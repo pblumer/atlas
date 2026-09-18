@@ -92,6 +92,25 @@ var Mark = newSet(map[string]string{"image/png": "png", "image/svg+xml": "svg"})
 // said nothing about why.
 var Photo = newSet(map[string]string{"image/png": "png", "image/jpeg": "jpg"})
 
+// Picture is what a product in the catalogue may be shown as: a photograph or a
+// vendor's mark, so PNG, JPEG **and** SVG.
+//
+// It is the union of the two sets above, and the reason is who uploads it. [Photo]
+// refuses SVG because a picture of a person arrives from a camera and the uploader
+// there is every account; a product picture arrives from whoever maintains the
+// catalogue — a product manager, the same kind of privileged author who sets a
+// catalogue's mark — and half of what they have is a vector, because half of what a
+// service catalogue sells is software with a logo rather than a thing with a
+// photograph. A set that refused SVG would be answered by converting the logo to a
+// raster, badly, once per product.
+//
+// What makes that safe is [Serve] and nothing else: the bytes are validated as the
+// type they claim, served under a sandbox policy with no script origin, and never
+// inlined into a page.
+var Picture = newSet(map[string]string{
+	"image/png": "png", "image/jpeg": "jpg", "image/svg+xml": "svg",
+})
+
 // pngMagic is the 8-byte signature every PNG begins with, and jpegMagic the three
 // bytes every JPEG does (SOI, then the first marker). Validating the bytes
 // server-side — not only the client's Content-Type — means a mislabelled or

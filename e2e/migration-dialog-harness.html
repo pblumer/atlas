@@ -21,7 +21,7 @@
       <button class="btn" id="mig-batch">Migrate batch</button>
     </div>
     <script type="module">
-      import { migrateInstanceFlow, migrateProcessFlow, planSummary, otherVersions } from "/migrationdialog.js";
+      import { migrateInstanceFlow, migrateProcessFlow, planSummary, otherVersions, forkSummary } from "/migrationdialog.js";
 
       // Three deployed versions of one process, and an unrelated process that must never
       // appear in the picker.
@@ -42,6 +42,20 @@
           { from: "review", to: "review_v2" },
           { from: "done", to: "done" },
         ],
+        fork: FORK(to, ["review_v2"]),
+      });
+      // The fork half of a plan (ADR-0389): where the work
+      // would pick up again, what crosses, and what ends with the instance. The stranded
+      // instance's parked token has no counterpart by id, so nothing is proposed and the
+      // operator has to say where it resumes — which is the case the section exists for.
+      const FORK = (to, proposed) => ({
+        instanceKey: "5002", fromProcessDefKey: 101, fromVersion: 1,
+        toProcessDefKey: to, toVersion: to === 103 ? 3 : 2,
+        resume: proposed,
+        parked: [{ elementId: "review", resumeAt: proposed[0] || "" }],
+        candidates: ["start", "review_v2", "done"],
+        variables: 3, dataObjects: 1, jobs: 1,
+        forkable: proposed.length > 0,
       });
       const BAD_PLAN = (to) => ({
         instanceKey: "5002", fromProcessDefKey: 101, fromVersion: 1,
@@ -51,6 +65,7 @@
         problems: [
           { elementInstanceKey: "9001", elementId: "review", reason: "no element in the target version is mapped to it, so its token would be stranded" },
         ],
+        fork: FORK(to, []),
       });
 
       window.__calls = [];   // every write the flow issued, in order
@@ -70,6 +85,15 @@
         if (url.endsWith("/migrate/plan")) {
           const stranded = url.includes("/5002/");
           return stranded ? BAD_PLAN(body.targetProcessDefKey) : OK_PLAN(body.targetProcessDefKey);
+        }
+        if (url.endsWith("/migrate/fork")) {
+          if (!body.resume || !body.resume.length) {
+            const err = new Error("fork refused");
+            err.status = 409;
+            err.body = FORK(body.targetProcessDefKey, []);
+            throw err;
+          }
+          return { ...FORK(body.targetProcessDefKey, body.resume), successorInstanceKey: "5003" };
         }
         if (url.match(/\/instances\/\d+\/migrate$/)) {
           if (url.includes("/5002/")) {
@@ -125,6 +149,7 @@
 
       // Exported pure helpers, checked directly rather than through the DOM.
       window.__planSummary = planSummary;
+      window.__forkSummary = forkSummary;
       window.__otherVersions = otherVersions;
       window.__ready = true;
     </script>

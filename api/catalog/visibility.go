@@ -189,3 +189,17 @@ func (s *Service) HandleMyCatalog(w http.ResponseWriter, r *http.Request) {
 	}
 	httpapi.JSON(w, http.StatusOK, got)
 }
+
+// MayMaintain reports whether p may see this catalogue as somebody who maintains it,
+// rather than as somebody it is offered to.
+//
+// It is [mayRead] without the audience, and the difference is the whole reason it
+// exists. A customer reaches a catalogue to order from it; that tells them nothing
+// about the estate behind it, and a surface that drew the catalogue's products, their
+// provisioning processes and the engine around them for everyone the catalogue
+// reaches would be using this store to answer a question it never agreed to answer.
+// Maintainers, and the people a maintainer shared it with, are who that picture is
+// for (ADR-0211 §3).
+func (s *Service) MayMaintain(c Catalog, p *httpapi.Principal) bool {
+	return s.mayEdit(c, p) || grantedRole(c, p) == RoleViewer
+}

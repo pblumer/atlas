@@ -233,6 +233,11 @@ type Server struct {
 	// the loop (ADR-0266), so the result has no reason to travel back onto it — see
 	// api/runtimeincidents.go.
 	runtimeIncidents runtimeIncidentCache
+	// elementNames is the BPMN id → name map of each deployed definition, parsed
+	// from the stored document on first use — see api/portalprogress.go. Guarded by
+	// its own mutex for the reason above: the parse grows with the document, and the
+	// loop's only part in it is handing over the bytes.
+	elementNames elementNameCache
 	// jobTypes is the engine-wide job-type table (ADR-0007/0157). Compiled processes
 	// are resolved through it at deploy and on reload so a job type index means the
 	// same thing in every definition; it also turns an index on a job back into a name.
@@ -608,6 +613,15 @@ type Server struct {
 	// together by withRetentionTrigger.
 	retentionTicks <-chan time.Time
 	retentionSwept chan struct{}
+	// timerTicks, when non-nil, replaces the timer scheduler's real ticker, so a test
+	// that owns a clock owns the only one in the picture. It is the same seam the
+	// retention sweep and the checkpoint loop have, and it is here for a sharper
+	// reason than theirs: this loop does not only fire timers, it *drives jobs* — so
+	// on a server standing still it is the one goroutine that can hand work out while
+	// a test is counting what went out. A test that passes a channel it never sends
+	// on has silenced it; nil is production, where a real ticker drives it and nothing
+	// observes it. Set by withTimerTrigger.
+	timerTicks <-chan time.Time
 
 	// Recovery checkpoints (ADR-0131): on a fixed cadence, snapshot the applied state
 	// so a restart replays only the WAL suffix past it instead of the whole log — the
@@ -1034,6 +1048,16 @@ func withClock(now func() int64) Option {
 			s.now = now
 		}
 	}
+}
+
+// withTimerTrigger replaces the timer scheduler's real ticker with an explicit tick
+// channel. It is unexported — a test seam — and the reason it exists is the drive
+// that follows each tick rather than the timers themselves: a test that advances its
+// own clock and then counts what the engine handed out is otherwise sharing the
+// question with a goroutine firing every real second. Passing a channel nothing is
+// ever sent on holds it still for the whole test.
+func withTimerTrigger(ticks <-chan time.Time) Option {
+	return func(s *Server) { s.timerTicks = ticks }
 }
 
 // withRetentionTrigger replaces the retention sweep's real ticker with an explicit
@@ -2687,11 +2711,16 @@ func (s *Server) loadDeployments() error {
 func (s *Server) restoreDeployment(rec persistedDeployment) error {
 	// Recompile exactly the process this record represents (a collaboration's
 	// XML holds several), keyed as originally assigned (ADR-0019/0022) — and
-	// without the deploy-time validation gate
-	// (ADR-0177). This definition passed the gate
-	// that existed when it was deployed and its instances have been running under
-	// it since; a rule added to the compiler afterwards is a reason to tell the
-	// operator, not to refuse to start. The model on disk did not change.
+	// without the rules that gate a *deploy*
+	// (ADR-0177, ADR-0393). This definition
+	// passed the gate that existed when it was deployed and its instances have been
+	// running under it since; a rule added to the compiler afterwards is a reason to
+	// tell the operator, not to refuse to start. The model on disk did not change.
+	//
+	// That is every such rule, not only stage 5's: refusing a FEEL call this build
+	// can only answer with null (ADR-0388) is raised while the process is still
+	// being built, and it took a server into a crash loop before the reload carried
+	// its own gate too.
 	cp, problems, err := compiler.ReloadNamed(rec.Key, rec.Version, bytes.NewReader([]byte(rec.XML)), rec.ProcessID)
 	if err != nil {
 		// A stored model that no longer compiles *at all* is still a hard,
@@ -2705,7 +2734,7 @@ func (s *Server) restoreDeployment(rec persistedDeployment) error {
 		// and the next deploy of it will be refused. Named per deployment so the
 		// operator can go straight to the model that needs fixing.
 		logging.Warn(logging.DeploymentReloadedWithProblems,
-			"a deployed definition would no longer pass validation; it was restored and keeps running — fix the model and deploy it again",
+			"a deployed definition would no longer be accepted at deploy; it was restored and keeps running exactly as it did — fix the model and deploy it again",
 			slog.Uint64("deploymentKey", rec.Key),
 			slog.String("processId", rec.ProcessID),
 			slog.Int64("version", int64(rec.Version)),
@@ -2824,13 +2853,17 @@ func (s *Server) restoreDecisionDeployment(rec persistedDecision) error {
 // coarse (whole seconds) — timers are "fire at or after due", not real-time.
 func (s *Server) timerScheduler(every time.Duration) {
 	defer s.wg.Done()
-	t := time.NewTicker(every)
-	defer t.Stop()
+	ticks := s.timerTicks
+	if ticks == nil {
+		t := time.NewTicker(every)
+		defer t.Stop()
+		ticks = t.C
+	}
 	for {
 		select {
 		case <-s.quit:
 			return
-		case <-t.C:
+		case <-ticks:
 			// Fire due timers on the loop, then drive any jobs they unblocked (e.g. a
 			// timer leading into a business rule task) OFF it: this tick runs every
 			// second, and before ADR-0157 step 6 it was the path that could hold the

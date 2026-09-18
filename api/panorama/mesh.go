@@ -53,6 +53,19 @@ const (
 	// *stale* — every other node is read from local state while the request is being
 	// served, so it can neither fail to be contacted nor go out of date.
 	KindTarget = "target"
+	// KindCatalog is one service catalogue (ADR-0312): what a group of people may
+	// order, and the arrangement of it. It is a design-time record like every other
+	// node here, and — unlike a process or a peer — nothing can be asked how it is,
+	// so it carries no observation at all.
+	KindCatalog = "catalog"
+	// KindProduct is one catalogue item: a service that provisions itself, or a
+	// product assembled from several that do. One kind and not two, because Atlas
+	// holds one record for both and the difference is in the edges: a thing with
+	// parts is a whole, and the same record offered alone is a service. Deriving two
+	// kinds from that shape would invent a distinction the store does not make, and
+	// the store is right — the same laptop is a product in one catalogue and a part
+	// of a workplace bundle in another.
+	KindProduct = "product"
 )
 
 // Edge kinds.
@@ -60,9 +73,50 @@ const (
 	EdgeContains = "contains"
 	EdgeCalls    = "calls"
 	// EdgeUses is a process depending on something that is not a process: a
-	// configured worker, or a decision it delegates to.
+	// configured worker, or a decision it delegates to. A product uses the processes
+	// that provision and revoke it, which is the same relationship seen from the
+	// catalogue's side: the thing that needs work done, pointing at what does it.
 	EdgeUses = "uses"
+	// EdgeOffers is a catalogue putting a product in front of the people it reaches.
+	// Deliberately not EdgeContains: an application *holds* its processes and they
+	// exist nowhere else, while a product is referenced by catalogues rather than
+	// owned by one (ADR-0315) — two catalogues offering one laptop are two offers of
+	// one thing, not two laptops.
+	EdgeOffers = "offers"
+	// EdgeComposition and EdgeAggregation are the arrangement of a product: the part
+	// that always comes with the whole, and the part offered beside it.
+	//
+	// They are kept apart here for the reason the catalogue keeps them apart: they
+	// are different promises to whoever orders. They are also the first two edges on
+	// this landscape that are *exactly* what ArchiMate means by those words, which is
+	// why the projection can name them instead of declaring a loss.
+	EdgeComposition = "composition"
+	EdgeAggregation = "aggregation"
+	// EdgeRequires is precedence between two products: the one this points at has to
+	// be provisioned first. It is what the fulfilment order is computed from, and the
+	// only catalogue edge whose direction means "after".
+	EdgeRequires = "requires"
 )
+
+// catalogEdgeKinds is which stored arrangement edges this picture draws, and how.
+//
+// An allowlist rather than a pass-through, and the three spellings happening to
+// match is not a reason to write it as one: an edge kind added to the store later
+// would otherwise appear on the landscape in whatever ink the renderer defaulted to,
+// having been read by nobody.
+//
+// **Incompatibility is deliberately absent.** `excludes` means "these two must never
+// be held by the same person" (ADR-0342) — the one catalogue edge that means the
+// opposite of every other line on this canvas. Drawn in the same ink it would read as
+// a dependency, and a reader would take "the clerk who creates a supplier must not
+// approve payments to it" for "one needs the other". It is named in the derived
+// notation's loss list instead, which is where this picture says what it does not
+// draw.
+var catalogEdgeKinds = map[string]string{
+	"composition": EdgeComposition,
+	"aggregation": EdgeAggregation,
+	"requires":    EdgeRequires,
+}
 
 // Provenance says how a node is known (ADR-0211 §2). The three are the point of
 // overlaying a model onto the mesh: without them you have two pictures and no
@@ -240,6 +294,49 @@ type Draft struct {
 	CanView       bool
 }
 
+// ProductCatalog is one service catalogue as the mesh sees it (ADR-0312): what it
+// offers, and how what it offers is arranged.
+//
+// The arrangement lives on the catalogue rather than on the products because it *is*
+// the catalogue's: the same laptop is ordered with a docking station in one catalogue
+// and alone in another, and neither catalogue is wrong. Two catalogues that say
+// different things about one pair therefore produce two edges between one pair of
+// nodes, which is the fact rather than a defect in the drawing.
+type ProductCatalog struct {
+	ID      string
+	Name    string
+	CanView bool
+	// Items are the products this catalogue offers, by id.
+	Items []string
+	Edges []CatalogEdge
+}
+
+// CatalogEdge is one arrangement edge as stored, before the mesh decides whether it
+// is drawable. Kind is the catalogue's own spelling (composition, aggregation,
+// requires, excludes) rather than a mesh edge kind, because deciding which of them
+// this picture draws is exactly this package's job and not the store's.
+type CatalogEdge struct {
+	From string
+	To   string
+	Kind string
+}
+
+// Product is one catalogue item: what is offered, and the two processes that make it
+// real. CanView follows the item's home catalogue (ADR-0315), which is the same rule
+// the product listing applies — a product is edited through one catalogue, and that
+// is the catalogue that decides who may read it.
+type Product struct {
+	ID          string
+	Name        string
+	HomeCatalog string
+	CanView     bool
+	// ProvisionProcess and DeprovisionProcess are BPMN process ids, which is what a
+	// product binds: what runs is whatever is deployed when the order line is
+	// reached, so the binding names an id and never a version.
+	ProvisionProcess   string
+	DeprovisionProcess string
+}
+
 // Landscape is everything the mesh derives from, already filtered for this caller.
 type Landscape struct {
 	Applications []Application
@@ -249,6 +346,12 @@ type Landscape struct {
 	Drafts    []Draft
 	Workers   []Worker
 	Decisions []Decision
+	// Catalogs and Products are the service catalogue (ADR-0312), drawn always
+	// rather than on request like the drafts: a catalogue is part of what this
+	// server runs, not a plan somebody saved, and an installation that does not use
+	// the portal has none and pays nothing for them.
+	Catalogs []ProductCatalog
+	Products []Product
 	// Targets are the peers this server can promote to, and what asking them
 	// produced. Filled in two halves: the collector names them on the run loop, and
 	// [ReachOut] supplies each one's state off it.
@@ -307,8 +410,32 @@ var overlayKind = map[string]string{
 	KeyConnectorID:   KindWorker,
 }
 
+// The subjects a starmap can be drawn about.
+//
+// They are two pictures and not one picture with more on it, which is what the first
+// cut of the catalogue got wrong. The landscape answers "what does this server run
+// and what depends on what"; an operator reading it for a stuck process does not want
+// a hundred products in the way, and — the part that is not a matter of taste — every
+// product spends the size budget (§7), so a large catalogue could collapse somebody
+// else's landscape to applications without them ever having asked to see it.
+//
+// The product map answers the other question: what is offered, what each product is
+// assembled from, and which processes have to run for it to be delivered. It carries
+// the processes the products *bind* and nothing else of the estate — not the workers
+// those processes use, not the applications that hold them, not the peers. One hop,
+// because the second hop is the landscape's question and the landscape is one click
+// away.
+const (
+	// SubjectLandscape is the default: the estate as it runs.
+	SubjectLandscape = ""
+	// SubjectProducts is the catalogue and what provisions it.
+	SubjectProducts = "products"
+)
+
 // Options tunes one derivation.
 type Options struct {
+	// Subject is which of the two pictures to derive; empty is the landscape.
+	Subject string
 	// Overlays are the Panorama models compared against this landscape. Empty
 	// leaves the mesh exactly as the derivation alone made it.
 	Overlays []Overlay
@@ -333,6 +460,16 @@ type Node struct {
 	// Application is the owning application's node id, for grouping. Empty on
 	// application, restricted, and unresolved nodes.
 	Application string `json:"application,omitempty"`
+	// Catalog is the catalogue node a product is grouped under, and empty on every
+	// other kind. It is its home catalogue (ADR-0315) where that catalogue is on this
+	// picture, and otherwise the first catalogue here that offers it — a product
+	// whose home this reader cannot see is still somewhere, and a collapsed picture
+	// has to put it there.
+	//
+	// Separate from Application rather than sharing it: that field carries a process
+	// application, and one field holding two kinds of container is how a reader ends
+	// up asking which one they have.
+	Catalog string `json:"catalog,omitempty"`
 	// ProcessID and Version identify a process node well enough to navigate to the
 	// Operations view (L2) without a second lookup.
 	ProcessID string `json:"processId,omitempty"`
@@ -483,6 +620,8 @@ func workerNodeID(id string) string      { return KindWorker + ":" + id }
 // whole difference between it and a process node.
 func draftNodeID(processID string) string { return KindDraft + ":" + processID }
 func decisionNodeID(id string) string     { return KindDecision + ":" + id }
+func catalogNodeID(id string) string      { return KindCatalog + ":" + id }
+func productNodeID(id string) string      { return KindProduct + ":" + id }
 func restrictedNodeID(ordinal int) string { return fmt.Sprintf("%s:%d", KindRestricted, ordinal) }
 func targetNodeID(id string) string       { return KindTarget + ":" + id }
 
@@ -526,17 +665,24 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 	sort.Slice(visible, func(i, j int) bool { return visible[i].Key < visible[j].Key })
 
 	g := Graph{Nodes: []Node{}, Edges: []Edge{}, ObservedAt: opts.ObservedAt}
+	// Which of the two pictures this is (see the subjects above). The halves below are
+	// gated on it rather than filtered afterwards, because the size budget and the
+	// collapse are about what is *on* the picture: a product filtered out in the
+	// browser would still have taken an operator's landscape apart on the way there.
+	productMap := opts.Subject == SubjectProducts
 
 	appIDs := make([]string, 0, len(visibleApps))
 	for id := range visibleApps {
 		appIDs = append(appIDs, id)
 	}
 	sort.Strings(appIDs)
-	for _, id := range appIDs {
-		g.Nodes = append(g.Nodes, Node{
-			ID: applicationNodeID(id), Kind: KindApplication,
-			Name: visibleApps[id].Name, Provenance: ProvenanceDerived,
-		})
+	if !productMap {
+		for _, id := range appIDs {
+			g.Nodes = append(g.Nodes, Node{
+				ID: applicationNodeID(id), Kind: KindApplication,
+				Name: visibleApps[id].Name, Provenance: ProvenanceDerived,
+			})
+		}
 	}
 
 	// Restricted placeholders are keyed internally by the hidden resource — kind and
@@ -564,19 +710,29 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		}
 	}
 
-	for _, p := range visible {
-		node := Node{
+	// processNode is one deployed process as the picture draws it, with everything the
+	// engine has to say about it. Both subjects use it: the landscape draws every
+	// visible process, and the product map draws the ones a product binds — and there
+	// the state is the point, because "the process that provisions this is degraded"
+	// is the finding somebody opened the product map for.
+	processNode := func(p Process) Node {
+		return Node{
 			ID: processNodeID(p.Key), Kind: KindProcess, Name: p.Name,
 			Provenance: ProvenanceDerived, ProcessID: p.ProcessID, Version: p.Version,
 			State: p.State, Reason: p.Reason, Incidents: p.Incidents,
 			OldestIncident: p.OldestIncident, Sites: p.Sites,
 			Runtime: p.Runtime,
 		}
-		if _, ok := visibleApps[p.ApplicationID]; ok {
-			node.Application = applicationNodeID(p.ApplicationID)
-			addEdge(Edge{From: node.Application, To: node.ID, Kind: EdgeContains})
+	}
+	if !productMap {
+		for _, p := range visible {
+			node := processNode(p)
+			if _, ok := visibleApps[p.ApplicationID]; ok {
+				node.Application = applicationNodeID(p.ApplicationID)
+				addEdge(Edge{From: node.Application, To: node.ID, Kind: EdgeContains})
+			}
+			g.Nodes = append(g.Nodes, node)
 		}
-		g.Nodes = append(g.Nodes, node)
 	}
 
 	// Drafts, where the caller asked for them. They are drawn beside the processes of
@@ -585,114 +741,264 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 	// activities and drawing edges from them would be drawing the dependencies of a
 	// process that does not exist yet — a plan, rendered in the same ink as the
 	// facts around it, which is exactly what ADR-0211 §3 forbids.
+	// Declared out here because the collapse below stands for them: a collapsed
+	// application says how many nodes it holds, and a draft it holds is one of them.
 	var visibleDrafts []Draft
-	for _, d := range land.Drafts {
-		if d.CanView {
-			visibleDrafts = append(visibleDrafts, d)
-		}
-	}
-	sort.Slice(visibleDrafts, func(i, j int) bool {
-		return visibleDrafts[i].ProcessID < visibleDrafts[j].ProcessID
-	})
-	for _, d := range visibleDrafts {
-		node := Node{
-			ID: draftNodeID(d.ProcessID), Kind: KindDraft, Name: d.Name,
-			Provenance: ProvenanceDerived, ProcessID: d.ProcessID,
-		}
-		if _, ok := visibleApps[d.ApplicationID]; ok {
-			node.Application = applicationNodeID(d.ApplicationID)
-			addEdge(Edge{From: node.Application, To: node.ID, Kind: EdgeContains})
-		}
-		g.Nodes = append(g.Nodes, node)
-	}
-
-	// Dependencies are walked in a second pass so every visible process node already
-	// exists; a placeholder is minted only for a target genuinely not among them.
-	//
-	// Workers and decisions become nodes only where a process references them. The
-	// mesh is the dependency picture, not an inventory: a configured worker nothing
-	// uses is not a landscape edge, and putting it on screen would bury the ones
-	// that are.
-	workers := map[string]Worker{}
-	for _, w := range land.Workers {
-		workers[w.ID] = w
-	}
-	decisions := map[string]Decision{}
-	for _, d := range land.Decisions {
-		decisions[d.ID] = d
-	}
-	usedWorkers := map[string]bool{}
-	usedDecisions := map[string]bool{}
-
-	for _, p := range visible {
-		from := processNodeID(p.Key)
-		for _, c := range p.Calls {
-			target, ok := byKey[c.TargetKey]
-			switch {
-			case c.TargetKey != 0 && ok && target.CanView:
-				addEdge(Edge{From: from, To: processNodeID(target.Key), Kind: EdgeCalls})
-			case c.TargetKey != 0 && ok:
-				addEdge(Edge{From: from, To: restrictedOrdinal(processNodeID(target.Key)), Kind: EdgeCalls})
-			default:
-				// No deployment provides the called process — or the resolved key is
-				// not in the landscape at all, which is the same finding from the
-				// caller's side. The called process id is safe to name: it is in this
-				// caller's own model, which they can already read.
-				id := unresolvedNodeID(KindProcess, c.CalledProcessID)
-				unresolved[id] = c.CalledProcessID
-				addEdge(Edge{From: from, To: id, Kind: EdgeCalls})
+	// Everything from here to the catalogue is the landscape's half: the drafts a
+	// reader asked for, what each process depends on, and the workers and decisions
+	// those dependencies reach. The product map draws none of it — it is the estate,
+	// and the estate is the other picture.
+	if !productMap {
+		for _, d := range land.Drafts {
+			if d.CanView {
+				visibleDrafts = append(visibleDrafts, d)
 			}
 		}
-		for _, u := range p.Workers {
-			target, ok := workers[u.TargetID]
-			switch {
-			case u.TargetID != "" && ok && target.CanView:
-				usedWorkers[target.ID] = true
-				addEdge(Edge{From: from, To: workerNodeID(target.ID), Kind: EdgeUses})
-			case u.TargetID != "" && ok:
-				addEdge(Edge{From: from, To: restrictedOrdinal(workerNodeID(target.ID)), Kind: EdgeUses})
-			default:
-				// The model asks for a worker nobody configured, so the task would
-				// fail at run time. This is the question a model cannot answer about
-				// itself, and the name is safe: it is in this caller's own model.
-				id := unresolvedNodeID(KindWorker, u.Name)
-				unresolved[id] = u.Name
-				addEdge(Edge{From: from, To: id, Kind: EdgeUses})
-			}
-		}
-		for _, ref := range p.Decisions {
-			target, ok := decisions[ref]
-			switch {
-			case ok && target.CanView:
-				usedDecisions[target.ID] = true
-				addEdge(Edge{From: from, To: decisionNodeID(target.ID), Kind: EdgeUses})
-			case ok:
-				addEdge(Edge{From: from, To: restrictedOrdinal(decisionNodeID(target.ID)), Kind: EdgeUses})
-			default:
-				id := unresolvedNodeID(KindDecision, ref)
-				unresolved[id] = ref
-				addEdge(Edge{From: from, To: id, Kind: EdgeUses})
-			}
-		}
-	}
-
-	for _, id := range sortedKeys(usedWorkers) {
-		w := workers[id]
-		// Name and Worker Type only. The record also holds an endpoint and a
-		// credential reference; a landscape picture is opened by anyone with modeler
-		// access, and neither belongs in one (ADR-0211 §10, I6).
-		g.Nodes = append(g.Nodes, Node{
-			ID: workerNodeID(w.ID), Kind: KindWorker, Name: w.Name,
-			Provenance: ProvenanceDerived, WorkerType: w.Type,
-			State: w.State, Reason: w.Reason,
+		sort.Slice(visibleDrafts, func(i, j int) bool {
+			return visibleDrafts[i].ProcessID < visibleDrafts[j].ProcessID
 		})
+		for _, d := range visibleDrafts {
+			node := Node{
+				ID: draftNodeID(d.ProcessID), Kind: KindDraft, Name: d.Name,
+				Provenance: ProvenanceDerived, ProcessID: d.ProcessID,
+			}
+			if _, ok := visibleApps[d.ApplicationID]; ok {
+				node.Application = applicationNodeID(d.ApplicationID)
+				addEdge(Edge{From: node.Application, To: node.ID, Kind: EdgeContains})
+			}
+			g.Nodes = append(g.Nodes, node)
+		}
+
+		// Dependencies are walked in a second pass so every visible process node already
+		// exists; a placeholder is minted only for a target genuinely not among them.
+		//
+		// Workers and decisions become nodes only where a process references them. The
+		// mesh is the dependency picture, not an inventory: a configured worker nothing
+		// uses is not a landscape edge, and putting it on screen would bury the ones
+		// that are.
+		workers := map[string]Worker{}
+		for _, w := range land.Workers {
+			workers[w.ID] = w
+		}
+		decisions := map[string]Decision{}
+		for _, d := range land.Decisions {
+			decisions[d.ID] = d
+		}
+		usedWorkers := map[string]bool{}
+		usedDecisions := map[string]bool{}
+
+		for _, p := range visible {
+			from := processNodeID(p.Key)
+			for _, c := range p.Calls {
+				target, ok := byKey[c.TargetKey]
+				switch {
+				case c.TargetKey != 0 && ok && target.CanView:
+					addEdge(Edge{From: from, To: processNodeID(target.Key), Kind: EdgeCalls})
+				case c.TargetKey != 0 && ok:
+					addEdge(Edge{From: from, To: restrictedOrdinal(processNodeID(target.Key)), Kind: EdgeCalls})
+				default:
+					// No deployment provides the called process — or the resolved key is
+					// not in the landscape at all, which is the same finding from the
+					// caller's side. The called process id is safe to name: it is in this
+					// caller's own model, which they can already read.
+					id := unresolvedNodeID(KindProcess, c.CalledProcessID)
+					unresolved[id] = c.CalledProcessID
+					addEdge(Edge{From: from, To: id, Kind: EdgeCalls})
+				}
+			}
+			for _, u := range p.Workers {
+				target, ok := workers[u.TargetID]
+				switch {
+				case u.TargetID != "" && ok && target.CanView:
+					usedWorkers[target.ID] = true
+					addEdge(Edge{From: from, To: workerNodeID(target.ID), Kind: EdgeUses})
+				case u.TargetID != "" && ok:
+					addEdge(Edge{From: from, To: restrictedOrdinal(workerNodeID(target.ID)), Kind: EdgeUses})
+				default:
+					// The model asks for a worker nobody configured, so the task would
+					// fail at run time. This is the question a model cannot answer about
+					// itself, and the name is safe: it is in this caller's own model.
+					id := unresolvedNodeID(KindWorker, u.Name)
+					unresolved[id] = u.Name
+					addEdge(Edge{From: from, To: id, Kind: EdgeUses})
+				}
+			}
+			for _, ref := range p.Decisions {
+				target, ok := decisions[ref]
+				switch {
+				case ok && target.CanView:
+					usedDecisions[target.ID] = true
+					addEdge(Edge{From: from, To: decisionNodeID(target.ID), Kind: EdgeUses})
+				case ok:
+					addEdge(Edge{From: from, To: restrictedOrdinal(decisionNodeID(target.ID)), Kind: EdgeUses})
+				default:
+					id := unresolvedNodeID(KindDecision, ref)
+					unresolved[id] = ref
+					addEdge(Edge{From: from, To: id, Kind: EdgeUses})
+				}
+			}
+		}
+
+		for _, id := range sortedKeys(usedWorkers) {
+			w := workers[id]
+			// Name and Worker Type only. The record also holds an endpoint and a
+			// credential reference; a landscape picture is opened by anyone with modeler
+			// access, and neither belongs in one (ADR-0211 §10, I6).
+			g.Nodes = append(g.Nodes, Node{
+				ID: workerNodeID(w.ID), Kind: KindWorker, Name: w.Name,
+				Provenance: ProvenanceDerived, WorkerType: w.Type,
+				State: w.State, Reason: w.Reason,
+			})
+		}
+		for _, id := range sortedKeys(usedDecisions) {
+			d := decisions[id]
+			g.Nodes = append(g.Nodes, Node{
+				ID: decisionNodeID(d.ID), Kind: KindDecision, Name: d.Name,
+				Provenance: ProvenanceDerived,
+			})
+		}
 	}
-	for _, id := range sortedKeys(usedDecisions) {
-		d := decisions[id]
-		g.Nodes = append(g.Nodes, Node{
-			ID: decisionNodeID(d.ID), Kind: KindDecision, Name: d.Name,
-			Provenance: ProvenanceDerived,
-		})
+
+	// Hoisted out of the block below because the collapse needs them: which catalogues
+	// are on the picture, which products reached it, and which catalogue each one
+	// folds into.
+	var visibleCatalogs []ProductCatalog
+	var drawnOrder []string
+	foldInto := map[string]string{}
+	if productMap {
+		// --- The catalogue -------------------------------------------------------
+		//
+		// Two facts meet here that nothing else on this server puts on one picture: what
+		// is offered, and what has to run for it to be delivered. A product names the
+		// process that provisions it, and a product whose process is not deployed is an
+		// order that will park with somebody waiting for a laptop. The catalogue screen
+		// cannot make that finding — it cannot see the engine — and the Operations view
+		// cannot either, because it has never heard of the catalogue.
+		// The processes the products reach, in the order they were first bound. On the
+		// landscape they are already drawn; here they are drawn because a product named
+		// them.
+		bound := map[uint64]bool{}
+		var boundOrder []uint64
+		products := map[string]Product{}
+		for _, it := range land.Products {
+			products[it.ID] = it
+		}
+		// A product binds a process *id* and a derived process node is keyed by its
+		// deployment key, so the two are joined through this index rather than by string
+		// surgery on a node id. The landscape carries one entry per process id at its
+		// current version, so the first is the only one.
+		processByID := make(map[string]Process, len(land.Processes))
+		for _, p := range land.Processes {
+			if _, seen := processByID[p.ProcessID]; !seen {
+				processByID[p.ProcessID] = p
+			}
+		}
+
+		// productRef resolves one item id to whatever an edge should point at: the
+		// product, a placeholder for one this caller may not see, or the unresolved shape
+		// for one that is not here at all. The three are the same three the call
+		// activities above resolve to, for the same reason — "not yours" and "not here"
+		// send somebody to two different places.
+		productRef := func(id string) string {
+			it, known := products[id]
+			switch {
+			case known && it.CanView:
+				return productNodeID(it.ID)
+			case known:
+				return restrictedOrdinal(productNodeID(it.ID))
+			default:
+				nodeID := unresolvedNodeID(KindProduct, id)
+				unresolved[nodeID] = id
+				return nodeID
+			}
+		}
+
+		for _, c := range land.Catalogs {
+			if c.CanView {
+				visibleCatalogs = append(visibleCatalogs, c)
+			}
+		}
+		sort.Slice(visibleCatalogs, func(i, j int) bool { return visibleCatalogs[i].ID < visibleCatalogs[j].ID })
+
+		// drawn is which products reach the picture, in the order they were first
+		// offered; foldInto is the catalogue each one collapses into when the graph is
+		// over budget (see [Node.Catalog]).
+		drawn := map[string]bool{}
+		for _, c := range visibleCatalogs {
+			from := catalogNodeID(c.ID)
+			g.Nodes = append(g.Nodes, Node{
+				ID: from, Kind: KindCatalog, Name: c.Name, Provenance: ProvenanceDerived,
+			})
+			for _, id := range c.Items {
+				addEdge(Edge{From: from, To: productRef(id), Kind: EdgeOffers})
+				it, known := products[id]
+				if !known || !it.CanView {
+					continue
+				}
+				if !drawn[id] {
+					drawn[id] = true
+					drawnOrder = append(drawnOrder, id)
+				}
+				// Home wins wherever it is on the picture; otherwise the first catalogue
+				// here that offers it, which the sort above makes deterministic.
+				if _, have := foldInto[id]; !have || it.HomeCatalog == c.ID {
+					foldInto[id] = c.ID
+				}
+			}
+			for _, e := range c.Edges {
+				kind, drawable := catalogEdgeKinds[e.Kind]
+				if !drawable {
+					continue
+				}
+				addEdge(Edge{From: productRef(e.From), To: productRef(e.To), Kind: kind})
+			}
+		}
+
+		sort.Strings(drawnOrder)
+		for _, id := range drawnOrder {
+			it := products[id]
+			node := Node{
+				ID: productNodeID(id), Kind: KindProduct, Name: it.Name,
+				Provenance: ProvenanceDerived,
+			}
+			if home, ok := foldInto[id]; ok {
+				node.Catalog = catalogNodeID(home)
+			}
+			g.Nodes = append(g.Nodes, node)
+			// The two processes that make the promise real. Resolved exactly as a call
+			// activity is, because it is the same question asked by a different referrer.
+			for _, processID := range []string{it.ProvisionProcess, it.DeprovisionProcess} {
+				if processID == "" {
+					continue
+				}
+				target, known := processByID[processID]
+				switch {
+				case known && target.CanView:
+					// On the product map the process is not on the picture yet — this is
+					// the only thing that puts it there, and it arrives with everything
+					// the engine has to say about it, because "the process that provisions
+					// this is degraded" is the finding somebody opened this picture for.
+					if !bound[target.Key] {
+						bound[target.Key] = true
+						boundOrder = append(boundOrder, target.Key)
+					}
+					addEdge(Edge{From: node.ID, To: processNodeID(target.Key), Kind: EdgeUses})
+				case known:
+					addEdge(Edge{From: node.ID, To: restrictedOrdinal(processNodeID(target.Key)), Kind: EdgeUses})
+				default:
+					missing := unresolvedNodeID(KindProcess, processID)
+					unresolved[missing] = processID
+					addEdge(Edge{From: node.ID, To: missing, Kind: EdgeUses})
+				}
+			}
+		}
+
+		if productMap {
+			sort.Slice(boundOrder, func(i, j int) bool { return boundOrder[i] < boundOrder[j] })
+			for _, key := range boundOrder {
+				g.Nodes = append(g.Nodes, processNode(byKey[key]))
+			}
+		}
 	}
 
 	placeholders := sortedKeys(restricted)
@@ -721,10 +1027,14 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		})
 	}
 
-	// The peers, last, and unconditionally: a target that was asked and did not
-	// answer is the finding this whole kind exists to carry, so dropping it for
-	// having no state would delete exactly the row somebody needs.
+	// The peers, last, and unconditionally on the landscape: a target that was asked
+	// and did not answer is the finding this whole kind exists to carry, so dropping
+	// it for having no state would delete exactly the row somebody needs. They are not
+	// on the product map at all — nothing a catalogue offers is promoted to a peer.
 	for _, t := range land.Targets {
+		if productMap {
+			break
+		}
 		g.Nodes = append(g.Nodes, Node{
 			ID: targetNodeID(t.ID), Kind: KindTarget, Name: t.Name,
 			Provenance: ProvenanceDerived, State: t.State, Reason: t.Reason,
@@ -737,7 +1047,14 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 	// it is deliberately not covered by a contrived test. It is here because the next
 	// edge kinds (releases, targets) will make it reachable, and a comparator that is
 	// only total by accident sorts unstably the day that happens.
-	applyOverlays(&g, opts.Overlays, visible)
+	// The comparison against a drawn model is the landscape's: ADR-0189 §4 has binding
+	// keys for an application, a process and a worker, and none for a catalogue or a
+	// product — so on the product map there is nothing an overlay could match, and a
+	// modelled-but-absent node would be an application drawn onto a picture that has
+	// deliberately left every application out.
+	if !productMap {
+		applyOverlays(&g, opts.Overlays, visible)
+	}
 
 	sort.SliceStable(g.Edges, func(i, j int) bool {
 		if g.Edges[i].From != g.Edges[j].From {
@@ -750,6 +1067,13 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 	})
 
 	if opts.MaxNodes > 0 && len(g.Nodes) > opts.MaxNodes {
+		if productMap {
+			children := map[string]int{}
+			for _, id := range drawnOrder {
+				children[foldInto[id]]++
+			}
+			return clusterProducts(g, visibleCatalogs, children, land.PartialStatus)
+		}
 		return cluster(g, visible, visibleDrafts, appIDs, visibleApps, land.PartialStatus)
 	}
 	applyStatus(&g, land.PartialStatus)
@@ -841,6 +1165,14 @@ func applyOverlays(g *Graph, overlays []Overlay, visible []Process) {
 		if n.Kind == KindRestricted || n.Kind == KindUnresolved || n.Kind == KindDraft {
 			continue
 		}
+		// Nor a catalogue or a product, for a third reason again. Drift is a claim
+		// about a resource a model *could* have declared, and ADR-0189 §4 defines no
+		// binding key for either — so counting them would report a debt nobody can
+		// ever pay off, growing by one every time somebody adds a product. When a key
+		// exists for them, they join the count and this line goes.
+		if n.Kind == KindCatalog || n.Kind == KindProduct {
+			continue
+		}
 		g.Unmodeled++
 	}
 }
@@ -930,6 +1262,30 @@ func cluster(full Graph, visible []Process, drafts []Draft, appIDs []string,
 			node.OldestIncident = oldest[id]
 		}
 		out.Nodes = append(out.Nodes, node)
+	}
+	applyStatus(&out, partial)
+	return out
+}
+
+// clusterProducts is the same answer for the other subject: over budget, the product
+// map collapses to the catalogues, each saying how many products it stands for.
+//
+// Catalogues survive for the reason applications do in cluster above — they are what
+// holds the things being collapsed, and leaving them out would take the whole picture
+// away rather than shrink it, which is the truncated-but-complete-looking graph
+// ADR-0211 §7 refuses. They carry no state to aggregate, so a collapsed catalogue is
+// its name and how much it stands for.
+func clusterProducts(full Graph, catalogs []ProductCatalog, children map[string]int,
+	partial bool) Graph {
+	out := Graph{
+		Nodes: []Node{}, Edges: []Edge{},
+		Restricted: full.Restricted, Clustered: true, ObservedAt: full.ObservedAt,
+	}
+	for _, c := range catalogs {
+		out.Nodes = append(out.Nodes, Node{
+			ID: catalogNodeID(c.ID), Kind: KindCatalog, Name: c.Name,
+			Provenance: ProvenanceDerived, Children: children[c.ID],
+		})
 	}
 	applyStatus(&out, partial)
 	return out

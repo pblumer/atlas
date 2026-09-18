@@ -60,7 +60,12 @@ const STRINGS = {
     'order.running': 'In Arbeit',
     'proc.open': 'Prozess ansehen',
     'proc.openLine': 'Prozessschritt',
-    'proc.none': 'Zu diesem Auftrag läuft keine Prozessinstanz mehr — sie wurde von der Aufbewahrung entfernt.',
+    'proc.none': 'Zu dieser Position ist keine laufende Prozessinstanz zu finden: Entweder wurde noch keine gestartet, sie ist bereits beendet, oder die Aufbewahrung hat sie entfernt.',
+    'proc.none.order': 'Zu diesem Auftrag ist keine laufende Prozessinstanz zu finden: Entweder wurde noch keine gestartet, sie ist bereits beendet, oder die Aufbewahrung hat sie entfernt.',
+    'proc.where': 'Wo steht das?',
+    'proc.asking': 'Wird abgefragt …',
+    'proc.standing': 'Aktueller Schritt:',
+    'proc.nothingRunning': 'Zu dieser Position läuft gerade kein Prozess.',
     'order.completed': 'Abgeschlossen',
     'order.partial': 'Teilweise erfüllt',
     'order.unfulfilled': 'Nicht erfüllt',
@@ -124,6 +129,9 @@ const STRINGS = {
     'tbl.noMatch': 'Kein Auftrag entspricht der Suche.',
     'note.noCompany': 'Die Spalte Unternehmen bleibt leer: ein Auftrag trägt heute keine Organisation. Er nennt nur, wer bestellt und wer empfängt.',
     'note.included': 'Fest enthalten — nicht abwählbar.',
+    'window.later': 'Bestellbar ab',
+    'window.over': 'Nicht mehr bestellbar seit',
+    'window.until': 'Bestellbar bis',
     'variant.label': 'Ausführung',
     'variant.many': 'Mehrere Ausführungen möglich — jede angekreuzte ist eine eigene Position.',
     'variant.one': 'Genau eine Ausführung wählen.',
@@ -193,7 +201,12 @@ const STRINGS = {
     'order.running': 'In progress',
     'proc.open': 'View the process',
     'proc.openLine': 'Process step',
-    'proc.none': 'No process instance is left for this order — retention has removed it.',
+    'proc.none': 'No running process instance was found for this position: either none has started yet, it has already finished, or retention has removed it.',
+    'proc.none.order': 'No running process instance was found for this order: either none has started yet, it has already finished, or retention has removed it.',
+    'proc.where': 'Where is this?',
+    'proc.asking': 'Asking …',
+    'proc.standing': 'Current step:',
+    'proc.nothingRunning': 'Nothing is running for this position right now.',
     'order.completed': 'Completed',
     'order.partial': 'Partly fulfilled',
     'order.unfulfilled': 'Not fulfilled',
@@ -255,6 +268,9 @@ const STRINGS = {
     'tbl.noMatch': 'No order matches the search.',
     'note.noCompany': 'The organisation column stays empty: an order carries no organisation today. It names only who ordered and who receives.',
     'note.included': 'Always included — cannot be deselected.',
+    'window.later': 'Orderable from',
+    'window.over': 'No longer orderable since',
+    'window.until': 'Orderable until',
     'variant.label': 'Version',
     'variant.many': 'More than one version may be taken — each tick is its own position.',
     'variant.one': 'Choose exactly one version.',
@@ -514,6 +530,15 @@ const state = {
   // editing names the position whose details are open for correction, as
   // "<orderId>|<itemId>", empty for none (ADR-0359).
   editing: '',
+  // progress is where each position's process stands, keyed "<orderId>|<position>"
+  // (ADR-0390).
+  //
+  // Per position and not per order, because the order's own orchestration says
+  // "running" and this says which step *this* line is sitting on — which is the
+  // question somebody reading their own order actually has. Empty until asked: the
+  // server finds the instance by walking what is running, and a page of ten orders
+  // would be forty walks to fill a line most readers never read.
+  progress: new Map(),
 };
 
 // --- The four levels the mockups draw ---------------------------------------
@@ -974,6 +999,12 @@ function heldPill(item) {
 // sits at the right edge.
 function cell(opts) {
   const o = opts || {};
+  // Three slots and the rule that tells them apart: lead and trail hold controls,
+  // meta holds text about the row. A control has a fixed size and must not shrink;
+  // text has no size of its own and must. Putting text in the trail gave it the
+  // control's promise never to give width back, which is exactly what starved the
+  // name beside it.
+  //
   // The trail is wrapped here rather than by each caller. Every icon in it already
   // refuses to shrink, but an unstyled span is a flex item that may, and its
   // contents are inline boxes that wrap inside it — so in a narrow column the star,
@@ -984,13 +1015,69 @@ function cell(opts) {
   // wrapper takes an array as readily as a node, because el flattens its children.
   return el('div', { class: 'cell' },
     o.lead || null,
-    o.onOpen
-      ? el('button', {
-        class: o.open ? 'label on' : 'label',
-        onclick: o.onOpen,
-      }, o.text)
-      : el('span', { class: 'label' }, o.text),
+    // The name, and under it whatever describes the row rather than acts on it.
+    //
+    // They are one flex item and not two, because what may shrink is the pair: a
+    // name and its price are both text about the same thing, and putting the price
+    // beside the trail's icons made it a sibling that refused to give width back.
+    // In a 220px column that left the name a few pixels and it wrapped one letter
+    // per line — a row that read as a vertical alphabet.
+    el('span', { class: 'body' },
+      o.onOpen
+        ? el('button', {
+          class: o.open ? 'label on' : 'label',
+          onclick: o.onOpen,
+        }, o.text)
+        : el('span', { class: 'label' }, o.text),
+      o.meta ? el('span', { class: 'meta' }, o.meta) : null),
     o.trail ? el('span', { class: 'trail' }, o.trail) : null);
+}
+
+// --- When a product may be ordered -------------------------------------------
+//
+// The server is the gate (ADR-0397): a rule enforced
+// only where it is displayed is a rule every other caller walks past. This is the
+// courtesy half — a basket that cannot be submitted is the control-that-fails, and
+// filling one to be refused at the end teaches somebody the page is broken.
+//
+// Shown and disabled rather than hidden, which is the same choice the integral
+// part beside it makes. A product whose window has not opened is exactly the case
+// the field exists for — a catalogue published ahead of the date it opens — so
+// hiding it would remove the one thing somebody wants to know, which is when.
+
+// windowOf reads an item's window, tolerating a release published before the
+// portal read the field.
+function windowOf(item) {
+  const w = (item || {}).lifecycle || {};
+  return { from: Number(w.from) || 0, until: Number(w.until) || 0 };
+}
+
+// orderableNow reports whether this moment is inside the item's window. Both sides
+// are inclusive and zero is unbounded, exactly as the server reads them — two
+// readings of one rule that disagreed would be a portal offering what the order is
+// refused for, which is the failure this pairing exists to prevent.
+function orderableNow(item, at) {
+  const w = windowOf(item);
+  const now = at == null ? Date.now() * 1e6 : at;
+  if (w.from && now < w.from) return false;
+  if (w.until && now > w.until) return false;
+  return true;
+}
+
+// windowNote is what a row says about its own window, or null where there is
+// nothing to say — which is the ordinary product.
+function windowNote(item) {
+  const w = windowOf(item);
+  if (!w.from && !w.until) return null;
+  const day = (ns) => new Date(ns / 1e6).toLocaleDateString(locale);
+  if (!orderableNow(item)) {
+    return w.from && Date.now() * 1e6 < w.from
+      ? `${t('window.later')} ${day(w.from)}`
+      : `${t('window.over')} ${day(w.until)}`;
+  }
+  // Inside the window and about to leave it: the one case where somebody reading
+  // an orderable row still needs the date.
+  return w.until ? `${t('window.until')} ${day(w.until)}` : null;
 }
 
 // toggle renders the mockups' square −/+ control.
@@ -1017,6 +1104,16 @@ function toggle(release, id, integral) {
       class: 'sq', disabled: 'disabled', title: t('note.included'),
       'aria-label': t('note.included'),
     }, '\u2212');
+  }
+  // Outside its window. The title carries the date rather than a bare "no",
+  // because the date is the whole of what somebody does next: come back, or stop
+  // looking.
+  const item = itemsById(release)[id];
+  const shut = windowNote(item);
+  if (!orderableNow(item)) {
+    return el('button', {
+      class: 'sq', disabled: 'disabled', title: shut || '', 'aria-label': shut || '',
+    }, '+');
   }
   return el('button', {
     class: 'sq',
@@ -1063,6 +1160,7 @@ function infoPanel(rel, item) {
   const offered = namesOf(rel, (((rel || {}).options || {})[item.id]) || []);
   return el('div', { class: 'card' },
     el('h3', {}, textOf(item.texts, item.id)),
+    productPicture(item.id),
     el('p', { class: 'muted' }, `${t('info.id')}: ${item.id}`),
     // As the catalogue wrote it, never reformatted. A price here is a sentence
     // somebody chose — "CHF 1'200.–", "im Grundpaket enthalten" — and a page that
@@ -1077,7 +1175,33 @@ function infoPanel(rel, item) {
       ? el('p', { class: 'muted' }, `${t('info.includes')}: ${carried.join(', ')}`) : null,
     offered.length
       ? el('p', { class: 'muted' }, `${t('info.options')}: ${offered.join(', ')}`) : null,
+    // The window, where there is one. Beside the price and the approval rather
+    // than as a pill, because it is a fact about the product and not about this
+    // person: "orderable until the 31st" is true for everybody reading it.
+    windowNote(item)
+      ? el('p', { class: 'muted' }, windowNote(item)) : null,
     heldPill(item));
+}
+
+// productPicture is the product as it looks, where the catalogue has a picture of
+// it (ADR-0391).
+//
+// Asked for by rendering it and not by asking first whether one exists. A product
+// without a picture is the ordinary case and answers 404, which is the browser's
+// own cheapest "no" — a probe request per row would double the calls to learn what
+// the image request learns anyway. The element removes itself when the answer is
+// that 404, so a product with no picture leaves no broken-image icon and no gap.
+//
+// No width or height attribute: the catalogue does not resize what was uploaded
+// (a server that re-encodes somebody's picture decides their product looks near
+// enough), so the page bounds it in CSS instead and the image keeps its own shape.
+function productPicture(id) {
+  return el('img', {
+    class: 'picture',
+    src: `/api/v1/catalog-products/${encodeURIComponent(id)}/picture`,
+    alt: '',
+    onerror: (e) => { e.target.remove(); },
+  });
 }
 
 // namesOf turns part ids into the names the catalogue wrote for them.
@@ -1220,8 +1344,8 @@ function renderSearch(rel, by) {
             render();
           },
           lead: starButton(it.id),
-          trail: where
-            ? el('span', { class: 'muted', style: 'font-size:12px' }, `${t('find.where')} ${where}`)
+          meta: where
+            ? el('span', {}, `${t('find.where')} ${where}`)
             : null,
         });
       })));
@@ -1510,15 +1634,13 @@ function renderBasket() {
         // The same control the cascade uses, so a tick means one thing on the
         // whole page: it adds to the basket, and a second press takes it out.
         lead: toggle(rel, id, false),
-        trail: [
-          (by[id] || {}).price
-            ? el('span', { class: 'muted', style: 'font-size:12px' }, by[id].price)
-            : null,
+        meta: [
+          (by[id] || {}).price ? el('span', {}, by[id].price) : null,
           // The level it will sit under once it is taken, so the same position is
           // called the same thing before and after the decision.
-          el('span', { class: 'muted', style: 'font-size:12px' }, levelName(rel, id)),
-          infoButton(id),
+          el('span', {}, levelName(rel, id)),
         ],
+        trail: infoButton(id),
       }))));
 
   // The forms below the basket rather than beside each row: a form is taller than a
@@ -1722,7 +1844,13 @@ async function followProcess(order, line) {
     const hits = (page && page.items) || [];
     const hit = line ? hits[0] : hits.find((i) => i.processId === 'atlas-auftrag-erfuellung');
     if (!hit) {
-      state.error = t('proc.none');
+      // What is known, and not a cause that was guessed. This said the instance had
+      // been removed by retention, which is one of three reasons it is not found and
+      // the least likely of them: an order whose fulfilment never started has no
+      // instance to remove, and that is what somebody reads this message about on the
+      // day they ordered. A page that names a cause it cannot know sends whoever
+      // reads it to look in the wrong place.
+      state.error = t(line ? 'proc.none' : 'proc.none.order');
       render();
       return;
     }
@@ -1731,6 +1859,58 @@ async function followProcess(order, line) {
     state.error = `${t('portal.failed')} ${e.message}`;
     render();
   }
+}
+
+// --- Where one position stands ----------------------------------------------
+//
+// The other half of the link above, and the half that is not an operator's
+// (ADR-0390). Following the
+// instance means the console, and the console shows the whole engine state of that
+// instance — including variables belonging to somebody else's order where a process
+// holds them. So the orderer is answered by a route of their own, gated on owning
+// the order: which step the position is sitting on, and nothing else.
+
+// askProgress fetches where one position's process is.
+//
+// On a press rather than with the page, for the reason followProcess is: the server
+// finds the instance by walking what is running, and drawing this for every row
+// would pay that walk per position of every order on the page.
+//
+// Pressing again re-asks rather than closing. Where something stands is the one
+// thing on this page that moves while it is open, and a button that toggled a
+// stale answer would show yesterday's step as today's.
+async function askProgress(order, line) {
+  const at = `${order.id}|${lineKey(line)}`;
+  state.error = '';
+  state.progress.set(at, { asking: true });
+  render();
+  try {
+    const got = await api(`/api/v1/portal/orders/${encodeURIComponent(order.id)}`
+      + `/lines/${encodeURIComponent(lineKey(line))}/progress`);
+    state.progress.set(at, { state: got.state, steps: got.steps || [] });
+  } catch (e) {
+    // Nothing kept: a stale answer under a failed ask reads as the answer.
+    state.progress.delete(at);
+    state.error = `${t('portal.failed')} ${e.message}`;
+  }
+  render();
+}
+
+// progressNote is that answer in words, or nothing where it was never asked for.
+//
+// "Nothing is running" is said rather than left blank. It is the ordinary state of
+// most positions for most of an order's life — before the position is reached, and
+// after it is finished — and a button that answered with silence reads as broken.
+function progressNote(order, line) {
+  const got = state.progress.get(`${order.id}|${lineKey(line)}`);
+  if (!got) return null;
+  if (got.asking) return el('span', { class: 'muted' }, ` ${t('proc.asking')}`);
+  if (got.state !== 'active' || !got.steps.length) {
+    return el('span', { class: 'muted' }, ` ${t('proc.nothingRunning')}`);
+  }
+  // Every step, comma-separated: a process that forked is on two at once, and
+  // naming the first would be a coin toss rendered as fact.
+  return el('span', { class: 'step' }, ` ${t('proc.standing')} ${got.steps.join(', ')}`);
 }
 
 // lineKey is what one position is called, mirroring the server's own rule
@@ -1972,10 +2152,19 @@ function orderRowBodies() {
             onclick: () => withdrawLine(o, l),
           }, state.busy ? t('line.withdrawing') : t('line.withdraw'))
           : null,
-        // Where this position stands. On the position and not only on the order,
-        // because the order's process says "running" and this one says which step
-        // this line is sitting on — which is the question somebody reading their
-        // own order actually has.
+        // Where this position stands, to whoever's position it is. No role: the
+        // route behind it is gated on owning the order, which is the same gate
+        // that let this reader see the order at all.
+        el('button', {
+          class: 'linkish',
+          title: t('proc.where'),
+          disabled: state.busy,
+          onclick: () => askProgress(o, l),
+        }, t('proc.where')),
+        progressNote(o, l),
+        // The instance behind it, to whoever may open one. That is an operations
+        // surface — the console shows the whole state of the instance — so it stays
+        // where it was, beside the answer that needs no role.
         state.mayFollowProcess
           ? el('button', {
             class: 'linkish',
@@ -2173,6 +2362,36 @@ function depthOf(release, id) {
   return d;
 }
 
+// headingsHeld is the Kategorie or Produktgruppe column of what somebody holds,
+// read off the same products the catalogue reads it off.
+//
+// **Off the root, not off the held item.** Both strings are attributes of the
+// offering (ADR-0383): the cascade collects them from the products nothing
+// contains, so a service two edges down has never had a heading of its own to
+// carry. Read directly from what a person holds, this column showed "Ohne
+// Kategorie" for every service they have while the catalogue showed real headings
+// for the same things — the two sides of the portal disagreeing about one field,
+// which is exactly what ADR-0360 promised they would not do.
+//
+// So each held id is resolved to the product it belongs to and the heading is read
+// there, which is the same answer the person saw when they ordered it.
+//
+// Sorted and bucketed like the catalogue's own two columns, for the reasons given
+// at categoriesOf: there is nothing on a string to sort by, and the bucket is last
+// and only appears when something is in it.
+function headingsHeld(rel, by, ids, field) {
+  const named = new Set();
+  let none = false;
+  for (const id of ids) {
+    const root = by[rootOf(rel, id)] || {};
+    const value = (root[field] || '').trim();
+    if (value) named.add(value); else none = true;
+  }
+  const out = [...named].sort((a, b) => a.localeCompare(b, locale));
+  if (none) out.push('');
+  return out;
+}
+
 function renderServices() {
   const rel = state.release || {};
   const by = itemsById(rel);
@@ -2223,15 +2442,13 @@ function renderServices() {
         // The headings of what this person actually holds, not the whole
         // catalogue's: this screen answers "what do I have", and a heading with
         // nothing of theirs under it would be a column of other people's shelves.
-        [...new Set(ids.map((id) => ((by[id] || {}).category || '').trim()))]
-          .sort((a, b) => a.localeCompare(b, locale))
+        headingsHeld(rel, by, ids, 'category')
           .map((c) => cell({ text: c || t('cat.none') }))),
       // The product group beside the heading, read off what this person holds for
       // the same reason the heading is: this screen answers "what do I have".
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.group')),
-        [...new Set(ids.map((id) => ((by[id] || {}).productGroup || '').trim()))]
-          .sort((a, b) => a.localeCompare(b, locale))
+        headingsHeld(rel, by, ids, 'productGroup')
           .map((g) => cell({ text: g || t('group.none') }))),
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.offering')),

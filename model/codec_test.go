@@ -242,6 +242,29 @@ func TestRecordRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name:   "forked process instance names the instance it continues",
+			vt:     VTProcessInstance,
+			intent: IntentActivated,
+			value: &ProcessInstanceValue{
+				ProcessDefKey:          NewKey(3, 2),
+				CreatedAt:              1_700_000_000_000_000_000,
+				PredecessorInstanceKey: NewKey(3, 9),
+			},
+		},
+		{
+			name:   "forked-away process instance names its successor in history",
+			vt:     VTProcessInstance,
+			intent: IntentTerminated,
+			value: &ProcessInstanceValue{
+				ProcessDefKey:        NewKey(3, 2),
+				State:                PITerminated,
+				CompletedAt:          1_700_000_000_000_000_000,
+				CreatedAt:            1_699_999_999_000_000_000,
+				CompletedPosition:    4_242,
+				SuccessorInstanceKey: NewKey(3, 11),
+			},
+		},
+		{
 			name:   "message subscription",
 			vt:     VTMessageSubscription,
 			intent: IntentSubscriptionCreated,

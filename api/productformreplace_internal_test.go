@@ -10,18 +10,34 @@ import (
 // form which renders every field and posts every field back — and the catalogue's
 // product form does not render every field.
 //
-// It has no control for variants, for the orderable window, for the search
+// It had no control for variants, for the orderable window, for the search
 // keywords, for the groups eligible to receive the product, or for the ceiling on
-// how long the right may last. It builds its body out of the controls it does
-// have, so saving a price cleared all five, and moved the creation date to today.
-// Nothing said so: the save succeeded and the page reloaded looking correct,
-// because the fields it dropped are the ones it never shows.
+// how long the right may last. It built its body out of the controls it did have,
+// so saving a price cleared all five, and moved the creation date to today. Nothing
+// said so: the save succeeded and the page reloaded looking correct, because the
+// fields it dropped are the ones it never shows.
 //
-// So the form has to carry what it does not render, which means starting from the
-// stored record rather than from an empty object.
+// Four of the five are rendered now and one is not — the orderable window, which
+// nothing enforces and which a control would therefore misrepresent. So the rule
+// this file holds is unchanged and is not a transitional one: the form carries what
+// it does not render, which means starting from the stored record rather than from
+// an empty object. Every field added to a product from here on arrives on that
+// side of the rule first.
 
-// productFormHandler returns the body of wireProductForm, so these tests read the
-// submit path and not whatever else the file says about products.
+// productFormBody returns the body of productBody, which is where the record a
+// save posts is assembled. It reads that and not whatever else the file says about
+// products.
+//
+// It used to read wireProductForm, where this was a block inside an event listener.
+// The assembly moved out to be provable in a browser (e2e/catalog-product-body)
+// rather than only by reading it here; what has to hold of it did not change.
+func productFormBody(t *testing.T) string {
+	t.Helper()
+	return webRegion(t, readWeb(t, "catalog-admin.js"), "export function productBody(", "\n}")
+}
+
+// productFormHandler returns the body of wireProductForm: the save's own
+// surroundings — the toasts, the picture, the conflict.
 func productFormHandler(t *testing.T) string {
 	t.Helper()
 	src := readWeb(t, "catalog-admin.js")
@@ -41,20 +57,19 @@ func productFormHandler(t *testing.T) string {
 // must be seeded from the product being edited, so a field with no control on the
 // form survives a save.
 func TestTheProductFormKeepsTheFieldsItDoesNotRender(t *testing.T) {
-	h := productFormHandler(t)
-
-	// byID is the stored product, keyed by id — the only record the page holds that
-	// carries the fields the form has no control for.
-	if !strings.Contains(h, "byID[pid]") {
-		t.Error("the product form builds its body without reading the stored product, " +
-			"so every field it does not render — variants, lifecycle, keywords, " +
-			"eligible, maxDays — is cleared by a save")
+	// The stored product has to reach the assembly at all: it is the only record the
+	// page holds that carries a field the form has no control for.
+	if h := productFormHandler(t); !strings.Contains(h, "byID[pid]") {
+		t.Error("the submit path does not hand the stored product to the body, so " +
+			"every field the form does not render — the orderable window today — is " +
+			"cleared by a save")
 	}
 
-	// And the seed has to be spread *under* the form's own fields, or the form
-	// would not be able to change anything.
-	seed := strings.Index(h, "...stored")
-	id := strings.Index(h, "id: pid")
+	b := productFormBody(t)
+	// And the seed has to be spread *under* the form's own fields, or the form would
+	// not be able to change anything.
+	seed := strings.Index(b, "...was")
+	id := strings.Index(b, "id: productID")
 	if seed < 0 || id < 0 || seed > id {
 		t.Error("the stored product is not spread underneath the form's own fields, " +
 			"so either nothing is carried over or the form cannot change what it renders")
@@ -67,8 +82,8 @@ func TestTheProductFormKeepsTheFieldsItDoesNotRender(t *testing.T) {
 // and may carry a text for a language this one does not offer. Rebuilding texts
 // from the boxes alone drops it.
 func TestTheProductFormKeepsTextsInLanguagesItIsNotShowing(t *testing.T) {
-	h := productFormHandler(t)
-	if !strings.Contains(h, "stored.texts") {
+	h := productFormBody(t)
+	if !strings.Contains(h, "was.texts") {
 		t.Error("the product form rebuilds texts from its own boxes, so a text in a " +
 			"language this catalogue does not declare is dropped when somebody else's " +
 			"catalogue saves the product")

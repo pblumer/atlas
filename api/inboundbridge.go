@@ -378,7 +378,12 @@ func (s *Server) resolveInboundSubs() []pendingSub {
 		var compiled *expr.Compiled
 		if strings.TrimSpace(r.CorrelationKey) != "" {
 			// Compiled once here rather than per event; the config endpoint already
-			// rejected an uncompilable key, so an error here is not expected.
+			// rejected an uncompilable key — and one that can only ever be null
+			// (ADR-0388) — so an error here is not expected. The call check is not
+			// repeated here: a subscription stored before that gate existed would be
+			// dropped silently, which is the failure the gate was meant to prevent,
+			// arriving from the other side
+			// (ADR-0392).
 			if compiled, err = expr.CompileAuto(r.CorrelationKey); err != nil {
 				continue
 			}

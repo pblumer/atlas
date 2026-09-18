@@ -36,6 +36,306 @@ _Changed_ / _Removed_ for each version.
   no trace, because the engine offers none for a service. And the editor still cannot
   *draw* a decision service — a model that has one comes from the temis Modeler, from
   Camunda, or from hand-written XML.
+- **An incompatibility can be declared on the screen that declares everything else
+  about a catalogue.** A product may exclude another — the clerk who may create a
+  supplier must not also approve payments to it — and the record has carried that
+  since the decision was made. Publishing freezes it into a release in **both**
+  directions, and an order that would produce the combination is refused rather than
+  reported afterwards.
+
+  The Console knew three edge kinds of four. An incompatibility could not be
+  declared there at all, and one that already existed appeared in no table and could
+  not be removed, because the only remove button is on a row that is drawn. It was
+  reachable over REST and MCP and by nobody using the screen — while being enforced
+  the whole time.
+
+  It now sits beside structure and precedence as the third question the relations
+  section asks, and the pairwise form offers it, because it *is* pairwise: "never
+  these two together" is a statement about two products that belongs to neither.
+  Its symmetry is handled rather than passed on. One fact is **one row** however
+  many directions were stored, removing it removes both — taking away the one that
+  was drawn would leave the mirror, and the row would come straight back with
+  nothing to say why — and adding the mirror of one already recorded is refused
+  instead of stored as a second fact.
+
+  The comment above the Console's copy of these vocabularies claimed they were
+  "pinned by a test against the Go source so the two cannot drift". **No such test
+  existed**, which is why the drift went unnoticed for as long as it did. It exists
+  now, and it reads the constants themselves rather than a list kept beside them:
+  a value added to the states, the approval kinds or the edge kinds fails it until
+  the screen carries the value, can author it, and shows it.
+
+- **A product can be offered from a date, until a date — and now that means
+  something.** A catalogue item has carried an orderable window since the catalogue
+  was designed, and nothing ever read it. Publishing checked that the window did not
+  end before it began, which is a sanity check on the pair and not on the present;
+  no reader anywhere asked whether *today* was inside it. So a product with a window
+  was orderable exactly like a product without one, and the Console had no control
+  for it either — which is how it went unnoticed for so long: nobody could fill it
+  in from the screen, so nobody found out it did nothing.
+
+  It is enforced now, where every other rule about a basket is read: an order
+  carrying a product outside its window is **refused by the server**, with the
+  product and the date named and which side of the window the moment fell on. The
+  portal keeps the same window so a basket cannot be filled with something the
+  placement will refuse — shown with a disabled control and the date rather than
+  hidden, because a product that has not opened yet is exactly the case the field
+  exists for, and the one thing somebody wants to know is when.
+
+  Two boundaries decided deliberately. **Both ends are inclusive**, and the editor
+  stores the end of the last day: somebody who writes 31.10. means the product is
+  orderable on the 31st, and storing midnight would have closed it a day early,
+  every time, with nothing about it looking wrong. And the **clock is read once per
+  placement**, so the instant checked against the window is the instant the order
+  records as its creation — read twice, an order placed across a boundary could be
+  refused for a window that had already opened at the moment the order says it was
+  placed.
+
+  An integral part outside its window closes the product carrying it, and the
+  refusal says so rather than naming a part nobody can deselect. The window governs
+  **ordering** and nothing else: a right already held when it closes keeps running,
+  because when a right *ends* is the ceiling beside it.
+
+  **On upgrade:** an installation that filled the field in while it did nothing has
+  products that will now refuse orders outside their dates. That is the correction
+  rather than a regression, and it arrives without warning — worth a look at the
+  windows in your catalogue before this lands.
+
+- **The four fields the portal read and the product editor could not set.** A product
+  carries twelve fields the portal acts on and the editor rendered eight. The four it
+  did not render were not decoration: the **orderable shapes** are what the basket
+  refuses to place an order without, the **search terms** are what makes a service
+  findable by somebody who does not know its name, the **eligible groups** decide who
+  may receive it, and the **ceiling** decides how long the right lasts. All four were
+  settable over REST and MCP and by nobody else — which is to say, not by the person
+  whose job it is.
+
+  They are on the form now. The shapes read as one line each (`gross = 15 Zoll`, per
+  language where the catalogue declares several), the terms as a comma-separated list,
+  the eligible groups as a picker over the directory that falls back to an id field
+  when the directory cannot be read, and the ceiling as a number of days where zero
+  means a right that does not end.
+
+  Rendering them changes who owns them: a save is a **full replace**, so a control
+  somebody can empty has to be able to empty the field, while a field with no control
+  has to survive the save untouched. Both halves are now proved in a browser against
+  the real assembly rather than by reading the source. One field still has no control
+  on purpose — the orderable window, which nothing anywhere enforces; a control for it
+  would promise an effect that does not exist, and it gets one when the window is
+  enforced.
+
+  The editor also says, for the product open in front of you, **where the two headings
+  are read**. Kategorie and Produktgruppe are collected from the products nothing
+  contains, so a product that is a part of another one is reached through the product
+  carrying it and its own heading is never read there. The hint claimed the category
+  was "the heading this product sits under", which is false for a part — so a
+  maintainer could fill in a column that had already stopped reading the field, with
+  nothing to say so. Where the catalogue open carries this product inside another, the
+  form now names the carrier and says the heading is read there. It stays a note and
+  not a hidden field: containment belongs to a catalogue, so the same product is
+  legitimately a part here and offered in its own right next door, where the heading
+  *is* read.
+
+- **A Product Map on the starmap: what you offer, beside what has to run for it.**
+  Atlas held two halves of one estate and drew them on two screens. The starmap is the derived half — applications,
+  deployed processes, the workers they use, every edge a fact the server can point at.
+  The catalogue is the other: what a group of people may order, what each product is
+  assembled from, and the process that provisions it.
+
+  They are joined in the data and were separated on every screen. A product names a
+  BPMN process id; whether anything is deployed under that id is a question the
+  catalogue screen cannot answer, because it cannot see the engine, and Operations
+  cannot answer either, because it has never heard of the catalogue. So a product goes
+  out bound to a process nobody deployed, looks orderable, and the first person to
+  order it waits while the order parks.
+
+  The starmap's picker — now called **View**, because only some of its entries are
+  vocabularies — gains **Product Map**. It draws the catalogues, the products, the
+  arrangement between them (*included*, *optional*, *precedence*) and the processes
+  each product binds to provision and revoke it, resolved exactly as a call activity
+  is: the deployed process, a placeholder for one you may not see, or the same
+  **unresolved** shape everything missing on this picture already takes. A product
+  bound to nothing is a product pointing at a hole, in the same ink as every other
+  broken dependency, with nobody having modelled anything.
+
+  **The landscape itself carries no product.** They are two pictures rather than one
+  busier one, for two reasons: an operator opening the starmap because something is
+  stuck does not want a hundred products between them and it, and every product would
+  otherwise spend the size budget — so one large catalogue could collapse somebody
+  else's landscape to applications, and that somebody would never learn why. The
+  product map carries the bound processes and nothing else of the estate: not the
+  workers they use, not the applications that hold them, not the peers. One hop,
+  because the second hop is the landscape's question and the landscape is one entry
+  away on the same control.
+
+  **What it will not say is as deliberate as what it will.** Incompatibility — two
+  rights that must never be held by the same person — is not drawn: it is the one
+  catalogue relationship that means the opposite of every other line on the canvas,
+  and it is named in the picture's own loss list instead, which until now was empty
+  because the derivation had nothing to declare. Nothing here carries a health state,
+  so an unpublished catalogue is not a fault; a catalogue somebody is still filling
+  would otherwise be red for a week. Orders and prices are absent: an order is
+  runtime, a price is on the catalogue's own screen behind the catalogue's own rules.
+
+  **In ArchiMate's vocabulary** — reached through the export, which follows whichever
+  picture you are on — a catalogue is a Grouping and a product a Product, and
+  an integral part is a **Composition** while an optional one is an **Aggregation** —
+  the first relationships this landscape can name exactly rather than approximately,
+  drawn with the standard's own diamonds and written into the exported document.
+  Precedence is drawn and not exported, because ArchiMate has no relationship that
+  means "this cannot be provisioned before that", and the export says so rather than
+  picking the nearest wrong one.
+
+  **Who sees it follows the catalogue, not the picture.** A catalogue is on the
+  starmap for whoever maintains it — its owner, an editor, somebody it was shared with
+  — and never for the people it is offered to: reaching a catalogue as a customer says
+  what you may order and nothing about the estate behind it. A modeler who maintains
+  no catalogue therefore sees none, exactly as they see no application nobody shared
+  with them — and the picture **says so in words** rather than leaving an empty canvas
+  to be read as a broken feature. It names both reasons and picks neither: whether no
+  catalogue exists yet or none is yours is the one thing this picture must not tell
+  you, because telling you would disclose that catalogues exist which you may not see.
+
+- **A product is assembled from the services that exist, instead of related pairwise.**
+  A catalogue is built out of services that each provision themselves; what a product
+  adds is an arrangement — which of them come with it and cannot be deselected, and
+  which are offered beside it. That arrangement was authored as edges: pick a *from*,
+  pick a relationship, pick a *to*, one triple at a time into a table sorted by
+  relationship. It was the data as it is stored, and never showed what one product is
+  made of.
+
+  The catalogue screen now has a **construction kit** per product. It lists every other
+  product the catalogue offers and asks the one question, once per row, with three
+  answers that leave nothing out: **not part of it**, **included**, **optional** — each
+  pre-selected from how it stands today. One save writes that product's whole
+  structure, which is why "not part of it" is an answer here at all and was a removal
+  before.
+
+  What the kit was not asked about it does not touch: every other product's
+  arrangement, and every precedence edge including the assembled product's own. The
+  save carries the revision the page was read at, so a second maintainer's arrangement
+  cannot vanish into it.
+
+  A choice that closes a loop is **refused before it is written**, naming the product
+  that already contains this one, directly or through another. Publishing still proves
+  the whole catalogue — that is where the proof belongs — but a refusal is worth most
+  at the moment the choice is made, rather than three screens later about a catalogue
+  that has since been edited.
+
+  The pairwise form stays, narrowed to **precedence** only. Precedence is a statement
+  about two products and belongs to neither, so it is the one relationship a pairwise
+  form is the right shape for; structure had two ways to be said, and two ways drift.
+
+- **An approval is read and decided in the inbox.** An approval is an ordinary user
+  task, so the rows were always in `Tasks` — rendered like every other row, saying
+  nothing about the product, the price or the person waiting, and decided by opening a
+  second surface in another tab. Every approval task is called "Genehmigen", so a
+  queue of them was a column of identical lines.
+
+  Each row now names what it decides — the product as the catalogue wrote it, and the
+  cost — and the detail leads with the rest: the variant, who it is for, who ordered
+  it, and the order. All of it comes from `GET /api/v1/approvals`, which the inbox
+  already called to know which of its rows are approvals; nothing on the server
+  changed.
+
+  **The decision happens there too**: Approve and Reject, with the reason a rejection
+  needs, and — where the same order has more approvals in this inbox — an offer to
+  decide them together under one reason, which is what `POST /api/v1/approvals/decide`
+  exists for.
+
+  For the approval Atlas ships there is now exactly **one** way to answer in that
+  screen. The generic Complete button and the form's own "Genehmigen" checkbox
+  answered the same question by accident: a task completed with no variables reads as
+  `genehmigt = null`, which is not `true`, which is a rejection — recorded with no
+  reason and no sign that nobody meant it. So for that model the form and the Complete
+  button give way to the two buttons, and Ctrl+Enter says so rather than doing it.
+
+  An installation whose products name **its own** approval model keeps its form and its
+  Complete button untouched: `genehmigt` and `begruendung` are the shipped form's
+  contract and not a general one, and two buttons answering for a model Atlas cannot
+  read would complete somebody's task with variables their process never sees. The
+  block still says what is being decided, because that half is true of any approval.
+
+  The standalone approval page stays: it is what an approval notification links to,
+  and somebody arriving from a mail has no inbox to arrive in.
+
+- **A product can carry a picture.** A catalogue row was a name and a price, and
+  somebody choosing between two phones was choosing between two names. A product now
+  has a picture — a photograph of the thing or the vendor's mark, PNG, JPEG or SVG —
+  uploaded in the product editor and shown in the portal when the product is opened.
+
+  It is stored the way a catalogue's brand mark is: a file beside the stores, keyed by
+  the product, with **no flag on the record saying one exists**. The file is the fact,
+  and a second copy of that fact is a second copy to be wrong after a restore that
+  brought the JSON and not the image. What was uploaded is what is served — no
+  resizing and no re-encoding, because a server that re-encodes somebody's picture
+  decides their product looks near enough.
+
+  Who may see it is the question the portal actually asks: **does any catalogue this
+  person may read offer this product**, and not "may they read its home catalogue".
+  A product is referenced by catalogues rather than owned by one, so a customer of one
+  catalogue legitimately orders a product whose home is another — gated on the home
+  alone, that customer would see a name and no picture. Changing it stays with
+  whoever maintains the product: somebody who may not rename it may not re-illustrate
+  it either.
+
+  **A release does not freeze it.** A release freezes what was promised — the product,
+  its variants, the approval rule, the ceiling, the price. A picture is how a thing is
+  shown and not what was agreed, so a better photograph of the same laptop appears on
+  orders already placed rather than a second picture being kept for them.
+
+- **Where your own position stands, without an operations surface.** A position in
+  "Meine Aufträge" now answers *which step* it is sitting on — "Genehmigen",
+  "Provisionierung starten" — to whoever the order belongs to, and not only to a
+  reader holding the operator role.
+
+  The link that existed leads into the console, and the console shows the whole
+  engine state of that instance, variables included. Widening it would have handed
+  out an operations surface to answer a question about one line, so the orderer is
+  answered by a route of their own instead:
+  `GET /api/v1/portal/orders/{id}/lines/{position}/progress`, gated on **owning the
+  order** rather than on a role. Somebody else's order answers 404 and not 403 —
+  whether it exists is not something this confirms — and no process variable leaves
+  through it: the caller already knows their own order, and the route says *where*,
+  not *what*.
+
+  The server finds the instance by the two variables the fulfilment model passes,
+  `orderId` **and** `positionId`, and by both: the order id alone also matches the
+  order's own orchestration, and a position key alone is unique only inside one
+  order. Only live instances are walked, which bounds the cost by the work in
+  flight rather than by everything the store has ever run — and a finished instance
+  has no step to report. The step is the name the model gives the element, read from
+  the deployed document, falling back to its BPMN id where it is unnamed.
+
+- **A model fix now reaches an instance even when its tokens cannot be carried across.**
+  Migrating a running instance onto a corrected version rebinds it in place and keeps
+  everything it has done — but only where every token's element still exists in the new
+  version, as the same kind of element, in the same scope. That refusal is deliberate: a
+  token left on an element that means something else corrupts an instance in a way no
+  later fix repairs. Until now it was also the end of the road, and the operator was back
+  to cancelling the instance and re-entering its data by hand — in precisely the case
+  where the fix matters most, because a model that was genuinely restructured is the one
+  whose elements moved.
+
+  An instance can now be **continued in a new instance** of the target version instead.
+  The instance is ended where it is, a successor of the new version starts at the elements
+  you name — proposed from where its tokens are now, whenever the ids survived the edit —
+  and its variables and data objects come across with it. Both records name the other, so
+  the old replay says "continued as …" and the new one says "continues …", and each is one
+  click from the other. Nothing already done is undone, and the old instance stays
+  readable exactly as it ran.
+
+  It is a different operation from a migration, not a fallback the server takes on its
+  own: work in flight — open jobs, user tasks, incidents, armed timers and subscriptions —
+  ends with the instance it belonged to, and the dialog says so, with the counts, before
+  anything is written. The migration dialog plans both readings of "move this instance to
+  that version" in one call and shows the fork below the rebinding, dimmed while the
+  rebinding is still on the table. A reason is required and recorded on both instances.
+  Refused before anything is written when there is nowhere to resume, when a resume point
+  could not run on its own (a boundary event, an event subprocess, a joining gateway, an
+  element inside a subprocess), and for a call activity's child, whose caller waits on the
+  instance being ended. New: `POST /api/v1/instances/{key}/migrate/fork` and the
+  `atlas_fork_instance` MCP tool; `…/migrate/plan` now answers both.
 
 - **Every position carries its own way into the process working on it.** "Meine Aufträge"
   already listed each position and what it was doing, out of the order's own
@@ -237,7 +537,84 @@ _Changed_ / _Removed_ for each version.
   would hand back a value a few hundred nanoseconds off and be told its own read was
   stale.
 
+### Removed
+
+- **The standalone approval page.** It existed because the Console is an operator's
+  instrument and most approvers are not operators — right about the people, and wrong
+  about what followed from it: an approval *is* an ordinary user task and the inbox
+  never filtered those out, so the rows were always there. The page did not spare
+  anybody the Console; it was a second place to take one decision, and the two drifted
+  over whether a rejection needs a reason.
+
+  The decision is in the inbox now (see the entry above). What stays is the page's
+  **address**: every approval notification ever sent links to `/genehmigung.html` with
+  the order line in its query, and a mail cannot be recalled — so it forwards, handing
+  that line to the inbox, which resolves it against the approvals the reader holds. The
+  three shipped approval models link into the inbox from now on, and the menu entry
+  under Tasks is gone: it led to a redirect back into the screen it sat under.
+
+  **What is lost is the brand.** The page wore the catalogue's colours, because an
+  approver decides on that customer's behalf; the Console wears nobody's, so the block
+  names the catalogue in words instead. Information kept, presentation dropped.
+
 ### Changed
+
+- **The product editor opens beside the product list, level with the row it was
+  opened from.** It used to render under the table, which is fine with three products
+  and unusable with forty: editing a row near the bottom put the form below everything
+  offered, so it was read after a long scroll and with no sight of the product it
+  belonged to — the id in the first field being the only thing saying which one was
+  open.
+
+  The list and the editor are now two columns, and the panel is pushed down to its
+  row: the product, its row and its form are on one line across the page, and the row
+  is marked while its form is open. **The catalogue's page drops the centred content
+  column** to carry them, the way the Tasks inbox does — 1120px divides into a table
+  of products and a form of about 520px each, and both hold more than that. What is
+  prose on the page keeps its own measure, so nothing turns a paragraph into a line
+  across a 2000px screen, and the tables' action buttons move to the right edge —
+  the console's own rule for an action column, which a full-width table needs and a
+  1120px one could do without. The offset is measured in the browser rather than
+  stated in the stylesheet, because the shared table enhancer sorts and filters the
+  rows underneath it — sorting the list moves the panel with the row it belongs to.
+
+  Opening the panel takes a column off the list, so the rows above rewrap and the row
+  that was clicked would be pushed down the page by text nobody is reading. It is held
+  still: how far it travelled is measured and the page is scrolled back by exactly
+  that, so the list does not jump away from the click.
+
+  **The kit opens in the same place.** What a product is made of is a question about
+  one row exactly as its form is, so it uses the same column and the same alignment,
+  and a row has one of the two open at a time — opening either gives the panel up.
+  Its choice cells now carry the control alone: the column heading already says which
+  answer it is, and repeating that word in every cell cost the table 180px of width.
+  A reader who cannot see the column still hears both, from the radio's own label.
+
+  **The catalogue's own two cards are read side by side**, at the top of the page:
+  what a catalogue is, and what it looks like. They are the two questions about the
+  catalogue itself rather than about anything in it, and stacked down the left edge
+  they left the first screenful of a widened page half empty — the page was wide and
+  did not read as wide. A number field is drawn like every other field while this is
+  here: `Rank` was the one control on that card wearing the browser's own default.
+
+  **Every list on the catalogue page has its form beside it**, because the page is
+  four times one shape: the catalogues and the one being created, the products and
+  the panel that edits them, the relations and the pair being related, who maintains
+  it and who is being added. The shape is stated once, and each section says which
+  half it is — a fifth of them cannot invent a fifth layout.
+
+  **The stacked layout remains, and it is the fallback rather than a lesser page.**
+  The breakpoint is measured rather than chosen, and it is one number for the whole
+  page although the smaller pairs would fit earlier: a page that puts its lists beside
+  their forms at three different widths is three pages to somebody dragging a window
+  edge. The widest pair decides it — the product list cannot be drawn under 853px
+  (five columns, a process id, and a row offering edit, assemble and remove) and the
+  kit beside it needs 464px — which at 35% of the page is 1400px of window. Below
+  that one of the two would be narrower than its own content and would scroll sideways
+  inside its box, losing the column with the buttons in it first; stacked, each of them
+  gets the whole page. The panel sticks to the top of the
+  window while it is scrolled and carries its own scrollbar, because a form longer
+  than the screen that cannot scroll inside hides the Save button it exists for.
 
 - **The catalogue reads Kategorie › Produktgruppe › Produkt › Services, and there is
   no Bundle level.** A bundle is offered as a *Marktleistung*: it holds the
@@ -528,6 +905,189 @@ _Changed_ / _Removed_ for each version.
   about the reader rather than about what they are reading.
 
 ### Fixed
+
+- **An agent's save no longer clears a product's group.** `atlas_save_catalog_product`
+  is a full replace and forwards exactly the fields its schema declares. `productGroup`
+  was added to the record and to the Console and missed there, so the loop the tool's
+  own description prescribes — read the product with `atlas_list_catalog_products`,
+  change one field, send the whole record back — dropped it. The portal's Produktgruppe
+  column emptied itself for every product an agent had touched, and nothing anywhere
+  said so.
+
+  The field is declared now, and the schema is held against the record by reflection
+  rather than against a list kept beside it: the list is what was already wrong. A
+  field added to a product from here on is either declared or named as deliberately
+  absent, and neither can happen quietly.
+
+- **What you already hold is filed under the heading you ordered it under.** "Meine
+  Leistungen" drew the same Kategorie and Produktgruppe columns as the catalogue and
+  read them off a different set of products: the catalogue collects them from the
+  products nothing contains, and this screen read them straight off each entitlement.
+  Both strings belong to the offering, so a service two edges down has never had a
+  heading of its own to carry — and services are most of what a person actually holds.
+  The columns therefore showed "Ohne Kategorie" for things the catalogue filed under a
+  real heading. Nothing looked broken; the column was simply empty for the products
+  people have. Each entitlement is now resolved to the product it belongs to and the
+  heading read there, which is the heading that was on screen when it was ordered.
+
+- **"No process instance is left for this order" named a cause it could not know.** It
+  said retention had removed the instance. That is one of three reasons the portal
+  finds none, and the least likely of them: an order whose fulfilment never started has
+  no instance to remove, and that is what somebody reads this about on the day they
+  ordered — which is exactly what the defect below produced for every order on an
+  installation. The message now says what it knows: none has started yet, it has
+  finished, or retention removed it. The order and one position are also told apart,
+  because the order's orchestration and a position's own process are two different
+  absences.
+
+- **Checking a mail worker now says which of the two checks it is running.** The check
+  has two modes and they are not degrees of the same thing: one connects,
+  authenticates and stops at the door, the other puts a real message in a real
+  person's inbox. The server tells them apart by whether a recipient was given, which
+  is the right contract for an API and was the wrong question to put to a person: it
+  was asked as a browser prompt saying "leave empty to only check the connection", so
+  the harmless mode had to be expressed by typing nothing into the same box that means
+  "send mail to this address", and a stray character sent it.
+
+  A browser prompt is also refusable. A sandboxed frame, or the "prevent this page from
+  creating additional dialogs" box somebody ticks once, makes it return nothing without
+  ever opening — which the page read as Cancel and the operator read as the check not
+  happening at all, with no way to tell the two apart. The modes are now a control that
+  names them, in a dialog the page draws itself, with the connection check preselected
+  and the address checked for being an address before anything is sent.
+
+  The flow moved to `workerdialog.js` beside the worker's edit and delete dialogs, for
+  the reason those are there: what a check does is a decision, and it was sitting in
+  the one file a test cannot open.
+
+- **A catalogue's existing products are now picked from a list rather than typed.**
+  "Offer an existing product" opened a `window.prompt` that printed every product this
+  catalogue does not yet carry as a line of text — id, a dash, the name — and asked for
+  the id back. Nothing in that list could be clicked, because prompt body is not a
+  control: picking meant reading an id off the wall of lines and typing it exactly, and
+  a typo was answered with "No product with that id" and the whole list to re-read.
+
+  It also cut the list off. A browser truncates a prompt body past a handful of lines,
+  so on a server with a few dozen products the ones that sort last were not in the list
+  somebody was told to choose from — and a product created a minute earlier is exactly
+  the one being looked for. This is the failure the application picker had before it
+  became a dialog, and it gets the same fix: the console's pick dialog, whose list is a
+  `<select>` with no length limit and nothing to count.
+
+  The button beside it was drawn from a comparison of two counts — products on the
+  server against ids this catalogue offers. An id may be offered and no longer defined,
+  which the product table already reports as "offered but not defined", and one such
+  entry made the counts equal while products nobody had offered were sitting there: the
+  button vanished, reading as "there is nothing to add". It is drawn from the list of
+  products this catalogue does not carry, which is the question it was always asking.
+
+- **"Test expression" no longer certifies an expression that cannot work.** A BPMN deploy
+  already refuses a call this build can only ever answer with null — an unknown function
+  name, or a built-in called with an argument count its signature cannot take. Four other
+  places compiled FEEL without asking, and each already refused an expression that failed to
+  *parse*, at the point somebody wrote it. Only this one class of fault walked through a gate
+  that was already standing.
+
+  The worst of them did not merely stay silent. `POST /api/v1/feel/validate` — the route the
+  Modeler's expression fields call while you type, and whose entire purpose is to say whether
+  an expression is valid — answered **valid** for `is defined(x)`. Somebody who asked exactly
+  the right question was told the wrong answer, which is worse than never having been asked:
+  a "no" leaves you looking, a "yes" gives you a reason to stop. It now answers no, and names
+  the standard way to write the same thing.
+
+  The quietest of them was an **inbound worker's correlation key**. A key that evaluates to
+  null correlates an incoming message to nothing, so events arrive, the sender gets its 2xx,
+  the worker reports healthy, and no instance is ever woken — with nothing to see anywhere.
+  It is now refused at registration, where a syntax error already was, because by the time an
+  event arrives there is nobody left to tell. The same holds when an existing subscription's
+  key is edited.
+
+  **Playground rules** say it too, for `when` and for `then` alike: such a rule compiles,
+  then selects no case or fails every one, and the verdict is reached for a reason that has
+  nothing to do with the run.
+
+  **Task-folder rules turned out not to need it**, against the expectation that opened this:
+  a folder rule's expression is generated from a closed catalogue, and every value reaching
+  it is an escaped string, a bounded integer or a duration held to a pattern, so no text a
+  caller sends can become a call. Typing `is defined(x)` into a folder's name field looks for
+  tasks called that, which is what it says. What is real there is a property of the
+  catalogue, and it is now pinned in the test that already holds every advertised
+  field/operator pair against the generator — where an operator added later would break the
+  build rather than a person's folder.
+
+  `POST /api/v1/feel/evaluate` is deliberately untouched: if the expression yields null, null
+  is the honest answer and the one the engine really gives. The engine is untouched too — a
+  DMN decision still answers null, as the specification requires.
+
+- **A stored process definition could stop the server from starting.** The compiler
+  recently learned to refuse a FEEL call to a function this build does not have — a
+  call that can only ever evaluate to null, so it cannot be doing what its author
+  meant. The rule is right at a deploy. It was not right at a *restart*: it ran while
+  the process was still being built, which is before the point where a reload can tell
+  "this model would be refused today" apart from "there is nothing here to bring back".
+
+  So a definition deployed months ago, under a build that had no such rule, made the
+  new build exit during startup. The supervisor restarted it; it exited again. Every
+  other definition and every running instance sat behind the one record that would not
+  load, and the only way in — the API that could replace the model — needs a server
+  that is up.
+
+  A rule the compiler gains later decides whether a model may be **deployed**, never
+  whether it may be **loaded**. A deploy still refuses the call, with the same message
+  naming the task and the function. A reload now compiles the expression exactly as the
+  build that stored it did — the engine answers the unknown call with null, which is
+  what that definition has been doing all along — and logs
+  `deployment.reloaded_with_problems` naming the deployment and the expression to fix.
+  The server starts.
+
+- **The fulfilment orchestration never learned which order it was working on.** Its
+  model documents `orderId` as a start variable, builds every request from it
+  (`"/api/v1/orders/" + orderId + "/next"`) and correlates the message that wakes it
+  on it. The wake passed it as the message's **correlation key** only — and a message
+  *start* event's key is evaluated from the payload, so `=orderId` over a payload
+  without it resolved to nothing: the instance recorded no key, and the variable the
+  model reads was never written.
+
+  Nothing failed, which is the part worth knowing. FEEL propagates null, so the first
+  service task was activated with `path = null`: the orchestration asked its REST
+  worker for nothing, was never woken by a settled line, and the order sat at
+  "Wartet" with no incident for anybody to find.
+
+  Deploying the fix does not repair an instance that is already running — the
+  variable it needed was never there to write. **`POST /api/v1/orders/fulfilment/repair`**
+  (operator) ends the orchestrations that name no order, or name one this server no
+  longer holds, and starts one again for every open order left without one. Both
+  halves together: ending alone leaves the order where it was, and starting alone
+  would put a second orchestration beside a healthy one, where both would ask what may
+  start and both would start it. It is idempotent, and `?dryRun=true` reports what it
+  would do and changes nothing — which is what to run first.
+
+- **An approval of a product ordered twice vanished from the approver's inbox.** What
+  makes a task an approval is the order behind it: the instance names a line, and the
+  order agrees that this process decides that line. Naming the line is what the
+  position key changed — a process passes `positionId` beside `itemId`, because
+  "phone" is two lines when somebody ordered a black one and a silver one. The reader
+  was written for that and the collection was not: `positionId` was read out of a map
+  that gathered every other variable, so the fallback to the product always fired.
+  For an order carrying one position of a product that fallback is right, which is why
+  nothing showed; for a product ordered twice it resolves to nothing — correctly,
+  because the product names two lines — and the task was then not recognised as an
+  approval at all, in the inbox, on the approval page, or in the escalation lookup.
+
+- **A product's name in the basket wrapped one letter per line.** The optional column
+  read "Schutzhü / lle / transpare / nt" beside a price that had all the width. Two
+  decisions made it together, and each was enough on its own: the price and the level
+  were built into the row's *trail* — the slot that carries its controls, and
+  therefore promises never to give width back — and the name was set to
+  `overflow-wrap:anywhere`, which lets a box shrink below its longest word, so there
+  was no floor under it to stop at.
+
+  A row now has three slots with one rule between them: `lead` and `trail` carry
+  controls, `meta` carries text about the row, and text shrinks. The price, the level
+  a position will sit at and the "found under" line of a search result moved into
+  `meta`, which renders under the name and wraps; the name itself keeps its longest
+  word as a floor. The search results carried their "found under" line in the trail
+  for the same reason and moved with it.
 
 - **An expression calling a function that does not exist no longer deploys clean and answers
   null.** The FEEL engine compiles a call to a name it does not know into a constant null,

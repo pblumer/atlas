@@ -24,12 +24,12 @@ func eventSubStart(sub *xmlSubProcess) *xmlStartEvent {
 // expression (ADR-0137), mirroring how a gateway condition is compiled (connectScope). It
 // strips a leading Zeebe FEEL "=" and trims; an empty condition is a deploy error (a
 // conditional event with no predicate can never fire). id names the event for the error.
-func compileCondition(id, raw string) (*expr.Compiled, error) {
+func compileCondition(g *feelGate, id, raw string) (*expr.Compiled, error) {
 	cond := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(raw), "="))
 	if cond == "" {
 		return nil, fmt.Errorf("compiler: conditional event %q has no condition", id)
 	}
-	ce, err := compileFEEL(cond)
+	ce, err := g.compileFEEL(cond)
 	if err != nil {
 		return nil, fmt.Errorf("compiler: conditional event %q condition: %w", id, err)
 	}
@@ -129,7 +129,7 @@ func registerScope(
 			continue
 		}
 		if s.Timer != nil {
-			schedule, err := parseTimerSchedule(s.Timer)
+			schedule, err := parseTimerSchedule(b.gate(), s.Timer)
 			if err != nil {
 				return fmt.Errorf("compiler: start event %q timer: %w", s.Id, err)
 			}
@@ -311,7 +311,7 @@ func registerScope(
 		// FEEL is compiled once, at deploy time (ADR-0008/0015). CompileAuto
 		// discovers the process variables the expression reads; a syntax or type
 		// error fails here — i.e. fails deploy.
-		e, err := compileFEEL(text)
+		e, err := b.gate().compileFEEL(text)
 		if err != nil {
 			return fmt.Errorf("compiler: script task %q: %w", st.Id, err)
 		}
@@ -329,7 +329,7 @@ func registerScope(
 		if err != nil {
 			return fmt.Errorf("compiler: business rule task %q: %w", brt.Id, err)
 		}
-		mappings, err := decisionInputMappings(brt.Id, brt.InputMappings)
+		mappings, err := decisionInputMappings(b.gate(), brt.Id, brt.InputMappings)
 		if err != nil {
 			return err
 		}
@@ -370,11 +370,11 @@ func registerScope(
 			}
 			dueDateNanos = nanos
 		}
-		assignee, err := Assign(ut.Id, "assignee", ut.Assignment.Assignee)
+		assignee, err := assign(b.gate(), ut.Id, "assignee", ut.Assignment.Assignee)
 		if err != nil {
 			return err
 		}
-		groups, err := Assign(ut.Id, "candidateGroups", ut.Assignment.CandidateGroups)
+		groups, err := assign(b.gate(), ut.Id, "candidateGroups", ut.Assignment.CandidateGroups)
 		if err != nil {
 			return err
 		}
@@ -407,7 +407,7 @@ func registerScope(
 	for _, ev := range c.IntermediateCatchEvents {
 		switch {
 		case ev.Timer != nil:
-			schedule, err := parseTimerSchedule(ev.Timer)
+			schedule, err := parseTimerSchedule(b.gate(), ev.Timer)
 			if err != nil {
 				return fmt.Errorf("compiler: intermediate catch event %q timer: %w", ev.Id, err)
 			}
@@ -436,7 +436,7 @@ func registerScope(
 			// A conditional catch waits until its boolean FEEL condition becomes true, then
 			// flows on (ADR-0137). It arms inert and is driven to Completing by a re-check on
 			// variable change.
-			cond, err := compileCondition(ev.Id, ev.Conditional.Condition)
+			cond, err := compileCondition(b.gate(), ev.Id, ev.Conditional.Condition)
 			if err != nil {
 				return err
 			}
@@ -664,7 +664,7 @@ func registerScope(
 				d.ResultCollection = b.intern(rc)
 			}
 			if re := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(ag.ResultElement), "=")); re != "" {
-				ce, err := compileFEEL(re)
+				ce, err := b.gate().compileFEEL(re)
 				if err != nil {
 					return fmt.Errorf("compiler: agent-driven ad-hoc subprocess %q resultElement: %w", ah.Id, err)
 				}
@@ -672,7 +672,7 @@ func registerScope(
 			}
 		}
 		if cond := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(ah.CompletionCondition), "=")); cond != "" {
-			ce, err := compileFEEL(cond)
+			ce, err := b.gate().compileFEEL(cond)
 			if err != nil {
 				return fmt.Errorf("compiler: ad-hoc subprocess %q completion condition: %w", ah.Id, err)
 			}
@@ -748,7 +748,7 @@ func registerScope(
 				}
 				d.Kind, d.EscalationCode = BoundaryEscalation, code
 			case st.Timer != nil:
-				schedule, err := parseTimerSchedule(st.Timer)
+				schedule, err := parseTimerSchedule(b.gate(), st.Timer)
 				if err != nil {
 					return fmt.Errorf("compiler: event subprocess %q timer: %w", sub.Id, err)
 				}
@@ -759,7 +759,7 @@ func registerScope(
 				// analog of a conditional boundary. Like escalation it honors isInterrupting;
 				// unlike error it is not always interrupting. It is re-checked on every variable
 				// change in its scope, not driven by a throw.
-				cond, err := compileCondition(st.Id, st.Conditional.Condition)
+				cond, err := compileCondition(b.gate(), st.Id, st.Conditional.Condition)
 				if err != nil {
 					return err
 				}
@@ -784,7 +784,7 @@ func registerScope(
 		interrupting := ev.CancelActivity != "false"
 		switch {
 		case ev.Timer != nil:
-			schedule, err := parseTimerSchedule(ev.Timer)
+			schedule, err := parseTimerSchedule(b.gate(), ev.Timer)
 			if err != nil {
 				return fmt.Errorf("compiler: boundary event %q timer: %w", ev.Id, err)
 			}
@@ -838,7 +838,7 @@ func registerScope(
 			// becomes true (ADR-0137). It honors cancelActivity — interrupting tears the host
 			// down, non-interrupting runs the handler alongside. It opens no subscription and is
 			// re-evaluated on variable change.
-			cond, err := compileCondition(ev.Id, ev.Conditional.Condition)
+			cond, err := compileCondition(b.gate(), ev.Id, ev.Conditional.Condition)
 			if err != nil {
 				return err
 			}
@@ -986,7 +986,7 @@ func connectScope(b *Builder, ids map[string]int32, c *xmlFlowContent) error {
 		flowIdx[f.Id] = fid
 		if cond := strings.TrimSpace(f.Condition); cond != "" {
 			cond = strings.TrimSpace(strings.TrimPrefix(cond, "=")) // FEEL condition, '=' prefix per Zeebe
-			ce, err := compileFEEL(cond)
+			ce, err := b.gate().compileFEEL(cond)
 			if err != nil {
 				return fmt.Errorf("compiler: flow %q condition: %w", f.Id, err)
 			}

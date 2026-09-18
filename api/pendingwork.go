@@ -272,7 +272,11 @@ func (s *Server) approvalsWaitingFor(pr *httpapi.Principal) ([]pendingItem, erro
 				Kind: "approval", Ref: a.OrderID, Sub: a.ItemID,
 				What:  approvalSentence(a),
 				Since: waitingSince(a),
-				Link:  "/genehmigung.html#" + a.OrderID,
+				// Into the inbox, which is where an approval is read and decided
+				// (ADR-0394). It names the
+				// order line rather than the task, because a task key does not exist
+				// until the task activates and the order line does.
+				Link: "/index.html#/tasks?order=" + a.OrderID + "&item=" + a.PositionID,
 			})
 		}
 		return nil

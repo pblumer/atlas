@@ -18,7 +18,7 @@ import (
 //
 // An empty template returns the zero RestExpr: the task then falls back to its
 // attributesVariable, so the two ways of supplying a body stay mutually exclusive.
-func entraAttributesExpr(taskID, raw string) (RestExpr, error) {
+func entraAttributesExpr(g *feelGate, taskID, raw string) (RestExpr, error) {
 	if strings.TrimSpace(raw) == "" {
 		return RestExpr{}, nil
 	}
@@ -35,7 +35,7 @@ func entraAttributesExpr(taskID, raw string) (RestExpr, error) {
 	if err != nil {
 		return RestExpr{}, fmt.Errorf("compiler: entra task %q attributes: %w", taskID, err)
 	}
-	e, err := compileFEEL(feel)
+	e, err := g.compileFEEL(feel)
 	if err != nil {
 		return RestExpr{}, fmt.Errorf("compiler: entra task %q attributes did not compile (a value's =expression may be malformed): %w", taskID, err)
 	}

@@ -1,0 +1,35 @@
+{
+  "tags": [
+    "Catalogue",
+    "Portal"
+  ],
+  "title": {
+    "en": "A product can be offered from a date, until a date",
+    "de": "Ein Produkt kann ab einem Datum und bis zu einem Datum angeboten werden"
+  },
+  "summary": {
+    "en": "A catalogue item has carried an orderable window since the catalogue was designed, and nothing read it: publishing checked that the window did not end before it began, and no reader ever asked whether today was inside it. A product with a window was orderable exactly like one without. It is enforced now — an order for a product outside its window is refused by the server, naming the product and the date — and the editor has the two date boxes to set it with. Both ends are inclusive, so a product orderable \"until the 31st\" is orderable on the 31st. Note on upgrade: if you filled the field in while it did nothing, those products will now refuse orders outside their dates.",
+    "de": "Ein Katalogeintrag trägt seit dem Entwurf des Katalogs ein Bestellfenster, und niemand las es: Die Veröffentlichung prüfte, dass das Fenster nicht vor seinem Beginn endet, und kein Leser fragte je, ob das heutige Datum darin liegt. Ein Produkt mit Fenster war genauso bestellbar wie eines ohne. Jetzt wird es durchgesetzt — eine Bestellung für ein Produkt ausserhalb seines Fensters weist der Server ab und nennt dabei Produkt und Datum — und der Editor hat die beiden Datumsfelder, um es zu setzen. Beide Enden sind einschliesslich: Ein bis zum 31. bestellbares Produkt ist am 31. bestellbar. Hinweis zur Aktualisierung: Wurde das Feld gepflegt, solange es wirkungslos war, weisen diese Produkte künftig Bestellungen ausserhalb ihrer Daten ab."
+  },
+  "tutorial": {
+    "en": [
+      "Open Console → Catalogues, pick a catalogue and edit a product. The orderable window sits at the top of how an order is handled, as two dates.",
+      "Leave either side empty: empty on the left is \"from whenever it is published\", empty on the right is \"until somebody withdraws it\". Empty on both is the ordinary product, and nothing changes for it.",
+      "Publish the catalogue. A product whose window has not opened is visible in the portal and cannot be put in a basket; the row says from when.",
+      "The dates are the server's own (UTC) and are authored as days. A window that has to hold to the hour is not what this field is for."
+    ],
+    "de": [
+      "Console → Catalogues öffnen, einen Katalog wählen und ein Produkt bearbeiten. Das Bestellfenster steht zu Beginn des Abschnitts zur Auftragsbearbeitung, als zwei Datumsfelder.",
+      "Eine Seite darf leer bleiben: links leer heisst \"ab Veröffentlichung\", rechts leer heisst \"bis zum Zurückziehen\". Beide leer ist das gewöhnliche Produkt; für dieses ändert sich nichts.",
+      "Katalog veröffentlichen. Ein Produkt, dessen Fenster noch nicht offen ist, bleibt im Portal sichtbar und lässt sich nicht in den Warenkorb legen; die Zeile nennt das Datum.",
+      "Die Daten sind die des Servers (UTC) und werden tageweise gepflegt. Für ein Fenster, das auf die Stunde genau gelten muss, ist dieses Feld nicht gedacht."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Catalogues",
+      "de": "Kataloge öffnen"
+    },
+    "route": "#/catalog"
+  }
+}

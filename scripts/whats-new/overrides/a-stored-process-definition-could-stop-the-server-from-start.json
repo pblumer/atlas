@@ -1,0 +1,13 @@
+{
+  "tags": [
+    "Betrieb"
+  ],
+  "title": {
+    "en": "An upgrade no longer stops the server over an old model",
+    "de": "Ein Upgrade legt den Server nicht mehr wegen eines alten Modells still"
+  },
+  "summary": {
+    "en": "Atlas recompiles every deployed definition when it starts. A rule the compiler learned after a model was deployed — most recently: a FEEL call to a function this build does not have — could make that recompile fail, and the server then refused to start at all, with every other definition and every running instance locked behind the one old model. A rule added later now decides only whether a model may be deployed. On a restart the definition comes back exactly as it has been running, and the log names the model and the expression to fix.",
+    "de": "Atlas übersetzt beim Start jede deployte Definition neu. Eine Regel, die der Compiler erst nach dem Deployment gelernt hat — zuletzt: ein FEEL-Aufruf einer Funktion, die dieser Build nicht kennt — konnte diese Übersetzung scheitern lassen. Der Server startete dann gar nicht mehr, und alle übrigen Definitionen sowie sämtliche laufenden Instanzen waren hinter dem einen alten Modell eingeschlossen. Eine später ergänzte Regel entscheidet jetzt nur noch darüber, ob ein Modell deployt werden darf. Beim Neustart kommt die Definition unverändert zurück, und das Log benennt das Modell und den Ausdruck, der zu korrigieren ist."
+  }
+}

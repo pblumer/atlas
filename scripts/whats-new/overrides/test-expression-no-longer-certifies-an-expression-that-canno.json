@@ -1,0 +1,28 @@
+{
+  "tags": [
+    "Modeler",
+    "Workers"
+  ],
+  "title": {
+    "en": "\"Test expression\" no longer says yes to an expression that cannot work",
+    "de": "«Ausdruck testen» sagt nicht mehr Ja zu einem Ausdruck, der nicht funktionieren kann"
+  },
+  "summary": {
+    "en": "A deploy already refuses an expression that calls a function Atlas does not have, or calls a real one with the wrong number of arguments. Four other places compiled such an expression without a word — and one of them said it was fine. The Modeler's expression check, which runs while you type, reported is defined(x) as valid, so somebody who asked exactly the right question was told the wrong answer. It now says no and names the standard way to write the same thing. An inbound worker's correlation key is refused when it is registered rather than correlating every event to nothing, and the playground says it too. Evaluating an expression is unchanged: if it yields null, null is still what you see, because that is what the engine really answers.",
+    "de": "Ein Deploy lehnt bereits Ausdrücke ab, die eine in Atlas nicht vorhandene Funktion aufrufen oder eine echte mit falscher Argumentzahl. Vier weitere Stellen haben solche Ausdrücke kommentarlos übersetzt — und eine davon hat sie sogar für gültig erklärt. Die Ausdrucksprüfung im Modeler, die beim Tippen mitläuft, meldete is defined(x) als gültig: Wer genau die richtige Frage stellte, bekam die falsche Antwort. Sie sagt jetzt Nein und nennt die standardkonforme Schreibweise. Der Korrelationsschlüssel eines Inbound-Workers wird bei der Registrierung abgelehnt, statt später jedes Ereignis ins Leere zu korrelieren; im Playground gilt dasselbe. Das Auswerten eines Ausdrucks bleibt unverändert: Ergibt er null, sieht man weiterhin null — das ist die Antwort der Engine."
+  },
+  "tutorial": {
+    "en": [
+      "Open a process in the Modeler and type = is defined(x) into a condition or a script expression.",
+      "The field now reports that is defined is not a FEEL function and that the standard way to ask the same thing is x != null.",
+      "Under Workers, an inbound subscription whose correlation key calls such a function is refused when you save it — not left to correlate every arriving event to nothing.",
+      "Testing an expression is unchanged: the result box still shows the null the engine produces, because that is what it really answers."
+    ],
+    "de": [
+      "Einen Prozess im Modeler öffnen und in einer Bedingung oder einem Skript = is defined(x) eintippen.",
+      "Das Feld meldet jetzt, dass is defined keine FEEL-Funktion ist und dieselbe Frage standardkonform x != null lautet.",
+      "Unter Workers wird ein Inbound-Abonnement, dessen Korrelationsschlüssel eine solche Funktion aufruft, beim Speichern abgelehnt — statt später jedes eintreffende Ereignis ins Leere zu korrelieren.",
+      "Das Testen eines Ausdrucks bleibt unverändert: Das Ergebnisfeld zeigt weiterhin das null der Engine, denn das ist ihre tatsächliche Antwort."
+    ]
+  }
+}

@@ -23,6 +23,9 @@ go.work.sum
 # node_modules here. The built artifact is committed; what built it is not.
 /node_modules/
 
+# a vendored bundle's build inputs are committed; its install tree is not
+api/web/vendor/*/src/node_modules/
+
 # Profiling
 *.prof
 *.pprof

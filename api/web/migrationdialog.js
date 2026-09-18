@@ -72,6 +72,58 @@ export function planHTML(plan) {
   return head + why + mapping;
 }
 
+// forkSummary reduces a fork plan to the sentence an operator needs before they commit:
+// what crosses with the successor, and what ends with the predecessor. The second half is
+// the one that matters — a fork cannot carry work in flight, and finding that out
+// afterwards is finding out too late.
+export function forkSummary(fork) {
+  if (!fork) return null;
+  const unmatched = (fork.parked || []).filter((p) => !p.resumeAt).map((p) => p.elementId);
+  return {
+    variables: fork.variables || 0,
+    dataObjects: fork.dataObjects || 0,
+    jobs: fork.jobs || 0,
+    unmatched,
+  };
+}
+
+// forkHTML renders the fork alternative: what it would do, where the work would pick up
+// again, and what it would cost. It is shown beside the in-place plan rather than
+// instead of it, because the two are different operations and the cheaper one is almost
+// always right — a fork is what is left when the rebinding cannot hold
+// (ADR-0389).
+export function forkHTML(fork) {
+  if (!fork) return "";
+  const s = forkSummary(fork);
+  const chosen = new Set(fork.resume || []);
+  const candidates = fork.candidates || [];
+  const boxes = candidates.length
+    ? candidates.map((id) => `<label class="mig-resume-opt"><input type="checkbox" value="${esc(id)}"${
+      chosen.has(id) ? " checked" : ""}/> <span class="mono">${esc(id)}</span></label>`).join("")
+    : `<p class="muted" style="margin:0;font-size:12px">This version has no element the work could resume at.</p>`;
+  const stranded = s.unmatched.length
+    ? `<p class="muted" style="margin:6px 0 0;font-size:12px">${s.unmatched.map(esc).join(", ")} ${
+      s.unmatched.length === 1 ? "has" : "have"} no element of the same id in the target version, so nothing is
+       proposed for ${s.unmatched.length === 1 ? "it" : "them"} — say where that work picks up again.</p>`
+    : "";
+  const problems = (fork.problems || []).length
+    ? `<ul class="mig-problems">${fork.problems.map((p) =>
+      `<li>${p.elementId ? `<b>${esc(p.elementId)}</b> ` : ""}${esc(p.reason)}</li>`).join("")}</ul>`
+    : "";
+  return `
+    <h4>Or continue in a new instance</h4>
+    <p class="muted" style="margin:0 0 8px;font-size:12px">This instance is ended where it is and a <b>new instance of
+    v${esc(String(fork.toVersion))}</b> continues its work from the elements ticked below. Both instances link to each
+    other, and nothing already done is undone.</p>
+    <p class="muted" style="margin:0 0 8px;font-size:12px"><b>Crosses:</b> ${s.variables} variable${
+  s.variables === 1 ? "" : "s"}, ${s.dataObjects} data object${s.dataObjects === 1 ? "" : "s"}.
+    <b>Ends with this instance:</b> ${s.jobs} job${s.jobs === 1 ? "" : "s"} or task${s.jobs === 1 ? "" : "s"} in flight,
+    its incidents, and its history — which stays readable on the old instance.</p>
+    <div class="mig-resume">${boxes}</div>
+    ${stranded}
+    ${problems}`;
+}
+
 // migrateInstanceFlow opens the dialog on one running instance. Resolves true when the
 // instance was migrated, false otherwise (cancelled, refused, or the call failed — each
 // already reported). `onDone` is called after a successful migration so the caller can
@@ -94,16 +146,32 @@ export async function migrateInstanceFlow({ api, toast, instanceKey, processId, 
 
   const choice = await askMigration({ api, instanceKey, processId, fromVersion, targets });
   if (!choice) return false;
+  let got;
   try {
-    await api("POST", `/api/v1/instances/${encodeURIComponent(instanceKey)}/migrate`, {
-      targetProcessDefKey: choice.target.key,
-      reason: choice.reason,
-    });
+    got = choice.mode === "fork"
+      ? await api("POST", `/api/v1/instances/${encodeURIComponent(instanceKey)}/migrate/fork`, {
+        targetProcessDefKey: choice.target.key,
+        reason: choice.reason,
+        resume: choice.resume,
+      })
+      : await api("POST", `/api/v1/instances/${encodeURIComponent(instanceKey)}/migrate`, {
+        targetProcessDefKey: choice.target.key,
+        reason: choice.reason,
+      });
   } catch (e) {
     toast(migrateError(e), "err");
     return false;
   }
-  toast(`Instance migrated to ${versionLabel(choice.target)}`, "ok");
+  if (choice.mode === "fork") {
+    // The successor's key is the thing an operator needs next: the work is there now,
+    // and this is the only moment the connection is in front of them.
+    const next = got && got.successorInstanceKey;
+    toast(next
+      ? `Instance continues as ${next} on ${versionLabel(choice.target)}`
+      : `Instance continued on ${versionLabel(choice.target)}`, "ok");
+  } else {
+    toast(`Instance migrated to ${versionLabel(choice.target)}`, "ok");
+  }
   if (onDone) await onDone();
   return true;
 }
@@ -146,6 +214,7 @@ function askMigration({ api, instanceKey, processId, fromVersion, targets }) {
             </select>
           </label>
           <div id="mig-plan" class="mig-plan"><p class="muted" style="margin:0;font-size:12px">Reading the plan…</p></div>
+          <div id="mig-fork" class="mig-fork" hidden></div>
           <label class="field" style="margin-top:10px"><span>Reason</span>
             <input id="mig-reason" placeholder="Why this instance is being moved" autocomplete="off"/>
           </label>
@@ -155,6 +224,7 @@ function askMigration({ api, instanceKey, processId, fromVersion, targets }) {
         </div>
         <div class="modal-foot">
           <button class="btn neutral" data-mig-cancel title="Close without migrating">Cancel</button>
+          <button class="btn neutral" data-mig-fork title="End this instance and continue its work in a new instance of the selected version" hidden disabled>Continue in a new instance</button>
           <button class="btn" data-mig-go title="Move this instance to the selected version" disabled>Migrate</button>
         </div>
       </div>`;
@@ -162,8 +232,10 @@ function askMigration({ api, instanceKey, processId, fromVersion, targets }) {
 
     const targetSel = ov.querySelector("#mig-target");
     const planEl = ov.querySelector("#mig-plan");
+    const forkEl = ov.querySelector("#mig-fork");
     const reasonIn = ov.querySelector("#mig-reason");
     const goBtn = ov.querySelector("[data-mig-go]");
+    const forkBtn = ov.querySelector("[data-mig-fork]");
     const errEl = ov.querySelector(".mig-err");
     const byKey = new Map(targets.map((t) => [String(t.key), t]));
 
@@ -171,11 +243,22 @@ function askMigration({ api, instanceKey, processId, fromVersion, targets }) {
     let planSeq = 0;
 
     const close = (value) => { ov.remove(); resolve(value); };
+    // Which elements the fork would resume at: the server's proposal, as the operator
+    // has since ticked it. Every option offered came from the plan's candidates, which
+    // the server already validated, so this needs no second opinion here.
+    const chosenResume = () =>
+      Array.from(forkEl.querySelectorAll("input[type=checkbox]:checked")).map((el) => el.value);
     // A migration is only offered when the plan says it holds *and* a reason is given.
     // The button is the gate rather than a later error, because a refusal an operator
-    // could have seen first is a round trip they should not have had to make.
+    // could have seen first is a round trip they should not have had to make. The fork
+    // gates on the same reason plus somewhere to resume, and is only offered at all once
+    // the plan has said what it would cost.
     const sync = () => {
-      goBtn.disabled = !(plan && plan.migratable && reasonIn.value.trim());
+      const reason = reasonIn.value.trim();
+      goBtn.disabled = !(plan && plan.migratable && reason);
+      const fork = plan && plan.fork;
+      forkBtn.hidden = !fork;
+      forkBtn.disabled = !(fork && reason && chosenResume().length);
     };
 
     const loadPlan = async () => {
@@ -197,10 +280,16 @@ function askMigration({ api, instanceKey, processId, fromVersion, targets }) {
       if (seq !== planSeq) return;
       plan = got;
       planEl.innerHTML = planHTML(got);
+      forkEl.innerHTML = forkHTML(got.fork);
+      forkEl.hidden = !got.fork;
+      // Dimmed while the instance could simply be rebound: the fork is the answer to a
+      // refusal, and an operator who has one should not be invited to end an instance.
+      forkEl.classList.toggle("alt", !!got.migratable);
       sync();
     };
 
     targetSel.addEventListener("change", loadPlan);
+    forkEl.addEventListener("change", sync);
     reasonIn.addEventListener("input", () => { errEl.hidden = true; sync(); });
     ov.querySelector("[data-mig-cancel]").addEventListener("click", () => close(null));
     ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
@@ -212,7 +301,16 @@ function askMigration({ api, instanceKey, processId, fromVersion, targets }) {
         errEl.hidden = false;
         return;
       }
-      close({ target: byKey.get(targetSel.value), reason });
+      close({ mode: "migrate", target: byKey.get(targetSel.value), reason });
+    });
+    forkBtn.addEventListener("click", () => {
+      const reason = reasonIn.value.trim();
+      if (!reason) {
+        errEl.textContent = "A reason is required — a fork ends the instance it continues.";
+        errEl.hidden = false;
+        return;
+      }
+      close({ mode: "fork", target: byKey.get(targetSel.value), reason, resume: chosenResume() });
     });
 
     loadPlan();

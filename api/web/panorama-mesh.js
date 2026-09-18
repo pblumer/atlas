@@ -96,6 +96,26 @@ const KIND = {
   // the only one that can be *unreachable* or *stale*, which is exactly what somebody
   // scanning for trouble needs to find first.
   target: { r: 24, grow: 6, shape: "pentagon", fill: "var(--surface)", stroke: "var(--accent-hover)", label: "Deployment target — a peer this server can promote to" },
+  // The service catalogue, drawn as its own family. Everything above is what this
+  // server *runs*; these two are what it *offers*, which is a different axis of the
+  // same estate — and a reader has to be able to tell at a glance which half of the
+  // picture they are looking at.
+  //
+  // So they are the only cards on a canvas of polygons. Silhouette is the channel
+  // that survives a projector and a printout, and giving the offered half a family of
+  // its own says "these belong together and are not part of the running estate" before
+  // any label is read. A catalogue is the container, sized with the deployment target
+  // rather than with an application: it holds things, and it is not one of the
+  // application's own.
+  //
+  // The fills are a step of tint apart in a hue nothing else on the canvas uses:
+  // 1.29 against the canvas for the catalogue and 1.19 for the product, which is 1.09
+  // between them — the same separation the draft and the process have, and the same
+  // reason. Both stay far below a finding, where the amber badge is 3.59 and the red
+  // 5.44 (ADR-0211 §4). The outline is the canvas's own ink for both: the card already
+  // carries the kind, and the stroke is what a severity overrides.
+  catalog: { r: 24, grow: 6, shape: "card", fill: "#e6dff5", stroke: "var(--mesh-ink)", label: "Catalogue — what a group of people may order" },
+  product: { r: 13, grow: 4, shape: "tile", fill: "#efe9f8", stroke: "var(--mesh-ink)", label: "Product — a catalogue item and what provisions it" },
 };
 
 // Shape is the third channel, after colour and size, and the one that survives what
@@ -173,7 +193,10 @@ export function shapeVertices(shape, r) {
 // over height, round is the corner radius as a fraction of the short side.
 //
 // C4 draws everything as the same box and tells its types apart by the annotation
-// under the name rather than by silhouette, so it needs two of them and no more.
+// under the name rather than by silhouette, so it needs two of them and no more. The
+// catalogue's two are here as well, for the opposite reason: they are the one family
+// in Atlas's own notation that is drawn as rectangles, so that the half of the estate
+// that is *offered* reads apart from the half that *runs*.
 // `am-service` is here rather than among the polygons because a stadium is a
 // rectangle whose corners are its own half-height, which is what `round: 0.5` says.
 const RECTS = {
@@ -181,6 +204,11 @@ const RECTS = {
   box: { aspect: 1.9, round: 0.08 },
   rounded: { aspect: 1.9, round: 0.42 },
   "am-service": { aspect: 16 / 9, round: 0.5 },
+  // The catalogue's own family, in Atlas's notation rather than a projection's. A
+  // card and a smaller tile: the same silhouette twice, so the two read as one half
+  // of the estate, told apart by size the way an application and a process are.
+  card: { aspect: 1.7, round: 0.16 },
+  tile: { aspect: 1.25, round: 0.28 },
 };
 
 // ARCHIMATE_ICONS is ArchiMate's own notation, as geometry.
@@ -228,6 +256,22 @@ const ARCHIMATE_ICONS = {
   "am-node": {
     points: [[-7, -4], [-4, -7], [7, -7], [7, 4], [4, 7], [-7, 7]],
     detail: [[[-7, -4], [4, -4], [4, 7]], [[4, -4], [7, -7]]],
+  },
+  // Grouping: a rectangle with a tab on its top-left corner — the outline a reader of
+  // UML packages already knows, and the one ArchiMate draws this element with. The
+  // standard also draws its border dashed, which is a stroke and not a silhouette;
+  // this canvas spends the dash on "what is drawn here is not running" for the three
+  // placeholder kinds, and a second meaning for one mark would be worse than the
+  // tab alone.
+  "am-grouping": {
+    points: [[-7, -6], [-1, -6], [-1, -4], [7, -4], [7, 6], [-7, 6]],
+  },
+  // Product: a rectangle with a small bar across the top-left corner. The bar is
+  // interior line work rather than part of the outline, the way the Node's fold is,
+  // so the silhouette stays the rectangle the standard draws.
+  "am-product": {
+    points: [[-7, -5], [7, -5], [7, 5], [-7, 5]],
+    detail: [[[-7, -1.5], [-1.5, -1.5], [-1.5, -5]]],
   },
 };
 
@@ -298,7 +342,12 @@ const NOTATION_SHAPES = {
   "archimate-3.2": {
     application: "am-component", process: "am-process", worker: "am-service",
     decision: "am-function", target: "am-node",
+    catalog: "am-grouping", product: "am-product",
   },
+  // C4 has no word for a catalogue or a product, so both keep Atlas's own card and
+  // tile. Dressing them as a Container would be a claim C4 does not make: it
+  // describes the structure of a software system, and what an organisation offers
+  // its people is not one of its four levels.
   "c4-projection": {
     application: "rounded", process: "rounded", worker: "rounded",
     decision: "rounded", target: "box",
@@ -335,6 +384,8 @@ const NOTATION_SHAPES = {
 // dressing them as one would be a claim the notation does not make.
 const ARCHIMATE_APPLICATION = "#B5FFFF";
 const ARCHIMATE_TECHNOLOGY = "#C9E7B7";
+// Archi's business default, rgb(255,255,181), from the same table as the two above.
+const ARCHIMATE_BUSINESS = "#FFFFB5";
 const NOTATION_PAINT = {
   "archimate-3.2": {
     application: { fill: ARCHIMATE_APPLICATION, stroke: "var(--mesh-ink)" },
@@ -345,6 +396,14 @@ const NOTATION_PAINT = {
     // deployment target in the application blue would put it on the wrong floor of
     // the only diagram whose readers count the floors.
     target: { fill: ARCHIMATE_TECHNOLOGY, stroke: "var(--mesh-ink)" },
+    // A Product is Business, which is the floor a catalogue item belongs on and the
+    // one thing its colour has to say.
+    product: { fill: ARCHIMATE_BUSINESS, stroke: "var(--mesh-ink)" },
+    // A Grouping is on no layer at all — it is ArchiMate's "Other" element, and the
+    // convention every layer colour comes from has nothing to say about it. So it is
+    // drawn on the page's own surface rather than given a layer's fill, which would
+    // be putting it on a floor the standard deliberately leaves it off.
+    catalog: { fill: "var(--surface)", stroke: "var(--mesh-ink)" },
   },
 };
 
@@ -387,6 +446,9 @@ export function paintFor(node, notation) {
 const AM_HEAD = 6;        // how far an arrowhead reaches back along the line
 const AM_HALF = 2.6;      // half its width across the line — 6:2.6 is Archi's 7:3
 const AM_BALL = 2.6;      // Assignment's ball, at the relationship's source
+// Half a diamond's length. Slightly longer than the arrowhead is, which is how the
+// standard draws it and what keeps a diamond from reading as a blunt head.
+const AM_DIAMOND = 3.6;
 
 // RELATION_MARKS is what each ArchiMate relationship puts at each of its own ends.
 //
@@ -399,6 +461,13 @@ const RELATION_MARKS = {
   Assignment: { tail: "ball", head: "filled" },
   Triggering: { head: "filled" },
   Serving: { head: "open" },
+  // The diamond at the whole. It is the one mark in this notation a reader
+  // recognises before reading any label — filled for the integral part, hollow for
+  // the optional one — and it is the reason these two relationships are worth naming
+  // exactly rather than approximately: the picture says "the phone is part of the
+  // package, the case is offered with it" in the standard's own ink.
+  Composition: { tail: "diamond-filled" },
+  Aggregation: { tail: "diamond-open" },
 };
 
 // MARKER_IDS resolves a mark and the end it lands on to the marker that draws it.
@@ -413,6 +482,10 @@ const MARKER_IDS = {
   open: { end: "am-head-open", start: "am-head-open-back" },
   // A ball is the same ball whichever end it sits on.
   ball: { end: "am-ball", start: "am-ball" },
+  // And so is a diamond: it is symmetric along the line, so unlike an arrowhead it
+  // needs no mirrored twin.
+  "diamond-filled": { end: "am-diamond-filled", start: "am-diamond-filled" },
+  "diamond-open": { end: "am-diamond-open", start: "am-diamond-open" },
 };
 
 // MARKER_DEFS draws each of them, in world units.
@@ -438,6 +511,11 @@ const MARKER_DEFS = {
     stroke="var(--mesh-line)" points="${AM_HEAD},0 0,${AM_HALF} ${AM_HEAD},${2 * AM_HALF}"/>`,
   "am-ball": `<circle class="mesh-edge-mark" fill="var(--mesh-line)"
     cx="${AM_BALL}" cy="${AM_BALL}" r="${AM_BALL}"/>`,
+  "am-diamond-filled": `<polygon class="mesh-edge-mark" fill="var(--mesh-line)"
+    points="${AM_DIAMOND},0 ${2 * AM_DIAMOND},${AM_HALF} ${AM_DIAMOND},${2 * AM_HALF} 0,${AM_HALF}"/>`,
+  "am-diamond-open": `<polygon class="mesh-edge-mark mesh-edge-mark-open" fill="none"
+    stroke="var(--mesh-line)"
+    points="${AM_DIAMOND},0 ${2 * AM_DIAMOND},${AM_HALF} ${AM_DIAMOND},${2 * AM_HALF} 0,${AM_HALF}"/>`,
 };
 
 // markerElement is one <marker>, sized and anchored so the drawn point lands on the
@@ -449,6 +527,13 @@ function markerElement(id) {
     return `<marker id="${id}" markerUnits="userSpaceOnUse" orient="auto"
       markerWidth="${2 * AM_BALL}" markerHeight="${2 * AM_BALL}"
       refX="${AM_BALL}" refY="${AM_BALL}">${body}</marker>`;
+  }
+  // A diamond is centred on the line's end, as the ball is: both are source marks,
+  // and a source mark that hung past the end would sit inside the node it belongs to.
+  if (id.startsWith("am-diamond")) {
+    return `<marker id="${id}" markerUnits="userSpaceOnUse" orient="auto"
+      markerWidth="${2 * AM_DIAMOND}" markerHeight="${2 * AM_HALF}"
+      refX="${AM_DIAMOND}" refY="${AM_HALF}">${body}</marker>`;
   }
   // refX is the tip: at the far end for a forward head, at the near end for the
   // mirrored one, which is what puts both points exactly on the line's end.
@@ -506,6 +591,25 @@ export function trimEdge(a, b, ra, rb) {
 const DERIVED_NOTATION = {
   id: "atlas", label: "Atlas (derived)", short: "Atlas",
   projection: false, mappingVersion: 0, types: {}, relations: {}, loss: [], weigh: "degree",
+};
+
+// The product map is the picker's one entry that changes *what is on* the picture
+// rather than how it is drawn, and it is the reason the control is called View.
+//
+// It is not a notation and it is not a filter over the landscape either: the server
+// derives a different graph for it (?view=products), because a catalogue drawn onto
+// the landscape spends the size budget of everybody reading the estate — an operator
+// who never opens this picture could find their landscape collapsed to applications
+// by somebody else's catalogue. Two questions, two derivations, one picker.
+const PRODUCT_MAP = {
+  id: "products", label: "Product Map", short: "Products",
+  projection: false, mappingVersion: 0, types: {}, relations: {}, weigh: "degree",
+  subject: "products",
+  loss: [
+    "This is what is offered, not what runs. The processes on it are the ones a product binds to provision or revoke it, and nothing else of the estate: not the workers those processes use, not the applications that hold them, not the peers. That is one hop on purpose — the second hop is the landscape's question, and the landscape is one entry up this list.",
+    "Incompatibility between two products is not drawn. A catalogue can record that two rights must never be held by the same person, and that is the one catalogue relationship meaning the opposite of every other line here; drawn in the same ink it would read as a dependency. It stays where it is enforced and reported: the catalogue, and what publishing proves.",
+    "Nothing here is compared against a drawn model. A binding names an application, a process or a worker (ADR-0189 §4) and there is no key for a catalogue or a product, so this picture reports no drift rather than a debt nobody could pay off.",
+  ],
 };
 
 // HEATS are the ways of drawing the same landscape with its *sizes* carrying a
@@ -691,14 +795,14 @@ const HEAT_NOTATIONS = Object.fromEntries(Object.values(HEATS).map((heat) => [he
 // The local entries are held here rather than fetched, by the split this file already
 // keeps: what a node is *called* is the server's table (ADR-0211 §8), and how big it
 // is drawn is this side's business, exactly like NOTATION_SHAPES.
-let notations = { atlas: DERIVED_NOTATION, ...HEAT_NOTATIONS };
+let notations = { atlas: DERIVED_NOTATION, products: PRODUCT_MAP, ...HEAT_NOTATIONS };
 
 // useNotations takes what the server serves and adds this side's shapes to it. An
 // entry with no shapes is still usable — every kind falls back to its derived
 // outline — so a notation the server learns about before this file does degrades to
 // a vocabulary change rather than to a blank canvas.
 export function useNotations(served) {
-  const next = { atlas: DERIVED_NOTATION, ...HEAT_NOTATIONS };
+  const next = { atlas: DERIVED_NOTATION, products: PRODUCT_MAP, ...HEAT_NOTATIONS };
   for (const notation of Array.isArray(served) ? served : []) {
     // The locally-defined entries win over a served row of the same id. They are
     // rendering decisions rather than vocabularies, and a server that grew a word for
@@ -1033,10 +1137,24 @@ const SEVERITY = {
 const EDGE_KEY = [
   ["calls", "Solid line — calls: a process invokes another process",
     "a process invokes another process"],
-  ["uses", "Dashed line — uses: a process depends on a worker or a decision",
-    "a process depends on a worker or a decision"],
+  ["uses", "Dashed line — uses: a process depends on a worker or a decision, and a product on what provisions it",
+    "a process depends on a worker or a decision, and a product on what provisions it"],
   ["contains", "Dotted line — belongs to: an application and the processes it holds",
     "an application and the processes it holds"],
+  // The catalogue's three. They are the first lines here that are not about one
+  // process needing another, and the two structure kinds are the first this landscape
+  // can name in ArchiMate's own words rather than approximately — which is why they
+  // are three rows and not one: "comes with it" and "offered beside it" are different
+  // promises to whoever orders, and a key that merged them would be the picture
+  // saying the case comes with the phone.
+  ["offers", "Solid line — offers: a catalogue puts a product in front of the people it reaches",
+    "a catalogue puts a product in front of the people it reaches"],
+  ["composition", "Solid line — included: a part that always comes with the whole and cannot be deselected",
+    "a part that always comes with the whole and cannot be deselected"],
+  ["aggregation", "Dashed line — optional: a part offered beside the whole, ordered only if it is chosen",
+    "a part offered beside the whole, ordered only if it is chosen"],
+  ["requires", "Dotted line — precedence: this cannot be provisioned before that",
+    "this cannot be provisioned before that"],
 ];
 
 // PULSE_BUDGET is how many beating nodes the view will animate at once.
@@ -2025,8 +2143,18 @@ export function zoomView(view, factor, focus, base) {
 // deliberately absent: an application *contains* its processes, it does not depend
 // on them, and walking it would drag every sibling into the answer through their
 // shared application — which would make "what breaks if this goes down" name half
-// the landscape and mean nothing.
-const DEPENDENCY_EDGES = new Set(["calls", "uses"]);
+// the landscape and mean nothing. A catalogue's `offers` is containment of exactly
+// that shape and is left out for exactly that reason.
+//
+// Two of the catalogue's three are in, and the one that is not is the interesting
+// one. An integral part is a dependency in the plain sense — the package cannot be
+// delivered without the phone in it — and precedence is one by definition: the
+// account has to exist before the mailbox. An *optional* part is not, and that is
+// not a judgement call but what the word means in the store: the whole is ordered
+// without it whenever nobody ticks it, so a package whose optional case is
+// unavailable is a package that is still deliverable. Walking it would put "what
+// breaks" and "what is offered alongside" in one number.
+const DEPENDENCY_EDGES = new Set(["calls", "uses", "composition", "requires"]);
 
 // degreesOf counts, for every node, how many dependency edges touch it.
 //
@@ -2416,6 +2544,19 @@ function hrefFor(node) {
     const id = node.id.slice("draft:".length);
     return `#/modeler/draft/${encodeURIComponent(id)}`;
   }
+  // A catalogue's inside is the screen it is maintained on, and a product's is the
+  // same screen — the catalogue it is edited through (ADR-0315), which is what the
+  // node carries. A product whose home this reader cannot see carries none, and is
+  // opened here like everything else rather than being given a link into a catalogue
+  // they would be refused.
+  if (node.kind === "catalog") {
+    const id = node.id.slice("catalog:".length);
+    return `#/catalog/c/${encodeURIComponent(id)}`;
+  }
+  if (node.kind === "product" && node.catalog) {
+    const id = node.catalog.slice("catalog:".length);
+    return `#/catalog/c/${encodeURIComponent(id)}`;
+  }
   return "";
 }
 
@@ -2423,7 +2564,9 @@ function hrefFor(node) {
 // kind rather than written beside each href so the two cannot come apart: a link that
 // says Operations and opens the Modeler is worse than no link.
 function insideName(node) {
-  return node.kind === "draft" ? "Modeler" : "Operations";
+  if (node.kind === "draft") return "Modeler";
+  if (node.kind === "catalog" || node.kind === "product") return "Catalogue";
+  return "Operations";
 }
 
 function nodeTitle(node, notation) {
@@ -2449,6 +2592,15 @@ function nodeTitle(node, notation) {
   }
   if (node.kind === "restricted") {
     return "A resource outside your access. The dependency is real; its identity is not shown.";
+  }
+  if (node.kind === "catalog") {
+    return `${node.name || node.id} · a service catalogue · what a group of people may order`;
+  }
+  if (node.kind === "product") {
+    // Never a price and never who may order it. Both are on the catalogue's own
+    // screen, behind the catalogue's own rules; this picture is about what the
+    // product depends on, not about what it costs.
+    return `${node.name || node.id} · a catalogue product · the lines leaving it are what provisions it`;
   }
   if (node.kind === "unresolved") {
     // The id carries what kind of thing is missing, which is what makes the
@@ -2845,7 +2997,10 @@ export function heatScaleEntries(heat, peak) {
   }));
 }
 
-function legendHTML(graph, layoutMs, notation, peak = 0, band = null) {
+// `offersNothing` says the *delivered* product map was empty, which is not the same as
+// this picture being empty: a search that matches nothing empties the picture too, and
+// that already has its own sentence. The note below is about what the server had.
+function legendHTML(graph, layoutMs, notation, peak = 0, band = null, offersNothing = false) {
   const spoken = notationOf(notation?.id ?? notation);
   const heat = heatOf(spoken);
   const swatch = (entry) => `<span class="mesh-swatch ${entry.tone}">
@@ -2857,6 +3012,22 @@ function legendHTML(graph, layoutMs, notation, peak = 0, band = null) {
   const rules = entries.filter((e) => e.group === "edge").map(swatch).join("");
 
   const notes = [];
+  // An empty product map, said in words. It is the one picture here that is routinely
+  // empty for a reader who has done nothing wrong: the starmap needs the modeler role
+  // and a catalogue is drawn only for whoever *maintains* it, so an architect who
+  // maintains none opens this and sees nothing at all. Without a sentence that reads
+  // as a broken feature rather than as an answer.
+  //
+  // It names both possibilities and picks neither, deliberately. The server could tell
+  // "none exists" from "none is yours" and saying which would disclose that catalogues
+  // exist to somebody this store has decided may not see them — the same reason an
+  // application nobody shared is absent from the landscape rather than counted on it.
+  if (spoken.subject === "products" && offersNothing) {
+    notes.push(`<p class="mesh-note">Nothing is offered on this picture. Either no
+      catalogue has been created yet, or none has been shared with you: a catalogue is
+      drawn for whoever maintains it, and whoever does can share it with you as a
+      viewer.</p>`);
+  }
   if (graph.restricted > 0) {
     notes.push(`<p class="mesh-note"><b>${graph.restricted}</b> node(s) are hidden by your
       access. Their dependencies are drawn, their identities are not — this picture is
@@ -3636,9 +3807,14 @@ export async function mountPanoramaMesh(view, { api, toast }) {
            §8) — and it is one list rather than a list plus a switch, because every
            entry on it spends the same channels on a different question and only one
            of them can be answered at a time. -->
-      <label class="mesh-notation" for="mesh-notation">Notation</label>
+      <!-- Called View and not Notation, because only some of its entries are
+           vocabularies. The rest are ways of drawing — sized by what is running, by
+           what is stuck — and one of them, the product map, is a different picture
+           altogether. A control named after the narrowest of the questions it answers
+           is one nobody looks in for the others. -->
+      <label class="mesh-notation" for="mesh-notation">View</label>
       <select id="mesh-notation" class="mesh-notation-pick"
-        title="How this landscape is drawn: Atlas's own kinds, sized by what is running, by what is stuck or by how long it has been stuck, or projected into another vocabulary">${notationsAvailable()
+        title="What this picture shows and how: the estate as Atlas's own kinds, sized by what is running, by what is stuck or by how long it has been stuck, projected into another vocabulary — or the product map, which is what this server offers rather than what it runs">${notationsAvailable()
         .map((n) => `<option value="${esc(n.id)}">${esc(n.label)}</option>`).join("")}</select>
       <!-- Saved diagrams nobody has deployed. Off by default, and the one control here
            that re-asks the server rather than re-drawing what is already on screen:
@@ -4098,7 +4274,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     lit = null;
     refit();
     applyView();
-    legendSlot.innerHTML = legendHTML(shown, ms, spoken, peak, bandAt);
+    legendSlot.innerHTML = legendHTML(shown, ms, spoken, peak, bandAt, !graph.nodes.length);
     findingsSlot.innerHTML = findingsHTML(shown);
     paintRanking();
     // The freshness line, on every repaint as well as on every tick: a repaint that
@@ -4871,11 +5047,55 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     paint();
   });
 
+  // subjectNow is which picture the picker is on: the landscape, or the product map.
+  // Read off the entry rather than kept beside it, so the control and the request can
+  // never disagree about what is on screen.
+  function subjectNow() {
+    return notationOf(notationPick.value).subject || "";
+  }
+  // What the last successful fetch asked for, so a repaint is told from a re-ask.
+  let subjectLoaded = "";
+
   // A different vocabulary is a different drawing, so the picture is painted again.
   // The arrangement survives it: paint() carries the positions on screen forward and
   // every notation's shape is inscribed in the same reserved circle, so nothing moves
   // except the outlines.
-  notationPick.addEventListener("change", paint);
+  //
+  // A different *subject* is a different graph, so it is fetched. The two live on one
+  // control because a reader picks between them the same way, and they are told apart
+  // here rather than in two places that could come to disagree.
+  notationPick.addEventListener("change", async () => {
+    const want = subjectNow();
+    if (want === subjectLoaded) {
+      paint();
+      return;
+    }
+    try {
+      if (await loadLandscape(draftsToggle.checked, { subject: want })) {
+        subjectLoaded = want;
+        // The drafts switch belongs to the landscape: a draft is a diagram nobody
+        // deployed, and the product map draws no diagrams. Disabled rather than
+        // hidden, so a reader who turned it on finds it where they left it — and set
+        // after the load, because the load itself puts the switch back.
+        draftsToggle.disabled = want === "products";
+        // The arrangement is not carried across: the two pictures share almost no
+        // node, so positions kept by id would place a handful of processes where they
+        // sat among four hundred other nodes and leave the rest to the layout.
+        pinned.clear();
+        trail = [];
+        frameView = null;
+      }
+    } catch (e) {
+      toast(e.message, "err");
+      // The picker goes back to the picture that is actually on screen: a control
+      // naming a view the reader is not looking at is the one lie this view cannot
+      // afford.
+      notationPick.value = notationOf(subjectLoaded === "products" ? "products" : "atlas").id;
+      draftsToggle.disabled = false;
+      return;
+    }
+    paint();
+  });
 
   // Drafts are the one switch that changes the *landscape* rather than the drawing of
   // it, so it is answered by the server. Two things reach for it — the switch, and a
@@ -4893,12 +5113,16 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // thing that merely does so on its own.
   // Reports whether it took: a silent answer that arrived too late is dropped rather
   // than applied, so the caller knows not to repaint.
-  async function loadLandscape(wantDrafts, { silent = false } = {}) {
+  async function loadLandscape(wantDrafts, { silent = false, subject = subjectNow() } = {}) {
     if (!silent) draftsToggle.disabled = true;
     const started = performance.now();
     let arrived;
     try {
-      arrived = await api("GET", "/api/v1/panorama/mesh" + (wantDrafts ? "?drafts=1" : ""));
+      // The subject is the server's question and the drafts switch is the landscape's:
+      // a draft is a diagram nobody deployed, and the product map draws no diagrams at
+      // all, so the two are never asked together.
+      const query = subject === "products" ? "?view=products" : (wantDrafts ? "?drafts=1" : "");
+      arrived = await api("GET", "/api/v1/panorama/mesh" + query);
     } finally {
       if (!silent) draftsToggle.disabled = false;
     }
@@ -4937,7 +5161,11 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   });
 
   exportModelBtn.addEventListener("click", () => {
-    window.location.href = "/api/v1/panorama/mesh/archimate";
+    // The file follows the picture: exporting a product map and getting the estate
+    // would be two answers to one question, and the reader would have no way of
+    // telling which was theirs.
+    window.location.href = "/api/v1/panorama/mesh/archimate" +
+      (subjectNow() === "products" ? "?view=products" : "");
   });
 
   exportSvgBtn.addEventListener("click", () => exportPicture("svg"));

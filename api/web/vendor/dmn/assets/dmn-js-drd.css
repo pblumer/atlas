@@ -8,6 +8,7 @@
   --drill-down-overlay-background-color: var(--color-blue-205-100-50);
   --drill-down-overlay-color: var(--color-white);
   --drd-font-family-monospace: monospace;
+  --dmn-icon-decision-service: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 1000'%3E%3Cpath fill='%23000' fill-rule='evenodd' d='M16 187L984 187 984 813 16 813ZM67 238L67 762 933 762 933 238ZM67 537L933 537 933 588 67 588Z'/%3E%3C/svg%3E");
 
   width: 100%;
   height: 100%;
@@ -105,4 +106,26 @@
     width: 125px;
     border-radius: 12px;
   }
+}
+
+/**
+ * Decision Service palette icon.
+ *
+ * dmn-font has no Decision Service symbol, so the palette would otherwise
+ * reuse `dmn-icon-decision` and show two identical entries. The mask paints
+ * the icon in `currentcolor`, so it themes like a font glyph.
+ *
+ * Frame and stroke width match the `dmn-icon-decision` glyph; the divider
+ * line sits at 60% of the height, as DrdRenderer draws it. Drop this rule
+ * once dmn-font ships a `decision-service` symbol.
+ */
+.dmn-icon-decision-service::before {
+  content: '';
+  height: 1em;
+
+  /* the dmn font's em box reaches 0.15em below the baseline (ascent 850 of
+     1000); match it so the icon lines up with the neighbouring glyphs */
+  margin-bottom: -0.15em;
+  background-color: currentcolor;
+  mask: var(--dmn-icon-decision-service) no-repeat center / contain;
 }

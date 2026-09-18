@@ -16,6 +16,18 @@ package catalog
 // orderable from the moment they are published until somebody withdraws them. The
 // window is data rather than a computed state so that a catalogue can be published
 // ahead of the date it opens.
+//
+// **Both ends are inclusive**, and placing an order outside them is refused
+// (ADR-0397). The gate is the order service, read
+// from the release like every other rule about a basket; the portal keeps the same
+// window so a basket cannot be filled with something the placement will refuse,
+// which is courtesy rather than enforcement. The Console authors the window as two
+// days and stores the **end** of the last one, so a product orderable "until the
+// 31st" is orderable on the 31st.
+//
+// It governs ordering and nothing else. A right already held when the window closes
+// keeps running; when a right ends is [Item.MaxDays], which is a different
+// question (ADR-0344).
 type Lifecycle struct {
 	From  int64 `json:"from,omitempty"`
 	Until int64 `json:"until,omitempty"`

@@ -239,6 +239,21 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
 
+/* The construction kit (ADR-0395): one row per service, one radio per answer. The
+   cells carry the console's own inline field, with the field's stacking margin taken
+   back out — inside a table the row is the spacing.
+
+   A cell holds the control and nothing else. The word belongs to the column heading,
+   which says it once; repeating it in every cell cost the table 180px of width, which
+   is the difference between a kit that fits in the column beside the product list and
+   one that scrolls sideways in it. The radio is centred under its heading so a row
+   reads as three positions rather than three left edges, and the name a cell no longer
+   shows it keeps for a reader who cannot see the column — the radio's own label names
+   the product and the answer together. */
+.assemble td .field.inline { margin: 0; justify-content: center; }
+.assemble td:not(:first-child) { text-align: center; }
+.assemble th { white-space: nowrap; }
+
 /* The product form is read in two passes — what the catalogue shows, then how an
    order is handled — so it is laid out in two columns with section headings that
    span both. A field carrying an explanation takes `wide` and keeps the full
@@ -266,7 +281,118 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
 }
 .product-form > .form-sec:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 .product-form > .form-sec-hint { margin: 4px 0 4px; font-size: 12px; color: var(--muted); }
+/* The product's picture in its editor: bounded here rather than by the file, because
+   what was uploaded is what is served. contain and not cover — a crop would cut the
+   top off somebody's product. */
+.product-picture {
+  display: block; max-width: 220px; max-height: 140px; width: auto;
+  margin: 0 0 8px; border: 1px solid var(--border); border-radius: 8px;
+  object-fit: contain; background: var(--surface);
+}
 @media (max-width: 760px) { .product-form { grid-template-columns: 1fr; } }
+
+/* ---------- The product list and the editor beside it ---------- */
+
+/* The catalogue's own page is a working surface and not a page to read, so it drops
+   the centred content column the way the Tasks inbox does (app.js sets the class on
+   the route). Two columns inside 1120px would give a table of products and a form
+   about 520px each, and both hold more than that. What is *prose* on this page keeps
+   its own measure — the cards and the explanations below the headings state a
+   max-width of their own, so nothing here turns a paragraph into a line across a
+   2000px screen. */
+.catalog-mode main { max-width: none; }
+
+/* The editor used to render *under* the list, which is fine with three products and
+   unusable with forty: opening one near the bottom pushed the form below everything,
+   so it was read after a long scroll and with no sight of the row it belonged to.
+
+   So the list and the editor are two columns, and the panel is pushed down to the
+   row it was opened from — the offset is measured against the list and handed over
+   as --editor-top by catalog-admin.js, because only the DOM knows where a row ended
+   up once the shared table enhancer has sorted or filtered it. CSS holds the rule,
+   the script holds the one number it cannot compute.
+
+   Sticky, because the form is taller than most viewports: reading to its Save button
+   must not walk the panel off the top of the window. It carries its own scrollbar for
+   the same reason — a panel longer than the screen that cannot scroll inside hides
+   the button it exists for.
+
+   One breakpoint for the whole catalogue page, and the number is measured rather
+   than chosen. The widest of its pairs decides it: the product list cannot be drawn
+   under 853px — five columns, a provisioning process id, and a row offering edit,
+   assemble and remove — and the kit beside it needs 464px for its table and the
+   card's padding. At 35% of the page that is 1400px of window before both columns
+   hold what they contain. Below it one of the two is always narrower than its own
+   content, and a table that cannot be drawn narrower scrolls sideways inside its box
+   instead — where the column a reader loses first is the one holding the buttons.
+   Stacked, each of them gets the whole page, which is why a narrower window gets that
+   and not a worse version of this.
+
+   One number rather than one per section, although the smaller pairs would fit
+   earlier: a page that puts its lists beside their forms at three different widths is
+   three pages to a reader dragging a window edge, and nobody meant that.
+
+   Deliberately a min-width rule: stacked stays the default and this whole block is
+   the enhancement, so a viewport that never matches it reads exactly the page it read
+   before.
+
+   Inside the panel the form is one column at every width. The two-column form above
+   is for the full-width card; half a page cannot hold it. */
+/* The column holds two panels and shows whichever one is open: the product's form,
+   or the kit that says what the product is made of. It is gone when neither is, so a
+   closed panel costs the list nothing. :has() rather than a class set from the script,
+   because "is anything open" is a fact about the two containers and a class is a
+   second copy of it to forget to clear. */
+.product-side:not(:has(.product-editor > *, .assemble-editor > *)) { display: none; }
+.product-editor > .card,
+.assemble-editor > .card { margin: 14px 0; max-width: 960px; }
+/* The list's table is wider than its column on a narrow screen once the editor takes
+   a share of the page. Scroll it inside its own box, for the reason a card holding a
+   table does (ADR-0163): a table cannot be drawn narrower than its min-content width,
+   so without this it is laid out under the panel beside it. */
+.product-table { overflow-x: auto; }
+/* Stacked, a side form keeps the measure every other card on this page keeps, and the
+   air that separates it from the list above. The column above takes both away. */
+.cat-side > .card { margin-top: 18px; max-width: 640px; }
+/* Which row the open panel belongs to. The panel is aligned to this row, but an
+   alignment is not a statement — a reader scrolling past sees the highlight and not
+   the arithmetic. */
+.product-list tr.editing > td { background: var(--accent-soft); }
+@media (min-width: 1400px) {
+  /* A list beside the form that acts on it. The catalogue page is four of these — the
+     catalogues and the one being created, the products and the one being edited, the
+     relations and the pair being related, who maintains it and who is being added —
+     so the shape is stated once and each section says which half it is.
+
+     A share of the page with both ends held: never under 380px, where the labelled
+     controls start to crowd, and never over 620px, because these forms are one column
+     and a text field two thirds of a wide screen across is harder to read, not easier.
+     The list takes everything else, which is what the width of this page is for. */
+  .cat-cols { display: flex; align-items: flex-start; gap: 18px; }
+  .cat-cols > .cat-main { flex: 1 1 auto; min-width: 0; }
+  .cat-cols > .cat-side { flex: 0 0 clamp(380px, 35%, 620px); }
+  /* In a column the form starts level with the list beside it, and takes the column's
+     width rather than the measure it keeps when it is stacked underneath. */
+  .cat-cols > .cat-side > .card { margin: 0; max-width: none; }
+
+  /* overflow-anchor is off because the script corrects for this reflow itself
+     (catalog-admin.js): opening the panel narrows the list and rewraps the rows above
+     the reader, and two mechanisms undoing the same shift — the browser's anchoring
+     and the script's measured scroll — would each undo part of it and land nowhere. */
+  .product-cols { overflow-anchor: none; }
+  .product-cols > .product-side {
+    /* Under the top bar rather than behind it: the bar is itself sticky at the top of
+       the window, so a panel sticking at the window's own top would slide beneath it
+       and lose its first field. Read from --topbar-h rather than repeating the
+       number, so the two cannot drift; the fallback is only for a page that renders
+       this section without declaring one. */
+    position: sticky; top: calc(var(--topbar-h, 48px) + 16px);
+    max-height: calc(100vh - var(--topbar-h, 48px) - 32px); overflow: auto;
+    margin-top: var(--editor-top, 0px);
+  }
+  .product-cols > .product-side .card { margin: 0; }
+  .product-cols > .product-side .product-form { grid-template-columns: 1fr; }
+}
 
 h1 { font-size: 20px; margin: 0 0 12px; }
 h2 { font-size: 15px; margin: 0 0 10px; }
@@ -382,9 +508,15 @@ ol.steps li { margin: 6px 0; }
 /* A row of secondary actions under a field (e.g. the call-activity "create new
    process" button); nudged up so it reads as attached to the field above. */
 .field-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 10px; }
+/* number is in this list because a field that carries one is still a field: left out,
+   it was the one control on a form drawn in the browser's own default while every
+   input beside it wore the console's — which reads as a defect in the page rather
+   than as a type. The pickers that want a narrow numeric box (the starmap's depth,
+   the playground's fields) state their own width and still do. */
 .field input[type="text"],
 .field input[type="email"],
 .field input[type="password"],
+.field input[type="number"],
 .field input:not([type]) {
   display: block; width: 100%; box-sizing: border-box; margin-top: 5px;
   padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 6px;
@@ -588,6 +720,20 @@ textarea::placeholder {
 .mig-moved { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.6; }
 .mig-err { color: var(--warn); }
 
+/* The fork alternative (ADR-0389). It sits below the in-place
+   plan and reads as the second answer to the same question, not as a second dialog: the
+   rebinding is what an operator wants whenever it holds, and a fork ends the instance it
+   continues. Dimmed while the rebinding is still on the table, for exactly that reason. */
+.mig-fork {
+  margin: 10px 0 0; padding: 10px 12px; border-radius: 8px;
+  border: 1px dashed var(--border); background: var(--surface-2, var(--surface));
+}
+.mig-fork.alt { opacity: 0.72; }
+.mig-fork h4 { margin: 0 0 4px; font-size: 12px; color: var(--muted); }
+.mig-resume { margin: 6px 0 0; max-height: 132px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.mig-resume-opt { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.mig-resume-opt input { margin: 0; }
+
 /* The migration boundary on the replay history (ADR-0162): the steps above it and below
    it ran on different versions of the process, so it is drawn as a rule across the list
    rather than as another element row — a reader scanning the column should not be able
@@ -597,6 +743,10 @@ textarea::placeholder {
   background: var(--accent-soft);
 }
 .ops-hrow.mig .ops-hname { font-style: italic; }
+/* A fork row is the same kind of rule as a migration — the story does not continue below
+   it — but it is a different fact: the work left for another instance rather than
+   carrying on here under a new version (ADR-0389). */
+.ops-hrow.mig.fork { border-top-style: dashed; border-bottom-style: dashed; }
 .ops-hicon.mig { color: var(--accent); }
 .ops-mig {
   margin: 10px 0 0; padding: 10px 12px; border-radius: 8px;
@@ -2478,6 +2628,31 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 /* The instruction panel is itself tinted, so code inside it takes the surface colour:
    a chip the same shade as its background is not a chip. */
 .tasks-doc .md code, .tasks-doc .md pre { background: var(--surface); }
+/* An approval, read and decided in the inbox (#1029). Marked off the way the work
+   instruction above is, because it is the same kind of thing: what this person needs
+   before acting. The accent border says "this row is not an ordinary task". */
+.tasks-approval {
+  margin: 0 0 20px; padding: 12px 14px; max-width: 70ch;
+  border-left: 3px solid var(--accent); border-radius: 0 var(--radius) var(--radius) 0;
+  background: var(--bg);
+}
+.tasks-approval > h2 {
+  margin: 0 0 10px; font-size: 12px; font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--muted);
+}
+.tasks-approval .tasks-field { grid-template-columns: 110px 1fr; }
+.appr-decide { margin: 14px 0 0; display: flex; flex-direction: column; gap: 8px; }
+.appr-reason-label { font-size: 13px; }
+#appr-reason {
+  width: 100%; padding: 8px 10px; font: inherit; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  resize: vertical;
+}
+.appr-together { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.appr-buttons { display: flex; gap: 8px; }
+/* What an approval decides, on its own row in the list. Every approval task is
+   called "Genehmigen", so without this a queue of them is fourteen identical lines. */
+.tasks-item-appr { color: var(--text); }
 .tasks-fields { display: flex; flex-direction: column; gap: 10px; max-width: 520px; }
 .tasks-field { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 12px; }
 .tasks-field-label { font-size: 13px; }
@@ -4356,6 +4531,17 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 .mesh-edge { stroke: var(--mesh-line); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .mesh-edge-uses { stroke-dasharray: 6 4; }
 .mesh-edge-contains { stroke-dasharray: 1 3; opacity: 0.7; stroke-linecap: round; }
+/* The catalogue's lines, in the same three patterns and for the same reasons, because
+   a fourth pattern would not be told from the three at a glance. `offers` is the solid
+   structural line a catalogue hangs its products on; `composition` is solid too — a
+   part that always comes with the whole is as firm a claim as a call; `aggregation`
+   takes the dashed pattern that already means "and this one is optional to it"; and
+   `requires` takes the dotted one, which already reads as the faintest claim on the
+   canvas. The key beside the picture names each in words, which is what actually
+   tells them apart: the pattern groups them, the legend distinguishes them. */
+.mesh-edge-offers { opacity: 0.8; }
+.mesh-edge-aggregation { stroke-dasharray: 6 4; }
+.mesh-edge-requires { stroke-dasharray: 1 3; opacity: 0.7; stroke-linecap: round; }
 /* A line a notation has named. The dash is the derived picture's free channel and
    ArchiMate's is spoken for — a dashed line with an open arrowhead is a Flow there,
    and a dotted one a Realization — so an ArchiMate line is solid and its two ends

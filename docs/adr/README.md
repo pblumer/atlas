@@ -474,6 +474,15 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0386](0386-a-decision-result-keeps-its-declared-type.md) | A decision result keeps the type the model declares for it | Accepted | Landed |
 | [0387](0387-the-catalogue-against-the-standards-boundary.md) | The catalogue keeps its own model, and answers to TMF620 at the boundary | Proposed | Not started |
 | [0388](0388-a-call-that-can-only-be-null-is-refused-at-deploy.md) | A call that can only be null is refused at deploy | Accepted | Landed |
+| [0389](0389-forked-instance-migration.md) | Forked instance migration | Accepted | Landed |
+| [0390](0390-position-progress.md) | The orderer is told where their position stands, from a route of their own | Accepted | Landed |
+| [0391](0391-product-picture.md) | A product is shown, and its picture is not part of what was promised | Accepted | Landed |
+| [0392](0392-the-same-refusal-at-every-door-that-already-refuses.md) | The same refusal at every door that already refuses | Accepted | Landed |
+| [0393](0393-a-rule-added-later-is-a-gate-on-deploy.md) | A rule the compiler gains later is a gate on deploy, whatever stage it lives in | Accepted | Landed |
+| [0394](0394-approval-in-the-inbox.md) | An approval is read and decided where the work already is | Accepted | Landed |
+| [0395](0395-product-construction-kit.md) | A product's structure is assembled per product, not related pairwise | Accepted | Landed |
+| [0396](0396-catalogue-on-the-starmap.md) | The service catalogue is drawn on the starmap, as derived fact | Accepted | Landed |
+| [0397](0397-enforce-the-orderable-window.md) | The orderable window is enforced when an order is placed | Accepted | Landed |
 
 ## The two states of a record
 

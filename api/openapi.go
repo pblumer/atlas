@@ -189,7 +189,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			}))}},
 
 		{"POST", "/api/v1/feel/validate", s.handleValidateFeel, apiOp{
-			summary: "Validate a FEEL expression compiles", tag: "FEEL", role: RoleModeler,
+			summary: "Validate a FEEL expression: that it compiles, and that every call in it is one this build can make", tag: "FEEL", role: RoleModeler,
 			req: jsonBody("FEEL expression", schemaObj(map[string]any{"expression": tString()}, "expression")),
 			resp: jsonBody("Validation result", schemaObj(map[string]any{
 				"ok": tBool(), "error": tString(),
@@ -366,8 +366,8 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Decision evaluations", tArray())}},
 		{"POST", "/api/v1/instances/{key}/migrate/plan", s.handleMigrationPlan, apiOp{
 			summary: "Answer what migrating this instance to another version of its process would do — the derived element mapping and every reason it would be refused — writing nothing (admin-only when auth is on, ADR-0162)", tag: "Instances", role: RoleAdmin,
-			req: jsonBody("Target version and optional element-id overrides", schemaObj(map[string]any{
-				"targetProcessDefKey": tInteger(), "mapping": tArray(),
+			req: jsonBody("Target version, optional element-id overrides, and optional fork resume points", schemaObj(map[string]any{
+				"targetProcessDefKey": tInteger(), "mapping": tArray(), "resume": tArray(),
 			}, "targetProcessDefKey")),
 			resp: jsonBody("Migration plan", tObject())}},
 		{"POST", "/api/v1/instances/{key}/migrate", s.handleMigrateInstance, apiOp{
@@ -376,6 +376,12 @@ func (s *Server) apiRoutes() []apiRoute {
 				"targetProcessDefKey": tInteger(), "reason": tString(), "mapping": tArray(),
 			}, "targetProcessDefKey", "reason")),
 			resp: jsonBody("Migration result", tObject())}},
+		{"POST", "/api/v1/instances/{key}/migrate/fork", s.handleForkInstance, apiOp{
+			summary: "Continue a running instance in a NEW instance of another version: the instance is ended where it is, the successor starts at the resume elements named (or proposed from where its tokens are), carrying its variables and data objects, and each record names the other. In-flight jobs and tasks end with the predecessor. Refused with 409 and the same plan when it does not hold; a reason is required (admin-only when auth is on, ADR-0389)", tag: "Instances", role: RoleAdmin,
+			req: jsonBody("Target version, reason, and the element ids to resume at", schemaObj(map[string]any{
+				"targetProcessDefKey": tInteger(), "reason": tString(), "resume": tArray(),
+			}, "targetProcessDefKey", "reason")),
+			resp: jsonBody("Fork result", tObject())}},
 		{"POST", "/api/v1/processes/{key}/migrate-instances", s.handleMigrateInstancesOfProcess, apiOp{
 			summary: "Migrate a bounded batch of a definition's running instances to another version (?limit=, default 500, max 5000); each instance is its own event, so a refusal does not roll back the rest — repeat while the response reports remaining=true (ADR-0162)", tag: "Instances", role: RoleAdmin,
 			req: jsonBody("Target version, reason, and optional element-id overrides", schemaObj(map[string]any{
@@ -642,7 +648,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		// read — a consumer that renders this picture into a file has to put that
 		// date in the file (ADR-0211 §10), and only the server can supply it.
 		{"GET", "/api/v1/panorama/mesh", s.panoramaMesh.HandleGraph, apiOp{
-			summary: "Derive the landscape mesh from this server's resources with severity, filtered for the caller (ADR-0211). Pass drafts=1 to include saved-but-not-deployed diagrams, which are left out by default so the size budget is spent on what this server actually runs", tag: "Panorama", role: RoleModeler,
+			summary: "Derive the landscape mesh from this server's resources with severity, filtered for the caller (ADR-0211). Pass drafts=1 to include saved-but-not-deployed diagrams, which are left out by default so the size budget is spent on what this server actually runs. Pass view=products for the product map instead: the service catalogue, what each product is assembled from, and the processes that provision it — the two are separate pictures because a catalogue on the landscape would spend the size budget of everybody reading the estate", tag: "Panorama", role: RoleModeler,
 			resp: jsonBody("Derived landscape graph", tObject())}},
 		// The vocabularies the landscape can be drawn in, with each one's mapping and
 		// what it drops (ADR-0211 §8). Served rather than duplicated in the browser:
@@ -962,6 +968,14 @@ func (s *Server) apiRoutes() []apiRoute {
 			tag:     "Catalogue", role: RoleProductManager,
 			resp: jsonBody("Where the product is used, what depends on it, and how many hold it", tObject())}},
 
+		{"GET", "/api/v1/catalog-products/{id}/picture", s.catalogs.HandleGetPicture, apiOp{
+			summary: "A product's picture — a photograph or the vendor's mark — or 404 when it has none, which is the ordinary case the caller falls back from. Readable by anybody a catalogue offering the product is for, and not only by whoever maintains it: a product is referenced by catalogues rather than owned by one, so a customer of one catalogue legitimately orders a product whose home is another. A product nobody may see answers the same 404, because the two must be indistinguishable", tag: "Catalogue", role: RoleUser,
+			resp: &bodySpec{mediaType: "image/png", desc: "The picture (PNG, JPEG or SVG)", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"PUT", "/api/v1/catalog-products/{id}/picture", s.catalogs.HandleSetPicture, apiOp{
+			summary: "Store a product's picture from the raw request body (image/png, image/jpeg or image/svg+xml). Set by whoever maintains the product's home catalogue: a picture is part of how the product is offered, and somebody who may not rename it may not re-illustrate it. The bytes are validated as the type they claim and served back under a sandbox policy. Not frozen into a release — a better photograph of the same laptop is not a different laptop", tag: "Catalogue", role: RoleProductManager, status: http.StatusNoContent,
+			req: &bodySpec{mediaType: "image/png", desc: "The picture (PNG, JPEG or SVG)", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"DELETE", "/api/v1/catalog-products/{id}/picture", s.catalogs.HandleDeletePicture, apiOp{
+			summary: "Remove a product's picture, so the portal falls back to showing none. Same gate as setting one", tag: "Catalogue", role: RoleProductManager, status: http.StatusNoContent}},
 		{"POST", "/api/v1/catalog-products", s.catalogs.HandleSaveItem, apiOp{
 			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule, the processes that provision and deprovision it, the groups eligible to receive it, and the `keywords` somebody might search for that are not its name — synonyms, the vendor's term, the abbreviation everybody uses. Keywords are one flat list rather than one per language, because a synonym list is for finding and a searcher's language is not the catalogue's. `configForm` names an Atlas form the orderer fills in for this product — a cost centre, a site — whose answers travel with the order line. `price` is what it costs, written as the catalogue wants it read and never computed: it is displayed, frozen into the release and copied onto the order line, so an approver's figure stays the figure they decided on. `category` is the heading the portal groups it under — a heading and nothing else, with no ordering, no translation and no entity behind it. The write is a full **replace**, so a field left out is a field cleared: read the product first, change what you mean to change, and send the whole record back. Optionally state the `revision` you read — the write is then refused with 409 unless the stored product is still on it, which is what makes a read-modify-write safe against a second maintainer. Omitting it replaces unconditionally", tag: "Catalogue", role: RoleProductManager,
 			req: jsonBody("Product", schemaObj(map[string]any{
@@ -1067,6 +1081,12 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/orders/{id}", s.orders.HandleGet, apiOp{
 			summary: "One of your orders, with the status of every line", tag: "Order", role: RoleUser,
 			resp: jsonBody("The order", tObject())}},
+		{"POST", "/api/v1/orders/fulfilment/repair", s.handleRepairFulfilment, apiOp{
+			summary: "End the fulfilment orchestrations that cannot do their work — one that names no order builds every request from nothing — and start one again for every open order left without one. Idempotent: an installation with nothing broken is answered with two empty lists. ?dryRun=true reports what it would do and changes nothing, which is what to run first", tag: "Order", role: RoleOperator,
+			resp: jsonBody("What was ended and what was started again", tObject())}},
+		{"GET", "/api/v1/portal/orders/{id}/lines/{position}/progress", s.handleLineProgress, apiOp{
+			summary: "Where one of your own positions stands: the steps the process working on it is sitting on right now, by the names its model gives them. Gated on owning the order rather than on a role — somebody else's order answers 404, because whether it exists is not something this confirms — and it carries no process variable, because the caller already knows their own order and this says where, not what. A position nothing is running for answers state \"none\"", tag: "Order", role: RoleUser,
+			resp: jsonBody("Where the position's process stands", tObject())}},
 
 		// The two calls an orchestrator makes to drive an order: what may start,
 		// and what came back. Operator work rather than the orderer's — nobody

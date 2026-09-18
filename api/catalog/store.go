@@ -30,6 +30,12 @@ type Store struct {
 	// logos is the directory the marks live in — image files rather than JSON, so
 	// they are kept beside the stores rather than in one.
 	logos string
+	// pictures is the same again for the products' own pictures (image.go). A
+	// second directory rather than a second name inside the first: the two are
+	// keyed by different things — a catalogue id and an item id — and one
+	// directory holding both would make "which is this file" a question about a
+	// name nobody chose to be unique.
+	pictures string
 }
 
 // NewStore opens (creating if needed) the directories backing a catalogue.
@@ -63,7 +69,12 @@ func NewStore(dir string) (*Store, error) {
 	if err := os.MkdirAll(logos, 0o755); err != nil {
 		return nil, fmt.Errorf("catalogstore: create logo dir: %w", err)
 	}
-	return &Store{catalogs: catalogs, items: items, releases: releases, logos: logos}, nil
+	pictures := filepath.Join(dir, "pictures")
+	if err := os.MkdirAll(pictures, 0o755); err != nil {
+		return nil, fmt.Errorf("catalogstore: create picture dir: %w", err)
+	}
+	return &Store{catalogs: catalogs, items: items, releases: releases,
+		logos: logos, pictures: pictures}, nil
 }
 
 // SaveCatalog writes a catalogue, replacing any record with the same id.

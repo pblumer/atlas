@@ -333,6 +333,20 @@ type ProcessInstanceValue struct {
 	// it — and read back from the purge event to drop that index entry — without either
 	// fold reading a clock or a definition.
 	PurgeDueDate int64
+	// PredecessorInstanceKey is the instance this one continues: a fork migration ends
+	// an instance whose tokens cannot be rebound onto another version and starts this
+	// one in that version at operator-named resume points, carrying the data across
+	// (ADR-0389). 0 for every instance that began on its own.
+	//
+	// It is the successor's half of a link both records carry, so either instance
+	// answers "where did this come from" and "where did this go" without a scan.
+	PredecessorInstanceKey uint64
+	// SuccessorInstanceKey is the instance that continues this one: set on the terminal
+	// event of a forked-away instance, so the history record still names where the work
+	// went. 0 for every instance that ended on its own account — which is what keeps a
+	// forked predecessor distinguishable from an ordinary cancellation, both of which
+	// are PITerminated (ADR-0389).
+	SuccessorInstanceKey uint64
 }
 
 // processInstanceLegacySize is the original fixed layout (ProcessDefKey, State,
@@ -352,7 +366,9 @@ func (v *ProcessInstanceValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.ParentElementInstanceKey)
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.ExpiryDueDate))
 	dst = binary.LittleEndian.AppendUint64(dst, v.CompletedPosition)
-	return binary.LittleEndian.AppendUint64(dst, uint64(v.PurgeDueDate))
+	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.PurgeDueDate))
+	dst = binary.LittleEndian.AppendUint64(dst, v.PredecessorInstanceKey)
+	return binary.LittleEndian.AppendUint64(dst, v.SuccessorInstanceKey)
 }
 
 func (v *ProcessInstanceValue) decode(src []byte) error {
@@ -389,10 +405,20 @@ func (v *ProcessInstanceValue) decode(src []byte) error {
 	if len(tail) >= 24 {
 		v.CompletedPosition = binary.LittleEndian.Uint64(tail[16:])
 	}
-	// PurgeDueDate is the newest appended field: a record written before it ends after
+	// PurgeDueDate is a later appended field: a record written before it ends after
 	// the completed position and leaves it zero (no history TTL scheduled it).
 	if len(tail) >= 32 {
 		v.PurgeDueDate = int64(binary.LittleEndian.Uint64(tail[24:]))
+	}
+	// The two fork links are the newest appended fields: a record written before them
+	// ends after the purge due date and leaves both zero — an instance that neither
+	// continues another nor was continued by one
+	// (ADR-0389).
+	if len(tail) >= 40 {
+		v.PredecessorInstanceKey = binary.LittleEndian.Uint64(tail[32:])
+	}
+	if len(tail) >= 48 {
+		v.SuccessorInstanceKey = binary.LittleEndian.Uint64(tail[40:])
 	}
 	return nil
 }
@@ -788,6 +814,18 @@ const (
 	// the old version and started being the new one, which is what lets the replay
 	// resolve each step through the definition that was in force at it.
 	OperatorActionMigrate
+	// OperatorActionForkedTo is written on the instance an operator forked *away from*:
+	// its tokens could not be rebound onto the target version, so it was terminated and
+	// its work continued in a new instance of that version
+	// (ADR-0389). Which instance that is, is on the record —
+	// SuccessorInstanceKey — so this kind carries only who ended it and why.
+	OperatorActionForkedTo
+	// OperatorActionForkedFrom is the same fork seen from the successor: the instance
+	// did not begin at a start event but continued another instance's work at resume
+	// points an operator named. Its predecessor is on its record; this is what makes the
+	// successor's timeline open with the reason it exists rather than with a token
+	// appearing in the middle of the diagram.
+	OperatorActionForkedFrom
 )
 
 func (k OperatorActionKind) String() string {
@@ -796,6 +834,10 @@ func (k OperatorActionKind) String() string {
 		return "completeJob"
 	case OperatorActionMigrate:
 		return "migrate"
+	case OperatorActionForkedTo:
+		return "forkedTo"
+	case OperatorActionForkedFrom:
+		return "forkedFrom"
 	default:
 		return "OperatorActionKind(?)"
 	}

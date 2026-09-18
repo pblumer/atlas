@@ -899,13 +899,16 @@ func runtimeTools() []Tool {
 				"refused (a token on an element the target does not have, a changed element type or scope, a " +
 				"catch waiting on a different message). Call this before atlas_migrate_instance — the mapping " +
 				"is derived from two graphs and 'which of my tokens would be stranded' is not answerable by " +
-				"eye (ADR-0162).",
+				"eye (ADR-0162). The answer also carries 'fork': what atlas_fork_instance would do instead " +
+				"— {resume, parked, candidates, variables, dataObjects, jobs, forkable, problems} — so a " +
+				"refused rebinding comes back with its next step rather than a dead end.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"key":                 map[string]any{"type": "integer", "description": "The running instance key to plan a migration for."},
 					"targetProcessDefKey": map[string]any{"type": "integer", "description": "The deployed definition key to migrate to — another version of the same process."},
 					"mapping":             migrationMappingSchema(),
+					"resume":              forkResumeSchema(),
 				},
 				"required": []any{"key", "targetProcessDefKey"},
 			},
@@ -949,6 +952,40 @@ func runtimeTools() []Tool {
 					return "", err
 				}
 				return asText(c.post("/api/v1/instances/"+strconv.FormatUint(key, 10)+"/migrate", "application/json", body))
+			},
+		},
+		{
+			Name: "atlas_fork_instance",
+			Description: "Continue a running instance in a NEW instance of another version of its process, " +
+				"when atlas_migrate_instance has refused because its tokens cannot be rebound. The instance " +
+				"is ended where it is and a successor of the target version starts at the elements in " +
+				"'resume' (or, if none are given, at the ones proposed from where its tokens are now), " +
+				"carrying its root-scope variables and data objects; each instance's record names the other. " +
+				"In-flight jobs, user tasks and incidents end with the predecessor and are NOT carried — " +
+				"call atlas_migration_plan first and read its 'fork' block before using this. A 'reason' is " +
+				"required and recorded as an operator action on both instances. Refused (409) with the same " +
+				"fork plan when it does not hold, writing nothing. Returns the plan plus " +
+				"'successorInstanceKey' (ADR-0389).",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":                 map[string]any{"type": "integer", "description": "The running instance key to fork. A call activity's child cannot be forked."},
+					"targetProcessDefKey": map[string]any{"type": "integer", "description": "The deployed definition key to continue in — another version of the same process."},
+					"reason":              map[string]any{"type": "string", "description": "Why this instance is being forked. Recorded in both instances' audit trails."},
+					"resume":              forkResumeSchema(),
+				},
+				"required": []any{"key", "targetProcessDefKey", "reason"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				body, err := migrationBody(args, true)
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/instances/"+strconv.FormatUint(key, 10)+"/migrate/fork", "application/json", body))
 			},
 		},
 		{
@@ -1040,6 +1077,22 @@ func migrationMappingSchema() map[string]any {
 	}
 }
 
+// forkResumeSchema is where a fork picks the work up again: element ids in the *target*
+// version, which is the only element identity a human controls. Optional everywhere —
+// omitting it asks the server for the proposal derived from where the tokens are now,
+// which is right whenever the ids survived the edit
+// (ADR-0389).
+func forkResumeSchema() map[string]any {
+	return map[string]any{
+		"type": "array",
+		"description": "BPMN element ids in the TARGET version where the successor instance starts. Omit to " +
+			"use the proposal derived from where this instance's tokens are now. Each must be an element in " +
+			"the process itself (not inside a subprocess), not a boundary event, an event subprocess or a " +
+			"joining gateway.",
+		"items": map[string]any{"type": "string"},
+	}
+}
+
 // migrationBody assembles the shared request body for the migration tools. withReason
 // is true for the two that actually write, where the API requires one.
 func migrationBody(args map[string]any, withReason bool) ([]byte, error) {
@@ -1057,6 +1110,12 @@ func migrationBody(args map[string]any, withReason bool) ([]byte, error) {
 	}
 	if raw, ok := args["mapping"]; ok && raw != nil {
 		body["mapping"] = raw
+	}
+	// Resume points ride on the same body: the plan endpoint answers both readings of
+	// "move this instance to that version" at once, and the fork endpoint takes them as
+	// where the successor starts (ADR-0389).
+	if raw, ok := args["resume"]; ok && raw != nil {
+		body["resume"] = raw
 	}
 	return json.Marshal(body)
 }

@@ -1,14 +1,9 @@
 # ADR-0388: A call that can only be null is refused at deploy
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-09-17 — the refusal is a deploy gate, not a condition for loading a stored definition; see the amendment note below)
 - **Implementation:** Landed
 - **Date:** 2026-09-17
 - **Deciders:** Patrick Blumer
-- **Open question:** whether the same refusal belongs on the surfaces that compile FEEL
-  outside a BPMN deploy — task-folder rules, the inbound bridges, the playground. The
-  reasoning carries; what does not carry is the moment, since none of them has a deploy at
-  which refusing is free. Left as it is rather than guessed at.
-- **Question checked:** 2026-09
 
 ## Context and problem statement
 
@@ -105,13 +100,17 @@ nothing here: the syntax error is the real fault and the compiler already report
   path, so it is visible while editing and not only on deploy.
 - **Negative / trade-offs accepted:** a model that deploys today and contains such a call
   will stop deploying. That is the intent — it cannot ever have worked — but it is a
-  behaviour change for somebody whose broken call sits on a path nobody walks.
+  behaviour change for somebody whose broken call sits on a path nobody walks. What this
+  record did *not* consider is the model that was already deployed: see the amendment below.
 - **Negative:** the refusal is a compile error, so it has no element anchor of its own in the
   panel. The message carries the element id because the caller wraps it, which is enough to
   find it and less than an anchored Problem would be.
-- **Follow-ups / risks to watch:** the surfaces named in the open question above. And if the
-  engine ever gains a way to register extra functions on the BPMN path, this check has to be
-  told about them or it will refuse a call that works.
+- **Follow-ups / risks to watch:** the other surfaces that compile FEEL, settled since by
+  [ADR-0392](0392-the-same-refusal-at-every-door-that-already-refuses.md),
+  which also corrects the reason given here for leaving them — three of them did have a
+  moment at which refusing is free, and were already using it. And if the engine ever gains a
+  way to register extra functions on the BPMN path, this check has to be told about them or
+  it will refuse a call that works.
 
 ## Pros and cons of the options
 
@@ -142,9 +141,33 @@ nothing here: the syntax error is the real fault and the compiler already report
   silence, not the list. Whether to implement them is a separate decision with its own
   record.
 
+## Amendment (2026-09-17): the refusal does not reach a stored definition
+
+This record weighed the cost as "a model that deploys today will stop deploying". It missed
+the model that was deployed *yesterday*. `compileFEEL` runs in the build stage, so its
+refusal reached `parseNamed` as a plain error rather than as the `ValidationError` carrying a
+compiled process that the reload path knows how to take apart
+(ADR-0177). A stored deployment with one such call
+therefore made the server exit during startup, be restarted, and exit again — with every
+other definition and every running instance unreachable behind it. That happened in
+production, on a probe model calling `get keys(...)`.
+
+The rule is unchanged and still refuses the deploy with the same message. What changed is
+that the compile now carries a gate: a deploy refuses, a reload compiles the expression the
+way the build that stored it did — the engine binds the unknown callee to null, as it always
+has — and reports the fault as a `feel.null-call` Problem beside the process, which
+`loadDeployments` logs as `deployment.reloaded_with_problems`. See
+[ADR-0393](0393-a-rule-added-later-is-a-gate-on-deploy.md),
+which states the general form: a rule the compiler gains after a definition was stored is a
+gate on deploying it, never a condition for loading it, whatever stage it lives in.
+
 ## Links
 
+- amended by [ADR-0393](0393-a-rule-added-later-is-a-gate-on-deploy.md) — the reload split this record's placement bypassed
+- relates to [ADR-0177](0177-reload-skips-the-deploy-gate.md) — the gate/reload split
 - relates to [ADR-0008](0008-feel-expression-strategy.md) — compiling expressions once, at
   deploy, which is the moment this refusal uses
 - relates to [ADR-0015](0015-reuse-feel-engine.md) — the engine this leaves alone
 - relates to [ADR-0026](0026-problems-panel-and-versioned-validation.md) — the panel the refusal surfaces in
+- extended by [ADR-0392](0392-the-same-refusal-at-every-door-that-already-refuses.md) —
+  the same refusal at the other doors that already refuse

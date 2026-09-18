@@ -119,6 +119,11 @@ func newInstanceRow(key uint64, v *model.ProcessInstanceValue, defs defIndex) in
 		CompletedAt:    v.CompletedAt,
 		CorrelationKey: v.CorrelationKey,
 		Variables:      []variableView{},
+		// The two ends of a fork link (ADR-0389): both are
+		// zero for an instance that neither continues another nor was continued by one,
+		// which is every instance that has not been forked.
+		PredecessorInstanceKey: v.PredecessorInstanceKey,
+		SuccessorInstanceKey:   v.SuccessorInstanceKey,
 	}
 	// A row whose definition is gone (deleted after the instance ran) keeps its keys
 	// and simply carries no labels.

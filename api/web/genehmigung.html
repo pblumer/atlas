@@ -4,109 +4,45 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Genehmigungen</title>
+<meta name="robots" content="noindex" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='52' fill='%23000'/%3E%3Cpath fill='%23fff' fill-rule='evenodd' d='M128 26 244 214 12 214ZM128 172 178 214 78 214ZM111 72H145V99H172V133H145V160H111V133H84V99H111Z'/%3E%3C/svg%3E" />
 <style>
-  /* The same token set app.css, the public form and the portal declare. What is
-     written here is the instance's brand — the operator's — and genehmigung.js
-     overwrites the accent trio and the typeface once an approval is open, so the
-     decision is taken in the colours of the catalogue it belongs to.
-
-     Keyed to the approval and not to the page: an approver holds requests from
-     several customer groups at once, and a list of them has no one brand. */
-  :root {
-    --bg:#f3f4f6; --surface:#ffffff;
-    --border:#e2e4e9; --border-strong:#cdd0d6;
-    --text:#14161a; --muted:#62666d;
-    --accent:#0b5cff; --accent-hover:#0a4ad1; --accent-soft:#eaf0ff; --accent-ink:#ffffff;
-    --ok:#2d8a4e; --danger:#c0392b;
-    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  }
-  * { box-sizing: border-box; }
-  body { margin:0; font:15px/1.5 var(--font-sans); color:var(--text); background:var(--bg); }
-  #app { max-width: 680px; margin: 0 auto; padding: 32px 20px 80px; }
-  header { display:flex; align-items:center; justify-content:space-between; gap:16px;
-           flex-wrap:wrap; margin-bottom:16px; }
-  .brand { display:flex; align-items:center; gap:12px; min-width:0; }
-  /* Bounded in both directions: a mark is somebody's own image at whatever size
-     they uploaded it, and a page that let it set its own height would be laid out
-     by the upload. */
-  .mark { height:32px; width:auto; max-width:180px; display:block; }
-  h1 { font-size:22px; margin:0; }
-  h3 { font-size:17px; margin:0 0 12px; }
-  .langs { display:flex; gap:4px; }
-  /* The way back out of a page that is not part of the shell. Quiet on purpose: it
-     is an exit for whoever wants one, not an invitation into the tooling. */
-  .headright { display:flex; align-items:center; gap:14px; }
-  .backlink { color:var(--muted); font-size:13px; text-decoration:none; white-space:nowrap; }
-  .backlink:hover { color:var(--accent-hover); text-decoration:underline; }
-
-  .lang { border:1px solid var(--border-strong); background:var(--surface); color:var(--muted);
-          border-radius:6px; padding:3px 9px; font-size:12px; cursor:pointer; }
-  .lang.on { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
-  .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:20px; }
-  dl { display:grid; grid-template-columns:auto 1fr; gap:4px 16px; margin:0 0 20px; font-size:14px; }
-  dt { color:var(--muted); }
-  dd { margin:0; }
-  /* The collective decision sits between what is being decided and the reason
-     field, because that is the order somebody reads in: this is the position,
-     this is the rest of the request, this is why. */
-  .together { border:1px solid var(--border); border-radius:8px; padding:12px 14px;
-              margin-bottom:20px; font-size:14px; }
-  .together > p { margin:0 0 8px; }
-  .together > p:last-child { margin:8px 0 0; font-size:13px; }
-  .siblings { list-style:none; margin:0 0 10px; padding:0; }
-  .siblings li { padding:2px 0; }
-  .togglewrap { display:flex; gap:8px; align-items:flex-start; cursor:pointer; }
-  .reason { display:block; margin-bottom:20px; font-size:14px; }
-  .reason > span { display:block; }
-  .reason > span:first-child { margin-bottom:4px; }
-  .reason > span:last-child { color:var(--muted); font-size:13px; margin-top:4px; }
-  textarea { width:100%; font:inherit; padding:8px 10px; border:1px solid var(--border-strong);
-             border-radius:8px; background:var(--surface); color:var(--text); resize:vertical; }
-  .actions { display:flex; gap:10px; flex-wrap:wrap; }
-  button.primary { background:var(--accent); color:var(--accent-ink); border:1px solid var(--accent);
-                   border-radius:8px; padding:8px 16px; font:inherit; cursor:pointer; }
-  /* A refusal is a decision and not a mishap, so it is a plain button rather than
-     a red one. The colour would tell an approver that one of the two answers is
-     the dangerous one, which is not true of either. */
-  button.secondary { background:var(--surface); color:var(--text); border:1px solid var(--border-strong);
-                     border-radius:8px; padding:8px 16px; font:inherit; cursor:pointer; }
-  button.primary:disabled, button.secondary:disabled { opacity:.55; cursor:default; }
-  .list { list-style:none; margin:0; padding:0; }
-  .list li { margin-bottom:8px; }
-  .pick { display:block; width:100%; text-align:left; background:var(--surface);
-          border:1px solid var(--border); border-radius:10px; padding:14px 16px;
-          font:inherit; color:var(--text); cursor:pointer; }
-  .pick:hover { border-color:var(--accent); }
-  /* What the row says beyond the product and the person: a due date, or that the
-     approval has been passed on. Kept on its own line so a row without either
-     reads exactly as it did before. */
-  .pick .note { display:block; font-size:12px; margin-top:2px; }
-  /* Finding one decision among forty (ADR-0354). Layout
-     only — every colour below is a token this page already declares. */
-  .controls { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
-  .controls input[type="search"] { flex:1 1 220px; min-width:0; font:inherit; font-size:14px;
-                                   padding:7px 10px; border-radius:8px;
-                                   border:1px solid var(--border-strong);
-                                   background:var(--surface); color:var(--text); }
-  .sortwrap { display:flex; align-items:center; gap:6px; }
-  .sortwrap select { font:inherit; font-size:14px; padding:6px 8px; border-radius:8px;
-                     border:1px solid var(--border-strong); background:var(--surface);
-                     color:var(--text); }
-  .controls .count { font-size:13px; white-space:nowrap; }
-  .muted { color:var(--muted); font-size:13px; }
-  .empty { background:var(--surface); border:1px dashed var(--border-strong); border-radius:10px;
-           padding:24px; text-align:center; }
-  .empty p { margin:4px 0; }
-  .error { background:#fdecea; border:1px solid var(--danger); color:var(--danger);
-           border-radius:8px; padding:10px 14px; }
-  a { color:var(--accent-hover); }
+  body { margin:0; font:15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         color:#14161a; background:#f3f4f6; display:flex; align-items:center;
+         justify-content:center; min-height:100vh; }
+  main { max-width:44ch; padding:24px; text-align:center; }
+  a { color:#0a4ad1; }
 </style>
 </head>
 <body>
-  <div id="app"></div>
-  <!-- A module: genehmigung.js imports theme.js's palette derivation rather than
-       carrying a second copy of it. -->
-  <script type="module" src="/genehmigung.js"></script>
+<!--
+  The approver's page was here (ADR-0311), and the approval is now read and decided
+  in the inbox that already held it — an approval is an ordinary user task, and Tasks
+  is where all of this person's work is (ADR-0394).
+
+  What is left is the address, because addresses were sent out. Every approval
+  notification carries a link to this page with the order line in its query, and a
+  mail cannot be recalled: an approver who opens one next week must land on their
+  approval rather than on a 404. So this forwards, carrying the line it was given
+  into the inbox's own link.
+
+  It may be deleted once no notification old enough to point here can still name an
+  open approval. Nothing else links to it: the menu, the handbook and the models all
+  name the inbox now.
+-->
+<main>
+  <p>Diese Seite ist in <strong>Tasks</strong> aufgegangen. Sie werden weitergeleitet.</p>
+  <p><a id="go" href="/index.html#/tasks">Weiter zum Posteingang</a></p>
+</main>
+<script>
+  // The query this page was linked with, handed to the inbox unchanged: it names the
+  // order line, which is what the inbox resolves against the approvals somebody holds.
+  var q = window.location.search || "";
+  var to = "/index.html#/tasks" + (q ? "?" + q.slice(1) : "");
+  document.getElementById("go").setAttribute("href", to);
+  // replace and not assign: the page it forwards from is not a step anybody should
+  // reach again with the Back button.
+  window.location.replace(to);
+</script>
 </body>
 </html>

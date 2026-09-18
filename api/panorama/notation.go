@@ -25,7 +25,15 @@ package panorama
 // document generated now would be, relationship for relationship. What changed is
 // who can read the table — the canvas as well as the exporter — and a version that
 // moved for that would say a document might differ when it cannot.
-const NotationMappingVersion = 1
+//
+// Drawing the service catalogue did bump it, to 2. The landscape gained two element
+// types and two relationship types, and — the part that actually forces the bump —
+// the sentence "three relationships is all there can ever be" stopped being true: a
+// catalogue holds real Composition and real Aggregation, which is the first thing on
+// this landscape that ArchiMate can name exactly. A document generated at version 1
+// and one generated now are different documents about one estate, and that is the
+// question this number exists to answer.
+const NotationMappingVersion = 2
 
 const (
 	// NotationAtlas is the landscape drawn as itself: Atlas's own kinds, no
@@ -92,7 +100,17 @@ var notations = []Notation{
 	{
 		ID: NotationAtlas, Label: "Atlas (derived)", Short: "Atlas",
 		Projection: false, MappingVersion: NotationMappingVersion,
-		Types: map[string]NotationType{}, Relations: map[string]NotationRelation{}, Loss: []string{},
+		Types: map[string]NotationType{}, Relations: map[string]NotationRelation{},
+		// The derived picture has no mapping to lose anything *to* — it is the facts
+		// drawn as themselves — so what belongs here is what the derivation itself
+		// does not draw. It was empty while that was nothing. It is not nothing now:
+		// a catalogue holds one relationship this canvas deliberately refuses to
+		// draw, and a picture that dropped it in silence would be the complete-looking
+		// incompleteness the whole record is arranged against. The projections below
+		// carry what *they* drop on top of this.
+		Loss: []string{
+			"Incompatibility between two products is not drawn. A catalogue can record that two rights must never be held by the same person — the clerk who creates a supplier must not also approve payments to it — and that is the one catalogue relationship meaning the opposite of every other line here. Drawn in the same ink it would read as a dependency, so it is left off the picture and stays where it is enforced and reported: the catalogue, and what publishing proves.",
+		},
 	},
 	{
 		ID: NotationArchiMate32, Label: "ArchiMate 3.2", Short: "ArchiMate",
@@ -103,6 +121,17 @@ var notations = []Notation{
 			KindWorker:      {Name: "Application Service", Type: "ApplicationService"},
 			KindDecision:    {Name: "Application Function", Type: "ApplicationFunction"},
 			KindTarget:      {Name: "Node", Type: "Node"},
+			// A catalogue is a Grouping: ArchiMate's element for things that belong
+			// together on a common characteristic, which is what a catalogue is —
+			// what one audience may order. It is deliberately not a Product: a
+			// Product in ArchiMate is one coherent offering with a contract, and
+			// calling the catalogue one would make the things inside it parts of a
+			// single offering rather than a list of them.
+			KindCatalog: {Name: "Grouping", Type: "Grouping"},
+			// And a catalogue item is that Product — "a coherent collection of
+			// services accompanied by a contract, offered as a whole to customers",
+			// which is what a catalogue product is, down to the contract.
+			KindProduct: {Name: "Product", Type: "Product"},
 		},
 		// Derived from archiRelations rather than written out again: the export picks
 		// the relationship type from that table and the canvas draws its notation from
@@ -111,7 +140,9 @@ var notations = []Notation{
 		Relations: archiNotationRelations(),
 		Loss: []string{
 			"Nothing here was modelled. This is Atlas's own resources in ArchiMate's vocabulary — a picture, and a document generated from it, neither of which anybody drew.",
-			"Relationships are derived from two facts, and three is all there can ever be. ArchiMate tells eleven relationships apart; the starmap knows only that an application holds a process, that a process calls another, and that a process uses a worker or a decision. Those three are drawn and exported as Assignment, Triggering and Serving. Nothing here is a Flow, an Access, a Realization, an Aggregation or a Composition, because the facts that would distinguish them are not held — so an absent relationship type means Atlas cannot see one, never that there is none.",
+			"Relationships are derived from facts rather than drawn, so there are as many as there are kinds of fact and no more. An application holds a process; a process calls another; a process uses a worker or a decision; a catalogue offers a product; a product is assembled from other products, either integrally or optionally. Those become Assignment, Triggering, Serving, Aggregation and Composition. Nothing here is a Flow, an Access or a Realization, because the facts that would distinguish them are not held — so an absent relationship type means Atlas cannot see one, never that there is none.",
+			"Precedence between two products is drawn and not exported. The catalogue records that one product cannot be provisioned before another; ArchiMate's Triggering runs between behaviours and its Serving asserts a provider and a consumer, and neither is what that record says. Rather than pick the nearest wrong one, the line stays on the picture in Atlas's own ink and is absent from the document.",
+			"A product is written as a Product whether it is offered as a whole or as a part of one. Atlas holds one record for both, and which it is depends on the catalogue reading it — the same laptop is an offering in one and a component of a workplace bundle in another. ArchiMate would distinguish the Product from the Business Services it aggregates; that distinction is not in the data, so it is not invented here.",
 			"A Serving relationship is drawn pointing the other way from the fact it comes from. ArchiMate's Serving runs from the provider to the consumer, and the landscape's edge runs from the process to the worker it needs. The arrowhead is therefore on the process, so that the picture says \"the mail worker serves the invoice process\" — the same reversal the exported document makes.",
 			"A worker becomes an Application Service with nothing behind it. Atlas holds the worker's name and type and never what is on the other side, so there is no Technology Service to realize it.",
 			"Restricted placeholders have no ArchiMate element — they stand for resources this reader may not see, which is a fact about the reader rather than about the architecture — and are absent from the exported document.",
@@ -141,6 +172,7 @@ var notations = []Notation{
 			"Relationships carry no technology or protocol label, which is most of what a C4 arrow is for.",
 			"Restricted and unresolved placeholders have no C4 element and keep their own shape. So does a draft: C4 describes a system that exists, and a diagram nobody has deployed is not part of one.",
 			"There is no Person and no Software System: the starmap is derived from what this server runs, and neither is a thing Atlas holds.",
+			"A catalogue and a product have no C4 element and keep Atlas's own shape. C4 describes the structure of a software system across four levels; what an organisation offers its people, and what that offering is assembled from, is not one of them.",
 		},
 	},
 }
@@ -212,6 +244,17 @@ var archiRelations = map[string]archiRelation{
 	// A call activity is one behaviour invoking another, which is Triggering.
 	EdgeCalls: {Name: "Triggering", Type: "Triggering"},
 	EdgeUses:  {Name: "Serving", Type: "Serving", Flip: true},
+	// A catalogue aggregates what it offers rather than composing it: a product goes
+	// on existing when a catalogue stops offering it, and is offered by several at
+	// once (ADR-0315). That is exactly the difference ArchiMate draws between the two.
+	EdgeOffers: {Name: "Aggregation", Type: "Aggregation"},
+	// And the arrangement of a product is the same distinction one level down, which
+	// is the first thing on this landscape ArchiMate can name exactly rather than
+	// approximately: an integral part is a Composition, an optional one an
+	// Aggregation.
+	EdgeComposition: {Name: "Composition", Type: "Composition"},
+	EdgeAggregation: {Name: "Aggregation", Type: "Aggregation"},
+	// EdgeRequires has no row on purpose — see the loss list above.
 }
 
 // archiNotationRelations is archiRelations as the served table.

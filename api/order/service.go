@@ -299,10 +299,16 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		empty  bool
 		clash  *conflict
 		barred *ineligible
+		shut   *closed
 		stray  string
 		opErr  error
 	)
 	s.loop.Do(func() {
+		// One reading of the clock for the whole placement: the window below is
+		// checked against the same instant the order records as its creation. Read
+		// twice, a basket placed across a boundary could be refused for a window
+		// that had already opened at the moment the order says it was placed.
+		at := s.now()
 		ordered := rel.Expand(req.Items)
 		if len(ordered) == 0 {
 			// Nothing the release carries was asked for. An order with no lines is
@@ -327,6 +333,13 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		if barred = ineligibleIn(rel, ordered, recipientGroups); barred != nil {
 			return
 		}
+		// And whether it may be ordered at this moment at all. Beside the two above
+		// because it is the third rule of the same kind — what the release says
+		// about this basket — and it is the one nothing used to ask
+		// (ADR-0397).
+		if shut = closedIn(rel, ordered, at); shut != nil {
+			return
+		}
 		// And that the answers belong to this basket. Checked here because it needs
 		// the expanded list: an integral part is ordered without being asked for,
 		// and it may perfectly well carry a form of its own.
@@ -345,7 +358,7 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 			Lines:     linesFor(rel, ordered, has, req.Config, req.Variants),
 			Waves:     wavesFor(rel, ordered),
 			Requires:  requiresFor(rel, ordered),
-			CreatedAt: s.now(),
+			CreatedAt: at,
 		}
 		out.UpdatedAt = out.CreatedAt
 		opErr = s.store.Save(out)
@@ -366,6 +379,12 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		// recipient is. Telling the two apart is what lets a caller know whether
 		// there is anything to do about it.
 		httpapi.Error(w, http.StatusForbidden, barred.reason())
+	case shut != nil:
+		// 403 for the reason above and one of its own: nothing about the request is
+		// malformed — the very same body is correct the day the window opens — so a
+		// 400 would send whoever reads it looking for a mistake they did not make.
+		// And there is nothing to give back, which is what a 409 would offer.
+		httpapi.Error(w, http.StatusForbidden, shut.reason())
 	default:
 		// Start the fulfilment process for it. Durable first, then the side effect
 		// (I2): the order stands whether or not this succeeds, and a failure here
@@ -376,14 +395,19 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		// correlation key and nothing else, so both arrived null and every notice
 		// the fulfilment ever sent would have been addressed to nobody.
 		//
+		// orderId is on that list for the same reason and was missed by that
+		// correction. It is not covered by the correlation key: a message *start*
+		// event's key is evaluated from the payload, so `=orderId` over a payload
+		// without it resolves to nothing — the instance recorded no key and the
+		// variable the whole model reads was never written. Nothing failed, because
+		// FEEL propagates null: the first request was built as "/api/v1/orders/" +
+		// null + "/next" and the orchestration asked for nothing, forever, with no
+		// incident for anybody to find.
+		//
 		// portalBaseUrl is what a notification's link is built on. It is the
 		// operator's configured origin or empty; a model that finds it empty says
 		// where to go instead of printing a link nobody can follow.
-		if err := s.wake(PlacedMessage, out.ID, map[string]string{
-			"orderer":       out.Orderer,
-			"recipient":     out.Recipient,
-			"portalBaseUrl": s.portalBase(),
-		}); err != nil {
+		if err := s.wake(PlacedMessage, out.ID, PlacedVariables(out, s.portalBase())); err != nil {
 			httpapi.Error(w, http.StatusInternalServerError,
 				"the order was placed, but fulfilment could not be started: "+err.Error())
 			return
@@ -391,6 +415,32 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		httpapi.JSON(w, http.StatusCreated, out)
 	}
 }
+
+// PlacedVariables is what the fulfilment orchestration is started with.
+//
+// One function rather than a literal at the call site, because there is a second
+// caller: the repair that starts an orchestration again for an order whose own one
+// was lost or could never work (api/fulfilmentrepair.go). Two literals would be two
+// payloads, and the one that drifted would produce an orchestration that runs and
+// quietly does nothing — which is exactly the defect this list was widened for.
+//
+// portalBaseUrl is what a notification's link is built on: the operator's configured
+// origin or empty. A model that finds it empty says where to go instead of printing
+// a link nobody can follow.
+func PlacedVariables(o Order, portalBase string) map[string]string {
+	return map[string]string{
+		"orderId":       o.ID,
+		"orderer":       o.Orderer,
+		"recipient":     o.Recipient,
+		"portalBaseUrl": portalBase,
+	}
+}
+
+// FulfilmentProcess is the id of the model that works an order
+// (api/systemprocesses/auftrag-erfuellung.bpmn). Named here so the Go side has one
+// spelling of it; the model carries its own, and the two are held together by the
+// tests that start it.
+const FulfilmentProcess = "atlas-auftrag-erfuellung"
 
 // unresolvedVariant reports what is wrong with the variants this order names, or
 // "" when nothing is.

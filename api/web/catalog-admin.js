@@ -22,6 +22,11 @@
 //     are different questions, they are validated separately, and a screen that put
 //     them in one list would teach the conflation the record had to correct.
 
+// The console's "pick one of these" dialog, shared rather than reinvented: it is
+// what replaced the window.prompt pickers elsewhere, and it is covered by an
+// end-to-end test against exactly the list length a prompt could not show.
+import { openPickModal } from "./pickmodal.js";
+
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -70,11 +75,43 @@ const APPROVAL_KINDS = [
   { id: "superior", name: "The orderer's superior", ref: "", what: "resolved through the directory, and escalates up the chain" },
 ];
 
+// EDGE_KINDS is the whole vocabulary of the catalogue's edges, used to *read* one.
 const EDGE_KINDS = [
   { id: "composition", name: "contains", what: "an integral part, always ordered with the whole and not deselectable" },
   { id: "aggregation", name: "optionally contains", what: "offered beside the whole and separately orderable" },
   { id: "requires", name: "requires", what: "precedence: the other must be provisioned first" },
+  { id: "excludes", name: "must not be held with", what: "incompatibility: one person may never hold both" },
 ];
+
+// STRUCTURE_CHOICES are the three states one service can be in with respect to one
+// product — the kit's whole vocabulary, in the order somebody reads them.
+const STRUCTURE_CHOICES = [
+  { id: "none", name: "not part of it", what: "no relation to this product" },
+  { id: "composition", name: "included", what: "always ordered with it, and not deselectable" },
+  { id: "aggregation", name: "optional", what: "offered beside it, ordered only if ticked" },
+];
+
+// STRUCTURE_IDS are the edge kinds the kit owns — every choice above except "not
+// part of it", which is the absence of an edge rather than one of its own. Derived
+// from the list rather than spelled again, because a fourth answer added above and
+// forgotten here would be a save that silently drops it.
+const STRUCTURE_IDS = STRUCTURE_CHOICES.map((c) => c.id).filter((c) => c !== "none");
+
+// PAIRWISE_KINDS is what the pairwise form may still *write* (#1022).
+//
+// Structure is assembled per product now: a catalogue is built out of services that
+// each provision themselves, and what a product adds is an arrangement — which of
+// them come with it, and which are offered beside it. That is one question asked per
+// service, and asking it again as "pick a from, pick a relationship, pick a to"
+// would be a second way to say the same thing. Two ways drift, and the one that
+// drifts here decides what somebody is actually ordering.
+//
+// Everything the kit does not own is pairwise, and derived rather than listed for
+// the reason STRUCTURE_IDS is: a fourth kind added above and forgotten here would
+// be a kind nothing can author. Both of them *are* pairwise — "the account before
+// the mailbox" and "never these two together" are statements about two products
+// that belong to neither.
+const PAIRWISE_KINDS = EDGE_KINDS.filter((k) => !STRUCTURE_IDS.includes(k.id));
 
 // textOf reads a multilingual name, preferring the catalogue's first language and
 // falling back to the id — a product with no text yet is still a product, and a row
@@ -127,12 +164,15 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
       they reach wins — so two catalogues may not share a rank. A catalogue naming no
       group reaches <b>nobody</b>: the dangerous default is the one where a catalogue
       somebody is still filling is already open to everybody.</p>
-    ${cats.length ? `<table class="table">
-      <thead><tr><th>Catalogue</th><th>Rank</th><th>Languages</th><th>Products</th><th>Audience</th><th>Changed</th></tr></thead>
-      <tbody>${rows}</tbody></table>`
-    : `<div class="empty"><p>No catalogue yet. The one below is the first.</p></div>`}
-
-    <div class="card" style="margin-top:18px; max-width:640px">
+    <div class="cat-cols">
+      <div class="cat-main">
+        ${cats.length ? `<table class="table">
+          <thead><tr><th>Catalogue</th><th>Rank</th><th>Languages</th><th>Products</th><th>Audience</th><th>Changed</th></tr></thead>
+          <tbody>${rows}</tbody></table>`
+    : `<div class="empty"><p>No catalogue yet. The one beside it is the first.</p></div>`}
+      </div>
+      <aside class="cat-side">
+    <div class="card">
       <h3 style="margin:0 0 10px">New catalogue</h3>
       <form class="cat-new">
         <label class="field">Name<input name="name" required autocomplete="off"
@@ -143,6 +183,8 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
         ${audienceField(dir, [])}
         <button class="btn" type="submit">Create</button>
       </form>
+    </div>
+      </aside>
     </div>
 
     ${approverCard(report)}`;
@@ -358,9 +400,246 @@ const parseTargets = (raw) => String(raw || "").split("\n")
       : { system: line.slice(0, at).trim(), ref: line.slice(at + 1).trim() };
   });
 
+// The orderable shapes, as one line of `id = name` each.
+//
+// A variant is an id and a name per language, and the form's other multilingual
+// field — the product's own name — is one box per language. That does not scale
+// here: the number of shapes is unbounded, so a box per shape per language is a
+// grid nobody can read, and adding a shape would have to add controls to a form
+// that is one static string with one submit handler.
+//
+// So it is the idiom this form already uses for a list of small records, the way
+// `targets` is: one line each, split on the first separator, with the syntax stated
+// on the control. `=` and not `:`, because a name legitimately carries a colon
+// ("15 Zoll: Aluminium") and an id does not.
+//
+// **Only the languages this catalogue declares are rendered**, exactly as the
+// product's name boxes are. A text in a language it does not declare belongs to a
+// catalogue that does, and [parseVariants] carries it through untouched rather than
+// showing it here to be edited by somebody who cannot read it.
+export const variantLines = (variants, langs) =>
+  (variants || []).map((v) => {
+    const texts = v.texts || {};
+    const named = (langs || []).filter((l) => texts[l]);
+    // One declared language needs no tag in front of the name: a catalogue with a
+    // single language would otherwise carry "de:" on every line it has.
+    const names = (langs || []).length <= 1
+      ? (named.length ? texts[named[0]] : "")
+      : named.map((l) => `${l}:${texts[l]}`).join(" | ");
+    return `${v.id || ""} = ${names}`.trimEnd();
+  }).join("\n");
+
+// parseVariants reads that back.
+//
+// The declared languages are rebuilt from the line and the rest of the texts are
+// kept: a name removed from a line is removed from the variant, and a name in a
+// language this catalogue does not declare survives a save made here. That is the
+// same rule the product's own texts follow one level up, and it is the reason this
+// takes the stored variants rather than building from the textarea alone.
+//
+// A line with no `=` is kept as an id with no name rather than dropped, for the
+// reason parseTargets keeps a line with no colon: a line this form swallowed would
+// be a shape somebody believes they entered. The portal falls back to the id, so
+// the omission is visible rather than silent.
+const parseVariants = (raw, langs, stored) => {
+  const was = {};
+  for (const v of stored || []) was[v.id] = v.texts || {};
+  return String(raw || "").split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const at = line.indexOf("=");
+      const id = (at < 0 ? line : line.slice(0, at)).trim();
+      const rest = at < 0 ? "" : line.slice(at + 1).trim();
+      const texts = { ...(was[id] || {}) };
+      const given = {};
+      if ((langs || []).length <= 1) {
+        // The one declared language, or none at all. A catalogue declaring no
+        // language has no name boxes either, so the name lands under an unnamed
+        // language and the portal's own fallback still shows it.
+        if (rest) given[(langs || [])[0] || ""] = rest;
+      } else {
+        for (const part of rest.split("|")) {
+          const pair = part.trim();
+          if (!pair) continue;
+          const colon = pair.indexOf(":");
+          // A part with no language tag in a multilingual catalogue is the first
+          // declared language: it is what somebody types when they mean "the
+          // obvious one", and refusing it would lose the name.
+          const lang = colon < 0 ? langs[0] : pair.slice(0, colon).trim();
+          const name = colon < 0 ? pair : pair.slice(colon + 1).trim();
+          if (name) given[lang] = name;
+        }
+      }
+      for (const l of [...(langs || []), ""]) {
+        if (given[l]) texts[l] = given[l]; else delete texts[l];
+      }
+      return { id, texts };
+    });
+};
+
+// eligibleField is who may RECEIVE this product, as a picker over the directory
+// and as an id field when there is no directory to pick from.
+//
+// A sibling of [audienceField] and deliberately not a call to it, because the two
+// mean opposite things when nothing is chosen. A catalogue with no audience reaches
+// **nobody** — fail-closed, so a shop being filled in is not open to everybody. A
+// product with no eligible group narrows **nothing**: the catalogue's audience
+// already decided, and this only ever narrows it further (ADR-0347). One control
+// with one wording would state the wrong default for one of the two, and the
+// wording is the whole value of the control.
+//
+// Orphans keep their box for the reason they do there: not drawing a value and
+// unticking it save the same result, so a group the directory has lost would be
+// dropped by the next save of an unrelated field.
+function eligibleField(dir, chosen) {
+  const have = new Set(chosen || []);
+  const hint = "Empty is the ordinary case and narrows nothing. This never opens "
+    + "anything: whoever is outside the catalogue's audience cannot reach the product "
+    + "whatever is chosen here. It is the <b>recipient</b> who is checked and never "
+    + "the orderer, so a manager ordering for a new hire keeps working &mdash; and an "
+    + "order refused by it is refused when it is placed, with the product named.";
+  if (dir === null) {
+    return `<label class="field wide">Who may receive it (group ids, comma separated)
+      <span class="muted" style="display:block; margin:2px 0 6px">${hint}</span>
+      <input name="eligible-raw" value="${esc((chosen || []).join(", "))}" autocomplete="off">
+      <span class="muted">The directory could not be read, so groups are named by id
+        here for now.</span></label>`;
+  }
+  const choices = groupChoices(dir);
+  const orphans = (chosen || []).filter((id) => !choices.some((g) => g.id === id))
+    .map((id) => ({ id, name: `${id} — no longer in the directory` }));
+  const boxes = [...choices, ...orphans];
+  if (!boxes.length) {
+    return `<div class="field wide">Who may receive it
+      <span class="muted" style="display:block; margin:2px 0 6px">${hint}</span>
+      <p class="muted" style="margin:0">No group exists yet, so there is nothing to
+        narrow to. An administrator creates groups under Console → Organization.</p></div>`;
+  }
+  return `<div class="field wide">Who may receive it (none chosen narrows nothing)
+    <span class="muted" style="display:block; margin:2px 0 6px">${hint}</span>
+    <div class="eligible-boxes" style="display:grid; gap:4px; margin-top:6px">
+      ${boxes.map((g) => `<label style="display:flex; gap:6px; align-items:center; font-weight:400">
+        <input type="checkbox" name="eligible" value="${esc(g.id)}"${have.has(g.id) ? " checked" : ""}>
+        <span>${esc(g.name)}</span></label>`).join("")}
+    </div></div>`;
+}
+
+// eligibleFrom reads whichever of the two controls was rendered, the way
+// audienceFrom does: the picker names its boxes "eligible", the degraded input is
+// "eligible-raw", and its absence is what says a picker was drawn.
+const eligibleFrom = (f) =>
+  f.get("eligible-raw") === null ? f.getAll("eligible").map(String) : list(f.get("eligible-raw"));
+
+// The orderable window, as two dates.
+//
+// Nanoseconds in the record and days on the screen, and the conversion is the
+// whole of the care this needs. A window is authored as "from this day until that
+// day" — a product opens on the first of the month, not at 09:17:43 — so a
+// maintainer types dates and the form decides what time of day each one means.
+//
+// **The end is the end of that day.** Somebody who writes 31.10. means the product
+// is orderable on the 31st, and storing midnight would have closed it the moment
+// the 30th ended. That is the off-by-one this pairing exists to prevent, and it is
+// the reason the two sides are not converted by the same rule.
+//
+// UTC on both sides, because the record is the server's own Unix time and a
+// browser's zone is not the server's. The hint says so rather than leaving a
+// maintainer in Zurich to discover it from a product that opened at two in the
+// morning.
+const dayStart = (date) => date ? Date.parse(`${date}T00:00:00Z`) * 1e6 : 0;
+const dayEnd = (date) => date ? Date.parse(`${date}T23:59:59.999Z`) * 1e6 : 0;
+
+// dateOf renders one side back into the box it was typed in. Zero is unbounded and
+// renders as an empty box, which is what an unbounded side means.
+export const dateOf = (ns) => {
+  const n = Number(ns) || 0;
+  return n ? new Date(n / 1e6).toISOString().slice(0, 10) : "";
+};
+
+// lifecycleFrom reads the two boxes back.
+//
+// An omitted side stays zero rather than becoming a date, and the whole object is
+// omitted when neither side is given: a product with `{from: 0, until: 0}` and one
+// with no window at all are the same product, and writing the first would put a
+// field in every record that says nothing.
+const lifecycleFrom = (f) => {
+  const from = dayStart(String(f.get("orderableFrom") || "").trim());
+  const until = dayEnd(String(f.get("orderableUntil") || "").trim());
+  return from || until ? { from, until } : {};
+};
+
+// productBody is what saving the product form posts.
+//
+// A function and not a block inside the submit handler, for the reason
+// workerCreateBody is one: what a create carries is the thing worth proving, and a
+// body assembled inside an event listener can only be proved by clicking through
+// the Console. The handler above keeps what is genuinely its own — the toasts, the
+// picture, the second write that offers a new product.
+//
+// **Saving a product REPLACES it, and this form does not render every field a
+// product has**: the orderable window has no control here. Built from the controls
+// alone, the body cleared it on every save and moved the creation date to today —
+// silently, because a field it dropped is one it never shows. So the stored record
+// is the seed and the form's own fields are laid over it. It also carries the
+// revision, which turns a colleague's edit in between from a silent overwrite into
+// a refusal (ADR-0376).
+//
+// The four that used to sit in that list — the shapes, the search terms, the
+// eligible groups and the ceiling — are rendered now, and being rendered is what
+// makes them the form's to write: a control somebody can empty has to be able to
+// empty it, or it is a field that only ever grows.
+export function productBody(f, { productID, homeCatalog, langs, stored }) {
+  const was = stored || {};
+  // Texts are merged rather than rebuilt, for the same reason one level down: a
+  // product is shared between catalogues, this form renders one box per language
+  // *this* catalogue declares, and a text in a language it does not declare belongs
+  // to a catalogue that does. Emptying a box that is rendered still clears that
+  // text, or a text could be added and never taken away.
+  const texts = { ...(was.texts || {}) };
+  for (const l of langs || []) {
+    const val = String(f.get(`t-${l}`) || "").trim();
+    if (val) texts[l] = val; else delete texts[l];
+  }
+  return {
+    ...was,
+    id: productID, homeCatalog, state: f.get("state"), texts,
+    approval: approvalFrom(f),
+    category: String(f.get("category") || "").trim(),
+    productGroup: String(f.get("productGroup") || "").trim(),
+    price: String(f.get("price") || "").trim(),
+    configForm: f.get("configForm") || "",
+    provisionProcess: f.get("provisionProcess") || "",
+    deprovisionProcess: f.get("deprovisionProcess") || "",
+    multipleAllowed: !!f.get("multipleAllowed"),
+    targets: parseTargets(f.get("targets")),
+    keywords: list(f.get("keywords")),
+    eligible: eligibleFrom(f),
+    maxDays: maxDaysFrom(f),
+    lifecycle: lifecycleFrom(f),
+    // Merged over what is stored, so a name in a language this catalogue does not
+    // declare survives a save made here — the rule the texts above follow.
+    variants: parseVariants(f.get("variants"), langs, was.variants),
+  };
+}
+
+// maxDaysFrom reads the ceiling as a whole number of days, and reads anything that
+// is not one as no ceiling at all.
+//
+// Zero and a negative are different statements and only one of them is sayable
+// here: zero means the right does not end, and a negative would grant a right that
+// ended before it began — publishing refuses it, and the number input cannot
+// produce it. What a browser *can* hand over is an empty string or, on a field
+// somebody pasted into, text; both become no ceiling rather than NaN, which would
+// marshal as null and reach the server as a number nobody typed.
+const maxDaysFrom = (f) => {
+  const days = Math.trunc(Number(f.get("maxDays")));
+  return Number.isFinite(days) && days > 0 ? days : 0;
+};
+
 // ---------- One catalogue ----------
 
-export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, enforced }, id) {
+export async function viewCatalogDetail({ api, apiBytes, toast, view, isSuperseded, me, enforced }, id) {
   let cat, items, releases, processes, forms, dir, people;
   try {
     [cat, items, releases, processes, forms, dir, people] = await Promise.all([
@@ -393,6 +672,12 @@ export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, en
   const offered = cat.items || [];
   const byID = {};
   for (const it of items) byID[it.id] = it;
+  // What this catalogue could still offer. Deliberately the list and not a
+  // comparison of two counts: an id may be offered and no longer defined — the
+  // product row says "offered but not defined" for exactly that — and one such
+  // entry makes the counts equal while products nobody has offered are sitting
+  // there, so the button to offer them was not drawn at all.
+  const offerable = items.filter((it) => !offered.includes(it.id));
 
   // Deployed processes, by id, newest version first. A product binds an id and not
   // a version: what runs is whatever is deployed when the line is reached, which is
@@ -408,8 +693,17 @@ export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, en
     </div>
     <p><a href="#/catalog">← All catalogues</a></p>
 
-    <div class="card" style="margin:0 0 18px; max-width:640px">
+    <!-- What a catalogue is, and what it looks like: two questions about the catalogue
+         itself rather than about anything in it, so they are read side by side at the
+         top of the page instead of one under the other down the left edge. .grid2 is
+         the console's own two-column pair, so this follows its breakpoint rather than
+         inventing a third. -->
+    <div class="grid2" style="margin:0 0 18px">
+      <section>
       <h3 style="margin:0 0 10px">What this catalogue is</h3>
+      <p class="muted" style="max-width:62ch">Its name, the languages it is offered in,
+        its rank against the other catalogues, and who reaches it.</p>
+      <div class="card">
       <form class="cat-meta">
         ${langs.map((l) => `<label class="field">Name (${esc(l)})<input name="t-${esc(l)}"
           value="${esc((cat.texts || {})[l] || "")}" autocomplete="off"></label>`).join("")}
@@ -421,32 +715,51 @@ export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, en
     : "<b>No group named, so nobody reaches this catalogue</b> — the portal will tell them no catalogue is assigned to them."}</p>
         <button class="btn" type="submit">Save</button>
       </form>
+      </div>
+      </section>
+      <section>${appearanceCard(cat, me, enforced)}</section>
     </div>
-
-    ${appearanceCard(cat, me, enforced)}
 
     <h3>Products</h3>
     <p class="muted" style="max-width:62ch">A product is edited through its home catalogue.
       Everything offered here is orderable once this catalogue is published — a product in
       <b>draft</b> or <b>withdrawn</b> state is not.</p>
-    ${offered.length ? `<table class="table">
-      <thead><tr><th>Product</th><th>State</th><th>Approval</th><th>Provisioned by</th><th></th></tr></thead>
-      <tbody>${offered.map((iid) => productRow(byID[iid], iid, langs)).join("")}</tbody></table>`
+    <div class="product-cols cat-cols">
+      <div class="product-list cat-main">
+        ${offered.length ? `<div class="product-table"><table class="table">
+          <thead><tr><th>Product</th><th>State</th><th>Approval</th><th>Provisioned by</th><th></th></tr></thead>
+          <tbody>${offered.map((iid) => productRow(byID[iid], iid, langs, offered.length > 1)).join("")}</tbody></table></div>`
     : `<div class="empty"><p>Nothing offered yet.</p></div>`}
 
-    <div class="row" style="margin-top:10px">
-      <button class="btn" data-act="new-product">New product</button>
-      ${items.length > offered.length ? `<button class="btn ghost" data-act="add-existing">Offer an existing product</button>` : ""}
+        <div class="row" style="margin-top:10px">
+          <button class="btn" data-act="new-product">New product</button>
+          ${offerable.length ? `<button class="btn ghost" data-act="add-existing">Offer an existing product</button>` : ""}
+        </div>
+      </div>
+      <!-- One column, two panels, and never both at once: editing a product and
+           arranging what it is made of are two questions about the same row, and a
+           row has one answer open at a time. Both keep their own container so the
+           code that fills each one says which it means. -->
+      <aside class="product-side cat-side">
+        <div class="product-editor"></div>
+        <div class="assemble-editor"></div>
+      </aside>
     </div>
-    <div class="product-editor"></div>
 
     <h3 style="margin-top:26px">How the products relate</h3>
-    <p class="muted" style="max-width:62ch">Two different questions, kept apart.
-      <b>Structure</b> says what belongs to what. <b>Precedence</b> says what has to exist
-      first, and it is what the fulfilment order is computed from. Both must be free of
-      cycles, and publishing proves it.</p>
-    ${edgeTable(cat.edges || [], byID, langs)}
-    ${offered.length > 1 ? edgeForm(offered, byID, langs) : `<p class="muted">Two products are needed before one can relate to another.</p>`}
+    <p class="muted" style="max-width:62ch">Three different questions, kept apart.
+      <b>Structure</b> says what belongs to what, and is assembled per product.
+      <b>Precedence</b> says what has to exist first, and it is what the fulfilment order
+      is computed from; structure and precedence must both be free of cycles, and
+      publishing proves it. <b>Incompatibility</b> says what one person may never hold
+      together — the clerk who may create a supplier must not also approve payments to
+      it. Neither right is wrong there; the combination is, and an order that would
+      produce it is refused rather than reported afterwards.</p>
+    <div class="cat-cols">
+      <div class="cat-main">${edgeTable(cat.edges || [], byID, langs)}</div>
+      ${offered.length > 1 ? `<aside class="cat-side">${edgeForm(offered, byID, langs)}</aside>`
+    : `<p class="muted">Two products are needed before one can relate to another.</p>`}
+    </div>
 
     ${sharingCard(cat, me, enforced, dir)}
 
@@ -466,11 +779,11 @@ export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, en
     mayShare(cat, me, enforced), mayTheme(me, enforced), dir, people);
 }
 
-function productRow(it, iid, langs) {
+function productRow(it, iid, langs, canAssemble) {
   if (!it) {
     return `<tr><td>${esc(iid)}</td><td colspan="3" class="muted">offered but not defined —
       publishing will refuse this</td>
-      <td><button class="btn ghost danger" data-act="drop" data-id="${esc(iid)}">remove</button></td></tr>`;
+      <td class="row-actions"><button class="btn ghost danger" data-act="drop" data-id="${esc(iid)}">remove</button></td></tr>`;
   }
   const ap = it.approval || {};
   const kind = APPROVAL_KINDS.find((k) => k.id === ap.kind) || APPROVAL_KINDS[0];
@@ -479,19 +792,126 @@ function productRow(it, iid, langs) {
     <td>${esc((STATES.find((s) => s.id === it.state) || {}).name || it.state || "—")}</td>
     <td>${esc(kind.name)}${ap.ref ? ` <span class="muted">(${esc(ap.ref)})</span>` : ""}</td>
     <td>${esc(it.provisionProcess || "—")}</td>
-    <td><button class="btn ghost" data-act="edit" data-id="${esc(it.id)}">edit</button>
+    <td class="row-actions"><button class="btn ghost" data-act="edit" data-id="${esc(it.id)}">edit</button>
+      ${canAssemble ? `<button class="btn ghost" data-act="assemble" data-id="${esc(it.id)}">assemble</button>` : ""}
       <button class="btn ghost danger" data-act="drop" data-id="${esc(it.id)}">remove</button></td>
   </tr>`;
 }
 
-function edgeTable(edges, byID, langs) {
-  const rows = (kind) => edges.filter((e) => e.kind === kind).map((e) => {
-    const k = EDGE_KINDS.find((x) => x.id === e.kind);
-    return `<tr><td>${esc(textOf((byID[e.from] || {}).texts, langs, e.from))}</td>
-      <td class="muted">${esc(k ? k.name : e.kind)}</td>
-      <td>${esc(textOf((byID[e.to] || {}).texts, langs, e.to))}</td>
-      <td><button class="btn ghost danger" data-act="unedge" data-edge="${esc(e.from)}|${esc(e.kind)}|${esc(e.to)}">remove</button></td></tr>`;
+// ---------- The construction kit ----------
+//
+// A catalogue is built out of services that each provision themselves; what a
+// *product* adds is an arrangement — which of those services come with it, and
+// which are offered beside it. Said as edges, that arrangement is a set of triples
+// spread across a table sorted by relationship, and assembling one product means
+// finding its rows among everybody else's and adding them one at a time.
+//
+// The kit asks the arrangement as the question somebody actually has, once per
+// service and all at once: not part of it, included, or optional. The three answers
+// are exhaustive and mutually exclusive, which is what makes them radios — and one
+// save writes the whole arrangement, because "included" and "not part of it" are
+// the same control and a screen that could only add would be the edge table again.
+//
+// It is deliberately structure only. Precedence is a statement about two products
+// and belongs to neither of them, so it stays where a pairwise form can ask it.
+
+// assembleKit draws the arrangement of one product as it stands.
+function assembleKit(pid, offered, byID, langs, edges) {
+  const name = (i) => textOf((byID[i] || {}).texts, langs, i);
+  // A thing cannot be part of itself, so it is not among its own parts. The row
+  // would be refused on save anyway; offering it and then refusing it is a worse
+  // screen than never offering it.
+  const parts = offered.filter((i) => i !== pid);
+  const standing = (other) => {
+    const e = (edges || []).find((x) =>
+      x.from === pid && x.to === other && STRUCTURE_IDS.includes(x.kind));
+    return e ? e.kind : "none";
+  };
+  // A cell carries the control and not the word above it. The column says which
+  // answer it is, once, and repeating that in every cell cost the table about 180px
+  // of width — which is the difference between a kit that fits beside the product
+  // list and one that scrolls sideways in it. The name a cell loses on screen it
+  // keeps for a reader who cannot see the column: aria-label names the product and
+  // the answer together, so a radio is never announced as a bare choice, and the
+  // title still explains what the answer means on hover.
+  const rows = parts.map((other) => {
+    const now = standing(other);
+    return `<tr><td>${esc(name(other))}<div class="muted">${esc(other)}</div></td>
+      ${STRUCTURE_CHOICES.map((c) => `<td><label class="field inline" title="${esc(c.what)}">
+        <input type="radio" name="part-${esc(other)}" value="${esc(c.id)}"${
+  c.id === now ? " checked" : ""} aria-label="${esc(name(other))}: ${esc(c.name)}"></label></td>`).join("")}</tr>`;
   }).join("");
+  // No margin spelled here: the card is read in two layouts — beside the list in a
+  // column of its own, and stacked under it on a narrow screen — and an inline style
+  // would win over both, standing the panel twelve pixels off the row it belongs to.
+  return `<form class="assemble card" data-product="${esc(pid)}">
+    <h4 style="margin:0 0 4px">What ${esc(name(pid))} is made of</h4>
+    <p class="muted" style="max-width:62ch; margin:0 0 10px">Every other product this catalogue
+      offers, and where each one stands with respect to this one. <b>Included</b> is ordered
+      with it and cannot be deselected; <b>optional</b> is offered beside it and ordered only
+      if it is ticked. Saving writes the whole arrangement at once.</p>
+    <table class="table">
+      <thead><tr><th>Product</th>${STRUCTURE_CHOICES.map((c) =>
+    `<th title="${esc(c.what)}">${esc(c.name)}</th>`).join("")}</tr></thead>
+      <tbody>${rows}</tbody></table>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" type="button" data-act="assemble-save">Save the arrangement</button>
+      <button class="btn neutral" type="button" data-act="assemble-cancel">Cancel</button>
+    </div>
+  </form>`;
+}
+
+// contains reports whether `whole` already carries `part`, directly or through
+// another product, following structure edges only.
+//
+// It is the question a loop is made of: putting B inside A is a cycle exactly when
+// B already contains A. Publishing proves the same thing over the whole graph and
+// refuses — but three screens and one publish later, about a catalogue somebody has
+// since added to, which is why the kit asks it at the moment the choice is made.
+function contains(edges, whole, part) {
+  const seen = new Set();
+  const walk = (at) => {
+    if (at === part) return true;
+    if (seen.has(at)) return false;
+    seen.add(at);
+    return (edges || []).some((e) =>
+      e.from === at && STRUCTURE_IDS.includes(e.kind) && walk(e.to));
+  };
+  return walk(whole);
+}
+
+// pairKey names an unordered pair, so the two directions of one symmetric fact
+// answer to the same key.
+const pairKey = (a, b) => [a, b].sort().join("\u0000");
+
+function edgeTable(edges, byID, langs) {
+  const name = (id) => esc(textOf((byID[id] || {}).texts, langs, id));
+  const row = (e, act, data) => {
+    const k = EDGE_KINDS.find((x) => x.id === e.kind);
+    return `<tr><td>${name(e.from)}</td>
+      <td class="muted">${esc(k ? k.name : e.kind)}</td>
+      <td>${name(e.to)}</td>
+      <td class="row-actions"><button class="btn ghost danger" data-act="${act}" ${data}>remove</button></td></tr>`;
+  };
+  const rows = (kind) => edges.filter((e) => e.kind === kind)
+    .map((e) => row(e, "unedge",
+      `data-edge="${esc(e.from)}|${esc(e.kind)}|${esc(e.to)}"`)).join("");
+
+  // An incompatibility is the only symmetric kind: "A must not be held with B" is
+  // exactly "B must not be held with A", and publishing writes both directions into
+  // the release whichever way round it was authored. So one fact is drawn as one
+  // row even where both directions were stored, and removing it removes both —
+  // taking away one direction would leave the other, and the row nobody could
+  // account for would come straight back.
+  const seen = new Set();
+  const incompatibility = edges.filter((e) => e.kind === "excludes").filter((e) => {
+    const key = pairKey(e.from, e.to);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).map((e) => row(e, "unexclude",
+    `data-pair="${esc(e.from)}|${esc(e.to)}"`)).join("");
+
   const structure = rows("composition") + rows("aggregation");
   const precedence = rows("requires");
   return `
@@ -500,17 +920,22 @@ function edgeTable(edges, byID, langs) {
     : `<p class="muted">Nothing contains anything else.</p>`}
     <h4 style="margin:14px 0 4px">Precedence</h4>
     ${precedence ? `<table class="table"><tbody>${precedence}</tbody></table>`
-    : `<p class="muted">Nothing has to exist before anything else.</p>`}`;
+    : `<p class="muted">Nothing has to exist before anything else.</p>`}
+    <h4 style="margin:14px 0 4px">Incompatibility</h4>
+    ${incompatibility ? `<table class="table"><tbody>${incompatibility}</tbody></table>`
+    : `<p class="muted">Nothing is incompatible with anything else.</p>`}`;
 }
 
 function edgeForm(offered, byID, langs) {
   const opts = offered.map((i) =>
     `<option value="${esc(i)}">${esc(textOf((byID[i] || {}).texts, langs, i))}</option>`).join("");
-  return `<form class="edge-new card" style="margin-top:12px; max-width:640px">
+  // No width and no margin here: like every form on this page that is read both beside
+  // its list and stacked under it, only the stylesheet knows which layout is in force.
+  return `<form class="edge-new card">
     <h4 style="margin:0 0 10px">Relate two products</h4>
     <label class="field">From<select name="from">${opts}</select></label>
     <label class="field">Relationship<select name="kind">
-      ${EDGE_KINDS.map((k) => `<option value="${k.id}" title="${esc(k.what)}">${esc(k.name)} — ${esc(k.what)}</option>`).join("")}
+      ${PAIRWISE_KINDS.map((k) => `<option value="${k.id}" title="${esc(k.what)}">${esc(k.name)} — ${esc(k.what)}</option>`).join("")}
     </select></label>
     <label class="field">To<select name="to">${opts}</select></label>
     <button class="btn" type="submit">Add</button>
@@ -557,20 +982,20 @@ function appearanceCard(cat, me, enforced) {
   const logoURL = `/api/v1/catalogs/${encodeURIComponent(cat.id)}/logo`;
 
   if (!mayTheme(me, enforced)) {
-    return `<h3 style="margin-top:26px">How this catalogue looks</h3>
+    return `<h3 style="margin:0 0 10px">How this catalogue looks</h3>
       <p class="muted" style="max-width:62ch">${accent || theme.typeface
     ? `Its own appearance: ${esc(accent || "the instance colour")}, ${
       esc(theme.typeface || "the instance typeface")}.`
     : "The instance's own appearance."} Changing it is an administrator's.</p>`;
   }
 
-  return `<h3 style="margin-top:26px">How this catalogue looks</h3>
+  return `<h3 style="margin:0 0 10px">How this catalogue looks</h3>
     <p class="muted" style="max-width:62ch">The portal and the approval page paint
       themselves from this, so a customer sees their own brand rather than yours. Leave
       both empty and the catalogue wears the instance's appearance. Setting it is an
       administrator's; an editor may change what the catalogue offers and not whose it
       looks like.</p>
-    <div class="card" style="margin:0 0 18px; max-width:640px">
+    <div class="card">
       <form class="cat-theme">
         <label class="field">Accent colour
           <span class="row" style="gap:8px; align-items:center">
@@ -634,7 +1059,7 @@ function sharingCard(cat, me, enforced, dir) {
       <td>${esc(nameOfPrincipal(dir, ref.id || ""))}
         <div class="muted"><code>${esc(ref.id || "")}</code></div></td>
       <td>${esc(r ? r.name : m.role)}</td>
-      <td>${can ? `<button class="btn ghost danger" data-act="unshare"
+      <td class="row-actions">${can ? `<button class="btn ghost danger" data-act="unshare"
         data-ref="${esc(ref.type || "user")}|${esc(ref.id || "")}">remove</button>` : ""}</td></tr>`;
   }).join("");
 
@@ -646,20 +1071,23 @@ function sharingCard(cat, me, enforced, dir) {
     ? `${esc(nameOfPrincipal(dir, cat.ownerId))} <code>${esc(cat.ownerId)}</code>`
     : "<code>—</code>"}${
       cat.ownerId ? "" : " <span>(created before ownership, or with authentication off)</span>"}</p>
-    ${members.length ? `<table class="table">
-      <thead><tr><th>Kind</th><th>Id</th><th>May</th><th></th></tr></thead>
-      <tbody>${rows}</tbody></table>`
+    <div class="cat-cols">
+      <div class="cat-main">${members.length ? `<table class="table">
+        <thead><tr><th>Kind</th><th>Id</th><th>May</th><th></th></tr></thead>
+        <tbody>${rows}</tbody></table>`
     : `<p class="muted">Nobody else. Only the owner and administrators maintain it.</p>`}
-    ${can ? `<form class="share-new card" style="margin-top:12px; max-width:640px">
+      </div>
+      ${can ? `<aside class="cat-side"><form class="share-new card">
       <h4 style="margin:0 0 10px">Let somebody else maintain it</h4>
       ${shareWhoField(dir, cat)}
       <label class="field">May<select name="role">
         ${MEMBER_ROLES.map((r) => `<option value="${r.id}">${esc(r.name)} — ${esc(r.what)}</option>`).join("")}
       </select></label>
       <button class="btn" type="submit">Add</button>
-    </form>`
+    </form></aside>`
     : `<p class="muted">You maintain this catalogue but do not own it, so who else may is
-      the owner's to change.</p>`}`;
+      the owner's to change.</p>`}
+    </div>`;
 }
 
 // productForm renders the editor for one product, or for a new one.
@@ -679,6 +1107,72 @@ function sharingCard(cat, me, enforced, dir) {
 // The palette is the console's own tokens throughout. Nothing here introduces a
 // colour: the sections are separated by --border, their hints are --muted, and a
 // theme change reaches this form because it never spelled a colour out.
+// savePicture puts a chosen picture on the product, or takes the existing one
+// away. Does nothing when the form says nothing about it, which is the ordinary
+// save.
+//
+// A failure here is reported and not raised: the product is saved by the time this
+// runs, and a page that reported "not saved" because an image did not upload would
+// send somebody looking for a change that is in fact stored.
+async function savePicture({ api, apiBytes, toast }, pid, f) {
+  const file = f.get("picture");
+  const path = `/api/v1/catalog-products/${encodeURIComponent(pid)}/picture`;
+  try {
+    if (file && file.size > 0) {
+      await apiBytes("PUT", path, file);
+      return;
+    }
+    if (f.get("dropPicture")) await api("DELETE", path);
+  } catch (err) {
+    toast(`The product was saved, but its picture was not: ${err.message}`, "err");
+  }
+}
+
+// partOfNote says which products in THIS catalogue carry this one, because that is
+// what decides whether the two headings below are read at all.
+//
+// The portal's cascade reads Kategorie › Produktgruppe › Produkt › Services. The
+// two upper columns are collected from the products nothing contains and the two
+// lower ones from the containment graph, so a product that is a part is reached
+// through the product carrying it and its own heading is never read. The form
+// offers both fields on every product regardless, and its hint claimed the heading
+// was where the product sits — so a maintainer could fill in a column that had
+// already stopped reading the field.
+//
+// **It is a note and not a hidden field.** Containment belongs to a catalogue and
+// not to the product: an item is referenced by several catalogues, each with its
+// own edges, so the same product is legitimately a part here and offered on its own
+// next door. Hiding the controls would hide a heading that another catalogue reads.
+// So the honest answer is to say where this one stands, in this catalogue, and
+// leave the decision with the person reading it.
+//
+// Empty for a new product, which nothing can carry yet, and empty for a root —
+// where the fields do what they say and a note would be noise.
+function partOfNote(it, cat, items, langs) {
+  if (!it) return "";
+  const byID = {};
+  for (const i of items || []) byID[i.id] = i;
+  const wholes = (cat.edges || [])
+    .filter((e) => e.to === it.id && (e.kind === "composition" || e.kind === "aggregation"))
+    .map((e) => esc(textOf((byID[e.from] || {}).texts, langs, e.from)));
+  if (!wholes.length) return "";
+  const carriers = wholes.length === 1
+    ? `<b>${wholes[0]}</b>`
+    : wholes.slice(0, -1).map((w) => `<b>${w}</b>`).join(", ")
+      + ` and <b>${wholes[wholes.length - 1]}</b>`;
+  const one = wholes.length === 1;
+  return `<p class="form-sec-hint">In this catalogue ${carriers} ${one ? "carries" : "carry"}
+    this product, so the portal offers it as a <b>Service</b> behind
+    ${one ? "it" : "them"} and not as a Marktleistung of its own. The two headings below
+    are read off the products nothing contains, so a requester reaches this product under
+    ${one ? `${wholes[0]}&rsquo;s` : "the carrying product&rsquo;s"} heading and not under
+    what is written here. It still counts in another catalogue that offers this product on
+    its own. To have it offered in its own right, open
+    ${one ? `${wholes[0]}&rsquo;s` : "the carrying product&rsquo;s"} row and answer
+    &ldquo;${esc(STRUCTURE_CHOICES[0].name)}&rdquo; for this product under
+    <b>assemble</b>.</p>`;
+}
+
 function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
   const v = it || { state: "draft", approval: { kind: "none" }, texts: {} };
   const ap = v.approval || {};
@@ -691,7 +1185,10 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
     </select>`;
   const section = (title, hint) => `<h4 class="form-sec">${esc(title)}</h4>
     <p class="form-sec-hint">${hint}</p>`;
-  return `<div class="card" style="margin:14px 0; max-width:960px">
+  // No width and no margin spelled here: the card is read in two layouts — beside the
+  // list in a column of its own, and stacked under it on a narrow screen — and only
+  // the stylesheet knows which one is in force. An inline style would win over both.
+  return `<div class="card">
     <h3 style="margin:0 0 10px">${it ? "Edit product" : "New product"}</h3>
     <form class="product-form" data-editing="${esc(it ? it.id : "")}">
       ${section("What the catalogue shows",
@@ -701,13 +1198,16 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
           placeholder="laptop"></label>
       ${langs.map((l) => `<label class="field">Name (${esc(l)})<input name="t-${esc(l)}"
         value="${esc((v.texts || {})[l] || "")}" autocomplete="off"></label>`).join("")}
+      ${partOfNote(it, cat, items, langs)}
       <label class="field wide">Category
-        <span class="muted" style="display:block; margin:2px 0 6px">The heading this
-          product sits under in the portal &mdash; <code>Arbeitsplatz</code>,
+        <span class="muted" style="display:block; margin:2px 0 6px">The heading the
+          portal groups this product under &mdash; <code>Arbeitsplatz</code>,
           <code>Kommunikation</code>. A heading and nothing else: it has no ordering of
           its own (the portal sorts alphabetically), no translation, and two spellings
           are two headings. Leave it empty and the product sits under the portal's
-          heading for those that carry none.</span>
+          heading for those that carry none. <b>Read off the products nothing
+          contains</b>: the portal reaches a part through the product that carries it,
+          so a heading written on a part is never read there.</span>
         <input name="category" value="${esc(v.category || "")}" autocomplete="off"
           list="known-categories" placeholder="Arbeitsplatz">
         <datalist id="known-categories">${
@@ -721,12 +1221,25 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
           spellings are two groups. The group has no record and therefore no category of
           its own: the chain is assembled from the products that carry both, so a group
           whose products sit in two categories appears under both. Leave it empty and the
-          product sits under the portal's group for those that carry none.</span>
+          product sits under the portal's group for those that carry none. Read off the
+          same products the heading above is.</span>
         <input name="productGroup" value="${esc(v.productGroup || "")}" autocomplete="off"
           list="known-groups" placeholder="Mobile Geräte">
         <datalist id="known-groups">${
   [...new Set(items.map((i) => (i.productGroup || "").trim()).filter(Boolean))].sort()
     .map((g) => `<option value="${esc(g)}"></option>`).join("")}</datalist></label>
+      <label class="field wide">Search terms
+        <span class="muted" style="display:block; margin:2px 0 6px">Words somebody might
+          search for that are <b>not</b> the product's name &mdash; synonyms, the vendor's
+          own term, the abbreviation everybody uses, the thing it replaced. Comma
+          separated. The portal searches the id, every name the product carries and these;
+          the story this serves is finding a service <i>when the exact name is not
+          known</i>, which is the person a search over names alone cannot help. One flat
+          list and <b>not one per language</b>: a synonym list is for finding, and a
+          searcher's language is not the catalogue's &mdash; somebody reading a German
+          catalogue types <code>laptop</code> as readily as <code>Notebook</code>.</span>
+        <input name="keywords" value="${esc((v.keywords || []).join(", "))}"
+          autocomplete="off" placeholder="Notebook, mobiles Gerät, M365"></label>
       <label class="field wide">Cost
         <span class="muted" style="display:block; margin:2px 0 6px">Written as you want it
           read — <code>CHF 1'200.&ndash;</code>, <code>49.&ndash; / Monat</code>,
@@ -740,10 +1253,56 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
       <label class="field inline wide"><input type="checkbox" name="multipleAllowed"
         ${v.multipleAllowed ? "checked" : ""}> May be held more than once
         <span class="muted">— two licences, two mailboxes</span></label>
+      <label class="field wide">Orderable shapes
+        <span class="muted" style="display:block; margin:2px 0 6px">One per line, as
+          <code>id = name</code> &mdash; <code>gross = 15 Zoll</code>. A laptop's size, a
+          licence tier: the same product, ordered in one of several shapes.${langs.length > 1
+    ? ` This catalogue declares ${langs.length} languages, so name each shape per
+          language as <code>gross = ${langs.map((l) => `${esc(l)}:…`).join(" | ")}</code>;
+          a name with no language in front of it is filed under
+          <code>${esc(langs[0])}</code>.` : ""}
+          They are <b>unordered on purpose</b> &mdash; &ldquo;higher&rdquo; is meaningful
+          for a tier and meaningless for Windows against Linux &mdash; so the basket asks
+          the orderer, and <b>refuses to place the order until a shape is chosen</b> for
+          every position that has any. How many may be ticked is not asked here:
+          &ldquo;may be held more than once&rdquo; above already answers it. Leave it empty for a product with one
+          shape, which is most of them.</span>
+        <textarea name="variants" rows="3" spellcheck="false"
+          placeholder="gross = 15 Zoll">${esc(variantLines(v.variants, langs))}</textarea></label>
+      <div class="field wide">Picture
+        <span class="muted" style="display:block; margin:2px 0 6px">A photograph of the
+          thing or the vendor's mark, shown to whoever is choosing — PNG, JPEG or SVG,
+          served back exactly as uploaded. It is <b>not frozen into a release</b>: a
+          better photograph of the same laptop is not a different laptop, so a new
+          picture appears on old orders too. Most of a catalogue reads as a list of
+          names; this is the one thing that makes it read as a shop.</span>
+        ${it ? `<img class="product-picture" alt=""
+          src="/api/v1/catalog-products/${encodeURIComponent(v.id)}/picture?t=${Date.now()}"
+          onerror="this.remove()">` : ""}
+        <input type="file" name="picture" accept="image/png,image/jpeg,image/svg+xml">
+        ${it ? `<label class="field inline"><input type="checkbox" name="dropPicture">
+          Remove the picture this product has</label>` : ""}</div>
 
       ${section("How an order is handled",
     "What happens after somebody puts it in the basket. None of it is shown in the catalogue, " +
     "except that an approval is needed at all.")}
+      <label class="field wide">Orderable window
+        <span class="muted" style="display:block; margin:2px 0 6px">The days between
+          which this product may be ordered. Both ends are <b>inclusive</b> and either
+          may be left empty: empty on the left is &ldquo;from whenever it is published&rdquo;,
+          empty on the right is &ldquo;until somebody withdraws it&rdquo;, and empty on both
+          is the ordinary product. The window is what lets a catalogue be
+          <b>published ahead of the date it opens</b> &mdash; the product is visible,
+          and the portal will not put it in a basket before the first day or after the
+          last. An order outside it is <b>refused by the server</b>, not only hidden by
+          the portal. Dates are the server's own (UTC), so a window that matters to the
+          hour is not what this field is for.</span>
+        <div class="row">
+          <label>from <input name="orderableFrom" type="date"
+            value="${esc(dateOf((v.lifecycle || {}).from))}"></label>
+          <label>until <input name="orderableUntil" type="date"
+            value="${esc(dateOf((v.lifecycle || {}).until))}"></label>
+        </div></label>
       <label class="field">State<select name="state">
         ${STATES.map((s) => opt(s.id, v.state || "draft", `${s.name} — ${s.what}`)).join("")}
       </select></label>
@@ -751,6 +1310,7 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
         ${APPROVAL_KINDS.map((k) => opt(k.id, ap.kind || "none", `${k.name} — ${k.what}`)).join("")}
       </select></label>
       ${approverField(ap, dir, people)}
+      ${eligibleField(dir, v.eligible)}
       <label class="field wide">Details the orderer fills in
         <span class="muted" style="display:block; margin:2px 0 6px">An Atlas form, for what
           this product needs that its name does not say — a cost centre, a site, an
@@ -766,6 +1326,18 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
         </select></label>
       <label class="field">Provisioned by${procSelect("provisionProcess", v.provisionProcess)}</label>
       <label class="field">Revoked by${procSelect("deprovisionProcess", v.deprovisionProcess)}</label>
+      <label class="field wide">How long the right may last
+        <span class="muted" style="display:block; margin:2px 0 6px">In days, or
+          <code>0</code> for a right that does not end &mdash; which is the ordinary case.
+          A <b>ceiling declared as policy</b> ("nobody holds this for more than ninety
+          days") and not a date somebody chose: an order cannot yet name a shorter end
+          within it. It reaches a grant through the release like the bindings above, so a
+          ceiling relaxed next week does not lengthen a right granted this week under the
+          stricter one. It never applies to a right found by a commissioning load: that
+          start is the day the right was discovered, and a ceiling measured from it would
+          schedule the whole estate to expire on the anniversary of the switch-on.</span>
+        <input name="maxDays" type="number" min="0" step="1" inputmode="numeric"
+          value="${esc(String(v.maxDays || 0))}" autocomplete="off"></label>
       <label class="field wide">Known in the target systems as
         <span class="muted" style="display:block; margin:2px 0 6px">One per line, as
           <code>system:reference</code> — <code>ad:CN=VPN-Users</code>,
@@ -1020,6 +1592,116 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
     toast(err.message, "err");
   };
   const editor = view.querySelector(".product-editor");
+  const assembler = view.querySelector(".assemble-editor");
+
+  // ---- Where the editor panel sits ----
+  //
+  // The panel is a column beside the list (app.css), and it opens level with the row
+  // it was opened from: a product edited from row thirty would otherwise put its form
+  // thirty rows further down the page, which is the scroll this layout exists to
+  // remove. CSS cannot know where a row ended up — the shared table enhancer sorts
+  // and filters the tbody underneath it — so the offset is measured here and handed
+  // over as --editor-top. app.css reads it only where the two columns exist at all;
+  // on a narrow viewport the property is ignored and the panel is stacked under the
+  // list, exactly as it used to be.
+  const cols = view.querySelector(".product-cols");
+  const list = view.querySelector(".product-list");
+  // The column itself, which is what carries the offset: the two panels inside it are
+  // containers and only one of them holds anything at a time.
+  const side = view.querySelector(".product-side");
+  // The row the open panel belongs to, kept so the alignment survives what the list
+  // does afterwards.
+  let anchor = null;
+
+  const open = () => !!(editor.firstChild || assembler.firstChild);
+
+  const align = () => {
+    if (!anchor || !cols || !side || !open()) return;
+    // offsetParent is null for a row a filter has hidden. Measuring against a hidden
+    // row would snap the panel to the top of the list while its product is still
+    // open in it, so the last good offset stands until the row is on screen again.
+    if (anchor.offsetParent === null) return;
+    const top = anchor.getBoundingClientRect().top - cols.getBoundingClientRect().top;
+    side.style.setProperty("--editor-top", `${Math.max(0, Math.round(top))}px`);
+  };
+  // Sorting a column reorders the rows and a filter hides some: either moves the row
+  // the panel is aligned to, and both arrive as ordinary events on the list. One
+  // frame later the table has been rebuilt, so this re-measures rather than predicts.
+  const realign = () => requestAnimationFrame(align);
+  if (list) {
+    list.addEventListener("click", realign);
+    list.addEventListener("input", realign);
+  }
+  // A viewport change moves the row with no event on the list at all, and a narrow
+  // one takes the second column away entirely. Observed rather than bound to
+  // window.resize so it ends with the view: the element goes when the page is
+  // re-rendered and the observer goes with it, where a window listener would outlive
+  // both and go on measuring nodes nobody can see.
+  if (cols && typeof ResizeObserver === "function") new ResizeObserver(realign).observe(cols);
+
+  // markEditing keeps the highlight on exactly one row: the panel says which product
+  // it is editing, and a second highlight would make that a guess.
+  const markEditing = (row) => {
+    for (const tr of view.querySelectorAll(".product-list tr.editing")) tr.classList.remove("editing");
+    if (row) row.classList.add("editing");
+  };
+
+  // keepInPlace holds the row still while the layout changes under it.
+  //
+  // Opening the panel takes a column off the list, so every cell that was on one line
+  // and is now on two makes the rows above the reader taller — and a row at the
+  // bottom of a long list is then pushed a screenful down by text they are not even
+  // looking at. The panel is level with its row either way (align() measures after
+  // the reflow), but the *page* has moved, which reads as the list jumping away from
+  // the click. Measured before and after, the difference is exactly how far the row
+  // travelled, and scrolling by it puts it back under the cursor. app.css turns the
+  // browser's own scroll anchoring off here so this is the only correction applied
+  // and the two cannot fight over the same pixels.
+  const keepInPlace = (row, wasAt) => {
+    if (!row || wasAt === null || row.offsetParent === null) return;
+    const moved = row.getBoundingClientRect().top - wasAt;
+    if (Math.abs(moved) > 1) window.scrollBy(0, moved);
+  };
+
+  // stacked says the column is not there: below the layout's breakpoint the panel
+  // renders under the list, where nothing is level with anything and the reader has to
+  // be taken to it. Read off the layout rather than from a media query repeated here,
+  // because the breakpoint is app.css's and a second copy of it drifts.
+  const stacked = () => !cols || getComputedStyle(cols).display !== "flex";
+
+  // openPanel puts one panel in the column, empties the other, marks the row the two
+  // belong to and aligns them. One function for the product's form and for the kit,
+  // because they are one act and one place: a row has one answer open at a time, and
+  // a panel carrying the previous product's highlight — or the previous product's
+  // offset — is worse than no highlight at all.
+  const openPanel = (into, html, row) => {
+    const wasAt = row && row.offsetParent !== null ? row.getBoundingClientRect().top : null;
+    editor.innerHTML = "";
+    assembler.innerHTML = "";
+    into.innerHTML = html;
+    markEditing(row && row.tagName === "TR" ? row : null);
+    anchor = row || null;
+    align();
+    keepInPlace(row, wasAt);
+    // Stacked, the panel is below the list and can be a screen away; beside it, it is
+    // already level with the row that was clicked and scrolling would undo that.
+    if (stacked()) into.scrollIntoView({ block: "nearest" });
+  };
+  const openEditor = (html, row) => { openPanel(editor, html, row); wireProductForm(); };
+  const openAssembler = (html, row) => openPanel(assembler, html, row);
+
+  const closePanel = () => {
+    // Closing gives the width back and reflows the list the same way, so the row is
+    // held still on the way out too.
+    const row = anchor;
+    const wasAt = row && row.offsetParent !== null ? row.getBoundingClientRect().top : null;
+    editor.innerHTML = "";
+    assembler.innerHTML = "";
+    side.style.removeProperty("--editor-top");
+    markEditing(null);
+    anchor = null;
+    keepInPlace(row, wasAt);
+  };
 
   view.querySelector(".cat-meta").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -1047,24 +1729,88 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
     const act = b.dataset.act;
 
     if (act === "new-product") {
-      editor.innerHTML = productForm(null, cat, langs, procIDs, formList, items, dir, people);
-      wireProductForm();
+      // A new product has no row yet, so the panel opens level with the button that
+      // asked for it — which is where the reader is looking.
+      openEditor(productForm(null, cat, langs, procIDs, formList, items, dir, people),
+        b.closest(".row"));
       return;
     }
     if (act === "edit") {
-      editor.innerHTML = productForm(byID[b.dataset.id], cat, langs, procIDs, formList, items, dir, people);
-      wireProductForm();
+      openEditor(productForm(byID[b.dataset.id], cat, langs, procIDs, formList, items, dir, people),
+        b.closest("tr"));
       return;
     }
-    if (act === "cancel-product") { editor.innerHTML = ""; return; }
+    if (act === "cancel-product") { closePanel(); return; }
+
+    if (act === "assemble") {
+      openAssembler(assembleKit(
+        b.dataset.id, cat.items || [], byID, langs, cat.edges || []), b.closest("tr"));
+      return;
+    }
+    if (act === "assemble-cancel") { closePanel(); return; }
+
+    if (act === "assemble-save") {
+      const form = assembler.querySelector(".assemble");
+      if (!form) return;
+      const pid = form.dataset.product;
+      const f = new FormData(form);
+      // Everything this product is made of, as the form now says it. A choice of
+      // "none" is the absence of an edge and not an edge of its own, so it simply
+      // does not appear.
+      const chosen = [];
+      for (const [field, value] of f.entries()) {
+        if (!field.startsWith("part-")) continue;
+        if (!STRUCTURE_IDS.includes(String(value))) continue;
+        chosen.push({ from: pid, to: field.slice("part-".length), kind: String(value) });
+      }
+      // Everything else stays exactly as it was: another whole's arrangement, and
+      // every edge of a kind the kit does not own — precedence and incompatibility,
+      // this product's own included. The kit was asked one question and may only
+      // answer that one; a save that replaced the edge list wholesale would delete
+      // what this screen never showed. The filter is structural rather than a list
+      // of kinds to spare, so a kind added later is kept without being remembered.
+      const kept = (cat.edges || []).filter((e) =>
+        !(e.from === pid && STRUCTURE_IDS.includes(e.kind)));
+      const edges = [...kept, ...chosen];
+
+      // Refuse a loop here, naming the product that closes it. The rule is the
+      // publish rule and the reason to apply it now is the reader: at this moment
+      // they know which choice they just made, and at publish they have a list of
+      // problems about a catalogue they have since edited.
+      const looped = chosen.find((e) => contains(kept, e.to, pid));
+      if (looped) {
+        const nameOf = (i) => textOf((byID[i] || {}).texts, langs, i);
+        toast(`${nameOf(looped.to)} already contains ${nameOf(pid)}, so it cannot also be ` +
+          `part of it. Nothing was saved — a catalogue with a loop cannot be published.`, "err");
+        return;
+      }
+      try { await patchList({ edges }); toast("Saved"); reload(); }
+      catch (err) { patchFailed(err); }
+      return;
+    }
 
     if (act === "add-existing") {
-      const free = items.filter((it) => !(cat.items || []).includes(it.id));
-      const pick = window.prompt(
-        `Which product should this catalogue also offer?\n\n${free.map((f) => `${f.id} — ${textOf(f.texts, langs, f.id)}`).join("\n")}`);
-      if (!pick) return;
-      if (!free.some((f) => f.id === pick.trim())) { toast("No product with that id", "err"); return; }
-      try { await patchList({ items: [...(cat.items || []), pick.trim()] }); reload(); }
+      // A dialog with a real list, because the prompt this replaces was not one:
+      // it printed the products as lines of text and asked for an id back, so
+      // nothing in it could be clicked, a typo was answered with "No product with
+      // that id", and a browser truncates a prompt body past a handful of lines —
+      // which cuts off the newest products, the ones somebody is most likely to be
+      // looking for. The same failure the application picker had, and the same fix.
+      const free = items.filter((it) => !(cat.items || []).includes(it.id))
+        .map((f) => ({ value: f.id, label: `${textOf(f.texts, langs, f.id)} — ${f.id}` }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+      // The button is drawn from this same list, so an empty one means the page is
+      // stale rather than that there is nothing to offer.
+      if (!free.length) { toast("Every product is already offered here"); return; }
+      const picked = await openPickModal({
+        title: "Offer an existing product",
+        label: "Product",
+        options: free,
+        hint: "Offering it here does not copy it: the product stays edited through its home catalogue.",
+        okLabel: "Offer",
+      });
+      if (!picked) return;
+      try { await patchList({ items: [...(cat.items || []), picked.option.value] }); reload(); }
       catch (err) { patchFailed(err); }
       return;
     }
@@ -1083,6 +1829,18 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
     if (act === "unedge") {
       const [from, kind, to] = b.dataset.edge.split("|");
       const edges = (cat.edges || []).filter((x) => !(x.from === from && x.kind === kind && x.to === to));
+      try { await patchList({ edges }); reload(); }
+      catch (err) { patchFailed(err); }
+      return;
+    }
+
+    if (act === "unexclude") {
+      const [a, b2] = b.dataset.pair.split("|");
+      // Both directions, because the row is one fact: taking away the one that was
+      // drawn would leave the mirror, and the row would come straight back with
+      // nothing to say why.
+      const edges = (cat.edges || []).filter((x) => !(x.kind === "excludes"
+        && ((x.from === a && x.to === b2) || (x.from === b2 && x.to === a))));
       try { await patchList({ edges }); reload(); }
       catch (err) { patchFailed(err); }
       return;
@@ -1150,7 +1908,16 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
       const f = new FormData(e.target);
       const from = f.get("from"), to = f.get("to"), kind = f.get("kind");
       if (from === to) { toast("A product cannot relate to itself", "err"); return; }
-      const edges = [...(cat.edges || []), { from, to, kind }];
+      const have = cat.edges || [];
+      // An incompatibility is symmetric, so the mirror of one already recorded is
+      // the same fact said backwards rather than a second one. Added anyway it
+      // would draw one row, be removed as a pair, and leave whoever authored it
+      // wondering where the other went.
+      const already = have.some((e) => e.kind === kind
+        && ((e.from === from && e.to === to)
+          || (kind === "excludes" && e.from === to && e.to === from)));
+      if (already) { toast("That is already recorded", "err"); return; }
+      const edges = [...have, { from, to, kind }];
       try { await patchList({ edges }); reload(); }
       catch (err) { patchFailed(err); }
     });
@@ -1164,43 +1931,16 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
       const pid = String(editing || f.get("id") || "").trim();
       if (!pid) { toast("A product needs an id", "err"); return; }
 
-      // Saving a product REPLACES it, and this form does not render every field a
-      // product has: there is no control here for variants, the orderable window,
-      // the search keywords, the eligible groups or the ceiling on how long the
-      // right may last. Built from the controls alone, the body cleared all five on
-      // every save and moved the creation date to today — silently, because the
-      // fields it dropped are the ones it never shows.
-      //
-      // So the stored record is the seed and the form's own fields are laid over
-      // it. It also carries the revision, which turns a colleague's edit in between
-      // from a silent overwrite into a refusal (ADR-0376).
-      const stored = byID[pid] || {};
-
-      // Texts are merged rather than rebuilt, for the same reason one level down: a
-      // product is shared between catalogues, this form renders one box per
-      // language *this* catalogue declares, and a text in a language it does not
-      // declare belongs to a catalogue that does. Emptying a box that is rendered
-      // still clears that text, or a text could be added and never taken away.
-      const texts = { ...(stored.texts || {}) };
-      for (const l of langs) {
-        const val = String(f.get(`t-${l}`) || "").trim();
-        if (val) texts[l] = val; else delete texts[l];
-      }
-      const body = {
-        ...stored,
-        id: pid, homeCatalog: id, state: f.get("state"), texts,
-        approval: approvalFrom(f),
-        category: String(f.get("category") || "").trim(),
-        productGroup: String(f.get("productGroup") || "").trim(),
-        price: String(f.get("price") || "").trim(),
-        configForm: f.get("configForm") || "",
-        provisionProcess: f.get("provisionProcess") || "",
-        deprovisionProcess: f.get("deprovisionProcess") || "",
-        multipleAllowed: !!f.get("multipleAllowed"),
-        targets: parseTargets(f.get("targets")),
-      };
+      const body = productBody(f, {
+        productID: pid, homeCatalog: id, langs, stored: byID[pid] || {},
+      });
       try {
         await api("POST", "/api/v1/catalog-products", body);
+        // The picture is its own request, because it is bytes and the product is a
+        // record. It follows the save rather than preceding it, so a product that
+        // was refused never acquires a picture — and a picture that fails to upload
+        // is reported on its own, against a product that is already stored.
+        await savePicture({ api, apiBytes, toast }, pid, f);
         // A new product is offered by the catalogue it was created in: creating one
         // that nothing offers is the likeliest way to lose work here.
         //

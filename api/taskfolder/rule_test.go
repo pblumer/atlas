@@ -351,6 +351,15 @@ func TestCompileRejectsInvalidRule(t *testing.T) {
 // TestCatalogIsSelfConsistent holds the catalogue the editor is built from
 // against the generator: every advertised field/operator pair must validate and
 // produce an expression that compiles, or the UI offers a row nobody can save.
+//
+// It also holds each pair to more than compiling. A call this build can only ever
+// answer with null compiles cleanly (ADR-0388), so an operator emitting one would
+// pass the line below and produce a folder that filters nothing while reading as
+// "no tasks match". [Compile] does not check for that at run time because it
+// cannot happen: every value reaching the expression is escaped, bounded or
+// pattern-held. That is a property of the catalogue, so this is where it is
+// pinned — an operator that broke it would fail here, before anybody could save a
+// rule built on it.
 func TestCatalogIsSelfConsistent(t *testing.T) {
 	sample := map[string]Condition{
 		ValueText:     {Value: "beispiel"},
@@ -376,7 +385,34 @@ func TestCatalogIsSelfConsistent(t *testing.T) {
 			if _, err := Compile(r); err != nil {
 				t.Errorf("%s/%s: Compile(%s): %v", f.ID, op.ID, r.FEEL(), err)
 			}
+			if faults := expr.CheckCalls(r.FEEL()); len(faults) > 0 {
+				t.Errorf("%s/%s generates %s, which this build can only answer with null: %+v",
+					f.ID, op.ID, r.FEEL(), faults)
+			}
 		}
+	}
+}
+
+// TestAValueThatLooksLikeACallStaysAValue is the other half of the guard above,
+// from the caller's side rather than the catalogue's: somebody who types a Camunda
+// expression into a folder's text field gets a folder that looks for tasks named
+// that, which is literally what they asked for — not an expression that compiles
+// to null and quietly matches nothing (ADR-0388).
+func TestAValueThatLooksLikeACallStaysAValue(t *testing.T) {
+	r := Rule{Match: MatchAll, Conditions: []Condition{
+		{Field: FieldTaskName, Op: OpIs, Value: `is defined(x)`}}}
+	if err := r.Validate(); err != nil {
+		t.Fatalf("a value with parentheses in it was refused: %v", err)
+	}
+	got := r.FEEL()
+	if got != `taskName = "is defined(x)"` {
+		t.Fatalf("FEEL() = %s, want the value as a string literal", got)
+	}
+	if faults := expr.CheckCalls(got); len(faults) > 0 {
+		t.Errorf("the generated expression carries a call: %+v", faults)
+	}
+	if _, err := Compile(r); err != nil {
+		t.Errorf("Compile: %v", err)
 	}
 }
 
