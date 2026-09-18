@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "MCP",
+    "Catalogue"
+  ],
+  "title": {
+    "en": "An AI client's save no longer clears a product's group",
+    "de": "Ein Speichern aus dem KI-Client löscht die Produktgruppe nicht mehr"
+  },
+  "summary": {
+    "en": "Saving a product over MCP replaces the whole record and forwards exactly the fields the tool declares. The product group was added to the record and to the Console and missed in the tool, so the loop the tool's own description prescribes — read the product, change one field, send the whole record back — dropped it. The portal's Produktgruppe column emptied itself for every product an assistant had touched, and nothing said so. The field is declared now, and the tool's schema is held against the record itself: a field added to a product from here on is either declared or recorded as deliberately absent.",
+    "de": "Ein Speichern über MCP ersetzt den ganzen Datensatz und übermittelt genau die Felder, die das Werkzeug deklariert. Die Produktgruppe wurde dem Datensatz und der Konsole hinzugefügt, im Werkzeug aber übersehen. Der von der Werkzeugbeschreibung selbst vorgegebene Ablauf — Produkt lesen, ein Feld ändern, den ganzen Datensatz zurücksenden — verwarf sie dadurch. Die Spalte Produktgruppe im Portal leerte sich für jedes Produkt, das ein Assistent angefasst hatte, ohne jeden Hinweis. Das Feld ist jetzt deklariert, und das Schema des Werkzeugs wird gegen den Datensatz selbst geprüft: Ein künftig ergänztes Feld ist entweder deklariert oder mit Begründung als bewusst fehlend vermerkt."
+  }
+}

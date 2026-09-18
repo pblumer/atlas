@@ -166,16 +166,23 @@ test("a loop two edges long is refused the same way", async ({ page }) => {
   expect(page.__errors).toEqual([]);
 });
 
-test("the pairwise form is left for precedence only", async ({ page }) => {
-  await bootCatalogue(page);
+test("the pairwise form keeps the questions that are pairwise, and no structure",
+  async ({ page }) => {
+    await bootCatalogue(page);
 
-  // Structure is assembled per product now. A second way to say the same thing is
-  // how two surfaces drift, and the one that drifts here is the one that decides
-  // what somebody is actually ordering.
-  // Read the values, not the labels: the labels are prose ("contains", "optionally
-  // contains") and a guard reading those would pass on the day somebody renames one.
-  const kinds = await page.locator('.edge-new select[name="kind"] option')
-    .evaluateAll((os) => os.map((o) => o.value));
-  expect(kinds).toEqual(["requires"]);
-  expect(page.__errors).toEqual([]);
-});
+    // Structure is assembled per product now. A second way to say the same thing is
+    // how two surfaces drift, and the one that drifts here is the one that decides
+    // what somebody is actually ordering.
+    //
+    // What is left is genuinely pairwise: "the account before the mailbox" and
+    // "never these two together" are statements about two products that belong to
+    // neither. Incompatibility joined the form when the Console finally learned the
+    // fourth edge kind at all.
+    //
+    // Read the values, not the labels: the labels are prose ("contains", "optionally
+    // contains") and a guard reading those would pass on the day somebody renames one.
+    const kinds = await page.locator('.edge-new select[name="kind"] option')
+      .evaluateAll((os) => os.map((o) => o.value));
+    expect(kinds.sort()).toEqual(["excludes", "requires"]);
+    expect(page.__errors).toEqual([]);
+  });

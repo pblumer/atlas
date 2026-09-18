@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Portal",
+    "Catalogue"
+  ],
+  "title": {
+    "en": "What you hold is filed under the heading you ordered it under",
+    "de": "Bezogene Leistungen stehen unter der Überschrift, unter der sie bestellt wurden"
+  },
+  "summary": {
+    "en": "\"Meine Leistungen\" drew the same Kategorie and Produktgruppe columns as the catalogue and read them off a different set of products. Both headings belong to the offering, so a service two edges down has never had one of its own — and services are most of what a person actually holds. The columns therefore read \"Ohne Kategorie\" for things the catalogue files under a real heading. Nothing looked broken; the column was simply empty for the products people have. Each entitlement is now resolved to the product it belongs to and the heading read there, which is the heading that was on screen when it was ordered.",
+    "de": "Die Ansicht \"Meine Leistungen\" zeichnete dieselben Spalten Kategorie und Produktgruppe wie der Katalog und las sie von einer anderen Menge von Produkten. Beide Überschriften gehören zur Marktleistung; ein Service zwei Ebenen darunter hat also nie eine eigene getragen — und Services sind der grösste Teil dessen, was eine Person tatsächlich bezieht. Die Spalten zeigten deshalb \"Ohne Kategorie\" für Dinge, die der Katalog unter einer echten Überschrift führt. Es sah nicht nach einem Fehler aus; die Spalte war lediglich für genau die Produkte leer, die man hat. Jede bezogene Leistung wird jetzt auf das Produkt zurückgeführt, zu dem sie gehört, und die Überschrift dort gelesen — dieselbe, die bei der Bestellung auf dem Bildschirm stand."
+  }
+}

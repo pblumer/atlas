@@ -14,9 +14,108 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An incompatibility can be declared on the screen that declares everything else
+  about a catalogue.** A product may exclude another — the clerk who may create a
+  supplier must not also approve payments to it — and the record has carried that
+  since the decision was made. Publishing freezes it into a release in **both**
+  directions, and an order that would produce the combination is refused rather than
+  reported afterwards.
+
+  The Console knew three edge kinds of four. An incompatibility could not be
+  declared there at all, and one that already existed appeared in no table and could
+  not be removed, because the only remove button is on a row that is drawn. It was
+  reachable over REST and MCP and by nobody using the screen — while being enforced
+  the whole time.
+
+  It now sits beside structure and precedence as the third question the relations
+  section asks, and the pairwise form offers it, because it *is* pairwise: "never
+  these two together" is a statement about two products that belongs to neither.
+  Its symmetry is handled rather than passed on. One fact is **one row** however
+  many directions were stored, removing it removes both — taking away the one that
+  was drawn would leave the mirror, and the row would come straight back with
+  nothing to say why — and adding the mirror of one already recorded is refused
+  instead of stored as a second fact.
+
+  The comment above the Console's copy of these vocabularies claimed they were
+  "pinned by a test against the Go source so the two cannot drift". **No such test
+  existed**, which is why the drift went unnoticed for as long as it did. It exists
+  now, and it reads the constants themselves rather than a list kept beside them:
+  a value added to the states, the approval kinds or the edge kinds fails it until
+  the screen carries the value, can author it, and shows it.
+
+- **A product can be offered from a date, until a date — and now that means
+  something.** A catalogue item has carried an orderable window since the catalogue
+  was designed, and nothing ever read it. Publishing checked that the window did not
+  end before it began, which is a sanity check on the pair and not on the present;
+  no reader anywhere asked whether *today* was inside it. So a product with a window
+  was orderable exactly like a product without one, and the Console had no control
+  for it either — which is how it went unnoticed for so long: nobody could fill it
+  in from the screen, so nobody found out it did nothing.
+
+  It is enforced now, where every other rule about a basket is read: an order
+  carrying a product outside its window is **refused by the server**, with the
+  product and the date named and which side of the window the moment fell on. The
+  portal keeps the same window so a basket cannot be filled with something the
+  placement will refuse — shown with a disabled control and the date rather than
+  hidden, because a product that has not opened yet is exactly the case the field
+  exists for, and the one thing somebody wants to know is when.
+
+  Two boundaries decided deliberately. **Both ends are inclusive**, and the editor
+  stores the end of the last day: somebody who writes 31.10. means the product is
+  orderable on the 31st, and storing midnight would have closed it a day early,
+  every time, with nothing about it looking wrong. And the **clock is read once per
+  placement**, so the instant checked against the window is the instant the order
+  records as its creation — read twice, an order placed across a boundary could be
+  refused for a window that had already opened at the moment the order says it was
+  placed.
+
+  An integral part outside its window closes the product carrying it, and the
+  refusal says so rather than naming a part nobody can deselect. The window governs
+  **ordering** and nothing else: a right already held when it closes keeps running,
+  because when a right *ends* is the ceiling beside it.
+
+  **On upgrade:** an installation that filled the field in while it did nothing has
+  products that will now refuse orders outside their dates. That is the correction
+  rather than a regression, and it arrives without warning — worth a look at the
+  windows in your catalogue before this lands.
+
+- **The four fields the portal read and the product editor could not set.** A product
+  carries twelve fields the portal acts on and the editor rendered eight. The four it
+  did not render were not decoration: the **orderable shapes** are what the basket
+  refuses to place an order without, the **search terms** are what makes a service
+  findable by somebody who does not know its name, the **eligible groups** decide who
+  may receive it, and the **ceiling** decides how long the right lasts. All four were
+  settable over REST and MCP and by nobody else — which is to say, not by the person
+  whose job it is.
+
+  They are on the form now. The shapes read as one line each (`gross = 15 Zoll`, per
+  language where the catalogue declares several), the terms as a comma-separated list,
+  the eligible groups as a picker over the directory that falls back to an id field
+  when the directory cannot be read, and the ceiling as a number of days where zero
+  means a right that does not end.
+
+  Rendering them changes who owns them: a save is a **full replace**, so a control
+  somebody can empty has to be able to empty the field, while a field with no control
+  has to survive the save untouched. Both halves are now proved in a browser against
+  the real assembly rather than by reading the source. One field still has no control
+  on purpose — the orderable window, which nothing anywhere enforces; a control for it
+  would promise an effect that does not exist, and it gets one when the window is
+  enforced.
+
+  The editor also says, for the product open in front of you, **where the two headings
+  are read**. Kategorie and Produktgruppe are collected from the products nothing
+  contains, so a product that is a part of another one is reached through the product
+  carrying it and its own heading is never read there. The hint claimed the category
+  was "the heading this product sits under", which is false for a part — so a
+  maintainer could fill in a column that had already stopped reading the field, with
+  nothing to say so. Where the catalogue open carries this product inside another, the
+  form now names the carrier and says the heading is read there. It stays a note and
+  not a hidden field: containment belongs to a catalogue, so the same product is
+  legitimately a part here and offered in its own right next door, where the heading
+  *is* read.
+
 - **A Product Map on the starmap: what you offer, beside what has to run for it.**
-  Atlas held two halves of one
-  estate and drew them on two screens. The starmap is the derived half — applications,
+  Atlas held two halves of one estate and drew them on two screens. The starmap is the derived half — applications,
   deployed processes, the workers they use, every edge a fact the server can point at.
   The catalogue is the other: what a group of people may order, what each product is
   assembled from, and the process that provisions it.
@@ -781,6 +880,30 @@ _Changed_ / _Removed_ for each version.
   about the reader rather than about what they are reading.
 
 ### Fixed
+
+- **An agent's save no longer clears a product's group.** `atlas_save_catalog_product`
+  is a full replace and forwards exactly the fields its schema declares. `productGroup`
+  was added to the record and to the Console and missed there, so the loop the tool's
+  own description prescribes — read the product with `atlas_list_catalog_products`,
+  change one field, send the whole record back — dropped it. The portal's Produktgruppe
+  column emptied itself for every product an agent had touched, and nothing anywhere
+  said so.
+
+  The field is declared now, and the schema is held against the record by reflection
+  rather than against a list kept beside it: the list is what was already wrong. A
+  field added to a product from here on is either declared or named as deliberately
+  absent, and neither can happen quietly.
+
+- **What you already hold is filed under the heading you ordered it under.** "Meine
+  Leistungen" drew the same Kategorie and Produktgruppe columns as the catalogue and
+  read them off a different set of products: the catalogue collects them from the
+  products nothing contains, and this screen read them straight off each entitlement.
+  Both strings belong to the offering, so a service two edges down has never had a
+  heading of its own to carry — and services are most of what a person actually holds.
+  The columns therefore showed "Ohne Kategorie" for things the catalogue filed under a
+  real heading. Nothing looked broken; the column was simply empty for the products
+  people have. Each entitlement is now resolved to the product it belongs to and the
+  heading read there, which is the heading that was on screen when it was ordered.
 
 - **"No process instance is left for this order" named a cause it could not know.** It
   said retention had removed the instance. That is one of three reasons the portal
