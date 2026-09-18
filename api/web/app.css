@@ -239,13 +239,17 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
 
-/* The construction kit (ADR-0395): one row per service,
-   one radio per answer. The cells carry the console's own inline field so the
-   control and its word read as one thing, with the field's stacking margin taken
-   back out — inside a table the row is the spacing. */
-/* The choice cells hold a control and nothing else — the column heading is the word,
-   and the radio is centred under it so a row reads as three positions rather than
-   three left edges. */
+/* The construction kit (ADR-0395): one row per service, one radio per answer. The
+   cells carry the console's own inline field, with the field's stacking margin taken
+   back out — inside a table the row is the spacing.
+
+   A cell holds the control and nothing else. The word belongs to the column heading,
+   which says it once; repeating it in every cell cost the table 180px of width, which
+   is the difference between a kit that fits in the column beside the product list and
+   one that scrolls sideways in it. The radio is centred under its heading so a row
+   reads as three positions rather than three left edges, and the name a cell no longer
+   shows it keeps for a reader who cannot see the column — the radio's own label names
+   the product and the answer together. */
 .assemble td .field.inline { margin: 0; justify-content: center; }
 .assemble td:not(:first-child) { text-align: center; }
 .assemble th { white-space: nowrap; }
