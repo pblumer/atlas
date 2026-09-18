@@ -1167,14 +1167,14 @@ function setChrome(appId, route) {
   // It is the drawing that wants the room, so this is the diagram's route and not the
   // list of models beside it, which is a list and reads better in a column.
   document.body.classList.toggle("infomodel-mode", route.startsWith("#/data/m/"));
-  // A catalogue is maintained in two columns — the products on the left, the product
-  // being edited beside its own row on the right — and that is a working surface
-  // rather than a page to read: the centred column would divide 1120px between a
-  // table of products and a form, leaving both narrower than what they hold. It drops
-  // the column exactly as the Tasks inbox does, and keeps the padding. The route and
-  // not the app: the list of catalogues before it is a list, and a list reads better
-  // in a column.
-  document.body.classList.toggle("catalog-mode", route.startsWith("#/catalog/c/"));
+  // A catalogue is maintained in two columns — a list on the left, the thing being
+  // created or edited beside it on the right — and that is a working surface rather
+  // than a page to read: the centred column would divide 1120px between a table and a
+  // form, leaving both narrower than what they hold. It drops the column exactly as
+  // the Tasks inbox does, and keeps the padding. Both of its routes, because both are
+  // that shape: the catalogues and the one being created, then the products, the
+  // relations and the maintainers of one catalogue.
+  document.body.classList.toggle("catalog-mode", route.startsWith("#/catalog"));
 }
 
 // ---------- What's New ----------

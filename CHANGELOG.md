@@ -404,14 +404,26 @@ _Changed_ / _Removed_ for each version.
   **The kit opens in the same place.** What a product is made of is a question about
   one row exactly as its form is, so it uses the same column and the same alignment,
   and a row has one of the two open at a time — opening either gives the panel up.
+  Its choice cells now carry the control alone: the column heading already says which
+  answer it is, and repeating that word in every cell cost the table 180px of width.
+  A reader who cannot see the column still hears both, from the radio's own label.
+
+  **Every list on the catalogue page has its form beside it**, because the page is
+  four times one shape: the catalogues and the one being created, the products and
+  the panel that edits them, the relations and the pair being related, who maintains
+  it and who is being added. The shape is stated once, and each section says which
+  half it is — a fifth of them cannot invent a fifth layout.
 
   **The stacked layout remains, and it is the fallback rather than a lesser page.**
-  The breakpoint is measured rather than chosen: the product list cannot be drawn
-  under about 850px — five columns, a process id, and a row offering edit, assemble
-  and remove — and the kit needs about 500px to show its last answer, which with the
-  gap and the page's padding is 1440px of window. Below that one of the two would be
-  narrower than its own content and would scroll sideways inside its box, losing the
-  column with the buttons in it first; stacked, each of them gets the whole page. The panel sticks to the top of the
+  The breakpoint is measured rather than chosen, and it is one number for the whole
+  page although the smaller pairs would fit earlier: a page that puts its lists beside
+  their forms at three different widths is three pages to somebody dragging a window
+  edge. The widest pair decides it — the product list cannot be drawn under 853px
+  (five columns, a process id, and a row offering edit, assemble and remove) and the
+  kit beside it needs 464px — which at 35% of the page is 1400px of window. Below
+  that one of the two would be narrower than its own content and would scroll sideways
+  inside its box, losing the column with the buttons in it first; stacked, each of them
+  gets the whole page. The panel sticks to the top of the
   window while it is scrolled and carries its own scrollbar, because a form longer
   than the screen that cannot scroll inside hides the Save button it exists for.
 

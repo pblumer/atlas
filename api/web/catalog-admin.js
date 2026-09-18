@@ -160,12 +160,15 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
       they reach wins — so two catalogues may not share a rank. A catalogue naming no
       group reaches <b>nobody</b>: the dangerous default is the one where a catalogue
       somebody is still filling is already open to everybody.</p>
-    ${cats.length ? `<table class="table">
-      <thead><tr><th>Catalogue</th><th>Rank</th><th>Languages</th><th>Products</th><th>Audience</th><th>Changed</th></tr></thead>
-      <tbody>${rows}</tbody></table>`
-    : `<div class="empty"><p>No catalogue yet. The one below is the first.</p></div>`}
-
-    <div class="card" style="margin-top:18px; max-width:640px">
+    <div class="cat-cols">
+      <div class="cat-main">
+        ${cats.length ? `<table class="table">
+          <thead><tr><th>Catalogue</th><th>Rank</th><th>Languages</th><th>Products</th><th>Audience</th><th>Changed</th></tr></thead>
+          <tbody>${rows}</tbody></table>`
+    : `<div class="empty"><p>No catalogue yet. The one beside it is the first.</p></div>`}
+      </div>
+      <aside class="cat-side">
+    <div class="card">
       <h3 style="margin:0 0 10px">New catalogue</h3>
       <form class="cat-new">
         <label class="field">Name<input name="name" required autocomplete="off"
@@ -176,6 +179,8 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
         ${audienceField(dir, [])}
         <button class="btn" type="submit">Create</button>
       </form>
+    </div>
+      </aside>
     </div>
 
     ${approverCard(report)}`;
@@ -468,8 +473,8 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
     <p class="muted" style="max-width:62ch">A product is edited through its home catalogue.
       Everything offered here is orderable once this catalogue is published — a product in
       <b>draft</b> or <b>withdrawn</b> state is not.</p>
-    <div class="product-cols">
-      <div class="product-list">
+    <div class="product-cols cat-cols">
+      <div class="product-list cat-main">
         ${offered.length ? `<div class="product-table"><table class="table">
           <thead><tr><th>Product</th><th>State</th><th>Approval</th><th>Provisioned by</th><th></th></tr></thead>
           <tbody>${offered.map((iid) => productRow(byID[iid], iid, langs, offered.length > 1)).join("")}</tbody></table></div>`
@@ -484,7 +489,7 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
            arranging what it is made of are two questions about the same row, and a
            row has one answer open at a time. Both keep their own container so the
            code that fills each one says which it means. -->
-      <aside class="product-side">
+      <aside class="product-side cat-side">
         <div class="product-editor"></div>
         <div class="assemble-editor"></div>
       </aside>
@@ -495,8 +500,11 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
       <b>Structure</b> says what belongs to what. <b>Precedence</b> says what has to exist
       first, and it is what the fulfilment order is computed from. Both must be free of
       cycles, and publishing proves it.</p>
-    ${edgeTable(cat.edges || [], byID, langs)}
-    ${offered.length > 1 ? edgeForm(offered, byID, langs) : `<p class="muted">Two products are needed before one can relate to another.</p>`}
+    <div class="cat-cols">
+      <div class="cat-main">${edgeTable(cat.edges || [], byID, langs)}</div>
+      ${offered.length > 1 ? `<aside class="cat-side">${edgeForm(offered, byID, langs)}</aside>`
+    : `<p class="muted">Two products are needed before one can relate to another.</p>`}
+    </div>
 
     ${sharingCard(cat, me, enforced, dir)}
 
@@ -564,12 +572,19 @@ function assembleKit(pid, offered, byID, langs, edges) {
       x.from === pid && x.to === other && STRUCTURE_IDS.includes(x.kind));
     return e ? e.kind : "none";
   };
+  // A cell carries the control and not the word above it. The column says which
+  // answer it is, once, and repeating that in every cell cost the table about 180px
+  // of width — which is the difference between a kit that fits beside the product
+  // list and one that scrolls sideways in it. The name a cell loses on screen it
+  // keeps for a reader who cannot see the column: aria-label names the product and
+  // the answer together, so a radio is never announced as a bare choice, and the
+  // title still explains what the answer means on hover.
   const rows = parts.map((other) => {
     const now = standing(other);
     return `<tr><td>${esc(name(other))}<div class="muted">${esc(other)}</div></td>
       ${STRUCTURE_CHOICES.map((c) => `<td><label class="field inline" title="${esc(c.what)}">
         <input type="radio" name="part-${esc(other)}" value="${esc(c.id)}"${
-  c.id === now ? " checked" : ""}><span>${esc(c.name)}</span></label></td>`).join("")}</tr>`;
+  c.id === now ? " checked" : ""} aria-label="${esc(name(other))}: ${esc(c.name)}"></label></td>`).join("")}</tr>`;
   }).join("");
   // No margin spelled here: the card is read in two layouts — beside the list in a
   // column of its own, and stacked under it on a narrow screen — and an inline style
@@ -632,7 +647,9 @@ function edgeTable(edges, byID, langs) {
 function edgeForm(offered, byID, langs) {
   const opts = offered.map((i) =>
     `<option value="${esc(i)}">${esc(textOf((byID[i] || {}).texts, langs, i))}</option>`).join("");
-  return `<form class="edge-new card" style="margin-top:12px; max-width:640px">
+  // No width and no margin here: like every form on this page that is read both beside
+  // its list and stacked under it, only the stylesheet knows which layout is in force.
+  return `<form class="edge-new card">
     <h4 style="margin:0 0 10px">Relate two products</h4>
     <label class="field">From<select name="from">${opts}</select></label>
     <label class="field">Relationship<select name="kind">
@@ -772,20 +789,23 @@ function sharingCard(cat, me, enforced, dir) {
     ? `${esc(nameOfPrincipal(dir, cat.ownerId))} <code>${esc(cat.ownerId)}</code>`
     : "<code>—</code>"}${
       cat.ownerId ? "" : " <span>(created before ownership, or with authentication off)</span>"}</p>
-    ${members.length ? `<table class="table">
-      <thead><tr><th>Kind</th><th>Id</th><th>May</th><th></th></tr></thead>
-      <tbody>${rows}</tbody></table>`
+    <div class="cat-cols">
+      <div class="cat-main">${members.length ? `<table class="table">
+        <thead><tr><th>Kind</th><th>Id</th><th>May</th><th></th></tr></thead>
+        <tbody>${rows}</tbody></table>`
     : `<p class="muted">Nobody else. Only the owner and administrators maintain it.</p>`}
-    ${can ? `<form class="share-new card" style="margin-top:12px; max-width:640px">
+      </div>
+      ${can ? `<aside class="cat-side"><form class="share-new card">
       <h4 style="margin:0 0 10px">Let somebody else maintain it</h4>
       ${shareWhoField(dir, cat)}
       <label class="field">May<select name="role">
         ${MEMBER_ROLES.map((r) => `<option value="${r.id}">${esc(r.name)} — ${esc(r.what)}</option>`).join("")}
       </select></label>
       <button class="btn" type="submit">Add</button>
-    </form>`
+    </form></aside>`
     : `<p class="muted">You maintain this catalogue but do not own it, so who else may is
-      the owner's to change.</p>`}`;
+      the owner's to change.</p>`}
+    </div>`;
 }
 
 // productForm renders the editor for one product, or for a new one.

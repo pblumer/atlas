@@ -26,11 +26,11 @@ import (
 // render, still save, and silently be the page this change was made to replace.
 func TestTheProductEditorIsAColumnBesideTheList(t *testing.T) {
 	src := readWeb(t, "catalog-admin.js")
-	page := webRegion(t, src, `<div class="product-cols">`, "How the products relate")
+	page := webRegion(t, src, `<div class="product-cols cat-cols">`, "How the products relate")
 
 	for _, want := range []struct{ frag, what string }{
-		{`<div class="product-list">`, "the list column"},
-		{`<aside class="product-side">`, "the panel column beside it"},
+		{`<div class="product-list cat-main">`, "the list column"},
+		{`<aside class="product-side cat-side">`, "the panel column beside it"},
 		{`<div class="product-editor"></div>`, "the product's form in that column"},
 		{`<div class="assemble-editor"></div>`, "the kit in the same column, beside the same row"},
 		{`<div class="product-table">`, "the table's own scroll box, so it cannot run under the panel"},
@@ -57,6 +57,38 @@ func TestTheProductEditorIsAColumnBesideTheList(t *testing.T) {
 	}
 }
 
+// TestEveryListOnTheCataloguePageCarriesItsFormBesideIt.
+//
+// The page is four of one shape: a list, and the form that acts on it. The
+// catalogues and the one being created, the products and the panel that edits them,
+// the relations and the pair being related, the maintainers and the one being added.
+// Stated once in .cat-cols and marked per section, so a fifth of them cannot invent
+// a fifth layout — and so a form that is quietly dropped back under its list fails
+// here rather than in somebody's afternoon.
+func TestEveryListOnTheCataloguePageCarriesItsFormBesideIt(t *testing.T) {
+	src := readWeb(t, "catalog-admin.js")
+	if n := strings.Count(src, `class="cat-cols"`) + strings.Count(src, `class="product-cols cat-cols"`); n < 4 {
+		t.Errorf("only %d of the page's lists are paired with their form; the catalogues, the "+
+			"products, the relations and the maintainers are all that shape", n)
+	}
+	if a, b := strings.Count(src, `class="cat-main"`), strings.Count(src, `class="cat-side"`); a < 3 || b < 3 {
+		t.Errorf("%d halves are marked as the list and %d as the form beside it; a pair needs "+
+			"both, and a column with only one half is a column of nothing", a, b)
+	}
+	// The forms that moved into a column state no width of their own any more, for the
+	// reason the product editor's card does not: only the stylesheet knows which of the
+	// two layouts is in force, and an inline style wins over both.
+	for _, form := range []string{`class="edge-new card"`, `class="share-new card"`} {
+		i := strings.Index(src, form)
+		if i < 0 {
+			t.Fatalf("the page no longer carries %s; this guard has lost its subject", form)
+		}
+		if tag := src[i : i+strings.Index(src[i:], ">")]; strings.Contains(tag, "style=") {
+			t.Errorf("%s spells a style of its own, which overrides both layouts it is read in", form)
+		}
+	}
+}
+
 // TestTheCataloguePageDropsTheCentredColumn.
 //
 // Two columns need a page to put them on. The console's default content column is
@@ -67,7 +99,7 @@ func TestTheProductEditorIsAColumnBesideTheList(t *testing.T) {
 // Either one alone is a page that silently goes back to 1120px.
 func TestTheCataloguePageDropsTheCentredColumn(t *testing.T) {
 	js := readWeb(t, "app.js")
-	if !strings.Contains(js, `classList.toggle("catalog-mode", route.startsWith("#/catalog/c/"))`) {
+	if !strings.Contains(js, `classList.toggle("catalog-mode", route.startsWith("#/catalog"))`) {
 		t.Error("the catalogue page no longer asks for the wide layout, so its two columns " +
 			"share the default content column")
 	}

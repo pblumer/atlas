@@ -22,7 +22,7 @@
   <body class="catalog-mode">
     <main><div id="view"></div></main>
     <script type="module">
-      import { viewCatalogDetail } from "/catalog-admin.js";
+      import { viewCatalogDetail, viewCatalogs } from "/catalog-admin.js";
       const view = document.getElementById("view");
 
       // Twenty-four: enough that the last rows are well off the fold, and enough that
@@ -49,20 +49,36 @@
 
       const CAT = {
         id: "c1", texts: { de: "Katalog", en: "Catalogue" }, languages: ["de", "en"],
-        rank: 1, groups: ["grp_all"], items: ITEMS.map((i) => i.id), edges: [],
-        members: [], ownerId: "u1", revision: 3, theme: {},
+        rank: 1, groups: ["grp_all"], items: ITEMS.map((i) => i.id),
+        // One of each of the two graphs, and one maintainer: the relations and the
+        // maintainers are lists beside forms too, and an empty one would let their
+        // column pass without holding anything.
+        edges: [{ from: "p2", kind: "composition", to: "p3" },
+          { from: "p4", kind: "requires", to: "p5" }],
+        members: [{ ref: { type: "user", id: "u2" }, role: "editor" }],
+        ownerId: "u1", revision: 3, theme: {},
       };
 
       const api = async (method, url) => {
+        if (/\/catalogs$/.test(url)) return [CAT];
+        if (/approver-report/.test(url)) return { problems: [] };
         if (/\/catalogs\/[^/]+\/releases/.test(url)) return [];
         if (/\/catalogs\/[^/]+$/.test(url)) return CAT;
         if (/\/catalog-products$/.test(url)) return ITEMS;
         if (/\/processes$/.test(url)) return ITEMS.map((i) => ({ processId: i.provisionProcess }));
         if (/\/forms$/.test(url)) return [];
-        if (/\/principals$/.test(url)) return [{ id: "grp_all", type: "group", name: "Everybody" }];
+        if (/\/principals$/.test(url)) return [{ id: "grp_all", type: "group", name: "Everybody" },
+          { id: "u1", type: "user", name: "Die Eigentümerin" },
+          { id: "u2", type: "user", name: "Der Vertreter" }];
         if (/\/users\/assignable$/.test(url)) return [{ username: "arno", name: "Arno" }];
         return {};
       };
+
+      // The catalogues themselves, which are the same shape one level up: the list, and
+      // the catalogue being created beside it.
+      window.__mountList = () => viewCatalogs({
+        api, toast: () => {}, view, isSuperseded: () => false,
+      });
 
       window.__mount = () => viewCatalogDetail({
         api, apiBytes: async () => new Uint8Array(), toast: () => {}, view,

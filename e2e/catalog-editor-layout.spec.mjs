@@ -244,3 +244,65 @@ test("at the width the columns are offered, neither is drawn narrower than it ho
   expect(m.list).toBeLessThanOrEqual(1);
   expect(m.kit).toBeLessThanOrEqual(1);
 });
+
+test("every list on the catalogue page has its form beside it", async ({ page }) => {
+  await open(page);
+  // Three pairs on this page: the products and the panel that edits them, the
+  // relations and the pair being related, the maintainers and the one being added.
+  // The products' panel is empty until a row is opened, so it is not counted here.
+  const pairs = await page.evaluate(() => [...document.querySelectorAll(".cat-cols")]
+    .map((c) => {
+      const main = c.querySelector(".cat-main");
+      const side = c.querySelector(".cat-side");
+      if (!main || !side) return null;
+      const m = main.getBoundingClientRect();
+      const s = side.getBoundingClientRect();
+      // A closed panel is not a column: the products' one is hidden until a row is
+      // opened, which is what gives the list the whole width in the meantime.
+      if (!s.width) return null;
+      return { beside: s.left >= m.right - 1, level: Math.abs(s.top - m.top) <= 1, width: s.width };
+    }).filter(Boolean));
+
+  expect(pairs.length).toBeGreaterThanOrEqual(2); // relations and maintainers, at least
+  for (const p of pairs) {
+    expect(p.beside).toBe(true);
+    expect(p.width).toBeGreaterThanOrEqual(380);
+  }
+  // The relate form and the share form start level with their lists — they answer the
+  // whole list rather than one row, so they sit at its top rather than at an offset.
+  expect(pairs.filter((p) => p.level).length).toBeGreaterThanOrEqual(2);
+  expect(page.__errors).toEqual([]);
+});
+
+test("the catalogues themselves are a list beside the one being created", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.setViewportSize({ width: 1600, height: 800 });
+  await page.goto("/catalog-editor-harness.html");
+  await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
+  await page.evaluate(() => window.__mountList());
+  await page.waitForSelector(".cat-cols .cat-main table");
+
+  const b = await page.evaluate(() => {
+    const main = document.querySelector(".cat-cols > .cat-main").getBoundingClientRect();
+    const side = document.querySelector(".cat-cols > .cat-side").getBoundingClientRect();
+    return { beside: side.left >= main.right - 1, level: Math.abs(side.top - main.top) <= 1 };
+  });
+  expect(b.beside).toBe(true);
+  expect(b.level).toBe(true);
+  await expect(page.locator(".cat-side form.cat-new")).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("below the breakpoint every pair stacks, form under list", async ({ page }) => {
+  await open(page, { width: 1100, height: 800 });
+  const stacked = await page.evaluate(() => [...document.querySelectorAll(".cat-cols")]
+    .map((c) => {
+      const main = c.querySelector(".cat-main");
+      const side = c.querySelector(".cat-side");
+      if (!main || !side || !side.getBoundingClientRect().width) return null;
+      return side.getBoundingClientRect().top >= main.getBoundingClientRect().bottom - 1;
+    }).filter((x) => x !== null));
+  expect(stacked.length).toBeGreaterThanOrEqual(2);
+  for (const s of stacked) expect(s).toBe(true);
+});
