@@ -584,6 +584,26 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Checking a mail worker now says which of the two checks it is running.** The check
+  has two modes and they are not degrees of the same thing: one connects,
+  authenticates and stops at the door, the other puts a real message in a real
+  person's inbox. The server tells them apart by whether a recipient was given, which
+  is the right contract for an API and was the wrong question to put to a person: it
+  was asked as a browser prompt saying "leave empty to only check the connection", so
+  the harmless mode had to be expressed by typing nothing into the same box that means
+  "send mail to this address", and a stray character sent it.
+
+  A browser prompt is also refusable. A sandboxed frame, or the "prevent this page from
+  creating additional dialogs" box somebody ticks once, makes it return nothing without
+  ever opening — which the page read as Cancel and the operator read as the check not
+  happening at all, with no way to tell the two apart. The modes are now a control that
+  names them, in a dialog the page draws itself, with the connection check preselected
+  and the address checked for being an address before anything is sent.
+
+  The flow moved to `workerdialog.js` beside the worker's edit and delete dialogs, for
+  the reason those are there: what a check does is a decision, and it was sitting in
+  the one file a test cannot open.
+
 - **A catalogue's existing products are now picked from a list rather than typed.**
   "Offer an existing product" opened a `window.prompt` that printed every product this
   catalogue does not yet carry as a line of text — id, a dash, the name — and asked for

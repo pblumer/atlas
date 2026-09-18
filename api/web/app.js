@@ -22,7 +22,7 @@ import {
   incidentWorkerChip, resolveCauseFlow, resolveCauseQuick, resolveSelectionFlow,
   repairFormFlow,
 } from "./incidents.js";
-import { editWorkerFlow, workerShape, workerCreateBody, workerUsageHTML, openWorkerUsage, deleteWorkerFlow } from "./workerdialog.js";
+import { editWorkerFlow, workerShape, workerCreateBody, workerUsageHTML, openWorkerUsage, deleteWorkerFlow, testWorkerFlow } from "./workerdialog.js";
 // What a Worker Type needs at the provider before any of these fields mean anything,
 // plus the deep link into this server's own handbook
 // (ADR-0289). The create form is where someone who has
@@ -4415,30 +4415,13 @@ function wireWorkerManagement(workers) {
           toggleProvisionClio(row, id, c.name);
           return;
         } else if (act === "test") {
-          // Empty recipient = stop at the door (connect, authenticate). A recipient
-          // makes it a real send, which is the only thing that proves delivery. Only
-          // mail has that second half: a database check dials and stops, because the
-          // equivalent of "send one to see" would be running a statement.
-          let to = "";
-          if (c.kind === "mail") {
-            to = window.prompt(
-              `Test "${c.name}".\n\nSend a test message to which address?\nLeave empty to only check the connection and credential.`, "");
-            if (to == null) return;
-          }
-          // The menu the button was in is already gone by now, so a disabled button is
-          // no longer the feedback it used to be: a check can take seconds, and without
-          // a word here nothing at all happens until the result lands.
-          toast(`Checking "${c.name}"…`);
+          // The dialog, the two modes and the request are one flow in
+          // workerdialog.js: what a check does — probe the door or send a real
+          // message to a real person — is a decision, and app.js is the one file a
+          // test cannot open to read it.
           btn.disabled = true;
-          try {
-            const res = await api("POST", "/api/v1/connectors/test", {
-              name: c.name, kind: c.kind, provider: c.provider, endpoint: c.endpoint,
-              sender: c.sender, credentialsRef: c.credentialsRef, to: to.trim(),
-            });
-            toast(res.detail || (res.ok ? "Worker works" : "Check failed"), res.ok ? "ok" : "warn");
-          } catch (err) {
-            toast("Check failed: " + err.message, "warn");
-          } finally { btn.disabled = false; }
+          try { await testWorkerFlow({ api, toast, worker: c }); }
+          finally { btn.disabled = false; }
           return;
         } else if (act === "toggle") {
           await api("PATCH", "/api/v1/connectors/" + encodeURIComponent(id), { enabled: !c.enabled });
