@@ -22,6 +22,11 @@
 //     are different questions, they are validated separately, and a screen that put
 //     them in one list would teach the conflation the record had to correct.
 
+// The console's "pick one of these" dialog, shared rather than reinvented: it is
+// what replaced the window.prompt pickers elsewhere, and it is covered by an
+// end-to-end test against exactly the list length a prompt could not show.
+import { openPickModal } from "./pickmodal.js";
+
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -421,6 +426,12 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
   const offered = cat.items || [];
   const byID = {};
   for (const it of items) byID[it.id] = it;
+  // What this catalogue could still offer. Deliberately the list and not a
+  // comparison of two counts: an id may be offered and no longer defined — the
+  // product row says "offered but not defined" for exactly that — and one such
+  // entry makes the counts equal while products nobody has offered are sitting
+  // there, so the button to offer them was not drawn at all.
+  const offerable = items.filter((it) => !offered.includes(it.id));
 
   // Deployed processes, by id, newest version first. A product binds an id and not
   // a version: what runs is whatever is deployed when the line is reached, which is
@@ -464,7 +475,7 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
 
     <div class="row" style="margin-top:10px">
       <button class="btn" data-act="new-product">New product</button>
-      ${items.length > offered.length ? `<button class="btn ghost" data-act="add-existing">Offer an existing product</button>` : ""}
+      ${offerable.length ? `<button class="btn ghost" data-act="add-existing">Offer an existing product</button>` : ""}
     </div>
     <div class="product-editor"></div>
     <div class="assemble-editor"></div>
@@ -1242,12 +1253,27 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
     }
 
     if (act === "add-existing") {
-      const free = items.filter((it) => !(cat.items || []).includes(it.id));
-      const pick = window.prompt(
-        `Which product should this catalogue also offer?\n\n${free.map((f) => `${f.id} — ${textOf(f.texts, langs, f.id)}`).join("\n")}`);
-      if (!pick) return;
-      if (!free.some((f) => f.id === pick.trim())) { toast("No product with that id", "err"); return; }
-      try { await patchList({ items: [...(cat.items || []), pick.trim()] }); reload(); }
+      // A dialog with a real list, because the prompt this replaces was not one:
+      // it printed the products as lines of text and asked for an id back, so
+      // nothing in it could be clicked, a typo was answered with "No product with
+      // that id", and a browser truncates a prompt body past a handful of lines —
+      // which cuts off the newest products, the ones somebody is most likely to be
+      // looking for. The same failure the application picker had, and the same fix.
+      const free = items.filter((it) => !(cat.items || []).includes(it.id))
+        .map((f) => ({ value: f.id, label: `${textOf(f.texts, langs, f.id)} — ${f.id}` }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+      // The button is drawn from this same list, so an empty one means the page is
+      // stale rather than that there is nothing to offer.
+      if (!free.length) { toast("Every product is already offered here"); return; }
+      const picked = await openPickModal({
+        title: "Offer an existing product",
+        label: "Product",
+        options: free,
+        hint: "Offering it here does not copy it: the product stays edited through its home catalogue.",
+        okLabel: "Offer",
+      });
+      if (!picked) return;
+      try { await patchList({ items: [...(cat.items || []), picked.option.value] }); reload(); }
       catch (err) { patchFailed(err); }
       return;
     }
