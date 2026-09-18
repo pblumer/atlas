@@ -76,6 +76,15 @@ different server?**
   if the visible one can be written into a manifest, pinned, and moved to another
   server — which means the shared content needs an identity that survives a clone,
   the way [ADR-0134](0134-git-backed-applications.md)'s portable key does.
+- **One instance per domain is the estate model.** It is the premise the
+  cross-instance epic states outright
+  ([ADR-0369](0369-cross-instance-message-addressing.md)) and the one the business
+  architecture already builds on, where an application is the unit of a business
+  capability ([ADR-0305](0305-business-capabilities-and-value-streams.md),
+  `docs/architecture/business-architecture.md`). A library is therefore scoped to a
+  domain by construction, and "shared across the estate" is a second question with a
+  different answer — which this record settles as a copy per domain rather than a
+  lookup across domains.
 - **Design-time only; the invariants stay untouched.** Like ADR-0034, ADR-0071 and
   [ADR-0128](0128-process-applications.md), this is an organising layer below the
   HTTP API. Nothing here enters the event log, the WAL, the processor or
@@ -301,7 +310,9 @@ asserts that it survives export and import.
   application has an ordering constraint on a fresh server. The manifest gains a
   second kind of entry and another way for an export to be refused. A library is a
   read grant to every authenticated principal, which is a genuine widening — it is
-  opt-in and per application, but it is real.
+  opt-in and per application, but it is real. And because a node serves one domain, a
+  library is a **domain's** library: content meant for the whole estate exists as one
+  copy per domain, which can drift between them.
 - **Follow-ups / risks to watch:** whether a consuming application's release should
   **pin** a library release or merely record the one it saw, and what a pin means
   when the library moves on; how a library is deprecated when something still
@@ -394,6 +405,9 @@ asserts that it survives export and import.
   answered restrictively, which a URI-valued reference would reopen)
 - relates to [ADR-0230](0230-process-information-model.md) (the per-application
   vocabulary behind this record's open question)
+- relates to [ADR-0305](0305-business-capabilities-and-value-streams.md) (the business
+  architecture, where an application is the unit of a capability — so a library, which
+  realises no capability, is a resource beneath that map rather than a record in it)
 - relates to the cross-instance epic,
   [ADR-0369](0369-cross-instance-message-addressing.md),
   [ADR-0371](0371-participant-binds-a-published-interface.md),
