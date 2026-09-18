@@ -652,3 +652,131 @@ export async function deleteWorkerFlow({ api, worker }) {
     return true;
   }
 }
+
+// --- Checking a worker from the row -----------------------------------------
+//
+// The check has two modes, and they are not degrees of the same thing: a probe
+// connects, upgrades and authenticates and stops at the door, and a send puts a
+// real message in a real person's inbox. The server tells them apart by whether
+// `to` is empty (api/connectors.go), which is the right contract for an API and was
+// the wrong question to put to a person: it was asked as a window.prompt saying
+// "leave empty to only check the connection", so "stop at the door" had to be
+// expressed by typing nothing into the same box that means "send mail to this
+// address", and a stray character sent it.
+//
+// And a prompt is refusable. A sandboxed frame, or the "prevent this page from
+// creating additional dialogs" box somebody ticks once, makes window.prompt return
+// null without opening — indistinguishable from Cancel, so the check silently did
+// not happen on a page where the operator had just asked for it. A dialog the page
+// draws itself cannot be suppressed by the browser and cannot be mistaken for a
+// cancellation.
+
+// askTestRecipient resolves to the recipient the operator chose — "" for a probe —
+// or null if they cancelled.
+function askTestRecipient(c) {
+  return new Promise((resolve) => {
+    const ov = document.createElement("div");
+    ov.className = "modal-ov";
+    ov.innerHTML = `
+      <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-label="Check worker">
+        <div class="modal-head"><h2>Check "${esc(c.name || "")}"</h2></div>
+        <div class="modal-body">
+          <label class="field"><span>What to check</span>
+            <select id="wt-mode">
+              <option value="probe">The connection and the credential</option>
+              <option value="send">Send a real test message</option>
+            </select></label>
+          <label class="field" id="wt-to-field" hidden><span>To</span>
+            <input id="wt-to" type="email" autocomplete="off" placeholder="name@example.org"/></label>
+          <p class="muted small" id="wt-what"></p>
+        </div>
+        <div class="modal-foot">
+          <button class="btn neutral" data-wt-cancel>Cancel</button>
+          <button class="btn" data-wt-go>Check</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+
+    const mode = ov.querySelector("#wt-mode");
+    const toField = ov.querySelector("#wt-to-field");
+    const toIn = ov.querySelector("#wt-to");
+    const what = ov.querySelector("#wt-what");
+    const go = ov.querySelector("[data-wt-go]");
+
+    // What each mode actually does, said where the choice is made. A probe proves
+    // the worker can be reached and admitted; only a send proves the provider does
+    // something with a message — and only a send is visible to somebody else.
+    const sync = () => {
+      const sending = mode.value === "send";
+      toField.hidden = !sending;
+      go.textContent = sending ? "Send" : "Check";
+      what.textContent = sending
+        ? "A message arrives in that inbox, from this worker. Nothing is stored and no process runs."
+        : "Connect, authenticate, disconnect. Nothing is sent and nobody is written to.";
+      if (sending) toIn.focus();
+    };
+    mode.addEventListener("change", sync);
+    sync();
+
+    let settled = false;
+    const close = (value) => {
+      if (settled) return;
+      settled = true;
+      ov.remove();
+      document.removeEventListener("keydown", onKey);
+      resolve(value);
+    };
+    const submit = () => {
+      if (mode.value !== "send") { close(""); return; }
+      const to = toIn.value.trim();
+      // Checked here and not only at the provider: a send with a malformed address
+      // fails somewhere inside the provider's error vocabulary, and the operator
+      // reads that as "the worker is broken" rather than as "that is not an address".
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) { toIn.focus(); toIn.select(); return; }
+      close(to);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); close(null); return; }
+      if (e.key === "Enter" && ov.contains(document.activeElement)) { e.preventDefault(); submit(); }
+    };
+    document.addEventListener("keydown", onKey);
+    ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(null); });
+    ov.querySelector("[data-wt-cancel]").addEventListener("click", () => close(null));
+    go.addEventListener("click", submit);
+    mode.focus();
+  });
+}
+
+// testWorkerFlow is the row's "Check…": ask a mail worker what kind of check this
+// is, run it, and say what came back. Resolves true when the worker answered ok,
+// false on a failure or a cancellation — the caller reloads nothing either way,
+// since a check changes no state.
+//
+// It lives here rather than in app.js for the reason the delete flow does: app.js
+// boots the whole console on import, so anything left inside it is only ever
+// exercised by hand — and what this decides (which mode was chosen, whether an
+// address is an address, what reaches the server) is worth exercising.
+export async function testWorkerFlow({ api, toast, worker }) {
+  const c = worker || {};
+  let to = "";
+  // Only mail has a second half: every other Worker Type's check dials and stops,
+  // because the equivalent of "send one to see" would be running a statement.
+  if (c.kind === "mail") {
+    to = await askTestRecipient(c);
+    if (to === null) return false;
+  }
+  // A check can take seconds and the menu it was started from is already gone, so
+  // without a word here nothing at all happens until the result lands.
+  toast(`Checking "${c.name}"…`);
+  try {
+    const res = await api("POST", "/api/v1/connectors/test", {
+      name: c.name, kind: c.kind, provider: c.provider, endpoint: c.endpoint,
+      sender: c.sender, credentialsRef: c.credentialsRef, to,
+    });
+    toast(res.detail || (res.ok ? "Worker works" : "Check failed"), res.ok ? "ok" : "warn");
+    return !!res.ok;
+  } catch (err) {
+    toast("Check failed: " + (err && err.message ? err.message : err), "warn");
+    return false;
+  }
+}

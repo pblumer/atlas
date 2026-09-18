@@ -222,20 +222,21 @@ test("the welcome chapter offers every app and both portal surfaces", async ({ p
   await page.goto("/handbuch.html");
 
   const cards = page.locator("#willkommen .grid2 .card");
-  // Eight cards, nine links. Approvals stopped being an application of its own —
-  // an approval is a kind of task — so it lost its card and kept its link, on the
-  // Tasks card that now teaches it. Counting cards and listing routes separately is
-  // what makes that expressible: the card grid is where a reader learns an app
-  // exists, and the routes are what they can actually reach from it.
+  // Eight cards, eight links. Approvals stopped being an application of its own — an
+  // approval is a kind of task — so it lost its card and kept its link on the Tasks
+  // card; then it lost that link too, because the page it led to is gone and the
+  // inbox itself is where an approval is read and decided. Counting cards and
+  // listing routes separately is what makes both steps expressible: the card grid is
+  // where a reader learns an app exists, and the routes are what they can reach.
   await expect(cards).toHaveCount(8);
   // The routes matter more than the names: a card that names an app but links
   // somewhere else is the failure a reader meets rather than reads.
   //
-  // Two are paths rather than hashes because they are pages of their own and not
-  // views of the shell — which is also why they were reachable by nobody until they
-  // were taught here.
+  // One is a path rather than a hash because it is a page of its own and not a view
+  // of the shell — which is also why it was reachable by nobody until it was taught
+  // here.
   for (const route of ["/#/console", "/#/modeler", "/#/tasks", "/#/operations",
-    "/#/panorama/starmap", "/#/data", "/portal.html", "/genehmigung.html", "/#/catalog"]) {
+    "/#/panorama/starmap", "/#/data", "/portal.html", "/#/catalog"]) {
     await expect(cards.locator(`a[href="${route}"]`)).toHaveCount(1);
   }
 });

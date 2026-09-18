@@ -159,17 +159,23 @@ test("the row's actions sit at the table's right edge", async ({ page }) => {
   const b = await page.evaluate(() => {
     const row = document.querySelector(".product-list tbody tr");
     const cell = row.querySelector("td.row-actions");
+    const buttons = [...cell.querySelectorAll("button")];
+    const cellBox = cell.getBoundingClientRect();
     return {
-      buttons: cell.querySelector("button").getBoundingClientRect().left,
-      last: cell.getBoundingClientRect().right,
+      count: buttons.length,
+      lastButton: buttons[buttons.length - 1].getBoundingClientRect().right,
+      cell: cellBox.right,
+      cellHeight: cellBox.height,
       table: row.closest("table").getBoundingClientRect().right,
-      wrapped: cell.getBoundingClientRect().height,
       rowHeight: row.getBoundingClientRect().height,
     };
   });
-  // Hard against the right of the table, not adrift in the middle of the cell.
-  expect(b.last - b.table).toBeLessThanOrEqual(1);
-  expect(b.last - b.buttons).toBeLessThan(220);
-  // And on one line: two buttons that wrap would make one row taller than the rest.
-  expect(b.wrapped).toBeLessThanOrEqual(b.rowHeight);
+  // Measured from the last button rather than the first, so this says "flush right"
+  // whatever a row offers — two buttons on a plain product, three where it can also be
+  // assembled. Only the cell's own padding stands between the two.
+  expect(b.count).toBeGreaterThanOrEqual(2);
+  expect(b.cell - b.table).toBeLessThanOrEqual(1);
+  expect(b.cell - b.lastButton).toBeLessThan(24);
+  // And on one line: buttons that wrap would make one row taller than the rest.
+  expect(b.cellHeight).toBeLessThanOrEqual(b.rowHeight);
 });

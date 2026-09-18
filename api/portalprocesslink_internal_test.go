@@ -69,3 +69,46 @@ func TestAnInstanceThatIsGoneIsSaidRatherThanFollowed(t *testing.T) {
 			"instead of being told that the process has been cleaned up")
 	}
 }
+
+// TestAMissingInstanceIsNotBlamedOnRetention.
+//
+// The message said the instance "was removed by retention". That is one of three
+// reasons it is not found, and the least likely of them: an order whose fulfilment
+// never started has no instance to remove, and that is what somebody reads this
+// about on the day they ordered — which is exactly the case a real defect in the
+// fulfilment wake produced for every order on an installation.
+//
+// A page that names a cause it cannot know sends whoever reads it to look in the
+// wrong place, and "retention removed it" reads as "it is gone for good".
+func TestAMissingInstanceIsNotBlamedOnRetention(t *testing.T) {
+	src := readWeb(t, "portal.js")
+	for _, key := range []string{"'proc.none'", "'proc.none.order'"} {
+		for _, locale := range []struct{ name, from, to string }{
+			{"de", "  de: {", "\n  },"},
+			{"en", "  en: {", "\n  },"},
+		} {
+			body := webRegion(t, src, locale.from, locale.to)
+			at := strings.Index(body, key)
+			if at < 0 {
+				t.Errorf("%s carries no %s, so one locale says nothing where the other "+
+					"explains", locale.name, key)
+				continue
+			}
+			line := body[at : at+strings.Index(body[at:], "\n")]
+			// Three causes, and the one that was missing is the one that matters: a
+			// process nobody has started yet.
+			if !strings.Contains(line, "gestartet") && !strings.Contains(line, "started") {
+				t.Errorf("%s %s names no cause but the ones it can see afterwards; the "+
+					"ordinary case — nothing has started yet — is not among them: %s",
+					locale.name, key, line)
+			}
+		}
+	}
+	// And the two are told apart, because the order's own orchestration and one
+	// position's process are two different absences.
+	body := webRegion(t, src, "async function followProcess(", "\n}")
+	if !strings.Contains(body, "'proc.none.order'") {
+		t.Error("the order's missing instance is reported in the words written for a " +
+			"position, which names the wrong thing to whoever reads it")
+	}
+}
