@@ -36,7 +36,10 @@ func TestServedRelationsAreTheExporterOwnTable(t *testing.T) {
 // keyed on a kind that cannot occur is a mapping for a picture nobody can draw, and
 // it would go on looking correct for exactly as long as nobody checked.
 func TestRelationsAreKeyedOnEdgeKindsTheMeshProduces(t *testing.T) {
-	kinds := map[string]bool{EdgeContains: true, EdgeCalls: true, EdgeUses: true}
+	kinds := map[string]bool{
+		EdgeContains: true, EdgeCalls: true, EdgeUses: true,
+		EdgeOffers: true, EdgeComposition: true, EdgeAggregation: true, EdgeRequires: true,
+	}
 	for _, notation := range Notations() {
 		for edge := range notation.Relations {
 			if !kinds[edge] {
