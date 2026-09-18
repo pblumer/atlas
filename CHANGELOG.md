@@ -14,6 +14,51 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The service catalogue is drawn on the starmap.** Atlas held two halves of one
+  estate and drew them on two screens. The starmap is the derived half — applications,
+  deployed processes, the workers they use, every edge a fact the server can point at.
+  The catalogue is the other: what a group of people may order, what each product is
+  assembled from, and the process that provisions it.
+
+  They are joined in the data and were separated on every screen. A product names a
+  BPMN process id; whether anything is deployed under that id is a question the
+  catalogue screen cannot answer, because it cannot see the engine, and Operations
+  cannot answer either, because it has never heard of the catalogue. So a product goes
+  out bound to a process nobody deployed, looks orderable, and the first person to
+  order it waits while the order parks.
+
+  The landscape now carries **catalogues and products as nodes**, with the arrangement
+  between them — *included*, *optional*, *precedence* — as lines, and a product's
+  provisioning and deprovisioning processes resolved exactly as a call activity is:
+  the deployed process, a placeholder for one you may not see, or the same
+  **unresolved** shape everything missing on this picture already takes. A product
+  bound to nothing is now a product pointing at a hole, in the same ink as every other
+  broken dependency, with nobody having modelled anything.
+
+  **What it will not say is as deliberate as what it will.** Incompatibility — two
+  rights that must never be held by the same person — is not drawn: it is the one
+  catalogue relationship that means the opposite of every other line on the canvas,
+  and it is named in the picture's own loss list instead, which until now was empty
+  because the derivation had nothing to declare. Nothing here carries a health state,
+  so an unpublished catalogue is not a fault; a catalogue somebody is still filling
+  would otherwise be red for a week. Orders and prices are absent: an order is
+  runtime, a price is on the catalogue's own screen behind the catalogue's own rules.
+
+  **In ArchiMate's vocabulary** a catalogue is a Grouping and a product a Product, and
+  an integral part is a **Composition** while an optional one is an **Aggregation** —
+  the first relationships this landscape can name exactly rather than approximately,
+  drawn with the standard's own diamonds and written into the exported document.
+  Precedence is drawn and not exported, because ArchiMate has no relationship that
+  means "this cannot be provisioned before that", and the export says so rather than
+  picking the nearest wrong one.
+
+  **Who sees it follows the catalogue, not the picture.** A catalogue is on the
+  starmap for whoever maintains it — its owner, an editor, somebody it was shared with
+  — and never for the people it is offered to: reaching a catalogue as a customer says
+  what you may order and nothing about the estate behind it. A modeler who maintains
+  no catalogue therefore sees none, exactly as they see no application nobody shared
+  with them.
+
 - **An approval is read and decided in the inbox.** An approval is an ordinary user
   task, so the rows were always in `Tasks` — rendered like every other row, saying
   nothing about the product, the price or the person waiting, and decided by opening a

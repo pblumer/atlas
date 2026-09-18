@@ -209,9 +209,6 @@ const RECTS = {
   // of the estate, told apart by size the way an application and a process are.
   card: { aspect: 1.7, round: 0.16 },
   tile: { aspect: 1.25, round: 0.28 },
-  // ArchiMate's Product: a rectangle whose corner bar is drawn as interior line work
-  // (see ARCHIMATE_ICONS), so the silhouette itself is the plain rectangle.
-  "am-product": { aspect: 1.5, round: 0.04 },
 };
 
 // ARCHIMATE_ICONS is ArchiMate's own notation, as geometry.

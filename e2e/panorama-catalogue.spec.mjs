@@ -159,6 +159,14 @@ test("in ArchiMate's vocabulary the catalogue is named in ArchiMate's words", as
   const legend = page.locator(".mesh-legend");
   await expect(legend).toContainText("Grouping");
   await expect(legend).toContainText("Product");
+
+  // And drawn in ArchiMate's own outlines rather than kept in Atlas's cards: a
+  // Grouping's tabbed corner and a Product's bar are silhouettes, so both leave the
+  // rectangle family the derived picture draws them in.
+  const tagOf = (id) => page.locator(`[data-node-id="${id}"] .mesh-body`)
+    .evaluate((el) => el.tagName.toLowerCase());
+  expect(await tagOf("catalog:cat_1")).toBe("polygon");
+  expect(await tagOf("product:phone")).toBe("polygon");
   // The two relationships this landscape can finally name exactly rather than
   // approximately.
   await expect(legend).toContainText("Composition");
