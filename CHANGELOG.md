@@ -14,6 +14,36 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A product is assembled from the services that exist, instead of related pairwise.**
+  A catalogue is built out of services that each provision themselves; what a product
+  adds is an arrangement — which of them come with it and cannot be deselected, and
+  which are offered beside it. That arrangement was authored as edges: pick a *from*,
+  pick a relationship, pick a *to*, one triple at a time into a table sorted by
+  relationship. It was the data as it is stored, and never showed what one product is
+  made of.
+
+  The catalogue screen now has a **construction kit** per product. It lists every other
+  product the catalogue offers and asks the one question, once per row, with three
+  answers that leave nothing out: **not part of it**, **included**, **optional** — each
+  pre-selected from how it stands today. One save writes that product's whole
+  structure, which is why "not part of it" is an answer here at all and was a removal
+  before.
+
+  What the kit was not asked about it does not touch: every other product's
+  arrangement, and every precedence edge including the assembled product's own. The
+  save carries the revision the page was read at, so a second maintainer's arrangement
+  cannot vanish into it.
+
+  A choice that closes a loop is **refused before it is written**, naming the product
+  that already contains this one, directly or through another. Publishing still proves
+  the whole catalogue — that is where the proof belongs — but a refusal is worth most
+  at the moment the choice is made, rather than three screens later about a catalogue
+  that has since been edited.
+
+  The pairwise form stays, narrowed to **precedence** only. Precedence is a statement
+  about two products and belongs to neither, so it is the one relationship a pairwise
+  form is the right shape for; structure had two ways to be said, and two ways drift.
+
 - **A product can carry a picture.** A catalogue row was a name and a price, and
   somebody choosing between two phones was choosing between two names. A product now
   has a picture — a photograph of the thing or the vendor's mark, PNG, JPEG or SVG —
