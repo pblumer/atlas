@@ -8,7 +8,7 @@ import (
 )
 
 // The approver's page is retired, and its address is not
-// (ADR-draft-approval-in-the-inbox).
+// (ADR-0394).
 //
 // The page was a second place to take one decision, and the two had begun to differ
 // — one of them refused a rejection with no reason and the other did not. The

@@ -1,4 +1,4 @@
-# ADR-DRAFT: An approval is read and decided where the work already is
+# ADR-0394: An approval is read and decided where the work already is
 
 - **Status:** Accepted
 - **Implementation:** Landed

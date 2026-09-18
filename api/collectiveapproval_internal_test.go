@@ -16,7 +16,7 @@ import (
 //
 // They read app.js because that is where the decision is now: the approver's page
 // was a second place to take it, and it is gone
-// (ADR-draft-approval-in-the-inbox).
+// (ADR-0394).
 
 // TestTheInboxStillDecidesOnePositionByItself.
 //

@@ -389,7 +389,7 @@ func TestBothPortalSurfacesAreReachableFromTheMenu(t *testing.T) {
 
 	// There is no approver's half any more. The page it named is gone — an approval
 	// is read and decided in the inbox that already held it
-	// (ADR-draft-approval-in-the-inbox) — so what this
+	// (ADR-0394) — so what this
 	// guard asked of the navigation is asked of it the other way round: no entry
 	// may lead back to a page that is a forwarding stub.
 	if strings.Contains(src, `route: "genehmigung.html"`) {

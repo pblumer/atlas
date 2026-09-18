@@ -273,7 +273,7 @@ func (s *Server) approvalsWaitingFor(pr *httpapi.Principal) ([]pendingItem, erro
 				What:  approvalSentence(a),
 				Since: waitingSince(a),
 				// Into the inbox, which is where an approval is read and decided
-				// (ADR-draft-approval-in-the-inbox). It names the
+				// (ADR-0394). It names the
 				// order line rather than the task, because a task key does not exist
 				// until the task activates and the order line does.
 				Link: "/index.html#/tasks?order=" + a.OrderID + "&item=" + a.PositionID,

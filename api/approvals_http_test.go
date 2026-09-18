@@ -486,7 +486,7 @@ func TestTheApproverIsToldWithALinkToTheirInbox(t *testing.T) {
 		t.Errorf("subject = %q; it should say what is waiting", m.Subject)
 	}
 	// Into the inbox, which is where an approval is read and decided
-	// (ADR-draft-approval-in-the-inbox). The link
+	// (ADR-0394). The link
 	// still names the order line and not the task, and for the reason it always did:
 	// a task key does not exist until the task activates, while the order and the
 	// product do, and they survive a reassignment that changes the key.

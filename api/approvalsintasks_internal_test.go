@@ -16,7 +16,7 @@ import (
 // First the entry moved under Tasks, where Access review sits for the same reason:
 // a second kind of thing addressed to a person, not a second application. Then the
 // page it led to went, because the inbox reads and decides the approval itself
-// (ADR-draft-approval-in-the-inbox) — an entry
+// (ADR-0394) — an entry
 // beside the inbox leading to a second way of answering was the drift this removed,
 // and the two had already begun to differ over whether a rejection needs a reason.
 
@@ -40,7 +40,7 @@ func TestApprovalsIsNotAnApplicationOfItsOwn(t *testing.T) {
 	}
 	// And no entry under Tasks either, which is the half that changed: the page that
 	// entry led to is gone, because the decision is taken in the inbox the entry sits
-	// under (ADR-draft-approval-in-the-inbox). An
+	// under (ADR-0394). An
 	// entry beside the inbox, leading to a redirect into the inbox, is the second
 	// place for one decision that this removed.
 	tasks := webRegion(t, topnavList(t), "  tasks: [", "\n  ],")

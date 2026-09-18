@@ -22,7 +22,7 @@ import (
 func TestTheApproverSeesTheFigureTheyAreDecidingOn(t *testing.T) {
 	// Read where the decision now is. The page this guarded is gone and the approval
 	// is read and decided in the inbox
-	// (ADR-draft-approval-in-the-inbox); what it
+	// (ADR-0394); what it
 	// protected did not change, and neither did the reason.
 	src := readWeb(t, "app.js")
 	panel := webRegion(t, src, "function approvalBlock(", "\n  }")

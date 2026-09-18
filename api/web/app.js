@@ -663,7 +663,7 @@ const TOPNAV = {
   tasks: [
     { name: "Inbox", route: "#/tasks", role: "user" },
     // No Approvals entry any more, and no page behind one: an approval is read and
-    // decided in the inbox above (ADR-draft-approval-in-the-inbox).
+    // decided in the inbox above (ADR-0394).
     // It was a second place for one decision, and the two had already begun to
     // differ — one of them enforced a reason on a rejection and the other did not.
     // The second kind of thing addressed to a person

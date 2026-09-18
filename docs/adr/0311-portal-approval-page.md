@@ -215,7 +215,7 @@ whether a rejection needs a reason.
 
 The approval is now read and decided in the inbox, and this record's address survives
 as a forwarding stub for the notifications already sent. See
-[ADR-draft-approval-in-the-inbox](draft-approval-in-the-inbox.md), which also says
+[ADR-0394](0394-approval-in-the-inbox.md), which also says
 what is lost: the customer's colours.
 
 **The rest of this record stands**, and is what the inbox reads: one call answers
