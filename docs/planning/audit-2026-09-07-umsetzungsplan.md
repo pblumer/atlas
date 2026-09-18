@@ -758,10 +758,15 @@ das ist der Punkt, an dem V1 und V2 geschlossen sind.
 
 > **Stand:** AP0 bis AP6 sind umgesetzt und **alle siebzehn Befunde sind behoben.**
 > V1, V2 und V3 sind geschlossen und die Freigabeschwelle oben ist erreicht. Offen
-> sind nur noch die drei Nachbarlücken, die dieser Plan unterwegs benannt hat und
-> die eigene Befunde verdienen: die Objektlücke an `GET /api/v1/tasks/{key}`, die
-> übrigen instanzbezogenen Lesezugriffe, die über die Rolle statt über die Beziehung
-> geschützt sind, und der bei F07 gefundene Kompensationsdefekt.
+> sind nur noch die drei Nachbarlücken, die dieser Plan unterwegs benannt hat; sie
+> haben inzwischen je einen eigenen Befund: die Objektlücke an
+> `GET /api/v1/tasks/{key}`
+> ([#1011](https://github.com/pblumer/atlas/issues/1011) — die Lücke besteht in
+> grösserem Format auch auf `GET /api/v1/tasks`, das ungefiltert über alle offenen
+> User Tasks der Installation scannt), die übrigen instanzbezogenen Lesezugriffe,
+> die über die Rolle statt über die Beziehung geschützt sind
+> ([#1012](https://github.com/pblumer/atlas/issues/1012)), und der bei F07 gefundene
+> Kompensationsdefekt ([#1013](https://github.com/pblumer/atlas/issues/1013)).
 
 ---
 
