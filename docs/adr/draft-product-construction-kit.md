@@ -107,7 +107,14 @@ about two products and belongs to neither of them.
 
 ## Links
 
-- relates to ADR-0312 (the catalogue, order and inventory model)
-- relates to ADR-0315 (a product has one home catalogue)
-- relates to ADR-0376 (`revision` as a precondition: the kit replaces `edges` whole)
-- answers the first half of issue #1022
+- relates to [ADR-0312](0312-portal-catalogue-order-inventory.md) — the catalogue,
+  order and inventory model, where `composition` and `aggregation` are defined and
+  where publish proves both graphs acyclic.
+- relates to [ADR-0315](0315-portal-roles-and-responsibilities.md) — a product is
+  edited through its one home catalogue, and another catalogue may offer it. The
+  arrangement is the *catalogue's* and not the product's, which is why the kit is
+  drawn on the catalogue screen and may be used for a guest product.
+- relates to [ADR-0376](0376-catalogue-maintenance-over-mcp.md) — the `revision`
+  precondition the kit's save carries, because it replaces `edges` whole.
+- answers the first half of issue #1022. The second half — drawing the catalogue in
+  Panorama — is untouched by this record.
