@@ -169,7 +169,10 @@ _Changed_ / _Removed_ for each version.
   — and never for the people it is offered to: reaching a catalogue as a customer says
   what you may order and nothing about the estate behind it. A modeler who maintains
   no catalogue therefore sees none, exactly as they see no application nobody shared
-  with them.
+  with them — and the picture **says so in words** rather than leaving an empty canvas
+  to be read as a broken feature. It names both reasons and picks neither: whether no
+  catalogue exists yet or none is yours is the one thing this picture must not tell
+  you, because telling you would disclose that catalogues exist which you may not see.
 
 - **A product is assembled from the services that exist, instead of related pairwise.**
   A catalogue is built out of services that each provision themselves; what a product
