@@ -96,6 +96,26 @@ const KIND = {
   // the only one that can be *unreachable* or *stale*, which is exactly what somebody
   // scanning for trouble needs to find first.
   target: { r: 24, grow: 6, shape: "pentagon", fill: "var(--surface)", stroke: "var(--accent-hover)", label: "Deployment target — a peer this server can promote to" },
+  // The service catalogue, drawn as its own family. Everything above is what this
+  // server *runs*; these two are what it *offers*, which is a different axis of the
+  // same estate — and a reader has to be able to tell at a glance which half of the
+  // picture they are looking at.
+  //
+  // So they are the only cards on a canvas of polygons. Silhouette is the channel
+  // that survives a projector and a printout, and giving the offered half a family of
+  // its own says "these belong together and are not part of the running estate" before
+  // any label is read. A catalogue is the container, sized with the deployment target
+  // rather than with an application: it holds things, and it is not one of the
+  // application's own.
+  //
+  // The fills are a step of tint apart in a hue nothing else on the canvas uses:
+  // 1.29 against the canvas for the catalogue and 1.19 for the product, which is 1.09
+  // between them — the same separation the draft and the process have, and the same
+  // reason. Both stay far below a finding, where the amber badge is 3.59 and the red
+  // 5.44 (ADR-0211 §4). The outline is the canvas's own ink for both: the card already
+  // carries the kind, and the stroke is what a severity overrides.
+  catalog: { r: 24, grow: 6, shape: "card", fill: "#e6dff5", stroke: "var(--mesh-ink)", label: "Catalogue — what a group of people may order" },
+  product: { r: 13, grow: 4, shape: "tile", fill: "#efe9f8", stroke: "var(--mesh-ink)", label: "Product — a catalogue item and what provisions it" },
 };
 
 // Shape is the third channel, after colour and size, and the one that survives what
@@ -173,7 +193,10 @@ export function shapeVertices(shape, r) {
 // over height, round is the corner radius as a fraction of the short side.
 //
 // C4 draws everything as the same box and tells its types apart by the annotation
-// under the name rather than by silhouette, so it needs two of them and no more.
+// under the name rather than by silhouette, so it needs two of them and no more. The
+// catalogue's two are here as well, for the opposite reason: they are the one family
+// in Atlas's own notation that is drawn as rectangles, so that the half of the estate
+// that is *offered* reads apart from the half that *runs*.
 // `am-service` is here rather than among the polygons because a stadium is a
 // rectangle whose corners are its own half-height, which is what `round: 0.5` says.
 const RECTS = {
@@ -181,6 +204,11 @@ const RECTS = {
   box: { aspect: 1.9, round: 0.08 },
   rounded: { aspect: 1.9, round: 0.42 },
   "am-service": { aspect: 16 / 9, round: 0.5 },
+  // The catalogue's own family, in Atlas's notation rather than a projection's. A
+  // card and a smaller tile: the same silhouette twice, so the two read as one half
+  // of the estate, told apart by size the way an application and a process are.
+  card: { aspect: 1.7, round: 0.16 },
+  tile: { aspect: 1.25, round: 0.28 },
 };
 
 // ARCHIMATE_ICONS is ArchiMate's own notation, as geometry.
@@ -228,6 +256,22 @@ const ARCHIMATE_ICONS = {
   "am-node": {
     points: [[-7, -4], [-4, -7], [7, -7], [7, 4], [4, 7], [-7, 7]],
     detail: [[[-7, -4], [4, -4], [4, 7]], [[4, -4], [7, -7]]],
+  },
+  // Grouping: a rectangle with a tab on its top-left corner — the outline a reader of
+  // UML packages already knows, and the one ArchiMate draws this element with. The
+  // standard also draws its border dashed, which is a stroke and not a silhouette;
+  // this canvas spends the dash on "what is drawn here is not running" for the three
+  // placeholder kinds, and a second meaning for one mark would be worse than the
+  // tab alone.
+  "am-grouping": {
+    points: [[-7, -6], [-1, -6], [-1, -4], [7, -4], [7, 6], [-7, 6]],
+  },
+  // Product: a rectangle with a small bar across the top-left corner. The bar is
+  // interior line work rather than part of the outline, the way the Node's fold is,
+  // so the silhouette stays the rectangle the standard draws.
+  "am-product": {
+    points: [[-7, -5], [7, -5], [7, 5], [-7, 5]],
+    detail: [[[-7, -1.5], [-1.5, -1.5], [-1.5, -5]]],
   },
 };
 
@@ -298,7 +342,12 @@ const NOTATION_SHAPES = {
   "archimate-3.2": {
     application: "am-component", process: "am-process", worker: "am-service",
     decision: "am-function", target: "am-node",
+    catalog: "am-grouping", product: "am-product",
   },
+  // C4 has no word for a catalogue or a product, so both keep Atlas's own card and
+  // tile. Dressing them as a Container would be a claim C4 does not make: it
+  // describes the structure of a software system, and what an organisation offers
+  // its people is not one of its four levels.
   "c4-projection": {
     application: "rounded", process: "rounded", worker: "rounded",
     decision: "rounded", target: "box",
@@ -335,6 +384,8 @@ const NOTATION_SHAPES = {
 // dressing them as one would be a claim the notation does not make.
 const ARCHIMATE_APPLICATION = "#B5FFFF";
 const ARCHIMATE_TECHNOLOGY = "#C9E7B7";
+// Archi's business default, rgb(255,255,181), from the same table as the two above.
+const ARCHIMATE_BUSINESS = "#FFFFB5";
 const NOTATION_PAINT = {
   "archimate-3.2": {
     application: { fill: ARCHIMATE_APPLICATION, stroke: "var(--mesh-ink)" },
@@ -345,6 +396,14 @@ const NOTATION_PAINT = {
     // deployment target in the application blue would put it on the wrong floor of
     // the only diagram whose readers count the floors.
     target: { fill: ARCHIMATE_TECHNOLOGY, stroke: "var(--mesh-ink)" },
+    // A Product is Business, which is the floor a catalogue item belongs on and the
+    // one thing its colour has to say.
+    product: { fill: ARCHIMATE_BUSINESS, stroke: "var(--mesh-ink)" },
+    // A Grouping is on no layer at all — it is ArchiMate's "Other" element, and the
+    // convention every layer colour comes from has nothing to say about it. So it is
+    // drawn on the page's own surface rather than given a layer's fill, which would
+    // be putting it on a floor the standard deliberately leaves it off.
+    catalog: { fill: "var(--surface)", stroke: "var(--mesh-ink)" },
   },
 };
 
@@ -387,6 +446,9 @@ export function paintFor(node, notation) {
 const AM_HEAD = 6;        // how far an arrowhead reaches back along the line
 const AM_HALF = 2.6;      // half its width across the line — 6:2.6 is Archi's 7:3
 const AM_BALL = 2.6;      // Assignment's ball, at the relationship's source
+// Half a diamond's length. Slightly longer than the arrowhead is, which is how the
+// standard draws it and what keeps a diamond from reading as a blunt head.
+const AM_DIAMOND = 3.6;
 
 // RELATION_MARKS is what each ArchiMate relationship puts at each of its own ends.
 //
@@ -399,6 +461,13 @@ const RELATION_MARKS = {
   Assignment: { tail: "ball", head: "filled" },
   Triggering: { head: "filled" },
   Serving: { head: "open" },
+  // The diamond at the whole. It is the one mark in this notation a reader
+  // recognises before reading any label — filled for the integral part, hollow for
+  // the optional one — and it is the reason these two relationships are worth naming
+  // exactly rather than approximately: the picture says "the phone is part of the
+  // package, the case is offered with it" in the standard's own ink.
+  Composition: { tail: "diamond-filled" },
+  Aggregation: { tail: "diamond-open" },
 };
 
 // MARKER_IDS resolves a mark and the end it lands on to the marker that draws it.
@@ -413,6 +482,10 @@ const MARKER_IDS = {
   open: { end: "am-head-open", start: "am-head-open-back" },
   // A ball is the same ball whichever end it sits on.
   ball: { end: "am-ball", start: "am-ball" },
+  // And so is a diamond: it is symmetric along the line, so unlike an arrowhead it
+  // needs no mirrored twin.
+  "diamond-filled": { end: "am-diamond-filled", start: "am-diamond-filled" },
+  "diamond-open": { end: "am-diamond-open", start: "am-diamond-open" },
 };
 
 // MARKER_DEFS draws each of them, in world units.
@@ -438,6 +511,11 @@ const MARKER_DEFS = {
     stroke="var(--mesh-line)" points="${AM_HEAD},0 0,${AM_HALF} ${AM_HEAD},${2 * AM_HALF}"/>`,
   "am-ball": `<circle class="mesh-edge-mark" fill="var(--mesh-line)"
     cx="${AM_BALL}" cy="${AM_BALL}" r="${AM_BALL}"/>`,
+  "am-diamond-filled": `<polygon class="mesh-edge-mark" fill="var(--mesh-line)"
+    points="${AM_DIAMOND},0 ${2 * AM_DIAMOND},${AM_HALF} ${AM_DIAMOND},${2 * AM_HALF} 0,${AM_HALF}"/>`,
+  "am-diamond-open": `<polygon class="mesh-edge-mark mesh-edge-mark-open" fill="none"
+    stroke="var(--mesh-line)"
+    points="${AM_DIAMOND},0 ${2 * AM_DIAMOND},${AM_HALF} ${AM_DIAMOND},${2 * AM_HALF} 0,${AM_HALF}"/>`,
 };
 
 // markerElement is one <marker>, sized and anchored so the drawn point lands on the
@@ -449,6 +527,13 @@ function markerElement(id) {
     return `<marker id="${id}" markerUnits="userSpaceOnUse" orient="auto"
       markerWidth="${2 * AM_BALL}" markerHeight="${2 * AM_BALL}"
       refX="${AM_BALL}" refY="${AM_BALL}">${body}</marker>`;
+  }
+  // A diamond is centred on the line's end, as the ball is: both are source marks,
+  // and a source mark that hung past the end would sit inside the node it belongs to.
+  if (id.startsWith("am-diamond")) {
+    return `<marker id="${id}" markerUnits="userSpaceOnUse" orient="auto"
+      markerWidth="${2 * AM_DIAMOND}" markerHeight="${2 * AM_HALF}"
+      refX="${AM_DIAMOND}" refY="${AM_HALF}">${body}</marker>`;
   }
   // refX is the tip: at the far end for a forward head, at the near end for the
   // mirrored one, which is what puts both points exactly on the line's end.
@@ -1033,10 +1118,24 @@ const SEVERITY = {
 const EDGE_KEY = [
   ["calls", "Solid line — calls: a process invokes another process",
     "a process invokes another process"],
-  ["uses", "Dashed line — uses: a process depends on a worker or a decision",
-    "a process depends on a worker or a decision"],
+  ["uses", "Dashed line — uses: a process depends on a worker or a decision, and a product on what provisions it",
+    "a process depends on a worker or a decision, and a product on what provisions it"],
   ["contains", "Dotted line — belongs to: an application and the processes it holds",
     "an application and the processes it holds"],
+  // The catalogue's three. They are the first lines here that are not about one
+  // process needing another, and the two structure kinds are the first this landscape
+  // can name in ArchiMate's own words rather than approximately — which is why they
+  // are three rows and not one: "comes with it" and "offered beside it" are different
+  // promises to whoever orders, and a key that merged them would be the picture
+  // saying the case comes with the phone.
+  ["offers", "Solid line — offers: a catalogue puts a product in front of the people it reaches",
+    "a catalogue puts a product in front of the people it reaches"],
+  ["composition", "Solid line — included: a part that always comes with the whole and cannot be deselected",
+    "a part that always comes with the whole and cannot be deselected"],
+  ["aggregation", "Dashed line — optional: a part offered beside the whole, ordered only if it is chosen",
+    "a part offered beside the whole, ordered only if it is chosen"],
+  ["requires", "Dotted line — precedence: this cannot be provisioned before that",
+    "this cannot be provisioned before that"],
 ];
 
 // PULSE_BUDGET is how many beating nodes the view will animate at once.
@@ -2025,8 +2124,18 @@ export function zoomView(view, factor, focus, base) {
 // deliberately absent: an application *contains* its processes, it does not depend
 // on them, and walking it would drag every sibling into the answer through their
 // shared application — which would make "what breaks if this goes down" name half
-// the landscape and mean nothing.
-const DEPENDENCY_EDGES = new Set(["calls", "uses"]);
+// the landscape and mean nothing. A catalogue's `offers` is containment of exactly
+// that shape and is left out for exactly that reason.
+//
+// Two of the catalogue's three are in, and the one that is not is the interesting
+// one. An integral part is a dependency in the plain sense — the package cannot be
+// delivered without the phone in it — and precedence is one by definition: the
+// account has to exist before the mailbox. An *optional* part is not, and that is
+// not a judgement call but what the word means in the store: the whole is ordered
+// without it whenever nobody ticks it, so a package whose optional case is
+// unavailable is a package that is still deliverable. Walking it would put "what
+// breaks" and "what is offered alongside" in one number.
+const DEPENDENCY_EDGES = new Set(["calls", "uses", "composition", "requires"]);
 
 // degreesOf counts, for every node, how many dependency edges touch it.
 //
@@ -2416,6 +2525,19 @@ function hrefFor(node) {
     const id = node.id.slice("draft:".length);
     return `#/modeler/draft/${encodeURIComponent(id)}`;
   }
+  // A catalogue's inside is the screen it is maintained on, and a product's is the
+  // same screen — the catalogue it is edited through (ADR-0315), which is what the
+  // node carries. A product whose home this reader cannot see carries none, and is
+  // opened here like everything else rather than being given a link into a catalogue
+  // they would be refused.
+  if (node.kind === "catalog") {
+    const id = node.id.slice("catalog:".length);
+    return `#/catalog/c/${encodeURIComponent(id)}`;
+  }
+  if (node.kind === "product" && node.catalog) {
+    const id = node.catalog.slice("catalog:".length);
+    return `#/catalog/c/${encodeURIComponent(id)}`;
+  }
   return "";
 }
 
@@ -2423,7 +2545,9 @@ function hrefFor(node) {
 // kind rather than written beside each href so the two cannot come apart: a link that
 // says Operations and opens the Modeler is worse than no link.
 function insideName(node) {
-  return node.kind === "draft" ? "Modeler" : "Operations";
+  if (node.kind === "draft") return "Modeler";
+  if (node.kind === "catalog" || node.kind === "product") return "Catalogue";
+  return "Operations";
 }
 
 function nodeTitle(node, notation) {
@@ -2449,6 +2573,15 @@ function nodeTitle(node, notation) {
   }
   if (node.kind === "restricted") {
     return "A resource outside your access. The dependency is real; its identity is not shown.";
+  }
+  if (node.kind === "catalog") {
+    return `${node.name || node.id} · a service catalogue · what a group of people may order`;
+  }
+  if (node.kind === "product") {
+    // Never a price and never who may order it. Both are on the catalogue's own
+    // screen, behind the catalogue's own rules; this picture is about what the
+    // product depends on, not about what it costs.
+    return `${node.name || node.id} · a catalogue product · the lines leaving it are what provisions it`;
   }
   if (node.kind === "unresolved") {
     // The id carries what kind of thing is missing, which is what makes the
