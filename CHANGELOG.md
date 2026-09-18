@@ -114,8 +114,8 @@ _Changed_ / _Removed_ for each version.
   legitimately a part here and offered in its own right next door, where the heading
   *is* read.
 
-- **The service catalogue is drawn on the starmap.** Atlas held two halves of one
-  estate and drew them on two screens. The starmap is the derived half — applications,
+- **A Product Map on the starmap: what you offer, beside what has to run for it.**
+  Atlas held two halves of one estate and drew them on two screens. The starmap is the derived half — applications,
   deployed processes, the workers they use, every edge a fact the server can point at.
   The catalogue is the other: what a group of people may order, what each product is
   assembled from, and the process that provisions it.
@@ -127,13 +127,24 @@ _Changed_ / _Removed_ for each version.
   out bound to a process nobody deployed, looks orderable, and the first person to
   order it waits while the order parks.
 
-  The landscape now carries **catalogues and products as nodes**, with the arrangement
-  between them — *included*, *optional*, *precedence* — as lines, and a product's
-  provisioning and deprovisioning processes resolved exactly as a call activity is:
-  the deployed process, a placeholder for one you may not see, or the same
+  The starmap's picker — now called **View**, because only some of its entries are
+  vocabularies — gains **Product Map**. It draws the catalogues, the products, the
+  arrangement between them (*included*, *optional*, *precedence*) and the processes
+  each product binds to provision and revoke it, resolved exactly as a call activity
+  is: the deployed process, a placeholder for one you may not see, or the same
   **unresolved** shape everything missing on this picture already takes. A product
-  bound to nothing is now a product pointing at a hole, in the same ink as every other
+  bound to nothing is a product pointing at a hole, in the same ink as every other
   broken dependency, with nobody having modelled anything.
+
+  **The landscape itself carries no product.** They are two pictures rather than one
+  busier one, for two reasons: an operator opening the starmap because something is
+  stuck does not want a hundred products between them and it, and every product would
+  otherwise spend the size budget — so one large catalogue could collapse somebody
+  else's landscape to applications, and that somebody would never learn why. The
+  product map carries the bound processes and nothing else of the estate: not the
+  workers they use, not the applications that hold them, not the peers. One hop,
+  because the second hop is the landscape's question and the landscape is one entry
+  away on the same control.
 
   **What it will not say is as deliberate as what it will.** Incompatibility — two
   rights that must never be held by the same person — is not drawn: it is the one
@@ -144,7 +155,8 @@ _Changed_ / _Removed_ for each version.
   would otherwise be red for a week. Orders and prices are absent: an order is
   runtime, a price is on the catalogue's own screen behind the catalogue's own rules.
 
-  **In ArchiMate's vocabulary** a catalogue is a Grouping and a product a Product, and
+  **In ArchiMate's vocabulary** — reached through the export, which follows whichever
+  picture you are on — a catalogue is a Grouping and a product a Product, and
   an integral part is a **Composition** while an optional one is an **Aggregation** —
   the first relationships this landscape can name exactly rather than approximately,
   drawn with the standard's own diamonds and written into the exported document.

@@ -1,0 +1,40 @@
+{
+  "tags": [
+    "Catalogue",
+    "Panorama",
+    "Operations"
+  ],
+  "title": {
+    "en": "A Product Map beside the landscape",
+    "de": "Eine Product Map neben der Landschaft"
+  },
+  "summary": {
+    "en": "Atlas drew two halves of one estate on two screens. The starmap showed what this server runs — applications, deployed processes, the workers they use — and the catalogue showed what your people may order. Nothing joined them, and the join is where the failure lives: a product names a provisioning process, and whether anything is actually deployed under that name is a question neither screen could answer. So a product goes out bound to a process nobody deployed, looks perfectly orderable, and the first person to order it waits while the order parks. The starmap's picker — now called View, because only some of its entries are vocabularies — gains a Product Map. It draws your catalogues, the products they offer, the arrangement between them (included, optional, precedence) and the processes each product binds to provision and revoke it, with the state the engine has for each. A product bound to a process that is not deployed appears as a product pointing at a hole, in the same ink as every other broken dependency, and nobody had to model anything for it to show up. The landscape itself is unchanged and carries no product: they are two pictures rather than one busier one, because an operator opening the starmap for something stuck does not want a hundred products in the way — and because products would otherwise spend the size budget, so one large catalogue could collapse somebody else's landscape without them ever learning why. Two things the product map deliberately does not say: an incompatibility between two rights is not drawn as a line, since it means the opposite of every other line there, and no catalogue is ever coloured as a fault, because a catalogue you are still filling is not broken. The ArchiMate export follows whichever picture you are on, and writes a catalogue as a Grouping, a product as a Product, an integral part as a Composition and an optional one as an Aggregation. And the picture follows the catalogue's own sharing: a catalogue appears for whoever maintains it, never for the people it is offered to.",
+    "de": "Atlas zeichnete zwei Hälften eines Bestands auf zwei Bildschirmen. Die Starmap zeigte, was dieser Server ausführt — Applikationen, deployte Prozesse, die genutzten Worker — und der Katalog zeigte, was Ihre Leute bestellen dürfen. Nichts verband beide, und genau in dieser Verbindung liegt der Fehler: Ein Produkt nennt einen Bereitstellungsprozess, und ob unter diesem Namen überhaupt etwas deployt ist, konnte keiner der beiden Bildschirme beantworten. Ein Produkt geht also an einen Prozess gebunden in Betrieb, den niemand deployt hat, wirkt bestellbar, und die erste Person, die es bestellt, wartet, während die Bestellung hängen bleibt. Die Auswahl der Starmap — neu „View\", weil nur ein Teil ihrer Einträge Notationen sind — erhält eine „Product Map\". Sie zeichnet Ihre Kataloge, die angebotenen Produkte, die Anordnung dazwischen (enthalten, optional, Vorrang) und die Prozesse, die jedes Produkt zum Bereitstellen und Entziehen bindet, je mit dem Zustand, den die Engine dazu hat. Ein Produkt, dessen Prozess nicht deployt ist, erscheint als Produkt, das ins Leere zeigt — in derselben Tinte wie jede andere gebrochene Abhängigkeit, und niemand musste dafür etwas modellieren. Die Landschaft selbst bleibt unverändert und trägt kein Produkt: Es sind zwei Bilder statt eines volleren, weil wer die Starmap wegen einer hängenden Sache öffnet, nicht hundert Produkte im Weg haben will — und weil Produkte sonst das Grössenbudget verbrauchen, ein grosser Katalog also die Landschaft anderer Leute zusammenfallen liesse, ohne dass diese je erführen, warum. Zwei Dinge sagt die Product Map bewusst nicht: Eine Unverträglichkeit zwischen zwei Rechten wird nicht als Linie gezeichnet, weil sie das Gegenteil jeder anderen Linie dort bedeutet, und kein Katalog wird je als Fehler eingefärbt, denn ein Katalog, den Sie gerade erst füllen, ist nicht kaputt. Der ArchiMate-Export folgt dem Bild, das Sie gerade sehen, und schreibt einen Katalog als Grouping, ein Produkt als Product, einen integralen Bestandteil als Composition und einen optionalen als Aggregation. Und das Bild folgt der Freigabe des Katalogs: Ein Katalog erscheint für die, die ihn pflegen, nie für die, denen er angeboten wird."
+  },
+  "tutorial": {
+    "en": [
+      "Open Catalogue and make sure one of your catalogues offers at least one product with a provisioning process bound to it.",
+      "Open Panorama › Starmap and set View to “Product Map”. The catalogue is drawn as a card and each product it offers as a smaller tile beside it.",
+      "Follow the line from a product: it reaches the deployed process that provisions it, or an unresolved marker if nothing is deployed under that name.",
+      "Click that unresolved marker: it names the process id somebody has to deploy before the next order can go through.",
+      "Select a service several products contain and read the impact panel — it now names the products that cannot be delivered without it.",
+      "Switch View back to “Atlas (derived)” for the estate — no product is drawn there — and use the ArchiMate XML button on the product map to take that picture into your own tool."
+    ],
+    "de": [
+      "Öffnen Sie „Catalogue\" und stellen Sie sicher, dass einer Ihrer Kataloge mindestens ein Produkt mit gebundenem Bereitstellungsprozess anbietet.",
+      "Öffnen Sie „Panorama › Starmap\" und stellen Sie „View\" auf „Product Map\". Der Katalog wird als Karte gezeichnet, jedes angebotene Produkt als kleinere Kachel daneben.",
+      "Folgen Sie der Linie von einem Produkt: Sie erreicht den deployten Prozess, der es bereitstellt — oder eine Markierung „unresolved\", wenn unter diesem Namen nichts deployt ist.",
+      "Klicken Sie diese Markierung an: Sie nennt die Prozess-ID, die jemand deployen muss, bevor die nächste Bestellung durchläuft.",
+      "Wählen Sie einen Service aus, den mehrere Produkte enthalten, und lesen Sie das Auswirkungs-Panel — es nennt nun die Produkte, die ohne ihn nicht lieferbar sind.",
+      "Stellen Sie „View\" zurück auf „Atlas (derived)\" für den Bestand — dort wird kein Produkt gezeichnet — und nutzen Sie auf der Product Map die Schaltfläche „ArchiMate XML\", um dieses Bild in Ihr eigenes Werkzeug zu übernehmen."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Panorama › Starmap",
+      "de": "Panorama › Starmap öffnen"
+    },
+    "route": "#/panorama/starmap"
+  }
+}

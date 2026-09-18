@@ -2460,10 +2460,11 @@ test("the landscape can be downloaded as an ArchiMate model", async ({ page }) =
   expect(download.suggestedFilename()).toMatch(/^atlas-starmap.*\.xml$/);
 });
 
-// The picker offers what the server says it can draw, after the two ways of drawing
-// that are the browser's own. A *vocabulary* the browser invented would be one the
-// exported document knows nothing about; a weighting it invented is a rendering
-// decision the server has no opinion on (ADR-0211 §8).
+// The picker offers what the server says it can draw, after the ways of drawing that
+// are the browser's own. A *vocabulary* the browser invented would be one the exported
+// document knows nothing about; a weighting it invented is a rendering decision the
+// server has no opinion on (ADR-0211 §8), and the product map is a second subject the
+// server derives on request.
 test("the notations on offer are the ones the server serves", async ({ page }) => {
   installMock(page, radiusGraph);
   await page.goto("/index.html#/panorama/starmap");
@@ -2472,7 +2473,8 @@ test("the notations on offer are the ones the server serves", async ({ page }) =
   const offered = await page.locator("#mesh-notation option").evaluateAll(
     (options) => options.map((o) => o.value));
   expect(offered).toEqual([
-    "atlas", "instances", "incidents", "incident-age", "archimate-3.2", "c4-projection",
+    "atlas", "products", "instances", "incidents", "incident-age",
+    "archimate-3.2", "c4-projection",
   ]);
 });
 
@@ -2495,7 +2497,7 @@ test("a landscape draws even when the notations cannot be read", async ({ page }
   // tallies already in the mesh payload.
   const offered = await page.locator("#mesh-notation option").evaluateAll(
     (options) => options.map((o) => o.value));
-  expect(offered).toEqual(["atlas", "instances", "incidents", "incident-age"]);
+  expect(offered).toEqual(["atlas", "products", "instances", "incidents", "incident-age"]);
 });
 
 // Going into a node, as a control rather than only as a gesture. A double-click is

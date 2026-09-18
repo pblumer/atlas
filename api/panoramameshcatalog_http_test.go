@@ -15,6 +15,21 @@ import (
 // process the engine deployed, and — the half that matters most — whether the picture
 // is filtered per reader before it leaves the server.
 
+// getProductMap reads the other picture: the catalogue, what each product is
+// assembled from, and the processes that provision it (?view=products).
+func getProductMap(t *testing.T, ts *httptest.Server) meshGraph {
+	t.Helper()
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/panorama/mesh?view=products", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("GET product map status = %d, body = %s", code, body)
+	}
+	var g meshGraph
+	if err := json.Unmarshal(body, &g); err != nil {
+		t.Fatalf("decode product map: %v (%s)", err, body)
+	}
+	return g
+}
+
 const catalogueProvisionBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
   <process id="provision-vpn" name="Provision a VPN account" isExecutable="true">
     <startEvent id="s"/><endEvent id="e"/>
@@ -63,7 +78,7 @@ func TestTheStarmapDrawsTheCatalogueAndWhatProvisionsIt(t *testing.T) {
 		t.Fatalf("offer the products: %d (%s)", code, b)
 	}
 
-	g := getMesh(t, ts)
+	g := getProductMap(t, ts)
 
 	if n := meshNodeByID(t, g, "catalog:"+cat.ID); n.Kind != "catalog" || n.Name != "Arbeitsplatz" {
 		t.Errorf("catalogue node = %+v, want the catalogue named in its own language", n)
@@ -137,7 +152,7 @@ func TestTheStarmapDrawsOnlyTheCataloguesYouMaintain(t *testing.T) {
 		t.Fatalf("bruno offers it: %d (%s)", code, b)
 	}
 
-	code, body := cReq(t, anna, ts, "GET", "/api/v1/panorama/mesh", "")
+	code, body := cReq(t, anna, ts, "GET", "/api/v1/panorama/mesh?view=products", "")
 	if code != http.StatusOK {
 		t.Fatalf("anna's mesh: %d (%s)", code, body)
 	}
@@ -162,5 +177,63 @@ func grantModeler(t *testing.T, ts *httptest.Server, admin *http.Client, name st
 	if code, b := cReq(t, admin, ts, "PATCH", "/api/v1/users/"+id,
 		`{"roles":["user","productmanager","modeler"]}`); code != http.StatusOK {
 		t.Fatalf("grant modeler to %s: %d (%s)", name, code, b)
+	}
+}
+
+// TestTheLandscapeKeepsTheCatalogueOffIt is the correction #1022's first cut needed,
+// proved over HTTP: the same server that answers a product map answers the landscape
+// without a single product on it. Two pictures, one derivation, and the picture an
+// operator opens for a stuck process is the estate.
+func TestTheLandscapeKeepsTheCatalogueOffIt(t *testing.T) {
+	ts := newTestServer(t)
+
+	if code, b := doReq(t, ts, http.MethodPost, "/api/v1/deployments",
+		catalogueProvisionBPMN, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy: %d (%s)", code, b)
+	}
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/catalogs",
+		`{"rank":1,"languages":["de"],"texts":{"de":"Arbeitsplatz"}}`, "application/json")
+	if code != http.StatusCreated {
+		t.Fatalf("create catalogue: %d (%s)", code, body)
+	}
+	var cat struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &cat); err != nil {
+		t.Fatalf("decode catalogue: %v (%s)", err, body)
+	}
+	if code, b := doReq(t, ts, http.MethodPost, "/api/v1/catalog-products",
+		`{"id":"vpn","homeCatalog":"`+cat.ID+`","state":"active","texts":{"de":"VPN-Zugang"},`+
+			`"approval":{"kind":"none"},"provisionProcess":"provision-vpn","deprovisionProcess":""}`,
+		"application/json"); code != http.StatusOK {
+		t.Fatalf("save product: %d (%s)", code, b)
+	}
+	if code, b := doReq(t, ts, http.MethodPatch, "/api/v1/catalogs/"+cat.ID,
+		`{"items":["vpn"]}`, "application/json"); code != http.StatusOK {
+		t.Fatalf("offer the product: %d (%s)", code, b)
+	}
+
+	landscape := getMesh(t, ts)
+	for _, n := range landscape.Nodes {
+		if n.Kind == "catalog" || n.Kind == "product" {
+			t.Errorf("the landscape carries %s %q; the catalogue is the other picture", n.Kind, n.ID)
+		}
+	}
+	// And the estate is still there — the correction removed the catalogue, not the
+	// landscape's own subject.
+	var deployed bool
+	for _, n := range landscape.Nodes {
+		if n.ProcessID == "provision-vpn" {
+			deployed = true
+		}
+	}
+	if !deployed {
+		t.Errorf("the landscape lost the deployed process: %+v", landscape.Nodes)
+	}
+
+	// The same server, asked the other question, draws it.
+	products := getProductMap(t, ts)
+	if n := meshNodeByID(t, products, "catalog:"+cat.ID); n.Name != "Arbeitsplatz" {
+		t.Errorf("the product map does not carry the catalogue: %+v", products.Nodes)
 	}
 }
