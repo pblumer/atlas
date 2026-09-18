@@ -276,6 +276,65 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
 }
 @media (max-width: 760px) { .product-form { grid-template-columns: 1fr; } }
 
+/* ---------- The product list and the editor beside it ---------- */
+
+/* The editor used to render *under* the list, which is fine with three products and
+   unusable with forty: opening one near the bottom pushed the form below everything,
+   so it was read after a long scroll and with no sight of the row it belonged to.
+
+   So the list and the editor are two columns, and the panel is pushed down to the
+   row it was opened from — the offset is measured against the list and handed over
+   as --editor-top by catalog-admin.js, because only the DOM knows where a row ended
+   up once the shared table enhancer has sorted or filtered it. CSS holds the rule,
+   the script holds the one number it cannot compute.
+
+   Sticky, because the form is taller than most viewports: reading to its Save button
+   must not walk the panel off the top of the window. It carries its own scrollbar for
+   the same reason — a panel longer than the screen that cannot scroll inside hides
+   the button it exists for.
+
+   Its own breakpoint, and the number is a consequence rather than a taste: two
+   columns below about 900px leave the form under ~380px, which is narrower than the
+   controls it holds, so it falls back to the stacked layout that a phone wants
+   anyway. Deliberately a min-width rule: the stacked layout stays the default and
+   this whole block is the enhancement, so a viewport that never matches it reads
+   exactly the page it read before.
+
+   Inside the panel the form is one column at every width. The two-column form above
+   is for the full-width card; half a page cannot hold it. */
+.product-editor:empty { display: none; }
+.product-editor > .card { margin: 14px 0; max-width: 960px; }
+/* The list's table is wider than its column on a narrow screen once the editor takes
+   a share of the page. Scroll it inside its own box, for the reason a card holding a
+   table does (ADR-0163): a table cannot be drawn narrower than its min-content width,
+   so without this it is laid out under the panel beside it. */
+.product-table { overflow-x: auto; }
+/* Which row the open panel belongs to. The panel is aligned to this row, but an
+   alignment is not a statement — a reader scrolling past sees the highlight and not
+   the arithmetic. */
+.product-list tr.editing > td { background: var(--accent-soft); }
+@media (min-width: 900px) {
+  /* overflow-anchor is off because the script corrects for this reflow itself
+     (catalog-admin.js): opening the panel narrows the list and rewraps the rows above
+     the reader, and two mechanisms undoing the same shift — the browser's anchoring
+     and the script's measured scroll — would each undo part of it and land nowhere. */
+  .product-cols { display: flex; align-items: flex-start; gap: 18px; overflow-anchor: none; }
+  .product-cols > .product-list { flex: 1 1 auto; min-width: 0; }
+  .product-cols > .product-editor {
+    flex: 0 0 clamp(360px, 42%, 520px);
+    /* Under the top bar rather than behind it: the bar is itself sticky at the top of
+       the window, so a panel sticking at the window's own top would slide beneath it
+       and lose its first field. Read from --topbar-h rather than repeating the
+       number, so the two cannot drift; the fallback is only for a page that renders
+       this section without declaring one. */
+    position: sticky; top: calc(var(--topbar-h, 48px) + 16px);
+    max-height: calc(100vh - var(--topbar-h, 48px) - 32px); overflow: auto;
+    margin-top: var(--editor-top, 0px);
+  }
+  .product-cols > .product-editor > .card { margin: 0; }
+  .product-cols > .product-editor .product-form { grid-template-columns: 1fr; }
+}
+
 h1 { font-size: 20px; margin: 0 0 12px; }
 h2 { font-size: 15px; margin: 0 0 10px; }
 .muted { color: var(--muted); }

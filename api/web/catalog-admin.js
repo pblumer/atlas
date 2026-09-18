@@ -429,16 +429,20 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
     <p class="muted" style="max-width:62ch">A product is edited through its home catalogue.
       Everything offered here is orderable once this catalogue is published — a product in
       <b>draft</b> or <b>withdrawn</b> state is not.</p>
-    ${offered.length ? `<table class="table">
-      <thead><tr><th>Product</th><th>State</th><th>Approval</th><th>Provisioned by</th><th></th></tr></thead>
-      <tbody>${offered.map((iid) => productRow(byID[iid], iid, langs)).join("")}</tbody></table>`
+    <div class="product-cols">
+      <div class="product-list">
+        ${offered.length ? `<div class="product-table"><table class="table">
+          <thead><tr><th>Product</th><th>State</th><th>Approval</th><th>Provisioned by</th><th></th></tr></thead>
+          <tbody>${offered.map((iid) => productRow(byID[iid], iid, langs)).join("")}</tbody></table></div>`
     : `<div class="empty"><p>Nothing offered yet.</p></div>`}
 
-    <div class="row" style="margin-top:10px">
-      <button class="btn" data-act="new-product">New product</button>
-      ${items.length > offered.length ? `<button class="btn ghost" data-act="add-existing">Offer an existing product</button>` : ""}
+        <div class="row" style="margin-top:10px">
+          <button class="btn" data-act="new-product">New product</button>
+          ${items.length > offered.length ? `<button class="btn ghost" data-act="add-existing">Offer an existing product</button>` : ""}
+        </div>
+      </div>
+      <aside class="product-editor"></aside>
     </div>
-    <div class="product-editor"></div>
 
     <h3 style="margin-top:26px">How the products relate</h3>
     <p class="muted" style="max-width:62ch">Two different questions, kept apart.
@@ -712,7 +716,10 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
     </select>`;
   const section = (title, hint) => `<h4 class="form-sec">${esc(title)}</h4>
     <p class="form-sec-hint">${hint}</p>`;
-  return `<div class="card" style="margin:14px 0; max-width:960px">
+  // No width and no margin spelled here: the card is read in two layouts — beside the
+  // list in a column of its own, and stacked under it on a narrow screen — and only
+  // the stylesheet knows which one is in force. An inline style would win over both.
+  return `<div class="card">
     <h3 style="margin:0 0 10px">${it ? "Edit product" : "New product"}</h3>
     <form class="product-form" data-editing="${esc(it ? it.id : "")}">
       ${section("What the catalogue shows",
@@ -1055,6 +1062,94 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
   };
   const editor = view.querySelector(".product-editor");
 
+  // ---- Where the editor panel sits ----
+  //
+  // The panel is a column beside the list (app.css), and it opens level with the row
+  // it was opened from: a product edited from row thirty would otherwise put its form
+  // thirty rows further down the page, which is the scroll this layout exists to
+  // remove. CSS cannot know where a row ended up — the shared table enhancer sorts
+  // and filters the tbody underneath it — so the offset is measured here and handed
+  // over as --editor-top. app.css reads it only where the two columns exist at all;
+  // on a narrow viewport the property is ignored and the panel is stacked under the
+  // list, exactly as it used to be.
+  const cols = view.querySelector(".product-cols");
+  const list = view.querySelector(".product-list");
+  // The row the open panel belongs to, kept so the alignment survives what the list
+  // does afterwards.
+  let anchor = null;
+
+  const align = () => {
+    if (!anchor || !cols || !editor.firstChild) return;
+    // offsetParent is null for a row a filter has hidden. Measuring against a hidden
+    // row would snap the panel to the top of the list while its product is still
+    // open in it, so the last good offset stands until the row is on screen again.
+    if (anchor.offsetParent === null) return;
+    const top = anchor.getBoundingClientRect().top - cols.getBoundingClientRect().top;
+    editor.style.setProperty("--editor-top", `${Math.max(0, Math.round(top))}px`);
+  };
+  // Sorting a column reorders the rows and a filter hides some: either moves the row
+  // the panel is aligned to, and both arrive as ordinary events on the list. One
+  // frame later the table has been rebuilt, so this re-measures rather than predicts.
+  const realign = () => requestAnimationFrame(align);
+  if (list) {
+    list.addEventListener("click", realign);
+    list.addEventListener("input", realign);
+  }
+  // A viewport change moves the row with no event on the list at all, and a narrow
+  // one takes the second column away entirely. Observed rather than bound to
+  // window.resize so it ends with the view: the element goes when the page is
+  // re-rendered and the observer goes with it, where a window listener would outlive
+  // both and go on measuring nodes nobody can see.
+  if (cols && typeof ResizeObserver === "function") new ResizeObserver(realign).observe(cols);
+
+  // markEditing keeps the highlight on exactly one row: the panel says which product
+  // it is editing, and a second highlight would make that a guess.
+  const markEditing = (row) => {
+    for (const tr of view.querySelectorAll(".product-list tr.editing")) tr.classList.remove("editing");
+    if (row) row.classList.add("editing");
+  };
+
+  // keepInPlace holds the row still while the layout changes under it.
+  //
+  // Opening the panel takes a column off the list, so every cell that was on one line
+  // and is now on two makes the rows above the reader taller — and a row at the
+  // bottom of a long list is then pushed a screenful down by text they are not even
+  // looking at. The panel is level with its row either way (align() measures after
+  // the reflow), but the *page* has moved, which reads as the list jumping away from
+  // the click. Measured before and after, the difference is exactly how far the row
+  // travelled, and scrolling by it puts it back under the cursor. app.css turns the
+  // browser's own scroll anchoring off here so this is the only correction applied
+  // and the two cannot fight over the same pixels.
+  const keepInPlace = (row, wasAt) => {
+    if (!row || wasAt === null || row.offsetParent === null) return;
+    const moved = row.getBoundingClientRect().top - wasAt;
+    if (Math.abs(moved) > 1) window.scrollBy(0, moved);
+  };
+
+  // openEditor renders a form, marks the row it belongs to and aligns the two. One
+  // function because the three are one act: a panel carrying the previous product's
+  // highlight, or the previous product's offset, is worse than no highlight at all.
+  const openEditor = (html, row) => {
+    const wasAt = row && row.offsetParent !== null ? row.getBoundingClientRect().top : null;
+    editor.innerHTML = html;
+    markEditing(row && row.tagName === "TR" ? row : null);
+    anchor = row || null;
+    align();
+    keepInPlace(row, wasAt);
+    wireProductForm();
+  };
+  const closeEditor = () => {
+    // Closing gives the width back and reflows the list the same way, so the row is
+    // held still on the way out too.
+    const row = anchor;
+    const wasAt = row && row.offsetParent !== null ? row.getBoundingClientRect().top : null;
+    editor.innerHTML = "";
+    editor.style.removeProperty("--editor-top");
+    markEditing(null);
+    anchor = null;
+    keepInPlace(row, wasAt);
+  };
+
   view.querySelector(".cat-meta").addEventListener("submit", async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
@@ -1081,16 +1176,18 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
     const act = b.dataset.act;
 
     if (act === "new-product") {
-      editor.innerHTML = productForm(null, cat, langs, procIDs, formList, items, dir, people);
-      wireProductForm();
+      // A new product has no row yet, so the panel opens level with the button that
+      // asked for it — which is where the reader is looking.
+      openEditor(productForm(null, cat, langs, procIDs, formList, items, dir, people),
+        b.closest(".row"));
       return;
     }
     if (act === "edit") {
-      editor.innerHTML = productForm(byID[b.dataset.id], cat, langs, procIDs, formList, items, dir, people);
-      wireProductForm();
+      openEditor(productForm(byID[b.dataset.id], cat, langs, procIDs, formList, items, dir, people),
+        b.closest("tr"));
       return;
     }
-    if (act === "cancel-product") { editor.innerHTML = ""; return; }
+    if (act === "cancel-product") { closeEditor(); return; }
 
     if (act === "add-existing") {
       const free = items.filter((it) => !(cat.items || []).includes(it.id));

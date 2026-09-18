@@ -294,6 +294,30 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The product editor opens beside the product list, level with the row it was
+  opened from.** It used to render under the table, which is fine with three products
+  and unusable with forty: editing a row near the bottom put the form below everything
+  offered, so it was read after a long scroll and with no sight of the product it
+  belonged to — the id in the first field being the only thing saying which one was
+  open.
+
+  The list and the editor are now two columns, and the panel is pushed down to its
+  row: the product, its row and its form are on one line across the page, and the row
+  is marked while its form is open. The offset is measured in the browser rather than
+  stated in the stylesheet, because the shared table enhancer sorts and filters the
+  rows underneath it — sorting the list moves the panel with the row it belongs to.
+
+  Opening the panel takes a column off the list, so the rows above rewrap and the row
+  that was clicked would be pushed down the page by text nobody is reading. It is held
+  still: how far it travelled is measured and the page is scrolled back by exactly
+  that, so the list does not jump away from the click.
+
+  **The stacked layout remains, and it is the fallback rather than a lesser page.**
+  Below 900px two columns leave the form narrower than the controls it holds, so a
+  narrow window and a phone get the page they had. The panel sticks to the top of the
+  window while it is scrolled and carries its own scrollbar, because a form longer
+  than the screen that cannot scroll inside hides the Save button it exists for.
+
 - **The catalogue reads Kategorie › Produktgruppe › Produkt › Services, and there is
   no Bundle level.** A bundle is offered as a *Marktleistung*: it holds the
   orchestration process, and the services behind it hold their own provisioning and

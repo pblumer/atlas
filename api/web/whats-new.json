@@ -251,6 +251,45 @@
       }
     },
     {
+      "id": "the-product-editor-opens-beside-the-product-list-level-with-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The product editor opens beside its row",
+        "de": "Der Produkteditor öffnet neben seiner Zeile"
+      },
+      "summary": {
+        "en": "Editing a product used to open the form under the whole product list: with three products that is fine, with forty it meant scrolling past all of them to reach the form, and then reading it with no sight of the row it came from — the id in the first field was the only thing saying which product was open. The list and the editor are now two columns. The form opens on the right, level with the row it was opened from, and that row stays marked while it is open, so the product, its row and its form are on one line across the page. Sorting or filtering the list moves the form with its row rather than leaving it pointing at whatever slid into that place. The form itself is unchanged, and so is the narrow-window layout: below 900 pixels two columns would leave the form narrower than the fields it holds, so a small window and a phone get the stacked page they had.",
+        "de": "Beim Bearbeiten eines Produkts erschien das Formular bisher unterhalb der gesamten Produktliste: bei drei Produkten kein Problem, bei vierzig bedeutete es, an allen vorbeizuscrollen — und das Formular dann ohne Sicht auf die zugehörige Zeile zu lesen; allein die Id im ersten Feld sagte, welches Produkt offen war. Liste und Editor stehen jetzt in zwei Spalten. Das Formular öffnet rechts, auf der Höhe der Zeile, aus der es geöffnet wurde, und diese Zeile bleibt markiert, solange es offen ist — Produkt, Zeile und Formular liegen auf einer Linie. Wird die Liste sortiert oder gefiltert, wandert das Formular mit seiner Zeile mit, statt auf die Zeile zu zeigen, die nachgerückt ist. Das Formular selbst bleibt unverändert, ebenso die Darstellung in schmalen Fenstern: unter 900 Pixeln wären zwei Spalten schmaler als die Felder darin, daher erhalten kleines Fenster und Telefon weiterhin die untereinander gesetzte Ansicht."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Catalogue"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Catalogue and pick a catalogue with a few products in it.",
+          "Press \"edit\" on a product well down the list.",
+          "The form opens on the right, level with that row, and the row is highlighted while it is open.",
+          "Scroll: the form stays with you and scrolls inside itself, so its Save button is always reachable.",
+          "Sort the list by a column heading, or type in a column filter — the form follows its own row.",
+          "Press Cancel to close it; the list takes the full width back."
+        ],
+        "de": [
+          "Katalog öffnen und einen Katalog mit mehreren Produkten wählen.",
+          "Bei einem Produkt weiter unten in der Liste auf „edit\" drücken.",
+          "Das Formular öffnet rechts auf Höhe dieser Zeile; die Zeile ist markiert, solange es offen ist.",
+          "Scrollen: Das Formular bleibt sichtbar und scrollt in sich selbst, die Schaltfläche „Save\" bleibt erreichbar.",
+          "Liste über eine Spaltenüberschrift sortieren oder in einem Spaltenfilter tippen — das Formular folgt seiner Zeile.",
+          "„Cancel\" schliesst es; die Liste erhält die volle Breite zurück."
+        ]
+      }
+    },
+    {
       "id": "the-catalogue-reads-kategorie-produktgruppe-produkt-services",
       "version": "Unreleased",
       "date": null,
@@ -280,24 +319,6 @@
       "summary": {
         "en": "Approvals was advertised as an application beside Modeler and Operations, and it was empty for almost everybody who saw it — there is no approver role to gate on, because a product names a person, a group, or the orderer's superior, so anybody signed in may hold an approval tomorrow without holding one today.",
         "de": "Approvals was advertised as an application beside Modeler and Operations, and it was empty for almost everybody who saw it — there is no approver role to gate on, because a product names a person, a group, or the orderer's superior, so anybody signed in may hold an approval tomorrow without holding one today."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-catalogue-screen-wears-the-console-s-buttons",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The catalogue screen wears the console's buttons.",
-        "de": "The catalogue screen wears the console's buttons."
-      },
-      "summary": {
-        "en": "It had a button vocabulary of its own — primary on the eight actions that commit something, linkish on the five that remove a row, nothing at all on five more — and the stylesheet declares none of the three.",
-        "de": "It had a button vocabulary of its own — primary on the eight actions that commit something, linkish on the five that remove a row, nothing at all on five more — and the stylesheet declares none of the three."
       },
       "link": {
         "label": "Changelog",
