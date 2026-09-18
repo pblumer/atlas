@@ -247,3 +247,34 @@ test("the drafts switch belongs to the landscape", async ({ page }) => {
   await expect(page.locator("#mesh-drafts")).toBeEnabled();
   expect(page.__errors).toEqual([]);
 });
+
+// An empty Product Map is the one picture here that is routinely empty for a reader
+// who has done nothing wrong: the starmap needs the modeler role, and a catalogue is
+// drawn only for whoever maintains it — so an architect who maintains none opens this
+// and finds nothing at all. Without a sentence, that reads as a broken feature.
+test("an empty product map says why it is empty", async ({ page }) => {
+  installMock(page, { products: { nodes: [], edges: [], restricted: 0, clustered: false } });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await page.locator("#mesh-notation").selectOption("products");
+
+  const note = page.locator(".mesh-note").first();
+  await expect(note).toContainText("no catalogue has been created yet");
+  // It names both possibilities and picks neither: saying which would tell somebody
+  // this store has decided may not see a catalogue that one exists.
+  await expect(note).toContainText("shared with you");
+  await expect(note).toContainText("viewer");
+  expect(page.__errors).toEqual([]);
+});
+
+// And the sentence is about what the *server* had, not about what is on screen: a
+// search that matches nothing empties the picture too, and that already has its own
+// answer. Saying "nothing is offered" there would be false.
+test("a search that matches nothing is not mistaken for an empty catalogue", async ({ page }) => {
+  await openProductMap(page);
+
+  await page.locator("#mesh-search").fill("nothing matches this");
+  await expect(page.locator(".mesh-node")).toHaveCount(0);
+  await expect(page.locator(".mesh-legend")).not.toContainText("no catalogue has been created yet");
+  expect(page.__errors).toEqual([]);
+});
