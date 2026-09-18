@@ -28,7 +28,7 @@ func TestTheProcessLinkIsOfferedToWhoMayFollowIt(t *testing.T) {
 	}
 	// And the flag is the roles the instance routes actually require, read from the
 	// same record every other role on this page comes from.
-	who := webRegion(t, src, "async function loadWhoIAm(", "\n}")
+	who := webRegion(t, src, "function loadWhoIAm(", "\n}")
 	if !strings.Contains(who, "state.mayFollowProcess") {
 		t.Error("nothing decides whether this reader may follow a process, so the flag " +
 			"is whatever it was left as")
