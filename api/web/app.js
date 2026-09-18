@@ -620,9 +620,6 @@ const APPS = [
   // and reachable only by somebody who already knew the URL. Held by
   // TestBothPortalSurfacesAreReachableFromTheMenu.
   { id: "portal", name: "Portal", route: "portal.html", on: true, role: "user", separate: true },
-  // The approver's half of the same surface, and a separate page for the same
-  // reason: it answers to a different person. Until now it was reached only
-  // through the link in its notification mail, so an approver who deleted the mail
   // Where a catalogue is filled. Gated at productmanager (ADR-0315): maintaining a
   // catalogue means choosing from processes already deployed, never deploying one,
   // so it is deliberately not the modeller's role — deploy is code execution.
@@ -665,21 +662,10 @@ const TOPNAV = {
   ],
   tasks: [
     { name: "Inbox", route: "#/tasks", role: "user" },
-    // An approval is a kind of task, not an application. It was advertised beside
-    // Modeler and Operations while already sitting in the inbox as an unlabelled
-    // row — the same decision in two places, with neither saying so.
-    //
-    // Gated at "user" because there is no approver role to gate on: a product names
-    // a person, a group, or the orderer's superior, so anybody signed in may hold an
-    // approval tomorrow without holding one today. Under Tasks that costs nothing —
-    // it is one entry in a list somebody opened on purpose, rather than an
-    // application in everybody's drawer that is empty for almost all of them.
-    //
-    // `separate` for the same reason the drawer uses it: the page carries the
-    // catalogue's brand, loads its own message catalogue, and is not a view of this
-    // app, so it opens in its own window rather than replacing a console somebody
-    // was in the middle of using.
-    { name: "Approvals", route: "genehmigung.html", role: "user", separate: true },
+    // No Approvals entry any more, and no page behind one: an approval is read and
+    // decided in the inbox above (ADR-0394).
+    // It was a second place for one decision, and the two had already begun to
+    // differ — one of them enforced a reason on a rejection and the other did not.
     // The second kind of thing addressed to a person
     // (ADR-0341). Not Operations, where reconciliation
     // sits: a finding is repair and the operator's, while this asks a line manager
@@ -7832,11 +7818,19 @@ async function viewTasks(preselectKey) {
         // that is what the approvals page takes and it takes it for a reason of its
         // own — a task key does not exist until the task activates, while the order
         // and the product do, and they survive a reassignment that changes the key.
+        // Marked as what it is, and no longer a link: the decision is in this screen,
+        // and a chip that opened a second surface to take it was the drift this
+        // change removed.
         const ap = state.approvals.get(t.key);
         const approval = ap
-          ? `<a class="chip approval" target="_blank" rel="noopener"
-               href="genehmigung.html?order=${encodeURIComponent(ap.orderId)}&item=${encodeURIComponent(ap.itemId)}"
-               title="Decide this approval">Approval</a>`
+          ? `<span class="chip approval" title="This task decides an order line">Approval</span>`
+          : "";
+        // And what it decides, on the row itself. Every approval task in an inbox is
+        // called "Genehmigen", so the rows were distinguishable only by their job key:
+        // a queue of fourteen identical lines, each of which had to be opened to learn
+        // which product and whose order it was.
+        const apprLine = ap
+          ? `<span class="tasks-item-appr">${esc(approvalName(ap))}${ap.price ? ` · ${esc(ap.price)}` : ""}</span>`
           : "";
         return `<li class="tasks-item${sel}${picked ? " picked" : ""}" data-key="${t.key}">
           ${cb}
@@ -7847,7 +7841,7 @@ async function viewTasks(preselectKey) {
               <span class="chip" title="${esc(t.processId || "")}">${esc(t.processId || "")}</span>
             </div>
             <div class="tasks-item-sub muted">
-              <span class="tasks-item-meta">${id}<span>${who}</span></span>${due}
+              <span class="tasks-item-meta">${id}<span>${who}</span>${apprLine}</span>${due}
             </div>
           </div>
         </li>`;
@@ -7961,6 +7955,13 @@ async function viewTasks(preselectKey) {
   async function completeCurrent() {
     const t = state.tasks.find((x) => x.key === state.selected);
     if (!t) return;
+    if (decidedHere(t)) {
+      // The same act by keyboard, and the same reason it has no button: completing an
+      // approval with no variables is a rejection with no reason, written as if
+      // somebody had meant it.
+      toast("Use Approve or Reject above: this approval decides an order line", "err");
+      return;
+    }
     let payload;
     if (state.mountedForm) {
       const { data, errors } = state.mountedForm.submit();
@@ -8101,6 +8102,187 @@ async function viewTasks(preselectKey) {
       .join("")}</tbody></table>`;
   }
 
+  // --- An approval, decided here ---------------------------------------------
+  //
+  // An approval is an ordinary user task and the inbox never filtered those out, so
+  // the rows were already here — saying nothing about the product, the price or the
+  // person waiting, and decided by opening a second surface in another tab. This is
+  // the inbox reading its own rows (#1029).
+  //
+  // The separate page stays: it is what an approval notification links to, and
+  // somebody arriving from a mail has no inbox to arrive in.
+
+  // APPROVAL_FORM is the form the three approval models Atlas ships all carry. It is
+  // what makes the two buttons below answerable: `genehmigt` and `begruendung` are
+  // that form's contract, not a general one. An installation binds a product to its
+  // own model by name (order.Line.ApprovalProcess), and that model's form may be
+  // asking for something else entirely — so it keeps its form and this block says
+  // only what is being decided.
+  const APPROVAL_FORM = "genehmigung";
+
+  // openLinkedApproval selects the approval a notification's link names.
+  //
+  // The mail names the **order line** and not the task, and deliberately: a task key
+  // does not exist until the task activates, while the order and the product do, and
+  // they survive a reassignment that changes the key. So the line is resolved against
+  // the approvals this person holds — by position first, then by product, which is
+  // what every link sent before a product could be ordered twice carries.
+  //
+  // Once. A link is an arrival, not a filter: re-selecting it after every reload
+  // would drag the person back to it each time they decided something else.
+  let linkOpened = false;
+  function openLinkedApproval() {
+    if (linkOpened) return;
+    linkOpened = true;
+    const q = new URLSearchParams((location.hash.split("?")[1] || ""));
+    const order = q.get("order");
+    const item = q.get("item");
+    if (!order || !item) return;
+    for (const [key, a] of state.approvals) {
+      if (a.orderId === order && (a.positionId === item || a.itemId === item)) {
+        state.selected = key;
+        return;
+      }
+    }
+    // Not held. The ordinary reason is that somebody else decided it, or that it was
+    // withdrawn — so the inbox opens anyway and says why the approval that was linked
+    // is not in front of them. A blank screen would read as the link being broken.
+    toast("That approval is not in your inbox: it may already be decided", "err");
+  }
+
+  // decidedHere reports whether this task is an approval this screen answers itself.
+  //
+  // It is the shipped model and nothing else: `genehmigt` and `begruendung` are that
+  // form's contract. Where it holds, the block below is the *only* way to answer in
+  // this screen — the generic Complete button and the form's own checkbox answer the
+  // same question by accident, and a task completed with no variables reads as
+  // `genehmigt = null`, which is not true, which is a rejection with no reason.
+  const decidedHere = (t) => !!t && state.approvals.has(t.key) && t.formId === APPROVAL_FORM;
+
+  // approvalName is the product as the catalogue wrote it, in a language this reader
+  // has a chance with, falling back to the id. The Console is English and a catalogue
+  // need not be, so "the first text there is" beats showing an id.
+  function approvalName(a) {
+    const texts = a.texts || {};
+    for (const tag of [(navigator.language || "en").slice(0, 2), "en", "de"]) {
+      if (texts[tag]) return texts[tag];
+    }
+    const first = Object.values(texts).find((v) => v);
+    return first || a.itemId || "—";
+  }
+
+  // approvalCatalogue is the catalogue the order came from, in a language this reader
+  // has a chance with. Empty where the release's catalogue is gone, which is the one
+  // case the row is simply left out.
+  function approvalCatalogue(a) {
+    const texts = a.catalogTexts || {};
+    for (const tag of [(navigator.language || "en").slice(0, 2), "en", "de"]) {
+      if (texts[tag]) return texts[tag];
+    }
+    return Object.values(texts).find((v) => v) || "";
+  }
+
+  // approvalSiblings are the other approvals of the same order this person holds.
+  // One decision with one reason covers them, which is what /approvals/decide is for
+  // — and it refuses keys from more than one order, because one reason cannot cover
+  // two requests.
+  function approvalSiblings(key, orderId) {
+    const out = [];
+    for (const [k, a] of state.approvals) {
+      if (k !== key && a.orderId && a.orderId === orderId) out.push(k);
+    }
+    return out;
+  }
+
+  // approvalBlock is what the approver reads before deciding, and the decision.
+  function approvalBlock(t) {
+    const a = state.approvals.get(t.key);
+    if (!a) return "";
+    const row = (label, val) => val
+      ? `<div class="tasks-field"><span class="tasks-field-label muted">${label}</span><span>${val}</span></div>`
+      : "";
+    const others = approvalSiblings(t.key, a.orderId);
+    const decides = decidedHere(t)
+      ? `<div class="appr-decide">
+          <label class="appr-reason-label" for="appr-reason">Reason
+            <span class="muted">— required for a rejection, and read by the person who ordered</span></label>
+          <textarea id="appr-reason" rows="2" placeholder="Why this is refused"></textarea>
+          ${others.length ? `<label class="appr-together" for="appr-together">
+            <input type="checkbox" id="appr-together">
+            Decide the ${others.length} other position${others.length === 1 ? "" : "s"} of this order with it
+          </label>` : ""}
+          <div class="appr-buttons">
+            <button class="btn" id="appr-approve" title="Approve this order line">Approve</button>
+            <button class="btn neutral" id="appr-reject" title="Refuse this order line">Reject</button>
+          </div>
+        </div>`
+      : `<p class="muted">This approval runs on a model of its own, so what completing
+          it means belongs to its form below rather than to two buttons here.</p>`;
+    return `<div class="tasks-approval">
+      <h2>Approval</h2>
+      <div class="tasks-fields">
+        ${row("Product", `${esc(approvalName(a))} <span class="chip">${esc(a.itemId)}</span>`)}
+        ${row("Variant", a.variantId ? esc(a.variantId) : "")}
+        ${row("Cost", a.price ? esc(a.price) : "")}
+        ${row("For", esc(a.recipient))}
+        ${row("Ordered by", esc(a.orderer))}
+        ${row("Order", `<span class="chip">${esc(a.orderId)}</span>`)}
+        ${row("Catalogue", esc(approvalCatalogue(a)))}
+      </div>
+      ${decides}
+    </div>`;
+  }
+
+  // decideApproval sends the decision, for this line or for the order's lines
+  // together.
+  //
+  // A rejection with no reason is refused here and not sent. The server takes one
+  // either way — a reason is not a field it can require without breaking every model
+  // that completes an approval by other means — and an order line refused with no
+  // word to the person waiting is the one outcome this screen must not produce
+  // quietly.
+  async function decideApproval(t, approved) {
+    const a = state.approvals.get(t.key);
+    if (!a) return;
+    const reason = (document.getElementById("appr-reason") || {}).value || "";
+    if (!approved && !reason.trim()) {
+      toast("A rejection needs a reason: it is what the person who ordered is told", "err");
+      return;
+    }
+    const together = (document.getElementById("appr-together") || {}).checked;
+    const batch = together ? [t.key, ...approvalSiblings(t.key, a.orderId)] : [t.key];
+    for (const id of ["appr-approve", "appr-reject"]) {
+      const b = document.getElementById(id);
+      if (b) b.disabled = true;
+    }
+    try {
+      if (batch.length > 1) {
+        // Each is still its own process instance, so the server completes each as its
+        // own task and answers per line. A partial result is said rather than rounded
+        // off: a completion that went through has already handed its answer to its
+        // process.
+        const res = await api("POST", "/api/v1/approvals/decide",
+          { approved, reason: reason.trim(), taskKeys: batch });
+        const skipped = (res && res.skipped) || [];
+        toast(skipped.length
+          ? `Decided ${batch.length - skipped.length} of ${batch.length}; ${skipped.length} could not be`
+          : `Decided ${batch.length} positions`, skipped.length ? "err" : undefined);
+      } else {
+        await api("POST", "/api/v1/tasks/" + t.key + "/complete",
+          { variables: { genehmigt: approved, begruendung: reason.trim() } });
+        toast(approved ? "Approved" : "Rejected");
+      }
+      state.selected = null;
+      await load();
+    } catch (err) {
+      toast("Decision failed: " + err.message, "err");
+      for (const id of ["appr-approve", "appr-reject"]) {
+        const b = document.getElementById(id);
+        if (b) b.disabled = false;
+      }
+    }
+  }
+
   function renderDetail() {
     destroyForm();
     destroyProc();
@@ -8125,10 +8307,13 @@ async function viewTasks(preselectKey) {
             `<option value="${esc(u.username)}"${u.username === t.assignee ? " selected" : ""}>${esc(u.displayName || u.username)}</option>`).join("")}
         </select>`
       : "";
-    const formArea = t.formId
-      ? `<div class="tasks-form" id="task-form"><p class="muted">Loading form&hellip;</p></div>`
-      : `<div class="tasks-form-placeholder"><p class="muted">This task has no form; completing it
-         records no variables.</p></div>`;
+    const formArea = decidedHere(t)
+      ? `<div class="tasks-form-placeholder"><p class="muted">This approval is answered above:
+         Approve or Reject sends the decision its model reads.</p></div>`
+      : t.formId
+        ? `<div class="tasks-form" id="task-form"><p class="muted">Loading form&hellip;</p></div>`
+        : `<div class="tasks-form-placeholder"><p class="muted">This task has no form; completing it
+           records no variables.</p></div>`;
     // The form and a read-only view of the whole process instance sit side by side
     // as tabs, so the assignee can flip to "what has run and what's still ahead"
     // without the form scrolling away below.
@@ -8169,10 +8354,11 @@ async function viewTasks(preselectKey) {
         <div class="tasks-detail-actions">
           ${assignSelect}
           <button class="btn neutral" id="task-claim"${claimDisabled}${claimHint || ` title="${mine ? "Release this task back to the queue" : "Claim this task so it is assigned to you"}"`}>${claimLabel}</button>
-          <button class="btn" id="task-complete" title="Complete (Ctrl/⌘ + Enter)">Complete task</button>
+          ${decidedHere(t) ? "" : `<button class="btn" id="task-complete" title="Complete (Ctrl/⌘ + Enter)">Complete task</button>`}
         </div>
       </header>
       ${docBlock}
+      ${approvalBlock(t)}
       <div class="tasks-fields">
         ${row("Process", esc(t.processId || "—"))}
         ${row("Element", `<span class="chip">${esc(t.elementId || "—")}</span>`)}
@@ -8189,7 +8375,12 @@ async function viewTasks(preselectKey) {
         <div class="tasks-tabpane" id="pane-form"${tab === "form" ? "" : " hidden"}>${formArea}</div>
         ${procPane}
       </div>`;
-    document.getElementById("task-complete").addEventListener("click", () => completeCurrent());
+    const completeBtn = document.getElementById("task-complete");
+    if (completeBtn) completeBtn.addEventListener("click", () => completeCurrent());
+    for (const [id, approved] of [["appr-approve", true], ["appr-reject", false]]) {
+      const b = document.getElementById(id);
+      if (b) b.addEventListener("click", () => decideApproval(t, approved));
+    }
     document.getElementById("task-claim").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
       btn.disabled = true;
@@ -8227,7 +8418,7 @@ async function viewTasks(preselectKey) {
     // Always mount the form (when the task has one) so Complete has its data even
     // while the Process tab is showing. The process diagram mounts lazily the first
     // time its tab is opened; the chosen tab is kept across task selections.
-    if (t.formId) mountForm(t);
+    if (t.formId && !decidedHere(t)) mountForm(t);
     const dtabs = document.getElementById("task-dtabs");
     const paneForm = document.getElementById("pane-form");
     const paneProc = document.getElementById("pane-process");
@@ -8301,6 +8492,7 @@ async function viewTasks(preselectKey) {
       // Before the first paint, so a row is never drawn unmarked and then relabelled
       // under somebody's eyes.
       await loadApprovalKeys();
+      openLinkedApproval();
       renderAll();
       // Every mutation in this view (complete, claim, a bulk action) reloads through
       // here. When a saved folder is open, its page and the sidebar badges are part
@@ -8336,7 +8528,21 @@ async function viewTasks(preselectKey) {
       const next = new Map();
       for (const a of (page && page.items) || []) {
         if (a && a.task && a.task.key != null) {
-          next.set(a.task.key, { orderId: a.orderId || "", itemId: a.itemId || "" });
+          // What the route already answers with, kept whole rather than reduced to
+          // the two ids the chip's link needs. The row is no longer only marked as an
+          // approval — it says what it decides, and every field of that sentence is in
+          // this response already (ADR-0311's one call).
+          next.set(a.task.key, {
+            orderId: a.orderId || "", itemId: a.itemId || "",
+            positionId: a.positionId || "", variantId: a.variantId || "",
+            recipient: a.recipient || "", orderer: a.orderer || "",
+            price: a.price || "", texts: a.texts || {},
+            // Which customer's catalogue this order came from. The page this replaced
+            // said it in the catalogue's own colours; the Console is Atlas's own
+            // surface and wears nobody's brand, so it says it in words instead — an
+            // approver deciding for two customers needs to know which one this is.
+            catalogTexts: a.catalogTexts || {},
+          });
         }
       }
       state.approvals = next;

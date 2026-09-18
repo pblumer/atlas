@@ -20,26 +20,19 @@ import (
 // opened one at a time, and an approver who has to open each to see a figure is
 // being asked to do the thing the list exists to prevent.
 func TestTheApproverSeesTheFigureTheyAreDecidingOn(t *testing.T) {
-	src := readWeb(t, "genehmigung.js")
-	start := strings.Index(src, "function renderDecision(")
-	if start < 0 {
-		t.Fatal("genehmigung.js has no renderDecision(); if the panel moved, this test " +
-			"now passes vacuously and says so instead")
-	}
-	panel := src[start : start+strings.Index(src[start:], "\n}")]
+	// Read where the decision now is. The page this guarded is gone and the approval
+	// is read and decided in the inbox
+	// (ADR-0394); what it
+	// protected did not change, and neither did the reason.
+	src := readWeb(t, "app.js")
+	panel := webRegion(t, src, "function approvalBlock(", "\n  }")
 	if !strings.Contains(panel, "a.price") {
-		t.Error("the approval panel does not show the price, so an approver decides " +
+		t.Error("the approval block does not show the price, so an approver decides " +
 			"without the figure")
 	}
-
-	rows := strings.Index(src, "function listBodies(")
-	if rows < 0 {
-		t.Fatal("genehmigung.js has no listBodies(); if the list moved, this test now " +
-			"checks nothing and says so instead")
-	}
-	body := src[rows : rows+strings.Index(src[rows:], "\n}")]
-	if !strings.Contains(body, "a.price") {
-		t.Error("the approval list does not show the price, so forty approvals have to " +
+	rows := webRegion(t, src, "const apprLine = ap", ";")
+	if !strings.Contains(rows, "ap.price") {
+		t.Error("the approval rows do not show the price, so forty approvals have to " +
 			"be opened one at a time to compare what they cost")
 	}
 }
@@ -89,7 +82,7 @@ func TestThePortalSaysWhenTheCatalogueNamesNoCost(t *testing.T) {
 // parse a price would have invented all three without deciding anything. If a
 // total is ever wanted it arrives with a money model, not by accident.
 func TestNoPageTurnsAPriceIntoANumber(t *testing.T) {
-	for _, page := range []string{"portal.js", "genehmigung.js", "catalog-admin.js"} {
+	for _, page := range []string{"portal.js", "app.js", "catalog-admin.js"} {
 		src := readWeb(t, page)
 		for _, arithmetic := range []string{
 			"parseFloat(", "parseInt(", "Number(",

@@ -1,0 +1,32 @@
+{
+  "tags": [
+    "Tasks",
+    "Portal"
+  ],
+  "title": {
+    "en": "Decide an approval without leaving your inbox",
+    "de": "Genehmigungen direkt im Posteingang entscheiden"
+  },
+  "summary": {
+    "en": "An approval has always been an ordinary task, so it was always in your inbox — as a row that said \"Genehmigen\" and nothing else, next to thirteen other rows that also said \"Genehmigen\". To learn what one was, you opened a second page in another tab. Now the row names the product and what it costs, the detail says who it is for, who ordered it and which order it belongs to, and you approve or reject it right there, with the reason a rejection needs. Where the same order has more approvals waiting for you, one decision can cover them under one reason. There is one change worth knowing about: for the approval Atlas ships, the general Complete button is gone from that task, because it answered the same question by accident — a task completed with nothing filled in reads as \"not approved\", and that was being recorded as a rejection nobody had written a word about. If your own approval model is in use, nothing changes: its form and its Complete button stay exactly as they were, because only that model knows what completing it means.",
+    "de": "Eine Genehmigung war immer schon eine gewöhnliche Aufgabe und damit immer schon im Posteingang — als Zeile, auf der „Genehmigen\" stand und sonst nichts, neben dreizehn weiteren Zeilen, auf denen ebenfalls „Genehmigen\" stand. Um zu erfahren, worum es ging, musste man eine zweite Seite in einem anderen Reiter öffnen. Jetzt nennt die Zeile das Produkt und was es kostet, die Detailansicht nennt die Empfängerin, die bestellende Person und den Auftrag — und entschieden wird an Ort und Stelle, mit der Begründung, die eine Ablehnung braucht. Warten weitere Genehmigungen desselben Auftrags auf Sie, deckt eine Entscheidung sie unter einer Begründung ab. Eine Änderung ist erwähnenswert: Bei der mitgelieferten Genehmigung fehlt bei dieser Aufgabe die allgemeine Schaltfläche „Complete task\", denn sie beantwortete dieselbe Frage versehentlich — eine ohne Eingaben abgeschlossene Aufgabe liest sich als „nicht genehmigt\", und das wurde als Ablehnung verbucht, zu der niemand ein Wort geschrieben hatte. Wer ein eigenes Genehmigungsmodell einsetzt, merkt nichts davon: Dessen Formular und dessen Abschluss-Schaltfläche bleiben unverändert, weil nur dieses Modell weiss, was sein Abschluss bedeutet."
+  },
+  "tutorial": {
+    "en": [
+      "Order something in the portal whose product asks for an approval, as somebody whose approver you are.",
+      "Open Tasks. The row says \"Genehmigen\" and, under it, the product and its cost.",
+      "Select it: the Approval block leads the detail with the product, the variant, who it is for and the order.",
+      "Write a reason if you are refusing — it is what the person who ordered is told — then press Approve or Reject.",
+      "If the same order has more approvals waiting for you, tick the box above the buttons to decide them together under one reason.",
+      "The separate approval page is still there for the link in the notification mail; nothing about it changed."
+    ],
+    "de": [
+      "Im Portal etwas bestellen lassen, dessen Produkt eine Genehmigung verlangt — von jemandem, dessen Genehmiger Sie sind.",
+      "„Tasks\" öffnen. Die Zeile nennt „Genehmigen\" und darunter das Produkt samt Kosten.",
+      "Zeile auswählen: Der Block „Approval\" führt die Detailansicht an — Produkt, Ausführung, Empfängerin und Auftrag.",
+      "Bei einer Ablehnung eine Begründung schreiben; sie wird der bestellenden Person mitgeteilt. Dann „Approve\" oder „Reject\" drücken.",
+      "Warten weitere Genehmigungen desselben Auftrags, das Kästchen über den Schaltflächen ankreuzen — eine Entscheidung, eine Begründung.",
+      "Die eigenständige Genehmigungsseite bleibt für den Link aus der Benachrichtigungsmail; an ihr ändert sich nichts."
+    ]
+  }
+}
