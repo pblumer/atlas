@@ -242,6 +242,21 @@ possible under ADR-0186's operator allow-list, and a decision evaluated on a
 remote service is already a modelled service call
 ([ADR-0050](0050-temis-decision-connector.md)) rather than a resolved reference.
 
+Nor does any of this leave "reach a process on another node" unanswered — it is
+answered elsewhere, and deliberately not by a reference. The cross-instance epic
+([ADR-0369](0369-cross-instance-message-addressing.md) to
+[ADR-0374](0374-white-box-participant.md)) settles it as **collaboration**: the
+publisher publishes a versioned *interface* rather than its model
+([ADR-0373](0373-published-process-interface.md)), a participant in the consumer's
+model names that interface while the server says which node it is
+([ADR-0371](0371-participant-binds-a-published-interface.md)), and the message flow
+compiles to a job a reserved Worker Type carries
+([ADR-0372](0372-peer-message-delivery-worker.md)). That is the same conclusion this
+record reaches from the other side: what crosses a node boundary is a message with a
+contract, never a reference that resolves. A library moves *content* between nodes; the
+epic moves *messages* between them. Neither is a remote call activity, and the two do
+not overlap.
+
 ### Folders are a path, never a namespace
 
 An artifact record gains an optional `Folder string`: a display path within its
@@ -379,3 +394,9 @@ asserts that it survives export and import.
   answered restrictively, which a URI-valued reference would reopen)
 - relates to [ADR-0230](0230-process-information-model.md) (the per-application
   vocabulary behind this record's open question)
+- relates to the cross-instance epic,
+  [ADR-0369](0369-cross-instance-message-addressing.md),
+  [ADR-0371](0371-participant-binds-a-published-interface.md),
+  [ADR-0372](0372-peer-message-delivery-worker.md) and
+  [ADR-0373](0373-published-process-interface.md) (how a node reaches a process on
+  another node — a contract and a message, which is why a reference never has to)
