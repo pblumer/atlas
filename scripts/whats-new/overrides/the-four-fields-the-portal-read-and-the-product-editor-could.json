@@ -1,0 +1,37 @@
+{
+  "tags": [
+    "Catalogue",
+    "Portal"
+  ],
+  "title": {
+    "en": "The product editor now sets every field the portal reads",
+    "de": "Der Produkteditor setzt jetzt jedes Feld, das das Portal liest"
+  },
+  "summary": {
+    "en": "A product carries twelve fields the portal acts on and the editor rendered eight. The four it left out decide whether a product can be ordered at all: the orderable shapes the basket refuses to proceed without, the search terms that make a service findable by somebody who does not know its name, the groups eligible to receive it, and the ceiling on how long the right may last. They were settable over the API and by nobody else — not by the person whose job it is. All four are on the form now, and the form also says where the two headings are read: Kategorie and Produktgruppe are collected from the products nothing contains, so a product carried inside another one is reached through its carrier and its own heading is never read there. The editor names the carrier instead of leaving you to fill in a column that had stopped reading the field.",
+    "de": "Ein Produkt trägt zwölf Felder, die das Portal auswertet, und der Editor zeigte acht davon. Die vier fehlenden entscheiden darüber, ob ein Produkt überhaupt bestellt werden kann: die Ausführungen, ohne deren Wahl der Warenkorb die Bestellung verweigert, die Suchbegriffe, über die eine Leistung auch ohne Kenntnis ihres Namens gefunden wird, die bezugsberechtigten Gruppen und die Obergrenze für die Dauer des Rechts. Setzbar waren sie nur über die Schnittstelle und sonst von niemandem — nicht von der Person, deren Aufgabe das ist. Alle vier stehen jetzt im Formular, und das Formular sagt zudem, wo die beiden Überschriften gelesen werden: Kategorie und Produktgruppe werden von den Produkten gelesen, die in keinem anderen enthalten sind. Ein Produkt innerhalb eines anderen wird über dieses erreicht, seine eigene Überschrift dort also nie gelesen. Der Editor nennt nun das tragende Produkt, statt Sie eine Spalte füllen zu lassen, die das Feld längst nicht mehr liest."
+  },
+  "tutorial": {
+    "en": [
+      "Open Console → Catalogues, pick a catalogue and edit one of its products.",
+      "Under what the catalogue shows: the search terms as a comma-separated list — synonyms, the vendor's term, the abbreviation everybody uses — and the orderable shapes as one line each, written id = name.",
+      "Under how an order is handled: the groups eligible to receive it, and the ceiling in days. Empty eligibility narrows nothing and never opens anything, because the catalogue's audience stays the gate; a ceiling of zero is a right that does not end.",
+      "Where the catalogue carries this product inside another one, a note above the two headings names the carrier: the requester reaches the product under the carrier's heading, not under what you write here.",
+      "Publish the catalogue. Until you do, none of it reaches the portal."
+    ],
+    "de": [
+      "Console → Catalogues öffnen, einen Katalog wählen und eines seiner Produkte bearbeiten.",
+      "Im Abschnitt zum Katalogauftritt: die Suchbegriffe als kommagetrennte Liste — Synonyme, die Bezeichnung des Herstellers, die geläufige Abkürzung — und die Ausführungen als je eine Zeile in der Form id = Name.",
+      "Im Abschnitt zur Auftragsbearbeitung: die bezugsberechtigten Gruppen und die Obergrenze in Tagen. Keine Berechtigung eingeschränkt bedeutet keine Einschränkung und öffnet nie etwas, denn das Publikum des Katalogs bleibt die Schranke; eine Obergrenze von null ist ein Recht ohne Ende.",
+      "Ist das Produkt in diesem Katalog Teil eines anderen, nennt ein Hinweis über den beiden Überschriften das tragende Produkt: Die anfordernde Person erreicht das Produkt unter dessen Überschrift, nicht unter der hier eingetragenen.",
+      "Katalog veröffentlichen. Vorher erreicht nichts davon das Portal."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Catalogues",
+      "de": "Kataloge öffnen"
+    },
+    "route": "#/catalog"
+  }
+}

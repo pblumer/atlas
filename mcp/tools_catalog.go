@@ -124,7 +124,13 @@ func catalogItemProps() map[string]any {
 			"lifecycle, and the day somebody must revoke at scale is the wrong day to find out " +
 			"the process was never written."),
 		"lifecycle": objectProp("The window in which it may be ordered: {from, until} as Unix " +
-			"nanoseconds. Zero on a side means unbounded there, which is the ordinary case."),
+			"nanoseconds. Zero on a side means unbounded there, which is the ordinary case. " +
+			"BOTH ENDS ARE INCLUSIVE AND IT IS ENFORCED: an order placed outside the window is " +
+			"refused with 403, naming the product and the date. It is authored as days — the " +
+			"Console stores the END of the last one, so a product orderable \"until the 31st\" " +
+			"is orderable on the 31st, and a value you compute yourself should do the same. It " +
+			"governs ordering only: a right already held when the window closes keeps running, " +
+			"and when a right ends is `maxDays`."),
 		"variants": arrayProp("The orderable shapes of this product: [{id, texts}] — a laptop's " +
 			"size, a licence tier. UNORDERED on purpose: \"higher\" is meaningful for a tier and " +
 			"meaningless for Windows against Linux, so the basket asks the orderer."),
@@ -159,7 +165,14 @@ func catalogItemProps() map[string]any {
 		"category": stringProp("The heading the portal groups it under — \"Arbeitsplatz\", " +
 			"\"Kommunikation\". A heading and nothing else: no ordering, no translation, no entity " +
 			"behind it, and two spellings are two categories. Reuse a heading already in the " +
-			"catalogue rather than inventing a second spelling of it."),
+			"catalogue rather than inventing a second spelling of it. It is read off the products " +
+			"NOTHING CONTAINS: on a product that is a part of another one the portal never reads " +
+			"it, so set it on the offering and not on the services behind it."),
+		"productGroup": stringProp("The group one level below the heading: the portal's cascade " +
+			"reads Kategorie > Produktgruppe > Produkt > Services. A string with the same costs as " +
+			"`category` above and read off the same products — the group has no record and " +
+			"therefore no category of its own, so the chain is assembled per product and a group " +
+			"whose products sit in two categories appears under both."),
 		"createdAt": integerProp("When the product was first stored. Send back what you read: the " +
 			"write is a replace, so omitting it resets the creation date to now."),
 		"revision": integerProp("THE REVISION YOU READ, as a precondition. When set, the write is " +
@@ -258,7 +271,7 @@ func catalogTools() []Tool {
 			Name: "atlas_list_catalog_products",
 			Description: "List the products and services whose home catalogue you maintain, with " +
 				"every field: texts, state, approval rule, process bindings, targets, eligibility, " +
-				"price, category, keywords, and the `revision` each is on. READ THIS " +
+				"price, category, product group, keywords, and the `revision` each is on. READ THIS " +
 				"BEFORE EVERY CHANGE — atlas_save_catalog_product replaces the whole record, so " +
 				"this is where the fields you are not changing come from.",
 			InputSchema: noArgs(),
@@ -286,7 +299,8 @@ func catalogTools() []Tool {
 			Name: "atlas_save_catalog_product",
 			Description: "Create or change one product or service. THIS IS A FULL REPLACE: every " +
 				"field you leave out is CLEARED, including translations, variants, keywords, " +
-				"eligibility and the deprovisioning binding. To change a product, call " +
+				"eligibility, the product group and the deprovisioning binding. To change a " +
+				"product, call " +
 				"atlas_list_catalog_products, take the record, change what you mean to change, " +
 				"send the whole thing back, and pass the `revision` you read — the write is then " +
 				"refused with 409 if somebody else changed it meanwhile, instead of silently " +

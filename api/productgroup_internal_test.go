@@ -112,7 +112,10 @@ func TestTheGroupIsMaintainableBesideTheCategory(t *testing.T) {
 	// the form's own fields laid over it, so a control whose value is never read
 	// leaves the field at whatever was stored — which looks like a form that
 	// silently refuses to change one field.
-	body := webRegion(t, src, `const body = {`, "\n      };")
+	//
+	// The assembly is productBody; it was a block inside the submit handler when
+	// this guard was written and moved out to be provable in a browser.
+	body := webRegion(t, src, "export function productBody(", "\n}")
 	if !strings.Contains(body, "productGroup:") {
 		t.Error("the save does not read the group control, so editing it changes nothing")
 	}

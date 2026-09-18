@@ -315,3 +315,69 @@ func catalogRevision(t *testing.T, text string) float64 {
 	}
 	return got.Revision
 }
+
+// TestTheTwoHeadingsSurviveAnAgentsReadModifyWrite.
+//
+// The whole wire path, because the schema guard beside it can only see the schema.
+// `productGroup` was in the record and in the Console form and not in the tool, so
+// the loop the tool's own description prescribes — list, change one field, send the
+// whole thing back — emptied the portal's second column silently.
+//
+// Written as that loop and not as one save: a save that states both headings would
+// pass even with the property missing from the schema, because the value would come
+// straight back from the caller's own argument. What has to survive is the field
+// the caller never mentions.
+func TestTheTwoHeadingsSurviveAnAgentsReadModifyWrite(t *testing.T) {
+	ts := newAtlas(t)
+
+	text, isErr := callText(t, ts, "atlas_create_catalog", map[string]any{
+		"texts": map[string]any{"de": "Arbeitsplatz"}, "rank": 1,
+		"languages": []any{"de"}, "groups": []any{"grp_staff"},
+	})
+	if isErr {
+		t.Fatalf("create catalogue = %q", text)
+	}
+	cat := catalogID(t, text)
+
+	if text, isErr = callText(t, ts, "atlas_save_catalog_product", map[string]any{
+		"id": "laptop", "homeCatalog": cat, "state": "active",
+		"texts":    map[string]any{"de": "Notebook"},
+		"approval": map[string]any{"kind": "superior"},
+		"category": "Arbeitsplatz", "productGroup": "Mobile Geräte",
+	}); isErr {
+		t.Fatalf("save product = %q", text)
+	}
+
+	// What an agent is told to read before every change.
+	listed, isErr := callText(t, ts, "atlas_list_catalog_products", map[string]any{})
+	if isErr {
+		t.Fatalf("list products = %q", listed)
+	}
+	for _, want := range []string{"Arbeitsplatz", "Mobile Geräte"} {
+		if !strings.Contains(listed, want) {
+			t.Fatalf("the list an agent works from does not carry %q: %q", want, listed)
+		}
+	}
+
+	// One field changed, the headings never mentioned — which is the case that broke.
+	if text, isErr = callText(t, ts, "atlas_save_catalog_product", map[string]any{
+		"id": "laptop", "homeCatalog": cat, "state": "active",
+		"texts":    map[string]any{"de": "Notebook 14\""},
+		"approval": map[string]any{"kind": "superior"},
+		"category": "Arbeitsplatz", "productGroup": "Mobile Geräte",
+	}); isErr {
+		t.Fatalf("second save = %q", text)
+	}
+
+	after, isErr := callText(t, ts, "atlas_list_catalog_products", map[string]any{})
+	if isErr {
+		t.Fatalf("list products = %q", after)
+	}
+	if !strings.Contains(after, "Mobile Geräte") {
+		t.Errorf("the product group did not survive the save the tool's own description "+
+			"prescribes, so the portal's Produktgruppe column empties itself: %q", after)
+	}
+	if !strings.Contains(after, "Arbeitsplatz") {
+		t.Errorf("the category did not survive: %q", after)
+	}
+}

@@ -2,6 +2,137 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "an-incompatibility-can-be-declared-on-the-screen-that-declar",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Declare which two products may never be held together",
+        "de": "Festlegen, welche zwei Produkte nie zusammen bezogen werden dürfen"
+      },
+      "summary": {
+        "en": "A product may exclude another — the clerk who may create a supplier must not also approve payments to it. The record has carried that since the decision was made, publishing freezes it into a release in both directions, and an order that would produce the combination is refused rather than reported afterwards. The Console knew three edge kinds of four, so the rule was enforced the whole time and could be declared only over the API: one that already existed appeared in no table and could not be removed there. It is now the third question the relations section asks, beside structure and precedence. One incompatibility is one row however it was stored, removing it removes both directions, and adding the same fact backwards is refused instead of stored twice.",
+        "de": "Ein Produkt kann ein anderes ausschliessen — wer Kreditoren erfassen darf, soll nicht auch Zahlungen an sie freigeben. Der Datensatz trägt das seit der entsprechenden Entscheidung, die Veröffentlichung friert es in beiden Richtungen in ein Release ein, und eine Bestellung, die die Kombination erzeugen würde, wird abgewiesen statt im Nachhinein gemeldet. Die Konsole kannte drei der vier Kantenarten: Die Regel galt also durchgehend und liess sich nur über die Schnittstelle festlegen; eine bestehende erschien in keiner Tabelle und war dort nicht entfernbar. Sie ist jetzt die dritte Frage im Abschnitt zu den Beziehungen, neben Struktur und Reihenfolge. Eine Unverträglichkeit ist eine Zeile, gleich wie sie gespeichert wurde; das Entfernen nimmt beide Richtungen, und dasselbe rückwärts nochmals einzutragen wird abgewiesen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Catalogue",
+        "Governance"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Console → Catalogues and pick a catalogue. The relations section now shows three tables: structure, precedence, incompatibility.",
+          "Use the pairwise form below them: pick a product, choose \"must not be held with\", pick the other. It is pairwise because it belongs to neither product.",
+          "The two directions are one fact. The table draws one row, and removing it clears both — so you never have to remember which way round it was entered.",
+          "Publish the catalogue. From then on an order that would give one person both is refused when it is placed, with the pair named."
+        ],
+        "de": [
+          "Console → Catalogues öffnen und einen Katalog wählen. Der Abschnitt zu den Beziehungen zeigt jetzt drei Tabellen: Struktur, Reihenfolge, Unverträglichkeit.",
+          "Das paarweise Formular darunter verwenden: ein Produkt wählen, \"must not be held with\" auswählen, das andere wählen. Die Aussage ist paarweise, weil sie zu keinem der beiden Produkte allein gehört.",
+          "Beide Richtungen sind eine Aussage. Die Tabelle zeigt eine Zeile, und das Entfernen löscht beide — man muss sich also nicht merken, in welcher Richtung erfasst wurde.",
+          "Katalog veröffentlichen. Danach wird eine Bestellung, die einer Person beides gäbe, bei der Aufgabe abgewiesen, unter Nennung des Paares."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Catalogues",
+          "de": "Kataloge öffnen"
+        },
+        "route": "#/catalog"
+      }
+    },
+    {
+      "id": "a-product-can-be-offered-from-a-date-until-a-date-and-now-th",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A product can be offered from a date, until a date",
+        "de": "Ein Produkt kann ab einem Datum und bis zu einem Datum angeboten werden"
+      },
+      "summary": {
+        "en": "A catalogue item has carried an orderable window since the catalogue was designed, and nothing read it: publishing checked that the window did not end before it began, and no reader ever asked whether today was inside it. A product with a window was orderable exactly like one without. It is enforced now — an order for a product outside its window is refused by the server, naming the product and the date — and the editor has the two date boxes to set it with. Both ends are inclusive, so a product orderable \"until the 31st\" is orderable on the 31st. Note on upgrade: if you filled the field in while it did nothing, those products will now refuse orders outside their dates.",
+        "de": "Ein Katalogeintrag trägt seit dem Entwurf des Katalogs ein Bestellfenster, und niemand las es: Die Veröffentlichung prüfte, dass das Fenster nicht vor seinem Beginn endet, und kein Leser fragte je, ob das heutige Datum darin liegt. Ein Produkt mit Fenster war genauso bestellbar wie eines ohne. Jetzt wird es durchgesetzt — eine Bestellung für ein Produkt ausserhalb seines Fensters weist der Server ab und nennt dabei Produkt und Datum — und der Editor hat die beiden Datumsfelder, um es zu setzen. Beide Enden sind einschliesslich: Ein bis zum 31. bestellbares Produkt ist am 31. bestellbar. Hinweis zur Aktualisierung: Wurde das Feld gepflegt, solange es wirkungslos war, weisen diese Produkte künftig Bestellungen ausserhalb ihrer Daten ab."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Catalogue",
+        "Portal"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Console → Catalogues, pick a catalogue and edit a product. The orderable window sits at the top of how an order is handled, as two dates.",
+          "Leave either side empty: empty on the left is \"from whenever it is published\", empty on the right is \"until somebody withdraws it\". Empty on both is the ordinary product, and nothing changes for it.",
+          "Publish the catalogue. A product whose window has not opened is visible in the portal and cannot be put in a basket; the row says from when.",
+          "The dates are the server's own (UTC) and are authored as days. A window that has to hold to the hour is not what this field is for."
+        ],
+        "de": [
+          "Console → Catalogues öffnen, einen Katalog wählen und ein Produkt bearbeiten. Das Bestellfenster steht zu Beginn des Abschnitts zur Auftragsbearbeitung, als zwei Datumsfelder.",
+          "Eine Seite darf leer bleiben: links leer heisst \"ab Veröffentlichung\", rechts leer heisst \"bis zum Zurückziehen\". Beide leer ist das gewöhnliche Produkt; für dieses ändert sich nichts.",
+          "Katalog veröffentlichen. Ein Produkt, dessen Fenster noch nicht offen ist, bleibt im Portal sichtbar und lässt sich nicht in den Warenkorb legen; die Zeile nennt das Datum.",
+          "Die Daten sind die des Servers (UTC) und werden tageweise gepflegt. Für ein Fenster, das auf die Stunde genau gelten muss, ist dieses Feld nicht gedacht."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Catalogues",
+          "de": "Kataloge öffnen"
+        },
+        "route": "#/catalog"
+      }
+    },
+    {
+      "id": "the-four-fields-the-portal-read-and-the-product-editor-could",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The product editor now sets every field the portal reads",
+        "de": "Der Produkteditor setzt jetzt jedes Feld, das das Portal liest"
+      },
+      "summary": {
+        "en": "A product carries twelve fields the portal acts on and the editor rendered eight. The four it left out decide whether a product can be ordered at all: the orderable shapes the basket refuses to proceed without, the search terms that make a service findable by somebody who does not know its name, the groups eligible to receive it, and the ceiling on how long the right may last. They were settable over the API and by nobody else — not by the person whose job it is. All four are on the form now, and the form also says where the two headings are read: Kategorie and Produktgruppe are collected from the products nothing contains, so a product carried inside another one is reached through its carrier and its own heading is never read there. The editor names the carrier instead of leaving you to fill in a column that had stopped reading the field.",
+        "de": "Ein Produkt trägt zwölf Felder, die das Portal auswertet, und der Editor zeigte acht davon. Die vier fehlenden entscheiden darüber, ob ein Produkt überhaupt bestellt werden kann: die Ausführungen, ohne deren Wahl der Warenkorb die Bestellung verweigert, die Suchbegriffe, über die eine Leistung auch ohne Kenntnis ihres Namens gefunden wird, die bezugsberechtigten Gruppen und die Obergrenze für die Dauer des Rechts. Setzbar waren sie nur über die Schnittstelle und sonst von niemandem — nicht von der Person, deren Aufgabe das ist. Alle vier stehen jetzt im Formular, und das Formular sagt zudem, wo die beiden Überschriften gelesen werden: Kategorie und Produktgruppe werden von den Produkten gelesen, die in keinem anderen enthalten sind. Ein Produkt innerhalb eines anderen wird über dieses erreicht, seine eigene Überschrift dort also nie gelesen. Der Editor nennt nun das tragende Produkt, statt Sie eine Spalte füllen zu lassen, die das Feld längst nicht mehr liest."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Catalogue",
+        "Portal"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Console → Catalogues, pick a catalogue and edit one of its products.",
+          "Under what the catalogue shows: the search terms as a comma-separated list — synonyms, the vendor's term, the abbreviation everybody uses — and the orderable shapes as one line each, written id = name.",
+          "Under how an order is handled: the groups eligible to receive it, and the ceiling in days. Empty eligibility narrows nothing and never opens anything, because the catalogue's audience stays the gate; a ceiling of zero is a right that does not end.",
+          "Where the catalogue carries this product inside another one, a note above the two headings names the carrier: the requester reaches the product under the carrier's heading, not under what you write here.",
+          "Publish the catalogue. Until you do, none of it reaches the portal."
+        ],
+        "de": [
+          "Console → Catalogues öffnen, einen Katalog wählen und eines seiner Produkte bearbeiten.",
+          "Im Abschnitt zum Katalogauftritt: die Suchbegriffe als kommagetrennte Liste — Synonyme, die Bezeichnung des Herstellers, die geläufige Abkürzung — und die Ausführungen als je eine Zeile in der Form id = Name.",
+          "Im Abschnitt zur Auftragsbearbeitung: die bezugsberechtigten Gruppen und die Obergrenze in Tagen. Keine Berechtigung eingeschränkt bedeutet keine Einschränkung und öffnet nie etwas, denn das Publikum des Katalogs bleibt die Schranke; eine Obergrenze von null ist ein Recht ohne Ende.",
+          "Ist das Produkt in diesem Katalog Teil eines anderen, nennt ein Hinweis über den beiden Überschriften das tragende Produkt: Die anfordernde Person erreicht das Produkt unter dessen Überschrift, nicht unter der hier eingetragenen.",
+          "Katalog veröffentlichen. Vorher erreicht nichts davon das Portal."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Catalogues",
+          "de": "Kataloge öffnen"
+        },
+        "route": "#/catalog"
+      }
+    },
+    {
       "id": "the-service-catalogue-is-drawn-on-the-starmap",
       "version": "Unreleased",
       "date": null,
@@ -301,89 +432,6 @@
       "tags": [
         "Operations"
       ]
-    },
-    {
-      "id": "a-standing-list-of-the-approval-rules-that-reach-nobody",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A standing list of the approval rules that reach nobody.",
-        "de": "A standing list of the approval rules that reach nobody."
-      },
-      "summary": {
-        "en": "An approval rule names an approver, and what that name has to be differs by kind: a named person becomes a task's assignee, matched against a username, and a group becomes its candidate groups, matched against a group id or name.",
-        "de": "An approval rule names an approver, and what that name has to be differs by kind: a named person becomes a task's assignee, matched against a username, and a group becomes its candidate groups, matched against a group id or name."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "an-outage-now-stops-at-the-worker-instead-of-at-every-token",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "An outage now stops at the worker, instead of at every single token",
-        "de": "Ein Ausfall stoppt jetzt beim Worker statt bei jedem einzelnen Token"
-      },
-      "summary": {
-        "en": "When a target system stops answering — an SMTP host, a REST endpoint — it used to fail one job per instance that reached the task: every token spent its retries and parked on an incident of its own, so an hour of downtime in a busy process left thousands for somebody to clear. Atlas now notices. Three different instances failing in a row against the same target is enough: its jobs stop being handed out, and one job goes through every ten seconds — then twenty, forty, up to five minutes — to test whether it is back. Held work is waiting, not failed: no retry is spent on it, no incident raised, nothing cancelled, and the whole backlog carries on by itself the moment the target answers. Operations → Workers shows a Held back card naming each target, since when, what it last failed with and when the next attempt is due, with a Close now button for when you have already fixed the endpoint and would rather not wait.",
-        "de": "Antwortet ein Zielsystem nicht mehr — ein SMTP-Host, eine REST-Schnittstelle —, scheiterte bisher ein Job pro Instanz, die die Aufgabe erreichte: jeder Token verbrauchte seine Retries und parkte auf einem eigenen Incident, sodass eine Stunde Ausfall in einem gut laufenden Prozess Tausende davon hinterliess. Atlas erkennt das jetzt. Drei verschiedene Instanzen, die hintereinander gegen dasselbe Ziel scheitern, genügen: dessen Jobs werden nicht mehr ausgegeben, und alle zehn Sekunden — dann zwanzig, vierzig, bis maximal fünf Minuten — geht genau ein Job als Test durch. Zurückgehaltene Arbeit wartet, sie ist nicht gescheitert: kein Retry wird dafür verbraucht, kein Incident erzeugt, nichts abgebrochen, und der ganze Rückstau läuft von selbst weiter, sobald das Ziel wieder antwortet. In Operations → Workers nennt die Karte «Held back» jedes Ziel, seit wann es zurückgehalten wird, woran es zuletzt scheiterte und wann der nächste Versuch läuft — mit einem Knopf «Close now», wenn der Endpunkt schon repariert ist und man nicht warten will."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations",
-        "Workers"
-      ]
-    },
-    {
-      "id": "a-product-manager-maintains-the-catalogue-over-mcp",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Maintain the product catalogue from an AI client",
-        "de": "Den Produktkatalog aus einem KI-Client pflegen"
-      },
-      "summary": {
-        "en": "The portal's catalogue was the one substantial surface an AI assistant could not reach. Nine new tools close that: list, read, create and change catalogues, save products, publish a release and read what a release froze, and derive drafts from an ArchiMate model. Filling in two hundred products' search keywords, or finding which ones still have no deprovisioning process before a publish, is now something you can ask for instead of type. The assistant acts as you and no further — it needs the Product manager role and editor rights on the catalogue, exactly as the screen does — and it cannot delete anything, because a product is withdrawn and never removed.",
-        "de": "Der Katalog des Portals war die letzte grössere Fläche, die ein KI-Assistent nicht erreichen konnte. Neun neue Werkzeuge schliessen diese Lücke: Kataloge auflisten, lesen, anlegen und ändern, Produkte speichern, ein Release veröffentlichen und lesen, was es eingefroren hat, sowie Entwürfe aus einem ArchiMate-Modell ableiten. Die Suchbegriffe von zweihundert Produkten zu ergänzen oder vor einer Veröffentlichung zu finden, welchen davon noch der Deprovisionierungsprozess fehlt, lässt sich jetzt beauftragen statt tippen. Der Assistent handelt als Sie und nicht weiter — er braucht die Rolle Produktmanager und Editorrechte am Katalog, genau wie die Oberfläche — und er kann nichts löschen, denn ein Produkt wird zurückgezogen und nie entfernt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "MCP",
-        "AI"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Console → AI access and connect your MCP client to this server's own endpoint. A stdio client authenticating with an API token can read a catalogue but not change one: no API token carries the Product manager role, deliberately.",
-          "Ask it to list your catalogues. It answers with the ones you maintain and never with somebody else's — being the audience for a catalogue puts nothing in that list.",
-          "Changing a product means reading it first. The write replaces the whole record, so a field left out is a field cleared — and the product carries a revision the assistant passes back, so a colleague's edit in between is refused rather than silently overwritten.",
-          "Nothing is orderable until you publish. A refused publish names every problem at once: the product still in draft, the missing translation, the process that was never bound."
-        ],
-        "de": [
-          "Console → AI access öffnen und den MCP-Client mit dem Endpunkt dieses Servers verbinden. Ein stdio-Client, der sich mit einem API-Token anmeldet, kann einen Katalog lesen, aber nicht ändern: Kein API-Token trägt die Rolle Produktmanager, und das ist Absicht.",
-          "Den Assistenten nach den eigenen Katalogen fragen. Er antwortet mit denen, die Sie pflegen, und nie mit fremden — zum Publikum eines Katalogs zu gehören bringt keinen Eintrag in diese Liste.",
-          "Ein Produkt zu ändern heisst, es zuerst zu lesen. Der Schreibvorgang ersetzt den ganzen Datensatz, ein weggelassenes Feld ist also ein gelöschtes Feld — und das Produkt trägt eine Revision, die der Assistent zurückgibt, sodass die Änderung einer Kollegin dazwischen abgewiesen statt stillschweigend überschrieben wird.",
-          "Bestellbar ist nichts, bevor Sie veröffentlichen. Eine abgewiesene Veröffentlichung nennt alle Probleme auf einmal: das Produkt im Entwurf, den fehlenden Text, den nie gebundenen Prozess."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open AI access",
-          "de": "AI access öffnen"
-        },
-        "route": "#/console/ai-access"
-      }
     }
   ]
 }
