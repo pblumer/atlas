@@ -239,7 +239,7 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
 
-/* The construction kit (ADR-draft-product-construction-kit): one row per service,
+/* The construction kit (ADR-0395): one row per service,
    one radio per answer. The cells carry the console's own inline field so the
    control and its word read as one thing, with the field's stacking margin taken
    back out — inside a table the row is the spacing. */
@@ -4527,6 +4527,17 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 .mesh-edge { stroke: var(--mesh-line); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .mesh-edge-uses { stroke-dasharray: 6 4; }
 .mesh-edge-contains { stroke-dasharray: 1 3; opacity: 0.7; stroke-linecap: round; }
+/* The catalogue's lines, in the same three patterns and for the same reasons, because
+   a fourth pattern would not be told from the three at a glance. `offers` is the solid
+   structural line a catalogue hangs its products on; `composition` is solid too — a
+   part that always comes with the whole is as firm a claim as a call; `aggregation`
+   takes the dashed pattern that already means "and this one is optional to it"; and
+   `requires` takes the dotted one, which already reads as the faintest claim on the
+   canvas. The key beside the picture names each in words, which is what actually
+   tells them apart: the pattern groups them, the legend distinguishes them. */
+.mesh-edge-offers { opacity: 0.8; }
+.mesh-edge-aggregation { stroke-dasharray: 6 4; }
+.mesh-edge-requires { stroke-dasharray: 1 3; opacity: 0.7; stroke-linecap: round; }
 /* A line a notation has named. The dash is the derived picture's free channel and
    ArchiMate's is spoken for — a dashed line with an open arrowhead is a Flow there,
    and a dotted one a Realization — so an ArchiMate line is solid and its two ends

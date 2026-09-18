@@ -1,0 +1,388 @@
+package panorama
+
+import "testing"
+
+// The catalogue on the starmap (#1022, second half).
+//
+// A catalogue is the one part of Atlas that holds *composition* and *aggregation* as
+// facts rather than as something an architect drew: a product is assembled from the
+// services that provision themselves, and the catalogue record says which of them
+// come with it and which are offered beside it. Those are edges the landscape can
+// point at, which is the whole test ADR-0211 §1 applies to what it draws.
+//
+// The other half of why it belongs here is the edge that leaves the catalogue: a
+// product names the BPMN process that provisions it, and a product whose process is
+// not deployed is an order that will park with somebody waiting for a laptop. Until
+// now nothing put those two facts on one picture.
+
+// cat builds one visible catalogue offering the given items.
+func cat(id, name string, items ...string) ProductCatalog {
+	return ProductCatalog{ID: id, Name: name, CanView: true, Items: items}
+}
+
+// prod builds one visible product with its two processes.
+func prod(id, name, home, provision, deprovision string) Product {
+	return Product{
+		ID: id, Name: name, HomeCatalog: home, CanView: true,
+		ProvisionProcess: provision, DeprovisionProcess: deprovision,
+	}
+}
+
+// TestACatalogueAndWhatItOffersAreDrawn is the shape of the whole feature: the
+// catalogue is a node, every product it offers is a node, and the offering is an
+// edge. Nothing here is a claim about health — a catalogue is a record, not a thing
+// that can be asked how it is.
+func TestACatalogueAndWhatItOffersAreDrawn(t *testing.T) {
+	land := Landscape{
+		Catalogs: []ProductCatalog{cat("cat_1", "Mobile devices", "phone", "case")},
+		Products: []Product{
+			prod("phone", "Apple iPhone", "cat_1", "", ""),
+			prod("case", "Protective case", "cat_1", "", ""),
+		},
+	}
+
+	g := DeriveGraph(land, Options{})
+
+	counts := kindsOf(g)
+	if counts[KindCatalog] != 1 || counts[KindProduct] != 2 {
+		t.Fatalf("drew %d catalogue(s) and %d product(s); want 1 and 2 — %#v", counts[KindCatalog], counts[KindProduct], g.Nodes)
+	}
+	node := nodeByID(t, g, "catalog:cat_1")
+	if node.Name != "Mobile devices" || node.Provenance != ProvenanceDerived {
+		t.Errorf("catalogue node is %#v", node)
+	}
+	// Nothing can be asked how a catalogue is, so it carries the neutral pair rather
+	// than a finding: most of a young landscape is unobserved, and colouring it as a
+	// problem makes the whole picture a problem (ADR-0211 §4).
+	if node.State != StateUnbound || node.Severity != SeverityUnknown {
+		t.Errorf("a catalogue carries an observation it cannot have: state %q severity %q", node.State, node.Severity)
+	}
+	if p := nodeByID(t, g, "product:phone"); p.State != StateUnbound || p.Severity != SeverityUnknown {
+		t.Errorf("a product carries an observation it cannot have: state %q severity %q", p.State, p.Severity)
+	}
+	for _, id := range []string{"product:phone", "product:case"} {
+		if !hasEdge(g, "catalog:cat_1", id, EdgeOffers) {
+			t.Errorf("no offers edge to %s in %#v", id, g.Edges)
+		}
+	}
+}
+
+// TestTheArrangementIsDrawnAsItIsStored keeps the three structure answers apart on
+// the picture. Included and optional are different promises to whoever orders, and a
+// picture that drew them in one line would say the case comes with the phone.
+func TestTheArrangementIsDrawnAsItIsStored(t *testing.T) {
+	c := cat("cat_1", "Mobile devices", "package", "phone", "case", "sim")
+	c.Edges = []CatalogEdge{
+		{From: "package", To: "phone", Kind: EdgeComposition},
+		{From: "package", To: "case", Kind: EdgeAggregation},
+		{From: "phone", To: "sim", Kind: EdgeRequires},
+		// Incompatibility, which this picture does not draw — see the test below.
+		{From: "phone", To: "case", Kind: "excludes"},
+	}
+	land := Landscape{
+		Catalogs: []ProductCatalog{c},
+		Products: []Product{
+			prod("package", "Package", "cat_1", "", ""),
+			prod("phone", "Phone", "cat_1", "", ""),
+			prod("case", "Case", "cat_1", "", ""),
+			prod("sim", "SIM", "cat_1", "", ""),
+		},
+	}
+
+	g := DeriveGraph(land, Options{})
+
+	for _, want := range []struct{ from, to, kind string }{
+		{"product:package", "product:phone", EdgeComposition},
+		{"product:package", "product:case", EdgeAggregation},
+		{"product:phone", "product:sim", EdgeRequires},
+	} {
+		if !hasEdge(g, want.from, want.to, want.kind) {
+			t.Errorf("no %s edge %s → %s in %#v", want.kind, want.from, want.to, g.Edges)
+		}
+	}
+}
+
+// TestIncompatibilityIsNotDrawnAsADependency.
+//
+// "These two must never be held by the same person" is the one catalogue edge that
+// means the opposite of every other line on this canvas. Drawn in the same ink it
+// would read as a dependency, and a reader would take "the clerk who creates a
+// supplier must not approve payments to it" for "one needs the other".
+func TestIncompatibilityIsNotDrawnAsADependency(t *testing.T) {
+	c := cat("cat_1", "Rights", "create", "approve")
+	c.Edges = []CatalogEdge{{From: "create", To: "approve", Kind: "excludes"}}
+	land := Landscape{
+		Catalogs: []ProductCatalog{c},
+		Products: []Product{
+			prod("create", "Create suppliers", "cat_1", "", ""),
+			prod("approve", "Approve payments", "cat_1", "", ""),
+		},
+	}
+
+	g := DeriveGraph(land, Options{})
+
+	for _, e := range g.Edges {
+		if e.From == "product:create" && e.To == "product:approve" {
+			t.Fatalf("incompatibility was drawn as %q, which reads as a dependency", e.Kind)
+		}
+	}
+}
+
+// TestAProductPointsAtTheProcessesThatProvisionIt is the edge that makes this worth
+// drawing at all: it joins what is offered to what has to run.
+func TestAProductPointsAtTheProcessesThatProvisionIt(t *testing.T) {
+	land := Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes: []Process{
+			proc(1, "provision-phone", "Provision a phone", "a1"),
+			proc(2, "revoke-phone", "Revoke a phone", "a1"),
+		},
+		Catalogs: []ProductCatalog{cat("cat_1", "Mobile devices", "phone")},
+		Products: []Product{prod("phone", "Phone", "cat_1", "provision-phone", "revoke-phone")},
+	}
+
+	g := DeriveGraph(land, Options{})
+
+	if !hasEdge(g, "product:phone", "process:1", EdgeUses) {
+		t.Errorf("no edge to the provisioning process in %#v", g.Edges)
+	}
+	if !hasEdge(g, "product:phone", "process:2", EdgeUses) {
+		t.Errorf("no edge to the deprovisioning process in %#v", g.Edges)
+	}
+}
+
+// TestAProductWhoseProcessIsNotDeployedSaysSo.
+//
+// This is the finding the whole join exists for. A product bound to a process nobody
+// deployed is orderable, and the order parks the moment somebody presses the button.
+// The landscape already has a shape for "referenced, and nothing here provides it",
+// and this is the same finding about a different referrer.
+func TestAProductWhoseProcessIsNotDeployedSaysSo(t *testing.T) {
+	land := Landscape{
+		Catalogs: []ProductCatalog{cat("cat_1", "Mobile devices", "phone")},
+		Products: []Product{prod("phone", "Phone", "cat_1", "provision-phone", "")},
+	}
+
+	g := DeriveGraph(land, Options{})
+
+	id := unresolvedNodeID(KindProcess, "provision-phone")
+	node := nodeByID(t, g, id)
+	if node.Kind != KindUnresolved || node.Name != "provision-phone" {
+		t.Errorf("unresolved provisioning process is %#v", node)
+	}
+	if !hasEdge(g, "product:phone", id, EdgeUses) {
+		t.Errorf("no edge from the product to what is missing, in %#v", g.Edges)
+	}
+}
+
+// TestACatalogueOutsideTheCallersAccessIsAbsentWithItsProducts.
+//
+// A catalogue carries its audience, its approval rules and its price list, so who may
+// look at one is a decision the catalogue already makes. The mesh honours it and does
+// not re-decide it: a catalogue this caller does not maintain is not on their picture,
+// and neither is a product only that catalogue offers.
+func TestACatalogueOutsideTheCallersAccessIsAbsentWithItsProducts(t *testing.T) {
+	hidden := cat("cat_2", "Somebody else's", "secret")
+	hidden.CanView = false
+	land := Landscape{
+		Catalogs: []ProductCatalog{cat("cat_1", "Mine", "phone"), hidden},
+		Products: []Product{
+			prod("phone", "Phone", "cat_1", "", ""),
+			{ID: "secret", Name: "Their product", HomeCatalog: "cat_2"},
+		},
+	}
+
+	g := DeriveGraph(land, Options{})
+
+	for _, n := range g.Nodes {
+		if n.Name == "Their product" || n.Name == "Somebody else's" {
+			t.Fatalf("a catalogue outside the caller's access reached the picture: %#v", n)
+		}
+	}
+	if counts := kindsOf(g); counts[KindProduct] != 1 {
+		t.Errorf("drew %d products; want only the visible one — %#v", counts[KindProduct], g.Nodes)
+	}
+}
+
+// TestAPartOutsideTheCallersAccessKeepsItsEdge.
+//
+// The other half of the same rule (ADR-0211 §3). A visible product assembled from one
+// the reader may not see must not read as a product made of nothing: the edge is
+// drawn to a placeholder that says only that something is there.
+func TestAPartOutsideTheCallersAccessKeepsItsEdge(t *testing.T) {
+	mine := cat("cat_1", "Mine", "package", "part")
+	mine.Edges = []CatalogEdge{{From: "package", To: "part", Kind: EdgeComposition}}
+	land := Landscape{
+		Catalogs: []ProductCatalog{mine},
+		Products: []Product{
+			prod("package", "Package", "cat_1", "", ""),
+			// Offered here, but the product itself is somebody else's to see.
+			{ID: "part", Name: "Their part", HomeCatalog: "cat_2"},
+		},
+	}
+
+	g := DeriveGraph(land, Options{})
+
+	if g.Restricted != 1 {
+		t.Fatalf("restricted count is %d; want 1 — %#v", g.Restricted, g.Nodes)
+	}
+	if !hasEdge(g, "product:package", restrictedNodeID(1), EdgeComposition) {
+		t.Errorf("the edge to the hidden part was dropped: %#v", g.Edges)
+	}
+	for _, n := range g.Nodes {
+		if n.Kind == KindRestricted && n.Name != "" {
+			t.Errorf("a placeholder named what it stands for: %#v", n)
+		}
+	}
+}
+
+// TestAnArrangementNamingAProductNobodyOffersSaysSo. The catalogue's edges are stored
+// beside its item list and nothing keeps the two in step until publish, so an edge can
+// name a product that is not in the landscape at all. That is a different finding from
+// "not yours to see" and takes the shape the landscape already has for it.
+func TestAnArrangementNamingAProductNobodyOffersSaysSo(t *testing.T) {
+	c := cat("cat_1", "Mine", "package")
+	c.Edges = []CatalogEdge{{From: "package", To: "ghost", Kind: EdgeComposition}}
+	land := Landscape{
+		Catalogs: []ProductCatalog{c},
+		Products: []Product{prod("package", "Package", "cat_1", "", "")},
+	}
+
+	g := DeriveGraph(land, Options{})
+
+	id := unresolvedNodeID(KindProduct, "ghost")
+	if node := nodeByID(t, g, id); node.Kind != KindUnresolved {
+		t.Errorf("a missing part is %#v", node)
+	}
+	if !hasEdge(g, "product:package", id, EdgeComposition) {
+		t.Errorf("no edge to the missing part in %#v", g.Edges)
+	}
+}
+
+// TestAProductOfferedTwiceIsOneNode. A product is referenced by catalogues rather
+// than owned by one (ADR-0315), and two catalogues offering the same laptop are two
+// offers of one thing — drawing it twice would say there are two laptops.
+func TestAProductOfferedTwiceIsOneNode(t *testing.T) {
+	land := Landscape{
+		Catalogs: []ProductCatalog{cat("cat_1", "Sales", "laptop"), cat("cat_2", "Support", "laptop")},
+		Products: []Product{prod("laptop", "Laptop", "cat_1", "", "")},
+	}
+
+	g := DeriveGraph(land, Options{})
+
+	if counts := kindsOf(g); counts[KindProduct] != 1 {
+		t.Fatalf("drew %d product nodes for one product: %#v", counts[KindProduct], g.Nodes)
+	}
+	if !hasEdge(g, "catalog:cat_1", "product:laptop", EdgeOffers) ||
+		!hasEdge(g, "catalog:cat_2", "product:laptop", EdgeOffers) {
+		t.Errorf("both catalogues must be drawn offering it: %#v", g.Edges)
+	}
+}
+
+// TestAProductIsNeverCountedAsUnmodelledDrift.
+//
+// Drift is "the architecture declares this and Atlas does not have it", and the
+// reverse. A binding can name an application, a process or a worker; ADR-0189 §4 has
+// no key for a product, so counting products as unmodelled would report a debt no
+// model could ever pay off — a number that only grows as somebody fills a catalogue.
+func TestAProductIsNeverCountedAsUnmodelledDrift(t *testing.T) {
+	land := Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{proc(1, "invoice", "Invoice", "a1")},
+		Catalogs:     []ProductCatalog{cat("cat_1", "Mobile devices", "phone")},
+		Products:     []Product{prod("phone", "Phone", "cat_1", "", "")},
+	}
+	overlay := Overlay{ModelID: "m1", ModelName: "Estate", Elements: []ModelElement{
+		{ElementID: "e1", ElementType: "ApplicationComponent", Name: "Billing",
+			Key: KeyApplicationID, Values: []string{"a1"}},
+	}}
+
+	g := DeriveGraph(land, Options{Overlays: []Overlay{overlay}})
+
+	// The process is the one derived node nothing declares. The catalogue and the
+	// product are not drift at all.
+	if g.Unmodeled != 1 {
+		t.Errorf("unmodelled count is %d; want 1 (the process alone) — the catalogue and its product cannot be bound", g.Unmodeled)
+	}
+}
+
+// TestAnOverBudgetLandscapeCollapsesProductsIntoTheirCatalogue.
+//
+// The size budget collapses the picture to what holds things. An application holds
+// its processes; a catalogue holds what it offers. Leaving catalogues out of the
+// collapse would drop them from an over-budget picture entirely, which is the
+// truncated-but-complete-looking graph ADR-0211 §7 refuses.
+func TestAnOverBudgetLandscapeCollapsesProductsIntoTheirCatalogue(t *testing.T) {
+	land := Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{proc(1, "invoice", "Invoice", "a1")},
+		Catalogs:     []ProductCatalog{cat("cat_1", "Mobile devices", "phone", "case")},
+		Products: []Product{
+			prod("phone", "Phone", "cat_1", "", ""),
+			prod("case", "Case", "cat_1", "", ""),
+		},
+	}
+
+	g := DeriveGraph(land, Options{MaxNodes: 3})
+
+	if !g.Clustered {
+		t.Fatalf("a landscape over its budget must say it collapsed: %#v", g)
+	}
+	node := nodeByID(t, g, "catalog:cat_1")
+	if node.Children != 2 {
+		t.Errorf("the collapsed catalogue stands for %d products; want 2", node.Children)
+	}
+	if counts := kindsOf(g); counts[KindProduct] != 0 {
+		t.Errorf("a collapsed picture still drew %d product(s)", counts[KindProduct])
+	}
+}
+
+// TestAProductNoCatalogueOffersIsNotDrawn.
+//
+// The mesh is the dependency picture and not an inventory — the same rule that keeps
+// a configured worker nothing uses off the canvas. A product exists whether or not a
+// catalogue offers it, and one nobody offers is a record, not part of the landscape.
+func TestAProductNoCatalogueOffersIsNotDrawn(t *testing.T) {
+	land := Landscape{
+		Catalogs: []ProductCatalog{cat("cat_1", "Mobile devices", "phone")},
+		Products: []Product{
+			prod("phone", "Phone", "cat_1", "", ""),
+			prod("shelfware", "Nobody offers this", "cat_1", "", ""),
+		},
+	}
+
+	g := DeriveGraph(land, Options{})
+
+	for _, n := range g.Nodes {
+		if n.Name == "Nobody offers this" {
+			t.Fatalf("a product no catalogue offers was drawn: %#v", n)
+		}
+	}
+}
+
+// TestACollapsedProductFoldsIntoItsHomeCatalogue.
+//
+// A product is offered by several catalogues and edited through one (ADR-0315), so
+// when the picture collapses there is a right answer to which catalogue stands for
+// it — and it is the home, not whichever offer was read first.
+func TestACollapsedProductFoldsIntoItsHomeCatalogue(t *testing.T) {
+	land := Landscape{
+		Catalogs: []ProductCatalog{cat("cat_1", "Sales", "laptop"), cat("cat_2", "Support", "laptop")},
+		Products: []Product{prod("laptop", "Laptop", "cat_2", "", "")},
+	}
+
+	if node := nodeByID(t, DeriveGraph(land, Options{}), "product:laptop"); node.Catalog != "catalog:cat_2" {
+		t.Errorf("the product is grouped under %q; want its home catalogue", node.Catalog)
+	}
+
+	g := DeriveGraph(land, Options{MaxNodes: 2})
+	if !g.Clustered {
+		t.Fatalf("want a collapsed graph, got %#v", g)
+	}
+	if node := nodeByID(t, g, "catalog:cat_2"); node.Children != 1 {
+		t.Errorf("the home catalogue stands for %d; want 1", node.Children)
+	}
+	if node := nodeByID(t, g, "catalog:cat_1"); node.Children != 0 {
+		t.Errorf("the offering catalogue stands for %d; want 0 — it is not where the product is edited", node.Children)
+	}
+}
