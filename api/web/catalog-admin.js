@@ -358,6 +358,204 @@ const parseTargets = (raw) => String(raw || "").split("\n")
       : { system: line.slice(0, at).trim(), ref: line.slice(at + 1).trim() };
   });
 
+// The orderable shapes, as one line of `id = name` each.
+//
+// A variant is an id and a name per language, and the form's other multilingual
+// field — the product's own name — is one box per language. That does not scale
+// here: the number of shapes is unbounded, so a box per shape per language is a
+// grid nobody can read, and adding a shape would have to add controls to a form
+// that is one static string with one submit handler.
+//
+// So it is the idiom this form already uses for a list of small records, the way
+// `targets` is: one line each, split on the first separator, with the syntax stated
+// on the control. `=` and not `:`, because a name legitimately carries a colon
+// ("15 Zoll: Aluminium") and an id does not.
+//
+// **Only the languages this catalogue declares are rendered**, exactly as the
+// product's name boxes are. A text in a language it does not declare belongs to a
+// catalogue that does, and [parseVariants] carries it through untouched rather than
+// showing it here to be edited by somebody who cannot read it.
+export const variantLines = (variants, langs) =>
+  (variants || []).map((v) => {
+    const texts = v.texts || {};
+    const named = (langs || []).filter((l) => texts[l]);
+    // One declared language needs no tag in front of the name: a catalogue with a
+    // single language would otherwise carry "de:" on every line it has.
+    const names = (langs || []).length <= 1
+      ? (named.length ? texts[named[0]] : "")
+      : named.map((l) => `${l}:${texts[l]}`).join(" | ");
+    return `${v.id || ""} = ${names}`.trimEnd();
+  }).join("\n");
+
+// parseVariants reads that back.
+//
+// The declared languages are rebuilt from the line and the rest of the texts are
+// kept: a name removed from a line is removed from the variant, and a name in a
+// language this catalogue does not declare survives a save made here. That is the
+// same rule the product's own texts follow one level up, and it is the reason this
+// takes the stored variants rather than building from the textarea alone.
+//
+// A line with no `=` is kept as an id with no name rather than dropped, for the
+// reason parseTargets keeps a line with no colon: a line this form swallowed would
+// be a shape somebody believes they entered. The portal falls back to the id, so
+// the omission is visible rather than silent.
+const parseVariants = (raw, langs, stored) => {
+  const was = {};
+  for (const v of stored || []) was[v.id] = v.texts || {};
+  return String(raw || "").split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const at = line.indexOf("=");
+      const id = (at < 0 ? line : line.slice(0, at)).trim();
+      const rest = at < 0 ? "" : line.slice(at + 1).trim();
+      const texts = { ...(was[id] || {}) };
+      const given = {};
+      if ((langs || []).length <= 1) {
+        // The one declared language, or none at all. A catalogue declaring no
+        // language has no name boxes either, so the name lands under an unnamed
+        // language and the portal's own fallback still shows it.
+        if (rest) given[(langs || [])[0] || ""] = rest;
+      } else {
+        for (const part of rest.split("|")) {
+          const pair = part.trim();
+          if (!pair) continue;
+          const colon = pair.indexOf(":");
+          // A part with no language tag in a multilingual catalogue is the first
+          // declared language: it is what somebody types when they mean "the
+          // obvious one", and refusing it would lose the name.
+          const lang = colon < 0 ? langs[0] : pair.slice(0, colon).trim();
+          const name = colon < 0 ? pair : pair.slice(colon + 1).trim();
+          if (name) given[lang] = name;
+        }
+      }
+      for (const l of [...(langs || []), ""]) {
+        if (given[l]) texts[l] = given[l]; else delete texts[l];
+      }
+      return { id, texts };
+    });
+};
+
+// eligibleField is who may RECEIVE this product, as a picker over the directory
+// and as an id field when there is no directory to pick from.
+//
+// A sibling of [audienceField] and deliberately not a call to it, because the two
+// mean opposite things when nothing is chosen. A catalogue with no audience reaches
+// **nobody** — fail-closed, so a shop being filled in is not open to everybody. A
+// product with no eligible group narrows **nothing**: the catalogue's audience
+// already decided, and this only ever narrows it further (ADR-0347). One control
+// with one wording would state the wrong default for one of the two, and the
+// wording is the whole value of the control.
+//
+// Orphans keep their box for the reason they do there: not drawing a value and
+// unticking it save the same result, so a group the directory has lost would be
+// dropped by the next save of an unrelated field.
+function eligibleField(dir, chosen) {
+  const have = new Set(chosen || []);
+  const hint = "Empty is the ordinary case and narrows nothing. This never opens "
+    + "anything: whoever is outside the catalogue's audience cannot reach the product "
+    + "whatever is chosen here. It is the <b>recipient</b> who is checked and never "
+    + "the orderer, so a manager ordering for a new hire keeps working &mdash; and an "
+    + "order refused by it is refused when it is placed, with the product named.";
+  if (dir === null) {
+    return `<label class="field wide">Who may receive it (group ids, comma separated)
+      <span class="muted" style="display:block; margin:2px 0 6px">${hint}</span>
+      <input name="eligible-raw" value="${esc((chosen || []).join(", "))}" autocomplete="off">
+      <span class="muted">The directory could not be read, so groups are named by id
+        here for now.</span></label>`;
+  }
+  const choices = groupChoices(dir);
+  const orphans = (chosen || []).filter((id) => !choices.some((g) => g.id === id))
+    .map((id) => ({ id, name: `${id} — no longer in the directory` }));
+  const boxes = [...choices, ...orphans];
+  if (!boxes.length) {
+    return `<div class="field wide">Who may receive it
+      <span class="muted" style="display:block; margin:2px 0 6px">${hint}</span>
+      <p class="muted" style="margin:0">No group exists yet, so there is nothing to
+        narrow to. An administrator creates groups under Console → Organization.</p></div>`;
+  }
+  return `<div class="field wide">Who may receive it (none chosen narrows nothing)
+    <span class="muted" style="display:block; margin:2px 0 6px">${hint}</span>
+    <div class="eligible-boxes" style="display:grid; gap:4px; margin-top:6px">
+      ${boxes.map((g) => `<label style="display:flex; gap:6px; align-items:center; font-weight:400">
+        <input type="checkbox" name="eligible" value="${esc(g.id)}"${have.has(g.id) ? " checked" : ""}>
+        <span>${esc(g.name)}</span></label>`).join("")}
+    </div></div>`;
+}
+
+// eligibleFrom reads whichever of the two controls was rendered, the way
+// audienceFrom does: the picker names its boxes "eligible", the degraded input is
+// "eligible-raw", and its absence is what says a picker was drawn.
+const eligibleFrom = (f) =>
+  f.get("eligible-raw") === null ? f.getAll("eligible").map(String) : list(f.get("eligible-raw"));
+
+// productBody is what saving the product form posts.
+//
+// A function and not a block inside the submit handler, for the reason
+// workerCreateBody is one: what a create carries is the thing worth proving, and a
+// body assembled inside an event listener can only be proved by clicking through
+// the Console. The handler above keeps what is genuinely its own — the toasts, the
+// picture, the second write that offers a new product.
+//
+// **Saving a product REPLACES it, and this form does not render every field a
+// product has**: the orderable window has no control here. Built from the controls
+// alone, the body cleared it on every save and moved the creation date to today —
+// silently, because a field it dropped is one it never shows. So the stored record
+// is the seed and the form's own fields are laid over it. It also carries the
+// revision, which turns a colleague's edit in between from a silent overwrite into
+// a refusal (ADR-0376).
+//
+// The four that used to sit in that list — the shapes, the search terms, the
+// eligible groups and the ceiling — are rendered now, and being rendered is what
+// makes them the form's to write: a control somebody can empty has to be able to
+// empty it, or it is a field that only ever grows.
+export function productBody(f, { productID, homeCatalog, langs, stored }) {
+  const was = stored || {};
+  // Texts are merged rather than rebuilt, for the same reason one level down: a
+  // product is shared between catalogues, this form renders one box per language
+  // *this* catalogue declares, and a text in a language it does not declare belongs
+  // to a catalogue that does. Emptying a box that is rendered still clears that
+  // text, or a text could be added and never taken away.
+  const texts = { ...(was.texts || {}) };
+  for (const l of langs || []) {
+    const val = String(f.get(`t-${l}`) || "").trim();
+    if (val) texts[l] = val; else delete texts[l];
+  }
+  return {
+    ...was,
+    id: productID, homeCatalog, state: f.get("state"), texts,
+    approval: approvalFrom(f),
+    category: String(f.get("category") || "").trim(),
+    productGroup: String(f.get("productGroup") || "").trim(),
+    price: String(f.get("price") || "").trim(),
+    configForm: f.get("configForm") || "",
+    provisionProcess: f.get("provisionProcess") || "",
+    deprovisionProcess: f.get("deprovisionProcess") || "",
+    multipleAllowed: !!f.get("multipleAllowed"),
+    targets: parseTargets(f.get("targets")),
+    keywords: list(f.get("keywords")),
+    eligible: eligibleFrom(f),
+    maxDays: maxDaysFrom(f),
+    // Merged over what is stored, so a name in a language this catalogue does not
+    // declare survives a save made here — the rule the texts above follow.
+    variants: parseVariants(f.get("variants"), langs, was.variants),
+  };
+}
+
+// maxDaysFrom reads the ceiling as a whole number of days, and reads anything that
+// is not one as no ceiling at all.
+//
+// Zero and a negative are different statements and only one of them is sayable
+// here: zero means the right does not end, and a negative would grant a right that
+// ended before it began — publishing refuses it, and the number input cannot
+// produce it. What a browser *can* hand over is an empty string or, on a field
+// somebody pasted into, text; both become no ceiling rather than NaN, which would
+// marshal as null and reach the server as a number nobody typed.
+const maxDaysFrom = (f) => {
+  const days = Math.trunc(Number(f.get("maxDays")));
+  return Number.isFinite(days) && days > 0 ? days : 0;
+};
+
 // ---------- One catalogue ----------
 
 export async function viewCatalogDetail({ api, apiBytes, toast, view, isSuperseded, me, enforced }, id) {
@@ -700,6 +898,49 @@ async function savePicture({ api, apiBytes, toast }, pid, f) {
   }
 }
 
+// partOfNote says which products in THIS catalogue carry this one, because that is
+// what decides whether the two headings below are read at all.
+//
+// The portal's cascade reads Kategorie › Produktgruppe › Produkt › Services. The
+// two upper columns are collected from the products nothing contains and the two
+// lower ones from the containment graph, so a product that is a part is reached
+// through the product carrying it and its own heading is never read. The form
+// offers both fields on every product regardless, and its hint claimed the heading
+// was where the product sits — so a maintainer could fill in a column that had
+// already stopped reading the field.
+//
+// **It is a note and not a hidden field.** Containment belongs to a catalogue and
+// not to the product: an item is referenced by several catalogues, each with its
+// own edges, so the same product is legitimately a part here and offered on its own
+// next door. Hiding the controls would hide a heading that another catalogue reads.
+// So the honest answer is to say where this one stands, in this catalogue, and
+// leave the decision with the person reading it.
+//
+// Empty for a new product, which nothing can carry yet, and empty for a root —
+// where the fields do what they say and a note would be noise.
+function partOfNote(it, cat, items, langs) {
+  if (!it) return "";
+  const byID = {};
+  for (const i of items || []) byID[i.id] = i;
+  const wholes = (cat.edges || [])
+    .filter((e) => e.to === it.id && (e.kind === "composition" || e.kind === "aggregation"))
+    .map((e) => esc(textOf((byID[e.from] || {}).texts, langs, e.from)));
+  if (!wholes.length) return "";
+  const carriers = wholes.length === 1
+    ? `<b>${wholes[0]}</b>`
+    : wholes.slice(0, -1).map((w) => `<b>${w}</b>`).join(", ")
+      + ` and <b>${wholes[wholes.length - 1]}</b>`;
+  const one = wholes.length === 1;
+  return `<p class="form-sec-hint">In this catalogue ${carriers} ${one ? "carries" : "carry"}
+    this product, so the portal offers it as a <b>Service</b> behind
+    ${one ? "it" : "them"} and not as a Marktleistung of its own. The two headings below
+    are read off the products nothing contains, so a requester reaches this product under
+    ${one ? `${wholes[0]}&rsquo;s` : "the carrying product&rsquo;s"} heading and not under
+    what is written here. It still counts in another catalogue that offers this product on
+    its own. Remove the relation under &ldquo;How the products relate&rdquo; to have it
+    offered in its own right.</p>`;
+}
+
 function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
   const v = it || { state: "draft", approval: { kind: "none" }, texts: {} };
   const ap = v.approval || {};
@@ -722,13 +963,16 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
           placeholder="laptop"></label>
       ${langs.map((l) => `<label class="field">Name (${esc(l)})<input name="t-${esc(l)}"
         value="${esc((v.texts || {})[l] || "")}" autocomplete="off"></label>`).join("")}
+      ${partOfNote(it, cat, items, langs)}
       <label class="field wide">Category
-        <span class="muted" style="display:block; margin:2px 0 6px">The heading this
-          product sits under in the portal &mdash; <code>Arbeitsplatz</code>,
+        <span class="muted" style="display:block; margin:2px 0 6px">The heading the
+          portal groups this product under &mdash; <code>Arbeitsplatz</code>,
           <code>Kommunikation</code>. A heading and nothing else: it has no ordering of
           its own (the portal sorts alphabetically), no translation, and two spellings
           are two headings. Leave it empty and the product sits under the portal's
-          heading for those that carry none.</span>
+          heading for those that carry none. <b>Read off the products nothing
+          contains</b>: the portal reaches a part through the product that carries it,
+          so a heading written on a part is never read there.</span>
         <input name="category" value="${esc(v.category || "")}" autocomplete="off"
           list="known-categories" placeholder="Arbeitsplatz">
         <datalist id="known-categories">${
@@ -742,12 +986,25 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
           spellings are two groups. The group has no record and therefore no category of
           its own: the chain is assembled from the products that carry both, so a group
           whose products sit in two categories appears under both. Leave it empty and the
-          product sits under the portal's group for those that carry none.</span>
+          product sits under the portal's group for those that carry none. Read off the
+          same products the heading above is.</span>
         <input name="productGroup" value="${esc(v.productGroup || "")}" autocomplete="off"
           list="known-groups" placeholder="Mobile Geräte">
         <datalist id="known-groups">${
   [...new Set(items.map((i) => (i.productGroup || "").trim()).filter(Boolean))].sort()
     .map((g) => `<option value="${esc(g)}"></option>`).join("")}</datalist></label>
+      <label class="field wide">Search terms
+        <span class="muted" style="display:block; margin:2px 0 6px">Words somebody might
+          search for that are <b>not</b> the product's name &mdash; synonyms, the vendor's
+          own term, the abbreviation everybody uses, the thing it replaced. Comma
+          separated. The portal searches the id, every name the product carries and these;
+          the story this serves is finding a service <i>when the exact name is not
+          known</i>, which is the person a search over names alone cannot help. One flat
+          list and <b>not one per language</b>: a synonym list is for finding, and a
+          searcher's language is not the catalogue's &mdash; somebody reading a German
+          catalogue types <code>laptop</code> as readily as <code>Notebook</code>.</span>
+        <input name="keywords" value="${esc((v.keywords || []).join(", "))}"
+          autocomplete="off" placeholder="Notebook, mobiles Gerät, M365"></label>
       <label class="field wide">Cost
         <span class="muted" style="display:block; margin:2px 0 6px">Written as you want it
           read — <code>CHF 1'200.&ndash;</code>, <code>49.&ndash; / Monat</code>,
@@ -761,6 +1018,22 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
       <label class="field inline wide"><input type="checkbox" name="multipleAllowed"
         ${v.multipleAllowed ? "checked" : ""}> May be held more than once
         <span class="muted">— two licences, two mailboxes</span></label>
+      <label class="field wide">Orderable shapes
+        <span class="muted" style="display:block; margin:2px 0 6px">One per line, as
+          <code>id = name</code> &mdash; <code>gross = 15 Zoll</code>. A laptop's size, a
+          licence tier: the same product, ordered in one of several shapes.${langs.length > 1
+    ? ` This catalogue declares ${langs.length} languages, so name each shape per
+          language as <code>gross = ${langs.map((l) => `${esc(l)}:…`).join(" | ")}</code>;
+          a name with no language in front of it is filed under
+          <code>${esc(langs[0])}</code>.` : ""}
+          They are <b>unordered on purpose</b> &mdash; &ldquo;higher&rdquo; is meaningful
+          for a tier and meaningless for Windows against Linux &mdash; so the basket asks
+          the orderer, and <b>refuses to place the order until a shape is chosen</b> for
+          every position that has any. How many may be ticked is not asked here:
+          &ldquo;may be held more than once&rdquo; above already answers it. Leave it empty for a product with one
+          shape, which is most of them.</span>
+        <textarea name="variants" rows="3" spellcheck="false"
+          placeholder="gross = 15 Zoll">${esc(variantLines(v.variants, langs))}</textarea></label>
       <div class="field wide">Picture
         <span class="muted" style="display:block; margin:2px 0 6px">A photograph of the
           thing or the vendor's mark, shown to whoever is choosing — PNG, JPEG or SVG,
@@ -785,6 +1058,7 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
         ${APPROVAL_KINDS.map((k) => opt(k.id, ap.kind || "none", `${k.name} — ${k.what}`)).join("")}
       </select></label>
       ${approverField(ap, dir, people)}
+      ${eligibleField(dir, v.eligible)}
       <label class="field wide">Details the orderer fills in
         <span class="muted" style="display:block; margin:2px 0 6px">An Atlas form, for what
           this product needs that its name does not say — a cost centre, a site, an
@@ -800,6 +1074,18 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
         </select></label>
       <label class="field">Provisioned by${procSelect("provisionProcess", v.provisionProcess)}</label>
       <label class="field">Revoked by${procSelect("deprovisionProcess", v.deprovisionProcess)}</label>
+      <label class="field wide">How long the right may last
+        <span class="muted" style="display:block; margin:2px 0 6px">In days, or
+          <code>0</code> for a right that does not end &mdash; which is the ordinary case.
+          A <b>ceiling declared as policy</b> ("nobody holds this for more than ninety
+          days") and not a date somebody chose: an order cannot yet name a shorter end
+          within it. It reaches a grant through the release like the bindings above, so a
+          ceiling relaxed next week does not lengthen a right granted this week under the
+          stricter one. It never applies to a right found by a commissioning load: that
+          start is the day the right was discovered, and a ceiling measured from it would
+          schedule the whole estate to expire on the anniversary of the switch-on.</span>
+        <input name="maxDays" type="number" min="0" step="1" inputmode="numeric"
+          value="${esc(String(v.maxDays || 0))}" autocomplete="off"></label>
       <label class="field wide">Known in the target systems as
         <span class="muted" style="display:block; margin:2px 0 6px">One per line, as
           <code>system:reference</code> — <code>ad:CN=VPN-Users</code>,
@@ -1198,41 +1484,9 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
       const pid = String(editing || f.get("id") || "").trim();
       if (!pid) { toast("A product needs an id", "err"); return; }
 
-      // Saving a product REPLACES it, and this form does not render every field a
-      // product has: there is no control here for variants, the orderable window,
-      // the search keywords, the eligible groups or the ceiling on how long the
-      // right may last. Built from the controls alone, the body cleared all five on
-      // every save and moved the creation date to today — silently, because the
-      // fields it dropped are the ones it never shows.
-      //
-      // So the stored record is the seed and the form's own fields are laid over
-      // it. It also carries the revision, which turns a colleague's edit in between
-      // from a silent overwrite into a refusal (ADR-0376).
-      const stored = byID[pid] || {};
-
-      // Texts are merged rather than rebuilt, for the same reason one level down: a
-      // product is shared between catalogues, this form renders one box per
-      // language *this* catalogue declares, and a text in a language it does not
-      // declare belongs to a catalogue that does. Emptying a box that is rendered
-      // still clears that text, or a text could be added and never taken away.
-      const texts = { ...(stored.texts || {}) };
-      for (const l of langs) {
-        const val = String(f.get(`t-${l}`) || "").trim();
-        if (val) texts[l] = val; else delete texts[l];
-      }
-      const body = {
-        ...stored,
-        id: pid, homeCatalog: id, state: f.get("state"), texts,
-        approval: approvalFrom(f),
-        category: String(f.get("category") || "").trim(),
-        productGroup: String(f.get("productGroup") || "").trim(),
-        price: String(f.get("price") || "").trim(),
-        configForm: f.get("configForm") || "",
-        provisionProcess: f.get("provisionProcess") || "",
-        deprovisionProcess: f.get("deprovisionProcess") || "",
-        multipleAllowed: !!f.get("multipleAllowed"),
-        targets: parseTargets(f.get("targets")),
-      };
+      const body = productBody(f, {
+        productID: pid, homeCatalog: id, langs, stored: byID[pid] || {},
+      });
       try {
         await api("POST", "/api/v1/catalog-products", body);
         // The picture is its own request, because it is bytes and the product is a

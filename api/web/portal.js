@@ -2286,6 +2286,36 @@ function depthOf(release, id) {
   return d;
 }
 
+// headingsHeld is the Kategorie or Produktgruppe column of what somebody holds,
+// read off the same products the catalogue reads it off.
+//
+// **Off the root, not off the held item.** Both strings are attributes of the
+// offering (ADR-0383): the cascade collects them from the products nothing
+// contains, so a service two edges down has never had a heading of its own to
+// carry. Read directly from what a person holds, this column showed "Ohne
+// Kategorie" for every service they have while the catalogue showed real headings
+// for the same things — the two sides of the portal disagreeing about one field,
+// which is exactly what ADR-0360 promised they would not do.
+//
+// So each held id is resolved to the product it belongs to and the heading is read
+// there, which is the same answer the person saw when they ordered it.
+//
+// Sorted and bucketed like the catalogue's own two columns, for the reasons given
+// at categoriesOf: there is nothing on a string to sort by, and the bucket is last
+// and only appears when something is in it.
+function headingsHeld(rel, by, ids, field) {
+  const named = new Set();
+  let none = false;
+  for (const id of ids) {
+    const root = by[rootOf(rel, id)] || {};
+    const value = (root[field] || '').trim();
+    if (value) named.add(value); else none = true;
+  }
+  const out = [...named].sort((a, b) => a.localeCompare(b, locale));
+  if (none) out.push('');
+  return out;
+}
+
 function renderServices() {
   const rel = state.release || {};
   const by = itemsById(rel);
@@ -2336,15 +2366,13 @@ function renderServices() {
         // The headings of what this person actually holds, not the whole
         // catalogue's: this screen answers "what do I have", and a heading with
         // nothing of theirs under it would be a column of other people's shelves.
-        [...new Set(ids.map((id) => ((by[id] || {}).category || '').trim()))]
-          .sort((a, b) => a.localeCompare(b, locale))
+        headingsHeld(rel, by, ids, 'category')
           .map((c) => cell({ text: c || t('cat.none') }))),
       // The product group beside the heading, read off what this person holds for
       // the same reason the heading is: this screen answers "what do I have".
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.group')),
-        [...new Set(ids.map((id) => ((by[id] || {}).productGroup || '').trim()))]
-          .sort((a, b) => a.localeCompare(b, locale))
+        headingsHeld(rel, by, ids, 'productGroup')
           .map((g) => cell({ text: g || t('group.none') }))),
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.offering')),

@@ -14,6 +14,41 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The four fields the portal read and the product editor could not set.** A product
+  carries twelve fields the portal acts on and the editor rendered eight. The four it
+  did not render were not decoration: the **orderable shapes** are what the basket
+  refuses to place an order without, the **search terms** are what makes a service
+  findable by somebody who does not know its name, the **eligible groups** decide who
+  may receive it, and the **ceiling** decides how long the right lasts. All four were
+  settable over REST and MCP and by nobody else — which is to say, not by the person
+  whose job it is.
+
+  They are on the form now. The shapes read as one line each (`gross = 15 Zoll`, per
+  language where the catalogue declares several), the terms as a comma-separated list,
+  the eligible groups as a picker over the directory that falls back to an id field
+  when the directory cannot be read, and the ceiling as a number of days where zero
+  means a right that does not end.
+
+  Rendering them changes who owns them: a save is a **full replace**, so a control
+  somebody can empty has to be able to empty the field, while a field with no control
+  has to survive the save untouched. Both halves are now proved in a browser against
+  the real assembly rather than by reading the source. One field still has no control
+  on purpose — the orderable window, which nothing anywhere enforces; a control for it
+  would promise an effect that does not exist, and it gets one when the window is
+  enforced.
+
+  The editor also says, for the product open in front of you, **where the two headings
+  are read**. Kategorie and Produktgruppe are collected from the products nothing
+  contains, so a product that is a part of another one is reached through the product
+  carrying it and its own heading is never read there. The hint claimed the category
+  was "the heading this product sits under", which is false for a part — so a
+  maintainer could fill in a column that had already stopped reading the field, with
+  nothing to say so. Where the catalogue open carries this product inside another, the
+  form now names the carrier and says the heading is read there. It stays a note and
+  not a hidden field: containment belongs to a catalogue, so the same product is
+  legitimately a part here and offered in its own right next door, where the heading
+  *is* read.
+
 - **A product can carry a picture.** A catalogue row was a name and a price, and
   somebody choosing between two phones was choosing between two names. A product now
   has a picture — a photograph of the thing or the vendor's mark, PNG, JPEG or SVG —
@@ -583,6 +618,30 @@ _Changed_ / _Removed_ for each version.
   about the reader rather than about what they are reading.
 
 ### Fixed
+
+- **An agent's save no longer clears a product's group.** `atlas_save_catalog_product`
+  is a full replace and forwards exactly the fields its schema declares. `productGroup`
+  was added to the record and to the Console and missed there, so the loop the tool's
+  own description prescribes — read the product with `atlas_list_catalog_products`,
+  change one field, send the whole record back — dropped it. The portal's Produktgruppe
+  column emptied itself for every product an agent had touched, and nothing anywhere
+  said so.
+
+  The field is declared now, and the schema is held against the record by reflection
+  rather than against a list kept beside it: the list is what was already wrong. A
+  field added to a product from here on is either declared or named as deliberately
+  absent, and neither can happen quietly.
+
+- **What you already hold is filed under the heading you ordered it under.** "Meine
+  Leistungen" drew the same Kategorie and Produktgruppe columns as the catalogue and
+  read them off a different set of products: the catalogue collects them from the
+  products nothing contains, and this screen read them straight off each entitlement.
+  Both strings belong to the offering, so a service two edges down has never had a
+  heading of its own to carry — and services are most of what a person actually holds.
+  The columns therefore showed "Ohne Kategorie" for things the catalogue filed under a
+  real heading. Nothing looked broken; the column was simply empty for the products
+  people have. Each entitlement is now resolved to the product it belongs to and the
+  heading read there, which is the heading that was on screen when it was ordered.
 
 - **"Test expression" no longer certifies an expression that cannot work.** A BPMN deploy
   already refuses a call this build can only ever answer with null — an unknown function
