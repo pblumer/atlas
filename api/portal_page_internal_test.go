@@ -238,7 +238,11 @@ func TestPortalMarkCascadeStopsAtTheOperator(t *testing.T) {
 // dead from the first paint, found by reading rather than by running — there is no
 // browser in this test suite, so the guard is asserted in the source instead.
 func TestPageBuildersDropAnUnsetAttribute(t *testing.T) {
-	for _, page := range []string{"portal.js", "genehmigung.js"} {
+	// One page now. The approval page had the same builder and the same defect; it
+	// is gone, and its half of this guard with it — what it protected is protected
+	// where the decision moved, by the end-to-end cases that press the buttons
+	// (e2e/tasks-approval.spec.mjs).
+	for _, page := range []string{"portal.js"} {
 		src := readWeb(t, page)
 		i := strings.Index(src, "function el(tag, attrs")
 		if i < 0 {
@@ -383,23 +387,15 @@ func TestBothPortalSurfacesAreReachableFromTheMenu(t *testing.T) {
 			"something it does not have, and the visitor would land on a blank screen")
 	}
 
-	// The approver's half, which had the same gap for longer and worse: it was
-	// reached only through the link in its notification mail, so an approver who
-	// deleted the mail had no way back to a decision somebody was waiting on.
-	//
-	// Searched across the whole navigation rather than in the drawer alone. What
-	// this guard is about is that the page can be **reached**, and the entry has
-	// since moved from the drawer into the Tasks sub-navigation, where it belongs:
-	// an approval is a kind of task, not an application. Pinning the drawer would
-	// have made this fail for a move that keeps every word of the reason above true.
-	if !strings.Contains(src, `route: "genehmigung.html"`) {
-		t.Error("no menu entry leads to the approvals page. Its only other way in is " +
-			"the link in a notification mail, and a decision nobody can reach is an " +
-			"order that waits forever")
-	}
-	if strings.Contains(src, `route: "#/genehmigung`) || strings.Contains(src, `route: "#/approvals`) {
-		t.Error("the approvals entry uses a hash route; like the portal it is a page " +
-			"of its own and not a view of this app")
+	// There is no approver's half any more. The page it named is gone — an approval
+	// is read and decided in the inbox that already held it
+	// (ADR-draft-approval-in-the-inbox) — so what this
+	// guard asked of the navigation is asked of it the other way round: no entry
+	// may lead back to a page that is a forwarding stub.
+	if strings.Contains(src, `route: "genehmigung.html"`) {
+		t.Error("a menu entry still leads to the approvals page, which now only " +
+			"forwards into the inbox: the menu would send somebody through a redirect " +
+			"to reach a screen it could name directly")
 	}
 }
 
@@ -414,9 +410,12 @@ func TestBothPortalSurfacesAreReachableFromTheMenu(t *testing.T) {
 // second inherited the first's shape: a fix applied to one and forgotten on the
 // other is exactly how the approvals page came to have no menu entry for months.
 func TestBothPortalSurfacesLeadBackToAtlas(t *testing.T) {
+	// The approval page is gone, so one page is left with this promise to keep. The
+	// reason it was checked in both — a fix applied to one and forgotten on the
+	// other — is why the pair is written out here rather than the survivor being
+	// silently inlined.
 	for _, page := range []struct{ src, key string }{
 		{"portal.js", "portal.back"},
-		{"genehmigung.js", "appr.back"},
 	} {
 		src := readWeb(t, page.src)
 		if !strings.Contains(src, `href: '/index.html'`) {
