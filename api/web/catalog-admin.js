@@ -22,6 +22,11 @@
 //     are different questions, they are validated separately, and a screen that put
 //     them in one list would teach the conflation the record had to correct.
 
+// The console's "pick one of these" dialog, shared rather than reinvented: it is
+// what replaced the window.prompt pickers elsewhere, and it is covered by an
+// end-to-end test against exactly the list length a prompt could not show.
+import { openPickModal } from "./pickmodal.js";
+
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -70,11 +75,39 @@ const APPROVAL_KINDS = [
   { id: "superior", name: "The orderer's superior", ref: "", what: "resolved through the directory, and escalates up the chain" },
 ];
 
+// EDGE_KINDS is the whole vocabulary of the catalogue's edges, used to *read* one.
 const EDGE_KINDS = [
   { id: "composition", name: "contains", what: "an integral part, always ordered with the whole and not deselectable" },
   { id: "aggregation", name: "optionally contains", what: "offered beside the whole and separately orderable" },
   { id: "requires", name: "requires", what: "precedence: the other must be provisioned first" },
 ];
+
+// PAIRWISE_KINDS is what the pairwise form may still *write* (#1022).
+//
+// Structure is assembled per product now: a catalogue is built out of services that
+// each provision themselves, and what a product adds is an arrangement — which of
+// them come with it, and which are offered beside it. That is one question asked per
+// service, and asking it again as "pick a from, pick a relationship, pick a to"
+// would be a second way to say the same thing. Two ways drift, and the one that
+// drifts here decides what somebody is actually ordering.
+//
+// Precedence stays pairwise because it *is* pairwise: "the account before the
+// mailbox" is a statement about two things and belongs to neither.
+const PAIRWISE_KINDS = EDGE_KINDS.filter((k) => k.id === "requires");
+
+// STRUCTURE_CHOICES are the three states one service can be in with respect to one
+// product — the kit's whole vocabulary, in the order somebody reads them.
+const STRUCTURE_CHOICES = [
+  { id: "none", name: "not part of it", what: "no relation to this product" },
+  { id: "composition", name: "included", what: "always ordered with it, and not deselectable" },
+  { id: "aggregation", name: "optional", what: "offered beside it, ordered only if ticked" },
+];
+
+// STRUCTURE_IDS are the edge kinds the kit owns — every choice above except "not
+// part of it", which is the absence of an edge rather than one of its own. Derived
+// from the list rather than spelled again, because a fourth answer added above and
+// forgotten here would be a save that silently drops it.
+const STRUCTURE_IDS = STRUCTURE_CHOICES.map((c) => c.id).filter((c) => c !== "none");
 
 // textOf reads a multilingual name, preferring the catalogue's first language and
 // falling back to the id — a product with no text yet is still a product, and a row
@@ -393,6 +426,12 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
   const offered = cat.items || [];
   const byID = {};
   for (const it of items) byID[it.id] = it;
+  // What this catalogue could still offer. Deliberately the list and not a
+  // comparison of two counts: an id may be offered and no longer defined — the
+  // product row says "offered but not defined" for exactly that — and one such
+  // entry makes the counts equal while products nobody has offered are sitting
+  // there, so the button to offer them was not drawn at all.
+  const offerable = items.filter((it) => !offered.includes(it.id));
 
   // Deployed processes, by id, newest version first. A product binds an id and not
   // a version: what runs is whatever is deployed when the line is reached, which is
@@ -431,14 +470,15 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
       <b>draft</b> or <b>withdrawn</b> state is not.</p>
     ${offered.length ? `<table class="table">
       <thead><tr><th>Product</th><th>State</th><th>Approval</th><th>Provisioned by</th><th></th></tr></thead>
-      <tbody>${offered.map((iid) => productRow(byID[iid], iid, langs)).join("")}</tbody></table>`
+      <tbody>${offered.map((iid) => productRow(byID[iid], iid, langs, offered.length > 1)).join("")}</tbody></table>`
     : `<div class="empty"><p>Nothing offered yet.</p></div>`}
 
     <div class="row" style="margin-top:10px">
       <button class="btn" data-act="new-product">New product</button>
-      ${items.length > offered.length ? `<button class="btn ghost" data-act="add-existing">Offer an existing product</button>` : ""}
+      ${offerable.length ? `<button class="btn ghost" data-act="add-existing">Offer an existing product</button>` : ""}
     </div>
     <div class="product-editor"></div>
+    <div class="assemble-editor"></div>
 
     <h3 style="margin-top:26px">How the products relate</h3>
     <p class="muted" style="max-width:62ch">Two different questions, kept apart.
@@ -466,7 +506,7 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
     mayShare(cat, me, enforced), mayTheme(me, enforced), dir, people);
 }
 
-function productRow(it, iid, langs) {
+function productRow(it, iid, langs, canAssemble) {
   if (!it) {
     return `<tr><td>${esc(iid)}</td><td colspan="3" class="muted">offered but not defined —
       publishing will refuse this</td>
@@ -480,8 +520,81 @@ function productRow(it, iid, langs) {
     <td>${esc(kind.name)}${ap.ref ? ` <span class="muted">(${esc(ap.ref)})</span>` : ""}</td>
     <td>${esc(it.provisionProcess || "—")}</td>
     <td><button class="btn ghost" data-act="edit" data-id="${esc(it.id)}">edit</button>
+      ${canAssemble ? `<button class="btn ghost" data-act="assemble" data-id="${esc(it.id)}">assemble</button>` : ""}
       <button class="btn ghost danger" data-act="drop" data-id="${esc(it.id)}">remove</button></td>
   </tr>`;
+}
+
+// ---------- The construction kit ----------
+//
+// A catalogue is built out of services that each provision themselves; what a
+// *product* adds is an arrangement — which of those services come with it, and
+// which are offered beside it. Said as edges, that arrangement is a set of triples
+// spread across a table sorted by relationship, and assembling one product means
+// finding its rows among everybody else's and adding them one at a time.
+//
+// The kit asks the arrangement as the question somebody actually has, once per
+// service and all at once: not part of it, included, or optional. The three answers
+// are exhaustive and mutually exclusive, which is what makes them radios — and one
+// save writes the whole arrangement, because "included" and "not part of it" are
+// the same control and a screen that could only add would be the edge table again.
+//
+// It is deliberately structure only. Precedence is a statement about two products
+// and belongs to neither of them, so it stays where a pairwise form can ask it.
+
+// assembleKit draws the arrangement of one product as it stands.
+function assembleKit(pid, offered, byID, langs, edges) {
+  const name = (i) => textOf((byID[i] || {}).texts, langs, i);
+  // A thing cannot be part of itself, so it is not among its own parts. The row
+  // would be refused on save anyway; offering it and then refusing it is a worse
+  // screen than never offering it.
+  const parts = offered.filter((i) => i !== pid);
+  const standing = (other) => {
+    const e = (edges || []).find((x) =>
+      x.from === pid && x.to === other && STRUCTURE_IDS.includes(x.kind));
+    return e ? e.kind : "none";
+  };
+  const rows = parts.map((other) => {
+    const now = standing(other);
+    return `<tr><td>${esc(name(other))}<div class="muted">${esc(other)}</div></td>
+      ${STRUCTURE_CHOICES.map((c) => `<td><label class="field inline" title="${esc(c.what)}">
+        <input type="radio" name="part-${esc(other)}" value="${esc(c.id)}"${
+  c.id === now ? " checked" : ""}><span>${esc(c.name)}</span></label></td>`).join("")}</tr>`;
+  }).join("");
+  return `<form class="assemble card" data-product="${esc(pid)}" style="margin-top:12px">
+    <h4 style="margin:0 0 4px">What ${esc(name(pid))} is made of</h4>
+    <p class="muted" style="max-width:62ch; margin:0 0 10px">Every other product this catalogue
+      offers, and where each one stands with respect to this one. <b>Included</b> is ordered
+      with it and cannot be deselected; <b>optional</b> is offered beside it and ordered only
+      if it is ticked. Saving writes the whole arrangement at once.</p>
+    <table class="table">
+      <thead><tr><th>Product</th>${STRUCTURE_CHOICES.map((c) =>
+    `<th title="${esc(c.what)}">${esc(c.name)}</th>`).join("")}</tr></thead>
+      <tbody>${rows}</tbody></table>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" type="button" data-act="assemble-save">Save the arrangement</button>
+      <button class="btn neutral" type="button" data-act="assemble-cancel">Cancel</button>
+    </div>
+  </form>`;
+}
+
+// contains reports whether `whole` already carries `part`, directly or through
+// another product, following structure edges only.
+//
+// It is the question a loop is made of: putting B inside A is a cycle exactly when
+// B already contains A. Publishing proves the same thing over the whole graph and
+// refuses — but three screens and one publish later, about a catalogue somebody has
+// since added to, which is why the kit asks it at the moment the choice is made.
+function contains(edges, whole, part) {
+  const seen = new Set();
+  const walk = (at) => {
+    if (at === part) return true;
+    if (seen.has(at)) return false;
+    seen.add(at);
+    return (edges || []).some((e) =>
+      e.from === at && STRUCTURE_IDS.includes(e.kind) && walk(e.to));
+  };
+  return walk(whole);
 }
 
 function edgeTable(edges, byID, langs) {
@@ -510,7 +623,7 @@ function edgeForm(offered, byID, langs) {
     <h4 style="margin:0 0 10px">Relate two products</h4>
     <label class="field">From<select name="from">${opts}</select></label>
     <label class="field">Relationship<select name="kind">
-      ${EDGE_KINDS.map((k) => `<option value="${k.id}" title="${esc(k.what)}">${esc(k.name)} — ${esc(k.what)}</option>`).join("")}
+      ${PAIRWISE_KINDS.map((k) => `<option value="${k.id}" title="${esc(k.what)}">${esc(k.name)} — ${esc(k.what)}</option>`).join("")}
     </select></label>
     <label class="field">To<select name="to">${opts}</select></label>
     <button class="btn" type="submit">Add</button>
@@ -1054,6 +1167,7 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
     toast(err.message, "err");
   };
   const editor = view.querySelector(".product-editor");
+  const assembler = view.querySelector(".assemble-editor");
 
   view.querySelector(".cat-meta").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -1092,13 +1206,74 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
     }
     if (act === "cancel-product") { editor.innerHTML = ""; return; }
 
+    if (act === "assemble") {
+      assembler.innerHTML = assembleKit(
+        b.dataset.id, cat.items || [], byID, langs, cat.edges || []);
+      assembler.scrollIntoView({ block: "nearest" });
+      return;
+    }
+    if (act === "assemble-cancel") { assembler.innerHTML = ""; return; }
+
+    if (act === "assemble-save") {
+      const form = assembler.querySelector(".assemble");
+      if (!form) return;
+      const pid = form.dataset.product;
+      const f = new FormData(form);
+      // Everything this product is made of, as the form now says it. A choice of
+      // "none" is the absence of an edge and not an edge of its own, so it simply
+      // does not appear.
+      const chosen = [];
+      for (const [field, value] of f.entries()) {
+        if (!field.startsWith("part-")) continue;
+        if (!STRUCTURE_IDS.includes(String(value))) continue;
+        chosen.push({ from: pid, to: field.slice("part-".length), kind: String(value) });
+      }
+      // Everything else stays exactly as it was: another whole's arrangement, and
+      // every precedence edge including this product's own. The kit was asked one
+      // question and may only answer that one — a save that replaced the edge list
+      // wholesale would delete what this screen never showed.
+      const kept = (cat.edges || []).filter((e) =>
+        !(e.from === pid && STRUCTURE_IDS.includes(e.kind)));
+      const edges = [...kept, ...chosen];
+
+      // Refuse a loop here, naming the product that closes it. The rule is the
+      // publish rule and the reason to apply it now is the reader: at this moment
+      // they know which choice they just made, and at publish they have a list of
+      // problems about a catalogue they have since edited.
+      const looped = chosen.find((e) => contains(kept, e.to, pid));
+      if (looped) {
+        const nameOf = (i) => textOf((byID[i] || {}).texts, langs, i);
+        toast(`${nameOf(looped.to)} already contains ${nameOf(pid)}, so it cannot also be ` +
+          `part of it. Nothing was saved — a catalogue with a loop cannot be published.`, "err");
+        return;
+      }
+      try { await patchList({ edges }); toast("Saved"); reload(); }
+      catch (err) { patchFailed(err); }
+      return;
+    }
+
     if (act === "add-existing") {
-      const free = items.filter((it) => !(cat.items || []).includes(it.id));
-      const pick = window.prompt(
-        `Which product should this catalogue also offer?\n\n${free.map((f) => `${f.id} — ${textOf(f.texts, langs, f.id)}`).join("\n")}`);
-      if (!pick) return;
-      if (!free.some((f) => f.id === pick.trim())) { toast("No product with that id", "err"); return; }
-      try { await patchList({ items: [...(cat.items || []), pick.trim()] }); reload(); }
+      // A dialog with a real list, because the prompt this replaces was not one:
+      // it printed the products as lines of text and asked for an id back, so
+      // nothing in it could be clicked, a typo was answered with "No product with
+      // that id", and a browser truncates a prompt body past a handful of lines —
+      // which cuts off the newest products, the ones somebody is most likely to be
+      // looking for. The same failure the application picker had, and the same fix.
+      const free = items.filter((it) => !(cat.items || []).includes(it.id))
+        .map((f) => ({ value: f.id, label: `${textOf(f.texts, langs, f.id)} — ${f.id}` }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+      // The button is drawn from this same list, so an empty one means the page is
+      // stale rather than that there is nothing to offer.
+      if (!free.length) { toast("Every product is already offered here"); return; }
+      const picked = await openPickModal({
+        title: "Offer an existing product",
+        label: "Product",
+        options: free,
+        hint: "Offering it here does not copy it: the product stays edited through its home catalogue.",
+        okLabel: "Offer",
+      });
+      if (!picked) return;
+      try { await patchList({ items: [...(cat.items || []), picked.option.value] }); reload(); }
       catch (err) { patchFailed(err); }
       return;
     }
