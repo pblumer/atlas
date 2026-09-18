@@ -422,6 +422,63 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The product editor opens beside the product list, level with the row it was
+  opened from.** It used to render under the table, which is fine with three products
+  and unusable with forty: editing a row near the bottom put the form below everything
+  offered, so it was read after a long scroll and with no sight of the product it
+  belonged to — the id in the first field being the only thing saying which one was
+  open.
+
+  The list and the editor are now two columns, and the panel is pushed down to its
+  row: the product, its row and its form are on one line across the page, and the row
+  is marked while its form is open. **The catalogue's page drops the centred content
+  column** to carry them, the way the Tasks inbox does — 1120px divides into a table
+  of products and a form of about 520px each, and both hold more than that. What is
+  prose on the page keeps its own measure, so nothing turns a paragraph into a line
+  across a 2000px screen, and the tables' action buttons move to the right edge —
+  the console's own rule for an action column, which a full-width table needs and a
+  1120px one could do without. The offset is measured in the browser rather than
+  stated in the stylesheet, because the shared table enhancer sorts and filters the
+  rows underneath it — sorting the list moves the panel with the row it belongs to.
+
+  Opening the panel takes a column off the list, so the rows above rewrap and the row
+  that was clicked would be pushed down the page by text nobody is reading. It is held
+  still: how far it travelled is measured and the page is scrolled back by exactly
+  that, so the list does not jump away from the click.
+
+  **The kit opens in the same place.** What a product is made of is a question about
+  one row exactly as its form is, so it uses the same column and the same alignment,
+  and a row has one of the two open at a time — opening either gives the panel up.
+  Its choice cells now carry the control alone: the column heading already says which
+  answer it is, and repeating that word in every cell cost the table 180px of width.
+  A reader who cannot see the column still hears both, from the radio's own label.
+
+  **The catalogue's own two cards are read side by side**, at the top of the page:
+  what a catalogue is, and what it looks like. They are the two questions about the
+  catalogue itself rather than about anything in it, and stacked down the left edge
+  they left the first screenful of a widened page half empty — the page was wide and
+  did not read as wide. A number field is drawn like every other field while this is
+  here: `Rank` was the one control on that card wearing the browser's own default.
+
+  **Every list on the catalogue page has its form beside it**, because the page is
+  four times one shape: the catalogues and the one being created, the products and
+  the panel that edits them, the relations and the pair being related, who maintains
+  it and who is being added. The shape is stated once, and each section says which
+  half it is — a fifth of them cannot invent a fifth layout.
+
+  **The stacked layout remains, and it is the fallback rather than a lesser page.**
+  The breakpoint is measured rather than chosen, and it is one number for the whole
+  page although the smaller pairs would fit earlier: a page that puts its lists beside
+  their forms at three different widths is three pages to somebody dragging a window
+  edge. The widest pair decides it — the product list cannot be drawn under 853px
+  (five columns, a process id, and a row offering edit, assemble and remove) and the
+  kit beside it needs 464px — which at 35% of the page is 1400px of window. Below
+  that one of the two would be narrower than its own content and would scroll sideways
+  inside its box, losing the column with the buttons in it first; stacked, each of them
+  gets the whole page. The panel sticks to the top of the
+  window while it is scrolled and carries its own scrollbar, because a form longer
+  than the screen that cannot scroll inside hides the Save button it exists for.
+
 - **The catalogue reads Kategorie › Produktgruppe › Produkt › Services, and there is
   no Bundle level.** A bundle is offered as a *Marktleistung*: it holds the
   orchestration process, and the services behind it hold their own provisioning and

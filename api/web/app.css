@@ -239,11 +239,19 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
 
-/* The construction kit (ADR-0395): one row per service,
-   one radio per answer. The cells carry the console's own inline field so the
-   control and its word read as one thing, with the field's stacking margin taken
-   back out — inside a table the row is the spacing. */
-.assemble td .field.inline { margin: 0; }
+/* The construction kit (ADR-0395): one row per service, one radio per answer. The
+   cells carry the console's own inline field, with the field's stacking margin taken
+   back out — inside a table the row is the spacing.
+
+   A cell holds the control and nothing else. The word belongs to the column heading,
+   which says it once; repeating it in every cell cost the table 180px of width, which
+   is the difference between a kit that fits in the column beside the product list and
+   one that scrolls sideways in it. The radio is centred under its heading so a row
+   reads as three positions rather than three left edges, and the name a cell no longer
+   shows it keeps for a reader who cannot see the column — the radio's own label names
+   the product and the answer together. */
+.assemble td .field.inline { margin: 0; justify-content: center; }
+.assemble td:not(:first-child) { text-align: center; }
 .assemble th { white-space: nowrap; }
 
 /* The product form is read in two passes — what the catalogue shows, then how an
@@ -282,6 +290,109 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
   object-fit: contain; background: var(--surface);
 }
 @media (max-width: 760px) { .product-form { grid-template-columns: 1fr; } }
+
+/* ---------- The product list and the editor beside it ---------- */
+
+/* The catalogue's own page is a working surface and not a page to read, so it drops
+   the centred content column the way the Tasks inbox does (app.js sets the class on
+   the route). Two columns inside 1120px would give a table of products and a form
+   about 520px each, and both hold more than that. What is *prose* on this page keeps
+   its own measure — the cards and the explanations below the headings state a
+   max-width of their own, so nothing here turns a paragraph into a line across a
+   2000px screen. */
+.catalog-mode main { max-width: none; }
+
+/* The editor used to render *under* the list, which is fine with three products and
+   unusable with forty: opening one near the bottom pushed the form below everything,
+   so it was read after a long scroll and with no sight of the row it belonged to.
+
+   So the list and the editor are two columns, and the panel is pushed down to the
+   row it was opened from — the offset is measured against the list and handed over
+   as --editor-top by catalog-admin.js, because only the DOM knows where a row ended
+   up once the shared table enhancer has sorted or filtered it. CSS holds the rule,
+   the script holds the one number it cannot compute.
+
+   Sticky, because the form is taller than most viewports: reading to its Save button
+   must not walk the panel off the top of the window. It carries its own scrollbar for
+   the same reason — a panel longer than the screen that cannot scroll inside hides
+   the button it exists for.
+
+   One breakpoint for the whole catalogue page, and the number is measured rather
+   than chosen. The widest of its pairs decides it: the product list cannot be drawn
+   under 853px — five columns, a provisioning process id, and a row offering edit,
+   assemble and remove — and the kit beside it needs 464px for its table and the
+   card's padding. At 35% of the page that is 1400px of window before both columns
+   hold what they contain. Below it one of the two is always narrower than its own
+   content, and a table that cannot be drawn narrower scrolls sideways inside its box
+   instead — where the column a reader loses first is the one holding the buttons.
+   Stacked, each of them gets the whole page, which is why a narrower window gets that
+   and not a worse version of this.
+
+   One number rather than one per section, although the smaller pairs would fit
+   earlier: a page that puts its lists beside their forms at three different widths is
+   three pages to a reader dragging a window edge, and nobody meant that.
+
+   Deliberately a min-width rule: stacked stays the default and this whole block is
+   the enhancement, so a viewport that never matches it reads exactly the page it read
+   before.
+
+   Inside the panel the form is one column at every width. The two-column form above
+   is for the full-width card; half a page cannot hold it. */
+/* The column holds two panels and shows whichever one is open: the product's form,
+   or the kit that says what the product is made of. It is gone when neither is, so a
+   closed panel costs the list nothing. :has() rather than a class set from the script,
+   because "is anything open" is a fact about the two containers and a class is a
+   second copy of it to forget to clear. */
+.product-side:not(:has(.product-editor > *, .assemble-editor > *)) { display: none; }
+.product-editor > .card,
+.assemble-editor > .card { margin: 14px 0; max-width: 960px; }
+/* The list's table is wider than its column on a narrow screen once the editor takes
+   a share of the page. Scroll it inside its own box, for the reason a card holding a
+   table does (ADR-0163): a table cannot be drawn narrower than its min-content width,
+   so without this it is laid out under the panel beside it. */
+.product-table { overflow-x: auto; }
+/* Stacked, a side form keeps the measure every other card on this page keeps, and the
+   air that separates it from the list above. The column above takes both away. */
+.cat-side > .card { margin-top: 18px; max-width: 640px; }
+/* Which row the open panel belongs to. The panel is aligned to this row, but an
+   alignment is not a statement — a reader scrolling past sees the highlight and not
+   the arithmetic. */
+.product-list tr.editing > td { background: var(--accent-soft); }
+@media (min-width: 1400px) {
+  /* A list beside the form that acts on it. The catalogue page is four of these — the
+     catalogues and the one being created, the products and the one being edited, the
+     relations and the pair being related, who maintains it and who is being added —
+     so the shape is stated once and each section says which half it is.
+
+     A share of the page with both ends held: never under 380px, where the labelled
+     controls start to crowd, and never over 620px, because these forms are one column
+     and a text field two thirds of a wide screen across is harder to read, not easier.
+     The list takes everything else, which is what the width of this page is for. */
+  .cat-cols { display: flex; align-items: flex-start; gap: 18px; }
+  .cat-cols > .cat-main { flex: 1 1 auto; min-width: 0; }
+  .cat-cols > .cat-side { flex: 0 0 clamp(380px, 35%, 620px); }
+  /* In a column the form starts level with the list beside it, and takes the column's
+     width rather than the measure it keeps when it is stacked underneath. */
+  .cat-cols > .cat-side > .card { margin: 0; max-width: none; }
+
+  /* overflow-anchor is off because the script corrects for this reflow itself
+     (catalog-admin.js): opening the panel narrows the list and rewraps the rows above
+     the reader, and two mechanisms undoing the same shift — the browser's anchoring
+     and the script's measured scroll — would each undo part of it and land nowhere. */
+  .product-cols { overflow-anchor: none; }
+  .product-cols > .product-side {
+    /* Under the top bar rather than behind it: the bar is itself sticky at the top of
+       the window, so a panel sticking at the window's own top would slide beneath it
+       and lose its first field. Read from --topbar-h rather than repeating the
+       number, so the two cannot drift; the fallback is only for a page that renders
+       this section without declaring one. */
+    position: sticky; top: calc(var(--topbar-h, 48px) + 16px);
+    max-height: calc(100vh - var(--topbar-h, 48px) - 32px); overflow: auto;
+    margin-top: var(--editor-top, 0px);
+  }
+  .product-cols > .product-side .card { margin: 0; }
+  .product-cols > .product-side .product-form { grid-template-columns: 1fr; }
+}
 
 h1 { font-size: 20px; margin: 0 0 12px; }
 h2 { font-size: 15px; margin: 0 0 10px; }
@@ -397,9 +508,15 @@ ol.steps li { margin: 6px 0; }
 /* A row of secondary actions under a field (e.g. the call-activity "create new
    process" button); nudged up so it reads as attached to the field above. */
 .field-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 10px; }
+/* number is in this list because a field that carries one is still a field: left out,
+   it was the one control on a form drawn in the browser's own default while every
+   input beside it wore the console's — which reads as a defect in the page rather
+   than as a type. The pickers that want a narrow numeric box (the starmap's depth,
+   the playground's fields) state their own width and still do. */
 .field input[type="text"],
 .field input[type="email"],
 .field input[type="password"],
+.field input[type="number"],
 .field input:not([type]) {
   display: block; width: 100%; box-sizing: border-box; margin-top: 5px;
   padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 6px;
