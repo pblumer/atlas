@@ -481,6 +481,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0393](0393-a-rule-added-later-is-a-gate-on-deploy.md) | A rule the compiler gains later is a gate on deploy, whatever stage it lives in | Accepted | Landed |
 | [0394](0394-approval-in-the-inbox.md) | An approval is read and decided where the work already is | Accepted | Landed |
 | [0395](0395-product-construction-kit.md) | A product's structure is assembled per product, not related pairwise | Accepted | Landed |
+| [0396](0396-catalogue-on-the-starmap.md) | The service catalogue is drawn on the starmap, as derived fact | Accepted | Landed |
 
 ## The two states of a record
 

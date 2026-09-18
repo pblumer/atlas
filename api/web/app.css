@@ -4414,6 +4414,17 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 .mesh-edge { stroke: var(--mesh-line); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .mesh-edge-uses { stroke-dasharray: 6 4; }
 .mesh-edge-contains { stroke-dasharray: 1 3; opacity: 0.7; stroke-linecap: round; }
+/* The catalogue's lines, in the same three patterns and for the same reasons, because
+   a fourth pattern would not be told from the three at a glance. `offers` is the solid
+   structural line a catalogue hangs its products on; `composition` is solid too — a
+   part that always comes with the whole is as firm a claim as a call; `aggregation`
+   takes the dashed pattern that already means "and this one is optional to it"; and
+   `requires` takes the dotted one, which already reads as the faintest claim on the
+   canvas. The key beside the picture names each in words, which is what actually
+   tells them apart: the pattern groups them, the legend distinguishes them. */
+.mesh-edge-offers { opacity: 0.8; }
+.mesh-edge-aggregation { stroke-dasharray: 6 4; }
+.mesh-edge-requires { stroke-dasharray: 1 3; opacity: 0.7; stroke-linecap: round; }
 /* A line a notation has named. The dash is the derived picture's free channel and
    ArchiMate's is spoken for — a dashed line with an open arrowhead is a Flow there,
    and a dotted one a Realization — so an ArchiMate line is solid and its two ends

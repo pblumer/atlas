@@ -3,10 +3,12 @@ package api
 import (
 	"context"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/pblumer/atlas/api/catalog"
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/panorama"
 	"github.com/pblumer/atlas/compiler"
@@ -412,10 +414,98 @@ func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, panorama
 		})
 	}
 
+	if err := s.collectCatalogue(&land, principal); err != nil {
+		return panorama.Landscape{}, nil, err
+	}
+
 	peers := facts.peers
 	return land, func(ctx context.Context, out *panorama.Landscape) {
 		s.observeLandscapeTargets(ctx, peers, out)
 	}, nil
+}
+
+// collectCatalogue hangs the service catalogue on the landscape: what is offered,
+// how it is arranged, and who may look at any of it. Run-loop goroutine only.
+//
+// **Both stores are read per request, and neither is cached.** The catalogue record
+// is the obvious half: it carries its own owner and member list, so it is a
+// scope-bearing record and [meshFacts] holds none of those — a member removed a
+// moment ago must not still resolve to viewer. The items are the half that is worth
+// stating, because the argument is different and it is not about authorization at
+// all. A product's *offering* is on the catalogue record and its *name* is on the
+// item record, so caching one and reading the other would let a product added a
+// moment ago be offered by a catalogue while no item exists for it — and the
+// derivation would draw exactly what it was given: a dangling reference, on a picture
+// whose whole point is that a dangling reference means something is broken. Stale is
+// survivable when everything is stale together; a picture that contradicts itself
+// is not.
+func (s *Server) collectCatalogue(land *panorama.Landscape, p *httpapi.Principal) error {
+	cats, err := s.catalogStore.Catalogs()
+	if err != nil {
+		return err
+	}
+	items, err := s.catalogStore.Items()
+	if err != nil {
+		return err
+	}
+	// Which catalogues this caller may look at, and therefore which products: an item
+	// is edited through its home catalogue (ADR-0315), which is the rule the product
+	// listing already applies. The maintenance sight and not the portal one — being
+	// the *audience* for a catalogue tells you what you may order, and this picture is
+	// the estate around it.
+	visible := make(map[string]bool, len(cats))
+	for _, c := range cats {
+		visible[c.ID] = s.catalogs.MayMaintain(c, p)
+	}
+	for _, c := range cats {
+		edges := make([]panorama.CatalogEdge, 0, len(c.Edges))
+		for _, e := range c.Edges {
+			edges = append(edges, panorama.CatalogEdge{From: e.From, To: e.To, Kind: string(e.Kind)})
+		}
+		land.Catalogs = append(land.Catalogs, panorama.ProductCatalog{
+			ID: c.ID, Name: catalogWords(c.Texts, c.Languages, c.ID), CanView: visible[c.ID],
+			Items: append([]string(nil), c.Items...), Edges: edges,
+		})
+	}
+	byID := make(map[string]catalog.Catalog, len(cats))
+	for _, c := range cats {
+		byID[c.ID] = c
+	}
+	for _, it := range items {
+		land.Products = append(land.Products, panorama.Product{
+			ID: it.ID, Name: catalogWords(it.Texts, byID[it.HomeCatalog].Languages, it.ID),
+			HomeCatalog: it.HomeCatalog, CanView: visible[it.HomeCatalog],
+			ProvisionProcess:   strings.TrimSpace(it.ProvisionProcess),
+			DeprovisionProcess: strings.TrimSpace(it.DeprovisionProcess),
+		})
+	}
+	return nil
+}
+
+// catalogWords reads a multilingual name for a picture that has no reader's language
+// to go on.
+//
+// The catalogue's own first declared language, because that is the one its maintainer
+// writes in; then whichever language is alphabetically first, so two requests produce
+// one answer rather than whichever the map iterated to; then the id, because a node
+// drawn with an empty label is one nobody can find.
+func catalogWords(texts map[string]string, langs []string, fallback string) string {
+	for _, l := range langs {
+		if t := strings.TrimSpace(texts[l]); t != "" {
+			return t
+		}
+	}
+	rest := make([]string, 0, len(texts))
+	for l := range texts {
+		rest = append(rest, l)
+	}
+	sort.Strings(rest)
+	for _, l := range rest {
+		if t := strings.TrimSpace(texts[l]); t != "" {
+			return t
+		}
+	}
+	return fallback
 }
 
 // observeLandscapeTargets asks every peer who it is and folds the answer into the

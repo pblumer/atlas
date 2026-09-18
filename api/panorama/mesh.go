@@ -53,6 +53,19 @@ const (
 	// *stale* — every other node is read from local state while the request is being
 	// served, so it can neither fail to be contacted nor go out of date.
 	KindTarget = "target"
+	// KindCatalog is one service catalogue (ADR-0312): what a group of people may
+	// order, and the arrangement of it. It is a design-time record like every other
+	// node here, and — unlike a process or a peer — nothing can be asked how it is,
+	// so it carries no observation at all.
+	KindCatalog = "catalog"
+	// KindProduct is one catalogue item: a service that provisions itself, or a
+	// product assembled from several that do. One kind and not two, because Atlas
+	// holds one record for both and the difference is in the edges: a thing with
+	// parts is a whole, and the same record offered alone is a service. Deriving two
+	// kinds from that shape would invent a distinction the store does not make, and
+	// the store is right — the same laptop is a product in one catalogue and a part
+	// of a workplace bundle in another.
+	KindProduct = "product"
 )
 
 // Edge kinds.
@@ -60,9 +73,50 @@ const (
 	EdgeContains = "contains"
 	EdgeCalls    = "calls"
 	// EdgeUses is a process depending on something that is not a process: a
-	// configured worker, or a decision it delegates to.
+	// configured worker, or a decision it delegates to. A product uses the processes
+	// that provision and revoke it, which is the same relationship seen from the
+	// catalogue's side: the thing that needs work done, pointing at what does it.
 	EdgeUses = "uses"
+	// EdgeOffers is a catalogue putting a product in front of the people it reaches.
+	// Deliberately not EdgeContains: an application *holds* its processes and they
+	// exist nowhere else, while a product is referenced by catalogues rather than
+	// owned by one (ADR-0315) — two catalogues offering one laptop are two offers of
+	// one thing, not two laptops.
+	EdgeOffers = "offers"
+	// EdgeComposition and EdgeAggregation are the arrangement of a product: the part
+	// that always comes with the whole, and the part offered beside it.
+	//
+	// They are kept apart here for the reason the catalogue keeps them apart: they
+	// are different promises to whoever orders. They are also the first two edges on
+	// this landscape that are *exactly* what ArchiMate means by those words, which is
+	// why the projection can name them instead of declaring a loss.
+	EdgeComposition = "composition"
+	EdgeAggregation = "aggregation"
+	// EdgeRequires is precedence between two products: the one this points at has to
+	// be provisioned first. It is what the fulfilment order is computed from, and the
+	// only catalogue edge whose direction means "after".
+	EdgeRequires = "requires"
 )
+
+// catalogEdgeKinds is which stored arrangement edges this picture draws, and how.
+//
+// An allowlist rather than a pass-through, and the three spellings happening to
+// match is not a reason to write it as one: an edge kind added to the store later
+// would otherwise appear on the landscape in whatever ink the renderer defaulted to,
+// having been read by nobody.
+//
+// **Incompatibility is deliberately absent.** `excludes` means "these two must never
+// be held by the same person" (ADR-0342) — the one catalogue edge that means the
+// opposite of every other line on this canvas. Drawn in the same ink it would read as
+// a dependency, and a reader would take "the clerk who creates a supplier must not
+// approve payments to it" for "one needs the other". It is named in the derived
+// notation's loss list instead, which is where this picture says what it does not
+// draw.
+var catalogEdgeKinds = map[string]string{
+	"composition": EdgeComposition,
+	"aggregation": EdgeAggregation,
+	"requires":    EdgeRequires,
+}
 
 // Provenance says how a node is known (ADR-0211 §2). The three are the point of
 // overlaying a model onto the mesh: without them you have two pictures and no
@@ -240,6 +294,49 @@ type Draft struct {
 	CanView       bool
 }
 
+// ProductCatalog is one service catalogue as the mesh sees it (ADR-0312): what it
+// offers, and how what it offers is arranged.
+//
+// The arrangement lives on the catalogue rather than on the products because it *is*
+// the catalogue's: the same laptop is ordered with a docking station in one catalogue
+// and alone in another, and neither catalogue is wrong. Two catalogues that say
+// different things about one pair therefore produce two edges between one pair of
+// nodes, which is the fact rather than a defect in the drawing.
+type ProductCatalog struct {
+	ID      string
+	Name    string
+	CanView bool
+	// Items are the products this catalogue offers, by id.
+	Items []string
+	Edges []CatalogEdge
+}
+
+// CatalogEdge is one arrangement edge as stored, before the mesh decides whether it
+// is drawable. Kind is the catalogue's own spelling (composition, aggregation,
+// requires, excludes) rather than a mesh edge kind, because deciding which of them
+// this picture draws is exactly this package's job and not the store's.
+type CatalogEdge struct {
+	From string
+	To   string
+	Kind string
+}
+
+// Product is one catalogue item: what is offered, and the two processes that make it
+// real. CanView follows the item's home catalogue (ADR-0315), which is the same rule
+// the product listing applies — a product is edited through one catalogue, and that
+// is the catalogue that decides who may read it.
+type Product struct {
+	ID          string
+	Name        string
+	HomeCatalog string
+	CanView     bool
+	// ProvisionProcess and DeprovisionProcess are BPMN process ids, which is what a
+	// product binds: what runs is whatever is deployed when the order line is
+	// reached, so the binding names an id and never a version.
+	ProvisionProcess   string
+	DeprovisionProcess string
+}
+
 // Landscape is everything the mesh derives from, already filtered for this caller.
 type Landscape struct {
 	Applications []Application
@@ -249,6 +346,12 @@ type Landscape struct {
 	Drafts    []Draft
 	Workers   []Worker
 	Decisions []Decision
+	// Catalogs and Products are the service catalogue (ADR-0312), drawn always
+	// rather than on request like the drafts: a catalogue is part of what this
+	// server runs, not a plan somebody saved, and an installation that does not use
+	// the portal has none and pays nothing for them.
+	Catalogs []ProductCatalog
+	Products []Product
 	// Targets are the peers this server can promote to, and what asking them
 	// produced. Filled in two halves: the collector names them on the run loop, and
 	// [ReachOut] supplies each one's state off it.
@@ -333,6 +436,16 @@ type Node struct {
 	// Application is the owning application's node id, for grouping. Empty on
 	// application, restricted, and unresolved nodes.
 	Application string `json:"application,omitempty"`
+	// Catalog is the catalogue node a product is grouped under, and empty on every
+	// other kind. It is its home catalogue (ADR-0315) where that catalogue is on this
+	// picture, and otherwise the first catalogue here that offers it — a product
+	// whose home this reader cannot see is still somewhere, and a collapsed picture
+	// has to put it there.
+	//
+	// Separate from Application rather than sharing it: that field carries a process
+	// application, and one field holding two kinds of container is how a reader ends
+	// up asking which one they have.
+	Catalog string `json:"catalog,omitempty"`
 	// ProcessID and Version identify a process node well enough to navigate to the
 	// Operations view (L2) without a second lookup.
 	ProcessID string `json:"processId,omitempty"`
@@ -483,6 +596,8 @@ func workerNodeID(id string) string      { return KindWorker + ":" + id }
 // whole difference between it and a process node.
 func draftNodeID(processID string) string { return KindDraft + ":" + processID }
 func decisionNodeID(id string) string     { return KindDecision + ":" + id }
+func catalogNodeID(id string) string      { return KindCatalog + ":" + id }
+func productNodeID(id string) string      { return KindProduct + ":" + id }
 func restrictedNodeID(ordinal int) string { return fmt.Sprintf("%s:%d", KindRestricted, ordinal) }
 func targetNodeID(id string) string       { return KindTarget + ":" + id }
 
@@ -695,6 +810,123 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		})
 	}
 
+	// --- The catalogue -------------------------------------------------------
+	//
+	// Two facts meet here that nothing else on this server puts on one picture: what
+	// is offered, and what has to run for it to be delivered. A product names the
+	// process that provisions it, and a product whose process is not deployed is an
+	// order that will park with somebody waiting for a laptop. The catalogue screen
+	// cannot make that finding — it cannot see the engine — and the Operations view
+	// cannot either, because it has never heard of the catalogue.
+	products := map[string]Product{}
+	for _, it := range land.Products {
+		products[it.ID] = it
+	}
+	// A product binds a process *id* and a derived process node is keyed by its
+	// deployment key, so the two are joined through this index rather than by string
+	// surgery on a node id. The landscape carries one entry per process id at its
+	// current version, so the first is the only one.
+	processByID := make(map[string]Process, len(land.Processes))
+	for _, p := range land.Processes {
+		if _, seen := processByID[p.ProcessID]; !seen {
+			processByID[p.ProcessID] = p
+		}
+	}
+
+	// productRef resolves one item id to whatever an edge should point at: the
+	// product, a placeholder for one this caller may not see, or the unresolved shape
+	// for one that is not here at all. The three are the same three the call
+	// activities above resolve to, for the same reason — "not yours" and "not here"
+	// send somebody to two different places.
+	productRef := func(id string) string {
+		it, known := products[id]
+		switch {
+		case known && it.CanView:
+			return productNodeID(it.ID)
+		case known:
+			return restrictedOrdinal(productNodeID(it.ID))
+		default:
+			nodeID := unresolvedNodeID(KindProduct, id)
+			unresolved[nodeID] = id
+			return nodeID
+		}
+	}
+
+	var visibleCatalogs []ProductCatalog
+	for _, c := range land.Catalogs {
+		if c.CanView {
+			visibleCatalogs = append(visibleCatalogs, c)
+		}
+	}
+	sort.Slice(visibleCatalogs, func(i, j int) bool { return visibleCatalogs[i].ID < visibleCatalogs[j].ID })
+
+	// drawn is which products reach the picture, in the order they were first
+	// offered; foldInto is the catalogue each one collapses into when the graph is
+	// over budget (see [Node.Catalog]).
+	drawn := map[string]bool{}
+	var drawnOrder []string
+	foldInto := map[string]string{}
+	for _, c := range visibleCatalogs {
+		from := catalogNodeID(c.ID)
+		g.Nodes = append(g.Nodes, Node{
+			ID: from, Kind: KindCatalog, Name: c.Name, Provenance: ProvenanceDerived,
+		})
+		for _, id := range c.Items {
+			addEdge(Edge{From: from, To: productRef(id), Kind: EdgeOffers})
+			it, known := products[id]
+			if !known || !it.CanView {
+				continue
+			}
+			if !drawn[id] {
+				drawn[id] = true
+				drawnOrder = append(drawnOrder, id)
+			}
+			// Home wins wherever it is on the picture; otherwise the first catalogue
+			// here that offers it, which the sort above makes deterministic.
+			if _, have := foldInto[id]; !have || it.HomeCatalog == c.ID {
+				foldInto[id] = c.ID
+			}
+		}
+		for _, e := range c.Edges {
+			kind, drawable := catalogEdgeKinds[e.Kind]
+			if !drawable {
+				continue
+			}
+			addEdge(Edge{From: productRef(e.From), To: productRef(e.To), Kind: kind})
+		}
+	}
+
+	sort.Strings(drawnOrder)
+	for _, id := range drawnOrder {
+		it := products[id]
+		node := Node{
+			ID: productNodeID(id), Kind: KindProduct, Name: it.Name,
+			Provenance: ProvenanceDerived,
+		}
+		if home, ok := foldInto[id]; ok {
+			node.Catalog = catalogNodeID(home)
+		}
+		g.Nodes = append(g.Nodes, node)
+		// The two processes that make the promise real. Resolved exactly as a call
+		// activity is, because it is the same question asked by a different referrer.
+		for _, processID := range []string{it.ProvisionProcess, it.DeprovisionProcess} {
+			if processID == "" {
+				continue
+			}
+			target, known := processByID[processID]
+			switch {
+			case known && target.CanView:
+				addEdge(Edge{From: node.ID, To: processNodeID(target.Key), Kind: EdgeUses})
+			case known:
+				addEdge(Edge{From: node.ID, To: restrictedOrdinal(processNodeID(target.Key)), Kind: EdgeUses})
+			default:
+				missing := unresolvedNodeID(KindProcess, processID)
+				unresolved[missing] = processID
+				addEdge(Edge{From: node.ID, To: missing, Kind: EdgeUses})
+			}
+		}
+	}
+
 	placeholders := sortedKeys(restricted)
 	sort.Slice(placeholders, func(i, j int) bool {
 		return restricted[placeholders[i]] < restricted[placeholders[j]]
@@ -750,7 +982,12 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 	})
 
 	if opts.MaxNodes > 0 && len(g.Nodes) > opts.MaxNodes {
-		return cluster(g, visible, visibleDrafts, appIDs, visibleApps, land.PartialStatus)
+		catalogChildren := map[string]int{}
+		for _, id := range drawnOrder {
+			catalogChildren[foldInto[id]]++
+		}
+		return cluster(g, visible, visibleDrafts, appIDs, visibleApps,
+			visibleCatalogs, catalogChildren, land.PartialStatus)
 	}
 	applyStatus(&g, land.PartialStatus)
 	return g
@@ -841,6 +1078,14 @@ func applyOverlays(g *Graph, overlays []Overlay, visible []Process) {
 		if n.Kind == KindRestricted || n.Kind == KindUnresolved || n.Kind == KindDraft {
 			continue
 		}
+		// Nor a catalogue or a product, for a third reason again. Drift is a claim
+		// about a resource a model *could* have declared, and ADR-0189 §4 defines no
+		// binding key for either — so counting them would report a debt nobody can
+		// ever pay off, growing by one every time somebody adds a product. When a key
+		// exists for them, they join the count and this line goes.
+		if n.Kind == KindCatalog || n.Kind == KindProduct {
+			continue
+		}
 		g.Unmodeled++
 	}
 }
@@ -849,7 +1094,8 @@ func applyOverlays(g *Graph, overlays []Overlay, visible []Process) {
 // nodes each one stands for. It answers with less rather than with a picture the
 // browser cannot lay out, and Clustered says which of the two happened.
 func cluster(full Graph, visible []Process, drafts []Draft, appIDs []string,
-	apps map[string]Application, partial bool) Graph {
+	apps map[string]Application, catalogs []ProductCatalog, catalogChildren map[string]int,
+	partial bool) Graph {
 	children := map[string]int{}
 	// Processes are counted separately from children because the severity sentence
 	// names them: a collapsed application that also holds drafts stands for more
@@ -930,6 +1176,17 @@ func cluster(full Graph, visible []Process, drafts []Draft, appIDs []string,
 			node.OldestIncident = oldest[id]
 		}
 		out.Nodes = append(out.Nodes, node)
+	}
+	// Catalogues survive the collapse for the reason applications do: they are what
+	// holds the things being collapsed. Leaving them out would take the whole
+	// catalogue off an over-budget picture — the truncated graph that looks complete,
+	// which is the one outcome ADR-0211 §7 refuses. They carry no state to aggregate,
+	// so a collapsed catalogue is its name and how much it stands for.
+	for _, c := range catalogs {
+		out.Nodes = append(out.Nodes, Node{
+			ID: catalogNodeID(c.ID), Kind: KindCatalog, Name: c.Name,
+			Provenance: ProvenanceDerived, Children: catalogChildren[c.ID],
+		})
 	}
 	applyStatus(&out, partial)
 	return out
