@@ -80,20 +80,8 @@ const EDGE_KINDS = [
   { id: "composition", name: "contains", what: "an integral part, always ordered with the whole and not deselectable" },
   { id: "aggregation", name: "optionally contains", what: "offered beside the whole and separately orderable" },
   { id: "requires", name: "requires", what: "precedence: the other must be provisioned first" },
+  { id: "excludes", name: "must not be held with", what: "incompatibility: one person may never hold both" },
 ];
-
-// PAIRWISE_KINDS is what the pairwise form may still *write* (#1022).
-//
-// Structure is assembled per product now: a catalogue is built out of services that
-// each provision themselves, and what a product adds is an arrangement — which of
-// them come with it, and which are offered beside it. That is one question asked per
-// service, and asking it again as "pick a from, pick a relationship, pick a to"
-// would be a second way to say the same thing. Two ways drift, and the one that
-// drifts here decides what somebody is actually ordering.
-//
-// Precedence stays pairwise because it *is* pairwise: "the account before the
-// mailbox" is a statement about two things and belongs to neither.
-const PAIRWISE_KINDS = EDGE_KINDS.filter((k) => k.id === "requires");
 
 // STRUCTURE_CHOICES are the three states one service can be in with respect to one
 // product — the kit's whole vocabulary, in the order somebody reads them.
@@ -108,6 +96,22 @@ const STRUCTURE_CHOICES = [
 // from the list rather than spelled again, because a fourth answer added above and
 // forgotten here would be a save that silently drops it.
 const STRUCTURE_IDS = STRUCTURE_CHOICES.map((c) => c.id).filter((c) => c !== "none");
+
+// PAIRWISE_KINDS is what the pairwise form may still *write* (#1022).
+//
+// Structure is assembled per product now: a catalogue is built out of services that
+// each provision themselves, and what a product adds is an arrangement — which of
+// them come with it, and which are offered beside it. That is one question asked per
+// service, and asking it again as "pick a from, pick a relationship, pick a to"
+// would be a second way to say the same thing. Two ways drift, and the one that
+// drifts here decides what somebody is actually ordering.
+//
+// Everything the kit does not own is pairwise, and derived rather than listed for
+// the reason STRUCTURE_IDS is: a fourth kind added above and forgotten here would
+// be a kind nothing can author. Both of them *are* pairwise — "the account before
+// the mailbox" and "never these two together" are statements about two products
+// that belong to neither.
+const PAIRWISE_KINDS = EDGE_KINDS.filter((k) => !STRUCTURE_IDS.includes(k.id));
 
 // textOf reads a multilingual name, preferring the catalogue's first language and
 // falling back to the id — a product with no text yet is still a product, and a row
@@ -718,10 +722,14 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
     <div class="assemble-editor"></div>
 
     <h3 style="margin-top:26px">How the products relate</h3>
-    <p class="muted" style="max-width:62ch">Two different questions, kept apart.
-      <b>Structure</b> says what belongs to what. <b>Precedence</b> says what has to exist
-      first, and it is what the fulfilment order is computed from. Both must be free of
-      cycles, and publishing proves it.</p>
+    <p class="muted" style="max-width:62ch">Three different questions, kept apart.
+      <b>Structure</b> says what belongs to what, and is assembled per product.
+      <b>Precedence</b> says what has to exist first, and it is what the fulfilment order
+      is computed from; structure and precedence must both be free of cycles, and
+      publishing proves it. <b>Incompatibility</b> says what one person may never hold
+      together — the clerk who may create a supplier must not also approve payments to
+      it. Neither right is wrong there; the combination is, and an order that would
+      produce it is refused rather than reported afterwards.</p>
     ${edgeTable(cat.edges || [], byID, langs)}
     ${offered.length > 1 ? edgeForm(offered, byID, langs) : `<p class="muted">Two products are needed before one can relate to another.</p>`}
 
@@ -834,14 +842,38 @@ function contains(edges, whole, part) {
   return walk(whole);
 }
 
+// pairKey names an unordered pair, so the two directions of one symmetric fact
+// answer to the same key.
+const pairKey = (a, b) => [a, b].sort().join("\u0000");
+
 function edgeTable(edges, byID, langs) {
-  const rows = (kind) => edges.filter((e) => e.kind === kind).map((e) => {
+  const name = (id) => esc(textOf((byID[id] || {}).texts, langs, id));
+  const row = (e, act, data) => {
     const k = EDGE_KINDS.find((x) => x.id === e.kind);
-    return `<tr><td>${esc(textOf((byID[e.from] || {}).texts, langs, e.from))}</td>
+    return `<tr><td>${name(e.from)}</td>
       <td class="muted">${esc(k ? k.name : e.kind)}</td>
-      <td>${esc(textOf((byID[e.to] || {}).texts, langs, e.to))}</td>
-      <td><button class="btn ghost danger" data-act="unedge" data-edge="${esc(e.from)}|${esc(e.kind)}|${esc(e.to)}">remove</button></td></tr>`;
-  }).join("");
+      <td>${name(e.to)}</td>
+      <td><button class="btn ghost danger" data-act="${act}" ${data}>remove</button></td></tr>`;
+  };
+  const rows = (kind) => edges.filter((e) => e.kind === kind)
+    .map((e) => row(e, "unedge",
+      `data-edge="${esc(e.from)}|${esc(e.kind)}|${esc(e.to)}"`)).join("");
+
+  // An incompatibility is the only symmetric kind: "A must not be held with B" is
+  // exactly "B must not be held with A", and publishing writes both directions into
+  // the release whichever way round it was authored. So one fact is drawn as one
+  // row even where both directions were stored, and removing it removes both —
+  // taking away one direction would leave the other, and the row nobody could
+  // account for would come straight back.
+  const seen = new Set();
+  const incompatibility = edges.filter((e) => e.kind === "excludes").filter((e) => {
+    const key = pairKey(e.from, e.to);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).map((e) => row(e, "unexclude",
+    `data-pair="${esc(e.from)}|${esc(e.to)}"`)).join("");
+
   const structure = rows("composition") + rows("aggregation");
   const precedence = rows("requires");
   return `
@@ -850,7 +882,10 @@ function edgeTable(edges, byID, langs) {
     : `<p class="muted">Nothing contains anything else.</p>`}
     <h4 style="margin:14px 0 4px">Precedence</h4>
     ${precedence ? `<table class="table"><tbody>${precedence}</tbody></table>`
-    : `<p class="muted">Nothing has to exist before anything else.</p>`}`;
+    : `<p class="muted">Nothing has to exist before anything else.</p>`}
+    <h4 style="margin:14px 0 4px">Incompatibility</h4>
+    ${incompatibility ? `<table class="table"><tbody>${incompatibility}</tbody></table>`
+    : `<p class="muted">Nothing is incompatible with anything else.</p>`}`;
 }
 
 function edgeForm(offered, byID, langs) {
@@ -1573,9 +1608,11 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
         chosen.push({ from: pid, to: field.slice("part-".length), kind: String(value) });
       }
       // Everything else stays exactly as it was: another whole's arrangement, and
-      // every precedence edge including this product's own. The kit was asked one
-      // question and may only answer that one — a save that replaced the edge list
-      // wholesale would delete what this screen never showed.
+      // every edge of a kind the kit does not own — precedence and incompatibility,
+      // this product's own included. The kit was asked one question and may only
+      // answer that one; a save that replaced the edge list wholesale would delete
+      // what this screen never showed. The filter is structural rather than a list
+      // of kinds to spare, so a kind added later is kept without being remembered.
       const kept = (cat.edges || []).filter((e) =>
         !(e.from === pid && STRUCTURE_IDS.includes(e.kind)));
       const edges = [...kept, ...chosen];
@@ -1636,6 +1673,18 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
     if (act === "unedge") {
       const [from, kind, to] = b.dataset.edge.split("|");
       const edges = (cat.edges || []).filter((x) => !(x.from === from && x.kind === kind && x.to === to));
+      try { await patchList({ edges }); reload(); }
+      catch (err) { patchFailed(err); }
+      return;
+    }
+
+    if (act === "unexclude") {
+      const [a, b2] = b.dataset.pair.split("|");
+      // Both directions, because the row is one fact: taking away the one that was
+      // drawn would leave the mirror, and the row would come straight back with
+      // nothing to say why.
+      const edges = (cat.edges || []).filter((x) => !(x.kind === "excludes"
+        && ((x.from === a && x.to === b2) || (x.from === b2 && x.to === a))));
       try { await patchList({ edges }); reload(); }
       catch (err) { patchFailed(err); }
       return;
@@ -1703,7 +1752,16 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
       const f = new FormData(e.target);
       const from = f.get("from"), to = f.get("to"), kind = f.get("kind");
       if (from === to) { toast("A product cannot relate to itself", "err"); return; }
-      const edges = [...(cat.edges || []), { from, to, kind }];
+      const have = cat.edges || [];
+      // An incompatibility is symmetric, so the mirror of one already recorded is
+      // the same fact said backwards rather than a second one. Added anyway it
+      // would draw one row, be removed as a pair, and leave whoever authored it
+      // wondering where the other went.
+      const already = have.some((e) => e.kind === kind
+        && ((e.from === from && e.to === to)
+          || (kind === "excludes" && e.from === to && e.to === from)));
+      if (already) { toast("That is already recorded", "err"); return; }
+      const edges = [...have, { from, to, kind }];
       try { await patchList({ edges }); reload(); }
       catch (err) { patchFailed(err); }
     });

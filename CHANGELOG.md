@@ -14,6 +14,35 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An incompatibility can be declared on the screen that declares everything else
+  about a catalogue.** A product may exclude another — the clerk who may create a
+  supplier must not also approve payments to it — and the record has carried that
+  since the decision was made. Publishing freezes it into a release in **both**
+  directions, and an order that would produce the combination is refused rather than
+  reported afterwards.
+
+  The Console knew three edge kinds of four. An incompatibility could not be
+  declared there at all, and one that already existed appeared in no table and could
+  not be removed, because the only remove button is on a row that is drawn. It was
+  reachable over REST and MCP and by nobody using the screen — while being enforced
+  the whole time.
+
+  It now sits beside structure and precedence as the third question the relations
+  section asks, and the pairwise form offers it, because it *is* pairwise: "never
+  these two together" is a statement about two products that belongs to neither.
+  Its symmetry is handled rather than passed on. One fact is **one row** however
+  many directions were stored, removing it removes both — taking away the one that
+  was drawn would leave the mirror, and the row would come straight back with
+  nothing to say why — and adding the mirror of one already recorded is refused
+  instead of stored as a second fact.
+
+  The comment above the Console's copy of these vocabularies claimed they were
+  "pinned by a test against the Go source so the two cannot drift". **No such test
+  existed**, which is why the drift went unnoticed for as long as it did. It exists
+  now, and it reads the constants themselves rather than a list kept beside them:
+  a value added to the states, the approval kinds or the edge kinds fails it until
+  the screen carries the value, can author it, and shows it.
+
 - **A product can be offered from a date, until a date — and now that means
   something.** A catalogue item has carried an orderable window since the catalogue
   was designed, and nothing ever read it. Publishing checked that the window did not
