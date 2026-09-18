@@ -18,7 +18,9 @@ import (
 // newOffLoopServer builds a real server over a temp dir. The off-loop read path
 // is about the run loop, so nothing here may be faked: the test needs the actual
 // loop goroutine to observe that it stays free.
-func newOffLoopServer(t *testing.T) (*Server, func()) {
+// opts are passed through to New, so a test that needs one of the server's own
+// seams — a held ticker, an injected clock — gets it without a second helper.
+func newOffLoopServer(t *testing.T, opts ...Option) (*Server, func()) {
 	t.Helper()
 	dir := t.TempDir()
 	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
@@ -33,7 +35,7 @@ func newOffLoopServer(t *testing.T) (*Server, func()) {
 	if err := proc.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	srv, err := New(proc, store, dir)
+	srv, err := New(proc, store, dir, opts...)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

@@ -613,6 +613,15 @@ type Server struct {
 	// together by withRetentionTrigger.
 	retentionTicks <-chan time.Time
 	retentionSwept chan struct{}
+	// timerTicks, when non-nil, replaces the timer scheduler's real ticker, so a test
+	// that owns a clock owns the only one in the picture. It is the same seam the
+	// retention sweep and the checkpoint loop have, and it is here for a sharper
+	// reason than theirs: this loop does not only fire timers, it *drives jobs* — so
+	// on a server standing still it is the one goroutine that can hand work out while
+	// a test is counting what went out. A test that passes a channel it never sends
+	// on has silenced it; nil is production, where a real ticker drives it and nothing
+	// observes it. Set by withTimerTrigger.
+	timerTicks <-chan time.Time
 
 	// Recovery checkpoints (ADR-0131): on a fixed cadence, snapshot the applied state
 	// so a restart replays only the WAL suffix past it instead of the whole log — the
@@ -1039,6 +1048,16 @@ func withClock(now func() int64) Option {
 			s.now = now
 		}
 	}
+}
+
+// withTimerTrigger replaces the timer scheduler's real ticker with an explicit tick
+// channel. It is unexported — a test seam — and the reason it exists is the drive
+// that follows each tick rather than the timers themselves: a test that advances its
+// own clock and then counts what the engine handed out is otherwise sharing the
+// question with a goroutine firing every real second. Passing a channel nothing is
+// ever sent on holds it still for the whole test.
+func withTimerTrigger(ticks <-chan time.Time) Option {
+	return func(s *Server) { s.timerTicks = ticks }
 }
 
 // withRetentionTrigger replaces the retention sweep's real ticker with an explicit
@@ -2834,13 +2853,17 @@ func (s *Server) restoreDecisionDeployment(rec persistedDecision) error {
 // coarse (whole seconds) — timers are "fire at or after due", not real-time.
 func (s *Server) timerScheduler(every time.Duration) {
 	defer s.wg.Done()
-	t := time.NewTicker(every)
-	defer t.Stop()
+	ticks := s.timerTicks
+	if ticks == nil {
+		t := time.NewTicker(every)
+		defer t.Stop()
+		ticks = t.C
+	}
 	for {
 		select {
 		case <-s.quit:
 			return
-		case <-t.C:
+		case <-ticks:
 			// Fire due timers on the loop, then drive any jobs they unblocked (e.g. a
 			// timer leading into a business rule task) OFF it: this tick runs every
 			// second, and before ADR-0157 step 6 it was the path that could hold the
