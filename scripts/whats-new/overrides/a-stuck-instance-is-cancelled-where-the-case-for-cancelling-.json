@@ -1,0 +1,36 @@
+{
+  "tags": [
+    "Operations"
+  ],
+  "title": {
+    "en": "Cancel an instance straight from its replay",
+    "de": "Eine Instanz direkt im Replay abbrechen"
+  },
+  "summary": {
+    "en": "The replay of a process instance is where you work out why it has to be stopped: the incident that parked it, the step its token is sitting on, the variables it is carrying. Until now the button that stops it was on a different screen, so you read the case here and acted there — and by the time you had found the instance again in the live view's picker, the place you had been reading was gone. The replay header now carries Cancel instance next to Migrate. It is the same act as before: the instance's tokens are discarded and it moves to the finished list as terminated. You are asked to confirm, with the consequence spelled out, and nothing is sent until you do. If the server refuses — because the instance finished a moment earlier, say — you are told, the instance is left exactly as it was, and the button stays where it is. Both buttons now follow the instance rather than the moment you opened the view: an instance that finishes while you are replaying it quietly takes Cancel and Migrate with it, because there is no longer anything either could do.",
+    "de": "Das Replay einer Prozessinstanz ist die Ansicht, in der man sich erarbeitet, warum sie gestoppt werden muss: der Incident, der sie angehalten hat, der Schritt, auf dem ihr Token steht, die Variablen, die sie trägt. Bisher lag die Schaltfläche zum Stoppen auf einer anderen Ansicht — man las den Fall hier und handelte dort, und bis die Instanz in der Auswahlliste der Live-Ansicht wiedergefunden war, war die gelesene Stelle verloren. Die Kopfzeile des Replays trägt jetzt «Cancel instance» neben «Migrate». Der Vorgang ist derselbe wie bisher: Die Token der Instanz werden verworfen, und die Instanz wandert als «terminated» in die Liste der abgeschlossenen Instanzen. Vorher wird rückgefragt, mit benannter Folge, und erst nach der Bestätigung wird etwas gesendet. Lehnt der Server ab — etwa weil die Instanz kurz zuvor fertig wurde —, wird das gemeldet, die Instanz bleibt unverändert, und die Schaltfläche bleibt bedienbar. Beide Schaltflächen richten sich jetzt nach dem Zustand der Instanz und nicht nach dem Moment des Aufrufs: Eine Instanz, die während des Replays fertig wird, nimmt «Cancel» und «Migrate» mit, weil beides nichts mehr bewirken könnte."
+  },
+  "tutorial": {
+    "en": [
+      "Open Operations › Instances and start (or pick) an instance that is still running.",
+      "Press ▶ Replay on it — the replay opens with the instance's history and diagram.",
+      "Read the case: the flagged step, its Details panel, the variables at that point.",
+      "Press Cancel instance in the header and confirm the question.",
+      "The state pill switches to terminated, the instance moves to the finished list, and both Cancel and Migrate disappear because there is nothing left to do to it."
+    ],
+    "de": [
+      "Unter «Operations › Instances» eine laufende Instanz starten oder auswählen.",
+      "Bei dieser Instanz «▶ Replay» drücken — das Replay öffnet sich mit Historie und Diagramm.",
+      "Den Fall lesen: den markierten Schritt, dessen Details-Panel, die Variablen an dieser Stelle.",
+      "In der Kopfzeile «Cancel instance» drücken und die Rückfrage bestätigen.",
+      "Der Status wechselt auf «terminated», die Instanz wandert in die Liste der abgeschlossenen Instanzen, und «Cancel» wie «Migrate» verschwinden, weil an ihr nichts mehr zu tun ist."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Operations",
+      "de": "Betrieb öffnen"
+    },
+    "route": "#/operations"
+  }
+}

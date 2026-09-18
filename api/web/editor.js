@@ -11493,6 +11493,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
         </div>
         <div style="flex:1"></div>
         <a class="btn neutral" id="rp-forklink" hidden></a>
+        <button class="btn ghost danger" id="rp-cancel" hidden title="Cancel (terminate) this running instance">Cancel instance</button>
         <button class="btn neutral" id="rp-migrate" hidden title="Move this instance to another deployed version of its process">&#8644; Migrate&hellip;</button>
         <a class="btn neutral" id="rp-live" title="Open this instance's live view">Live view</a>
         <a class="btn neutral" id="rp-instances" href="#/operations" title="Back to this process's instances">&larr; Instances</a>
@@ -11592,23 +11593,49 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     forkLink.textContent = `\u2190 Continues ${tl.predecessorInstanceKey}`;
     forkLink.title = "This instance continues the work of an instance that ran an earlier version";
   }
-  // Migrating is offered only where it means something: an instance still running has
-  // tokens to rebind, a finished one has none, and the button would be an invitation to
-  // an action the engine would refuse (ADR-0162).
+  // Migrating and cancelling are offered only where they mean something: an instance
+  // still running has tokens to rebind or discard, a finished one has none, and either
+  // button would be an invitation to an action the engine would refuse (ADR-0162).
+  // Whether they show follows the *state*, not the mount: a replayed instance is polled,
+  // so it can finish while it is on screen (see applyMeta).
   const migrateBtn = root.querySelector("#rp-migrate");
-  if (tl.state === "active") {
-    migrateBtn.hidden = false;
-    migrateBtn.addEventListener("click", () => migrateInstanceFlow({
-      api, toast,
-      instanceKey: key,
-      processId: tl.processId,
-      fromVersion: tl.version,
-      fromProcessDefKey: tl.processDefKey,
-      // The replay is a fold of the instance's history and the migration changes what
-      // that history means, so it is re-read from scratch rather than patched.
-      onDone: () => mountInstanceReplay(root, { api, toast, key }),
-    }));
-  }
+  const cancelBtn = root.querySelector("#rp-cancel");
+  const syncInstanceActions = (state) => {
+    const active = state === "active";
+    migrateBtn.hidden = !active;
+    cancelBtn.hidden = !active;
+  };
+  syncInstanceActions(tl.state);
+  migrateBtn.addEventListener("click", () => migrateInstanceFlow({
+    api, toast,
+    instanceKey: key,
+    processId: tl.processId,
+    fromVersion: tl.version,
+    fromProcessDefKey: tl.processDefKey,
+    // The replay is a fold of the instance's history and the migration changes what
+    // that history means, so it is re-read from scratch rather than patched.
+    onDone: () => mountInstanceReplay(root, { api, toast, key }),
+  }));
+  // Cancelling is the act the live view already offers, asked for where the operator has
+  // just read the case for it — the incident, the step the token is parked on, the
+  // variables it carries. Sending them back to the live view to press the same button
+  // loses that place, and with it the reason they came here.
+  cancelBtn.addEventListener("click", async () => {
+    if (!window.confirm(`Cancel (terminate) instance ${key}? Its tokens are discarded and it moves to the finished list as "terminated".`)) return;
+    cancelBtn.disabled = true;
+    try {
+      await api("DELETE", `/api/v1/instances/${key}`);
+      toast(`Instance ${key} terminated`, "ok");
+      // The termination ends this instance's history, so the replay is re-read from
+      // scratch rather than patched — the same treatment a migration gets above.
+      mountInstanceReplay(root, { api, toast, key });
+    } catch (e) {
+      // Nothing was terminated, so the button has to come back: it is the only control
+      // here that can stop the instance.
+      toast("cancel failed: " + e.message, "err");
+      cancelBtn.disabled = false;
+    }
+  });
 
   const viewer = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
   current = viewer;
@@ -13540,6 +13567,9 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const end = next.state !== "active" && steps.length ? Math.max(...steps.map((s) => s.endAt || 0)) : 0;
     root.querySelector("#m-end").textContent = end ? fmtDateTime(end) : "—";
     applyStatePill(next.state);
+    // An instance that finishes while the replay is open has nothing left to migrate or
+    // cancel; the actions go with the state the poll just read.
+    syncInstanceActions(next.state);
   }
 
   async function poll() {

@@ -14,6 +14,24 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A stuck instance is cancelled where the case for cancelling it was read.** The
+  replay is where an operator reconstructs why an instance has to be stopped: the
+  incident that parked it, the step its token sits on, the variables it carries.
+  Stopping it lived on another screen — the live view's instance picker — so the
+  decision and the act were two views apart, and the way back lost the place the
+  reasoning was done in.
+
+  The replay header now carries **Cancel instance** beside Migrate, and it is the same
+  act the live view offers (`DELETE /api/v1/instances/{key}`): the tokens are discarded
+  and the instance moves to the finished list as *terminated*. It asks first and names
+  the consequence; a server that refuses is reported and the instance is left as it
+  was, with the button still there — it is the only control on this screen that can
+  stop the instance.
+
+  Both per-instance actions now follow the instance's state rather than the moment the
+  view was mounted. A replayed instance is polled, so it can finish while it is on
+  screen, and an instance that has finished has nothing left to migrate or cancel.
+
 - **The service catalogue is drawn on the starmap.** Atlas held two halves of one
   estate and drew them on two screens. The starmap is the derived half — applications,
   deployed processes, the workers they use, every edge a fact the server can point at.
