@@ -6,7 +6,7 @@ import (
 )
 
 // The portal page when a sign-in is required and nobody has one yet
-// (ADR-draft-portal-carries-its-own-sign-in).
+// (ADR-0399).
 //
 // This is the case the page had no answer for. With --auth on and no session,
 // every route the portal reads answers 401: the catalogue read was swallowed and

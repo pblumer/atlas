@@ -8,7 +8,7 @@ import (
 )
 
 // A federated login lands where it started
-// (ADR-draft-portal-carries-its-own-sign-in).
+// (ADR-0399).
 //
 // The callback has always redirected to "/", which was right while the Console's
 // login screen was the only place a federated login could begin. It is not any

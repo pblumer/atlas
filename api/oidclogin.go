@@ -60,7 +60,7 @@ const (
 	oidcFailedQuery = "?sso=failed"
 
 	// portalPage is the service portal, the second surface that can start a
-	// federated login (ADR-draft-portal-carries-its-own-sign-in). Named here
+	// federated login (ADR-0399). Named here
 	// because this file decides where a login may end, and that is the same list.
 	portalPage = "/portal.html"
 

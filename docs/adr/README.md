@@ -484,6 +484,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0396](0396-catalogue-on-the-starmap.md) | The service catalogue is drawn on the starmap, as derived fact | Accepted | Landed |
 | [0397](0397-enforce-the-orderable-window.md) | The orderable window is enforced when an order is placed | Accepted | Landed |
 | [0398](0398-a-business-rule-task-can-call-a-decision-service.md) | A business rule task can call a decision service | Accepted | Landed |
+| [0399](0399-portal-carries-its-own-sign-in.md) | The service portal carries its own sign-in | Accepted | Landed |
 
 ## The two states of a record
 

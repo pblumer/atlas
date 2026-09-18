@@ -1,4 +1,4 @@
-# ADR-DRAFT: The service portal carries its own sign-in
+# ADR-0399: The service portal carries its own sign-in
 
 - **Status:** Accepted
 - **Implementation:** Landed
