@@ -65,6 +65,44 @@ now has an answer, delete both lines and check whether the decision that rested 
 gap still holds — that is the case this exists for. If it is still open, write down
 what you learned and date the month you looked.
 
+### The prior-art line
+
+Every record says what its author looked at outside Atlas before deciding:
+
+```
+- **Prior art:** TMF620/622/637 carry the same catalogue/order/inventory split;
+  mapped in docs/comparisons/catalogue-standards.md. Syncope and midPoint refused
+  as runtimes on ADR-0011.
+```
+
+`none` is a perfectly good answer — most records decide an internal detail, and no
+standard covers where a button sits. It just has to say why, because a bare `none`
+reads exactly like a blank:
+
+```
+- **Prior art:** none — this decides how one index is keyed inside the state store.
+```
+
+ADR-0387 is why the line exists. The catalogue, order and inventory complex — the
+better part of thirty records — was written without the question being put once:
+`grep -ci standard` on ADR-0312 returns zero across its 767 lines, its considered
+options are "one model / two models / three models", and no record in the complex
+cites [ADR-0176](0176-standards-boundary-and-runtime-contract.md), which exists to
+place exactly that question. The answers turned out largely right, and that is what
+made the omission invisible — a record that names no prior art cannot be told apart
+from one that examined it and refused it, and the refusal is the half a reviewer can
+check. ADR-0387 wrote the comparison down; eight records followed it and not one
+named prior art, which is the evidence that a document is not a mechanism.
+
+`go test ./docs/adr` is the mechanism. It fails on a record above ADR-0397 — and on
+every draft — that omits the line or answers `none` without a reason. The 397 records
+written before the rule are not retrofitted: going back to answer the question from
+memory for each is the thing the line exists to stop.
+
+What the guard cannot do is judge the answer. No test sees that a search was cursory,
+and one that pretended to would buy the same false comfort as a coverage number with
+no assertions behind it. That half is the reviewer's.
+
 ## Reading the older records: "connector"
 
 Records written before [ADR-0203](0203-worker-execution-model.md) say *connector*

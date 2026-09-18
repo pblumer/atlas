@@ -9,12 +9,15 @@ Do not pick a number and do not add a row to README.md's index: the number is
 assigned when the record lands on main (`make adr-number`), which also fixes the
 heading, adds the index row, and rewrites every ADR-draft-<slug> citation. See
 README.md § Writing a record.
+Prior art is required, and `none` is a fine answer as long as it says why: see
+README.md § The prior-art line. A guard fails on a record that omits it.
 -->
 
 - **Status:** Proposed | Accepted | Superseded by ADR-XXXX | Deprecated
 - **Implementation:** Not started | Partial | Landed | Superseded
 - **Date:** YYYY-MM-DD
 - **Deciders:** names/roles
+- **Prior art:** the standards, specifications and existing implementations you looked at before deciding — or `none` and why none applies
 - **Open question:** what this record could not settle, if anything — delete this line and the next when there is nothing
 - **Question checked:** YYYY-MM (the month somebody last looked at that question)
 

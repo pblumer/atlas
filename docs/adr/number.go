@@ -61,7 +61,25 @@ type Record struct {
 	// — and a guard test fails once a date has stood for a year.
 	OpenQuestion    string
 	QuestionChecked string
+	// PriorArt is what the record's author looked at outside Atlas before deciding:
+	// the standards, specifications and existing implementations that cover the same
+	// ground, or `none` and why none applies. ADR-0387 is why it exists. The
+	// catalogue complex was built without the question being put once, and the
+	// answers turned out largely right — which is exactly why the omission was
+	// invisible: a record that names no prior art cannot be told apart from one that
+	// examined it and refused it, and the refusal is the half a reviewer can check.
+	//
+	// Required of records above lastRecordWithoutPriorArt and of every draft; the
+	// guard is in priorart_test.go rather than in the parse, because a record
+	// missing it is a convention broken and not a file the numbering cannot read.
+	PriorArt string
 }
+
+// lastRecordWithoutPriorArt is the highest number written before the prior-art line
+// was required. The records at or below it are not retrofitted: answering the
+// question for 397 existing decisions would mean answering it from memory, which is
+// the thing the line exists to stop. ADR-0387 says so.
+const lastRecordWithoutPriorArt = 397
 
 // IsDraft reports whether this record is still waiting for a number.
 func (r Record) IsDraft() bool { return r.Num == 0 }
@@ -79,6 +97,10 @@ var (
 	openQuestionPattern = regexp.MustCompile(`(?m)^- \*\*Open question:\*\* (.+(?:\n[ \t]+\S.*)*)$`)
 	questionCheckedPtrn = regexp.MustCompile(`(?m)^- \*\*Question checked:\*\* (.+)$`)
 	monthPattern        = regexp.MustCompile(`^\d{4}-\d{2}$`)
+	// Prior art wraps the same way an open question does, and for the same reason:
+	// a list of standards cut off at the margin is cut off in the line meant to
+	// enumerate them.
+	priorArtPattern = regexp.MustCompile(`(?m)^- \*\*Prior art:\*\* (.+(?:\n[ \t]+\S.*)*)$`)
 	// A cell may not contain a `|`, so each is matched as "not a pipe" rather than
 	// greedily: with three cells after the link, a greedy title would swallow the
 	// status and leave the last cell to be read as both.
@@ -173,6 +195,9 @@ func parseRecord(name, body string) (Record, error) {
 	} else {
 		problems = append(problems, fmt.Errorf("%s: no `- **Implementation:** ...` line — "+
 			"say whether the decision is %s, because Status alone cannot", name, strings.Join(implementationWords, ", ")))
+	}
+	if a := priorArtPattern.FindStringSubmatch(body); a != nil {
+		r.PriorArt = unwrap(a[1])
 	}
 	problems = append(problems, parseState(name, &r)...)
 	problems = append(problems, parseOpenQuestion(name, body, &r)...)
@@ -279,6 +304,39 @@ type Assignment struct {
 	Title          string
 	Status         string
 	Implementation string
+}
+
+// NeedsPriorArt reports whether the prior-art line is required of this record: of
+// every draft, because a draft lands above the cutoff, and of every numbered record
+// written since the rule.
+func (r Record) NeedsPriorArt() bool {
+	return r.IsDraft() || r.Num > lastRecordWithoutPriorArt
+}
+
+// PriorArtDefect names what is wrong with this record's prior-art line, and whether
+// anything is.
+//
+// It judges two things, and deliberately not a third. That the line is there at all,
+// and that a `none` says why none applies — a bare `none` is indistinguishable from
+// a blank, which is the state ADR-0387 exists to end. What it cannot judge is
+// whether the answer is any good: no test can see that a search was cursory, and one
+// that pretended to would buy the same false comfort as a coverage number with no
+// assertions behind it. That half stays with the reviewer, which is where it was
+// always going to live.
+func (r Record) PriorArtDefect() (string, bool) {
+	if !r.NeedsPriorArt() {
+		return "", false
+	}
+	if r.PriorArt == "" {
+		return "no `- **Prior art:**` line — name the standards, specifications or " +
+			"existing implementations you looked at, or `none` and why none applies (ADR-0387)", true
+	}
+	rest, isNone := strings.CutPrefix(strings.ToLower(r.PriorArt), "none")
+	if isNone && strings.Trim(rest, " .,:;—–-") == "" {
+		return "says `none` without saying why — a bare `none` reads exactly like a " +
+			"blank, so say what made the question inapplicable (ADR-0387)", true
+	}
+	return "", false
 }
 
 // QuestionAge reports how long ago the record's open question was last looked at,
