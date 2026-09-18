@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// An approval belongs under Tasks, and it was already there.
+// An approval belongs under Tasks, and it was always there.
 //
 // The finding that shaped this: an approval *is* an ordinary engine user task,
 // `handleListTasks` does not filter those out, and the inbox never knew the word.
@@ -13,10 +13,12 @@ import (
 // in the inbox as an unlabelled row that decides somebody's order, and in a menu
 // entry of its own advertising a page.
 //
-// The entry moves under Tasks, where Access review already sits for the same
-// reason: a second kind of thing addressed to a person, not a second application.
-// And the inbox row says what it is and where it is decided, which is the half that
-// was actually missing.
+// First the entry moved under Tasks, where Access review sits for the same reason:
+// a second kind of thing addressed to a person, not a second application. Then the
+// page it led to went, because the inbox reads and decides the approval itself
+// (ADR-draft-approval-in-the-inbox) — an entry
+// beside the inbox leading to a second way of answering was the drift this removed,
+// and the two had already begun to differ over whether a rejection needs a reason.
 
 // appsList and topnav are the two navigation tables, read as regions because both
 // are long and both mention routes the other one owns.
@@ -36,46 +38,23 @@ func TestApprovalsIsNotAnApplicationOfItsOwn(t *testing.T) {
 		t.Error("approvals is still advertised as an application beside Modeler and " +
 			"Operations, and it is a kind of task")
 	}
+	// And no entry under Tasks either, which is the half that changed: the page that
+	// entry led to is gone, because the decision is taken in the inbox the entry sits
+	// under (ADR-draft-approval-in-the-inbox). An
+	// entry beside the inbox, leading to a redirect into the inbox, is the second
+	// place for one decision that this removed.
 	tasks := webRegion(t, topnavList(t), "  tasks: [", "\n  ],")
-	if !strings.Contains(tasks, `route: "genehmigung.html"`) {
-		t.Error("no entry under Tasks leads to the approvals page. Its only other way " +
-			"in is the link in a notification mail, and a decision nobody can reach is " +
-			"an order that waits forever")
+	if strings.Contains(tasks, "genehmigung.html") {
+		t.Error("an entry under Tasks still leads to the approvals page, which now only " +
+			"forwards back into the inbox it sits under")
 	}
 }
 
-// TestASeparatePageUnderTasksStillOpensInItsOwnWindow.
-//
-// The reason this is not a one-line move. The drawer opens a separate page in its
-// own window on purpose — replacing the console in the same tab puts whoever
-// followed the entry on a page whose only way back is one small link, and asks
-// somebody in the middle of something to lose it. The sub-navigation renders a
-// plain anchor, so moving the entry down there without teaching it the same rule
-// would restore exactly the behaviour that comment argues against.
-func TestASeparatePageUnderTasksStillOpensInItsOwnWindow(t *testing.T) {
-	// The entry says it is a page of its own. This half moved here from
-	// TestThePortalSurfacesOpenInTheirOwnWindow, which made the same promise while
-	// the entry was in the drawer.
-	tasks := webRegion(t, topnavList(t), "  tasks: [", "\n  ],")
-	for _, line := range strings.Split(tasks, "\n") {
-		if strings.Contains(line, `route: "genehmigung.html"`) &&
-			!strings.Contains(line, "separate: true") {
-			t.Error("the approvals entry is not marked separate, so following it replaces " +
-				"the console in the same tab. It is a page of its own — its own brand, " +
-				"its own message catalogue — and unloading Atlas to reach it costs " +
-				"whoever clicked whatever they had open")
-		}
-	}
-
-	body := webRegion(t, readWeb(t, "app.js"), "topnav.innerHTML = ", "syncIncidentBadge(")
-	if !strings.Contains(body, "separate") {
-		t.Error("the sub-navigation renders every entry as a plain link, so a page of " +
-			"its own replaces the console in the same tab")
-	}
-	if !strings.Contains(body, "_blank") {
-		t.Error("a separate page under Tasks does not open in its own window")
-	}
-}
+// There is no separate page under Tasks any more, so the guard that insisted one
+// opened in its own window has no subject. What it protected — following an entry
+// must not unload the console somebody is in the middle of using — is still held
+// for the drawer's own separate entry by TestThePortalSurfacesOpenInTheirOwnWindow,
+// which is where the rule started.
 
 // TestTheInboxSaysWhichRowsDecideAnOrder.
 //
@@ -91,12 +70,18 @@ func TestTheInboxSaysWhichRowsDecideAnOrder(t *testing.T) {
 		t.Error("the inbox never asks which of its rows are approvals, so it cannot " +
 			"say so")
 	}
-	// Linked by the order line, which is what the approvals page takes and what it
-	// takes for a reason its own comment gives: a task key does not exist until the
-	// task activates, and the order and the product do.
-	if !strings.Contains(body, "genehmigung.html?order=") {
-		t.Error("an approval row does not lead to where it is decided, or leads there " +
-			"without naming which decision")
+	// And the row says what it decides rather than only that it is one. Every
+	// approval task is called "Genehmigen", so a queue of them was a column of
+	// identical lines that had to be opened one at a time.
+	if !strings.Contains(body, "tasks-item-appr") {
+		t.Error("an approval row is marked as one and says nothing about what it " +
+			"decides, so a list of them cannot be read")
+	}
+	// The decision is here too, which is what makes this the one place: a row that
+	// said what it decided and sent somebody elsewhere to decide it would be the
+	// second surface again, one screen further in.
+	if !strings.Contains(body, `id="appr-approve"`) || !strings.Contains(body, `id="appr-reject"`) {
+		t.Error("the inbox names an approval and offers no way to decide it")
 	}
 }
 

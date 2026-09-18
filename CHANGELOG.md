@@ -44,6 +44,39 @@ _Changed_ / _Removed_ for each version.
   about two products and belongs to neither, so it is the one relationship a pairwise
   form is the right shape for; structure had two ways to be said, and two ways drift.
 
+- **An approval is read and decided in the inbox.** An approval is an ordinary user
+  task, so the rows were always in `Tasks` — rendered like every other row, saying
+  nothing about the product, the price or the person waiting, and decided by opening a
+  second surface in another tab. Every approval task is called "Genehmigen", so a
+  queue of them was a column of identical lines.
+
+  Each row now names what it decides — the product as the catalogue wrote it, and the
+  cost — and the detail leads with the rest: the variant, who it is for, who ordered
+  it, and the order. All of it comes from `GET /api/v1/approvals`, which the inbox
+  already called to know which of its rows are approvals; nothing on the server
+  changed.
+
+  **The decision happens there too**: Approve and Reject, with the reason a rejection
+  needs, and — where the same order has more approvals in this inbox — an offer to
+  decide them together under one reason, which is what `POST /api/v1/approvals/decide`
+  exists for.
+
+  For the approval Atlas ships there is now exactly **one** way to answer in that
+  screen. The generic Complete button and the form's own "Genehmigen" checkbox
+  answered the same question by accident: a task completed with no variables reads as
+  `genehmigt = null`, which is not `true`, which is a rejection — recorded with no
+  reason and no sign that nobody meant it. So for that model the form and the Complete
+  button give way to the two buttons, and Ctrl+Enter says so rather than doing it.
+
+  An installation whose products name **its own** approval model keeps its form and its
+  Complete button untouched: `genehmigt` and `begruendung` are the shipped form's
+  contract and not a general one, and two buttons answering for a model Atlas cannot
+  read would complete somebody's task with variables their process never sees. The
+  block still says what is being decided, because that half is true of any approval.
+
+  The standalone approval page stays: it is what an approval notification links to,
+  and somebody arriving from a mail has no inbox to arrive in.
+
 - **A product can carry a picture.** A catalogue row was a name and a price, and
   somebody choosing between two phones was choosing between two names. A product now
   has a picture — a photograph of the thing or the vendor's mark, PNG, JPEG or SVG —
@@ -321,6 +354,26 @@ _Changed_ / _Removed_ for each version.
   representing integers exactly, so every client that decodes JSON numbers as doubles
   would hand back a value a few hundred nanoseconds off and be told its own read was
   stale.
+
+### Removed
+
+- **The standalone approval page.** It existed because the Console is an operator's
+  instrument and most approvers are not operators — right about the people, and wrong
+  about what followed from it: an approval *is* an ordinary user task and the inbox
+  never filtered those out, so the rows were always there. The page did not spare
+  anybody the Console; it was a second place to take one decision, and the two drifted
+  over whether a rejection needs a reason.
+
+  The decision is in the inbox now (see the entry above). What stays is the page's
+  **address**: every approval notification ever sent links to `/genehmigung.html` with
+  the order line in its query, and a mail cannot be recalled — so it forwards, handing
+  that line to the inbox, which resolves it against the approvals the reader holds. The
+  three shipped approval models link into the inbox from now on, and the menu entry
+  under Tasks is gone: it led to a redirect back into the screen it sat under.
+
+  **What is lost is the brand.** The page wore the catalogue's colours, because an
+  approver decides on that customer's behalf; the Console wears nobody's, so the block
+  names the catalogue in words instead. Information kept, presentation dropped.
 
 ### Changed
 
@@ -613,6 +666,16 @@ _Changed_ / _Removed_ for each version.
   about the reader rather than about what they are reading.
 
 ### Fixed
+
+- **"No process instance is left for this order" named a cause it could not know.** It
+  said retention had removed the instance. That is one of three reasons the portal
+  finds none, and the least likely of them: an order whose fulfilment never started has
+  no instance to remove, and that is what somebody reads this about on the day they
+  ordered — which is exactly what the defect below produced for every order on an
+  installation. The message now says what it knows: none has started yet, it has
+  finished, or retention removed it. The order and one position are also told apart,
+  because the order's orchestration and a position's own process are two different
+  absences.
 
 - **"Test expression" no longer certifies an expression that cannot work.** A BPMN deploy
   already refuses a call this build can only ever answer with null — an unknown function
