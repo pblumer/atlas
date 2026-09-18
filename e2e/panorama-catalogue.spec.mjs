@@ -10,8 +10,9 @@ import { test, expect } from "@playwright/test";
 
 const graph = {
   nodes: [
-    { id: "application:a1", kind: "application", name: "Workplace", provenance: "derived", state: "unbound", severity: "unknown" },
-    { id: "process:1", kind: "process", name: "Provision a phone", provenance: "derived", application: "application:a1", processId: "provision-phone", version: 1, state: "healthy", severity: "ok" },
+    // The process a product binds — drawn here because a product named it, with the
+    // state the engine has for it, which is the finding this picture exists for.
+    { id: "process:1", kind: "process", name: "Provision a phone", provenance: "derived", processId: "provision-phone", version: 1, state: "healthy", severity: "ok" },
     { id: "catalog:cat_1", kind: "catalog", name: "Mobile devices", provenance: "derived", state: "unbound", severity: "unknown" },
     { id: "product:package", kind: "product", name: "Phone package", provenance: "derived", catalog: "catalog:cat_1", state: "unbound", severity: "unknown" },
     { id: "product:phone", kind: "product", name: "Apple iPhone", provenance: "derived", catalog: "catalog:cat_1", state: "unbound", severity: "unknown" },
@@ -19,7 +20,6 @@ const graph = {
     { id: "unresolved:process:revoke-phone", kind: "unresolved", name: "revoke-phone", provenance: "derived", state: "unbound", severity: "unknown" },
   ],
   edges: [
-    { from: "application:a1", to: "process:1", kind: "contains" },
     { from: "catalog:cat_1", to: "product:package", kind: "offers" },
     { from: "catalog:cat_1", to: "product:phone", kind: "offers" },
     { from: "catalog:cat_1", to: "product:case", kind: "offers" },
@@ -60,28 +60,57 @@ const notations = [
   },
 ];
 
-function installMock(page, mesh = graph) {
+// The server derives two pictures, so the mock serves two. A mock that answered the
+// same graph either way would be testing a picker that changes nothing.
+function installMock(page, { landscape = estate, products = graph } = {}) {
   page.route("**/api/v1/**", async (route) => {
-    const path = new URL(route.request().url()).pathname;
-    if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
-    if (path === "/api/v1/panorama/mesh") return route.fulfill({ json: mesh });
-    if (path === "/api/v1/panorama/notations") return route.fulfill({ json: notations });
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
+    if (url.pathname === "/api/v1/panorama/mesh") {
+      page.__asked.push(url.search);
+      return route.fulfill({ json: url.searchParams.get("view") === "products" ? products : landscape });
+    }
+    if (url.pathname === "/api/v1/panorama/notations") return route.fulfill({ json: notations });
     return route.fulfill({ json: [] });
   });
 }
+
+// The landscape: the estate, with not one product on it.
+const estate = {
+  nodes: [
+    { id: "application:a1", kind: "application", name: "Workplace", provenance: "derived", state: "unbound", severity: "unknown" },
+    { id: "process:1", kind: "process", name: "Provision a phone", provenance: "derived", application: "application:a1", processId: "provision-phone", version: 1, state: "healthy", severity: "ok" },
+    { id: "worker:w1", kind: "worker", name: "ops-mail", provenance: "derived", workerType: "mail", state: "healthy", severity: "ok" },
+  ],
+  edges: [
+    { from: "application:a1", to: "process:1", kind: "contains" },
+    { from: "process:1", to: "worker:w1", kind: "uses" },
+  ],
+  restricted: 0,
+  clustered: false,
+};
 
 test.beforeEach(async ({ page }) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.__errors = errors;
+  page.__asked = [];
   installMock(page);
 });
 
-test("the catalogue is drawn as its own family, not as more processes", async ({ page }) => {
+// openProductMap picks the second subject, which re-asks the server rather than
+// redrawing what is on screen.
+async function openProductMap(page) {
   await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await page.locator("#mesh-notation").selectOption("products");
+  await expect(page.locator('[data-node-id="catalog:cat_1"]')).toBeVisible();
+}
 
-  await expect(page.locator(".mesh-node")).toHaveCount(7);
+test("the catalogue is drawn as its own family, not as more processes", async ({ page }) => {
+  await openProductMap(page);
+
+  await expect(page.locator(".mesh-node")).toHaveCount(6);
   await expect(page.locator(".mesh-canvas")).toContainText("Mobile devices");
   await expect(page.locator(".mesh-canvas")).toContainText("Phone package");
 
@@ -108,7 +137,7 @@ test("the catalogue is drawn as its own family, not as more processes", async ({
 });
 
 test("the key explains the lines the catalogue adds", async ({ page }) => {
-  await page.goto("/index.html#/panorama/starmap");
+  await openProductMap(page);
   const legend = page.locator(".mesh-legend");
 
   // "Comes with it" and "offered beside it" are different promises to whoever
@@ -121,7 +150,7 @@ test("the key explains the lines the catalogue adds", async ({ page }) => {
 });
 
 test("a product opens where it is maintained, not in Operations", async ({ page }) => {
-  await page.goto("/index.html#/panorama/starmap");
+  await openProductMap(page);
 
   await page.locator('[data-node-id="product:phone"]').click();
   await page.getByRole("link", { name: "Open in Catalogue" }).click();
@@ -152,24 +181,69 @@ test("what breaks if this service goes down counts the products that contain it"
   expect(new Set(optional.nodes)).toEqual(new Set(["product:case"]));
 });
 
-test("in ArchiMate's vocabulary the catalogue is named in ArchiMate's words", async ({ page }) => {
+test("the ArchiMate export follows the picture rather than the estate", async ({ page }) => {
+  await openProductMap(page);
+
+  // The vocabularies on this picker are views of the *landscape* — one answer at a
+  // time — so the catalogue's own ArchiMate words (Grouping, Product, Composition,
+  // Aggregation, proved in the Go suite) are reached through the export rather than by
+  // reading the product map in another notation. What the export must not do is hand
+  // back the estate to somebody looking at the products: two answers to one question,
+  // with no way to tell which was theirs.
+  const asked = [];
+  await page.route("**/api/v1/panorama/mesh/archimate*", async (route) => {
+    asked.push(new URL(route.request().url()).search);
+    await route.fulfill({ status: 200, contentType: "application/xml", body: "<model/>" });
+  });
+  await page.locator("#mesh-export-archimate").click();
+  await expect.poll(() => asked.length).toBeGreaterThan(0);
+  expect(asked[0]).toBe("?view=products");
+  expect(page.__errors).toEqual([]);
+});
+
+// The two subjects, and the control that switches between them (#1022, corrected).
+//
+// The first cut drew the catalogue onto the landscape. It made the landscape worse for
+// everybody who does not maintain a catalogue, and — the part that is not taste — every
+// product spends the size budget, so one large catalogue could collapse somebody else's
+// estate to applications. They are two pictures now, on one picker called View.
+test("the landscape has no products on it, and the picker asks the server for them", async ({ page }) => {
   await page.goto("/index.html#/panorama/starmap");
-  await page.locator("#mesh-notation").selectOption("archimate-3.2");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
 
-  const legend = page.locator(".mesh-legend");
-  await expect(legend).toContainText("Grouping");
-  await expect(legend).toContainText("Product");
+  // The estate, drawn as itself.
+  await expect(page.locator('[data-node-id="application:a1"]')).toBeVisible();
+  await expect(page.locator('[data-node-id="catalog:cat_1"]')).toHaveCount(0);
+  await expect(page.locator('[data-node-id="product:phone"]')).toHaveCount(0);
 
-  // And drawn in ArchiMate's own outlines rather than kept in Atlas's cards: a
-  // Grouping's tabbed corner and a Product's bar are silhouettes, so both leave the
-  // rectangle family the derived picture draws them in.
-  const tagOf = (id) => page.locator(`[data-node-id="${id}"] .mesh-body`)
-    .evaluate((el) => el.tagName.toLowerCase());
-  expect(await tagOf("catalog:cat_1")).toBe("polygon");
-  expect(await tagOf("product:phone")).toBe("polygon");
-  // The two relationships this landscape can finally name exactly rather than
-  // approximately.
-  await expect(legend).toContainText("Composition");
-  await expect(legend).toContainText("Aggregation");
+  // The control is called View, because only some of its entries are vocabularies.
+  await expect(page.locator('label[for="mesh-notation"]')).toHaveText("View");
+
+  await page.locator("#mesh-notation").selectOption("products");
+  await expect(page.locator('[data-node-id="catalog:cat_1"]')).toBeVisible();
+  // The other picture, and the estate's own nodes are gone with it.
+  await expect(page.locator('[data-node-id="worker:w1"]')).toHaveCount(0);
+  await expect(page.locator('[data-node-id="application:a1"]')).toHaveCount(0);
+
+  // Asked of the server rather than filtered here: a picture filtered in the browser
+  // would still have spent the size budget on its way over.
+  expect(page.__asked).toContain("?view=products");
+  expect(page.__errors).toEqual([]);
+});
+
+test("the drafts switch belongs to the landscape", async ({ page }) => {
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await expect(page.locator("#mesh-drafts")).toBeEnabled();
+
+  // A draft is a diagram nobody deployed, and the product map draws no diagrams — so
+  // the switch is disabled there rather than silently doing nothing.
+  await page.locator("#mesh-notation").selectOption("products");
+  await expect(page.locator('[data-node-id="catalog:cat_1"]')).toBeVisible();
+  await expect(page.locator("#mesh-drafts")).toBeDisabled();
+
+  await page.locator("#mesh-notation").selectOption("atlas");
+  await expect(page.locator('[data-node-id="application:a1"]')).toBeVisible();
+  await expect(page.locator("#mesh-drafts")).toBeEnabled();
   expect(page.__errors).toEqual([]);
 });

@@ -593,6 +593,25 @@ const DERIVED_NOTATION = {
   projection: false, mappingVersion: 0, types: {}, relations: {}, loss: [], weigh: "degree",
 };
 
+// The product map is the picker's one entry that changes *what is on* the picture
+// rather than how it is drawn, and it is the reason the control is called View.
+//
+// It is not a notation and it is not a filter over the landscape either: the server
+// derives a different graph for it (?view=products), because a catalogue drawn onto
+// the landscape spends the size budget of everybody reading the estate — an operator
+// who never opens this picture could find their landscape collapsed to applications
+// by somebody else's catalogue. Two questions, two derivations, one picker.
+const PRODUCT_MAP = {
+  id: "products", label: "Product Map", short: "Products",
+  projection: false, mappingVersion: 0, types: {}, relations: {}, weigh: "degree",
+  subject: "products",
+  loss: [
+    "This is what is offered, not what runs. The processes on it are the ones a product binds to provision or revoke it, and nothing else of the estate: not the workers those processes use, not the applications that hold them, not the peers. That is one hop on purpose — the second hop is the landscape's question, and the landscape is one entry up this list.",
+    "Incompatibility between two products is not drawn. A catalogue can record that two rights must never be held by the same person, and that is the one catalogue relationship meaning the opposite of every other line here; drawn in the same ink it would read as a dependency. It stays where it is enforced and reported: the catalogue, and what publishing proves.",
+    "Nothing here is compared against a drawn model. A binding names an application, a process or a worker (ADR-0189 §4) and there is no key for a catalogue or a product, so this picture reports no drift rather than a debt nobody could pay off.",
+  ],
+};
+
 // HEATS are the ways of drawing the same landscape with its *sizes* carrying a
 // quantity the engine holds, rather than the structure the layout already draws.
 //
@@ -776,14 +795,14 @@ const HEAT_NOTATIONS = Object.fromEntries(Object.values(HEATS).map((heat) => [he
 // The local entries are held here rather than fetched, by the split this file already
 // keeps: what a node is *called* is the server's table (ADR-0211 §8), and how big it
 // is drawn is this side's business, exactly like NOTATION_SHAPES.
-let notations = { atlas: DERIVED_NOTATION, ...HEAT_NOTATIONS };
+let notations = { atlas: DERIVED_NOTATION, products: PRODUCT_MAP, ...HEAT_NOTATIONS };
 
 // useNotations takes what the server serves and adds this side's shapes to it. An
 // entry with no shapes is still usable — every kind falls back to its derived
 // outline — so a notation the server learns about before this file does degrades to
 // a vocabulary change rather than to a blank canvas.
 export function useNotations(served) {
-  const next = { atlas: DERIVED_NOTATION, ...HEAT_NOTATIONS };
+  const next = { atlas: DERIVED_NOTATION, products: PRODUCT_MAP, ...HEAT_NOTATIONS };
   for (const notation of Array.isArray(served) ? served : []) {
     // The locally-defined entries win over a served row of the same id. They are
     // rendering decisions rather than vocabularies, and a server that grew a word for
@@ -3769,9 +3788,14 @@ export async function mountPanoramaMesh(view, { api, toast }) {
            §8) — and it is one list rather than a list plus a switch, because every
            entry on it spends the same channels on a different question and only one
            of them can be answered at a time. -->
-      <label class="mesh-notation" for="mesh-notation">Notation</label>
+      <!-- Called View and not Notation, because only some of its entries are
+           vocabularies. The rest are ways of drawing — sized by what is running, by
+           what is stuck — and one of them, the product map, is a different picture
+           altogether. A control named after the narrowest of the questions it answers
+           is one nobody looks in for the others. -->
+      <label class="mesh-notation" for="mesh-notation">View</label>
       <select id="mesh-notation" class="mesh-notation-pick"
-        title="How this landscape is drawn: Atlas's own kinds, sized by what is running, by what is stuck or by how long it has been stuck, or projected into another vocabulary">${notationsAvailable()
+        title="What this picture shows and how: the estate as Atlas's own kinds, sized by what is running, by what is stuck or by how long it has been stuck, projected into another vocabulary — or the product map, which is what this server offers rather than what it runs">${notationsAvailable()
         .map((n) => `<option value="${esc(n.id)}">${esc(n.label)}</option>`).join("")}</select>
       <!-- Saved diagrams nobody has deployed. Off by default, and the one control here
            that re-asks the server rather than re-drawing what is already on screen:
@@ -5004,11 +5028,55 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     paint();
   });
 
+  // subjectNow is which picture the picker is on: the landscape, or the product map.
+  // Read off the entry rather than kept beside it, so the control and the request can
+  // never disagree about what is on screen.
+  function subjectNow() {
+    return notationOf(notationPick.value).subject || "";
+  }
+  // What the last successful fetch asked for, so a repaint is told from a re-ask.
+  let subjectLoaded = "";
+
   // A different vocabulary is a different drawing, so the picture is painted again.
   // The arrangement survives it: paint() carries the positions on screen forward and
   // every notation's shape is inscribed in the same reserved circle, so nothing moves
   // except the outlines.
-  notationPick.addEventListener("change", paint);
+  //
+  // A different *subject* is a different graph, so it is fetched. The two live on one
+  // control because a reader picks between them the same way, and they are told apart
+  // here rather than in two places that could come to disagree.
+  notationPick.addEventListener("change", async () => {
+    const want = subjectNow();
+    if (want === subjectLoaded) {
+      paint();
+      return;
+    }
+    try {
+      if (await loadLandscape(draftsToggle.checked, { subject: want })) {
+        subjectLoaded = want;
+        // The drafts switch belongs to the landscape: a draft is a diagram nobody
+        // deployed, and the product map draws no diagrams. Disabled rather than
+        // hidden, so a reader who turned it on finds it where they left it — and set
+        // after the load, because the load itself puts the switch back.
+        draftsToggle.disabled = want === "products";
+        // The arrangement is not carried across: the two pictures share almost no
+        // node, so positions kept by id would place a handful of processes where they
+        // sat among four hundred other nodes and leave the rest to the layout.
+        pinned.clear();
+        trail = [];
+        frameView = null;
+      }
+    } catch (e) {
+      toast(e.message, "err");
+      // The picker goes back to the picture that is actually on screen: a control
+      // naming a view the reader is not looking at is the one lie this view cannot
+      // afford.
+      notationPick.value = notationOf(subjectLoaded === "products" ? "products" : "atlas").id;
+      draftsToggle.disabled = false;
+      return;
+    }
+    paint();
+  });
 
   // Drafts are the one switch that changes the *landscape* rather than the drawing of
   // it, so it is answered by the server. Two things reach for it — the switch, and a
@@ -5026,12 +5094,16 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // thing that merely does so on its own.
   // Reports whether it took: a silent answer that arrived too late is dropped rather
   // than applied, so the caller knows not to repaint.
-  async function loadLandscape(wantDrafts, { silent = false } = {}) {
+  async function loadLandscape(wantDrafts, { silent = false, subject = subjectNow() } = {}) {
     if (!silent) draftsToggle.disabled = true;
     const started = performance.now();
     let arrived;
     try {
-      arrived = await api("GET", "/api/v1/panorama/mesh" + (wantDrafts ? "?drafts=1" : ""));
+      // The subject is the server's question and the drafts switch is the landscape's:
+      // a draft is a diagram nobody deployed, and the product map draws no diagrams at
+      // all, so the two are never asked together.
+      const query = subject === "products" ? "?view=products" : (wantDrafts ? "?drafts=1" : "");
+      arrived = await api("GET", "/api/v1/panorama/mesh" + query);
     } finally {
       if (!silent) draftsToggle.disabled = false;
     }
@@ -5070,7 +5142,11 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   });
 
   exportModelBtn.addEventListener("click", () => {
-    window.location.href = "/api/v1/panorama/mesh/archimate";
+    // The file follows the picture: exporting a product map and getting the estate
+    // would be two answers to one question, and the reader would have no way of
+    // telling which was theirs.
+    window.location.href = "/api/v1/panorama/mesh/archimate" +
+      (subjectNow() === "products" ? "?view=products" : "");
   });
 
   exportSvgBtn.addEventListener("click", () => exportPicture("svg"));

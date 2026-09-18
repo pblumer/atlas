@@ -331,7 +331,7 @@ func catalogueLandscape() Landscape {
 // integral part *is* a Composition and an optional one *is* an Aggregation, rather
 // than the nearest available approximation the rest of the mapping settles for.
 func TestExportedCatalogueUsesArchiMatesOwnWords(t *testing.T) {
-	g := DeriveGraph(catalogueLandscape(), Options{})
+	g := DeriveGraph(catalogueLandscape(), Options{Subject: SubjectProducts})
 	xml := string(ExportArchiMate(g, ArchiMateExport{Instance: "atlas.example.test"}))
 
 	for _, want := range []string{
@@ -358,7 +358,7 @@ func TestExportedCatalogueUsesArchiMatesOwnWords(t *testing.T) {
 // never happen is the silent drop: a reader comparing the two would find a line
 // missing and no statement that it was left out on purpose.
 func TestExportedPrecedenceIsAbsentAndSaysWhy(t *testing.T) {
-	g := DeriveGraph(catalogueLandscape(), Options{})
+	g := DeriveGraph(catalogueLandscape(), Options{Subject: SubjectProducts})
 	if !hasEdge(g, "product:phone", "product:sim", EdgeRequires) {
 		t.Fatalf("the picture lost the precedence edge before the export could drop it")
 	}

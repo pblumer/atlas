@@ -41,7 +41,7 @@ func TestACatalogueAndWhatItOffersAreDrawn(t *testing.T) {
 		},
 	}
 
-	g := DeriveGraph(land, Options{})
+	g := DeriveGraph(land, Options{Subject: SubjectProducts})
 
 	counts := kindsOf(g)
 	if counts[KindCatalog] != 1 || counts[KindProduct] != 2 {
@@ -89,7 +89,7 @@ func TestTheArrangementIsDrawnAsItIsStored(t *testing.T) {
 		},
 	}
 
-	g := DeriveGraph(land, Options{})
+	g := DeriveGraph(land, Options{Subject: SubjectProducts})
 
 	for _, want := range []struct{ from, to, kind string }{
 		{"product:package", "product:phone", EdgeComposition},
@@ -119,7 +119,7 @@ func TestIncompatibilityIsNotDrawnAsADependency(t *testing.T) {
 		},
 	}
 
-	g := DeriveGraph(land, Options{})
+	g := DeriveGraph(land, Options{Subject: SubjectProducts})
 
 	for _, e := range g.Edges {
 		if e.From == "product:create" && e.To == "product:approve" {
@@ -141,7 +141,7 @@ func TestAProductPointsAtTheProcessesThatProvisionIt(t *testing.T) {
 		Products: []Product{prod("phone", "Phone", "cat_1", "provision-phone", "revoke-phone")},
 	}
 
-	g := DeriveGraph(land, Options{})
+	g := DeriveGraph(land, Options{Subject: SubjectProducts})
 
 	if !hasEdge(g, "product:phone", "process:1", EdgeUses) {
 		t.Errorf("no edge to the provisioning process in %#v", g.Edges)
@@ -163,7 +163,7 @@ func TestAProductWhoseProcessIsNotDeployedSaysSo(t *testing.T) {
 		Products: []Product{prod("phone", "Phone", "cat_1", "provision-phone", "")},
 	}
 
-	g := DeriveGraph(land, Options{})
+	g := DeriveGraph(land, Options{Subject: SubjectProducts})
 
 	id := unresolvedNodeID(KindProcess, "provision-phone")
 	node := nodeByID(t, g, id)
@@ -192,7 +192,7 @@ func TestACatalogueOutsideTheCallersAccessIsAbsentWithItsProducts(t *testing.T) 
 		},
 	}
 
-	g := DeriveGraph(land, Options{})
+	g := DeriveGraph(land, Options{Subject: SubjectProducts})
 
 	for _, n := range g.Nodes {
 		if n.Name == "Their product" || n.Name == "Somebody else's" {
@@ -221,7 +221,7 @@ func TestAPartOutsideTheCallersAccessKeepsItsEdge(t *testing.T) {
 		},
 	}
 
-	g := DeriveGraph(land, Options{})
+	g := DeriveGraph(land, Options{Subject: SubjectProducts})
 
 	if g.Restricted != 1 {
 		t.Fatalf("restricted count is %d; want 1 — %#v", g.Restricted, g.Nodes)
@@ -248,7 +248,7 @@ func TestAnArrangementNamingAProductNobodyOffersSaysSo(t *testing.T) {
 		Products: []Product{prod("package", "Package", "cat_1", "", "")},
 	}
 
-	g := DeriveGraph(land, Options{})
+	g := DeriveGraph(land, Options{Subject: SubjectProducts})
 
 	id := unresolvedNodeID(KindProduct, "ghost")
 	if node := nodeByID(t, g, id); node.Kind != KindUnresolved {
@@ -268,7 +268,7 @@ func TestAProductOfferedTwiceIsOneNode(t *testing.T) {
 		Products: []Product{prod("laptop", "Laptop", "cat_1", "", "")},
 	}
 
-	g := DeriveGraph(land, Options{})
+	g := DeriveGraph(land, Options{Subject: SubjectProducts})
 
 	if counts := kindsOf(g); counts[KindProduct] != 1 {
 		t.Fatalf("drew %d product nodes for one product: %#v", counts[KindProduct], g.Nodes)
@@ -279,13 +279,17 @@ func TestAProductOfferedTwiceIsOneNode(t *testing.T) {
 	}
 }
 
-// TestAProductIsNeverCountedAsUnmodelledDrift.
+// TestNeitherPictureCountsACatalogueAsDrift.
 //
 // Drift is "the architecture declares this and Atlas does not have it", and the
 // reverse. A binding can name an application, a process or a worker; ADR-0189 §4 has
-// no key for a product, so counting products as unmodelled would report a debt no
-// model could ever pay off — a number that only grows as somebody fills a catalogue.
-func TestAProductIsNeverCountedAsUnmodelledDrift(t *testing.T) {
+// no key for a catalogue or a product, so counting one would report a debt no model
+// could ever pay off — a number that only grows as somebody fills a catalogue.
+//
+// Since the two subjects were split there are two halves to this, and they answer it
+// differently: the landscape has no catalogue to miscount, and the product map has no
+// overlay at all, because every kind an overlay could match is on the other picture.
+func TestNeitherPictureCountsACatalogueAsDrift(t *testing.T) {
 	land := Landscape{
 		Applications: []Application{app("a1", "Billing")},
 		Processes:    []Process{proc(1, "invoice", "Invoice", "a1")},
@@ -297,12 +301,22 @@ func TestAProductIsNeverCountedAsUnmodelledDrift(t *testing.T) {
 			Key: KeyApplicationID, Values: []string{"a1"}},
 	}}
 
-	g := DeriveGraph(land, Options{Overlays: []Overlay{overlay}})
+	// The landscape: the process is the one derived node nothing declares.
+	landscape := DeriveGraph(land, Options{Overlays: []Overlay{overlay}})
+	if landscape.Unmodeled != 1 {
+		t.Errorf("the landscape's unmodelled count is %d; want 1, the process alone", landscape.Unmodeled)
+	}
 
-	// The process is the one derived node nothing declares. The catalogue and the
-	// product are not drift at all.
-	if g.Unmodeled != 1 {
-		t.Errorf("unmodelled count is %d; want 1 (the process alone) — the catalogue and its product cannot be bound", g.Unmodeled)
+	// The product map: nothing to compare, so nothing is claimed.
+	products := DeriveGraph(land, Options{Subject: SubjectProducts, Overlays: []Overlay{overlay}})
+	if products.Unmodeled != 0 || products.Modeled != 0 {
+		t.Errorf("the product map reported drift (%d modelled, %d unmodelled); no binding key names a product",
+			products.Modeled, products.Unmodeled)
+	}
+	for _, n := range products.Nodes {
+		if n.Provenance != ProvenanceDerived {
+			t.Errorf("an overlay reached the product map: %#v", n)
+		}
 	}
 }
 
@@ -323,7 +337,7 @@ func TestAnOverBudgetLandscapeCollapsesProductsIntoTheirCatalogue(t *testing.T) 
 		},
 	}
 
-	g := DeriveGraph(land, Options{MaxNodes: 3})
+	g := DeriveGraph(land, Options{Subject: SubjectProducts, MaxNodes: 2})
 
 	if !g.Clustered {
 		t.Fatalf("a landscape over its budget must say it collapsed: %#v", g)
@@ -351,7 +365,7 @@ func TestAProductNoCatalogueOffersIsNotDrawn(t *testing.T) {
 		},
 	}
 
-	g := DeriveGraph(land, Options{})
+	g := DeriveGraph(land, Options{Subject: SubjectProducts})
 
 	for _, n := range g.Nodes {
 		if n.Name == "Nobody offers this" {
@@ -371,11 +385,11 @@ func TestACollapsedProductFoldsIntoItsHomeCatalogue(t *testing.T) {
 		Products: []Product{prod("laptop", "Laptop", "cat_2", "", "")},
 	}
 
-	if node := nodeByID(t, DeriveGraph(land, Options{}), "product:laptop"); node.Catalog != "catalog:cat_2" {
+	if node := nodeByID(t, DeriveGraph(land, Options{Subject: SubjectProducts}), "product:laptop"); node.Catalog != "catalog:cat_2" {
 		t.Errorf("the product is grouped under %q; want its home catalogue", node.Catalog)
 	}
 
-	g := DeriveGraph(land, Options{MaxNodes: 2})
+	g := DeriveGraph(land, Options{Subject: SubjectProducts, MaxNodes: 2})
 	if !g.Clustered {
 		t.Fatalf("want a collapsed graph, got %#v", g)
 	}
@@ -384,5 +398,113 @@ func TestACollapsedProductFoldsIntoItsHomeCatalogue(t *testing.T) {
 	}
 	if node := nodeByID(t, g, "catalog:cat_1"); node.Children != 0 {
 		t.Errorf("the offering catalogue stands for %d; want 0 — it is not where the product is edited", node.Children)
+	}
+}
+
+// The two subjects, kept apart (#1022, corrected).
+//
+// The first cut drew the catalogue onto the landscape, and that was wrong in a way no
+// test caught because it was not a defect in any assertion: an operator reading the
+// landscape for a stuck process had a hundred products in the way, and — the part
+// that is not taste — every product spent the size budget, so a large catalogue could
+// collapse somebody else's landscape to applications without them having asked to see
+// it at all. They are two pictures now.
+
+// TestTheLandscapeDrawsNoCatalogue is the correction, stated as a test: a landscape
+// carrying a whole catalogue in its facts still draws the estate and nothing else.
+func TestTheLandscapeDrawsNoCatalogue(t *testing.T) {
+	land := Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{proc(1, "invoice", "Invoice", "a1")},
+		Catalogs:     []ProductCatalog{cat("cat_1", "Mobile devices", "phone")},
+		Products:     []Product{prod("phone", "Phone", "cat_1", "invoice", "")},
+	}
+
+	g := DeriveGraph(land, Options{})
+
+	counts := kindsOf(g)
+	if counts[KindCatalog] != 0 || counts[KindProduct] != 0 {
+		t.Errorf("the landscape drew %d catalogue(s) and %d product(s); it draws the estate",
+			counts[KindCatalog], counts[KindProduct])
+	}
+	if counts[KindApplication] != 1 || counts[KindProcess] != 1 {
+		t.Errorf("the landscape lost its own subject: %#v", counts)
+	}
+	for _, e := range g.Edges {
+		if e.Kind == EdgeOffers || e.Kind == EdgeComposition || e.Kind == EdgeAggregation {
+			t.Errorf("a catalogue edge reached the landscape: %#v", e)
+		}
+	}
+}
+
+// TestTheProductMapDrawsNoEstate is the same rule read the other way. It carries the
+// processes the products *bind* and nothing else of the estate — not the workers those
+// processes use, not the applications that hold them, not the peers. One hop, because
+// the second hop is the landscape's question and the landscape is one click away.
+func TestTheProductMapDrawsNoEstate(t *testing.T) {
+	called := proc(2, "archive", "Archive", "a1")
+	caller := proc(1, "provision-phone", "Provision a phone", "a1",
+		Call{ElementID: "c1", CalledProcessID: "archive", TargetKey: 2})
+	caller.Workers = []WorkerUse{{ElementID: "s1", Name: "ops-mail", TargetID: "w1"}}
+	land := Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{caller, called},
+		Workers:      []Worker{{ID: "w1", Name: "ops-mail", Type: "mail", CanView: true}},
+		Targets:      []Target{{ID: "t1", Name: "Production"}},
+		Drafts:       []Draft{{ProcessID: "draft-one", Name: "A draft", ApplicationID: "a1", CanView: true}},
+		Catalogs:     []ProductCatalog{cat("cat_1", "Mobile devices", "phone")},
+		Products:     []Product{prod("phone", "Phone", "cat_1", "provision-phone", "")},
+	}
+
+	g := DeriveGraph(land, Options{Subject: SubjectProducts})
+
+	counts := kindsOf(g)
+	for kind, n := range map[string]int{
+		KindApplication: counts[KindApplication],
+		KindWorker:      counts[KindWorker],
+		KindDraft:       counts[KindDraft],
+		KindTarget:      counts[KindTarget],
+	} {
+		if n != 0 {
+			t.Errorf("the product map drew %d %s node(s); it draws what is offered", n, kind)
+		}
+	}
+	// The one process a product binds, and not the one that process calls.
+	if counts[KindProcess] != 1 {
+		t.Fatalf("drew %d process nodes; want only the one a product binds — %#v", counts[KindProcess], g.Nodes)
+	}
+	if !hasEdge(g, "product:phone", "process:1", EdgeUses) {
+		t.Errorf("the product is not joined to what provisions it: %#v", g.Edges)
+	}
+	for _, e := range g.Edges {
+		if e.Kind == EdgeCalls || e.Kind == EdgeContains {
+			t.Errorf("an estate edge reached the product map: %#v", e)
+		}
+	}
+}
+
+// TestABoundProcessCarriesItsTroubleOntoTheProductMap.
+//
+// The state is the point of drawing the process at all. "Three tokens are parked on
+// the process that provisions the laptop" is the finding somebody opens this picture
+// for, and a node that arrived without it would send them to another screen to learn
+// the thing this one was drawn to tell them.
+func TestABoundProcessCarriesItsTroubleOntoTheProductMap(t *testing.T) {
+	stuck := proc(1, "provision-phone", "Provision a phone", "a1")
+	stuck.State, stuck.Reason, stuck.Incidents = StateDegraded, "3 parked", 3
+	land := Landscape{
+		Applications: []Application{app("a1", "Billing")},
+		Processes:    []Process{stuck},
+		Catalogs:     []ProductCatalog{cat("cat_1", "Mobile devices", "phone")},
+		Products:     []Product{prod("phone", "Phone", "cat_1", "provision-phone", "")},
+	}
+
+	node := nodeByID(t, DeriveGraph(land, Options{Subject: SubjectProducts}), "process:1")
+
+	if node.State != StateDegraded || node.Incidents != 3 || node.Reason != "3 parked" {
+		t.Errorf("the bound process arrived without its trouble: %#v", node)
+	}
+	if node.Severity != SeverityAttention {
+		t.Errorf("severity = %q, want the class degraded maps to", node.Severity)
 	}
 }

@@ -1,6 +1,7 @@
 # ADR-0396: The service catalogue is drawn on the starmap, as derived fact
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-09-18 — the catalogue is a *second subject* of
+  the starmap rather than more nodes on the landscape; see "The two subjects" below)
 - **Implementation:** Landed
 - **Date:** 2026-09-18
 - **Deciders:** Atlas maintainers
@@ -73,6 +74,50 @@ provides.
 That last line is the feature. *A product bound to a process nobody deployed now
 appears on the landscape as a product pointing at a hole*, in the same ink as every
 other broken dependency on the picture, without anybody modelling anything.
+
+### The two subjects (amendment, 2026-09-18)
+
+The first cut of this record drew the catalogue onto the landscape, as more kinds on
+one picture. That was wrong, and it was wrong in the way this record's own
+"Negative / trade-offs accepted" section had already half-seen without following
+through:
+
+- **For a reader, it answered a question nobody had asked them.** An operator opens the
+  starmap because something is stuck. A hundred products between them and the process
+  they are looking for is not context; it is the thing they have to look past.
+- **For everybody else, it spent a budget they did not draw on.** Products and
+  catalogues count towards the size budget (ADR-0211 §7), and over it the picture
+  collapses to applications. So one product manager filling a catalogue could take
+  somebody else's landscape apart, and that somebody would never learn why.
+
+So there are two subjects, derived separately and asked for separately
+(`GET /api/v1/panorama/mesh?view=products`):
+
+- **The landscape** — what this server runs — carries no catalogue and no product at
+  all. It is exactly what it was before this record.
+- **The product map** — what this server offers — carries the catalogues, the products,
+  the arrangement between them, and the processes those products **bind**, with the
+  state the engine has for each. It carries nothing else of the estate: not the workers
+  those processes use, not the applications that hold them, not the peers, and not the
+  processes *they* call. One hop, because the second hop is the landscape's question
+  and the landscape is one entry away on the same control.
+
+Three things follow, and each is a decision rather than a consequence:
+
+- **The picker is named View, not Notation.** It already held ways of drawing that were
+  not vocabularies (the weightings), and it now holds a second subject. A control named
+  after the narrowest of the questions it answers is one nobody looks in for the others.
+- **The vocabularies stay views of the landscape.** Picking ArchiMate while on the
+  product map leaves the product map: the picker answers one question at a time, which
+  is what ADR-0211 §8's amendment already settled for the weightings. The catalogue's
+  own ArchiMate words are reached through the **export**, which follows the picture —
+  the ArchiMate download from the product map is the product map.
+- **No overlay on the product map.** ADR-0189 §4 has binding keys for an application, a
+  process and a worker and none for a catalogue or a product, so there is nothing an
+  overlay could match there; it reports no drift rather than a debt nobody could pay.
+
+What did not change: who may see a catalogue, what the picture refuses to draw, and
+every edge kind and mapping row below. Only where they are drawn.
 
 ### What the picture will not say
 

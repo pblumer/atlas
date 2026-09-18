@@ -67,6 +67,19 @@ func NewMesh(loop *runloop.Loop, collect LandscapeCollector, overlays OverlayCol
 	return &Mesh{loop: loop, collect: collect, overlays: overlays, maxNodes: maxNodes, now: now}
 }
 
+// subjectOf reads which of the two pictures the caller asked for.
+//
+// An allowlist of one, and anything else is the landscape: a subject this build does
+// not know is a stale saved view or a hand-edited URL, and the estate is the answer
+// that cannot mislead — a picture that silently drew nothing because a word was
+// misspelled would read as an instance with nothing on it.
+func subjectOf(r *http.Request) string {
+	if r.URL.Query().Get("view") == SubjectProducts {
+		return SubjectProducts
+	}
+	return SubjectLandscape
+}
+
 // HandleGraph serves the whole-instance mesh for the calling principal.
 func (m *Mesh) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	graph, ok := m.derive(w, r)
@@ -207,6 +220,7 @@ func (m *Mesh) derive(w http.ResponseWriter, r *http.Request) (Graph, bool) {
 	// produced, and holding the single-writer goroutine through it would make every
 	// other design-time request wait on one caller's graph.
 	return DeriveGraph(land, Options{
+		Subject:  subjectOf(r),
 		MaxNodes: m.maxNodes, Overlays: overlays, ObservedAt: observedAt,
 	}), true
 }
