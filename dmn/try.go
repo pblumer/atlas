@@ -67,8 +67,17 @@ func (v *Validator) Try(ctx context.Context, src []byte, decisionID string, inpu
 		out.Message = formatDiagnostics(diags)
 		return out
 	}
+	if collisions := nameCollisions(defs, src); len(collisions) > 0 {
+		// Said here too, not only at the deploy gate: trying a decision is the
+		// affordance an author reaches for first, and it should not answer for a model
+		// the deploy would refuse (services.go).
+		out.Message = collisionMessage(collisions)
+		return out
+	}
 	out.ModelName = defs.ModelName()
-	if described := describeDecisions(defs); described != nil {
+	// A decision service is offered beside the decisions, because the panel calls
+	// either the same way (services.go).
+	if described := append(describeDecisions(defs), describeServices(defs, src)...); described != nil {
 		out.Decisions = described
 	}
 	if decisionID == "" {
@@ -79,7 +88,7 @@ func (v *Validator) Try(ctx context.Context, src []byte, decisionID string, inpu
 	// and the picker use — so "this model does not provide that decision" is one
 	// answer everywhere rather than three.
 	found := false
-	for _, id := range addressableDecisions(defs) {
+	for _, id := range append(addressableDecisions(defs), serviceNames(describeServices(defs, src))...) {
 		if id == decisionID {
 			found = true
 			break

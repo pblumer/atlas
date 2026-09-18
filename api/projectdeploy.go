@@ -174,6 +174,7 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 				modelName:  res.ModelName,
 				decisions:  res.Decisions,
 				aliases:    res.Aliases,
+				services:   res.Services,
 				xml:        xml,
 			})
 		}
@@ -311,7 +312,12 @@ type resolvedModel struct {
 	// task's decisionId reads them; nothing recorded does
 	// (ADR-0385).
 	aliases []string
-	xml     []byte
+	// services are the decision services the model publishes. A task addresses one
+	// exactly as it addresses a decision, so they are matched alongside — and
+	// recorded alongside, because a service is a published interface in its own
+	// right (ADR-draft-a-business-rule-task-can-call-a-decision-service).
+	services []string
+	xml      []byte
 }
 
 // decisionDeployments turns the application's resolved DMN references into the
@@ -330,8 +336,10 @@ func decisionDeployments(models []resolvedModel) []decisionDeployment {
 			artifactID: m.artifactID,
 			modelRef:   m.modelRef,
 			modelName:  m.modelName,
-			decisions:  m.decisions,
-			xml:        m.xml,
+			// A decision service is published and versioned like a decision, because it
+			// is what a task names; the record holds both under one list.
+			decisions: append(append([]string{}, m.decisions...), m.services...),
+			xml:       m.xml,
 		})
 	}
 	return out
@@ -408,7 +416,7 @@ func (s *Server) dmnForDeployBody(ctx context.Context, body []byte, refs []dmnRe
 		if err != nil {
 			return nil, "", err
 		}
-		models = append(models, resolvedModel{decisions: res.Decisions, aliases: res.Aliases, xml: xml})
+		models = append(models, resolvedModel{decisions: res.Decisions, aliases: res.Aliases, services: res.Services, xml: xml})
 	}
 	xmls, missing := coverModelsReport(models, needed)
 	if refuse := decisionCoverage(missing, bundleBoundDecisions(deployables), deployed); refuse != "" {
@@ -451,6 +459,11 @@ func coverModelsReport(models []resolvedModel, needed []string) ([][]byte, []str
 			}
 		}
 		for _, d := range m.aliases {
+			if _, ok := provider[d]; !ok {
+				provider[d] = i
+			}
+		}
+		for _, d := range m.services {
 			if _, ok := provider[d]; !ok {
 				provider[d] = i
 			}

@@ -14,6 +14,28 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A business rule task can call a decision service.** DMN lets a model publish an
+  interface over part of its decision graph: a decision service names what it returns,
+  what it works out internally, and — the part nothing else can express — which
+  decisions it does *not* compute, because the caller supplies their results as a
+  boundary. Atlas ignored them entirely. A model carrying one deployed, the service was
+  simply never looked at, and the only way through was to call the decision inside it:
+  the same value, but the caller then has to know which decision is the right one and
+  which inputs the whole graph happens to need, so nothing inside can be rearranged
+  without breaking every process that calls it.
+
+  A task's decision now names either. The deploy gate, the version pointers, the test
+  panel and the picker all answer for a service exactly as they do for a decision, and
+  a decision inside one stays callable, so nothing already deployed changes. A model
+  that gives one name to both — or to two services — is refused with the name said out
+  loud, rather than one of the two meanings being picked silently. What a service
+  offers as its inputs is what a caller must supply: its input data and its input
+  decisions, nothing else from the graph behind it.
+
+  Two things are worth knowing. A service evaluation records its inputs and outputs but
+  no trace, because the engine offers none for a service. And the editor still cannot
+  *draw* a decision service — a model that has one comes from the temis Modeler, from
+  Camunda, or from hand-written XML.
 - **An incompatibility can be declared on the screen that declares everything else
   about a catalogue.** A product may exclude another — the clerk who may create a
   supplier must not also approve payments to it — and the record has carried that

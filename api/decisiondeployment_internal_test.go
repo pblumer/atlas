@@ -669,6 +669,26 @@ const decisionServiceProcess = `<definitions xmlns="http://www.omg.org/spec/BPMN
   </process>
 </definitions>`
 
+// decisionServiceByNameProcess calls the decision *service* rather than the
+// decision inside it — the interface DMN publishes, which is what #998 makes
+// reachable from a business rule task.
+const decisionServiceByNameProcess = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="approval-service" isExecutable="true">
+    <startEvent id="s"/>
+    <businessRuleTask id="decide">
+      <extensionElements>
+        <calledDecision decisionId="Approval" resultVariable="verdict" bindingType="latest"/>
+        <decisionInput name="Applicant Age" value="30"/>
+      </extensionElements>
+    </businessRuleTask>
+    <userTask id="wait"/>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="decide"/>
+    <sequenceFlow id="f2" sourceRef="decide" targetRef="wait"/>
+    <sequenceFlow id="f3" sourceRef="wait" targetRef="e"/>
+  </process>
+</definitions>`
+
 // TestDecisionServiceVerticalSlice walks issue #915's end-to-end acceptance path
 // on the DMN 1.5 Decision Service fixture: author the model, publish it from an
 // application holding nothing else, restart Atlas, and have a BPMN process deployed
@@ -680,13 +700,14 @@ func TestDecisionServiceVerticalSlice(t *testing.T) {
 
 	appID, rep := publishDecisionApp(t, first.x, "Approval", "approval", decisionServiceDMN)
 	// The model's evaluable decisions — the encapsulated one and the service's
-	// output — are each versioned in their own right.
+	// output — are each versioned in their own right, and so is the service: it is
+	// a published interface a task can name (#998).
 	ids := map[string]int32{}
 	for _, d := range rep.Decisions {
 		ids[d.DecisionID] = d.Version
 	}
-	if ids["Routing"] != 1 || ids["Eligibility"] != 1 {
-		t.Fatalf("published decisions = %+v, want Eligibility and Routing at v1", rep.Decisions)
+	if ids["Routing"] != 1 || ids["Eligibility"] != 1 || ids["Approval"] != 1 {
+		t.Fatalf("published decisions = %+v, want Eligibility, Routing and the service Approval at v1", rep.Decisions)
 	}
 	deployedKey := rep.Decisions[0].Key
 	for _, d := range rep.Decisions {
@@ -701,13 +722,26 @@ func TestDecisionServiceVerticalSlice(t *testing.T) {
 	defer second.shutdown()
 
 	rows := listDecisionDeployments(t, second.x, "?applicationId="+appID)
-	if len(rows) != 2 || rows[0].Key != deployedKey || rows[1].Key != deployedKey {
-		t.Fatalf("after restart: listing = %+v, want both decisions of deployment %d", rows, deployedKey)
+	if len(rows) != 3 {
+		t.Fatalf("after restart: listing = %+v, want both decisions and the service of deployment %d", rows, deployedKey)
+	}
+	for _, row := range rows {
+		if row.Key != deployedKey {
+			t.Fatalf("after restart: listing = %+v, want every row under deployment %d", rows, deployedKey)
+		}
 	}
 
+	// The decision inside the service, called directly: the path that worked before
+	// the service itself was reachable, and still has to.
 	key := deployProcess(t, second.x, decisionServiceProcess)
 	if got := runAndReadVerdict(t, second.x, key, "approval"); got != "ACCEPT" {
 		t.Fatalf("decision service verdict = %q, want ACCEPT", got)
+	}
+	// The service itself, by name — the interface the model publishes. Its result is
+	// its output decision's, so the task's result variable lands the same value.
+	svcKey := deployProcess(t, second.x, decisionServiceByNameProcess)
+	if got := runAndReadVerdict(t, second.x, svcKey, "approval-service"); got != "ACCEPT" {
+		t.Fatalf("verdict through the service = %q, want ACCEPT", got)
 	}
 }
 
