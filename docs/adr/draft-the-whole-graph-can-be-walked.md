@@ -276,7 +276,7 @@ Two further findings belong with the archive substrate record, for whoever write
   for a graph source read in five years: renaming a Go field silently renames an archive
   column.
 
-### 9. A hard memory budget, and a refusal above it
+### 9. A hard memory budget, a refusal above it, and narrowing as the way in
 
 **The explorer may not displace the engine.** Atlas executes processes; a projection that
 can exhaust the process it lives in is not a feature, it is an outage with a view attached.
@@ -288,7 +288,7 @@ not an answer at all, and it is the one failure mode an operator cannot diagnose
 outside: the engine that was executing work yesterday is executing it slowly today, and
 nothing points at the view somebody opened.
 
-Four properties make this a decision rather than an intention:
+Five properties make this a decision rather than an intention:
 
 **The refusal is a prediction, not a recovery.** The size is estimated *before a byte is
 allocated*, from counters that already exist: active instances per definition
@@ -311,19 +311,60 @@ state: nothing that executes processes is at risk while no projection exists, an
 installation that never opens the run graph should not be paying for the possibility. The
 opt-in is the operator saying how much memory the view may have.
 
-**The refusal names the narrowing that would fit.** This is where §1's topology pays a
+**A subset is a whole graph, so narrowing is lossless.** This is where §1's topology pays a
 second time: because the run graph is a forest of independent components, **a subset is a
 complete graph of a subset, not a truncated graph.** One application, one definition, one
 time window — each is a whole graph whose walk is sound, not a picture with the edges cut
-off. So the refusal is constructive rather than a dead end: it states the estimate, the
-budget, and the scope that would come in under it. A picture that says what it cannot do
-and what would work instead is the same discipline ADR-0211 §7 applies over its node budget
-and §3 applies to a filtered mesh.
+off. Nothing about a narrower scope is an approximation, which is what makes the next point
+possible.
 
 And the build is **all-or-nothing**. A partially built CSR that answers is worse than none,
 because its answers are wrong in a way no reader can see. A refused or failed build leaves
 whatever projection already existed in place, stale and labelled stale, rather than
 replacing it with something incomplete.
+
+#### The entry is a narrow scope; the whole graph is the exception
+
+A budget with a refusal above it, offered as *"show me everything"* with a *no* behind it,
+removes the feature exactly where it is most wanted: the installation with half a million
+instances is the one that needs impact analysis and the one that gets refused, while the
+installation with three thousand gets the whole-graph walk and has no question it answers.
+That is a limit doing its job and a product failing at its own.
+
+So the interaction is inverted. **The first scope is narrow, and the reader widens until
+refused.** The refusal then stops being a door that was shut before anyone started and
+becomes a boundary found while exploring — the same thing as reaching the end of a list.
+
+Four rules follow, and the first is the one that makes it work:
+
+- **The entry scope follows the question, not the budget.** A reader arriving from a worker
+  node on the starmap wants the definitions that use that worker; from a process, that
+  process. That is context the click already carries, not a guess. Only when there is no
+  context — the run graph opened directly — is a default needed, and it is a **recent time
+  window**, because that is the scope a person means by "what is going on".
+- **Every widening states its estimate before it runs.** The control is not widen-and-hope:
+  the server answers *this scope would need 2.3 GB against a 1 GB budget* and names the
+  nearest scope that fits. Over a few steps the reader learns the shape of their own estate,
+  which is worth more than the picture they were denied.
+- **The budget is visible while exploring**, as a share of it spent on the current scope.
+  This is affordable precisely because the estimate is O(definitions × elements) — it can run
+  on every step rather than once.
+- **A saved view re-estimates on open.** ADR-0211 §7 already saves views. A saved run-graph
+  view holds a scope, and a scope that fitted last month may not fit today; the view says so
+  rather than failing to open.
+
+**The estimator needs its own cap, and that is not a contradiction.** Scoping by application
+or definition is free — the counters are per definition. Scoping by *time* is not: a count
+within a window is a range scan over `cfInstanceDoneByDef`
+(`piDoneByDef:<procDefKey>:<completedAt>:<piKey>`), so it costs in proportion to the window
+asked about. A day is tens of thousands of valueless keys and cheap; a year is the whole
+population. So the estimator is itself bounded, and above that bound the answer is *"too
+large to estimate"* — which is a refusal too. If counting what you asked for is itself too
+expensive, the answer is no, and saying so is cheaper than finding out by building it.
+
+A picture that states what it cannot do, and what would work instead, is the discipline
+ADR-0211 §7 applies over its node budget and §3 applies to a filtered mesh. This is that
+discipline made into the primary interaction rather than the error path.
 
 ### Consequences
 
@@ -337,10 +378,12 @@ replacing it with something incomplete.
 - **Negative / trade-offs accepted:** **memory, bounded by refusal.** Under 1 GB compressed
   at the year-scale estimate, and three to five times that if the per-instance node count is
   higher than estimated — in a single binary that also runs the engine. §9 turns that from an
-  open risk into a stated limit, and the accepted consequence is the honest one: **on a large
-  enough installation the feature is simply unavailable**, and says so. That is the cost of
-  refusing to let a view slow the engine, and it is deliberately paid in capability rather
-  than in throughput.
+  open risk into a stated limit. The accepted consequence, stated precisely because the loose
+  version is wrong: **on a large enough installation the *whole-graph* walk is unavailable**,
+  and says so. The feature is not — every narrower scope is a whole graph of itself (§9), so
+  what a large estate loses is the one question it could ask least usefully anyway, and what
+  it keeps is every question about an application, a definition or a window. That is the cost
+  of refusing to let a view slow the engine, paid in reach rather than in throughput.
 - **Negative:** rebuild time after a restart, and a window during which the run graph is
   absent or behind. It must report that state rather than answer from a partial structure.
 - **Negative:** the projection can drift from the state store. Disposability is the
