@@ -1597,14 +1597,25 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .in-pills { display: flex; flex-wrap: wrap; gap: 4px; }
 .pill-kv { font: 12px/1.5 ui-monospace, monospace; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 1px 7px; white-space: nowrap; }
 .pill-kv b { color: var(--muted); font-weight: 600; }
-.res { display: flex; flex-direction: column; gap: 2px; min-width: 190px; }
-.res-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; font-size: 12.5px; padding: 2px 4px; border-radius: 5px; }
+.res { display: flex; flex-direction: column; gap: 3px; min-width: 190px; }
+/* The name, the answer and the rule that produced it read as one line, left to
+   right. This was a three-column grid with the value right-aligned, which is fine
+   in a narrow table cell and wrong everywhere else: in the replay panel it threw
+   the answer against the far edge of a full-width card, a hand's width from the
+   name it answers to, with white space in between and nothing to tie them. A
+   result is a phrase — "entscheid = abgelehnt" — so it is set as one. */
+.res-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12.5px; padding: 2px 4px; border-radius: 5px; }
 .res-row.hoverable { cursor: help; }
 .res-row.hoverable:hover, .res-row.hoverable:focus-visible { background: var(--accent-soft); outline: none; }
 .res-row.hoverable .res-key::after { content: "\229e"; margin-left: 5px; color: var(--accent); font-weight: 700; opacity: 0.8; }
-.res-key { color: var(--text); font-weight: 600; white-space: nowrap; }
-.res-val { font: 12px/1.3 ui-monospace, monospace; color: var(--text); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.res-rule { grid-column: 2 / 4; justify-self: end; font: 600 10px/1.4 ui-monospace, monospace; color: #15803d; background: #dcfce7; padding: 1px 7px; border-radius: 999px; }
+.res-key { color: var(--muted); font-weight: 600; white-space: nowrap; }
+/* The answer carries the emphasis, not its label: it is the thing being read. */
+.res-val {
+  font: 600 12px/1.5 ui-monospace, monospace; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 5px;
+  padding: 0 7px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.res-rule { font: 600 10px/1.4 ui-monospace, monospace; color: #15803d; background: #dcfce7; padding: 1px 7px; border-radius: 999px; }
 
 /* The hover popover: a frosted card holding the matched-rule table. */
 .dec-pop {
@@ -1624,8 +1635,17 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .mgrid th { background: var(--bg); font-weight: 600; }
 .mgrid code { font: 11px/1 ui-monospace, monospace; }
 .mcol-idx { width: 20px; text-align: center; color: var(--muted); }
-.mrule.is-hit { background: #eaf1ff; }
-.mrule.is-hit .mcol-idx { color: #1d4ed8; font-weight: 700; }
+/* The rule that fired is green, and so is a condition that held — one colour, one
+   meaning ("the case satisfied this"), at two strengths. It used to be blue, which
+   made the row that carried the result a third thing to learn on a grid that is
+   already saying two. The row is the stronger green and carries its output in bold,
+   so a rule whose conditions all held but which the hit policy passed over — the
+   thing an author is usually squinting at — still reads apart from the one that
+   won. */
+.mrule.is-hit { background: #dcfce7; }
+.mrule.is-hit td { border-color: #86efac; }
+.mrule.is-hit .mcol-idx { color: #15803d; font-weight: 700; }
+.mrule.is-hit .mout { color: #14532d; font-weight: 700; }
 .mcell.is-ok { color: #166534; background: rgba(22, 163, 74, 0.08); }
 .mcell.is-no { color: #b91c1c; }
 .mcell.is-skip { color: #c3cad6; }
@@ -2217,6 +2237,13 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .dec-sect2-l { font: 600 10px/1.7 system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
 /* In the narrow live-view side panel the cards need horizontal gutters (the replay
    tab already pads its body). */
+/* The way into the decision's graph. It is a link in a card, so it is set as one
+   rather than as a button: the card is being read, not operated. */
+.dec-open {
+  border: 0; background: none; padding: 0; cursor: pointer; text-align: left;
+  font: 600 12px/1.6 system-ui, sans-serif; color: var(--accent);
+}
+.dec-open:hover { text-decoration: underline; }
 .var-panel.side .dec-card2 { margin-left: 14px; margin-right: 14px; }
 .var-panel.side .dec-card2:first-of-type { margin-top: 12px; }
 
@@ -6336,4 +6363,74 @@ button.im-problem:hover { background: var(--accent-soft); }
   .tf-top { grid-template-columns: 1fr; }
   .tf-cond { grid-template-columns: 1fr 1fr 26px; }
   .tf-cond .tf-val { grid-column: 1 / -1; }
+}
+
+/* ---------- The decision graph: one case, drawn on the decision that decided it
+   (decision-graph.js). Opened by double-clicking a business rule task in the
+   Operations replay and live viewers. It is deliberately a wide window: the DRG is
+   the picture a DMN author works in, and it is being shown here to somebody who
+   has to account for a decision, so it gets the room a diagram needs. ---------- */
+.drg-ov {
+  position: fixed; inset: 0; z-index: 70; padding: 24px;
+  background: rgba(20, 22, 26, 0.5); display: flex; align-items: center; justify-content: center;
+}
+.drg-modal {
+  width: min(1100px, 100%); max-height: 88vh; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow);
+}
+.drg-head {
+  display: flex; align-items: flex-start; gap: 12px; justify-content: space-between;
+  padding: 14px 16px; border-bottom: 1px solid var(--border);
+}
+.drg-titles h2 { margin: 0; font: 700 17px/1.3 system-ui, sans-serif; color: var(--text); }
+.drg-sub { margin: 3px 0 0; font: 12px/1.5 system-ui, sans-serif; color: var(--muted); }
+.drg-sub b { color: var(--text); font-weight: 600; }
+.drg-tag {
+  display: inline-block; font: 600 10px/1.6 system-ui, sans-serif; text-transform: uppercase;
+  letter-spacing: 0.04em; color: #6d28d9; background: #f5f3ff; border-radius: 999px; padding: 0 8px;
+}
+.drg-x {
+  border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+  border-radius: 8px; width: 30px; height: 30px; font-size: 19px; line-height: 1; cursor: pointer; flex: none;
+}
+.drg-x:hover { border-color: var(--accent); color: var(--accent); }
+.drg-body { padding: 14px 16px 18px; overflow: auto; }
+.drg-canvas {
+  overflow: auto; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--diagram-bg); padding: 10px;
+}
+/* The graph is half the answer and the rules are the other half, so the diagram
+   takes the room it needs and no more: a tall DRG scales down to fit rather than
+   pushing the matrix that explains it below the fold. */
+.drg-canvas svg { max-height: min(46vh, 430px); width: auto; max-width: 100%; margin: 0 auto; }
+/* A node the case did not touch fades back rather than disappearing: "this played
+   no part" is part of the account, and a hole in the graph would not say it. */
+.drg-node.is-idle { opacity: 0.55; }
+
+.drg-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 10px 2px 0; }
+.drg-key { display: inline-flex; align-items: center; gap: 6px; font: 11.5px/1.6 system-ui, sans-serif; color: var(--muted); }
+.drg-key .sw { width: 13px; height: 13px; border-radius: 4px; border: 1.5px solid; display: inline-block; }
+.drg-key .sw.given { background: #eff6ff; border-color: #3b82f6; }
+.drg-key .sw.derived { background: #ffffff; border-color: #111827; }
+.drg-key .sw.result { background: #dcfce7; border-color: #15803d; }
+.drg-key .sw.idle { background: #f8fafc; border-color: #cbd5e1; }
+
+/* Rules on the left, the answer on the right: the reading order of the question. */
+.drg-split { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 20px; margin-top: 16px; }
+.drg-split h3 {
+  margin: 0 0 8px; font: 600 11px/1.6 system-ui, sans-serif; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--muted);
+}
+.drg-rules { min-width: 0; overflow-x: auto; }
+.drg-rules .mtable:first-of-type { margin-top: 0; }
+.drg-result { min-width: 0; }
+.drg-foot { font-size: 12px; line-height: 1.6; margin: 12px 0 0; }
+/* A decision table is read here, not glanced at on hover, so the matrix is set at
+   a size somebody can actually read it at. */
+.drg-rules .mgrid { font-size: 12px; }
+.drg-rules .mgrid th, .drg-rules .mgrid td { padding: 3px 8px; }
+
+@media (max-width: 900px) {
+  .drg-split { grid-template-columns: minmax(0, 1fr); }
+  .drg-ov { padding: 10px; }
 }

@@ -34,6 +34,34 @@ _Changed_ / _Removed_ for each version.
   and an error handler are each correctly zero for months and each load-bearing, and a
   picture that called one of them dead would be believed once and distrusted afterwards.
 
+- **Double-click a business rule task and the decision opens.** An evaluation has been
+  durable history for a while — what went in, what came out, which rules fired — and it
+  reached an operator as a card with the rule matrix behind a *hover*. A hover is not an
+  affordance: nobody can see it, it is unreachable on a touch device, and what it reveals
+  cannot be scrolled, selected, or pointed at while somebody else is reading the screen.
+  So the one thing the record exists to answer was the one thing hidden.
+
+  Double-clicking the task now opens the decision itself — the same gesture a call
+  activity already answers with the process behind it — in a window holding the
+  **decision requirements graph with the case drawn on it**. Every input datum carries
+  the value it was given, every decision the value it produced, and the decision that
+  answered is marked as the answer. Underneath sit the rule matrices, with the rule that
+  carried the result in green and, on the rules that did not fire, the condition that
+  ruled each one out. The Decisions tab's cards carry the same door, for a reader
+  scrolling the list rather than looking at the diagram.
+
+  It is drawn to be turned towards somebody who does not use Atlas, so nothing on it is
+  inferred. The graph is the model the evaluation *ran* against, not the model as it
+  reads today. A value appears on a node only where the record ties it there by name; a
+  node nothing can speak for is drawn back and says "not part of this case" rather than
+  being left blank. Colour says where a value came from rather than what kind of node
+  holds it, which is the first time a decision service's boundary — a decision the
+  caller supplied instead of the model computing it — is visible anywhere.
+
+  One thing it cannot show: a **decision service** records no rule-by-rule trace, because
+  the engine offers none for one. The window says that in as many words and keeps drawing
+  the values, which are exact — rather than rendering a silence that would read as "no
+  rules matched".
 - **A business rule task can call a decision service.** DMN lets a model publish an
   interface over part of its decision graph: a decision service names what it returns,
   what it works out internally, and — the part nothing else can express — which
@@ -950,6 +978,23 @@ _Changed_ / _Removed_ for each version.
   about the reader rather than about what they are reading.
 
 ### Fixed
+
+- **The rule that fired is green, like the conditions that held.** The rule matrix
+  marked a satisfied condition green and the rule that carried the result blue, which
+  made the row a reader is looking for a third thing to learn on a grid already saying
+  two. Green now means one thing — the case satisfied this — at two strengths, and the
+  row that won carries its output in bold so a rule whose conditions all held but which
+  the hit policy passed over still reads apart from it. The Modeler's Test panel, the
+  Operations hover and the decision graph share one renderer, so all three changed
+  together.
+- **A decision's result no longer sits a panel-width away from what it answers.** The
+  output name and its value were laid out in a three-column grid with the value
+  right-aligned — fine in the narrow table it was written for, and wrong in the replay
+  panel, where the answer ended up against the far edge of a full-width card with empty
+  space between it and the name it belongs to. Name, answer and the rule that produced
+  it now read as one line, left to right, with the answer carrying the emphasis rather
+  than its label. The Operations decision table and the live view's decision panel share
+  the markup, so all three are fixed together.
 
 - **The decision-service tool in the editor's palette was a button that never worked.**
   DMN's published interface over part of a decision graph could be carried, edited and

@@ -9,9 +9,14 @@
 //
 // The picture is the rule matrix temis's own Operate view uses: a row per rule,
 // the input columns tinted by whether each condition held, and the matched rule
-// highlighted. A rule that never matches — a string compared against a number, a
-// stray space, a wrong type — shows its condition in red, which is the thing an
-// author is usually looking for.
+// highlighted in green. A rule that never matches — a string compared against a
+// number, a stray space, a wrong type — shows its condition in red, which is the
+// thing an author is usually looking for.
+//
+// One colour, one meaning: green is "the case satisfied this", whether that is one
+// condition or the whole rule. The matrix reads the same in the Modeler's Test
+// panel, in the Operations hover, and in the decision graph, so learning to read it
+// once is enough.
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
