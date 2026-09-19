@@ -1,4 +1,4 @@
-# ADR-DRAFT: A decision is shown, not described
+# ADR-0405: A decision is shown, not described
 
 - **Status:** Accepted
 - **Implementation:** Landed

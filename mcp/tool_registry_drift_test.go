@@ -245,7 +245,7 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/panorama/models/{id}/drift": "a non-durable reading surface; an agent must not read an emptied journal as an absence of change",
 	"PUT /api/v1/node":                       "an operator naming this instance, not an agent action",
 	// One evaluation with the requirements graph of the model it ran against
-	// (ADR-draft-a-decision-is-shown-rather-than-described). The route exists to
+	// (ADR-0405). The route exists to
 	// fill a drawing: most of what it carries is DMNDI bounds — where each shape
 	// sits on a canvas — and an agent has no canvas. Every *fact* in it is already a
 	// tool: the case itself (inputs, outputs, the rules that fired) is
