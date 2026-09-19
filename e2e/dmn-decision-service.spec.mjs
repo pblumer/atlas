@@ -207,3 +207,102 @@ test("vendored dmn-js preserves DMN 1.5 Decision Services through modeling and r
   expect(result.roundtrip).toEqual(reclassifiedServices);
   expect(result.savedXML).toContain("DMNDecisionServiceDividerLine");
 });
+
+// A minimal DRD to create into: one decision, nothing else, so what the test
+// creates is unambiguous.
+const EMPTY_DRD_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20230324/MODEL/"
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20230324/DMNDI/"
+             xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/"
+             namespace="http://temis.example/blank" name="Blank" id="def_blank">
+  <decision id="id_only" name="Only">
+    <variable name="Only" typeRef="string" />
+    <literalExpression><text>"x"</text></literalExpression>
+  </decision>
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram id="DMNDiagram_Blank">
+      <dmndi:DMNShape id="DMNShape_Only" dmnElementRef="id_only">
+        <dc:Bounds x="40" y="80" width="160" height="80" />
+      </dmndi:DMNShape>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>`;
+
+// #998's second half: the palette offered a Decision Service and the canvas
+// refused the drop, because the DRD create rule did not list the type — so the
+// tool was a button that never worked. The fork fixed the rule and Atlas rebuilt
+// the bundle; this holds the result where Atlas actually ships it.
+//
+// It asks the *rule*, not the modeling API. `modeling.createShape` executes the
+// command directly and consults no rules, which is why the fork's own authoring
+// test passed throughout the defect: the interactive path the palette uses asks
+// `rules.allowed('shape.create', …)`, and that is the thing that was false.
+test("vendored dmn-js lets an author create a DMN 1.5 Decision Service from the palette", async ({ page }) => {
+  await page.goto("/harness.html");
+  await page.addScriptTag({ url: "/vendor/dmn/dmn-modeler.js" });
+
+  const result = await page.evaluate(async (xml) => {
+    document.body.innerHTML = '<div id="dmn" style="width:1200px;height:700px"></div>';
+
+    const modeler = new window.AtlasDmn.DmnJS({ container: "#dmn", dmnVersion: "1.5" });
+    const imported = await modeler.importXML(xml);
+    const viewer = modeler.getActiveViewer();
+    const canvas = viewer.get("canvas");
+    const rules = viewer.get("rules");
+    const elementFactory = viewer.get("elementFactory");
+    const modeling = viewer.get("modeling");
+    const palette = viewer.get("palette");
+
+    const entries = palette.getEntries();
+    const entry = entries["create.decision-service"];
+
+    const root = canvas.getRootElement();
+    const shape = elementFactory.createShape({ type: "dmn:DecisionService" });
+    // The question the palette asks before it lets go of the shape.
+    const allowed = rules.allowed("shape.create", {
+      position: { x: 500, y: 240 },
+      shape,
+      target: root,
+    });
+
+    modeling.createShape(shape, { x: 500, y: 240 }, root);
+    const divider = shape.businessObject.di.get("decisionServiceDividerLine");
+    const waypoints = (divider && divider.get("waypoint")) || [];
+
+    const saved = await modeler.saveXML({ format: true });
+    const reimported = await modeler.importXML(saved.xml);
+
+    modeler.destroy();
+    return {
+      importWarnings: imported.warnings.map((w) => w.message),
+      offered: !!entry,
+      iconClass: entry && entry.className,
+      allowed,
+      type: shape.businessObject.$type,
+      parented: shape.businessObject.$parent === root.businessObject,
+      dividerWaypoints: waypoints.length,
+      savedXML: saved.xml,
+      reimportWarnings: reimported.warnings.map((w) => w.message),
+    };
+  }, EMPTY_DRD_XML);
+
+  expect(result.importWarnings).toEqual([]);
+  // The rule that made the button dead: the palette offered the tool and this
+  // answered false, in every configuration, so the drop was refused.
+  expect(result.offered).toBe(true);
+  expect(result.allowed).toBe(true);
+  // And its own icon rather than the decision's — the two shapes mean different
+  // things, and a palette that draws them alike says they do not.
+  expect(result.iconClass).toContain("dmn-icon-decision-service");
+
+  expect(result.type).toBe("dmn:DecisionService");
+  expect(result.parented).toBe(true);
+  // A service is drawn with a divider line, and it is created with the shape
+  // rather than left for the author to repair.
+  expect(result.dividerWaypoints).toBe(2);
+
+  // And it survives to the document, which is what a deploy would read.
+  expect(result.savedXML).toContain("<decisionService");
+  expect(result.savedXML).toContain("DMNDecisionServiceDividerLine");
+  expect(result.reimportWarnings).toEqual([]);
+});
