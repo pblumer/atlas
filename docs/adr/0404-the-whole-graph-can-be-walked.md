@@ -1,4 +1,4 @@
-# ADR-DRAFT: The whole graph can be walked, in a projection with a stated scope
+# ADR-0404: The whole graph can be walked, in a projection with a stated scope
 
 - **Status:** Proposed
 - **Implementation:** Not started
@@ -15,7 +15,7 @@
 
 ## Context and problem statement
 
-ADR-draft-the-estate-graph-is-derived-from-the-log states, as its rule 2, that runtime
+ADR-0403 states, as its rule 2, that runtime
 facts reach the structural graph as properties and never as nodes. The reason given is
 arithmetic: the starmap's measured budget is 400 nodes and one day of runtime facts is
 four orders of magnitude past it.
@@ -434,9 +434,9 @@ discipline made into the primary interaction rather than the error path.
 
 ## Links
 
-- precises rule 2 of ADR-draft-the-estate-graph-is-derived-from-the-log; uses the identity
-  scheme of ADR-draft-graph-identity-across-several-logs; complements
-  ADR-draft-an-edge-that-was-taken-is-not-an-edge-that-was-declared, which aggregates the
+- precises rule 2 of ADR-0403; uses the identity
+  scheme of ADR-0401; complements
+  ADR-0400, which aggregates the
   same facts onto structure instead of walking them
 - builds on ADR-0114 (the tailer shape and the export document), ADR-0131 (why not from
   genesis), ADR-0080/ADR-0239/ADR-0382 (what may not hold the writer), ADR-0238 and

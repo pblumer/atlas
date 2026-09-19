@@ -1,4 +1,4 @@
-# ADR-DRAFT: One estate, several nodes — a starmap stitched from subgraphs
+# ADR-0402: One estate, several nodes — a starmap stitched from subgraphs
 
 - **Status:** Proposed
 - **Implementation:** Not started
@@ -77,7 +77,7 @@ it.
 Chosen: **option 2 — every node keeps deriving its own subgraph, and the reader's node
 stitches.** No node becomes the estate's master, nothing new is stored, and the graph
 inherits the derivation rules it already has. Identities are
-ADR-draft-graph-identity-across-several-logs'.
+ADR-0401'.
 
 Four things the stitching has to decide.
 
@@ -158,7 +158,7 @@ recorded. Two things are therefore explicitly refused:
 Real cross-node edges arrive with #986: a published interface ([ADR-0373](0373-published-process-interface.md))
 is a declared contract, and a delivered envelope
 ([ADR-0372](0372-peer-message-delivery-worker.md)) is an observed traversal in the sense of
-ADR-draft-an-edge-that-was-taken-is-not-an-edge-that-was-declared. Both are facts, and
+ADR-0400. Both are facts, and
 both are drawable when they exist. Until then the estate view draws domains, their
 contents and the promotion joins, and says that is what it draws.
 
@@ -224,8 +224,8 @@ contents and the promotion joins, and says that is what it draws.
 - builds on ADR-0129 (targets and their credential), ADR-0069 (the vault reference), the
   node descriptor's derived feature list (ADR-0189 P4a), ADR-0071 (the local sharing scopes
   the gate sits beside)
-- requires ADR-draft-graph-identity-across-several-logs; bounded by
-  ADR-draft-the-estate-graph-is-derived-from-the-log
+- requires ADR-0401; bounded by
+  ADR-0403
 - blocked-on-nothing, but completed by [#986](https://github.com/pblumer/atlas/issues/986):
   ADR-0373's contract and ADR-0372's delivery are what finally make a cross-node edge a
   fact

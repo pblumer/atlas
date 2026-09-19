@@ -1,4 +1,4 @@
-# ADR-DRAFT: An edge that was taken is not an edge that was declared
+# ADR-0400: An edge that was taken is not an edge that was declared
 
 - **Status:** Accepted
 - **Implementation:** Not started
@@ -64,7 +64,7 @@ invisible.
   content to be visually distinct, always, with a legend stating the cases. A further
   word in that vocabulary is far cheaper than a further picture.
 - **No scan** — tier T2's rule in
-  ADR-draft-the-estate-graph-is-derived-from-the-log: a graph property comes from a
+  ADR-0403: a graph property comes from a
   maintained counter or a bounded index, or it does not come.
 - **A picture that overstates is worse than one that says less.** ADR-0211 §4 already
   refuses to render *unreachable* and *stale* alike, because a view that loses
@@ -139,7 +139,7 @@ only for the three late-resolution kinds above, and for peers once delivery exis
 
 - **It does not put instances on the graph.** The count is a property of an edge (tier
   T2), not a population of nodes. That boundary is
-  ADR-draft-the-estate-graph-is-derived-from-the-log's rule 2.
+  ADR-0403's rule 2.
 - **It does not answer "how long did it take".** Duration is not in the counter, and
   adding it is a second counter with a second write on the hot path — a separate
   decision with a separate cost.
@@ -200,6 +200,6 @@ only for the three late-resolution kinds above, and for peers once delivery exis
 - builds on ADR-0080 (`cfElementVisitAgg`, the counter this joins), ADR-0022 (the
   per-instance visit history it aggregates), ADR-0211 §2 and §4 (provenance, and the
   refusal to render different findings alike)
-- bounded by ADR-draft-the-estate-graph-is-derived-from-the-log (tier T2's rule)
+- bounded by ADR-0403 (tier T2's rule)
 - relates to ADR-0105, ADR-0379, ADR-0385, ADR-0256 (the late-resolution kinds that can
   drift) and to [#986](https://github.com/pblumer/atlas/issues/986) for the peer edge

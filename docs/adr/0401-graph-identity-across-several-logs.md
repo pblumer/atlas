@@ -1,4 +1,4 @@
-# ADR-DRAFT: What a node is called when there is more than one log
+# ADR-0401: What a node is called when there is more than one log
 
 - **Status:** Accepted
 - **Implementation:** Not started
@@ -17,7 +17,7 @@
 
 ## Context and problem statement
 
-ADR-draft-the-estate-graph-is-derived-from-the-log settles that an estate graph is a
+ADR-0403 settles that an estate graph is a
 projection and that merging logs is not what it needs. What it does need is that two
 servers' derived subgraphs can be named in **one namespace**, and that is an identity
 question nothing in the tree has answered.
@@ -199,7 +199,7 @@ server it happens to sit on, that is a sign it was modelled at the wrong altitud
 - builds on ADR-0189 P4a (the runtime id), ADR-0129 (deployment targets and their
   `Bindings`), ADR-0006 (cross-partition is message passing only), ADR-0357 (a backup does
   not take over an identity)
-- required by ADR-draft-one-estate-several-nodes; bounded by
-  ADR-draft-the-estate-graph-is-derived-from-the-log
+- required by ADR-0402; bounded by
+  ADR-0403
 - relates to [#986](https://github.com/pblumer/atlas/issues/986), whose correction about
   participants is the same argument one altitude up

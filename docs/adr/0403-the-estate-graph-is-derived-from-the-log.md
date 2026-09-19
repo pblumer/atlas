@@ -1,4 +1,4 @@
-# ADR-DRAFT: The estate graph is derived from the log, never the log from the graph
+# ADR-0403: The estate graph is derived from the log, never the log from the graph
 
 - **Status:** Accepted
 - **Implementation:** Not started
@@ -45,9 +45,9 @@ questions that have been asked and never answered:
 Neither is answerable on its own. Both are really asking the same prior question:
 *which direction does derivation run, and how many tiers are there?* This record
 answers that and nothing else. The identity scheme a merge needs is
-ADR-draft-graph-identity-across-several-logs; what the log contributes to the picture
-is ADR-draft-an-edge-that-was-taken-is-not-an-edge-that-was-declared; how the
-subgraphs are stitched is ADR-draft-one-estate-several-nodes.
+ADR-0401; what the log contributes to the picture
+is ADR-0400; how the
+subgraphs are stitched is ADR-0402.
 
 ## Decision drivers
 
@@ -141,8 +141,8 @@ sentence ADR-0382 was written about.
 - **Question 2 is answerable, and the answer is "yes, at T1, and only with an identity
   scheme".** Merging logs is not what a merged *graph* needs: what it needs is that two
   nodes' derived subgraphs can be named in one namespace. That is
-  ADR-draft-graph-identity-across-several-logs, and the stitching is
-  ADR-draft-one-estate-several-nodes. Merging the *logs themselves* is refused for the
+  ADR-0401, and the stitching is
+  ADR-0402. Merging the *logs themselves* is refused for the
   same reason rule 2 exists: it would produce a T3-population graph and call it T1.
 - **No tier is promoted by adding a node kind.** A future slice that wants instances on
   the starmap is not a node-kind change; it is a tier change, and it needs its own
@@ -227,6 +227,6 @@ sentence ADR-0382 was written about.
 - builds on ADR-0211 (the derived starmap this generalizes), ADR-0080 (the counter
   mechanism T2 rests on), ADR-0114 and ADR-0179 (T4's sinks), ADR-0065 (T3), ADR-0071
   (why authorization cannot be materialized once)
-- companion records: ADR-draft-graph-identity-across-several-logs,
-  ADR-draft-an-edge-that-was-taken-is-not-an-edge-that-was-declared,
-  ADR-draft-one-estate-several-nodes
+- companion records: ADR-0401,
+  ADR-0400,
+  ADR-0402
