@@ -276,6 +276,55 @@ Two further findings belong with the archive substrate record, for whoever write
   for a graph source read in five years: renaming a Go field silently renames an archive
   column.
 
+### 9. A hard memory budget, and a refusal above it
+
+**The explorer may not displace the engine.** Atlas executes processes; a projection that
+can exhaust the process it lives in is not a feature, it is an outage with a view attached.
+So the budget is not a tuning parameter with a degradation curve behind it — it is a limit
+with a **refusal** above it.
+
+*"The run graph is too large for this installation"* is an honest answer. A slow server is
+not an answer at all, and it is the one failure mode an operator cannot diagnose from the
+outside: the engine that was executing work yesterday is executing it slowly today, and
+nothing points at the view somebody opened.
+
+Four properties make this a decision rather than an intention:
+
+**The refusal is a prediction, not a recovery.** The size is estimated *before a byte is
+allocated*, from counters that already exist: active instances per definition
+(`cfDefInstanceCount`), finished instances per definition
+([ADR-0083](0083-o1-instance-summary.md)'s `cfDefCompletedCount`), cumulative visits per
+definition-element (`cfElementVisitAgg`), and the element count of each compiled process,
+which is known at deploy time. The estimate is therefore O(definitions × elements) — the
+same shape ADR-0080 made the runtime view — and never O(instances). An OOM caught by a
+recovery path has already stalled the writer; a projection refused before it starts has
+cost nothing.
+
+**The budget is stated in bytes, not in nodes.** An operator knows how much memory the
+machine has and cannot know what a node costs. Converting one to the other is the server's
+arithmetic, and making the operator do it is how a limit gets set wrong in the direction
+that hurts.
+
+**It is off by default.** ADR-0070's posture — on by default with a generated key — is right
+for a security feature, where being off is the worse state. Here being off is the *safe*
+state: nothing that executes processes is at risk while no projection exists, and an
+installation that never opens the run graph should not be paying for the possibility. The
+opt-in is the operator saying how much memory the view may have.
+
+**The refusal names the narrowing that would fit.** This is where §1's topology pays a
+second time: because the run graph is a forest of independent components, **a subset is a
+complete graph of a subset, not a truncated graph.** One application, one definition, one
+time window — each is a whole graph whose walk is sound, not a picture with the edges cut
+off. So the refusal is constructive rather than a dead end: it states the estimate, the
+budget, and the scope that would come in under it. A picture that says what it cannot do
+and what would work instead is the same discipline ADR-0211 §7 applies over its node budget
+and §3 applies to a filtered mesh.
+
+And the build is **all-or-nothing**. A partially built CSR that answers is worse than none,
+because its answers are wrong in a way no reader can see. A refused or failed build leaves
+whatever projection already existed in place, stale and labelled stale, rather than
+replacing it with something incomplete.
+
 ### Consequences
 
 - **Positive:** the walk is affordable *because* of the topology that makes a global
@@ -285,11 +334,13 @@ Two further findings belong with the archive substrate record, for whoever write
   is the property that distinguishes it from the persistent graph store option 2 proposes.
 - **Positive:** no CGO and no new service. The heaviest dependency is gonum, and even that
   is optional if the algorithms are written directly against the CSR.
-- **Negative / trade-offs accepted:** **memory.** Under 1 GB compressed at the year-scale
-  estimate, and three to five times that if the per-instance node count is higher than
-  estimated — in a single binary that also runs the engine. This needs an explicit budget,
-  a refusal above it, and possibly a separate process. It is the one cost that can make
-  this undeployable.
+- **Negative / trade-offs accepted:** **memory, bounded by refusal.** Under 1 GB compressed
+  at the year-scale estimate, and three to five times that if the per-instance node count is
+  higher than estimated — in a single binary that also runs the engine. §9 turns that from an
+  open risk into a stated limit, and the accepted consequence is the honest one: **on a large
+  enough installation the feature is simply unavailable**, and says so. That is the cost of
+  refusing to let a view slow the engine, and it is deliberately paid in capability rather
+  than in throughput.
 - **Negative:** rebuild time after a restart, and a window during which the run graph is
   absent or behind. It must report that state rather than answer from a partial structure.
 - **Negative:** the projection can drift from the state store. Disposability is the
@@ -304,7 +355,11 @@ Two further findings belong with the archive substrate record, for whoever write
   directions — ADR-0314 names key loss as data loss, and the reverse is equally true once an
   archive is in play, because a vault backup that survives the erasure defeats it. Backing up
   too well and backing up too little are both compliance failures, of different laws.
-  Neither record settles it.
+  Neither record settles it. And §9's estimate has one hole: **variables are counted
+  nowhere.** Instances, element visits and jobs have counters; variables per scope do not,
+  so the estimate needs either a counter of its own or a conservative per-instance
+  allowance — and a conservative allowance refuses installations that would in fact have
+  fitted.
 
 ## Pros and cons of the options
 
