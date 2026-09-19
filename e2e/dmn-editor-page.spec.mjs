@@ -40,7 +40,7 @@ const STORED_XML = `<?xml version="1.0" encoding="UTF-8"?>
 // `taken` makes the model upload answer 409 the way the server does when the handle
 // a decision would land on is already somebody else's (ADR-0222), unless the request
 // says the author chose to replace it.
-function installMock(page, { refs = [], drafts = [], taken = false, deployed = [], trial = null, docs = [], storedXml = STORED_XML } = {}) {
+function installMock(page, { refs = [], drafts = [], taken = false, deployed = [], trial = null, docs = [], storedXml = STORED_XML, decisions = null } = {}) {
   const uploads = [];
   const created = [];
   const patched = [];
@@ -99,7 +99,9 @@ function installMock(page, { refs = [], drafts = [], taken = false, deployed = [
       const described = {
         ok: true,
         modelName: "Eligibility",
-        decisions: [{ id: "Decision_stored", name: "eligibility", inputs: [{ name: "amount", type: "number" }], output: { name: "result", type: "string" } }],
+        // What the model offers. A test may hand in its own list — a decision service
+        // is described here exactly like a decision, marked with `service`.
+        decisions: decisions || [{ id: "Decision_stored", name: "eligibility", inputs: [{ name: "amount", type: "number" }], output: { name: "result", type: "string" } }],
       };
       if (!payload.decisionId) return route.fulfill({ json: described });
       if (trial) return route.fulfill({ json: { ...described, ...trial } });
@@ -561,6 +563,59 @@ test("a decision that does not run says so in the panel, not as a broken page", 
   // The editor is untouched: a table that does not work yet is the normal state of
   // one being written.
   await expect(page.locator(".dmn-editor .dmn-canvas .dmn-js-parent")).toBeVisible();
+});
+
+test("a decision service says why it has no rule matrix, instead of claiming the model has no tables", async ({ page }) => {
+  // temis reports no trace for a service evaluation, so the panel receives an answer
+  // with no trace at all. That is not the same as a decision whose own logic has no
+  // table, and saying so would be false: the decisions behind the interface are
+  // usually tables.
+  installMock(page, {
+    refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }],
+    decisions: [{ id: "Dienst", name: "Dienst", service: true, inputs: [{ name: "amount", type: "number" }], output: { name: "Dienst", type: "" } }],
+    trial: { decisionId: "Dienst", outputs: { eligibility: "approve" } },
+  });
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  await page.locator("#dmn-test").click();
+  await page.locator("#dmn-test-run").click();
+
+  const result = page.locator("#dmn-test-result");
+  await expect(result.locator(".res-val")).toHaveText("approve");
+  await expect(result).toContainText("A decision service reports no rule matrix");
+  await expect(result).toContainText("Test a decision inside it");
+  await expect(result).not.toContainText("no table logic");
+});
+
+test("a decision whose logic has no table says that, and one with no trace at all says that instead", async ({ page }) => {
+  // The two silences the panel has to tell apart. A trace that exists and holds no
+  // table is a statement about the model; no trace is a statement about the run.
+  installMock(page, {
+    refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }],
+    trial: { decisionId: "Decision_stored", outputs: { eligibility: "approve" }, trace: { tables: null } },
+  });
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  await page.locator("#dmn-test").click();
+  await page.locator("#dmn-test-run").click();
+  await expect(page.locator("#dmn-test-result")).toContainText("no table logic");
+
+  // The same decision, answered without a trace: the panel no longer blames the
+  // model for something the run did not record.
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+  installMock(page, {
+    refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }],
+    trial: { decisionId: "Decision_stored", outputs: { eligibility: "approve" } },
+  });
+  await page.reload();
+  await editorReady(page);
+  await page.locator("#dmn-test").click();
+  await page.locator("#dmn-test-run").click();
+  const result = page.locator("#dmn-test-result");
+  await expect(result).toContainText("recorded no trace");
+  await expect(result).not.toContainText("no table logic");
 });
 
 test("Auto-layout re-flows the requirements graph through the server", async ({ page }) => {

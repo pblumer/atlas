@@ -906,6 +906,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The test panel blamed the model for a silence that belongs to the engine.** A
+  decision service is evaluated without a rule matrix — the engine reports none for one
+  — so testing a service handed the panel an answer with no trace at all. The panel
+  said "this decision has no table logic, so there are no rules to trace", which is
+  false twice over: the decisions behind the interface are usually tables, and nothing
+  about the model is the reason. It now says that a service reports no rule matrix and
+  points at the thing that does: test a decision inside it.
+
+  The two silences are kept apart properly rather than papered over. A trace that
+  exists and holds no table is a statement about the model — a literal expression, a
+  boxed context — and still reads as one. A missing trace is a statement about the run,
+  and reads as one. Measured on the way: a decision whose own logic is a boxed context
+  but which requires a decision table still traces that table, so the older message was
+  right about every case it used to see.
+
 - **The portal asks you to sign in instead of showing you an error.** On an instance
   started with `--auth`, opening the service portal without a session produced an
   error line with an HTTP status in it, no catalogue, nothing saying a sign-in was

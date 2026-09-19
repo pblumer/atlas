@@ -27,8 +27,9 @@ export const fmtVal = (v) =>
 const cellText = (t) => { const s = (t ?? "").trim(); return s === "" || s === "-" ? "–" : s; };
 
 // tablesOf pulls the decision tables out of whatever shape the trace arrived in.
-// A decision with no table logic — a literal expression — traces to nothing, which
-// is a valid answer and not an error.
+// A decision with no table logic — a literal expression — traces to a trace with no
+// tables in it, which is a valid answer and not an error. That is a different thing
+// from no trace at all; see renderTrace.
 export function tablesOf(trace) {
   return trace && Array.isArray(trace.tables) ? trace.tables : [];
 }
@@ -66,9 +67,29 @@ export function renderTraceTable(tt, n) {
 }
 
 // renderTrace draws every table in a trace, numbering them when there is more than
-// one. A decision whose logic is a literal expression has no table to draw, and
-// says so rather than rendering an empty frame.
-export function renderTrace(trace) {
+// one, and says why there is nothing to draw when there is nothing.
+//
+// Two different silences reach here, and telling an author they are the same is a
+// lie about their model:
+//
+//   - **A trace with no tables in it.** The decision's own logic is a literal
+//     expression, a boxed context or another boxed form, so no rule matrix exists to
+//     show. Measured: a decision whose logic is a context but which requires a table
+//     still traces *that* table, so this really is "no table logic here".
+//   - **No trace at all.** Nothing was recorded. A decision service is the case that
+//     matters: temis offers no trace option for one, so the decisions behind the
+//     interface run and report nothing (ADR-0398).
+//     Saying "this decision has no table logic" there would be plainly false — the
+//     decisions inside it are usually tables.
+//
+// The caller passes `service` when it knows the thing it ran was one, because only
+// it knows; without it the message says what is true either way.
+export function renderTrace(trace, opts = {}) {
+  if (trace === null || trace === undefined) {
+    return opts.service
+      ? `<p class="muted">A decision service reports no rule matrix, so there is nothing to trace here. Test a decision inside it to see its rules.</p>`
+      : `<p class="muted">This evaluation recorded no trace, so there are no rules to show.</p>`;
+  }
   const tables = tablesOf(trace);
   if (!tables.length) {
     return `<p class="muted">This decision has no table logic, so there are no rules to trace.</p>`;
