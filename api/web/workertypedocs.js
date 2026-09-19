@@ -338,7 +338,7 @@ export const WORKER_TYPE_DOCS = {
       `${WORKERS} &rarr; <b>New worker</b>: type <b>S3 object storage</b>, a name, credential reference <code>s3_archiv</code>. Leave the <b>endpoint empty for AWS</b>; for any other store enter its base URL (<code>https://minio.example:9000</code>), which is also what tells Atlas to address buckets path-style.`,
       `Try it with a <b>Check object</b> task on a key you know: <code>=datei.exists</code> answers without needing the object to be readable in full, so a wrong permission shows up as an error rather than as an empty result.`,
     ],
-    trap: `A document larger than <b>1 MiB</b> cannot be read into a process variable — that is the variable's ceiling, not a setting. Use <b>Link to download</b>, which hands out a signed URL and lets the browser fetch the bytes straight from the store. Keep the link's lifetime short: it opens that object for anyone who has it, and it is stored in the instance's variables like any other value.`,
+    trap: `A document larger than a process variable's budget — <b>1 MiB</b> unless this installation raised it — cannot be read into one. Use <b>Link to download</b>, which hands out a signed URL and lets the browser fetch the bytes straight from the store. Keep the link's lifetime short: it opens that object for anyone who has it, and it is stored in the instance's variables like any other value.`,
   },
 
   aitask: {

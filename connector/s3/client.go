@@ -39,7 +39,8 @@
 //
 // The byte path still exists, because a 4 KB manifest a gateway branches on is a real
 // case: put-object and get-object move content through a variable, bounded by
-// [MaxObjectBytes], which refuses rather than truncates — half a PDF is not a smaller PDF.
+// [MaxObjectBytes] — the process variable's own budget — which refuses rather than
+// truncates, because half a PDF is not a smaller PDF.
 //
 // # A presigned URL is a capability
 //
@@ -65,22 +66,24 @@ import (
 	"sort"
 
 	"github.com/pblumer/atlas/connector/clientreg"
+	"github.com/pblumer/atlas/limits"
 )
 
 // MaxObjectBytes bounds the two operations that move an object's content through a
-// process variable. It is limits.Variable's default, because the destination of a read
-// *is* a process variable and a cap larger than what can be stored would only move the
-// failure one step later, to a place with less context.
+// process variable.
 //
-// It is spelled here rather than read from the limits package because this worker also
-// runs out of process (ADR-0164/0168), where the engine's configured limits are not in
-// reach — a worker that bounded a read differently from the engine would be a second
-// answer to the same question.
+// It *is* [limits.Limits.Variable] rather than a number of this package's own, and that
+// is the whole point: the destination of a read is one process variable, so a cap that
+// could differ from the variable's own would only move the failure one step later, to a
+// place with less context — and an installation that raises the variable budget means to
+// raise this with it. It is a function rather than a package constant because reading the
+// registry at the call site is what makes it one number instead of two
+// (limits.TestNoCeilingWithoutAName holds every bounded read to that).
 //
 // It refuses rather than truncates, for the reason entra.Request.MaxBytes gives: the magic
 // is at the front of a file, so a truncated document passes every format check there is
 // and lands as something nobody can explain.
-const MaxObjectBytes int64 = 1 << 20
+func MaxObjectBytes() int64 { return limits.Default().Variable }
 
 // The content encodings a model may author for the byte path. Text is the default: a
 // process writing JSON, CSV or a letter into a bucket wants the characters it composed.

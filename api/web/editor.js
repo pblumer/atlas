@@ -3932,7 +3932,7 @@ const SERVICE_TASK_KINDS = [
       {
         key: "content", label: "Content", placeholder: "=antwort", fx: true,
         showIf: (v) => v.operation === "put-object",
-        hint: "What to store. It travels through a process variable, so it is capped at 1 MiB — for anything larger use Link to upload and let the browser that has the document send it straight to the store.",
+        hint: "What to store. It travels through a process variable, so it is capped at that variable's own budget — 1 MiB unless this installation raised it. For anything larger use Link to upload and let the browser that has the document send it straight to the store.",
       },
       {
         key: "encoding", label: "Content is", type: "select",
@@ -4001,7 +4001,7 @@ const SERVICE_TASK_KINDS = [
             case "list-objects":
               return "The page lands here: =seite.objects is the list (1-based, so the first is =seite.objects[1].key), =seite.prefixes the rolled-up folders, =seite.truncated whether there is more, and =seite.nextStartAfter where to carry on.";
             case "get-object":
-              return "The document lands in =datei.content, with =datei.contentType and =datei.size beside it. An object larger than 1 MiB fails the task rather than arriving cut short — use Link to download for those.";
+              return "The document lands in =datei.content, with =datei.contentType and =datei.size beside it. An object larger than a process variable's budget (1 MiB by default) fails the task rather than arriving cut short — use Link to download for those.";
             case "head-object":
               return "Whether the object is there is =datei.exists, and when it is, =datei.size, =datei.contentType and =datei.lastModified come with it. A missing object is an answer here, not an incident.";
             case "presign-get":

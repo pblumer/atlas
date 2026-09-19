@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/connector/nettimeout"
+	"github.com/pblumer/atlas/limits"
 )
 
 // awsHostFormat is where a Worker with no endpoint points: AWS's regional S3 host, with
@@ -274,11 +275,11 @@ func (c *HTTPClient) getObject(ctx context.Context, req Request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if int64(len(raw)) > MaxObjectBytes {
+	if int64(len(raw)) > MaxObjectBytes() {
 		return nil, fmt.Errorf("s3: %s/%s is larger than the %d byte limit a process variable holds; "+
 			"it is refused rather than cut short, because a truncated document passes every format check and is still broken. "+
 			"Use presign-get and hand the link out instead — the bytes then go straight from the store to whoever opens it",
-			req.Bucket, req.Key, MaxObjectBytes)
+			req.Bucket, req.Key, MaxObjectBytes())
 	}
 	return map[string]any{
 		"bucket":       req.Bucket,
@@ -357,9 +358,9 @@ func (c *HTTPClient) listObjects(ctx context.Context, req Request) (any, error) 
 	if err != nil {
 		return nil, err
 	}
-	if int64(len(raw)) > MaxObjectBytes {
+	if int64(len(raw)) > MaxObjectBytes() {
 		return nil, fmt.Errorf("s3: the listing of %s is larger than the %d bytes this worker reads in one answer; lower maxKeys and page with startAfter",
-			req.Bucket, MaxObjectBytes)
+			req.Bucket, MaxObjectBytes())
 	}
 	var parsed listBucketResult
 	if err := xml.Unmarshal(raw, &parsed); err != nil {
@@ -527,8 +528,10 @@ func (c *HTTPClient) call(ctx context.Context, method, rawURL string, header htt
 	}
 	defer resp.Body.Close()
 	// One byte past the cap, so an over-large body is recognised as over-large rather than
-	// truncated into a smaller one that still parses.
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, MaxObjectBytes+1))
+	// truncated into a smaller one that still parses. The number is the process variable's
+	// own budget, read from the registry here rather than kept as a constant of this
+	// package — see [MaxObjectBytes].
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, limits.Default().Variable+1))
 	if err != nil {
 		return nil, nil, fmt.Errorf("s3: read %s response: %w", req.Operation, err)
 	}
@@ -558,9 +561,9 @@ func decodeContent(req Request) ([]byte, error) {
 // checkSize refuses a body past the cap, naming the operation that exists for exactly this
 // case rather than only the number that was exceeded.
 func checkSize(raw []byte) ([]byte, error) {
-	if int64(len(raw)) > MaxObjectBytes {
+	if int64(len(raw)) > MaxObjectBytes() {
 		return nil, fmt.Errorf("s3: put-object was given %d bytes and the limit is %d — a process variable holds no more. "+
-			"Use presign-put and let whoever has the document upload it straight to the store", len(raw), MaxObjectBytes)
+			"Use presign-put and let whoever has the document upload it straight to the store", len(raw), MaxObjectBytes())
 	}
 	return raw, nil
 }
