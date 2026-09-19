@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-decision-service-survives-auto-layout",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A decision service survives Auto-layout",
+        "de": "Ein Decision Service übersteht das Auto-Layout"
+      },
+      "summary": {
+        "en": "Atlas draws a DMN model's diagram when it has none, and redraws it when you ask. The generator knew decisions, input data and knowledge models — but not a decision service, the box drawn around part of the graph with a divider line separating what the service returns from what it works out internally. Auto-layout deleted that box, and the modeler, which reads a service's membership back out of where its decisions sit, then concluded the service had no members and wrote that into the model on the next save. What was left was a decision service with no output decision: still deployable, still callable from a business rule task, and returning nothing — no incident, no validation error, only the stored XML to show for it. The generator now draws the box around the decisions the service publishes and encapsulates, with the divider between them, and a model whose service went undrawn is laid out afresh instead of being handed to the modeler half-finished. The modeler treats the box as a real container: it is drawn beneath what it holds rather than over it, and moving it takes its decisions along. A decision the service names as its input boundary stays outside the box, where DMN puts it.",
+        "de": "Atlas zeichnet das Diagramm eines DMN-Modells, wenn keines vorhanden ist, und zeichnet es auf Wunsch neu. Der Generator kannte Entscheidungen, Eingabedaten und Knowledge Models — aber keinen Decision Service, also jene Box um einen Teil des Graphen, deren Trennlinie scheidet, was der Service liefert, von dem, was er intern ermittelt. Das Auto-Layout löschte diese Box, und der Modeler, der die Zugehörigkeit eines Service daraus abliest, wo seine Entscheidungen liegen, schloss daraus auf einen Service ohne Mitglieder und schrieb das beim nächsten Speichern ins Modell. Übrig blieb ein Decision Service ohne Output-Entscheidung: weiterhin deploybar, weiterhin aus einer Business Rule Task aufrufbar — und ohne Ergebnis, ohne Incident und ohne Validierungsfehler, sichtbar allein im gespeicherten XML. Der Generator zeichnet die Box nun um die Entscheidungen, die der Service veröffentlicht und kapselt, mit der Trennlinie dazwischen; ein Modell mit ungezeichnetem Service wird neu gelegt, statt halbfertig an den Modeler zu gehen. Der Modeler behandelt die Box als echten Container: Sie wird unter ihrem Inhalt gezeichnet statt darüber, und wer sie verschiebt, nimmt ihre Entscheidungen mit. Eine Entscheidung, die der Service als Eingabegrenze benennt, bleibt ausserhalb der Box — dort, wo DMN sie vorsieht."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Decisions",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open a decision",
+          "de": "Entscheidung öffnen"
+        },
+        "route": "#/modeler/decisions"
+      }
+    },
+    {
       "id": "a-business-rule-task-can-call-a-decision-service",
       "version": "Unreleased",
       "date": null,
@@ -417,24 +446,6 @@
       "summary": {
         "en": "\"Meine Aufträge\" already listed each position and what it was doing, out of the order's own record, and that stays the answer for every reader.",
         "de": "\"Meine Aufträge\" already listed each position and what it was doing, out of the order's own record, and that stays the answer for every reader."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "one-product-may-be-ordered-in-two-shapes-at-once",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "One product may be ordered in two shapes at once.",
-        "de": "One product may be ordered in two shapes at once."
-      },
-      "summary": {
-        "en": "The catalogue describes the same service pulled in twice in different variants as a conflict the orderer resolves, and keeping both is a resolution — a black phone and a silver one.",
-        "de": "The catalogue describes the same service pulled in twice in different variants as a conflict the orderer resolves, and keeping both is a resolution — a black phone and a silver one."
       },
       "link": {
         "label": "Changelog",
