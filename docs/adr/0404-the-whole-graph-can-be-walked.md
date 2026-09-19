@@ -92,8 +92,9 @@ instances is a bad idea. That is the finding this record is built on.
    hop, straight off Pebble.
 2. **A persistent graph store beside the state store**, maintained incrementally by a WAL
    tailer.
-3. **An in-memory CSR projection**, rebuilt rather than maintained authoritatively, with
-   dense ordinals, frontier bitmaps and precomputed component and community membership.
+3. **A rebuildable CSR projection**, never maintained authoritatively, with dense
+   ordinals, frontier bitmaps and a precomputed component membership — held on the heap or
+   mapped from files, which §10 settles as an operator's choice rather than the record's.
 4. **Depend on a graph engine** — embedded or external — and let it own the walk.
 
 ## Decision outcome
@@ -112,10 +113,11 @@ views and not one view with a zoom level.
 This is the same separation ADR-0396 made for the catalogue: a second *subject*, not more
 nodes on the landscape. The precedent is deliberate.
 
-### 2. The structure is an in-memory CSR, and it is never authoritative
+### 2. The structure is a CSR, and it is never authoritative
 
 Compressed Sparse Row: an offset array per node, a concatenated array of neighbour
-ordinals. For the year-scale numbers above:
+ordinals. Two flat, pointer-free arrays — which is what lets §10 decide *where* they live
+without changing anything about the structure or the walk. For the year-scale numbers above:
 
 The figures below are **measured**, not estimated — see §5's W0 results. An earlier draft
 of this table halved the target array by counting each edge once; an undirected CSR that
@@ -364,6 +366,13 @@ not an answer at all, and it is the one failure mode an operator cannot diagnose
 outside: the engine that was executing work yesterday is executing it slowly today, and
 nothing points at the view somebody opened.
 
+**What the budget counts is the resident working set, not the projection's size.** §10
+measured those apart: the year-scale graph is 2.4 GB of structure and runs its whole-graph
+pass in 294 MB. So the estimate below produces two numbers — the file the build will write,
+and the working set the query will hold — and only the second is what the limit governs. The
+refusal still exists and still refuses; it simply refuses about eight times later than a
+budget over the whole structure would.
+
 Five properties make this a decision rather than an intention:
 
 **The refusal is a prediction, not a recovery.** The size is estimated *before a byte is
@@ -442,6 +451,97 @@ A picture that states what it cannot do, and what would work instead, is the dis
 ADR-0211 §7 applies over its node budget and §3 applies to a filtered mesh. This is that
 discipline made into the primary interaction rather than the error path.
 
+### 10. Where the CSR lives is an operator's dial, not the data's decision
+
+§2's figures are resident memory, and 3.4 GB in the process that executes business
+processes is the cost §9 exists to bound. It does not have to be paid that way, and W0b
+measured the alternative.
+
+A CSR is two flat arrays with no pointers in them. Mapped from two files with `mmap`, the
+page cache decides what is resident: the projection reserves *address space* rather than
+memory, and its pages are evictable in a way heap pages are not. Both halves of that were
+measured at the same year scale, on the same generated graph, on a 16 GB / 4-core machine
+with the page cache dropped before every cold run.
+
+**The build is cheaper in memory and dearer in time, and the difference is a detour.**
+W0's fill pass scatters random writes across the whole 2 GB array, which is a page cache's
+worst case on a mapped file. The standard external-memory answer is to sort rather than
+scatter: distribute the directed pairs into 64 buckets by source, then stream each bucket
+out in node order, so every write to the CSR file is sequential.
+
+| Build at 110 M nodes / 266 M edges | on the heap (W0) | to files (W0b) |
+|---|---|---|
+| total | **23.1 s** | **31.3 s** |
+| peak RSS | **3,369 MB** | **944 MB** |
+
+35% more time for 72% less memory. The phases are degrees 3.8 s, offsets 3.1 s, distribute
+18.2 s, stream out 6.2 s; the distribute pass writes 4.3 GB of bucket files which the
+stream pass consumes and deletes, so the build's transient disk need is about three times
+the CSR it produces.
+
+**The walk off a cold disk costs nothing measurable, because the layout makes it
+sequential.** This is what §3's persisted ordinals are quietly worth: assign them *in key
+order* and a component's nodes are contiguous in ordinal space, so its adjacency lists are
+adjacent in the target array. A pass in node order is then a stream, and readahead carries
+it.
+
+| Whole-graph walk, 110 M nodes | time | resident |
+|---|---|---|
+| on the heap (W0) | 3.7 s | 3,369 MB |
+| mapped, cold cache, uncapped | **3.5 s** | 2,464 MB |
+| mapped, warm | 2.5–3.2 s | 2,464 MB |
+| mapped, capped at 1 GB | 2.9 s | 1,019 MB |
+| mapped, capped at 300 MB | **3.4 s** | **294 MB** |
+
+So the resident footprint of the whole-graph pass is **a number an operator chooses**, not
+one the data dictates: 294 MB instead of 3,369 MB, at the same wall time. The kernel evicts
+behind the scan and reads ahead in front of it, which is the textbook streaming case.
+
+**And then the trap, which is the finding that earns this measurement.** Scattered access —
+the pattern a filter produces, "every instance with an incident", touching components spread
+across the whole mapping — behaves completely differently, and *the naive implementation
+fails in a way that looks like the disk being too slow*:
+
+| 50 000 scattered components, 1.5 M nodes touched | time | resident |
+|---|---|---|
+| uncapped, default readahead | 2.9 s | 2,023 MB |
+| uncapped, `MADV_RANDOM` | 3.6 s | 373 MB |
+| capped at 300 MB, `MADV_RANDOM` | **4.0 s** | **287 MB** |
+| capped at 300 MB, default readahead | **4 min 54 s** | 10 MB |
+
+The last row is 74× the row above it, and the whole difference is one `madvise` call.
+With readahead on and a small cap the cache thrashes: every touched node pulls a readahead
+window that immediately evicts what the previous touch fetched, so each of the 50,000
+touches re-faults repeatedly. With `MADV_RANDOM` the kernel fetches only the pages actually
+touched, the working set is genuinely small, and nothing thrashes. Readahead costs memory
+even uncapped — 2,023 MB to touch 1.5 M nodes, against 373 MB — for a 24% speedup.
+
+**So the rule is that the readahead policy is part of the query, not part of the
+mapping.** A whole-graph pass advises sequential; a scattered selection advises random.
+Getting it wrong is not a tuning miss, it is a two-orders-of-magnitude difference that
+will be misdiagnosed as "the disk variant does not work".
+
+What this costs, stated rather than discovered:
+
+- **The projection stops being invisible.** It is 2.4 GB of derived files in the data
+  directory that an operator will see, may back up pointlessly, and will ask about. It stays
+  disposable — delete it and it rebuilds — and it is still not ADR-0179's refused "second
+  store", because it has no schema, no compaction and no retention of its own. But it needs
+  a version stamp and an explicit "safe to delete at any time".
+- **The numbers above are this machine's.** `/dev/vda` is a virtio device whose backing
+  store is unknown; the cold walk implies SSD-class sequential throughput. The arithmetic
+  for a cloud block volume is a different matter and is not measured here: 2.4 GB in 4 KiB
+  pages is 626,688 page-ins, which at a gp3 baseline of 3,000 IOPS is 209 seconds *if* the
+  access were random. The layout above is what keeps it from being random, and that is the
+  property to verify on real ordinals in W1 rather than to assume.
+
+**§9's budget therefore changes meaning, in the direction that helps.** It stops being
+"how much memory may the projection own" and becomes "how much resident working set may it
+have" — and the refusal threshold moves up by roughly the ratio between the file and the hot
+set, which these measurements put at about 8×. The estimate §9 makes before allocating now
+produces two numbers rather than one: the file the build will write, and the working set the
+query will hold. Only the second is what the operator's limit governs.
+
 ### Consequences
 
 - **Positive:** the walk is affordable *because* of the topology that makes a global
@@ -454,12 +554,17 @@ discipline made into the primary interaction rather than the error path.
   reason, and union-find plus a group-by are a page of code each. The spike that produced
   §5's numbers was written dependency-free on purpose: one that needed gonum to decide
   whether gonum was needed would have answered a different question.
-- **Negative / trade-offs accepted:** **memory, bounded by refusal, and larger than this
-  record first said.** Measured at the year-scale size: **2.4 GB** for the CSR and **3.4 GB
-  peak RSS** through the build — in a single binary that also runs the engine, and three to
-  five times that if the per-instance node count is higher than the 30 estimated. §9 turns
-  that from an open risk into a stated limit, and the limit now has a real number behind it
-  instead of an estimate that was low by more than half. The accepted consequence, stated precisely because the loose
+- **Negative / trade-offs accepted:** **memory — no longer the number that could make this
+  undeployable.** Held on the heap the year-scale projection is 2.4 GB of CSR and 3.4 GB peak
+  RSS, in a binary that also runs the engine. §10 measured the file-backed alternative and it
+  changes the character of the cost rather than shaving it: **294 MB resident for the same
+  whole-graph pass at the same wall time**, with the build at 944 MB instead of 3,369 MB for
+  35% more time. What remains is a real but ordinary cost — 2.4 GB of derived files in the
+  data directory, and a readahead policy that has to match the access pattern or lose two
+  orders of magnitude. The earlier framing, that a large enough installation simply cannot
+  have the feature, was a consequence of assuming residency. It is withdrawn: what a large
+  installation needs is a working-set budget and the right `madvise`, not more RAM than the
+  engine has. The accepted consequence, stated precisely because the loose
   version is wrong: **on a large enough installation the *whole-graph* walk is unavailable**,
   and says so. The feature is not — every narrower scope is a whole graph of itself (§9), so
   what a large estate loses is the one question it could ask least usefully anyway, and what
@@ -500,7 +605,7 @@ discipline made into the primary interaction rather than the error path.
   cache that can drift with no repair path, and it acquires a retention story of its own
   that will disagree with the engine's.
 
-### Option 3 — a rebuildable in-memory CSR (chosen)
+### Option 3 — a rebuildable CSR, heap- or file-backed (chosen)
 - Good: sequential build, fast passes, disposable, no persistence to operate, and the
   industry's own answer (Neo4j GDS projects exactly this).
 - Bad: memory; rebuild latency; persisted ordinals as a hard requirement; and it crosses
