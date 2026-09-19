@@ -52,7 +52,7 @@
     * Ein REST-Worker namens "atlas" mit einem API-Token des Scopes `reminders`,
       gehalten von einem Konto mit der Rolle `operator`. Der Scope erreicht genau
       eine Route; die Rolle ist es, die das Fragen über andere erlaubt.
-    * Ein Mail-Worker namens "portal", wie ihn die mitgelieferten
+    * Ein Mail-Worker namens "mail", wie ihn die mitgelieferten
       Genehmigungsverfahren verwenden.
 
   NICHT GEPRÜFT: wie oft zu erinnern richtig ist. Wöchentlich steht hier, weil eine

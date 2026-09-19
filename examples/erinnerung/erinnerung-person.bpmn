@@ -91,7 +91,7 @@ Der Text nennt die Anzahl und die erste Zeile im Klartext. „Sie haben 3 offene
 
 Fehlt `portalBaseUrl`, sagt die Mail, wo zu suchen ist, statt einen Link zu drucken, dem niemand folgen kann — dieselbe Vorsichtsmassnahme wie in den Genehmigungsmails.</bpmn:documentation>
       <bpmn:extensionElements>
-        <atlas:mailConnector connector="portal"
+        <atlas:mailConnector connector="mail"
           to="=person"
           subject="=&#34;Erinnerung: &#34; + string(offen.counts.total) + &#34; offene(r) Posten im Leistungsportal&#34;"
           body="=&#34;Guten Tag\n\nIm Leistungsportal warten &#34; + string(offen.counts.total) + &#34; Posten auf Sie.\n\nZuerst: &#34; + offen.items[1].what + &#34;\n\n&#34; + (if portalBaseUrl = null or portalBaseUrl = &#34;&#34; then &#34;Sie finden alles im Leistungsportal dieser Atlas-Instanz.&#34; else portalBaseUrl + offen.items[1].link) + &#34;\n\nFreundliche Gr&#252;sse\nIhr Leistungsportal&#34;" />

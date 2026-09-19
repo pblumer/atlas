@@ -459,7 +459,7 @@ func TestTheApproverIsToldWithALinkToTheirInbox(t *testing.T) {
 	}
 	// A mail worker by the name the shipped approval models address.
 	if code, b := cReq(t, admin, ts, "POST", "/api/v1/configured-workers",
-		`{"name":"portal","kind":"mail","provider":"preview","sender":"portal@example.ch"}`); code != http.StatusOK {
+		`{"name":"mail","kind":"mail","provider":"preview","sender":"portal@example.ch"}`); code != http.StatusOK {
 		t.Fatalf("create the mail worker: %d (%s)", code, b)
 	}
 
@@ -556,7 +556,7 @@ func TestAGroupApprovalTellsEveryoneWhoMayDecideIt(t *testing.T) {
 		}
 	}
 	if code, b := cReq(t, admin, ts, "POST", "/api/v1/configured-workers",
-		`{"name":"portal","kind":"mail","provider":"preview","sender":"portal@example.ch"}`); code != http.StatusOK {
+		`{"name":"mail","kind":"mail","provider":"preview","sender":"portal@example.ch"}`); code != http.StatusOK {
 		t.Fatalf("create the mail worker: %d (%s)", code, b)
 	}
 

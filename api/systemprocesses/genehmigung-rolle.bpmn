@@ -106,9 +106,9 @@ Der Link nennt Auftrag und Leistung und nicht die Aufgabe: einen Aufgabenschl&#2
 
 Ist portalBaseUrl leer — der Betreiber hat keine externe Adresse gesetzt —, nennt die Nachricht das Portal statt einen Link, den niemand aufrufen kann.
 
-Voraussetzung beim Betreiber: ein Mail-Worker namens &#8222;portal&#8220;.</bpmn:documentation>
+Voraussetzung beim Betreiber: ein Mail-Worker namens &#8222;mail&#8220;.</bpmn:documentation>
       <bpmn:extensionElements>
-        <atlas:mailConnector connector="portal"
+        <atlas:mailConnector connector="mail"
           to="=approvalRef"
           subject="=&#34;Genehmigung n&#246;tig: &#34; + itemId"
           body="=&#34;Guten Tag\n\nEine Bestellung wartet auf Ihre Genehmigung.\n\nLeistung: &#34; + itemId + &#34;\nAuftrag: &#34; + orderId + &#34;\n\n&#34; + (if portalBaseUrl = null or portalBaseUrl = &#34;&#34; then &#34;Sie finden sie in Ihrem Posteingang (Tasks) dieser Atlas-Instanz.&#34; else portalBaseUrl + &#34;/index.html#/tasks?order=&#34; + orderId + &#34;&amp;item=&#34; + itemId) + &#34;\n\nFreundliche Gr&#252;sse\nIhr Leistungsportal&#34;" />
@@ -134,7 +134,7 @@ Eine unbeachtete Genehmigung ist die leisere H&#228;lfte des Problems: ein h&#22
     <bpmn:serviceTask id="Erinnern" name="Erinnerung senden">
       <bpmn:documentation>Dieselbe Nachricht wie am Anfang, an dieselbe Referenz — der Server schl&#228;gt die Adresse beim Versand nach.</bpmn:documentation>
       <bpmn:extensionElements>
-        <atlas:mailConnector connector="portal"
+        <atlas:mailConnector connector="mail"
           to="=approvalRef"
           subject="=&#34;Erinnerung: Genehmigung n&#246;tig f&#252;r &#34; + itemId"
           body="=&#34;Guten Tag\n\nEine Bestellung wartet weiterhin auf Ihre Genehmigung.\n\nLeistung: &#34; + itemId + &#34;\nAuftrag: &#34; + orderId + &#34;\n\n&#34; + (if portalBaseUrl = null or portalBaseUrl = &#34;&#34; then &#34;Sie finden sie in Ihrem Posteingang (Tasks) dieser Atlas-Instanz.&#34; else portalBaseUrl + &#34;/index.html#/tasks?order=&#34; + orderId + &#34;&amp;item=&#34; + itemId) + &#34;\n\nFreundliche Gr&#252;sse\nIhr Leistungsportal&#34;" />
