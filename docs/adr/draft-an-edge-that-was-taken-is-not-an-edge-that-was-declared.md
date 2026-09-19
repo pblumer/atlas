@@ -1,6 +1,6 @@
 # ADR-DRAFT: An edge that was taken is not an edge that was declared
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-09-18
 - **Deciders:** Atlas maintainers

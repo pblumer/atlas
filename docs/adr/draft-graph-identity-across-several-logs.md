@@ -1,6 +1,6 @@
 # ADR-DRAFT: What a node is called when there is more than one log
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-09-18
 - **Deciders:** Atlas maintainers

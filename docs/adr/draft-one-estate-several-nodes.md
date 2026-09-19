@@ -5,12 +5,17 @@
 - **Date:** 2026-09-18
 - **Deciders:** Atlas maintainers
 - **Open question:** whether an estate view is ever read by somebody who may not see all
-  of it. The operator gate below is right only while the answer is "no". The first
-  customer who wants a domain owner to see their own domain plus their neighbours'
-  contracts breaks it, and the fix is the cross-installation identity
-  [ADR-0373](0373-published-process-interface.md) could not settle either. Until then
-  this record ships the narrow posture rather than the one an estate of twenty domains
-  will eventually want.
+  of it. The operator gate in §1 is right only while the answer is "no". Looked at in
+  2026-09, and the question now has an addressee rather than a hypothetical: multi-domain
+  installations exist, and a federal administration is one of them. There the reader who
+  wants an estate picture is plausibly a cross-departmental architect who is *not* the
+  operator of each node, and separation between administrative units is precisely what such
+  an installation's information-protection concept restricts. So the gate is likely
+  **insufficient** for the customer who most needs this view, rather than merely unproven.
+  That does not change the gate — it is still the only posture buildable today — but it
+  moves the cross-installation identity
+  [ADR-0373](0373-published-process-interface.md) could not settle from a follow-up to the
+  thing this feature actually waits on.
 - **Question checked:** 2026-09
 
 ## Context and problem statement
@@ -168,7 +173,10 @@ contents and the promotion joins, and says that is what it draws.
   reconcile, and an estate of two works the same way as an estate of twenty.
 - **Negative / trade-offs accepted:** it is an operator's view, and will stay one until
   cross-installation identity exists. A domain owner cannot be given a scoped estate view,
-  and this record does not pretend otherwise.
+  and this record does not pretend otherwise. Known as of 2026-09 to bind rather than to be
+  hypothetical: see the open question. For a multi-domain public administration this is not
+  a limitation at the edge of the feature — it is plausibly the difference between a view
+  somebody may open and one nobody may.
 - **Negative:** the picture's completeness is a function of reachability at the moment it
   was drawn. Four peers answering and one timing out is a different picture from the same
   estate a minute later, and the freshness of each subgraph has to be rendered *into* it —

@@ -1,6 +1,6 @@
 # ADR-DRAFT: The estate graph is derived from the log, never the log from the graph
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-09-18
 - **Deciders:** Atlas maintainers
