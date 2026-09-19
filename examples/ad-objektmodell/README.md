@@ -44,7 +44,7 @@ keine fachlichen Attribute und wandern als Herkunftszeile in die Dokumentation
 der Klasse.
 
 ```bash
-python3 archimate2xmi.py EFD-BIT-AD-Objekte.archimate.xml > ad-objekte.xmi
+python3 archimate2xmi.py AD-Objekte.archimate.xml > ad-objekte.xmi
 ```
 
 ## Bekannte Luecken des Quellexports

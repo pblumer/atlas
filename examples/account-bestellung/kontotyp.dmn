@@ -9,7 +9,7 @@
     T = Test            kuerzel "t", deaktiviert, Kategorie "Test"
     S = Service/Dienst  kuerzel "s", deaktiviert, Kategorie "Dienstkonto"
 
-  Der Prozess baut daraus den UPN "jml-test-<kuerzel>-<mailNick>@blumer.net" — das
+  Der Prozess baut daraus den UPN "jml-test-<kuerzel>-<mailNick>@contoso.com" — das
   "jml-test-" steht im Prozess, nicht in der Tabelle, damit die Test-Objekt-Grenze
   eine Prozess-Invariante bleibt und nicht aus Versehen wegkonfiguriert wird.
 -->

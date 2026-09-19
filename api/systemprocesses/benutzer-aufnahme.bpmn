@@ -83,7 +83,7 @@
 
     <serviceTask id="zugang_mail" name="Zugangsdaten senden">
       <extensionElements>
-        <atlas:mailConnector connector="Patrick Blumer"
+        <atlas:mailConnector connector="mail"
           to="=email"
           subject="Ihr Atlas-Zugang wurde angelegt"
           body="=&quot;Hallo &quot; + vorname + &quot; &quot; + nachname + &quot;,\n\nIhr Atlas-Zugang wurde angelegt.\n\nBenutzername: &quot; + benutzername + &quot;\nInitiales Passwort: &quot; + initialpasswort + &quot;\n\nBitte aendern Sie das Passwort nach dem ersten Login.\n\nViele Gruesse\nIhre Benutzerverwaltung&quot;"/>
@@ -94,7 +94,7 @@
 
     <serviceTask id="ablehnung_mail" name="Ablehnung senden">
       <extensionElements>
-        <atlas:mailConnector connector="Patrick Blumer"
+        <atlas:mailConnector connector="mail"
           to="=email"
           subject="Ihr Aufnahme-Antrag"
           body="=&quot;Hallo &quot; + vorname + &quot; &quot; + nachname + &quot;,\n\nIhr Aufnahme-Antrag wurde nicht bewilligt.\n\nGrund: &quot; + ablehnungsgrund + &quot;\n\nViele Gruesse\nIhre Benutzerverwaltung&quot;"/>

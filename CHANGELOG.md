@@ -559,6 +559,31 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Every process Atlas ships names one mail worker, and it is called `mail`.** The
+  platform processes (ADR-0122) addressed their mail tasks to two different workers,
+  and neither name said what the worker was. The three user management processes —
+  intake, access review, offboarding — named an individual, and the access review sent
+  its "action required" mail to that person's fixed private address; the three
+  approval processes, and the examples built on them, named `portal`. Both values are
+  embedded in the binary and bootstrap-deployed into the system project, so a server
+  nobody had configured yet listed a private person's name under **Workers nothing can
+  serve**, next to a second entry for the same job — two workers to configure for one
+  way of sending mail, one of them keyed to someone else's name.
+
+  There is now one name across all six, and it says what the worker is rather than who
+  first configured one or which screen the mail was sent from: **`mail`**. The
+  review's recipient is asked for on the start form (`meldung_an`, required, validated
+  as an e-mail address) instead of being frozen into the model, which is what the other
+  two processes already did with their own recipients. Nothing about the mail path
+  itself changed: `connector="…"` is still the attribute (ADR-0203 renamed the
+  vocabulary, not the models).
+
+  **For an existing instance:** a mail worker configured under either old name is no
+  longer found — rename it to `mail` under *Console → Workers*, and where both existed,
+  keep the one whose provider you want and delete the other. The changed bytes make the
+  next start deploy one new version of each of the six processes; instances already
+  running stay on the version they started on.
+
 - **The product editor opens beside the product list, level with the row it was
   opened from.** It used to render under the table, which is fine with three products
   and unusable with forty: editing a row near the bottom put the form below everything

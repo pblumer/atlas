@@ -3,8 +3,13 @@
 Eine Atlas-**Applikation mit öffentlichem Start-Formular**, **DMN-gesteuertem
 Kontotyp-Mapping**, menschlicher Freigabe und **Entra-Provisionierung** — plus ein
 **einbettbares HTML+JS-Widget**, das die Bestellung von einer beliebigen Website aus
-startet. Schreibt scharf gegen **blumer.net**, aber fail-closed nur gegen klar
+startet. Schreibt scharf gegen **contoso.com**, aber fail-closed nur gegen klar
 benannte **Test-Objekte**.
+
+Tenant und Worker-Name sind **Platzhalter**: `contoso.com` steht für den eigenen
+Entra-Tenant, `contoso` für den Namen, unter dem der Entra-Worker konfiguriert ist.
+Beides ist vor dem Deployen im Modell, in den Formularen, im Widget und in der
+UPN-Prüfung auf die eigenen Werte zu setzen.
 
 ## Der Ablauf
 
@@ -12,10 +17,10 @@ benannte **Test-Objekte**.
 Start (öffentliches Formular account-order: Vorname, Nachname, Kontotyp, Begründung)
   → [DMN] Profil bestimmen   KontotypMapping: A/E/T/S → { kuerzel, accountEnabled,
                              kategorie, usageLocation }
-  → [Script+Output-Mappings] mailNick, upn = jml-test-<kuerzel>-<mailNick>@blumer.net,
+  → [Script+Output-Mappings] mailNick, upn = jml-test-<kuerzel>-<mailNick>@contoso.com,
                              displayName, kategorie
   → (X) Test-Objekt?   ── sonst ──▶ Ende "Kein Test-Objekt"  (kein Entra-Aufruf)
-        │ jml-test-*@blumer.net
+        │ jml-test-*@contoso.com
   → 🔑 Freigabe (account-freigabe) – Admin setzt Initialpasswort
   → (X) Freigegeben?   ── ablehnen ▶ Ende "Abgelehnt"
         │ anlegen
@@ -27,10 +32,10 @@ Start (öffentliches Formular account-order: Vorname, Nachname, Kontotyp, Begrü
 
 | Typ | kürzel | accountEnabled | Kategorie | UPN-Beispiel |
 |---|---|---|---|---|
-| **A** Administrativ | `a` | **true** | Administrativ | `jml-test-a-anna.muster@blumer.net` |
-| **E** Bildung/Extern | `e` | **true** | Bildung/Extern | `jml-test-e-…@blumer.net` |
-| **T** Test | `t` | **false** | Test | `jml-test-t-…@blumer.net` |
-| **S** Service/Dienst | `s` | **false** | Dienstkonto | `jml-test-s-…@blumer.net` |
+| **A** Administrativ | `a` | **true** | Administrativ | `jml-test-a-anna.muster@contoso.com` |
+| **E** Bildung/Extern | `e` | **true** | Bildung/Extern | `jml-test-e-…@contoso.com` |
+| **T** Test | `t` | **false** | Test | `jml-test-t-…@contoso.com` |
+| **S** Service/Dienst | `s` | **false** | Dienstkonto | `jml-test-s-…@contoso.com` |
 
 Der Typ wird über eine **Entscheidungstabelle** abgebildet, nicht über if/else im
 Prozess — wer die Regeln je Typ ändert, ändert die Tabelle. Das `jml-test-`-Präfix
@@ -51,7 +56,7 @@ je Kontotyp** und **Live-UPN-Vorschau**. Zwei Einbett-Wege:
 1. **Per `<iframe>`** (kein Serverumbau nötig) — bettet die von Atlas gerenderte
    Public-Form-Seite ein:
    ```html
-   <iframe src="https://atlas.blumer.cloud/public/forms/DEIN_TOKEN"
+   <iframe src="https://atlas.example.com/public/forms/DEIN_TOKEN"
            style="width:100%;max-width:560px;height:760px;border:0"></iframe>
    ```
    Oder das Widget selbst per iframe (es liest `?atlas=…&token=…` aus der URL).

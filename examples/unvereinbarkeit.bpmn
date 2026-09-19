@@ -51,7 +51,7 @@
 
   Voraussetzungen beim Betreiber:
     * Ein REST-Worker namens "atlas" mit einem API-Token der Rolle `operator`.
-    * Ein Mail-Worker namens "portal", wie ihn die Genehmigungsverfahren verwenden.
+    * Ein Mail-Worker namens "mail", wie ihn die Genehmigungsverfahren verwenden.
     * Mindestens ein Katalog mit einer Kante der Art `excludes` und einer
       veröffentlichten Freigabe. Ohne das ist `bericht.pairs` null, und der Bericht
       sagt genau das — nicht „sauber".
@@ -118,7 +118,7 @@ Gemeldet wird an die Betriebsführung und nicht an die betroffene Person. Wer ei
 
 Der Text nennt die Anzahl und den ältesten Befund. `findings[1]` ist der älteste, weil der Bericht danach sortiert — was am längsten besteht, hat am längsten niemand angesehen.</bpmn:documentation>
       <bpmn:extensionElements>
-        <atlas:mailConnector connector="portal"
+        <atlas:mailConnector connector="mail"
           to="=empfaenger"
           subject="=&#34;Unvereinbare Berechtigungen: &#34; + string(bericht.counts.findings) + &#34; Fall/Fälle&#34;"
           body="=&#34;Guten Tag\n\n&#34; + string(bericht.counts.findings) + &#34; verbotene Kombination(en) bei &#34; + string(bericht.counts.people) + &#34; Person(en), gegen &#34; + string(bericht.pairs) + &#34; erklaerte Regel(n).\n\nAeltester Fall: &#34; + bericht.findings[1].principal + &#34; haelt &#34; + bericht.findings[1].a + &#34; und &#34; + bericht.findings[1].b + &#34;.\n\nEs wird nichts automatisch entzogen. Welche Haelfte aufgegeben wird, ist eine Entscheidung ueber die Arbeit der Person; der Weg dorthin ist eine Rueckgabe der Bestellzeile oder eine Rezertifizierung, und beide halten fest, wer entschieden hat.\n\nFreundliche Gruesse\nIhr Leistungsportal&#34;" />

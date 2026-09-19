@@ -1,7 +1,7 @@
 # Onboarding-Self-Service (Entra ID) 🚀
 
 Eine Atlas-**Applikation mit Formularen**, die einen neuen Arbeitsplatz im Tenant
-**blumer.net** über den Entra-Worker (ADR-0172) anlegt — **scharf**, aber
+**contoso.com** über den Entra-Worker (ADR-0172) anlegt — **scharf**, aber
 ausschließlich gegen klar benannte **Test-Objekte**.
 
 ## Der Ablauf
@@ -10,11 +10,11 @@ ausschließlich gegen klar benannte **Test-Objekte**.
 Start (eonb-start: Vorname, Nachname, UPN, Abteilung, Lizenz?, Gruppe?)
   → [Script] Vorschlag              displayName + mailNickname aus den Namen
   → (X) Test-Objekt?    ── sonst ──▶ Ende "Kein Test-Objekt"  (kein Entra-Aufruf)
-        │ jml-test-*@blumer.net
+        │ jml-test-*@contoso.com
   → 🔑 User-Task "Onboarding freigeben" (eonb-freigabe) – Admin setzt Initialpasswort
   → (X) Freigegeben?    ── ablehnen ▶ Ende "Abgelehnt"
         │ anlegen
-  → [entra create-user] Benutzer anlegen (Worker "blumer_net" → konto)
+  → [entra create-user] Benutzer anlegen (Worker "contoso" → konto)
   → (X) Lizenz?         ── ohne ──▶┐  (übersprungen, wenn keine lizenzSku)
         │ lizenzSku gesetzt        │
   → [entra assign-license]         │
@@ -35,8 +35,8 @@ Beide Gateways nehmen den **ablehnenden** Pfad als Default. Nur eine ausdrückli
 positive Bedingung führt zum Schreiben:
 
 1. **Test-Objekt-Gate.** Der UPN muss mit `jml-test-` beginnen **und** auf
-   `@blumer.net` enden (`= starts with(upn, "jml-test-") and ends with(upn,
-   "@blumer.net")`). Jeder andere UPN endet **vor** jedem Entra-Aufruf bei „Kein
+   `@contoso.com` enden (`= starts with(upn, "jml-test-") and ends with(upn,
+   "@contoso.com")`). Jeder andere UPN endet **vor** jedem Entra-Aufruf bei „Kein
    Test-Objekt". Das ist die maßgebliche Grenze — die `pattern`-Validierung im
    Start-Formular ist nur Komfort und lässt sich (z. B. bei per MCP gestarteten
    Instanzen ohne Formular) umgehen, das BPMN-Gateway nicht.
@@ -51,10 +51,16 @@ eingesetzt — es steht nie im Modell.
 
 Der Worker-Typ `entra` ist **worker-only** (ADR-0164/0172): das Tenant-Credential
 liegt nie in der Engine. Die Service-Tasks parken, bis eine Entra-Worker-Instanz sie
-abholt; auf `atlas.blumer.cloud` beaufsichtigt die Engine diese Instanz standardmäßig,
-sobald der Worker `blumer_net` unter *Console → Workers* konfiguriert ist. Benötigte
-Anwendungsberechtigungen (mit Administratorzustimmung): **`User.ReadWrite.All`**; für die optionalen Schritte
-zusätzlich **`Organization.Read.All`** (SKUs) und **`Group.ReadWrite.All`**.
+abholt; auf einem Server, der Worker beaufsichtigt (ADR-0157), startet die Engine
+diese Instanz standardmäßig, sobald der Worker `contoso` unter *Console → Workers*
+konfiguriert ist. Benötigte Anwendungsberechtigungen (mit Administratorzustimmung):
+**`User.ReadWrite.All`**; für die optionalen Schritte zusätzlich
+**`Organization.Read.All`** (SKUs) und **`Group.ReadWrite.All`**.
+
+Tenant und Worker-Name sind **Platzhalter**: `contoso.com` steht für den eigenen
+Entra-Tenant, `contoso` für den Namen, unter dem der Entra-Worker konfiguriert ist.
+Beides ist vor dem Deployen im Modell, in den Formularen und in der UPN-Prüfung auf
+die eigenen Werte zu setzen.
 
 ## Deployen (über die Atlas-MCP-Tools)
 

@@ -11,7 +11,7 @@
   Einbetten — zwei Wege:
 
   1) Per <iframe> (einfachster Weg, kein CORS nötig):
-       <iframe src="https://DEIN-HOST/account-order-widget.html?atlas=https://atlas.blumer.cloud&token=DEIN_TOKEN"
+       <iframe src="https://DEIN-HOST/account-order-widget.html?atlas=https://atlas.example.com&token=DEIN_TOKEN"
                style="width:100%;max-width:560px;height:760px;border:0"></iframe>
 
   2) Direkt auf einer fremden Seite hosten und per JS an Atlas posten. Dafür muss der
@@ -87,10 +87,10 @@
 </head>
 <body>
   <form class="order" id="order" novalidate
-        data-atlas="https://atlas.blumer.cloud" data-token="">
+        data-atlas="https://atlas.example.com" data-token="">
     <div class="head">
       <h1>🧩 Account-Bestellung</h1>
-      <p>Neues Konto im Tenant <b>blumer.net</b> — der Kontotyp bestimmt Aktivierung, Kategorie und Namen.</p>
+      <p>Neues Konto im Tenant <b>contoso.com</b> — der Kontotyp bestimmt Aktivierung, Kategorie und Namen.</p>
     </div>
     <div class="body">
       <div class="row">
@@ -122,7 +122,7 @@
     <div class="foot">
       Läuft als <b>Atlas-Prozess</b>: die Bestellung startet einen Ablauf, ein Administrator gibt frei,
       dann provisioniert der Entra-Worker. Schreibt nur klar benannte Test-Objekte
-      (<b>jml-test-…@blumer.net</b>).
+      (<b>jml-test-…@contoso.com</b>).
     </div>
   </form>
 
@@ -171,7 +171,7 @@
     if(!chosen) return "";
     var mn = slug(vorname.value) + "." + slug(nachname.value);
     if(mn === ".") mn = "vorname.nachname";
-    return "jml-test-" + TYPES[chosen].k + "-" + mn + "@blumer.net";
+    return "jml-test-" + TYPES[chosen].k + "-" + mn + "@contoso.com";
   }
   function render(){
     if(!chosen){ previewEl.textContent = "Wähle einen Kontotyp, um die Vorschau zu sehen."; submitEl.disabled = true; return; }
