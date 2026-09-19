@@ -1,7 +1,7 @@
 # Testbericht — Identitäts-Lebenszyklus als Prozessinstanz je Mitarbeiter
 
 **Datum:** 2026-09-03
-**Server:** `atlas.blumer.cloud` (server01), Atlas `0.4.0-dev`, Revision `1020986`
+**Server:** `atlas.example.com` (server01), Atlas `0.4.0-dev`, Revision `1020986`
 **Zugang:** ausschliesslich über die Atlas-MCP-Werkzeuge
 **Frage:** Trägt eine Prozessinstanz je Identität (bei 50.000 Mitarbeitern also
 50.000 Instanzen) den kompletten Lebenszyklus samt aller bestellten Business

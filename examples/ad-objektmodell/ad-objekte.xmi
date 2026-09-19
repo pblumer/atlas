@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<uml:Model xmi:version="20131001" xmlns:xmi="http://www.omg.org/spec/XMI/20131001" xmlns:uml="http://www.omg.org/spec/UML/20161101" xmi:id="model" name="EFD-BIT AD Objekte">
+<uml:Model xmi:version="20131001" xmlns:xmi="http://www.omg.org/spec/XMI/20131001" xmlns:uml="http://www.omg.org/spec/UML/20161101" xmi:id="model" name="AD Objekte">
   <ownedComment xmi:type="uml:Comment" xmi:id="model-doc">
     <body>Active Directory Objektmodell mit BPMN, UML und ERM - exportiert aus Enterprise Architect</body>
   </ownedComment>
@@ -8,7 +8,7 @@
     <ownedComment xmi:type="uml:Comment" xmi:id="id-8a9b61a2-0ede-572c-2d63-8e2bfa3ec7f5-doc">
       <body>The top level class from which all classes are derived.
 
-Herkunft (Enterprise Architect): stereotype: Klasse; visibility: Öffentlich; isAbstract: nein; isLeaf: nein; isActive: nein; status: in Arbeit; accessRights: Business Analyst|Software Architect; owner: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::AD; diagramOccurrences: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::Diagramme::AD Objekte|Unternehmensarchitekturmodell mit ArchiMate::Views::Marktleistungen DO::Overview Account::Prozesse; createdBy: Blumer Patrick BIT; createdAt: 05.12.2025 08:59:32; modifiedBy: Blumer Patrick BIT; modifiedAt: 15.12.2025 17:01:55</body>
+Herkunft (Enterprise Architect): stereotype: Klasse; visibility: Öffentlich; isAbstract: nein; isLeaf: nein; isActive: nein; status: in Arbeit; accessRights: Business Analyst|Software Architect; owner: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::AD; diagramOccurrences: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::Diagramme::AD Objekte|Unternehmensarchitekturmodell mit ArchiMate::Views::Marktleistungen DO::Overview Account::Prozesse; createdBy: Muster Hans IT; createdAt: 05.12.2025 08:59:32; modifiedBy: Muster Hans IT; modifiedAt: 15.12.2025 17:01:55</body>
     </ownedComment>
     <ownedAttribute xmi:type="uml:Property" xmi:id="attr_d2483750-0e72-73fb-7dd9-edb43eabe74a" name="msExchOWAForceSaveFileTypesBL" type="String">
       <lowerValue xmi:type="uml:LiteralInteger" value="0"/>
@@ -145,7 +145,7 @@ Herkunft (Enterprise Architect): stereotype: Klasse; visibility: Öffentlich; is
     <ownedComment xmi:type="uml:Comment" xmi:id="id-a8012085-dde1-2a48-992f-710b84645218-doc">
       <body>Active Directory Klasse: Person
 
-Herkunft (Enterprise Architect): stereotype: Klasse; visibility: Öffentlich; isAbstract: nein; isLeaf: nein; isActive: nein; status: in Arbeit; accessRights: Business Analyst|Software Architect; owner: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::AD; diagramOccurrences: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::Diagramme::AD Objekte|Unternehmensarchitekturmodell mit ArchiMate::Views::Marktleistungen DO::Overview Account::Prozesse; createdBy: Blumer Patrick BIT; createdAt: 05.12.2025 09:13:44; modifiedBy: Blumer Patrick BIT; modifiedAt: 15.12.2025 17:02:05</body>
+Herkunft (Enterprise Architect): stereotype: Klasse; visibility: Öffentlich; isAbstract: nein; isLeaf: nein; isActive: nein; status: in Arbeit; accessRights: Business Analyst|Software Architect; owner: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::AD; diagramOccurrences: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::Diagramme::AD Objekte|Unternehmensarchitekturmodell mit ArchiMate::Views::Marktleistungen DO::Overview Account::Prozesse; createdBy: Muster Hans IT; createdAt: 05.12.2025 09:13:44; modifiedBy: Muster Hans IT; modifiedAt: 15.12.2025 17:02:05</body>
     </ownedComment>
     <generalization xmi:type="uml:Generalization" xmi:id="id-d75f7f2b-8381-a171-7586-7dc32f5c1766" general="id-8a9b61a2-0ede-572c-2d63-8e2bfa3ec7f5"/>
     <ownedAttribute xmi:type="uml:Property" xmi:id="attr_47fc4356-71ed-f2f2-a83c-d0c2c4fa0607" name="cn" type="String">
@@ -202,7 +202,7 @@ Herkunft (Enterprise Architect): stereotype: Klasse; visibility: Öffentlich; is
     <ownedComment xmi:type="uml:Comment" xmi:id="id-9bec3e24-8b16-414a-7340-9b9b740b2603-doc">
       <body>Active Directory Klasse: organizationalPerson
 
-Herkunft (Enterprise Architect): stereotype: Klasse; visibility: Öffentlich; isAbstract: nein; isLeaf: nein; isActive: nein; status: in Arbeit; accessRights: Business Analyst|Software Architect; owner: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::AD; diagramOccurrences: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::Diagramme::AD Objekte|Unternehmensarchitekturmodell mit ArchiMate::Views::Marktleistungen DO::Overview Account::Prozesse; createdBy: Blumer Patrick BIT; createdAt: 05.12.2025 09:23:02; modifiedBy: Blumer Patrick BIT; modifiedAt: 15.12.2025 17:02:11</body>
+Herkunft (Enterprise Architect): stereotype: Klasse; visibility: Öffentlich; isAbstract: nein; isLeaf: nein; isActive: nein; status: in Arbeit; accessRights: Business Analyst|Software Architect; owner: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::AD; diagramOccurrences: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::Diagramme::AD Objekte|Unternehmensarchitekturmodell mit ArchiMate::Views::Marktleistungen DO::Overview Account::Prozesse; createdBy: Muster Hans IT; createdAt: 05.12.2025 09:23:02; modifiedBy: Muster Hans IT; modifiedAt: 15.12.2025 17:02:11</body>
     </ownedComment>
     <generalization xmi:type="uml:Generalization" xmi:id="id-3b6c7e67-ac39-478a-99b8-d9be453f1db0" general="id-a8012085-dde1-2a48-992f-710b84645218"/>
     <ownedAttribute xmi:type="uml:Property" xmi:id="attr_24f931d3-0004-3366-dbec-686c2ad4a1e9" name="streetAddress" type="String">
@@ -310,7 +310,7 @@ Herkunft (Enterprise Architect): stereotype: Klasse; visibility: Öffentlich; is
 
 ACHTUNG: Der Quellexport enthielt hier nur einen Platzhalter (... 14 Attribute von Security-Principal ...), keine Attributdaten. Attribute sind nachzupflegen.
 
-Herkunft (Enterprise Architect): stereotype: Klasse; visibility: Öffentlich; isAbstract: nein; isLeaf: nein; isActive: nein; status: in Arbeit; accessRights: Business Analyst|Software Architect; owner: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::AD; diagramOccurrences: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::Diagramme::AD Objekte|Unternehmensarchitekturmodell mit ArchiMate::Views::Marktleistungen DO::Overview Account::Prozesse; createdBy: Blumer Patrick BIT; createdAt: 05.12.2025 16:22:06; modifiedBy: Blumer Patrick BIT; modifiedAt: 15.12.2025 17:02:05</body>
+Herkunft (Enterprise Architect): stereotype: Klasse; visibility: Öffentlich; isAbstract: nein; isLeaf: nein; isActive: nein; status: in Arbeit; accessRights: Business Analyst|Software Architect; owner: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::AD; diagramOccurrences: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::Diagramme::AD Objekte|Unternehmensarchitekturmodell mit ArchiMate::Views::Marktleistungen DO::Overview Account::Prozesse; createdBy: Muster Hans IT; createdAt: 05.12.2025 16:22:06; modifiedBy: Muster Hans IT; modifiedAt: 15.12.2025 17:02:05</body>
     </ownedComment>
     <generalization xmi:type="uml:Generalization" xmi:id="id-6f9b8e21-79ee-25a9-9ac2-ab1e88360eb6" general="id-8a9b61a2-0ede-572c-2d63-8e2bfa3ec7f5"/>
   </packagedElement>
@@ -320,7 +320,7 @@ Herkunft (Enterprise Architect): stereotype: Klasse; visibility: Öffentlich; is
 
 ACHTUNG: Der Quellexport enthielt hier nur einen Platzhalter (... 15 Attribute von User ...), keine Attributdaten. Attribute sind nachzupflegen.
 
-Herkunft (Enterprise Architect): stereotype: Klasse; visibility: Öffentlich; isAbstract: nein; isLeaf: nein; isActive: nein; status: in Arbeit; accessRights: Business Analyst|Configurator|Software Architect; owner: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::AD; diagramOccurrences: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::Diagramme::AD Objekte|Unternehmensarchitekturmodell mit ArchiMate::Views::Marktleistungen DO::Overview Account::Prozesse; createdBy: Blumer Patrick BIT; createdAt: 05.12.2025 16:12:37; modifiedBy: Blumer Patrick BIT; modifiedAt: 15.12.2025 17:01:55</body>
+Herkunft (Enterprise Architect): stereotype: Klasse; visibility: Öffentlich; isAbstract: nein; isLeaf: nein; isActive: nein; status: in Arbeit; accessRights: Business Analyst|Configurator|Software Architect; owner: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::AD; diagramOccurrences: Modellierungen mit BPMN, UML und ERM::Fachliches Modell::Klassen und Datentypen::Diagramme::AD Objekte|Unternehmensarchitekturmodell mit ArchiMate::Views::Marktleistungen DO::Overview Account::Prozesse; createdBy: Muster Hans IT; createdAt: 05.12.2025 16:12:37; modifiedBy: Muster Hans IT; modifiedAt: 15.12.2025 17:01:55</body>
     </ownedComment>
     <generalization xmi:type="uml:Generalization" xmi:id="id-933875aa-2e8e-c187-6579-5c6474b71b94" general="id-9bec3e24-8b16-414a-7340-9b9b740b2603"/>
     <generalization xmi:type="uml:Generalization" xmi:id="id-06aedb5a-20c8-eab4-5ce4-6caf1c5d47f8" general="id-e1f45414-e3af-13fb-6965-26e4814e8738"/>

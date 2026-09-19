@@ -2,14 +2,14 @@
 <!--
   Account-Bestellung (Entra ID) — eine Applikation mit oeffentlichem Start-Formular,
   DMN-gesteuertem Kontotyp-Mapping, menschlicher Freigabe und Entra-Provisionierung.
-  Scharf gegen blumer.net, aber fail-closed nur fuer klar benannte Test-Objekte.
+  Scharf gegen contoso.com, aber fail-closed nur fuer klar benannte Test-Objekte.
 
     Start (oeffentliches Formular account-order: Vorname, Nachname, Kontotyp, Begruendung)
      -> [DMN] "Profil bestimmen"   KontotypMapping: kontotyp A/E/T/S -> profil
                                    { kuerzel, accountEnabled, kategorie, usageLocation }
-     -> [Script] "aufbereiten"     mailNick, upn = jml-test-<kuerzel>-<mailNick>@blumer.net,
+     -> [Script] "aufbereiten"     mailNick, upn = jml-test-<kuerzel>-<mailNick>@contoso.com,
                                    displayName, kategorie
-     -> (X) "Test-Objekt?"         nur jml-test-*@blumer.net weiter; sonst Ende ohne Entra
+     -> (X) "Test-Objekt?"         nur jml-test-*@contoso.com weiter; sonst Ende ohne Entra
      -> User-Task "Freigeben"      (account-freigabe; Admin setzt Initialpasswort)
      -> (X) "Freigegeben?"         nur "anlegen" legt an; sonst Ende "Abgelehnt"
      -> [entra create-user]        Attribute aus profil (accountEnabled, usageLocation) + Form
@@ -32,11 +32,11 @@
                   targetNamespace="http://atlas/examples">
 
   <bpmn:process id="proc_account_bestellung" name="Account-Bestellung (Entra ID)" isExecutable="true">
-    <bpmn:documentation>Oeffentlich bestellbare Account-Provisionierung fuer blumer.net. Ein oeffentliches
+    <bpmn:documentation>Oeffentlich bestellbare Account-Provisionierung fuer contoso.com. Ein oeffentliches
 Start-Formular (ADR-0029) nimmt Vorname, Nachname, Kontotyp (A/E/T/S) und eine
 Begruendung entgegen. Eine DMN-Regel (KontotypMapping) bildet den Typ auf ein Profil
 ab (kuerzel, accountEnabled, kategorie, usageLocation); ein Script baut daraus den UPN
-jml-test-&lt;kuerzel&gt;-&lt;mailNick&gt;@blumer.net. Zwei fail-closed Gateways sichern jeden
+jml-test-&lt;kuerzel&gt;-&lt;mailNick&gt;@contoso.com. Zwei fail-closed Gateways sichern jeden
 Schreibzugriff: nur ein Test-UPN geht weiter, nur eine ausdrueckliche Freigabe legt an.
 Der create-user-Task ist worker-only (ADR-0172). Berechtigung: User.ReadWrite.All.</bpmn:documentation>
 
@@ -72,7 +72,7 @@ der DMN-Tabelle, damit die Test-Objekt-Grenze eine Prozess-Invariante bleibt.</b
         <zeebe:script resultVariable="mailNick" expression="= lower case(vorname) + &quot;.&quot; + lower case(nachname)"/>
         <zeebe:ioMapping>
           <zeebe:output source="= lower case(vorname) + &quot;.&quot; + lower case(nachname)" target="mailNick"/>
-          <zeebe:output source="= &quot;jml-test-&quot; + profil.kuerzel + &quot;-&quot; + lower case(vorname) + &quot;.&quot; + lower case(nachname) + &quot;@blumer.net&quot;" target="upn"/>
+          <zeebe:output source="= &quot;jml-test-&quot; + profil.kuerzel + &quot;-&quot; + lower case(vorname) + &quot;.&quot; + lower case(nachname) + &quot;@contoso.com&quot;" target="upn"/>
           <zeebe:output source="= vorname + &quot; &quot; + nachname + &quot; [&quot; + profil.kategorie + &quot;]&quot;" target="displayName"/>
           <zeebe:output source="= profil.kategorie" target="kategorie"/>
         </zeebe:ioMapping>
@@ -103,12 +103,12 @@ der DMN-Tabelle, damit die Test-Objekt-Grenze eine Prozess-Invariante bleibt.</b
     </bpmn:exclusiveGateway>
 
     <bpmn:serviceTask id="anlegen" name="Konto anlegen">
-      <bpmn:documentation>create-user gegen blumer.net. Der Body wird inline als JSON verfasst; accountEnabled
+      <bpmn:documentation>create-user gegen contoso.com. Der Body wird inline als JSON verfasst; accountEnabled
 und usageLocation kommen aus dem DMN-Profil, displayName/mailNickname/userPrincipalName
 aus der Aufbereitung, das Passwort ist die Laufzeit-Variable initialpasswort. Antwort in
 "konto".</bpmn:documentation>
       <bpmn:extensionElements>
-        <atlas:entraConnector connector="blumer_net" operation="create-user" resultVariable="konto"
+        <atlas:entraConnector connector="contoso" operation="create-user" resultVariable="konto"
                               attributes="{ &quot;accountEnabled&quot;: &quot;=profil.accountEnabled&quot;, &quot;displayName&quot;: &quot;=displayName&quot;, &quot;mailNickname&quot;: &quot;=mailNick&quot;, &quot;userPrincipalName&quot;: &quot;=upn&quot;, &quot;usageLocation&quot;: &quot;=profil.usageLocation&quot;, &quot;passwordProfile&quot;: { &quot;password&quot;: &quot;=initialpasswort&quot;, &quot;forceChangePasswordNextSignIn&quot;: true } }"/>
       </bpmn:extensionElements>
       <bpmn:incoming>f_frei_anlegen</bpmn:incoming>
@@ -130,8 +130,8 @@ aus der Aufbereitung, das Passwort ist die Laufzeit-Variable initialpasswort. An
     <bpmn:sequenceFlow id="f_start_profil" sourceRef="start" targetRef="profil"/>
     <bpmn:sequenceFlow id="f_profil_script" sourceRef="profil" targetRef="aufbereiten"/>
     <bpmn:sequenceFlow id="f_script_test" sourceRef="aufbereiten" targetRef="gw_test"/>
-    <bpmn:sequenceFlow id="f_test_ok" name="jml-test-*@blumer.net" sourceRef="gw_test" targetRef="freigabe">
-      <bpmn:conditionExpression>= starts with(upn, "jml-test-") and ends with(upn, "@blumer.net")</bpmn:conditionExpression>
+    <bpmn:sequenceFlow id="f_test_ok" name="jml-test-*@contoso.com" sourceRef="gw_test" targetRef="freigabe">
+      <bpmn:conditionExpression>= starts with(upn, "jml-test-") and ends with(upn, "@contoso.com")</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="f_test_reject" name="sonst" sourceRef="gw_test" targetRef="end_kein_test"/>
     <bpmn:sequenceFlow id="f_freigabe_gw" sourceRef="freigabe" targetRef="gw_frei"/>
