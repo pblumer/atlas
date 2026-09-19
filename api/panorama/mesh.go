@@ -147,7 +147,10 @@ type Application struct {
 // target depends on deploy-time facts and call overrides (ADR-0076), not on
 // anything the compiled model carries.
 type Call struct {
-	ElementID       string
+	ElementID string
+	// ElementIndex is the same element by the identity the per-element counters are
+	// keyed on (ADR-0080). It is what lets this edge carry a traversal count.
+	ElementIndex    int32
 	CalledProcessID string
 	TargetKey       uint64
 }
@@ -160,8 +163,24 @@ type Call struct {
 // that name is configured.
 type WorkerUse struct {
 	ElementID string
-	Name      string
-	TargetID  string
+	// ElementIndex is the same element by the identity the per-element counters are
+	// keyed on. See [Call.ElementIndex].
+	ElementIndex int32
+	Name         string
+	TargetID     string
+}
+
+// DecisionUse is one business rule task and the local decision it calls.
+//
+// A slice of these rather than of decision ids, which is what this carried before: one
+// decision called from two tasks is one edge reached from two places, and the edge's
+// count is their sum (ADR-0400). Collapsing them to the decision first loses half of
+// it, and the compiler's own de-duplicating enumeration is still the right one for the
+// deploy-time gate that reads it.
+type DecisionUse struct {
+	DecisionID string
+	// ElementIndex is the calling business rule task. See [Call.ElementIndex].
+	ElementIndex int32
 }
 
 // Worker is one configured worker as the mesh sees it — a target and identity of a
@@ -202,7 +221,7 @@ type Process struct {
 	CanView       bool
 	Calls         []Call
 	Workers       []WorkerUse
-	Decisions     []string
+	Decisions     []DecisionUse
 	// State is the observation state (ADR-0189 §6) the server read for this
 	// process, and Reason is the sentence behind it. Empty means unbound: no
 	// observation applies, which is not a finding.
@@ -220,6 +239,18 @@ type Process struct {
 	OldestIncident int64
 	// Sites are the places in this process where that work is parked.
 	Sites []IncidentSite
+	// DeployedAt is when this definition was deployed, in Unix seconds. It is the
+	// window every traversal count on this process's edges is counted over, because
+	// the counter is keyed by definition key and a redeploy starts a fresh one.
+	DeployedAt int64
+	// ElementVisits is the cumulative activation count of this definition's elements,
+	// keyed by element index — ADR-0080's maintained counter, read in O(elements).
+	//
+	// Nil when the collector could not read it, which is the same distinction Runtime
+	// makes below and for the same reason: an unread counter and an element nothing has
+	// reached are different facts, and only one of them is worth saying out loud. An
+	// element absent from a non-nil map has been read and holds nothing, which is zero.
+	ElementVisits map[int32]int64
 	// Runtime is what the engine has recorded about this definition's instances:
 	// how many are live, how many have finished, and when it last did anything. It
 	// is nil where the collector could not read it, which is not the same fact as
@@ -570,10 +601,33 @@ type Target struct {
 }
 
 // Edge is one directed relationship between two nodes.
+//
+// From, To and Kind are its identity: three call activities to one target are one
+// dependency, and the derivation deduplicates on exactly those three. Taken and
+// TakenSince are facts *about* that identity and are never part of it — a count in the
+// key would turn one dependency back into several.
 type Edge struct {
 	From string `json:"from"`
 	To   string `json:"to"`
 	Kind string `json:"kind"`
+	// Taken is how many times the elements behind this edge were activated, summed:
+	// two business rule tasks calling one decision are one edge reached from two
+	// places, and the count is theirs together (ADR-0400). It is read from the
+	// cumulative per-element counter ADR-0080 already maintains, so it costs a join
+	// rather than an index.
+	//
+	// **Nil and zero are different facts.** Nil means the counter was not read — the
+	// same absence [Process.Runtime] uses — or that this edge kind has no element to
+	// anchor on. Zero means it was read and nothing has taken this path, which is a
+	// real answer and the one that must never be rendered as a verdict: a quarterly
+	// reconciliation, a compensation branch and an error handler are each correctly
+	// zero for months and each load-bearing.
+	Taken *int64 `json:"taken,omitempty"`
+	// TakenSince is when the counting started, in Unix seconds: the moment the source
+	// definition was deployed, because the counter is keyed by definition key and a
+	// redeploy starts a fresh one. It is the window without which Taken says nothing,
+	// so it travels with it and is zero exactly when Taken is nil.
+	TakenSince int64 `json:"takenSince,omitempty"`
 }
 
 // Graph is one derived mesh.
@@ -702,12 +756,50 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 	// unresolved is keyed by its node id, which already carries the kind.
 	unresolved := map[string]string{}
 	// Edges are deduplicated: three call activities to one target are one dependency.
-	seenEdge := map[Edge]bool{}
+	//
+	// The key is the identity triple with the traversal fact stripped off, which is the
+	// whole reason this is an index rather than a set: a repeat is not dropped, its
+	// count is *added* to the edge already there. Two business rule tasks calling one
+	// decision are one edge whose count is theirs together (ADR-0400), and keying on
+	// the whole Edge would instead have produced two edges differing only in a number.
+	//
+	// The indices are valid only while the graph is being built. The sort at the end of
+	// this function reorders g.Edges and invalidates every one of them, so an addEdge
+	// call placed after it would add a count to an unrelated edge — the one failure mode
+	// this join has, and the one that would look plausible on screen. Every call is
+	// above that sort, and a new one belongs above it too.
+	edgeAt := map[Edge]int{}
 	addEdge := func(e Edge) {
-		if !seenEdge[e] {
-			seenEdge[e] = true
+		key := Edge{From: e.From, To: e.To, Kind: e.Kind}
+		i, seen := edgeAt[key]
+		if !seen {
+			edgeAt[key] = len(g.Edges)
 			g.Edges = append(g.Edges, e)
+			return
 		}
+		if e.Taken == nil {
+			return
+		}
+		if g.Edges[i].Taken == nil {
+			// The first contributor carried no count and this one does: adopt it whole,
+			// window included, rather than summing onto an absence.
+			g.Edges[i].Taken = e.Taken
+			g.Edges[i].TakenSince = e.TakenSince
+			return
+		}
+		sum := *g.Edges[i].Taken + *e.Taken
+		g.Edges[i].Taken = &sum
+	}
+
+	// taken resolves one anchored element into the traversal fact its edge carries.
+	// Nil where the counter was not read for this process — never a zero, which would
+	// be a claim about traffic on no evidence (ADR-0400).
+	taken := func(p Process, element int32) (*int64, int64) {
+		if p.ElementVisits == nil {
+			return nil, 0
+		}
+		n := p.ElementVisits[element]
+		return &n, p.DeployedAt
 	}
 
 	// processNode is one deployed process as the picture draws it, with everything the
@@ -791,11 +883,12 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 			from := processNodeID(p.Key)
 			for _, c := range p.Calls {
 				target, ok := byKey[c.TargetKey]
+				n, since := taken(p, c.ElementIndex)
 				switch {
 				case c.TargetKey != 0 && ok && target.CanView:
-					addEdge(Edge{From: from, To: processNodeID(target.Key), Kind: EdgeCalls})
+					addEdge(Edge{From: from, To: processNodeID(target.Key), Kind: EdgeCalls, Taken: n, TakenSince: since})
 				case c.TargetKey != 0 && ok:
-					addEdge(Edge{From: from, To: restrictedOrdinal(processNodeID(target.Key)), Kind: EdgeCalls})
+					addEdge(Edge{From: from, To: restrictedOrdinal(processNodeID(target.Key)), Kind: EdgeCalls, Taken: n, TakenSince: since})
 				default:
 					// No deployment provides the called process — or the resolved key is
 					// not in the landscape at all, which is the same finding from the
@@ -803,38 +896,40 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 					// caller's own model, which they can already read.
 					id := unresolvedNodeID(KindProcess, c.CalledProcessID)
 					unresolved[id] = c.CalledProcessID
-					addEdge(Edge{From: from, To: id, Kind: EdgeCalls})
+					addEdge(Edge{From: from, To: id, Kind: EdgeCalls, Taken: n, TakenSince: since})
 				}
 			}
 			for _, u := range p.Workers {
 				target, ok := workers[u.TargetID]
+				n, since := taken(p, u.ElementIndex)
 				switch {
 				case u.TargetID != "" && ok && target.CanView:
 					usedWorkers[target.ID] = true
-					addEdge(Edge{From: from, To: workerNodeID(target.ID), Kind: EdgeUses})
+					addEdge(Edge{From: from, To: workerNodeID(target.ID), Kind: EdgeUses, Taken: n, TakenSince: since})
 				case u.TargetID != "" && ok:
-					addEdge(Edge{From: from, To: restrictedOrdinal(workerNodeID(target.ID)), Kind: EdgeUses})
+					addEdge(Edge{From: from, To: restrictedOrdinal(workerNodeID(target.ID)), Kind: EdgeUses, Taken: n, TakenSince: since})
 				default:
 					// The model asks for a worker nobody configured, so the task would
 					// fail at run time. This is the question a model cannot answer about
 					// itself, and the name is safe: it is in this caller's own model.
 					id := unresolvedNodeID(KindWorker, u.Name)
 					unresolved[id] = u.Name
-					addEdge(Edge{From: from, To: id, Kind: EdgeUses})
+					addEdge(Edge{From: from, To: id, Kind: EdgeUses, Taken: n, TakenSince: since})
 				}
 			}
 			for _, ref := range p.Decisions {
-				target, ok := decisions[ref]
+				target, ok := decisions[ref.DecisionID]
+				n, since := taken(p, ref.ElementIndex)
 				switch {
 				case ok && target.CanView:
 					usedDecisions[target.ID] = true
-					addEdge(Edge{From: from, To: decisionNodeID(target.ID), Kind: EdgeUses})
+					addEdge(Edge{From: from, To: decisionNodeID(target.ID), Kind: EdgeUses, Taken: n, TakenSince: since})
 				case ok:
-					addEdge(Edge{From: from, To: restrictedOrdinal(decisionNodeID(target.ID)), Kind: EdgeUses})
+					addEdge(Edge{From: from, To: restrictedOrdinal(decisionNodeID(target.ID)), Kind: EdgeUses, Taken: n, TakenSince: since})
 				default:
-					id := unresolvedNodeID(KindDecision, ref)
-					unresolved[id] = ref
-					addEdge(Edge{From: from, To: id, Kind: EdgeUses})
+					id := unresolvedNodeID(KindDecision, ref.DecisionID)
+					unresolved[id] = ref.DecisionID
+					addEdge(Edge{From: from, To: id, Kind: EdgeUses, Taken: n, TakenSince: since})
 				}
 			}
 		}

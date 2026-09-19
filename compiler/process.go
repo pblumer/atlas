@@ -1803,7 +1803,14 @@ func (p *CompiledProcess) CallActivity(detail int32) *CallActivityDetail {
 // which deployed definition the call reaches is a per-server, deploy-time fact
 // the server layer computes on top of this (ADR-0076).
 type CallActivityRef struct {
-	ElementId          string
+	ElementId string
+	// ElementIndex is the same element as ElementId, by the identity the engine uses:
+	// the node's position in the compiled table. It is what joins a reference to a
+	// maintained per-element counter, since those are keyed by (definition, element
+	// index) and never by the id a modeller typed (ADR-0080, ADR-0400). It is
+	// version-local — the interning is per compiled process — so it means nothing
+	// outside the definition it came from.
+	ElementIndex       int32
 	CalledProcessId    string
 	Binding            DecisionBinding
 	PropagateAllParent bool
@@ -1823,8 +1830,15 @@ type CallActivityRef struct {
 // enumerable from outside, where the worker store is (ADR-0158).
 type ConnectorRef struct {
 	ElementId string
-	JobType   int32
-	Connector string
+	// ElementIndex is the same element as ElementId, by the identity the engine uses:
+	// the node's position in the compiled table. It is what joins a reference to a
+	// maintained per-element counter, since those are keyed by (definition, element
+	// index) and never by the id a modeller typed (ADR-0080, ADR-0400). It is
+	// version-local — the interning is per compiled process — so it means nothing
+	// outside the definition it came from.
+	ElementIndex int32
+	JobType      int32
+	Connector    string
 }
 
 // NodeConnectorRef returns the worker reference one node makes, and false when it
@@ -1871,9 +1885,10 @@ func (p *CompiledProcess) NodeConnectorRef(id int32) (ConnectorRef, bool) {
 		return ConnectorRef{}, false
 	}
 	return ConnectorRef{
-		ElementId: p.ElementBpmnId(id),
-		JobType:   jobType,
-		Connector: p.Intern(connector),
+		ElementId:    p.ElementBpmnId(id),
+		ElementIndex: id,
+		JobType:      jobType,
+		Connector:    p.Intern(connector),
 	}, true
 }
 
@@ -1945,6 +1960,7 @@ func (p *CompiledProcess) CallActivities() []CallActivityRef {
 		d := p.CallActivity(p.nodes[i].Detail)
 		out = append(out, CallActivityRef{
 			ElementId:          p.ElementBpmnId(int32(i)),
+			ElementIndex:       int32(i),
 			CalledProcessId:    p.Intern(d.CalledProcessId),
 			Binding:            d.Binding,
 			PropagateAllParent: d.PropagateAllParent,
@@ -2003,6 +2019,47 @@ func (p *CompiledProcess) BusinessRuleDecisions() []string {
 		if id != "" && !seen[id] {
 			seen[id] = true
 			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// BusinessRuleDecisionRef is one business rule task and the local decision it calls.
+//
+// It is [CompiledProcess.BusinessRuleDecisions] without the de-duplication, which is
+// the whole reason it exists as a second method rather than a changed one. That
+// enumeration answers "which decisions must exist for this model to deploy", so one
+// entry per decision is right and the deploy-time gate reads it. This one answers
+// "how often was this decision reached, and from where", and for that two tasks
+// calling one decision are two places: the count on the edge is their sum, and
+// collapsing them first would lose half of it (ADR-0400).
+type BusinessRuleDecisionRef struct {
+	// DecisionId is the local decision the task calls, already interned to a string.
+	DecisionId string
+	// ElementIndex is the calling business rule task, by the identity the per-element
+	// counters are keyed on. See [CallActivityRef.ElementIndex].
+	ElementIndex int32
+}
+
+// BusinessRuleDecisionRefs returns one reference per business rule task that calls a
+// local decision, in node order — the same elements [CompiledProcess.BusinessRuleDecisions]
+// walks, before it collapses them by decision id.
+//
+// Worker-mode tasks are skipped here for the same reason they are skipped there: a
+// central decision is evaluated by a remote temis service (ADR-0050), so there is no
+// local decision for an edge to point at.
+func (p *CompiledProcess) BusinessRuleDecisionRefs() []BusinessRuleDecisionRef {
+	var out []BusinessRuleDecisionRef
+	for i := range p.nodes {
+		if p.nodes[i].Type != TypeBusinessRuleTask {
+			continue
+		}
+		detail := p.BusinessRuleTask(p.nodes[i].Detail)
+		if detail.Connector >= 0 {
+			continue
+		}
+		if id := p.Intern(detail.DecisionId); id != "" {
+			out = append(out, BusinessRuleDecisionRef{DecisionId: id, ElementIndex: int32(i)})
 		}
 	}
 	return out

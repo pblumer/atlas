@@ -14,6 +14,26 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The starmap says which dependencies are actually used.** Every line on the starmap
+  was a *declared* dependency: a call activity names a process, a service task names a
+  worker, a business rule task names a decision, and the picture drew all of them the
+  same. So a worker nobody has ever called and one carrying the whole business looked
+  identical, and the two questions an operator actually brings to a landscape — what can
+  I retire, and what carries the load — were the two it could not answer.
+
+  Each of those lines now carries how often it was taken. It costs no new bookkeeping:
+  the engine has folded a cumulative activation count per element since the Operations
+  heatmap needed one, every derived line is anchored on exactly one element, and the
+  count is a join between the two. One decision called from two tasks is still one line,
+  and its count is both tasks together.
+
+  A line nothing has taken is drawn quieter and says so on hover, **always with the
+  window it was counted over** — never as a verdict. The counter belongs to the deployed
+  version, so a redeploy starts a fresh one, and a zero on a version deployed this
+  morning says nothing about the path. A quarterly reconciliation, a compensation branch
+  and an error handler are each correctly zero for months and each load-bearing, and a
+  picture that called one of them dead would be believed once and distrusted afterwards.
+
 - **Double-click a business rule task and the decision opens.** An evaluation has been
   durable history for a while — what went in, what came out, which rules fired — and it
   reached an operator as a card with the rule matrix behind a *hover*. A hover is not an

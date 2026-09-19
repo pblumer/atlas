@@ -1,6 +1,6 @@
 # ADR-0404: The whole graph can be walked, in a projection with a stated scope
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-09-19
 - **Deciders:** Atlas maintainers

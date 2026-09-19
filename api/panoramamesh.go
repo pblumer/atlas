@@ -116,7 +116,11 @@ type structuralProcess struct {
 	// worker store, which the request reads for itself, and an id resolved here could
 	// name a worker that has since been deleted or re-scoped.
 	workers   []panorama.WorkerUse
-	decisions []string
+	decisions []panorama.DecisionUse
+	// deployedAt is when this definition was deployed, in Unix seconds. Structural
+	// rather than status — it cannot change while the definition exists — and it is
+	// the window every traversal count on this process's edges is counted over.
+	deployedAt int64
 }
 
 // structuralDraft is one saved-but-undeployed diagram, and who governs it.
@@ -217,12 +221,19 @@ func (s *Server) readStructure(withDrafts bool, now time.Time) (*meshFacts, erro
 		}
 		proc := structuralProcess{
 			key: d.Key, processID: d.ProcessID, name: d.Name, version: d.Version,
-			projectID: d.ProjectID, deployedBy: d.DeployedBy,
-			workers:   workerRefs(d.cp),
-			decisions: d.cp.BusinessRuleDecisions(),
+			projectID: d.ProjectID, deployedBy: d.DeployedBy, deployedAt: d.DeployedAt,
+			workers: workerRefs(d.cp),
+			// The de-duplicating enumeration is the wrong one here: one decision called
+			// from two tasks is one edge reached from two places, and its traversal count
+			// is their sum (ADR-0400). BusinessRuleDecisions stays what the deploy-time
+			// gate reads.
+			decisions: decisionRefs(d.cp),
 		}
 		for _, ref := range d.cp.CallActivities() {
-			call := panorama.Call{ElementID: ref.ElementId, CalledProcessID: ref.CalledProcessId}
+			call := panorama.Call{
+				ElementID: ref.ElementId, ElementIndex: ref.ElementIndex,
+				CalledProcessID: ref.CalledProcessId,
+			}
 			// Resolution mirrors the call-activity management view exactly, overrides
 			// included: an edge that ignored a redirect or a pin would draw a
 			// dependency the engine would not take (ADR-0076/0105).
@@ -399,10 +410,14 @@ func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, panorama
 			CanView:       s.canViewArtifact(r, p.projectID, p.deployedBy, projs),
 			State:         state, Reason: reason,
 			Incidents: tally.Count, OldestIncident: tally.OldestRaisedAt, Sites: tally.Sites,
-			Runtime:   s.processRuntime(p.key),
-			Calls:     p.calls,
-			Workers:   resolveWorkerRefs(p.workers, byName),
-			Decisions: p.decisions,
+			Runtime: s.processRuntime(p.key),
+			// The window is structural and comes from the cache; the counts are status
+			// and are read per request, like every other number on this picture.
+			DeployedAt:    p.deployedAt,
+			ElementVisits: s.elementVisits(p.key),
+			Calls:         p.calls,
+			Workers:       resolveWorkerRefs(p.workers, byName),
+			Decisions:     p.decisions,
 		})
 	}
 	for _, d := range facts.drafts {
@@ -581,7 +596,26 @@ func workerRefs(cp *compiler.CompiledProcess) []panorama.WorkerUse {
 		if strings.HasPrefix(strings.TrimSpace(ref.Connector), "=") {
 			continue
 		}
-		out = append(out, panorama.WorkerUse{ElementID: ref.ElementId, Name: ref.Connector})
+		out = append(out, panorama.WorkerUse{
+			ElementID: ref.ElementId, ElementIndex: ref.ElementIndex, Name: ref.Connector,
+		})
+	}
+	return out
+}
+
+// decisionRefs is the same enumeration for local decisions: one reference per business
+// rule task rather than one per decision, so an edge reached from two tasks can carry
+// the sum of both (ADR-0400).
+func decisionRefs(cp *compiler.CompiledProcess) []panorama.DecisionUse {
+	refs := cp.BusinessRuleDecisionRefs()
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]panorama.DecisionUse, 0, len(refs))
+	for _, ref := range refs {
+		out = append(out, panorama.DecisionUse{
+			DecisionID: ref.DecisionId, ElementIndex: ref.ElementIndex,
+		})
 	}
 	return out
 }
@@ -621,6 +655,29 @@ func resolveWorkerRefs(refs []panorama.WorkerUse, byName map[string]connector) [
 // A read that fails returns nil rather than zero. "Nothing has ever run here" and
 // "the counter could not be read" are different facts, and a picture that showed the
 // second as the first would report a quiet estate on no evidence.
+// elementVisits reads one definition's cumulative per-element activation counts —
+// ADR-0080's `cfElementVisitAgg`, in O(elements) from a maintained merge counter rather
+// than by summing any instance's history.
+//
+// It is what makes a traversal count on a derived edge a *join* rather than a new index
+// (ADR-0400): the counter has been folded in `applyToState` since long before this
+// picture existed, is never decremented, and therefore survives instance TTL and
+// history retention. This is its fourth reader.
+//
+// Nil on a read failure, deliberately, and never an empty map: an unread counter and a
+// definition nothing has reached are different facts, and only the second is worth
+// drawing. The same distinction [Server.processRuntime] makes by returning nil.
+func (s *Server) elementVisits(defKey uint64) map[int32]int64 {
+	out := map[int32]int64{}
+	if err := s.store.ElementVisitTotals(defKey, func(element int32, count int64) error {
+		out[element] = count
+		return nil
+	}); err != nil {
+		return nil
+	}
+	return out
+}
+
 func (s *Server) processRuntime(defKey uint64) *panorama.Runtime {
 	running, err := s.store.DefInstanceCount(defKey)
 	if err != nil {

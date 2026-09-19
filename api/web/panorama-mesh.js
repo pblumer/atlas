@@ -3130,6 +3130,32 @@ function legendHTML(graph, layoutMs, notation, peak = 0, band = null, offersNoth
   </div>`;
 }
 
+// takenTitle is what an edge says about its own traffic: the count, and always the
+// window it was counted over.
+//
+// The window is not decoration. The counter is keyed by the deployed definition, so a
+// redeploy starts a fresh one — and a zero on a version deployed this morning says
+// nothing at all about the path. ADR-0400 forbids the shorter sentence for that reason:
+// a never-taken edge is *never* labelled dead, because a quarterly reconciliation, a
+// compensation branch and an error handler are each correctly zero for months and each
+// load-bearing. What is stated is the fact and its window; the reader draws the
+// conclusion.
+//
+// Empty for an edge carrying no count — the counter was not read, or this edge kind has
+// no element to anchor on — which must not become a zero somebody acts on.
+function takenTitle(edge) {
+  if (edge.taken == null) return "";
+  const since = edge.takenSince
+    ? spanText(Date.now() - edge.takenSince * 1000)
+    : "";
+  const window = since
+    ? `the ${since} this version has been deployed`
+    : "this version's deployment";
+  return edge.taken > 0
+    ? `Taken ${fmtCount(edge.taken)} times, counted over ${window}.`
+    : `Not taken in ${window}.`;
+}
+
 function renderGraph(graph, layoutMs, frame,
   { pinned, from, notation, peak = 0, at: measuredAt = Date.now() } = {}) {
   const spoken = notationOf(notation?.id ?? notation);
@@ -3194,10 +3220,16 @@ function renderGraph(graph, layoutMs, frame,
       if (ends.start) { marked.add(ends.start); mark += ` marker-start="url(#${ends.start})"`; }
       if (ends.end) { marked.add(ends.end); mark += ` marker-end="url(#${ends.end})"`; }
     }
+    // An edge the counter has read and found nothing on is drawn quieter, never
+    // differently coloured: colour on this canvas is severity and kind, and a path
+    // nothing has walked is neither a fault nor another kind of thing (ADR-0400).
+    const untaken = e.taken === 0 ? " mesh-edge-untaken" : "";
+    const title = takenTitle(e);
     return `<line x1="${line.x1.toFixed(1)}" y1="${line.y1.toFixed(1)}"
       x2="${line.x2.toFixed(1)}" y2="${line.y2.toFixed(1)}"
       data-from="${esc(e.from)}" data-to="${esc(e.to)}"${ends ? ' data-trimmed="1"' : ""}
-      class="mesh-edge mesh-edge-${esc(kind)}${ends ? " mesh-edge-marked" : ""}"${mark}/>`;
+      class="mesh-edge mesh-edge-${esc(kind)}${ends ? " mesh-edge-marked" : ""}${untaken}"${mark}>${
+      title ? `<title>${esc(title)}</title>` : ""}</line>`;
   }).join("");
 
   // Only the markers this picture actually uses. They live inside the canvas SVG

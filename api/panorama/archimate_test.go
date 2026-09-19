@@ -23,7 +23,7 @@ func landscapeForExport() Landscape {
 					{ElementID: "Task_Secret", CalledProcessID: "ledger", TargetKey: 9},
 				},
 				Workers:   []WorkerUse{{ElementID: "Task_Mail", Name: "ops-mail", TargetID: "w-mail"}},
-				Decisions: []string{"credit"},
+				Decisions: []DecisionUse{{DecisionID: "credit"}},
 				// Observation state, which the exported document must not carry.
 				State: "degraded", Reason: "4 token(s) are parked.", Incidents: 4,
 			},
