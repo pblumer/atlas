@@ -327,6 +327,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/instances/{key}/decisions", s.handleInstanceDecisions, apiOp{
 			summary: "Read the DMN decision evaluations a process instance made — each with its inputs, outputs, and trace", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Decision evaluations", tArray())}},
+		{"GET", "/api/v1/instances/{key}/decisions/{at}/graph", s.handleInstanceDecisionGraph, apiOp{
+			summary: "Read one decision evaluation with the requirements graph of the model it ran against — the decision drawn as the case saw it, for the Operations viewers' decision modal", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Decision evaluation and graph", tObject())}},
 		{"GET", "/api/v1/instances/{key}/jobs", s.handleListInstanceJobs, apiOp{
 			summary: "List the activatable jobs an instance is parked on (any type) — the read side of POST /jobs/{key}/complete", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Activatable jobs", tArray())}},

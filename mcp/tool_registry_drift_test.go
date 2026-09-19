@@ -244,6 +244,21 @@ var mcpOmittedRoutes = map[string]string{
 	// it already has give it.
 	"GET /api/v1/panorama/models/{id}/drift": "a non-durable reading surface; an agent must not read an emptied journal as an absence of change",
 	"PUT /api/v1/node":                       "an operator naming this instance, not an agent action",
+	// One evaluation with the requirements graph of the model it ran against
+	// (ADR-draft-a-decision-is-shown-rather-than-described). The route exists to
+	// fill a drawing: most of what it carries is DMNDI bounds — where each shape
+	// sits on a canvas — and an agent has no canvas. Every *fact* in it is already a
+	// tool: the case itself (inputs, outputs, the rules that fired) is
+	// atlas_instance_decisions and atlas_decision_evaluations, and the model's own
+	// shape is atlas_deployed_decision_model or atlas_dmnref_graph.
+	//
+	// One thing is only here: the flag saying the evaluation went through a decision
+	// *service*, which is why its trace is empty (ADR-0398). An agent reading an
+	// empty trace today cannot tell "no rules were recorded" from "no rules
+	// matched". That is worth a tool of its own if an agent ever needs to tell them
+	// apart — on a surface an agent reads, not smuggled in behind a route whose
+	// payload is a picture.
+	"GET /api/v1/instances/{key}/decisions/{at}/graph": "a drawing's payload — diagram bounds for a canvas an agent does not have; the case and the model behind it are already tools",
 	// One worker's recent jobs (ADR-0157): operator diagnostics about a *process*, and
 	// a memory tail rather than a record. An agent debugging a run asks from the
 	// instance side, where atlas_instance_jobs and the timeline answer the same

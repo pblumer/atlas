@@ -11,6 +11,7 @@ import {
 } from "./logo.js";
 import { enhanceTable } from "./table.js";
 import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
+import { renderDrgSvg, openDecisionGraph } from "./decision-graph.js";
 import { copyText } from "./clipboard.js";
 import { restoreSummary } from "./restore-report.js";
 // Documentation prose is Markdown (ADR-0250). The renderer
@@ -7334,8 +7335,8 @@ async function viewDecisionDetail(id) {
     </div>
     <div class="card" style="padding:0; margin-top:20px">
       <table data-dt-key="decision-evals">
-        <thead><tr><th>When</th><th>Instance</th><th>Element</th><th>Inputs</th><th>Result</th></tr></thead>
-        <tbody id="rows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+        <thead><tr><th>When</th><th>Instance</th><th>Element</th><th>Inputs</th><th>Result</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>
     <div class="dec-pop" id="dec-pop" hidden></div>`;
@@ -7411,7 +7412,7 @@ async function viewDecisionDetail(id) {
     try {
       evals = await api("GET", `/api/v1/decisions/${encodeURIComponent(id)}/evaluations`) || [];
       if (!evals.length) {
-        tbody.innerHTML = `<tr><td colspan="5" class="empty">
+        tbody.innerHTML = `<tr><td colspan="6" class="empty">
           This decision has not been evaluated yet. Start a process instance whose
           business rule task calls it.</td></tr>`;
         return;
@@ -7433,16 +7434,23 @@ async function viewDecisionDetail(id) {
                 ${oi === 0 ? badge : ""}
               </div>`).join("")}</div>`
           : '<span class="muted">—</span>';
+        // The same door the replay's decision cards carry: the decision's graph with
+        // this case drawn on it. data-decat is the server's exact decimal string, not
+        // r.at — a nanosecond timestamp is past what a browser holds in a number, so
+        // the parsed value is rounded and would address an evaluation that does not
+        // exist (decision-graph.js).
         return `<tr>
           <td class="muted" data-sort="${r.at || 0}">${esc(fmtNano(r.at))}</td>
           <td><a href="#/operations/i/${r.instanceKey}" title="Replay this instance step by step">&#9654; ${r.instanceKey}</a></td>
           <td class="muted">${esc(r.elementId || "—")}</td>
           <td>${pills}</td>
           <td>${result}</td>
+          <td class="row-actions"><button type="button" class="dec-open" data-decat="${esc(r.atKey || String(r.at))}"
+            title="Open this decision's requirements graph with this case drawn on it">How this was decided &rarr;</button></td>
         </tr>`;
       }).join("");
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;
     }
   };
 
@@ -7461,6 +7469,19 @@ async function viewDecisionDetail(id) {
     pop.style.top = (top < 8 ? box.bottom + 10 : top) + "px";
   };
   const hidePop = () => { pop.hidden = true; };
+  // Opening the graph is the deliberate half of the same question the hover answers
+  // in passing, and it is the one that survives being read by somebody else.
+  tbody.addEventListener("click", (e) => {
+    const btn = e.target.closest(".dec-open");
+    if (!btn || !tbody.contains(btn)) return;
+    const r = evals.find((x) => String(x.atKey || x.at) === btn.dataset.decat);
+    if (!r) return;
+    hidePop();
+    openDecisionGraph({
+      api, instanceKey: r.instanceKey, at: r.atKey || r.at,
+      decisionId: id, taskLabel: r.elementId || "",
+    });
+  });
   tbody.addEventListener("pointerover", (e) => {
     const row = e.target.closest(".res-row.hoverable");
     if (row && tbody.contains(row)) showPop(row);
@@ -9658,86 +9679,9 @@ async function viewDmnViewer(refId) {
   wireEdit();
 }
 
-// borderPoint returns the point on a box's border (centre cx,cy, size w×h) in the
-// direction of (tx,ty), so a requirement arrow lands on the box edge, not its
-// centre.
-function borderPoint(cx, cy, w, h, tx, ty) {
-  const dx = tx - cx, dy = ty - cy;
-  if (dx === 0 && dy === 0) return [cx, cy];
-  const sx = dx !== 0 ? (w / 2) / Math.abs(dx) : Infinity;
-  const sy = dy !== 0 ? (h / 2) / Math.abs(dy) : Infinity;
-  const s = Math.min(sx, sy);
-  return [cx + dx * s, cy + dy * s];
-}
-
-// renderDrgSvg draws a model's decision requirements graph as an SVG. It uses the
-// authored DMNDI bounds when the model has a diagram; otherwise it lays the graph
-// out in layers (input data at the bottom, decisions stacked above by requirement
-// depth). Read-only: no interaction, just a faithful picture.
-function renderDrgSvg(g) {
-  const NW = 168, NH = 64, GAPX = 36, GAPY = 60, PAD = 24;
-  const hasDI = (g.nodes || []).some((n) => n.width > 0);
-  let placed;
-  if (hasDI) {
-    placed = g.nodes.map((n) => ({ n, x: n.x || 0, y: n.y || 0, w: n.width || NW, h: n.height || NH }));
-  } else {
-    const reqs = {};
-    (g.edges || []).forEach((e) => { (reqs[e.target] = reqs[e.target] || []).push(e.source); });
-    const level = {};
-    const lvl = (id, seen) => {
-      if (level[id] != null) return level[id];
-      if (seen.has(id)) return 0;
-      seen.add(id);
-      const rs = reqs[id] || [];
-      return (level[id] = rs.length ? 1 + Math.max(...rs.map((r) => lvl(r, seen))) : 0);
-    };
-    g.nodes.forEach((n) => lvl(n.id, new Set()));
-    const maxL = Math.max(0, ...Object.values(level));
-    const byLevel = {};
-    g.nodes.forEach((n) => { (byLevel[level[n.id]] = byLevel[level[n.id]] || []).push(n); });
-    placed = [];
-    for (let L = 0; L <= maxL; L++) {
-      (byLevel[L] || []).forEach((n, i) =>
-        placed.push({ n, x: PAD + i * (NW + GAPX), y: PAD + (maxL - L) * (NH + GAPY), w: NW, h: NH }));
-    }
-  }
-  if (!placed.length) return `<p class="muted" style="padding:16px">This model has no decisions to show.</p>`;
-  const pos = {};
-  placed.forEach((p) => { pos[p.n.id] = p; });
-
-  const edges = (g.edges || []).map((e) => {
-    const a = pos[e.source], b = pos[e.target];
-    if (!a || !b) return "";
-    const ax = a.x + a.w / 2, ay = a.y + a.h / 2, bx = b.x + b.w / 2, by = b.y + b.h / 2;
-    const [x1, y1] = borderPoint(ax, ay, a.w, a.h, bx, by);
-    const [x2, y2] = borderPoint(bx, by, b.w, b.h, ax, ay);
-    const dash = e.type === "knowledgeRequirement" ? ` stroke-dasharray="5 4"` : "";
-    return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#94a3b8" stroke-width="1.5"${dash} marker-end="url(#drg-arrow)"/>`;
-  }).join("");
-
-  const nodes = placed.map(({ n, x, y, w, h }) => {
-    const input = n.type === "inputData";
-    const bkm = n.type === "businessKnowledgeModel";
-    const fill = input ? "#eff6ff" : bkm ? "#f5f3ff" : "#ffffff";
-    const stroke = input ? "#3b82f6" : bkm ? "#8b5cf6" : "#111827";
-    const rx = input ? h / 2 : 10;
-    const sub = input ? (n.dataType || "input data") : bkm ? "knowledge model" : (n.hasTable ? "decision table" : "decision");
-    return `<g>
-      <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>
-      <text x="${x + w / 2}" y="${y + h / 2 - 3}" text-anchor="middle" font-size="13" font-weight="600" fill="#111827">${esc(n.name || n.id)}</text>
-      <text x="${x + w / 2}" y="${y + h / 2 + 14}" text-anchor="middle" font-size="10.5" fill="#6b7280">${esc(sub)}</text>
-    </g>`;
-  }).join("");
-
-  const minX = Math.min(...placed.map((p) => p.x)) - PAD;
-  const minY = Math.min(...placed.map((p) => p.y)) - PAD;
-  const W = Math.max(...placed.map((p) => p.x + p.w)) + PAD - minX;
-  const H = Math.max(...placed.map((p) => p.y + p.h)) + PAD - minY;
-  return `<svg viewBox="${minX.toFixed(0)} ${minY.toFixed(0)} ${W.toFixed(0)} ${H.toFixed(0)}" width="${W.toFixed(0)}" height="${H.toFixed(0)}" style="max-width:100%;height:auto;display:block;font-family:system-ui,-apple-system,sans-serif">
-    <defs><marker id="drg-arrow" markerWidth="10" markerHeight="8" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
-      <path d="M0,0 L8,3 L0,6 z" fill="#94a3b8"/></marker></defs>
-    ${edges}${nodes}</svg>`;
-}
+// The decision requirements graph is drawn by decision-graph.js — one renderer,
+// shared with the Operations decision modal, so a decision is the same picture
+// whether it is being designed or being accounted for.
 
 // setTitle sets the browser tab / history title with the distinctive part first, so
 // several open Atlas tabs are told apart at a glance. "" falls back to plain "Atlas".

@@ -1,0 +1,135 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas decision graph e2e harness</title>
+    <!-- Drives the real api/web/decision-graph.js over the shape that provoked it: a
+         credit approval whose decision requirements graph has two input decisions
+         feeding a third, and whose published interface is a decision service.
+
+         The two fixtures are the two readings the window has to get right. The
+         DECISION was called directly, so the engine recorded the rule matrix and the
+         window can say which row carried the answer. The SERVICE was called through
+         its interface, which records no trace at all (ADR-0398) — the values are
+         still exact, and only the rule-level detail is missing. Telling those two
+         apart is the whole job, so they are both here.
+
+         The api() stub answers exactly what the server's
+         /instances/{key}/decisions/{at}/graph route serves, including the DMNDI
+         bounds, because a graph without them takes a different code path. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>html, body { margin: 0; min-height: 100%; background: #fff; }</style>
+  </head>
+  <body>
+    <script type="module">
+      import { openDecisionGraph, closeDecisionGraph, renderDrgSvg } from "/decision-graph.js";
+
+      // The requirements graph as the server freezes it: bounds from the model's own
+      // DMNDI, one node per decision and input datum, one edge per requirement.
+      const NODES = [
+        { id: "in_betrag", type: "inputData", name: "betrag", varName: "betrag", dataType: "number", x: 60, y: 540, width: 125, height: 45 },
+        { id: "in_laufzeit", type: "inputData", name: "laufzeitMonate", varName: "laufzeitMonate", dataType: "number", x: 235, y: 540, width: 125, height: 45 },
+        { id: "in_einkommen", type: "inputData", name: "einkommen", varName: "einkommen", dataType: "number", x: 410, y: 540, width: 125, height: 45 },
+        { id: "in_stoerungen", type: "inputData", name: "zahlungsstoerungen", varName: "zahlungsstoerungen", dataType: "number", x: 700, y: 540, width: 125, height: 45 },
+        { id: "dec_tragbarkeit", type: "decision", name: "Tragbarkeit", varName: "tragbarkeit", x: 210, y: 300, width: 180, height: 80 },
+        { id: "dec_bonitaet", type: "decision", name: "Bonität", varName: "bonitaet", hasTable: true, x: 660, y: 300, width: 180, height: 80 },
+        { id: "dec_entscheid", type: "decision", name: "Kreditentscheid", varName: "entscheid", hasTable: true, x: 210, y: 100, width: 180, height: 80 },
+      ];
+      const EDGES = [
+        { type: "informationRequirement", source: "in_stoerungen", target: "dec_bonitaet" },
+        { type: "informationRequirement", source: "in_einkommen", target: "dec_bonitaet" },
+        { type: "informationRequirement", source: "in_betrag", target: "dec_tragbarkeit" },
+        { type: "informationRequirement", source: "in_laufzeit", target: "dec_tragbarkeit" },
+        { type: "informationRequirement", source: "in_einkommen", target: "dec_tragbarkeit" },
+        { type: "informationRequirement", source: "dec_bonitaet", target: "dec_entscheid" },
+        { type: "informationRequirement", source: "dec_tragbarkeit", target: "dec_entscheid" },
+      ];
+
+      // The case: 60 000 over 48 months on 5 000 a month, with a C rating handed in.
+      // 1250/5000 = 0.25, which is past what a C carries, so the catch-all rule takes
+      // it — the shape of "why was this rejected" the window exists to answer.
+      const INPUTS = { betrag: 60000, bonitaet: "C", einkommen: 5000, laufzeitMonate: 48 };
+      const OUTPUTS = { entscheid: "abgelehnt" };
+
+      const TRACE = {
+        tables: [{
+          hitPolicy: "F",
+          inputs: [
+            { expression: "bonitaet", value: "C" },
+            { expression: "tragbarkeit", value: "0.25" },
+          ],
+          rules: [
+            { index: 0, id: "r_ent_1", matched: false, conditions: [{ input: "bonitaet", entry: '"A"', matched: false }] },
+            { index: 1, id: "r_ent_2", matched: false, conditions: [{ input: "bonitaet", entry: '"A"', matched: false }] },
+            { index: 2, id: "r_ent_3", matched: false, conditions: [{ input: "bonitaet", entry: '"B"', matched: false }] },
+            { index: 3, id: "r_ent_4", matched: false, conditions: [{ input: "bonitaet", entry: '"B"', matched: false }] },
+            { index: 4, id: "r_ent_5", matched: false, conditions: [
+              { input: "bonitaet", entry: '"C"', matched: true },
+              { input: "tragbarkeit", entry: "<= 0.15", matched: false },
+            ] },
+            { index: 5, id: "r_ent_6", matched: true, outputs: ["abgelehnt"], conditions: [
+              { input: "bonitaet", entry: "-", matched: true },
+              { input: "tragbarkeit", entry: "-", matched: true },
+            ] },
+          ],
+          matched: [5],
+        }],
+      };
+
+      // A real nanosecond timestamp, and it is written as a string on purpose: it is
+      // past 2^53, so JavaScript cannot hold one without rounding it — 1789824241612033700
+      // becomes …033800. That is exactly why the server serves `atKey` beside `at` and
+      // why an evaluation is addressed by the string. Writing these as numbers here
+      // collapsed all three fixtures onto one key, which is the same bug a browser
+      // would have hit against the real server.
+      const AT = "1789824241612033700";
+      const AT_SERVICE = "1789824241612033701";
+      const AT_GONE = "1789824241612033702";
+      const CASES = {
+        // Called as a decision: the engine recorded the matrix.
+        [AT]: {
+          at: Number(AT), atKey: AT, elementId: "brt_freigabe", decisionId: "Kreditentscheid",
+          modelName: "Kreditfreigabe", inputs: INPUTS, outputs: OUTPUTS, trace: TRACE, nodes: NODES, edges: EDGES,
+        },
+        // Called through the service interface: no trace exists for one.
+        [AT_SERVICE]: {
+          at: Number(AT_SERVICE), atKey: AT_SERVICE, elementId: "brt_freigabe", decisionId: "Kreditfreigabe",
+          modelName: "Kreditfreigabe", service: true, inputs: INPUTS, outputs: OUTPUTS, nodes: NODES, edges: EDGES,
+        },
+        // A decision whose model is gone: the record stands, the picture cannot.
+        [AT_GONE]: {
+          at: Number(AT_GONE), atKey: AT_GONE, elementId: "brt_freigabe", decisionId: "Vergessen",
+          inputs: INPUTS, outputs: OUTPUTS, nodes: [], edges: [],
+        },
+      };
+
+      window.__apiCalls = [];
+      window.__api = async (method, path) => {
+        window.__apiCalls.push({ method, path });
+        const m = path.match(/\/instances\/(\d+)\/decisions\/(\d+)\/graph$/);
+        if (!m) throw new Error(`unexpected call: ${method} ${path}`);
+        const view = CASES[m[2]];
+        if (!view) throw new Error("no decision evaluation recorded at that time");
+        return view;
+      };
+
+      window.__open = (at, taskLabel = "Kreditfreigabe") =>
+        openDecisionGraph({ api: window.__api, instanceKey: 281474999937230, at, taskLabel });
+      window.__close = closeDecisionGraph;
+      window.__at = AT;
+      window.__atService = AT_SERVICE;
+      window.__atGone = AT_GONE;
+      // The plain picture, to prove the renderer app.js shares still draws one.
+      window.__plain = () => renderDrgSvg({ nodes: NODES, edges: EDGES });
+
+      // A focusable element to open from, so the window's focus restore has somewhere
+      // to put focus back.
+      const opener = document.createElement("button");
+      opener.id = "opener";
+      opener.textContent = "open";
+      document.body.appendChild(opener);
+
+      window.__ready = true;
+    </script>
+  </body>
+</html>

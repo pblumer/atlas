@@ -23,6 +23,7 @@ import { formFieldKeys, formFieldTypes, loadFormViewer, withLoadDeadline } from 
 import { attachCollab } from "./collab.js";
 import { collectDocumentation, exportDocumentation } from "./process-doc.js";
 import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
+import { openDecisionGraph } from "./decision-graph.js";
 // Documentation prose is Markdown (ADR-0250). The replay
 // renders it with the same module the Tasks app uses, so the same text cannot mean two
 // things depending on which surface a reader is standing in front of.
@@ -483,10 +484,25 @@ function decCard(d, i) {
           ${oi === 0 ? badge : ""}
         </div>`).join("")}</div>`
     : '<span class="muted">none</span>';
+  // Every card carries the way in to the full account — the decision's graph with
+  // this case on it (decision-graph.js). The hover table above is a glance; this is
+  // the thing to open when somebody has to be shown how a case was decided, and it
+  // is a button rather than a hover because a gesture nobody can see is not an
+  // affordance.
+  //
+  // data-decat identifies the evaluation, and it is the server's exact decimal
+  // string rather than d.at: a nanosecond timestamp is past what a browser holds in
+  // a number, so the parsed value is rounded (…033700 arrives as …033800) and would
+  // address an evaluation that does not exist. The viewer wiring the click supplies
+  // the instance it belongs to.
   return `<div class="dec-card2">
     <div class="dec-card2-h"><b>${esc(d.decisionId)}</b>${when ? ` <span class="muted">${esc(when)}</span>` : ""}</div>
     <div class="dec-sect2"><span class="dec-sect2-l">Inputs</span>${pills}</div>
     <div class="dec-sect2"><span class="dec-sect2-l">Result</span>${result}</div>
+    <div class="dec-sect2"><span class="dec-sect2-l"></span>
+      <button type="button" class="dec-open" data-decat="${esc(d.atKey || String(d.at))}"
+        title="Open this decision's requirements graph with this case drawn on it">How this was decided &rarr;</button>
+    </div>
   </div>`;
 }
 
@@ -10912,6 +10928,36 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     if (setElementFilter(tokenBearing(el) ? el.id : "")) poll();
     else if (leavingDecision) renderVariables();
   });
+  // Double-clicking a business rule task opens the decision behind it — its
+  // requirements graph with this case drawn on it (decision-graph.js), the same
+  // gesture and the same window the replay answers with. The single click beside it
+  // filters the panel to the task; this one goes the whole way in.
+  //
+  // Live, "this case" is the newest evaluation the task has made: there is no
+  // playhead here, so the case on the diagram is simply the latest one.
+  const openDecisionFor = (d, label) => openDecisionGraph({
+    api, instanceKey: selected, at: d.atKey || d.at, decisionId: d.decisionId, taskLabel: label,
+  });
+  const openLatestDecision = (elementId, label) => {
+    if (selected === "all") {
+      toast("Select a single instance (top-left) to see how its decision was made.", "err");
+      return;
+    }
+    const made = decisions.filter((d) => d.elementId === elementId);
+    if (!made.length) {
+      toast("This business rule task has not decided anything in this instance yet.", "err");
+      return;
+    }
+    openDecisionFor(made[made.length - 1], label);
+  };
+  viewer.on("element.dblclick", 1500, ({ element }) => {
+    const el = (element && element.labelTarget) || element;
+    const bo = el && el.businessObject;
+    if (!bo || bo.$type !== "bpmn:BusinessRuleTask") return;
+    openLatestDecision(el.id, bo.name || bo.id);
+    return false;
+  });
+
   // A click that lands on no shape at all is the same instruction — "the process,
   // not an element of it" — and bpmn-js does not always report one as an
   // element.click, so the canvas carries it. Anything inside a shape's hit area or
@@ -10923,6 +10969,15 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   // The ⚖ badge (a diagram overlay) and the panel's "← Variables" button are HTML,
   // so they're wired by delegation on the view root.
   root.addEventListener("click", (ev) => {
+    const open = ev.target.closest(".dec-open");
+    if (open) {
+      ev.preventDefault();
+      // The card names its own evaluation, so a task that decided several times
+      // opens the round the reader clicked rather than the newest one.
+      const d = decisions.find((x) => String(x.atKey || x.at) === open.dataset.decat);
+      if (d) openDecisionFor(d, decisionLabel(d.elementId));
+      return;
+    }
     const badge = ev.target.closest(".decision-badge");
     if (badge) {
       ev.preventDefault();
@@ -13636,6 +13691,52 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     }
     toast(`No child instance ran here — opening the called process “${pid}”.`, "ok");
     location.hash = `#/operations/p/${dep.key}`;
+  });
+
+  // Double-clicking a business rule task opens the decision it made: its requirements
+  // graph with this case drawn on it, the rules that fired, and the answer
+  // (decision-graph.js). It is the same gesture a call activity answers with the
+  // process behind it — "show me what is inside this box" — and a decision is the one
+  // other element whose contents are a model of their own.
+  //
+  // A task that decided more than once (a loop, a multi-instance round) holds one
+  // record per round, so the one opened is the round being replayed: the newest that
+  // had already happened at the frame on screen, and before any of them have, the
+  // first. Opening the last round while the playhead sits before it would answer a
+  // question about a different case than the one on the diagram.
+  const decisionForElement = (elementId) => {
+    const made = decisions.filter((d) => d.elementId === elementId);
+    if (!made.length) return null;
+    const at = playhead > 0 && playhead <= frames.length ? frames[playhead - 1].at : 0;
+    const done = at ? made.filter((d) => d.at <= at) : [];
+    return done.length ? done[done.length - 1] : made[0];
+  };
+  // Which round is a comparison of timestamps, where a browser's rounding — a couple
+  // of hundred nanoseconds at this magnitude — cannot reach across two rounds. Which
+  // record is an identity, so that one goes by the server's exact key.
+  const openDecisionFor = (d, label) => openDecisionGraph({
+    api, instanceKey: key, at: d.atKey || d.at, decisionId: d.decisionId, taskLabel: label,
+  });
+  eventBus.on("element.dblclick", 1500, (e) => {
+    const el = (e.element && e.element.labelTarget) || e.element;
+    const bo = el && el.businessObject;
+    if (!bo || bo.$type !== "bpmn:BusinessRuleTask") return;
+    const d = decisionForElement(el.id);
+    if (!d) {
+      toast("This business rule task has not decided anything in this instance.", "err");
+      return false;
+    }
+    pause(); // the graph is read standing still, not while the token walks on
+    openDecisionFor(d, bo.name || bo.id);
+    return false; // and never the label editor underneath
+  });
+  // The Decisions tab's cards carry the same door, for the reader who is scrolling the
+  // list rather than looking at the diagram.
+  decEl.addEventListener("click", (e) => {
+    const btn = e.target.closest(".dec-open");
+    if (!btn || !decEl.contains(btn)) return;
+    const d = decisions.find((x) => String(x.atKey || x.at) === btn.dataset.decat);
+    if (d) openDecisionFor(d, decLabel(d.elementId));
   });
 
   // The Details panel's incident actions are HTML inside a tab body that re-renders,

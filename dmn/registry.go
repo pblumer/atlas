@@ -92,6 +92,12 @@ type registered struct {
 	// no listing of them, so they are read from the document — which the registry
 	// has and an evaluation does not.
 	services []DecisionInfo
+	// graph is the model's requirements graph, drawn once here for the same reason
+	// the names are resolved here: the document is only in hand at registration, and
+	// the surface that wants the picture — an operator asking how a decision was
+	// reached — reaches shared state through the run loop, which is no place to
+	// compile a model (invariants I1/I5).
+	graph ModelGraph
 }
 
 // NewRegistry creates an empty registry over a fresh temis engine.
@@ -167,7 +173,7 @@ func (r *Registry) Reload(defKey uint64, dmnXML []byte) (string, error) {
 // pointer only pre-pinning definitions read (ADR-0063). Shared by Deploy, Reload
 // and registerDecision so every accepted model is indexed identically.
 func (r *Registry) register(defKey uint64, defs *tdmn.Definitions, src []byte) registered {
-	reg := registered{defs: defs, services: describeServices(defs, src)}
+	reg := registered{defs: defs, services: describeServices(defs, src), graph: modelGraph(r.engine, defs, src)}
 	reg.names = append(addressableDecisions(defs), serviceNames(reg.services)...)
 	r.definitions[defKey] = append(r.definitions[defKey], reg)
 	for _, id := range reg.names {
@@ -312,14 +318,69 @@ func (r *Registry) LatestDecisionIDs() map[string]bool {
 // nil if none does — how a deployment-bound evaluation finds the bundled model that
 // declares its decision when a process bundles several.
 func modelProviding(list []registered, decisionId string) *tdmn.Definitions {
-	for _, reg := range list {
+	if reg := regProviding(list, decisionId); reg != nil {
+		return reg.defs
+	}
+	return nil
+}
+
+// regProviding is modelProviding over the whole registration, for the callers that
+// want what was worked out about the model rather than the model itself.
+func regProviding(list []registered, decisionId string) *registered {
+	for i, reg := range list {
 		for _, id := range reg.names {
 			if id == decisionId {
-				return reg.defs
+				return &list[i]
 			}
 		}
 	}
 	return nil
+}
+
+// Graph returns the requirements graph of the model that the deployment under
+// defKey evaluates decisionId from — the picture of the decision as the evaluation
+// saw it, not as the design-time model reads today. It is the graph frozen at
+// registration, so this is a map lookup: it runs on the run loop, where compiling
+// anything is out of the question (invariants I1/I5).
+//
+// defKey 0, or a key whose deployment is gone, falls back to the newest model
+// providing the decision. That is the same fallback a latest-bound task evaluates
+// under, and it is honest about what it can still answer: a process definition
+// deleted after its instances ran leaves evaluations behind whose model is no
+// longer addressable any other way. The second return is false when nothing on this
+// server provides the decision at all.
+func (r *Registry) Graph(defKey uint64, decisionId string) (ModelGraph, bool) {
+	if reg := regProviding(r.definitions[defKey], decisionId); reg != nil {
+		return reg.graph, true
+	}
+	if reg, ok := r.latest[decisionId]; ok {
+		return reg.graph, true
+	}
+	return ModelGraph{Nodes: []GraphNode{}, Edges: []GraphEdge{}}, false
+}
+
+// IsService reports whether the name addresses a decision *service* — DMN's
+// published interface over part of the graph — rather than one decision in it, in
+// the model the deployment under defKey resolves it from. It answers one question
+// a reader of an evaluation cannot otherwise settle: a service evaluation retains
+// no rule trace (ADR-0398), and "no rules were recorded" and "no rules ran" are
+// not the same thing to say to somebody asking how a case was decided.
+func (r *Registry) IsService(defKey uint64, decisionId string) bool {
+	reg := regProviding(r.definitions[defKey], decisionId)
+	if reg == nil {
+		if latest, ok := r.latest[decisionId]; ok {
+			reg = &latest
+		}
+	}
+	if reg == nil {
+		return false
+	}
+	for _, svc := range reg.services {
+		if svc.ID == decisionId {
+			return true
+		}
+	}
+	return false
 }
 
 // Evaluate runs the named decision from the model deployed under defKey against
