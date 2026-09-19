@@ -13,6 +13,7 @@ import (
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
+	"github.com/pblumer/atlas/connector/s3"
 	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/connector/temis"
 	"github.com/pblumer/atlas/job"
@@ -347,6 +348,36 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		jobTypes: []int32{compiler.DiscordJobTypeIndex},
 	},
 	{
+		// An S3 task performs one object operation against a Worker an operator
+		// configured (ADR-draft-s3-object-store-worker) and writes what the store
+		// returned into the task's result variable. Unlike Discord and Google Sheets the
+		// endpoint is meaningful and optional at once: blank is AWS at the credential
+		// bundle's region, and anything else is the store the installation runs.
+		name:           connectorKindS3,
+		validateCreate: validateS3Connector,
+		newRegistry:    func(s *Server) { s.s3Registry = s3.NewRegistry() },
+		registerHandlers: func(s *Server, store *state.Store) {
+			s.jobRunner.HandleWithOutput(compiler.S3JobTypeIndex, func(rd state.Reader) job.OutputHandler {
+				return s3.Handler(rd, s.processLookup, s.s3Registry)
+			})
+		},
+		rebuild: func(s *Server) error {
+			clients, problems, err := s.buildS3Clients()
+			if err != nil {
+				return err
+			}
+			s.s3Registry.ReplaceWith(clients, problems)
+			return nil
+		},
+		problem: func(s *Server, name string) (string, bool) {
+			if s.s3Registry == nil {
+				return "", false
+			}
+			return s.s3Registry.Problem(name)
+		},
+		jobTypes: []int32{compiler.S3JobTypeIndex},
+	},
+	{
 		// A Microsoft Entra ID task manages the cloud directory over Graph
 		// (ADR-0172). It is worker-only: the engine builds no client and holds no tenant
 		// credential — the store entry exists only so an operator can add a tenant in the
@@ -486,6 +517,7 @@ var offloadableKinds = map[string][]int32{
 	connectorKindJira:         {compiler.JiraJobTypeIndex},
 	connectorKindGoogleSheets: {compiler.GoogleSheetsJobTypeIndex},
 	connectorKindDiscord:      {compiler.DiscordJobTypeIndex},
+	connectorKindS3:           {compiler.S3JobTypeIndex},
 	"csv":                     {compiler.CsvImportJobTypeIndex},
 	"ldif":                    {compiler.LdifJobTypeIndex},
 	"rest":                    {compiler.RestJobTypeIndex},
@@ -595,7 +627,7 @@ var offloadableKinds = map[string][]int32{
 //
 // With it the record's "owed a worker half" table is empty.
 func DefaultOffloadedKinds() []string {
-	return []string{"ad", connectorKindClio, "csv", connectorKindDiscord, connectorKindGoogleSheets, connectorKindJira, "ldap", "ldif", connectorKindMail, connectorKindRemedy, "rest", "scim", "script", connectorKindSharePoint, "soap", connectorKindTemis, "webscrape"}
+	return []string{"ad", connectorKindClio, "csv", connectorKindDiscord, connectorKindGoogleSheets, connectorKindJira, "ldap", "ldif", connectorKindMail, connectorKindRemedy, "rest", connectorKindS3, "scim", "script", connectorKindSharePoint, "soap", connectorKindTemis, "webscrape"}
 }
 
 // DefaultSupervisedWorkerOnlyKinds are the worker-only Worker Types Atlas supervises
@@ -773,6 +805,24 @@ func validateDiscordConnector(p *createConnectorParams) string {
 	p.Provider, p.Sender = "", ""
 	if p.CredentialsRef == "" {
 		return "a Discord Worker requires a credentialsRef naming a vault bundle: {botToken}"
+	}
+	return ""
+}
+
+// validateS3Connector validates an S3 Worker an operator is adding. The credential is
+// required — an unsigned request to an object store is refused by every store worth
+// using — and the endpoint is not: blank means AWS at the region the bundle names, which
+// is the only configuration an AWS installation needs.
+//
+// It deliberately does not check that the endpoint is reachable or that the key works.
+// A Worker is a durable record an operator may create before the bucket exists, and a
+// create that failed on a store that happens to be down is a create an operator cannot
+// make at all; a key that does not work shows up as a problem on the Worker
+// (ADR-0158), which is where it belongs.
+func validateS3Connector(p *createConnectorParams) string {
+	p.Provider, p.Sender, p.Model = "", "", ""
+	if strings.TrimSpace(p.CredentialsRef) == "" {
+		return "an S3 Worker requires a credentialsRef naming a vault bundle: {accessKeyId, secretAccessKey, region} — and optionally sessionToken"
 	}
 	return ""
 }

@@ -29,6 +29,7 @@ import (
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
+	"github.com/pblumer/atlas/connector/s3"
 	"github.com/pblumer/atlas/connector/scim"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/connector/sharepoint"
@@ -6127,6 +6128,26 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"message": j.Message, "content": j.Content, "name": j.Name,
 			"after": j.After, "maxResults": j.MaxResults, "fields": j.Fields,
 			"nonce": j.Nonce, "resultVariable": j.ResultVariable,
+		}}
+	case compiler.S3JobTypeIndex:
+		// The bucket, the key and — for a put — the document travel; the access key does
+		// not exist here to travel. Same split as Jira's above
+		// (ADR-draft-s3-object-store-worker), and with one consequence this kind has that
+		// the others do not: on an offloaded installation the *bytes* of a put go from
+		// the worker to the store, so the engine only ever held the variable they were
+		// composed from.
+		j, err := s3.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "s3", Fields: map[string]any{
+			"connector": j.Connector, "operation": j.Operation, "bucket": j.Bucket,
+			"key": j.Key, "content": j.Content, "contentType": j.ContentType,
+			"encoding": j.Encoding, "prefix": j.Prefix, "delimiter": j.Delimiter,
+			"startAfter": j.StartAfter, "maxKeys": j.MaxKeys,
+			"sourceBucket": j.SourceBucket, "sourceKey": j.SourceKey,
+			"expiresIn": j.ExpiresIn, "metadata": j.Metadata,
+			"resultVariable": j.ResultVariable,
 		}}
 	case compiler.MsSqlJobTypeIndex, compiler.MariaDBJobTypeIndex, compiler.PostgresJobTypeIndex:
 		// The statement and its bound parameters travel; the DSN does not exist here

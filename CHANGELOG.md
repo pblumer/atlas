@@ -14,6 +14,39 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A process can put a document in a bucket, find it again, and hand somebody a link
+  to open it.** A process produces and consumes documents — a generated letter, a scan,
+  an export, an invoice — and until now there was nowhere to put one. A process variable
+  holds a mebibyte and keeps whatever it holds in the event log for as long as the
+  installation keeps history, so the honest options were a script task shelling out to
+  `aws s3 cp` with the installation's credentials in its environment, or nothing.
+
+  There is now an **S3 object storage** Worker Type, against AWS S3 and equally against
+  MinIO, Ceph, Garage, Cloudflare R2 or Wasabi — the Worker's endpoint decides which, and
+  an empty one means AWS. Eight operations, each a step a process takes: put an object,
+  read a small one back, check whether one is there, list what is under a prefix, copy
+  one, delete one, and mint a time-limited link to download or to upload.
+
+  The two link operations are what makes this reach documents at their real size. They
+  compute a signature and make **no call at all**, so a 40 MB signed PDF reaches an
+  approver, and a scan reaches the bucket from the browser that has it, without a byte
+  passing through Atlas. Read and put still carry content through a variable for the
+  cases that suit it — a manifest, a CSV, a letter — bounded at one mebibyte, and the
+  bound refuses rather than truncates, because half a PDF passes every format check and
+  is still broken.
+
+  Three things are worth knowing. A listing is a **prefix scan**, because that is what
+  searching an object store means — there is no query language, and a truncated page
+  answers with the key to resume after, so the paging loop is visible in the diagram
+  rather than hidden in an opaque token. A **check** answers whether the object is
+  there instead of raising an incident, so a gateway can branch on it. And a minted
+  link is a **key to that one object for anybody holding it**, stored in the instance's
+  variables like any other value — the default lifetime is an hour, seven days is the
+  most a signature allows, and short is the right answer.
+
+  The access key, the region and an optional session token live in the vault under the
+  Worker's credential reference; a model names the Worker and never carries a key.
+  Object-store tasks run on a worker by default, like every other integration.
 - **A business rule task can call a decision service.** DMN lets a model publish an
   interface over part of its decision graph: a decision service names what it returns,
   what it works out internally, and — the part nothing else can express — which

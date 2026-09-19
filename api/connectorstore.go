@@ -57,7 +57,16 @@ const (
 	// per-tenant address; the field stays an override for an operator behind a proxy.
 	// Only the operation and its values are model-authored.
 	connectorKindDiscord = "discord"
-	connectorKindEntra   = "entra"
+	// connectorKindS3 is the object-store Worker Type
+	// (ADR-draft-s3-object-store-worker): a configured record of this kind resolves to a
+	// live client speaking the S3 API, whose access key — an {accessKeyId,
+	// secretAccessKey, region} bundle, optionally with a sessionToken — is read from the
+	// vault. Unlike Google Sheets and Discord the endpoint *is* meaningful: blank means
+	// AWS at the bundle's region, and anything else is the address of the store the
+	// installation runs, which also decides that its buckets are addressed path-style.
+	// Only the operation and its values are model-authored.
+	connectorKindS3    = "s3"
+	connectorKindEntra = "entra"
 	// connectorKindAD is the Active Directory Worker Type
 	// (ADR-0206). A record holds the directory's LDAP URL
 	// and a credentialsRef naming a vault {bindDN, password} bundle; the model names

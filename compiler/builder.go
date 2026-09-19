@@ -404,6 +404,22 @@ const DiscordJobType = "io.atlas.discord"
 // way the Jira worker uses JiraJobTypeIndex.
 const DiscordJobTypeIndex int32 = 29
 
+// S3JobType is the reserved job type an object-store task carries
+// (ADR-draft-s3-object-store-worker). One job type serves every object operation — put
+// one down, read a small one back, ask whether it is there, list what is under a prefix,
+// copy one, delete one, or mint a time-limited URL somebody can open it with — because
+// they share a bucket, a credential and an error envelope; the operation is a modeled
+// value rather than a reserved index of its own, as it is for Jira (ADR-0201), Google
+// Sheets (ADR-0235) and Discord (ADR-0258).
+const S3JobType = "io.atlas.s3"
+
+// S3JobTypeIndex is the interned index S3JobType is guaranteed to occupy in every
+// compiled process: NewBuilder reserves it thirty-first, so it is always 30. Together
+// with the name it lets a job carry its type as an integer and the in-process S3 worker
+// subscribe by one global index across every deployed process, the same way the Jira
+// worker uses JiraJobTypeIndex.
+const S3JobTypeIndex int32 = 30
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -441,6 +457,7 @@ var reservedJobTypes = []string{
 	AgentJobType,         // 27
 	AiTaskJobType,        // 28
 	DiscordJobType,       // 29
+	S3JobType,            // 30
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -1975,6 +1992,81 @@ func (b *Builder) AddDiscordConnectorTask(cfg DiscordConfig) int32 {
 		DiscordMaxResults: cfg.MaxResults,
 		DiscordFields:     cfg.Fields,
 		Retries:           cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// S3Config is the deploy-time configuration of an object-store task
+// (ADR-draft-s3-object-store-worker). Worker names the configured S3 Worker (whose
+// access key lives server-side, never in the model) and Operation is the object
+// operation. It is read from the task's `connector="…"` attribute, which keeps the
+// pre-ADR-0203 spelling because it is authored in deployed models. The remaining values
+// are the ones that operation takes — literal-or-FEEL values (the parser compiles the
+// FEEL ones) evaluated over the variables the task sees at call time.
+//
+// Encoding, MaxKeys and ExpiresIn are compiled structure rather than authored values,
+// because each decides the *shape* of a call rather than its content and the compiler
+// has already applied their defaults, so the runtime interprets nothing (I5). Metadata
+// are extra request headers as name/literal-or-FEEL pairs. ResultVar, if set, is the
+// process variable what the store returned is written back into.
+type S3Config struct {
+	Worker       string
+	Operation    string
+	Bucket       RestExpr
+	Key          RestExpr
+	Content      RestExpr
+	ContentType  RestExpr
+	Encoding     string
+	Prefix       RestExpr
+	Delimiter    RestExpr
+	StartAfter   RestExpr
+	MaxKeys      int32
+	SourceBucket RestExpr
+	SourceKey    RestExpr
+	ExpiresIn    int32
+	Metadata     []RestKV
+	ResultVar    string
+	Retries      int32
+}
+
+// AddS3ConnectorTask adds an object-store task and returns its element id. Like a
+// service task it creates a job on activation and waits; the job carries the reserved
+// S3JobType so the in-process S3 worker picks it up, evaluates the authored
+// literal-or-FEEL values over the variables the task sees, resolves the named Worker's
+// client, performs the one operation, writes what the store returned into ResultVar
+// (empty = discard it), and completes the job. The access key is resolved server-side
+// from the named Worker, never authored in the model — mirroring Jira, Google Sheets
+// and Discord (ADR-0201/0235/0258).
+//
+// The method keeps the Add*ConnectorTask name its siblings on this Builder carry;
+// renaming that family is its own step of the ADR-0203 migration.
+func (b *Builder) AddS3ConnectorTask(cfg S3Config) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:        b.intern(S3JobType),
+		Connector:      b.intern(cfg.Worker),
+		Subject:        -1, // not a clio task
+		EventType:      -1,
+		ClioQuery:      -1,
+		ReduceSpec:     -1,
+		Method:         -1, // not a REST task
+		ResultVar:      b.intern(cfg.ResultVar),
+		Auth:           -1,
+		S3Op:           b.intern(cfg.Operation),
+		S3Bucket:       cfg.Bucket,
+		S3Key:          cfg.Key,
+		S3Content:      cfg.Content,
+		S3ContentType:  cfg.ContentType,
+		S3Encoding:     b.intern(cfg.Encoding),
+		S3Prefix:       cfg.Prefix,
+		S3Delimiter:    cfg.Delimiter,
+		S3StartAfter:   cfg.StartAfter,
+		S3MaxKeys:      cfg.MaxKeys,
+		S3SourceBucket: cfg.SourceBucket,
+		S3SourceKey:    cfg.SourceKey,
+		S3ExpiresIn:    cfg.ExpiresIn,
+		S3Metadata:     cfg.Metadata,
+		Retries:        cfg.Retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

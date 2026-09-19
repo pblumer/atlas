@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -31,8 +32,8 @@ func registryByJobType(t *testing.T) map[string]releasedKind {
 	byType := make(map[string]releasedKind, len(releasedKinds))
 	for _, k := range releasedKinds {
 		if prev, dup := byType[k.JobType]; dup {
-			t.Errorf("job type %q has two rows in the registry (ADR %d and ADR %d) — one kind, one row",
-				k.JobType, prev.ADR, k.ADR)
+			t.Errorf("job type %q has two rows in the registry (%s and %s) — one kind, one row",
+				k.JobType, citationOf(prev), citationOf(k))
 			continue
 		}
 		byType[k.JobType] = k
@@ -78,17 +79,46 @@ func TestEveryReservedJobTypeIsRegistered(t *testing.T) {
 // Proposed record means the kind is not released yet and owes nothing — which is only a
 // meaningful exemption if the citation is real, so the record has to exist and its
 // status has to be read rather than assumed.
+//
+// A row cites either a numbered record or a draft, and exactly one of the two. The draft
+// case is not a loophole, it is the normal state of a kind on the branch that adds it:
+// ADR-0170 assigns numbers when a record lands on main, so a kind shipping with its own
+// decision has nothing but a slug to cite until then. Both are read the same way — the
+// record must exist and must say Accepted — and the draft half carries one extra rule the
+// numbered half does not need: once the draft file is gone, the record was numbered, and
+// the row has to be updated to say so.
 func TestReleasedKindsCiteAnAcceptedRecord(t *testing.T) {
 	status := adrStatuses(t)
+	drafts := adrDraftStatuses(t)
 	for _, k := range releasedKinds {
-		st, ok := status[k.ADR]
-		if !ok {
-			t.Errorf("%s cites ADR-%04d, which is not a record in docs/adr", k.JobType, k.ADR)
-			continue
-		}
-		if st != "Accepted" {
-			t.Errorf("%s cites ADR-%04d, whose status is %q. A kind that ships is a decision that was taken; "+
-				"either the record is out of date or this row cites the wrong one", k.JobType, k.ADR, st)
+		switch {
+		case k.ADR != 0 && k.Draft != "":
+			t.Errorf("%s cites both ADR-%04d and draft %q; a kind was decided once", k.JobType, k.ADR, k.Draft)
+		case k.ADR == 0 && k.Draft == "":
+			t.Errorf("%s cites no record at all — say which ADR decided it, or which draft does "+
+				"while that record is still in flight (ADR-0167, ADR-0170)", k.JobType)
+		case k.Draft != "":
+			st, ok := drafts[k.Draft]
+			if !ok {
+				t.Errorf("%s cites draft %q, and docs/adr/draft-%s.md does not exist. If the record was just "+
+					"numbered, replace Draft with that number in its ADR field — `make adr-number` rewrites "+
+					"citations in comments, not this row", k.JobType, k.Draft, k.Draft)
+				continue
+			}
+			if st != "Accepted" {
+				t.Errorf("%s cites draft %q, whose status is %q. A kind that ships is a decision that was taken; "+
+					"either the record is out of date or this row cites the wrong one", k.JobType, k.Draft, st)
+			}
+		default:
+			st, ok := status[k.ADR]
+			if !ok {
+				t.Errorf("%s cites ADR-%04d, which is not a record in docs/adr", k.JobType, k.ADR)
+				continue
+			}
+			if st != "Accepted" {
+				t.Errorf("%s cites ADR-%04d, whose status is %q. A kind that ships is a decision that was taken; "+
+					"either the record is out of date or this row cites the wrong one", k.JobType, k.ADR, st)
+			}
 		}
 	}
 }
@@ -246,6 +276,52 @@ func adrStatuses(t *testing.T) map[int]string {
 	}
 	if len(out) == 0 {
 		t.Fatal("no ADR records found; this guard would pass vacuously")
+	}
+	return out
+}
+
+// citationOf renders a row's record for a message, whichever half it cites.
+func citationOf(k releasedKind) string {
+	if k.Draft != "" {
+		return "draft-" + k.Draft
+	}
+	return fmt.Sprintf("ADR-%04d", k.ADR)
+}
+
+var adrDraftFileName = regexp.MustCompile(`^draft-([a-z0-9-]+)\.md$`)
+
+// adrDraftStatuses reads the status of each record still in flight, keyed by slug. It is
+// adrStatuses for the other half of the directory, and it exists because a kind that ships
+// with its own decision has no number to cite yet — see the guard above.
+func adrDraftStatuses(t *testing.T) map[string]string {
+	t.Helper()
+	dir := filepath.Join("..", "docs", "adr")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read docs/adr: %v", err)
+	}
+	statusLine := regexp.MustCompile(`(?m)^- \*\*Status:\*\* (.+)$`)
+	out := map[string]string{}
+	for _, e := range entries {
+		m := adrDraftFileName.FindStringSubmatch(e.Name())
+		if m == nil {
+			continue
+		}
+		body, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			t.Fatalf("read %s: %v", e.Name(), err)
+		}
+		st := statusLine.FindStringSubmatch(string(body))
+		if st == nil {
+			t.Errorf("%s has no status line", e.Name())
+			continue
+		}
+		// "Accepted (amended …)" is Accepted; only the word itself is compared.
+		s := strings.TrimSpace(st[1])
+		if i := strings.Index(s, "("); i >= 0 {
+			s = strings.TrimSpace(s[:i])
+		}
+		out[m[1]] = s
 	}
 	return out
 }

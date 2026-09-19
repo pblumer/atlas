@@ -939,6 +939,52 @@ type ConnectorTaskDetail struct {
 	// (ADR-0253), not this.
 	AgentModel  int32
 	AgentPrompt RestExpr
+	// Object-store fields (JobType == S3JobType, ADR-draft-s3-object-store-worker).
+	// Connector (above) names the configured S3 Worker — the field keeps that name
+	// because the BPMN attribute it is read from does; its access key lives in the
+	// Worker store and the vault, never in a model. S3Op is the interned operation
+	// ("put-object"|"get-object"|"head-object"|"list-objects"|"copy-object"|
+	// "delete-object"|"presign-get"|"presign-put"), and it decides which of the rest are
+	// populated; the compiler refuses a value on an operation that does not use it, so a
+	// field can never be quietly ignored at call time.
+	//
+	// S3Bucket addresses the bucket every operation acts in and S3Key the one object the
+	// seven object-level operations address — a listing has no key, because it addresses
+	// S3Prefix instead. S3Content is the document a put writes and S3ContentType what
+	// those bytes are, which a presigned upload also *binds*: a client using that URL
+	// must send the same type.
+	//
+	// S3Prefix, S3Delimiter, S3StartAfter and S3MaxKeys are a listing's shape — what to
+	// match, how to roll it up at a separator, where to resume from, and how much to
+	// answer with. S3SourceBucket and S3SourceKey are what a copy copies from, which is
+	// how a document moves between prefixes without its bytes entering this process.
+	// S3ExpiresIn is a presigned URL's lifetime in seconds.
+	//
+	// S3Encoding, S3MaxKeys and S3ExpiresIn are compiled structure rather than authored
+	// values, because each decides the shape of a call rather than its content and a
+	// shape that differed per token would not be one; the compiler has already applied
+	// their defaults, so the runtime interprets nothing (I5). S3Metadata are extra
+	// request headers as name/literal-or-FEEL pairs — user metadata under
+	// x-amz-meta-<name>, or an x-amz-* header sent as itself, which is how a model
+	// reaches server-side encryption or a storage class.
+	//
+	// Each RestExpr is a literal-or-FEEL value evaluated over the variables the task
+	// sees at call time; all are the zero value for a non-S3 task. ResultVar (above)
+	// receives what the store returned, for the operations that return anything.
+	S3Op           int32
+	S3Bucket       RestExpr
+	S3Key          RestExpr
+	S3Content      RestExpr
+	S3ContentType  RestExpr
+	S3Encoding     int32
+	S3Prefix       RestExpr
+	S3Delimiter    RestExpr
+	S3StartAfter   RestExpr
+	S3MaxKeys      int32
+	S3SourceBucket RestExpr
+	S3SourceKey    RestExpr
+	S3ExpiresIn    int32
+	S3Metadata     []RestKV
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a

@@ -128,6 +128,11 @@ var connectorCompilers = []connectorCompiler{
 		retries: func(st xmlServiceTask) string { return st.Discord.Retries },
 		compile: compileDiscordConnectorTask,
 	},
+	{
+		present: func(st xmlServiceTask) bool { return st.S3 != nil },
+		retries: func(st xmlServiceTask) string { return st.S3.Retries },
+		compile: compileS3ConnectorTask,
+	},
 }
 
 // The directory-file formats and directions a model can author. They are spelled here
@@ -2275,4 +2280,284 @@ func compileAgentConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 		ResultVar: result,
 		Retries:   retries,
 	}), nil
+}
+
+// The content encodings and the numeric ceilings an object-store task may author. They
+// are spelled here as well as in connector/s3 because the compiler cannot import that
+// package (the dependency runs the other way); the drift test
+// TestS3OpsMatchTheWorkerType guards the seam.
+//
+// Text is the default because a process writing JSON, CSV or a letter into a bucket
+// wants the characters it composed; base64 is what makes a binary round-trip through a
+// process variable possible at all.
+const (
+	s3EncodingText   = "text"
+	s3EncodingBase64 = "base64"
+
+	// s3DefaultExpiresIn and s3MaxExpiresIn bound a presigned URL's lifetime: an hour by
+	// default, and SigV4's own ceiling of seven days. A longer one is refused by the
+	// store with a message about the signature rather than about the expiry, which is
+	// why it is refused here instead.
+	s3DefaultExpiresIn int32 = 3600
+	s3MaxExpiresIn     int32 = 7 * 24 * 60 * 60
+
+	// s3DefaultMaxKeys and s3MaxListPageSize bound a listing. Asking the store for more
+	// than a thousand is not an error there — it silently answers with a thousand — and
+	// a model that says one number while another happens is exactly what a deploy check
+	// is for.
+	s3DefaultMaxKeys  int32 = 1000
+	s3MaxListPageSize int32 = 1000
+)
+
+// s3Op describes what one object operation requires of a model, and what it is allowed
+// to carry. The table is the compiler's half of connector/s3's Ops table; the drift test
+// TestS3OpsMatchTheWorkerType keeps the two from disagreeing about the operation set,
+// which is the failure this shape exists to prevent.
+//
+// Both halves matter. "Needs" is the familiar one: a put with no content cannot be sent.
+// "Takes" is the half that is easy to forget and expensive to have forgotten — a prefix
+// authored on a put, or an expiry on a delete, would otherwise compile and then be
+// silently dropped at call time, which from the author's side is indistinguishable from
+// a Worker that ignored it.
+type s3Op struct {
+	needsBucket      bool
+	needsKey         bool
+	needsContent     bool
+	takesContentType bool
+	takesEncoding    bool
+	takesList        bool
+	needsSource      bool
+	takesExpiry      bool
+	takesMetadata    bool
+	// needsResult marks an operation whose whole point is what it returns: a read or a
+	// presign that discards its answer is a call made for nothing. takesResult marks one
+	// that returns something a model may keep or discard — and, by its absence,
+	// delete-object, where a result variable would name a value that is never written.
+	needsResult bool
+	takesResult bool
+}
+
+// s3Ops is the operation table: the loop a process actually runs against an object store
+// — put a document down, find it again, look at it, hand it out, move it when the case
+// closes, and take it away. It mirrors connector/s3.Ops, which the drift test keeps
+// honest.
+var s3Ops = map[string]s3Op{
+	"put-object":    {needsBucket: true, needsKey: true, needsContent: true, takesContentType: true, takesEncoding: true, takesMetadata: true, takesResult: true},
+	"get-object":    {needsBucket: true, needsKey: true, takesEncoding: true, needsResult: true, takesResult: true},
+	"head-object":   {needsBucket: true, needsKey: true, needsResult: true, takesResult: true},
+	"list-objects":  {needsBucket: true, takesList: true, needsResult: true, takesResult: true},
+	"copy-object":   {needsBucket: true, needsKey: true, needsSource: true, takesMetadata: true, takesResult: true},
+	"delete-object": {needsBucket: true, needsKey: true},
+	"presign-get":   {needsBucket: true, needsKey: true, takesExpiry: true, needsResult: true, takesResult: true},
+	"presign-put":   {needsBucket: true, needsKey: true, takesExpiry: true, takesContentType: true, needsResult: true, takesResult: true},
+}
+
+// s3OpNames lists the operations, sorted, for the messages that have to say what was
+// expected.
+func s3OpNames() []string {
+	out := make([]string, 0, len(s3Ops))
+	for name := range s3Ops {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// compileS3ConnectorTask compiles an <atlas:s3Connector> task: one object operation
+// against a Worker an operator configured, via the job path
+// (ADR-draft-s3-object-store-worker). The access key is resolved server-side by Worker
+// name, like Jira's and Google Sheets'; only the operation and its values live in the
+// model.
+//
+// The element and the function keep the …Connector spelling their siblings carry: the
+// element is authored in deployed models, and the moddle drift guard that keeps bpmn-js
+// from silently dropping an extension only recognizes elements named that way.
+func compileS3ConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
+	cn := st.S3
+	if strings.TrimSpace(cn.Connector) == "" {
+		return 0, fmt.Errorf("compiler: s3 task %q needs a connector attribute naming the Worker the server holds the access key under", st.Id)
+	}
+	op := strings.ToLower(strings.TrimSpace(cn.Operation))
+	if op == "" {
+		return 0, fmt.Errorf("compiler: s3 task %q needs an operation (%s)", st.Id, strings.Join(s3OpNames(), ", "))
+	}
+	spec, ok := s3Ops[op]
+	if !ok {
+		return 0, fmt.Errorf("compiler: s3 task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(s3OpNames(), ", "))
+	}
+	// One pass over every authored value: required where the operation needs it, refused
+	// where it does not use it. A single table means neither half can be forgotten for a
+	// field, and an added field is one row rather than two checks in two places. noun is
+	// how the "needs" message reads; attr is the attribute the "does not use" message
+	// names, because those are the two different things an author has to be told.
+	values := []struct {
+		attr     string
+		noun     string
+		raw      string
+		required bool
+		allowed  bool
+	}{
+		{"bucket", "a bucket", cn.Bucket, spec.needsBucket, spec.needsBucket},
+		{"key", "a key", cn.Key, spec.needsKey, spec.needsKey},
+		{"content", "content to store", cn.Content, spec.needsContent, spec.needsContent},
+		{"contentType", "a contentType", cn.ContentType, false, spec.takesContentType},
+		{"encoding", "an encoding", cn.Encoding, false, spec.takesEncoding},
+		{"prefix", "a prefix", cn.Prefix, false, spec.takesList},
+		{"delimiter", "a delimiter", cn.Delimiter, false, spec.takesList},
+		{"startAfter", "a startAfter", cn.StartAfter, false, spec.takesList},
+		{"maxKeys", "a maxKeys", cn.MaxKeys, false, spec.takesList},
+		{"sourceBucket", "a source bucket", cn.SourceBucket, spec.needsSource, spec.needsSource},
+		{"sourceKey", "a source key", cn.SourceKey, spec.needsSource, spec.needsSource},
+		{"expiresIn", "an expiresIn", cn.ExpiresIn, false, spec.takesExpiry},
+		{"resultVariable", "a resultVariable", cn.ResultVariable, spec.needsResult, spec.takesResult},
+	}
+	for _, v := range values {
+		set := strings.TrimSpace(v.raw) != ""
+		if v.required && !set {
+			return 0, fmt.Errorf("compiler: s3 task %q operation %q needs %s (%s)",
+				st.Id, op, v.noun, s3Why(v.attr))
+		}
+		if set && !v.allowed {
+			return 0, fmt.Errorf("compiler: s3 task %q operation %q does not use %s (%s); remove it rather than leaving a value the Worker ignores",
+				st.Id, op, v.attr, s3Why(v.attr))
+		}
+	}
+	if len(cn.Meta) > 0 && !spec.takesMetadata {
+		return 0, fmt.Errorf("compiler: s3 task %q operation %q sends no request headers, so it does not use s3Meta values; remove them rather than leaving values the Worker ignores", st.Id, op)
+	}
+	meta, err := httpKVList(b.gate(), st.Id, "s3 metadata", cn.Meta)
+	if err != nil {
+		return 0, err
+	}
+	encoding, err := s3Encoding(st.Id, op, cn.Encoding, spec.takesEncoding)
+	if err != nil {
+		return 0, err
+	}
+	maxKeys, err := s3Count(st.Id, op, "maxKeys", cn.MaxKeys, spec.takesList, s3DefaultMaxKeys, s3MaxListPageSize)
+	if err != nil {
+		return 0, err
+	}
+	expiresIn, err := s3Count(st.Id, op, "expiresIn", cn.ExpiresIn, spec.takesExpiry, s3DefaultExpiresIn, s3MaxExpiresIn)
+	if err != nil {
+		return 0, err
+	}
+	cfg := S3Config{
+		Worker:    strings.TrimSpace(cn.Connector),
+		Operation: op,
+		Encoding:  encoding,
+		MaxKeys:   maxKeys,
+		ExpiresIn: expiresIn,
+		Metadata:  meta,
+		ResultVar: strings.TrimSpace(cn.ResultVariable),
+		Retries:   retries,
+	}
+	// Each authored value is literal or FEEL (the fx toggle, ADR-0067), compiled once
+	// here and evaluated over the variables the task sees at call time.
+	for _, v := range []struct {
+		what string
+		raw  string
+		into *RestExpr
+	}{
+		{"bucket", cn.Bucket, &cfg.Bucket},
+		{"key", cn.Key, &cfg.Key},
+		{"content", cn.Content, &cfg.Content},
+		{"contentType", cn.ContentType, &cfg.ContentType},
+		{"prefix", cn.Prefix, &cfg.Prefix},
+		{"delimiter", cn.Delimiter, &cfg.Delimiter},
+		{"startAfter", cn.StartAfter, &cfg.StartAfter},
+		{"sourceBucket", cn.SourceBucket, &cfg.SourceBucket},
+		{"sourceKey", cn.SourceKey, &cfg.SourceKey},
+	} {
+		if strings.TrimSpace(v.raw) == "" {
+			continue
+		}
+		val, err := connectorValue(b.gate(), st.Id, "s3", v.what, v.raw)
+		if err != nil {
+			return 0, err
+		}
+		*v.into = val
+	}
+	return b.AddS3ConnectorTask(cfg), nil
+}
+
+// s3Why explains one attribute, so both halves of the check above — the missing value
+// and the ignored one — say the same thing about it in one place.
+func s3Why(attr string) string {
+	switch attr {
+	case "bucket":
+		return "the bucket the operation acts in"
+	case "key":
+		return "the object's key — its whole path inside the bucket, without a leading slash"
+	case "content":
+		return "the document to store, as text or base64"
+	case "contentType":
+		return "what the bytes are; on presign-put it also binds the type the client must send"
+	case "encoding":
+		return `whether content is read and written as text ("text") or base64 ("base64")`
+	case "prefix":
+		return "the start of the keys a listing matches, which is what searching an object store means"
+	case "delimiter":
+		return `the separator a listing rolls keys up at ("/" makes it read like a folder)`
+	case "startAfter":
+		return "the key a listing resumes after, which a truncated page answers with"
+	case "maxKeys":
+		return "how many keys a listing may return"
+	case "sourceBucket":
+		return "the bucket the object is copied from"
+	case "sourceKey":
+		return "the key the object is copied from"
+	case "expiresIn":
+		return "how many seconds the minted URL stays usable"
+	default:
+		return "the process variable receiving what the store returned"
+	}
+}
+
+// s3Encoding reads the content encoding, applying the default when a model authors none
+// so the runtime interprets nothing (I5). Anything that is neither text nor base64 is
+// refused at deploy rather than read as the default at call time, where the difference
+// is a PDF stored as the characters of its base64.
+func s3Encoding(taskID, op, raw string, takes bool) (string, error) {
+	if !takes {
+		return "", nil
+	}
+	switch mode := strings.ToLower(strings.TrimSpace(raw)); mode {
+	case "":
+		return s3EncodingText, nil
+	case s3EncodingText, s3EncodingBase64:
+		return mode, nil
+	default:
+		return "", fmt.Errorf("compiler: s3 task %q operation %q has an unknown encoding %q (want %q or %q)",
+			taskID, op, raw, s3EncodingText, s3EncodingBase64)
+	}
+}
+
+// s3Count reads one of the two numeric ceilings an operation may author, applying the
+// default when a model authors none. A value that is not a number, is not positive, or
+// is past what the store honours is refused at deploy rather than turned into a silently
+// different call — a maxKeys of ten thousand is answered with a thousand and no
+// complaint, and an expiry past seven days is answered with a signature error that says
+// nothing about expiry.
+//
+// The two share a function because they are the same check with different numbers, and
+// two copies is how one of them later grows a rule the other does not.
+func s3Count(taskID, op, attr, raw string, takes bool, def, max int32) (int32, error) {
+	if !takes {
+		return 0, nil
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return def, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("compiler: s3 task %q operation %q has a non-numeric %s %q", taskID, op, attr, raw)
+	}
+	if n <= 0 {
+		return 0, fmt.Errorf("compiler: s3 task %q operation %q has a %s of %d; it must be positive", taskID, op, attr, n)
+	}
+	if int32(n) > max {
+		return 0, fmt.Errorf("compiler: s3 task %q operation %q has a %s of %d, and the most that takes effect is %d", taskID, op, attr, n, max)
+	}
+	return int32(n), nil
 }

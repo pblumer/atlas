@@ -67,6 +67,7 @@ import (
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
+	"github.com/pblumer/atlas/connector/s3"
 	"github.com/pblumer/atlas/connector/scim"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/connector/sharepoint"
@@ -539,6 +540,11 @@ type Server struct {
 	// every change to it, with each Worker's bot token resolved from the vault
 	// (ADR-0041). Read only while driving jobs on the run loop, so it needs no lock.
 	discordRegistry *discord.Registry
+	// s3Registry resolves a Worker name to an S3 API client for object-store tasks
+	// (ADR-draft-s3-object-store-worker). Built from the Worker store at startup and
+	// rebuilt on every change; a task naming a Worker that is not in it parks with the
+	// reason (ADR-0158). The access key lives here and in the vault, never in a model.
+	s3Registry *s3.Registry
 
 	// inboundSubs holds the operator-configured clio inbound subscriptions the
 	// inbound bridge polls (ADR-0075). Owned by the run-loop goroutine. inboundPoll

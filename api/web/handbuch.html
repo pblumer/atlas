@@ -5996,6 +5996,64 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
       </div>
 
+      <div class="card" id="runbook-s3">
+        <h4 data-l="de">S3-Objektspeicher</h4><h4 data-l="en">S3 object storage</h4>
+        <p data-l="de">Der Typ, bei dem die eine Entscheidung vor allen anderen steht: Sollen die Bytes durch Atlas
+          laufen oder nicht? Für alles ausser kleinen Textdokumenten lautet die Antwort nein – und dafür gibt es die
+          beiden Link-Operationen.</p>
+        <p data-l="en">The type where one decision comes before all the others: should the bytes pass through Atlas
+          or not? For anything but small text documents the answer is no – which is what the two link operations are
+          for.</p>
+        <ol>
+          <li data-l="de"><b>Bucket anlegen</b> – bei AWS S3, MinIO, Ceph, Garage, Cloudflare R2 oder was die
+            Installation betreibt – und die <b>Region</b> notieren. Selbst betriebene Speicher ohne Regionen
+            antworten üblicherweise auf <code>us-east-1</code>.</li>
+          <li data-l="en"><b>Create the bucket</b> – at AWS S3, MinIO, Ceph, Garage, Cloudflare R2 or whatever the
+            installation runs – and note its <b>region</b>. Self-hosted stores that have no regions commonly answer
+            to <code>us-east-1</code>.</li>
+          <li data-l="de"><b>Zugriffsschlüssel erzeugen:</b> <b>AWS-Konsole → IAM → Benutzer → Sicherheitsanmeldedaten
+            → Zugriffsschlüssel erstellen</b>, oder <b>MinIO-Konsole → Access Keys → Create</b>. Nur die Rechte
+            vergeben, die die Prozesse brauchen: <code>s3:GetObject</code>, <code>s3:PutObject</code>,
+            <code>s3:ListBucket</code> und – wo ein Prozess löscht – <code>s3:DeleteObject</code>.</li>
+          <li data-l="en"><b>Issue an access key:</b> <b>AWS console → IAM → Users → Security credentials → Create
+            access key</b>, or <b>MinIO console → Access Keys → Create</b>. Grant only the actions the processes
+            need: <code>s3:GetObject</code>, <code>s3:PutObject</code>, <code>s3:ListBucket</code>, and
+            <code>s3:DeleteObject</code> where a process removes anything.</li>
+          <li data-l="de">Secret anlegen, z.&nbsp;B. <code>s3_archiv</code>:
+            <code>{"accessKeyId": "…", "secretAccessKey": "…", "region": "eu-central-1"}</code>. Stammt der Schlüssel
+            von STS, kommt <code>"sessionToken"</code> dazu. Die Region gehört ins Bundle, weil die Signatur mit ihr
+            gerechnet wird.</li>
+          <li data-l="en">Create a secret, e.g. <code>s3_archiv</code>:
+            <code>{"accessKeyId": "…", "secretAccessKey": "…", "region": "eu-central-1"}</code>. Add
+            <code>"sessionToken"</code> if the key came from STS. The region belongs in the bundle because the
+            signature is computed with it.</li>
+          <li data-l="de">Worker anlegen: Typ <b>S3-Objektspeicher</b>, ein Name, Credential-Referenz
+            <code>s3_archiv</code>. <b>Endpoint bei AWS leer lassen</b>; bei jedem anderen Speicher dessen Basis-URL
+            eintragen (<code>https://minio.example:9000</code>) – genau das sagt Atlas auch, dass die Buckets im Pfad
+            adressiert werden und nicht im Hostnamen.</li>
+          <li data-l="en">Create the worker: type <b>S3 object storage</b>, a name, credential reference
+            <code>s3_archiv</code>. <b>Leave the endpoint empty for AWS</b>; for any other store enter its base URL
+            (<code>https://minio.example:9000</code>) – which is also what tells Atlas to address buckets in the path
+            rather than in the hostname.</li>
+          <li data-l="de">Ausprobieren mit einer <b>Check object</b>-Aufgabe auf einem bekannten Key:
+            <code>=datei.exists</code> antwortet, ohne das Objekt lesen zu müssen, also zeigt sich ein falsches Recht
+            als Fehler und nicht als leeres Ergebnis.</li>
+          <li data-l="en">Try it with a <b>Check object</b> task on a key you know: <code>=datei.exists</code> answers
+            without having to read the object, so a wrong permission shows up as an error rather than as an empty
+            result.</li>
+        </ol>
+        <p data-l="de"><b>Die Falle:</b> Ein Dokument über <b>1 MiB</b> passt in keine Prozessvariable – das ist die
+          Obergrenze der Variablen, keine Einstellung. <b>Link to download</b> erzeugt stattdessen eine signierte URL,
+          und die Bytes gehen direkt vom Speicher zu dem, der sie öffnet. Halte die Gültigkeit kurz: Diese URL öffnet
+          genau dieses Objekt für jeden, der sie hat, und sie steht wie jeder andere Wert in den Variablen der
+          Instanz.</p>
+        <p data-l="en"><b>The trap:</b> a document over <b>1 MiB</b> fits in no process variable – that is the
+          variable's ceiling, not a setting. <b>Link to download</b> mints a signed URL instead, and the bytes go
+          straight from the store to whoever opens it. Keep the lifetime short: that URL opens that one object for
+          anybody holding it, and it sits in the instance's variables like any other value.</p>
+        <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
+      </div>
+
       <div class="card" id="runbook-ai">
         <h4 data-l="de">KI-Worker (Sprachmodell)</h4><h4 data-l="en">AI worker (language model)</h4>
         <p data-l="de">Ein Konto beim Modellanbieter, ein Schlüssel, ein Standardmodell – mehr braucht es nicht.

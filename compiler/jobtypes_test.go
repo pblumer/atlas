@@ -43,6 +43,7 @@ func TestReservedJobTypesMatchTheirIndices(t *testing.T) {
 		AgentJobType:         AgentJobTypeIndex,
 		AiTaskJobType:        AiTaskJobTypeIndex,
 		DiscordJobType:       DiscordJobTypeIndex,
+		S3JobType:            S3JobTypeIndex,
 	}
 
 	reserved := ReservedJobTypes()

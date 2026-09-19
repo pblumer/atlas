@@ -2,6 +2,53 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-process-can-put-a-document-in-a-bucket-find-it-again-and-h",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A process can file a document and hand out a link to it",
+        "de": "Ein Prozess kann ein Dokument ablegen und einen Link darauf herausgeben"
+      },
+      "summary": {
+        "en": "Processes produce and consume documents — a generated letter, a scan, an export, an invoice — and Atlas had nowhere to put one: a process variable holds a mebibyte and keeps it in the event log forever. There is now an S3 object storage Worker Type, for AWS S3 and just as much for MinIO, Ceph, Garage, R2 or Wasabi. Eight steps a process takes: put an object, read a small one back, check whether it is there, list what is under a prefix, copy, delete, and mint a time-limited link to download or to upload. The two link operations are the point: they compute a signature and make no call, so a 40 MB PDF reaches an approver and a scan reaches the bucket straight from the browser, without a byte passing through Atlas. The access key and its region live in the vault; a model names the Worker and never carries a key. Keep a minted link short-lived — it opens that one object for anybody holding it, and it sits in the instance's variables like any other value.",
+        "de": "Prozesse erzeugen und verarbeiten Dokumente — ein erzeugtes Schreiben, ein Scan, ein Export, eine Rechnung — und Atlas hatte keinen Ort dafür: Eine Prozessvariable fasst ein Mebibyte und behält es dauerhaft im Event-Log. Es gibt jetzt eine Worker-Art S3-Objektspeicher, für AWS S3 und ebenso für MinIO, Ceph, Garage, R2 oder Wasabi. Acht Schritte, die ein Prozess wirklich geht: Objekt ablegen, ein kleines zurücklesen, prüfen, ob es da ist, unter einem Präfix auflisten, kopieren, löschen sowie einen befristeten Link zum Herunterladen oder Hochladen erzeugen. Die beiden Link-Operationen sind der Kern: Sie berechnen eine Signatur und rufen gar nichts auf — ein 40-MB-PDF erreicht so den Genehmiger und ein Scan den Bucket direkt aus dem Browser, ohne dass ein einziges Byte durch Atlas läuft. Zugriffsschlüssel und Region liegen im Vault; das Modell nennt nur den Worker und trägt nie einen Schlüssel. Halten Sie die Gültigkeit eines Links kurz: Er öffnet genau dieses Objekt für jeden, der ihn hat, und steht wie jeder andere Wert in den Variablen der Instanz."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Workers",
+        "Modeler"
+      ],
+      "tutorial": {
+        "en": [
+          "Create the bucket at your store and note its region. Self-hosted stores that have no regions commonly answer to us-east-1.",
+          "Issue an access key scoped to that bucket — AWS console › IAM › Users › Security credentials › Create access key, or MinIO console › Access Keys › Create — with only the actions your processes need.",
+          "Under Console › Secrets, store it as {\"accessKeyId\": \"…\", \"secretAccessKey\": \"…\", \"region\": \"eu-central-1\"}. Add \"sessionToken\" as well if the key came from STS.",
+          "Under Console › Workers, add a Worker of kind S3 object storage with that credential reference. Leave the endpoint empty for AWS; for any other store enter its base URL, e.g. https://minio.example:9000.",
+          "In the Modeler, drop a service task, pick S3 Object Storage and choose Put object. Bucket and key take FEEL, so a key like =\"faelle/\" + vorgang.nummer + \"/antrag.pdf\" files the document under its case.",
+          "To let a person open it later, add a second task with Link to download on the same key and put =datei.url into a user task or a mail. For anything above a mebibyte this is the only way — Read object refuses rather than truncating."
+        ],
+        "de": [
+          "Legen Sie den Bucket bei Ihrem Speicher an und notieren Sie dessen Region. Selbst betriebene Speicher ohne Regionen antworten üblicherweise auf us-east-1.",
+          "Erzeugen Sie einen auf diesen Bucket beschränkten Zugriffsschlüssel — AWS-Konsole › IAM › Benutzer › Sicherheitsanmeldedaten › Zugriffsschlüssel erstellen, oder MinIO-Konsole › Access Keys › Create — nur mit den Rechten, die Ihre Prozesse brauchen.",
+          "Hinterlegen Sie ihn unter Console › Secrets als {\"accessKeyId\": \"…\", \"secretAccessKey\": \"…\", \"region\": \"eu-central-1\"}. Stammt der Schlüssel von STS, kommt \"sessionToken\" dazu.",
+          "Legen Sie unter Console › Workers einen Worker der Art S3-Objektspeicher mit dieser Credential-Referenz an. Den Endpoint lassen Sie bei AWS leer; bei jedem anderen Speicher tragen Sie dessen Basis-URL ein, z. B. https://minio.example:9000.",
+          "Ziehen Sie im Modeler einen Service-Task auf, wählen Sie S3-Objektspeicher und dann „Objekt ablegen\". Bucket und Key nehmen FEEL: Ein Key wie =\"faelle/\" + vorgang.nummer + \"/antrag.pdf\" legt das Dokument unter seinem Vorgang ab.",
+          "Damit es später jemand öffnen kann, hängen Sie einen zweiten Task mit „Link zum Herunterladen\" auf denselben Key an und setzen =datei.url in einen User-Task oder eine Mail. Oberhalb eines Mebibyte ist das der einzige Weg — „Objekt lesen\" verweigert, statt abzuschneiden."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Workers öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
       "id": "a-business-rule-task-can-call-a-decision-service",
       "version": "Unreleased",
       "date": null,
@@ -417,24 +464,6 @@
       "summary": {
         "en": "\"Meine Aufträge\" already listed each position and what it was doing, out of the order's own record, and that stays the answer for every reader.",
         "de": "\"Meine Aufträge\" already listed each position and what it was doing, out of the order's own record, and that stays the answer for every reader."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "one-product-may-be-ordered-in-two-shapes-at-once",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "One product may be ordered in two shapes at once.",
-        "de": "One product may be ordered in two shapes at once."
-      },
-      "summary": {
-        "en": "The catalogue describes the same service pulled in twice in different variants as a conflict the orderer resolves, and keeping both is a resolution — a black phone and a silver one.",
-        "de": "The catalogue describes the same service pulled in twice in different variants as a conflict the orderer resolves, and keeping both is a resolution — a black phone and a silver one."
       },
       "link": {
         "label": "Changelog",

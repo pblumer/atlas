@@ -3894,6 +3894,129 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
+    id: "s3", name: "S3 Object Storage", group: "Files",
+    desc: "Put a document in a bucket, find it again by prefix, and hand somebody a link that opens it",
+    icon: "S",
+    // A bucket on storage grey: the thing an object goes into, which is what this Worker
+    // Type is about — its counterpart to Jira's ticked issue and Sheets' grid. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the fill
+    // and the white marks.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#3f7f6e"/><path d="M3.6 4.6h8.8l-.9 7a1.2 1.2 0 0 1-1.2 1H5.7a1.2 1.2 0 0 1-1.2-1z" fill="#fff"/><ellipse cx="8" cy="4.6" rx="4.4" ry="1.3" fill="#fff"/><ellipse cx="8" cy="4.6" rx="2.6" ry=".7" fill="#3f7f6e"/></svg>`,
+    ext: "atlas:S3Connector",
+    fields: [
+      { group: "S3 worker" },
+      { key: "connector", label: "Worker", datalist: "s3", placeholder: "archiv", hint: "The configured S3 Worker this task acts as, by the name it has under Workers in the Console. Its access key and region live on the server, never in the model." },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "put-object", l: "Put object" },
+          { v: "get-object", l: "Read object" },
+          { v: "head-object", l: "Check object" },
+          { v: "list-objects", l: "List objects" },
+          { v: "copy-object", l: "Copy object" },
+          { v: "delete-object", l: "Delete object" },
+          { v: "presign-get", l: "Link to download" },
+          { v: "presign-put", l: "Link to upload" },
+        ],
+      },
+      {
+        key: "bucket", label: "Bucket", placeholder: "rechnungen", fx: true,
+        hint: "The bucket this task acts in — one name, never a path. May be a FEEL expression (fx).",
+      },
+      {
+        key: "key", label: "Key", placeholder: "=\"faelle/\" + vorgang.nummer + \"/antrag.pdf\"", fx: true,
+        showIf: (v) => v.operation && v.operation !== "list-objects",
+        hint: "The object's whole path inside the bucket, without a leading slash. Usually a FEEL expression (fx) built from the case it belongs to. Note that a retry re-runs this task with the same variables, so a key built from a timestamp or a random value writes a second object instead of overwriting the first.",
+      },
+      {
+        key: "content", label: "Content", placeholder: "=antwort", fx: true,
+        showIf: (v) => v.operation === "put-object",
+        hint: "What to store. It travels through a process variable, so it is capped at 1 MiB — for anything larger use Link to upload and let the browser that has the document send it straight to the store.",
+      },
+      {
+        key: "encoding", label: "Content is", type: "select",
+        options: [{ v: "", l: "Text — the characters as they are" }, { v: "base64", l: "Base64 — decode it before storing" }],
+        showIf: (v) => v.operation === "put-object" || v.operation === "get-object",
+        hint: "Text is right for JSON, CSV, XML and a letter. Base64 is what a binary needs to survive a process variable at all, and what a form's uploaded file already is. On a read it decides the same thing in reverse.",
+      },
+      {
+        key: "contentType", label: "Content type", placeholder: "application/pdf", fx: true,
+        showIf: (v) => v.operation === "put-object" || v.operation === "presign-put",
+        hint: (v) => (v.operation === "presign-put"
+          ? "Optional, and stronger than it looks: a type set here is bound into the URL, so whoever uploads must send exactly this one. That is what stops a link minted for a PDF being used to store something else."
+          : "What the bytes are, e.g. application/pdf or text/csv. Without it the store guesses, and a browser opening the object later downloads it instead of showing it."),
+      },
+      {
+        key: "prefix", label: "Prefix", placeholder: "=\"faelle/\" + vorgang.nummer + \"/\"", fx: true,
+        showIf: (v) => v.operation === "list-objects",
+        hint: "Only keys that start with this are listed — which is what searching an object store means, because S3 has no query language. May be a FEEL expression (fx).",
+      },
+      {
+        key: "delimiter", label: "Delimiter", placeholder: "/",
+        showIf: (v) => v.operation === "list-objects",
+        hint: "Optional. Keys sharing a segment are rolled up into common prefixes instead of listed one by one, so \"/\" makes a listing read like a folder. They come back in the result's prefixes.",
+      },
+      {
+        key: "startAfter", label: "Start after", placeholder: "=seite.nextStartAfter", fx: true,
+        showIf: (v) => v.operation === "list-objects",
+        hint: "Optional. Resumes after this key, exclusive. A truncated page answers with nextStartAfter, so passing it back here is how a loop pages a prefix forward without re-reading what it already has.",
+      },
+      {
+        key: "maxKeys", label: "Maximum keys", placeholder: "1000",
+        showIf: (v) => v.operation === "list-objects",
+        hint: "Caps what may land in the result variable. Empty uses 1000, which is also the most the store returns in one call; a larger value is refused at deploy rather than silently answered with 1000.",
+      },
+      {
+        key: "sourceBucket", label: "From bucket", placeholder: "eingang", fx: true,
+        showIf: (v) => v.operation === "copy-object",
+        hint: "The bucket the object is copied from. The copy happens inside the store, so the bytes never pass through Atlas — which is what makes archiving a large document a step a process can take.",
+      },
+      {
+        key: "sourceKey", label: "From key", placeholder: "=eingang.key", fx: true,
+        showIf: (v) => v.operation === "copy-object",
+        hint: "The key the object is copied from. May be a FEEL expression (fx), e.g. the key an earlier List objects found.",
+      },
+      {
+        key: "expiresIn", label: "Valid for (seconds)", placeholder: "3600",
+        showIf: (v) => v.operation === "presign-get" || v.operation === "presign-put",
+        hint: "How long the link works. Empty uses one hour; seven days is the most the signature allows. Keep it short: the URL is a key to that one object for anyone who has it, and it lands in a process variable like any other value.",
+      },
+      {
+        key: "meta", label: "Metadata & headers", type: "map", childType: "atlas:S3Meta", fx: true,
+        showIf: (v) => v.operation === "put-object" || v.operation === "copy-object",
+        hint: "Extra request headers. A plain name becomes user metadata on the object (x-amz-meta-<name>), which is where a case number belongs; a name starting with x-amz- is sent as itself, which is how you reach server-side encryption or a storage class. On a copy these replace the source's metadata rather than adding to it — the store offers no third option.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable",
+        resultType: () => "object",
+        placeholder: "datei",
+        // Delete is the one operation the store answers with 204 No Content, so a result
+        // variable there would name a value that is never written — the panel hides it
+        // rather than letting an author expect one (the compiler refuses it too).
+        showIf: (v) => v.operation && v.operation !== "delete-object",
+        hint: (v) => {
+          switch (v.operation) {
+            case "list-objects":
+              return "The page lands here: =seite.objects is the list (1-based, so the first is =seite.objects[1].key), =seite.prefixes the rolled-up folders, =seite.truncated whether there is more, and =seite.nextStartAfter where to carry on.";
+            case "get-object":
+              return "The document lands in =datei.content, with =datei.contentType and =datei.size beside it. An object larger than 1 MiB fails the task rather than arriving cut short — use Link to download for those.";
+            case "head-object":
+              return "Whether the object is there is =datei.exists, and when it is, =datei.size, =datei.contentType and =datei.lastModified come with it. A missing object is an answer here, not an incident.";
+            case "presign-get":
+            case "presign-put":
+              return "The link lands in =datei.url, with =datei.expiresAt beside it. Put it in a user task, a mail or a message — whoever opens it reaches the store directly, so the document never passes through Atlas.";
+            case "copy-object":
+              return "The copy's identity lands here: =datei.key, =datei.etag and the source it came from. Leave empty to discard it.";
+            default:
+              return "The stored object's identity lands here — =datei.etag, and =datei.versionId on a versioned bucket. Leave empty to discard it.";
+          }
+        },
+      },
+    ],
+  },
+  {
     id: "aitask", name: "AI Task", group: "Applications",
     desc: "Ask a language model one question and put the answer in a process variable",
     icon: "A",

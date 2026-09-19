@@ -11,6 +11,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/mail"
+	"github.com/pblumer/atlas/connector/s3"
 	"github.com/pblumer/atlas/logging"
 )
 
@@ -209,7 +210,14 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// configuration and lives in the Worker store and the vault
 		// (ADR-0258), so a supervised worker holding neither could serve
 		// no Discord task at all.
-		connectorKindDiscord:  s.discordWorkerEnv,
+		connectorKindDiscord: s.discordWorkerEnv,
+		// S3 is provisioned for Discord's reason with one field more: the access key is
+		// the whole identity and lives in the Worker store and the vault
+		// (ADR-draft-s3-object-store-worker), so a supervised worker holding neither
+		// could serve no object-store task at all. The endpoint travels beside it because
+		// for this kind it is not only an override — it is what says the store is not
+		// AWS, and therefore how its buckets are addressed.
+		connectorKindS3:       s.s3WorkerEnv,
 		connectorKindPostgres: func() []string { return s.sqlWorkerEnvByName(connectorKindPostgres) },
 		connectorKindMariaDB:  func() []string { return s.sqlWorkerEnvByName(connectorKindMariaDB) },
 		connectorKindMSSQL:    func() []string { return s.sqlWorkerEnvByName(connectorKindMSSQL) },
@@ -973,6 +981,118 @@ func discordBundleParse(raw string) (string, bool) {
 		return "", false
 	}
 	return token, true
+}
+
+// Environment a supervised S3 worker reads its object-store identities from — the same
+// names an operator sets by hand for an external worker (there is no private channel,
+// ADR-0157). s3EnvPrefix matches the worker's own constant of the same name;
+// TestSupervisedS3EnvUsesTheWorkersOwnNames holds the two together.
+const (
+	s3EnvPrefix     = "ATLAS_S3_"
+	s3ConnectorsEnv = s3EnvPrefix + "CONNECTORS"
+)
+
+// s3WorkerEnv renders the access keys a supervised S3 worker needs out of the vault, one
+// set of variables per Worker the store holds.
+//
+// The credential arrives as *the whole bundle*, one opaque JSON value, rather than as one
+// variable per field — Google Sheets' and the SQL kinds' arrangement, chosen for their
+// reason: [s3.CredentialsFromBundle] parses it, insists on the region and reports what is
+// missing, exactly as it does in the engine, so a worker cannot end up with a different
+// reading of the same JSON. The endpoint travels as its own variable because it is not
+// secret and because it is the one piece of an S3 Worker's configuration an operator
+// changes without reissuing a key.
+//
+// A Worker an operator configured on the host is left untouched and kept in the rendered
+// list: the child inherits ATLAS_S3_<NAME>_* already, and dropping its name would let a
+// store instance silently take the whole list away from it.
+//
+// It reads the Worker store and the vault, so it runs on the run-loop goroutine (their
+// owner, invariant I3), like buildS3Clients does.
+func (s *Server) s3WorkerEnv() []string {
+	var (
+		env       []string
+		names     []string
+		fromStore bool // a store instance contributed a name; only then must CONNECTORS be rendered
+	)
+	seen := map[string]bool{}
+	addName := func(n string) {
+		if n = strings.TrimSpace(n); n != "" && !seen[n] {
+			seen[n] = true
+			names = append(names, n)
+		}
+	}
+	// Identities an operator set directly on the host: inherited by the child as they
+	// are, so nothing is rendered for them — they are only kept in the list below.
+	for _, name := range splitConnectorList(os.Getenv(s3ConnectorsEnv)) {
+		addName(name)
+	}
+	s.do(func() {
+		recs, err := s.connectors.LoadAll()
+		if err != nil {
+			logging.Warn(logging.WorkerSupervisorFailed, "could not read the worker store for a supervised s3 worker",
+				slog.String("error", err.Error()))
+			return
+		}
+		sort.Slice(recs, func(i, j int) bool { return recs[i].Name < recs[j].Name })
+		taken := map[string]string{}
+		for _, c := range recs {
+			if c.Kind != connectorKindS3 || !c.Enabled {
+				continue
+			}
+			envKey := connectorEnvKey(c.Name)
+			if envKey == "" {
+				continue
+			}
+			// Two names that fold to one variable would silently give one the other's
+			// key — the mail/jira collision, left out for the same reason.
+			if first, dup := taken[envKey]; dup {
+				logging.Warn(logging.WorkerSupervisorFailed,
+					"two s3 workers share one environment name; the second is not handed to the supervised worker",
+					slog.String("connector", c.Name), slog.String("collidesWith", first))
+				continue
+			}
+			bundle := s.resolveConnectorSecret(c.CredentialsRef)
+			// A Worker whose bundle does not resolve — no secret set yet, or no region in
+			// it — is left out rather than handed over empty: the worker refuses at
+			// startup on a *named* identity it cannot build, which would take down every
+			// other kind it serves. Left out, it is simply not served, and the Console
+			// shows it as configured-not-working.
+			if !s3BundleUsable(bundle) {
+				continue
+			}
+			taken[envKey] = c.Name
+			key := s3EnvPrefix + envKey + "_"
+			// The endpoint is optional: blank means AWS at the bundle's region, which is
+			// what buildS3Clients passes too, so a record without one builds the same
+			// client on both sides.
+			if endpoint := strings.TrimSpace(c.Endpoint); endpoint != "" {
+				env = append(env, key+"URL="+endpoint)
+			}
+			env = append(env, key+"CREDENTIALS="+bundle)
+			addName(c.Name)
+			fromStore = true
+		}
+	})
+	// Only a store identity needs CONNECTORS rendered: an operator who set it on the host
+	// has it inherited by the child already. When the store does contribute, render the
+	// union so a host-named identity is not lost to the override.
+	if !fromStore {
+		return nil
+	}
+	return append(env, s3ConnectorsEnv+"="+strings.Join(names, ","))
+}
+
+// s3BundleUsable reports whether an S3 Worker's vault bundle builds an identity at all.
+//
+// The reading itself is connector/s3's, not a second copy of it: a supervised worker must
+// be handed exactly what the engine would have built its client from, and the region rule
+// in particular is too easy to restate differently. What stays here is only the shape this
+// caller wants — usable or not — because a Worker with no credential is skipped rather
+// than reported (see the caller above).
+func s3BundleUsable(raw string) bool {
+	_, _, _, _, err := s3.CredentialsFromBundle(raw)
+	return err == nil
 }
 
 // Environment a supervised Jira worker reads its sites from — the same names an

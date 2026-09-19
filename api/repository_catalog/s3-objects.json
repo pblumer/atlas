@@ -1,0 +1,60 @@
+{
+  "id": "atlas.s3-objects",
+  "version": "1.0.0",
+  "kind": "connector",
+  "title": "S3 object storage",
+  "author": "Atlas core",
+  "description": "Put a document into an S3-compatible bucket, read a small one back, ask whether one is there, list what is under a prefix, copy one, delete one, or mint a time-limited URL somebody can open or upload with — through a server-registered access key. The operation, the bucket and the key are authored in the model; the credential lives on the server, resolved from the vault (ADR-draft-s3-object-store-worker). The two link operations are what makes this reach documents at their real size: they compute a signature and make no call, so the bytes go straight between the store and whoever opens them. A read into a process variable is bounded at 1 MiB and refuses rather than truncates. Works against AWS S3 and against MinIO, Ceph, Garage, Cloudflare R2 or Wasabi — the Worker's endpoint decides which.",
+  "engineCompat": ">=0.10",
+  "template": {
+    "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
+    "name": "S3 object storage",
+    "id": "atlas.s3-objects",
+    "appliesTo": ["bpmn:ServiceTask"],
+    "properties": [
+      { "label": "Worker", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:connector" },
+        "description": "Name of the configured S3 Worker (Console → Workers), never a key. The attribute behind this field is spelled connector for compatibility with models already deployed." },
+      { "label": "Operation", "type": "Dropdown", "value": "put-object", "binding": { "type": "property", "name": "atlas:operation" },
+        "choices": [
+          { "name": "Put object", "value": "put-object" },
+          { "name": "Read object", "value": "get-object" },
+          { "name": "Check object", "value": "head-object" },
+          { "name": "List objects", "value": "list-objects" },
+          { "name": "Copy object", "value": "copy-object" },
+          { "name": "Delete object", "value": "delete-object" },
+          { "name": "Link to download", "value": "presign-get" },
+          { "name": "Link to upload", "value": "presign-put" }
+        ] },
+      { "label": "Bucket", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:bucket" },
+        "description": "The bucket this task acts in — one name, never a path. A value with a slash or a colon in it is refused, because it would address a different bucket or a different host." },
+      { "label": "Key (everything but List objects)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:key" },
+        "description": "The object's whole path inside the bucket, without a leading slash. Often a FEEL expression built from the case, e.g. =\"faelle/\" + vorgang.nummer + \"/antrag.pdf\". A retry re-runs the task with the same variables, so a key built from a timestamp writes a second object instead of overwriting the first." },
+      { "label": "Content (Put object)", "type": "Text", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:content" },
+        "description": "What to store. It travels through a process variable, so it is capped at 1 MiB — for anything larger use Link to upload and let the browser that has the document send it straight to the store." },
+      { "label": "Content is (Put/Read object)", "type": "Dropdown", "value": "", "binding": { "type": "property", "name": "atlas:encoding" },
+        "choices": [
+          { "name": "Text — the characters as they are", "value": "" },
+          { "name": "Base64 — decode before storing, encode when reading", "value": "base64" }
+        ],
+        "description": "Text is right for JSON, CSV, XML and a letter. Base64 is what a binary needs to survive a process variable at all, and what a form's uploaded file already is." },
+      { "label": "Content type (Put object / Link to upload)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:contentType" },
+        "description": "What the bytes are, e.g. application/pdf. On Link to upload it is bound into the URL, so whoever uploads must send exactly this type — which is what stops a link minted for a PDF being used to store something else." },
+      { "label": "Prefix (List objects)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:prefix" },
+        "description": "Only keys that start with this are listed, which is what searching an object store means — S3 has no query language." },
+      { "label": "Delimiter (List objects)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:delimiter" },
+        "description": "Optional. Keys sharing a segment are rolled up into common prefixes instead of listed one by one, so \"/\" makes a listing read like a folder. They come back in the result's prefixes." },
+      { "label": "Start after (List objects)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:startAfter" },
+        "description": "Optional. Resumes after this key, exclusive. A truncated page answers with nextStartAfter, so passing it back here pages a prefix forward without re-reading what you already have." },
+      { "label": "Maximum keys (List objects)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:maxKeys" },
+        "description": "Caps what may land in the result variable. Empty uses 1000, which is also the most the store returns in one call; a larger value is refused at deploy rather than silently answered with 1000." },
+      { "label": "From bucket (Copy object)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:sourceBucket" },
+        "description": "The bucket the object is copied from. The copy happens inside the store, so the bytes never pass through Atlas." },
+      { "label": "From key (Copy object)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:sourceKey" },
+        "description": "The key the object is copied from — often the key an earlier List objects found." },
+      { "label": "Valid for, seconds (the two links)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:expiresIn" },
+        "description": "How long the link works. Empty uses one hour; seven days is the most the signature allows. Keep it short: the URL is a key to that one object for anyone who has it, and it is stored in the instance's variables like any other value." },
+      { "label": "Result variable (everything but Delete object)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:resultVariable" },
+        "description": "Receives what the store returned. A listing answers with objects, prefixes, truncated and nextStartAfter; a read with content, contentType and size; a check with exists; a link with url and expiresAt. FEEL lists are 1-based, so the first key is =seite.objects[1].key. Delete answers with nothing a process needs, and the compiler refuses a result variable on it." }
+    ]
+  }
+}

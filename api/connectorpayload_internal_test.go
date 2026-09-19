@@ -23,6 +23,7 @@ import (
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
+	"github.com/pblumer/atlas/connector/s3"
 	"github.com/pblumer/atlas/connector/scim"
 	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/connector/soap"
@@ -612,6 +613,7 @@ func TestEveryPayloadArmSendsTheWholeResolvedJob(t *testing.T) {
 		{"compiler.CsvImportJobTypeIndex", csvimport.Job{}},
 		{"compiler.LdifJobTypeIndex", ldif.Job{}},
 		{"compiler.DiscordJobTypeIndex", discord.Job{}},
+		{"compiler.S3JobTypeIndex", s3.Job{}},
 	} {
 		t.Run(tc.arm, func(t *testing.T) {
 			sent, ok := arms[tc.arm]
@@ -642,7 +644,7 @@ func TestEveryPayloadArmSendsTheWholeResolvedJob(t *testing.T) {
 // the next arm would come up missing. That is not hypothetical: the ai task's arm hands
 // its map to agent.TaskJobPayload, and building the pattern this way is what keeps it from
 // silently eating Google Sheets' fields (ADR-0256).
-var payloadCaseRe = regexp.MustCompile(`(?m)^\tcase (compiler\.[A-Za-z]+JobTypeIndex)[^\n]*:$`)
+var payloadCaseRe = regexp.MustCompile(`(?m)^\tcase (compiler\.[A-Za-z][A-Za-z0-9]*JobTypeIndex)[^\n]*:$`)
 
 // payloadFieldsRe finds the field map inside one arm's body.
 var payloadFieldsRe = regexp.MustCompile(`(?s)connectorPayload\{Kind:[^,]+, Fields: map\[string\]any\{(.*?)\n\t\t\}\}`)
@@ -749,10 +751,15 @@ func TestEveryOffloadableJobTypeHasAPayloadArm(t *testing.T) {
 // Three kinds share an arm today — the SQL products, and clio's write/query/read — and
 // keying them by the first constant is what would otherwise make this guard demand arms
 // that already exist.
-var payloadArmCaseRe = regexp.MustCompile(`(?m)^\tcase (compiler\.[A-Za-z]+JobTypeIndex(?:, compiler\.[A-Za-z]+JobTypeIndex)*):$`)
+var payloadArmCaseRe = regexp.MustCompile(`(?m)^\tcase (compiler\.[A-Za-z][A-Za-z0-9]*JobTypeIndex(?:, compiler\.[A-Za-z][A-Za-z0-9]*JobTypeIndex)*):$`)
 
 // payloadArmConstRe pulls the individual constants out of such a line.
-var payloadArmConstRe = regexp.MustCompile(`compiler\.([A-Za-z]+JobTypeIndex)`)
+//
+// All three patterns above admit a digit after the first letter, and that is not
+// cosmetic: S3JobTypeIndex was the first constant with one, and a pattern of [A-Za-z]+
+// skipped its arm silently — which is precisely the "guard stops covering a kind without
+// failing" outcome the count assertion below exists to prevent, arriving by the back door.
+var payloadArmConstRe = regexp.MustCompile(`compiler\.([A-Za-z][A-Za-z0-9]*JobTypeIndex)`)
 
 // payloadArmCases is the set of reserved job-type indices resolveConnectorTask answers.
 //
@@ -794,6 +801,7 @@ func payloadArmCases(t *testing.T) map[int32]bool {
 		"AgentJobTypeIndex":         compiler.AgentJobTypeIndex,
 		"AiTaskJobTypeIndex":        compiler.AiTaskJobTypeIndex,
 		"DiscordJobTypeIndex":       compiler.DiscordJobTypeIndex,
+		"S3JobTypeIndex":            compiler.S3JobTypeIndex,
 	}
 	if len(indexByConstName) != int(compiler.ReservedJobTypeCount()) {
 		t.Fatalf("this table names %d job-type constants but the compiler reserves %d; "+
