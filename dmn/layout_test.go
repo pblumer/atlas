@@ -27,7 +27,7 @@ const drgXML = `<?xml version="1.0" encoding="UTF-8"?>
 
 // shapeBounds is one drawn element's position, read back out of the generated
 // diagram so a test asserts the picture rather than the generator's internals.
-type shapeBounds struct{ x, y float64 }
+type shapeBounds struct{ x, y, w, h float64 }
 
 // boundsOf maps each drawn element id to where the generated diagram put it.
 func boundsOf(t *testing.T, out string) map[string]shapeBounds {
@@ -40,6 +40,8 @@ func boundsOf(t *testing.T, out string) map[string]shapeBounds {
 					Bounds struct {
 						X float64 `xml:"x,attr"`
 						Y float64 `xml:"y,attr"`
+						W float64 `xml:"width,attr"`
+						H float64 `xml:"height,attr"`
 					} `xml:"Bounds"`
 				} `xml:"DMNShape"`
 			} `xml:"DMNDiagram"`
@@ -51,7 +53,7 @@ func boundsOf(t *testing.T, out string) map[string]shapeBounds {
 	at := map[string]shapeBounds{}
 	for _, d := range doc.DI.Diagrams {
 		for _, sh := range d.Shapes {
-			at[sh.Ref] = shapeBounds{sh.Bounds.X, sh.Bounds.Y}
+			at[sh.Ref] = shapeBounds{sh.Bounds.X, sh.Bounds.Y, sh.Bounds.W, sh.Bounds.H}
 		}
 	}
 	return at
@@ -320,5 +322,289 @@ func TestAutoLayoutMakesTheSameNamespaceChoice(t *testing.T) {
 	got := string(RegenerateDiagram([]byte(src)))
 	if !strings.Contains(got, `xmlns:dmndi="https://www.omg.org/spec/DMN/20230324/DMNDI/"`) {
 		t.Errorf("Auto-layout on a DMN 1.5 model did not use the 1.5 DMNDI namespace:\n%s", got)
+	}
+}
+
+// --- decision services (ADR-0398) ---
+
+// serviceLayoutXML is the shape of a published decision service: one output decision
+// above the divider, one encapsulated decision below it, and an input decision
+// that DMN draws OUTSIDE the box because the caller supplies it. No diagram.
+const serviceLayoutXML = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20230324/MODEL/" id="defs_svc" name="Approval" namespace="http://atlas/dmn/svc">
+  <inputData id="id_amount" name="amount"/>
+  <decision id="boundary" name="Boundary">
+    <informationRequirement id="ir_boundary"><requiredInput href="#id_amount"/></informationRequirement>
+  </decision>
+  <decision id="inner" name="Inner">
+    <informationRequirement id="ir_inner"><requiredInput href="#id_amount"/></informationRequirement>
+  </decision>
+  <decision id="outer" name="Outer">
+    <informationRequirement id="ir_outer_1"><requiredDecision href="#inner"/></informationRequirement>
+    <informationRequirement id="ir_outer_2"><requiredDecision href="#boundary"/></informationRequirement>
+  </decision>
+  <decisionService id="svc" name="Approval Service">
+    <outputDecision href="#outer"/>
+    <encapsulatedDecision href="#inner"/>
+    <inputDecision href="#boundary"/>
+  </decisionService>
+</definitions>`
+
+// dividerY reads back the single divider line of the generated service box.
+func dividerY(t *testing.T, out string) float64 {
+	t.Helper()
+	var doc struct {
+		DI struct {
+			Diagrams []struct {
+				Shapes []struct {
+					Ref     string `xml:"dmnElementRef,attr"`
+					Divider struct {
+						Waypoints []struct {
+							X float64 `xml:"x,attr"`
+							Y float64 `xml:"y,attr"`
+						} `xml:"waypoint"`
+					} `xml:"DMNDecisionServiceDividerLine"`
+				} `xml:"DMNShape"`
+			} `xml:"DMNDiagram"`
+		} `xml:"DMNDI"`
+	}
+	if err := xml.Unmarshal([]byte(out), &doc); err != nil {
+		t.Fatalf("read back the generated diagram: %v\n%s", err, out)
+	}
+	for _, d := range doc.DI.Diagrams {
+		for _, sh := range d.Shapes {
+			if sh.Ref != "svc" {
+				continue
+			}
+			if len(sh.Divider.Waypoints) != 2 {
+				t.Fatalf("divider has %d waypoints, want 2\n%s", len(sh.Divider.Waypoints), out)
+			}
+			return sh.Divider.Waypoints[0].Y
+		}
+	}
+	t.Fatalf("no shape for the decision service\n%s", out)
+	return 0
+}
+
+// A decision service is drawn, as a box with a divider line. Without a shape of its
+// own dmn-js invents an empty one, and because it rereads membership from geometry,
+// the next save writes that emptiness into the document.
+func TestADecisionServiceIsDrawnWithItsDivider(t *testing.T) {
+	out := string(EnsureDiagram([]byte(serviceLayoutXML)))
+
+	at := boundsOf(t, out)
+	box, ok := at["svc"]
+	if !ok {
+		t.Fatalf("the decision service got no shape\n%s", out)
+	}
+	if box.w <= 0 || box.h <= 0 {
+		t.Fatalf("service box has no size: %+v", box)
+	}
+	if n := countElements(out, "DMNDecisionServiceDividerLine"); n != 1 {
+		t.Fatalf("got %d divider lines, want 1\n%s", n, out)
+	}
+}
+
+// The box holds what the service declares and nothing else: its output and
+// encapsulated decisions are inside it, the input decision it names as its boundary
+// is not.
+func TestTheServiceBoxHoldsItsMembersAndNotTheBoundary(t *testing.T) {
+	out := string(EnsureDiagram([]byte(serviceLayoutXML)))
+	at := boundsOf(t, out)
+	box := at["svc"]
+
+	inside := func(b shapeBounds) bool {
+		return b.x >= box.x && b.y >= box.y &&
+			b.x+b.w <= box.x+box.w && b.y+b.h <= box.y+box.h
+	}
+	for _, id := range []string{"outer", "inner"} {
+		if !inside(at[id]) {
+			t.Errorf("%s at %+v is not inside the service box %+v", id, at[id], box)
+		}
+	}
+	if inside(at["boundary"]) {
+		t.Errorf("the input decision at %+v was drawn inside the service box %+v",
+			at["boundary"], box)
+	}
+}
+
+// The divider separates the compartments the document declares: the output decision
+// above it, the encapsulated one below. dmn-js classifies a member by which side of
+// this line it is on, so a picture that got this backwards would rewrite the model.
+func TestTheDividerSeparatesOutputFromEncapsulated(t *testing.T) {
+	out := string(EnsureDiagram([]byte(serviceLayoutXML)))
+	at := boundsOf(t, out)
+	y := dividerY(t, out)
+
+	if mid := at["outer"].y + at["outer"].h/2; mid >= y {
+		t.Errorf("the output decision's centre %g is not above the divider %g", mid, y)
+	}
+	if mid := at["inner"].y + at["inner"].h/2; mid <= y {
+		t.Errorf("the encapsulated decision's centre %g is not below the divider %g", mid, y)
+	}
+}
+
+// The declared membership wins over the requirements graph. Here the DRG alone
+// would stack them the other way round: the encapsulated decision requires the
+// output one, so layering by depth would put it higher.
+func TestTheDividerFollowsTheDocumentNotTheGraph(t *testing.T) {
+	const invertedXML = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20230324/MODEL/" id="defs_inv" name="Inverted" namespace="http://atlas/dmn/inv">
+  <inputData id="id_amount" name="amount"/>
+  <decision id="outer" name="Outer">
+    <informationRequirement id="ir_outer"><requiredInput href="#id_amount"/></informationRequirement>
+  </decision>
+  <decision id="inner" name="Inner">
+    <informationRequirement id="ir_inner"><requiredDecision href="#outer"/></informationRequirement>
+  </decision>
+  <decisionService id="svc" name="Inverted Service">
+    <outputDecision href="#outer"/>
+    <encapsulatedDecision href="#inner"/>
+  </decisionService>
+</definitions>`
+
+	out := string(EnsureDiagram([]byte(invertedXML)))
+	at := boundsOf(t, out)
+	y := dividerY(t, out)
+
+	if mid := at["outer"].y + at["outer"].h/2; mid >= y {
+		t.Errorf("the output decision's centre %g is not above the divider %g\n%s", mid, y, out)
+	}
+	if mid := at["inner"].y + at["inner"].h/2; mid <= y {
+		t.Errorf("the encapsulated decision's centre %g is not below the divider %g\n%s", mid, y, out)
+	}
+}
+
+// The service is written before the decisions it holds. A viewer that does not
+// treat the box as a container paints in document order, so a service written last
+// covers its own contents.
+func TestTheServiceIsDrawnBeforeWhatItHolds(t *testing.T) {
+	out := string(EnsureDiagram([]byte(serviceLayoutXML)))
+
+	svc := strings.Index(out, `dmnElementRef="svc"`)
+	outer := strings.Index(out, `dmnElementRef="outer"`)
+	inner := strings.Index(out, `dmnElementRef="inner"`)
+	if svc < 0 || outer < 0 || inner < 0 {
+		t.Fatalf("not every element was drawn\n%s", out)
+	}
+	if svc > outer || svc > inner {
+		t.Errorf("the service box is written after what it holds (svc %d, outer %d, inner %d)",
+			svc, outer, inner)
+	}
+}
+
+// A diagram that draws every decision but not the service is not a human
+// arrangement to preserve — it is what a tool that predates DMN 1.5 leaves behind.
+// It is laid out afresh rather than handed to dmn-js to complete.
+func TestADiagramMissingOnlyTheServiceIsLaidOutAfresh(t *testing.T) {
+	const partialXML = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20230324/MODEL/" xmlns:dmndi="https://www.omg.org/spec/DMN/20230324/DMNDI/" xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/" id="defs_part" name="Partial" namespace="http://atlas/dmn/part">
+  <inputData id="id_amount" name="amount"/>
+  <decision id="outer" name="Outer">
+    <informationRequirement id="ir_outer"><requiredInput href="#id_amount"/></informationRequirement>
+  </decision>
+  <decisionService id="svc" name="Partial Service">
+    <outputDecision href="#outer"/>
+  </decisionService>
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram id="D">
+      <dmndi:DMNShape id="S1" dmnElementRef="id_amount"><dc:Bounds x="10" y="200" width="125" height="45"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="S2" dmnElementRef="outer"><dc:Bounds x="10" y="60" width="180" height="80"/></dmndi:DMNShape>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>`
+
+	out, generated := EnsureDiagramReport([]byte(partialXML))
+	if !generated {
+		t.Fatal("a diagram that does not draw the decision service was left as it was")
+	}
+	if _, ok := boundsOf(t, string(out))["svc"]; !ok {
+		t.Errorf("the redrawn diagram still has no shape for the service\n%s", out)
+	}
+}
+
+// A diagram that draws the service too is somebody's arrangement, and is left
+// alone. This is the guard on the rule above: completing a diagram must not become
+// an excuse to move one.
+func TestADiagramThatDrawsTheServiceIsLeftAlone(t *testing.T) {
+	const completeXML = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20230324/MODEL/" xmlns:dmndi="https://www.omg.org/spec/DMN/20230324/DMNDI/" xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/" xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/" id="defs_full" name="Complete" namespace="http://atlas/dmn/full">
+  <inputData id="id_amount" name="amount"/>
+  <decision id="outer" name="Outer">
+    <informationRequirement id="ir_outer"><requiredInput href="#id_amount"/></informationRequirement>
+  </decision>
+  <decisionService id="svc" name="Complete Service">
+    <outputDecision href="#outer"/>
+  </decisionService>
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram id="D">
+      <dmndi:DMNShape id="S0" dmnElementRef="svc">
+        <dc:Bounds x="500" y="500" width="300" height="200"/>
+        <dmndi:DMNDecisionServiceDividerLine><di:waypoint x="500" y="600"/><di:waypoint x="800" y="600"/></dmndi:DMNDecisionServiceDividerLine>
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="S1" dmnElementRef="id_amount"><dc:Bounds x="10" y="200" width="125" height="45"/></dmndi:DMNShape>
+      <dmndi:DMNShape id="S2" dmnElementRef="outer"><dc:Bounds x="520" y="520" width="180" height="80"/></dmndi:DMNShape>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>`
+
+	out, generated := EnsureDiagramReport([]byte(completeXML))
+	if generated {
+		t.Error("a complete diagram was redrawn")
+	}
+	if string(out) != completeXML {
+		t.Error("a complete diagram came back changed")
+	}
+}
+
+// A service naming nothing this model declares still gets a box. Without one
+// EnsureDiagram would find the diagram incomplete on every read and redraw the
+// model each time it is opened.
+func TestAServiceWithNothingToHoldStillGetsABox(t *testing.T) {
+	const emptyXML = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20230324/MODEL/" id="defs_empty" name="Empty" namespace="http://atlas/dmn/empty">
+  <inputData id="id_amount" name="amount"/>
+  <decision id="outer" name="Outer">
+    <informationRequirement id="ir_outer"><requiredInput href="#id_amount"/></informationRequirement>
+  </decision>
+  <decisionService id="svc" name="Empty Service"/>
+</definitions>`
+
+	once, generated := EnsureDiagramReport([]byte(emptyXML))
+	if !generated {
+		t.Fatal("a model with no diagram was not drawn")
+	}
+	if _, ok := boundsOf(t, string(once))["svc"]; !ok {
+		t.Fatalf("the empty service got no shape\n%s", once)
+	}
+	if _, again := EnsureDiagramReport(once); again {
+		t.Error("reading the drawn model back redrew it again")
+	}
+}
+
+// A decision named in both compartments has no side of the line to be on. The box
+// is still drawn and the divider still lands inside it, because a service whose
+// shape is missing or malformed is what sends dmn-js back to inventing one.
+func TestAContradictoryServiceStillGetsAUsableBox(t *testing.T) {
+	const bothXML = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20230324/MODEL/" id="defs_both" name="Both" namespace="http://atlas/dmn/both">
+  <inputData id="id_amount" name="amount"/>
+  <decision id="only" name="Only">
+    <informationRequirement id="ir_only"><requiredInput href="#id_amount"/></informationRequirement>
+  </decision>
+  <decisionService id="svc" name="Contradictory Service">
+    <outputDecision href="#only"/>
+    <encapsulatedDecision href="#only"/>
+  </decisionService>
+</definitions>`
+
+	out := string(EnsureDiagram([]byte(bothXML)))
+	box, ok := boundsOf(t, out)["svc"]
+	if !ok {
+		t.Fatalf("the service got no shape\n%s", out)
+	}
+	y := dividerY(t, out)
+	if y <= box.y || y >= box.y+box.h {
+		t.Errorf("divider at %g is outside the box %+v", y, box)
 	}
 }
