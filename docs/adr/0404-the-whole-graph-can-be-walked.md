@@ -4,14 +4,6 @@
 - **Implementation:** Not started
 - **Date:** 2026-09-19
 - **Deciders:** Atlas maintainers
-- **Open question:** whether community detection over a graph of average degree ~2.5 that
-  decomposes into millions of ~30-node components produces clusters that mean anything.
-  Louvain optimises modularity, and a forest of tiny components may have no modularity
-  structure worth finding — in which case the "clusters" are simply the components, which
-  is either exactly right (one cloud per instance family) or a smear. The cloud rendering
-  in §5 rests entirely on that, and it is decidable in a day with a prototype over real
-  data. Nobody has run it.
-- **Question checked:** 2026-09
 
 ## Context and problem statement
 
@@ -41,7 +33,8 @@ multi-instance activities and loops can raise it three- to fivefold.
 ### The topology, which decides everything
 
 The run graph is **not one graph**. It is a forest of millions of components of about 30
-nodes each, average degree about 2.5, hanging off a handful of **supernodes** — the
+nodes each — 2.4 edges per node, so an average degree of 4.8 (measured, §5) — hanging off
+a handful of **supernodes**: the
 definition, the worker, the decision — whose degree is in the millions.
 
 Two consequences follow, and they point in opposite directions:
@@ -124,15 +117,26 @@ nodes on the landscape. The precedent is deliberate.
 Compressed Sparse Row: an offset array per node, a concatenated array of neighbour
 ordinals. For the year-scale numbers above:
 
-| | Size |
+The figures below are **measured**, not estimated — see §5's W0 results. An earlier draft
+of this table halved the target array by counting each edge once; an undirected CSR that
+supports a walk in either direction, which impact analysis needs, holds every edge in both
+endpoints' lists.
+
+| | Size at 110 M nodes / 266 M edges |
 |---|---|
-| Offsets, 110 M nodes × uint32 | 440 MB |
-| Targets, 275 M edges × uint32 | 1.1 GB |
-| Raw total | ~1.5 GB |
-| With delta and varint compression of adjacency lists | under 1 GB |
-| Frontier bitmap, 110 M bits | 14 MB |
-| Visited bitmap | 14 MB |
-| Union-find parent array | 440 MB |
+| Offsets, (n+1) × uint32 | 420 MB |
+| Targets, **2 × m** × uint32 | 2,028 MB |
+| Raw CSR total | **2,448 MB** (measured) |
+| Peak RSS through build and component pass | **3,369 MB** (measured) |
+| Frontier / visited bitmap, 110 M bits each | 14 MB each |
+| Union-find parent array | 420 MB |
+
+Delta and varint compression of the adjacency lists is what Neo4j's GDS applies for the
+same reason, and would bring the target array down at the cost of decompression on every
+traversal. It is **not** costed here, because at an average degree of 4.8 the lists are
+four or five entries long and there is little delta structure to exploit — the earlier
+claim of "under 1 GB compressed" was an extrapolation from graphs that are far denser than
+this one, and it is withdrawn rather than corrected.
 
 This is not a novel design; it is what the field does. Neo4j's Graph Data Science
 projects the stored graph into an in-memory structure in the CSR layout, with the
@@ -166,26 +170,98 @@ compacted log no longer holds genesis at all (ADR-0131). So:
 - **keep current** from the tailer, starting at the snapshot's position;
 - **rebuild** whenever the two cannot be reconciled, because the projection is disposable.
 
-### 5. One pass computes membership; a query is a lookup
+### 5. One pass computes membership; a query is a lookup. The cloud is an aggregation, not a clustering
 
-The whole-graph walk is a batch job, not a request. One pass over the CSR computes:
+The whole-graph walk is a batch job, not a request. One pass over the CSR computes
+**connected components** by union-find, which for this topology *is* the instance-family
+decomposition. Queries are then lookups against that membership, not walks.
 
-- **connected components** by union-find, which for this topology is the instance-family
-  decomposition;
-- **communities** by hierarchical Louvain, which yields several coarsening levels at once.
+The cloud is a **group-by along dimensions the nodes already carry** — definition,
+element, worker, incident state, time bucket — and not a community detection. An earlier
+draft of this section said hierarchical Louvain; the measurement below replaced it, and
+the replacement is better on every axis that matters.
 
-Queries are then lookups against that membership, not walks. The **cloud is the coarse
-level** — a cluster is a node, inter-cluster edge weights are sums — and semantic zoom
-expands a cloud into its members, at which point the existing 400-node budget governs
-again.
+**Community detection cannot serve this picture, and the reason is not empirical
+disappointment — it is arithmetic, twice over.**
+
+*Without the supernodes the graph is disconnected.* Modularity only changes when a node
+has edges into both candidate communities, and across components there are none; merging
+two edge-disjoint communities strictly lowers Q. So every community is a *subset* of a
+component. Louvain can subdivide one 30-node lineage; it can never group two instances.
+Communities collapse to components — which union-find already computes, deterministically,
+with no resolution parameter, in the time recorded below.
+
+*With the supernodes the graph is connected, and the resolution limit forbids what we
+would want.* Modularity optimisation cannot reliably resolve a community holding fewer
+than about **√(L/2)** edges, where L is the whole graph's edge count
+([Fortunato and Barthélemy, PNAS 2007](https://www.pnas.org/doi/10.1073/pnas.0605965104)).
+At the measured L of 266 million that threshold is **≈11,500 edges**. An instance has
+**74**. Components are ~156× below the limit, so they provably cannot appear as
+communities; what Louvain returns instead is a handful of giant communities organised
+around the hubs — the single blob the old text predicted as a rendering accident, which is
+in fact the algorithm working correctly on the wrong question.
+
+Turned around, the limit gives the sentence worth remembering: a 74-edge instance is
+resolvable as a community only while the whole graph holds at most 2 × 74² ≈ 11,000 edges
+— **about 150 instances.** The mechanism works only at the scale where nobody needs it.
+
+So the cloud groups by attribute, and gains three properties clustering cannot give:
+
+- **It names itself.** *"4,812 instances of `order-intake` parked on `Approve`"* is a cloud
+  somebody can act on. A community carries no label, and an unlabelled blob is not a
+  finding — it is a shape that has to be investigated before it says anything.
+- **It is deterministic and parameter-free.** No resolution to tune, and therefore no
+  picture that changes because a constant was nudged.
+- **It is stable across rebuilds**, which is what makes §9's saved views keep their
+  meaning; a Louvain partition is not stable under a rebuild on changed data.
+
+This also removes the last reason to take on gonum: union-find and a group-by are a page
+of code each, and the algorithms that would have justified the dependency are the ones
+this section just refused.
 
 Two rules on the rendering, both inherited rather than invented:
 
 - **A density without a named reference is a picture of nothing.** A dense region must say
   dense *in what*, and as of *when*.
-- **The supernodes are excluded before clustering and overlaid after layout.** Louvain will
-  otherwise place the definition node's cluster at the centre of everything and the cloud
-  will be one blob. This is the visual return of §1's arithmetic.
+- **The supernodes are excluded before aggregating and overlaid after layout.** They are
+  the hubs every instance touches, so any grouping that keeps them puts everything in one
+  cell. This is the visual return of §1's arithmetic.
+
+#### What W0 measured
+
+A dependency-free spike built the structure this record describes at the year-scale size it
+names — 3.67 million components of 30 nodes, 74 edges each, on a 16 GB / 4-core machine,
+Go 1.26. A throwaway design spike under AGENTS.md's stated TDD exception; W1 re-does it
+test-first against real state rather than a generator. The generator's parameters are given
+above so the numbers can be reproduced from this description.
+
+| | 1 M nodes | 10 M nodes | 110 M nodes |
+|---|---|---|---|
+| edges | 2.4 M | 24.2 M | 265.8 M |
+| CSR build (count + fill) | 82 ms | 2.1 s | **23.1 s** |
+| components (union-find) | 48 ms | 676 ms | **7.8 s** |
+| whole-graph walk, every node | 33 ms | 327 ms | **3.7 s** |
+| CSR size | 22 MB | 223 MB | **2,448 MB** |
+| peak RSS | 34 MB | 333 MB | **3,369 MB** |
+
+Three things it settled, two of them against this record's own earlier text:
+
+- **The walk is confirmed cheap: 3.7 seconds for all 110 million nodes.** §1's claim that a
+  whole-graph walk degenerates into a sequential pass was derived from the topology and
+  marked as unmeasured. It is now measured.
+- **The memory estimate in §2 was too low by more than a factor of two, and §2 is corrected
+  below.** The error was conceptual rather than arithmetic: an undirected CSR that supports
+  a walk in *either* direction — which impact analysis needs — stores every edge in both
+  endpoints' lists. The earlier figure counted each edge once.
+- **The build, not the walk, is the expensive phase**, and its fill pass is 4.5× its count
+  pass: random writes into a 2 GB array are cache-hostile. A rebuild is therefore ~30
+  seconds, not seconds, which is what §4's seeding and the "window during which the run
+  graph is absent or behind" have to be sized against.
+
+One wording error the measurement exposed: this record said "average degree ~2.5". That is
+*edges per node* (2.42 measured); the average **degree** is twice it, 4.83. The arguments
+above rest on component size and on disconnection, neither of which the mix-up touched, but
+the number was wrong wherever it appeared.
 
 ### 6. Supernode edges are an excludable class, excluded by default
 
@@ -343,7 +419,7 @@ Four rules follow, and the first is the one that makes it work:
   context — the run graph opened directly — is a default needed, and it is a **recent time
   window**, because that is the scope a person means by "what is going on".
 - **Every widening states its estimate before it runs.** The control is not widen-and-hope:
-  the server answers *this scope would need 2.3 GB against a 1 GB budget* and names the
+  the server answers *this scope would need 2.4 GB against a 1 GB budget* and names the
   nearest scope that fits. Over a few steps the reader learns the shape of their own estate,
   which is worth more than the picture they were denied.
 - **The budget is visible while exploring**, as a share of it spent on the current scope.
@@ -373,12 +449,17 @@ discipline made into the primary interaction rather than the error path.
   the clustering that makes the picture legible is the same pass that makes the walk cheap.
 - **Positive:** nothing new to back up. The projection is disposable by construction, which
   is the property that distinguishes it from the persistent graph store option 2 proposes.
-- **Positive:** no CGO and no new service. The heaviest dependency is gonum, and even that
-  is optional if the algorithms are written directly against the CSR.
-- **Negative / trade-offs accepted:** **memory, bounded by refusal.** Under 1 GB compressed
-  at the year-scale estimate, and three to five times that if the per-instance node count is
-  higher than estimated — in a single binary that also runs the engine. §9 turns that from an
-  open risk into a stated limit. The accepted consequence, stated precisely because the loose
+- **Positive:** no CGO and **no new dependency at all.** An earlier draft expected gonum for
+  the layout and community algorithms; §5's refusal of community detection removed the
+  reason, and union-find plus a group-by are a page of code each. The spike that produced
+  §5's numbers was written dependency-free on purpose: one that needed gonum to decide
+  whether gonum was needed would have answered a different question.
+- **Negative / trade-offs accepted:** **memory, bounded by refusal, and larger than this
+  record first said.** Measured at the year-scale size: **2.4 GB** for the CSR and **3.4 GB
+  peak RSS** through the build — in a single binary that also runs the engine, and three to
+  five times that if the per-instance node count is higher than the 30 estimated. §9 turns
+  that from an open risk into a stated limit, and the limit now has a real number behind it
+  instead of an estimate that was low by more than half. The accepted consequence, stated precisely because the loose
   version is wrong: **on a large enough installation the *whole-graph* walk is unavailable**,
   and says so. The feature is not — every narrower scope is a whole graph of itself (§9), so
   what a large estate loses is the one question it could ask least usefully anyway, and what
