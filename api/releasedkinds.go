@@ -32,7 +32,21 @@ type releasedKind struct {
 	// ADR is the record that decided this kind. Where a kind's own comment cites
 	// several records, this is the one whose subject *is* the kind — ADR-0172 for
 	// Entra, not the ADR-0166 it is compared to — and the rest are context.
+	//
+	// It is zero for a kind whose record has not been numbered yet; see Draft.
 	ADR int
+	// Draft is the slug of a record still in flight, for a kind that ships in the same
+	// change as the decision that admitted it — which, under the merge-time numbering of
+	// ADR-0170, is *every* new kind: a record carries no number until it lands on main,
+	// so a row that could only cite a number could not be written at all.
+	//
+	// Exactly one of ADR and Draft is set. `make adr-number` rewrites the ADR-draft-<slug>
+	// citations in this file's comments but not this field, which is deliberate rather
+	// than an oversight: TestReleasedKindsCiteAnAcceptedRecord fails the moment
+	// docs/adr/draft-<slug>.md is gone, and its message says to replace Draft with the
+	// number the record was given. A one-line edit the guard asks for beats a rewrite
+	// rule that has to know this field exists.
+	Draft string
 	// Class decides whether a package is owed at all. See the constants below.
 	Class kindClass
 	// Package is the Repository package id that advertises this kind, or "" where none
@@ -112,6 +126,7 @@ var releasedKinds = []releasedKind{
 		Why: "the order's own send task: it states how a product action ended to the order and the engine, so there is no system to configure and nothing to publish"},
 	{JobType: compiler.ShopCommandJobType, ADR: 429, Class: classEngine,
 		Why: "the order's own send task in mode command: it asks a held position for an action through the order act, in the name of the process's application, so there is no system to configure and nothing to publish"},
+	{JobType: compiler.S3JobType, Draft: "s3-object-store-worker", Class: classConnector, Package: "atlas.s3-objects"},
 }
 
 // packagesOwed is how many released connector kinds have no Repository package right

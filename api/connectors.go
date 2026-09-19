@@ -20,6 +20,7 @@ import (
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/nettimeout"
 	"github.com/pblumer/atlas/connector/remedy"
+	"github.com/pblumer/atlas/connector/s3"
 	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/connector/temis"
@@ -399,6 +400,58 @@ func (s *Server) buildDiscordClients() (map[string]discord.Client, map[string]st
 	}
 	noteForeignKinds(problems, recs, connectorKindDiscord, clients)
 	return clients, problems, nil
+}
+
+// buildS3Clients builds the live S3 client for every enabled S3 Worker, resolving each
+// one's access key from the vault (ADR-0041) — so a model names a Worker and never a
+// key. A Worker whose bundle is missing, malformed or short of a region is skipped with
+// the reason recorded, which is what lets the list say "configured but not working"
+// instead of leaving it to be discovered by a token parking on it (ADR-0158).
+//
+// The endpoint is optional and does two things at once: blank points the client at AWS
+// at the bundle's region, and set points it at the store the installation runs — which
+// is also what makes its buckets addressed path-style, since that is what every
+// self-hosted store serves (ADR-draft-s3-object-store-worker).
+func (s *Server) buildS3Clients() (map[string]s3.Client, map[string]string, error) {
+	clients := map[string]s3.Client{}
+	problems := map[string]string{}
+	recs, err := s.connectors.LoadAll()
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, c := range recs {
+		if c.Kind != connectorKindS3 {
+			continue
+		}
+		if !c.Enabled {
+			problems[c.Name] = problemDisabled
+			continue
+		}
+		client, err := s3.NewProviderClient(s3.ProviderConfig{
+			Endpoint: strings.TrimSpace(c.Endpoint),
+			Secret:   s.resolveConnectorSecret(c.CredentialsRef),
+		})
+		if err != nil {
+			problems[c.Name] = err.Error() // its tasks park until it is fixed
+			continue
+		}
+		clients[c.Name] = client
+	}
+	noteForeignKinds(problems, recs, connectorKindS3, clients)
+	return clients, problems, nil
+}
+
+// s3Credentials is the shape of an S3 Worker's credential bundle held in the vault under
+// its credentialsRef (ADR-draft-s3-object-store-worker): an access key, the region SigV4
+// signs with, and — for a key STS issued — the session token that goes with it. Only a
+// *reference* to this bundle is stored in the Worker record; the values live in the
+// vault, never in a model or the record (I6). It mirrors connector/s3's own unexported
+// bundle type, which is what the shape test holds it to.
+type s3Credentials struct {
+	AccessKeyID     string `json:"accessKeyId,omitempty"`
+	SecretAccessKey string `json:"secretAccessKey,omitempty"`
+	Region          string `json:"region,omitempty"`
+	SessionToken    string `json:"sessionToken,omitempty"`
 }
 
 // discordCredentials is the shape of a Discord Worker's credential bundle held in the

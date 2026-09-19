@@ -422,6 +422,38 @@
       ]
     },
     {
+      "name": "S3Connector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "bucket", "type": "String", "isAttr": true },
+        { "name": "key", "type": "String", "isAttr": true },
+        { "name": "content", "type": "String", "isAttr": true },
+        { "name": "contentType", "type": "String", "isAttr": true },
+        { "name": "encoding", "type": "String", "isAttr": true },
+        { "name": "prefix", "type": "String", "isAttr": true },
+        { "name": "delimiter", "type": "String", "isAttr": true },
+        { "name": "startAfter", "type": "String", "isAttr": true },
+        { "name": "maxKeys", "type": "String", "isAttr": true },
+        { "name": "sourceBucket", "type": "String", "isAttr": true },
+        { "name": "sourceKey", "type": "String", "isAttr": true },
+        { "name": "expiresIn", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true },
+        { "name": "meta", "type": "S3Meta", "isMany": true }
+      ]
+    },
+    {
+      "name": "S3Meta",
+      "superClass": ["Element"],
+      "properties": [
+        { "name": "name", "type": "String", "isAttr": true },
+        { "name": "value", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "WebscrapeConnector",
       "superClass": ["Element"],
       "meta": { "allowedIn": ["bpmn:ServiceTask"] },
