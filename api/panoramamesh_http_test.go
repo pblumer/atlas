@@ -27,6 +27,10 @@ type meshEdge struct {
 	From string `json:"from"`
 	To   string `json:"to"`
 	Kind string `json:"kind"`
+	// Taken and TakenSince are the traversal fact (ADR-0400). A pointer because nil
+	// and zero are different answers: unread versus read-and-nothing-happened.
+	Taken      *int64 `json:"taken"`
+	TakenSince int64  `json:"takenSince"`
 }
 
 type meshGraph struct {
@@ -481,5 +485,84 @@ func TestPanoramaMeshDraftNeverCarriesARuntimeClaim(t *testing.T) {
 			t.Errorf("draft node carries %q = %v — a plan reports nothing about running",
 				field, node[field])
 		}
+	}
+}
+
+// meshEdgeOf finds exactly one edge by its identity triple. Distinct from
+// meshHasEdge: this needs the edge, and needs to know the deduplication left one.
+func meshEdgeOf(t *testing.T, g meshGraph, from, to, kind string) meshEdge {
+	t.Helper()
+	var found []meshEdge
+	for _, e := range g.Edges {
+		if e.From == from && e.To == to && e.Kind == kind {
+			found = append(found, e)
+		}
+	}
+	if len(found) != 1 {
+		t.Fatalf("edges %s -%s-> %s = %d, want exactly 1: %+v", from, kind, to, len(found), g.Edges)
+	}
+	return found[0]
+}
+
+// TestPanoramaMeshCountsWhatActuallyTookTheEdge is the join of ADR-0400 asserted
+// against a real server rather than against the derivation alone, which is the only
+// place it can be asserted at all.
+//
+// The derivation tests build a Landscape by hand and so agree with whatever element
+// index they are handed. What they cannot catch is the collector attributing one
+// element's traffic to another — and that is the failure that matters, because the
+// count would look plausible and name the wrong edge. Here the engine picks the index
+// when it compiles the model, the engine increments the counter when a token arrives,
+// and the only thing under test is whether the picture joins the two correctly.
+func TestPanoramaMeshCountsWhatActuallyTookTheEdge(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", workerMeshBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status = %d, body = %s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+	edge := func() meshEdge {
+		return meshEdgeOf(t, getMesh(t, ts), meshProcessID(dep.Key), "unresolved:worker:ops-mail", "uses")
+	}
+
+	// Nothing has run. The counter has been read and holds nothing for this element,
+	// which is zero rather than absent — and it arrives with the window that qualifies
+	// it, because a bare zero is what gets misread as "dead" (ADR-0400).
+	before := edge()
+	if before.Taken == nil {
+		t.Fatalf("edge carries no count on a server whose counters read fine: %+v", before)
+	}
+	if *before.Taken != 0 {
+		t.Errorf("Taken = %d before anything ran, want 0", *before.Taken)
+	}
+	if before.TakenSince == 0 {
+		t.Error("TakenSince = 0, want the deployment stamp: a count without its window says nothing")
+	}
+
+	// Two instances, so the assertion is a count and not a boolean. The service task
+	// names a worker nobody configured, so each token parks on it — activation is what
+	// the counter folds, and it does not wait for anybody to serve the job.
+	for i := 0; i < 2; i++ {
+		if code, b := doReq(t, ts, http.MethodPost, "/api/v1/instances", `{"processId":"notifier"}`, "application/json"); code != http.StatusOK {
+			t.Fatalf("start instance %d: status = %d, body = %s", i, code, b)
+		}
+	}
+
+	after := edge()
+	if after.Taken == nil {
+		t.Fatalf("edge lost its count after two instances ran: %+v", after)
+	}
+	if *after.Taken != 2 {
+		t.Errorf("Taken = %d after two instances, want 2 — the element the edge is anchored on was activated twice", *after.Taken)
+	}
+	if after.TakenSince != before.TakenSince {
+		t.Errorf("TakenSince moved from %d to %d; the window is the deployment and does not change under traffic",
+			before.TakenSince, after.TakenSince)
 	}
 }
