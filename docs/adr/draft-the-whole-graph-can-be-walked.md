@@ -204,31 +204,66 @@ respect to what Atlas holds, and Atlas deletes (ADR-0085, ADR-0115). A view must
 render the scope alongside the picture — the same requirement ADR-0211 §10 already puts on
 every exported starmap, for the same reason.
 
-### 8. Extending the scope to an archive is blocked on a decision nobody has made
+### 8. Extending the scope to an archive needs no archive-layout decision
 
-The blocker is **not** the data. The export already carries every edge the runtime
-produces: `opensearch/exporter.go`'s `document` holds `Position`, `SourcePosition`, `Key`,
-`Partition` and the record's value marshalled generically as `any` — which for an element
-instance means `FlowScopeKey`, `TokenID`, `ParentTokenID` and `SourceFlowId` all travel.
-An archive-scale run graph is reconstructible from what is already being written.
+The obvious reading is that an archive forces a layout choice — time-partitioned objects
+that are dropped wholesale, or fine-grained objects so one subject can be removed — and
+that this choice has to be made before the first byte is written, because rewriting an
+archive is the one thing that is not cheap. That reading is wrong here, and it is wrong
+because of a decision this repository has already taken.
 
-The blocker is governance, and it determines the archive's *layout*:
+**Neither the data nor the layout is the obstacle.**
 
-> **Who deletes from the archive, and on what request?**
+The export already carries every edge the runtime produces: `opensearch/exporter.go`'s
+`document` holds `Position`, `SourcePosition`, `Key`, `Partition` and the record's value
+marshalled generically as `any` — which for an element instance means `FlowScopeKey`,
+`TokenID`, `ParentTokenID` and `SourceFlowId` all travel. An archive-scale run graph is
+reconstructible from what is already being written.
 
-Atlas hard-deletes instances; the archive keeps them. A deletion request for a person
-therefore reaches nothing by deleting in Atlas. And the answer dictates the layout before
-the first byte is written:
+And [ADR-0314](0314-portal-personal-data.md) already decides how personal data is erased
+from copies nobody can reach: a **reference by default**, and for the residue that cannot
+be a reference, **ciphertext under a per-subject data key held in the vault**, erased by
+destroying that one vault entry. Its own words on why that reaches an archive: every copy
+— "the WAL segment, the state record, the checkpoint, the OpenSearch document, last year's
+backup, the instance snapshot an operator exported" — holds the same bytes that the
+destroyed key decrypted, so "nothing has to be found, coordinated or reached".
 
-- deletion **by time only** → time-partitioned immutable objects, dropped wholesale;
-- deletion **by subject** → large immutable objects mixing many subjects are ruled out
-  entirely.
+**The consequence for this record is that a conflict dissolves.** Subject-level erasure and
+a bulk sequential read pull in opposite directions only while erasure means removing bytes:
+one wants many small objects, the other wants few large ones. Erasure as key destruction
+wants neither. So the archive may use exactly the layout the CSR build needs — large,
+immutable, time-partitioned objects — and remain subject-erasable. No archive-layout
+decision is owed, and this record does not ask for one.
 
-Rewriting an archive is the one thing that is not cheap, so this decision cannot be
-retrofitted. Until it is taken, the archive extension is not designed, and this record's
-scope stands at §7.
+What genuinely remains is smaller, and none of it is a vacuum:
 
-Two further findings belong with it, for whoever takes it:
+- **ADR-0314's scope is the portal.** The run graph covers every instance of every process.
+  The mechanism reads as general — which variables are personal is declared on the process
+  as a compile-time attribute, "the same shape and the same place as the searchable-variable
+  declaration" of [ADR-0244](0244-searchable-variables.md) — but extending it from portal
+  processes to all of them is a decision, and it is not this record's.
+- **ADR-0314 is `Implementation: Not started`.** So an archive that must be subject-erasable
+  is ordered *after* it. That is a sequencing constraint, not an open question.
+- **One switch is genuinely once-only, and it is not the layout.** Whether an installation
+  runs the per-subject key machinery at all has to be settled before the first write and
+  cannot be changed afterwards: ciphertext written under per-subject keys is unreadable to
+  an installation that later switches the machinery off, and plaintext already written
+  cannot retroactively become erasable. The posture shape already exists —
+  [ADR-0070](0070-vault-on-by-default-with-generated-key.md) is on by default with a
+  generated key and one flag to disable — and an installation under an archiving duty
+  rather than an erasure duty is the case for choosing differently. That switch belongs to
+  the record that extends ADR-0314 beyond the portal.
+
+**The run graph itself holds no payload, and that is not the same as holding nothing.** The
+CSR carries keys, ordinals, flow ids and token ids — never a variable value — so ADR-0314's
+ciphertext never enters it and erasing a subject changes nothing in it. But an instance key
+is a pseudonymous identifier, and a picture that shows *one subject's instances* is
+processing about that person whether or not a value is drawn. The run graph is therefore
+pseudonymous structure rather than anonymous structure, and it inherits the sharing scopes
+(ADR-0071) and the redaction discipline (ADR-0211 §3) for that reason, not merely by
+analogy.
+
+Two further findings belong with the archive substrate record, for whoever writes it:
 
 - **OpenSearch is the wrong substrate for a bulk pass and the right one for a search.** It
   has no join and no traversal; building a CSR from it means scrolling the entire index —
@@ -264,8 +299,12 @@ Two further findings belong with it, for whoever takes it:
 - **Follow-ups / risks to watch:** measure `Modularize` at scale before anything else is
   built — gonum's algorithms work over the interface-based `graph.Graph`, and interface
   dispatch per edge across 275 million edges is where a hand-written pass may become
-  unavoidable; the archive substrate record, blocked on §8; the ordinal map's own
-  compaction as instances are deleted underneath it.
+  unavoidable; the archive substrate record, which §8 no longer blocks; the ordinal map's
+  own compaction as instances are deleted underneath it; and the key-backup tension in both
+  directions — ADR-0314 names key loss as data loss, and the reverse is equally true once an
+  archive is in play, because a vault backup that survives the erasure defeats it. Backing up
+  too well and backing up too little are both compliance failures, of different laws.
+  Neither record settles it.
 
 ## Pros and cons of the options
 
@@ -305,4 +344,8 @@ Two further findings belong with it, for whoever takes it:
   genesis), ADR-0080/ADR-0239/ADR-0382 (what may not hold the writer), ADR-0238 and
   ADR-0261 (cross-instance edges already indexed), ADR-0211 §§4/7/10 (the rendering and
   export discipline it inherits), ADR-0396 (a second subject rather than more nodes)
-- bounded by ADR-0085 and ADR-0115 (retention), ADR-0010 (no CGO), ADR-0011 (single binary)
+- rests on ADR-0314 for §8: erasure as key destruction is what lets the archive keep the
+  layout a bulk read wants, and ADR-0244 is the declaration shape it reuses; ADR-0070 is the
+  posture shape of the one switch that is genuinely once-only
+- bounded by ADR-0085 and ADR-0115 (retention), ADR-0071 (the scopes the pseudonymous
+  structure inherits), ADR-0010 (no CGO), ADR-0011 (single binary)
