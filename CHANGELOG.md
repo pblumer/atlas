@@ -931,6 +931,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The decision-service tool in the editor's palette was a button that never worked.**
+  DMN's published interface over part of a decision graph could be carried, edited and
+  round-tripped by the editor, but not drawn: the palette offered the tool and the
+  canvas refused every drop, because the modeling rule that decides what may be created
+  did not list the type. From an author's side it read as a broken button, and the
+  workaround was to write the element into the XML by hand or bring the model from
+  another tool.
+
+  The rule now lists it, the tool has its own icon instead of borrowing the decision's,
+  and a service created this way comes with the divider line that separates what it
+  returns from what it works out internally. The vendored modeler is rebuilt from the
+  fork that carries all of it. What Atlas ships is held to it by a test of its own: the
+  palette offers the tool, the rule allows the drop, and the result survives to the
+  document — asking the rule the interactive path asks, which is the thing that was
+  false.
+
 - **The test panel blamed the model for a silence that belongs to the engine.** A
   decision service is evaluated without a rule matrix — the engine reports none for one
   — so testing a service handed the panel an answer with no trace at all. The panel
