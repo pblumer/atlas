@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"sort"
+	"strconv"
 
 	"github.com/pblumer/atlas/model"
 
@@ -166,7 +167,11 @@ func (s *Server) handleDeployedDecisions(w http.ResponseWriter, _ *http.Request)
 // returns nothing — a string compared against the wrong type, a trailing space, a
 // number where a string was expected — is diagnosable from what it actually saw.
 type decisionEvaluationRow struct {
-	At          int64           `json:"at"`
+	At int64 `json:"at"`
+	// AtKey is At as a decimal string, for the reason decisionEvaluationView carries
+	// one: a nanosecond timestamp is past 2^53, so a browser cannot parse one without
+	// rounding it, and this is how an evaluation is addressed.
+	AtKey       string          `json:"atKey"`
 	InstanceKey uint64          `json:"instanceKey"`
 	ProcessID   string          `json:"processId"`
 	ElementID   string          `json:"elementId"`
@@ -192,6 +197,7 @@ func (s *Server) handleDecisionEvaluations(w http.ResponseWriter, r *http.Reques
 			}
 			row := decisionEvaluationRow{
 				At:          ts,
+				AtKey:       strconv.FormatInt(ts, 10),
 				InstanceKey: v.ProcessInstanceKey,
 				Inputs:      rawJSONOr(v.InputsJSON, "{}"),
 				Outputs:     rawJSONOr(v.OutputsJSON, "{}"),

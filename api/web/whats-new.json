@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "double-click-a-business-rule-task-and-the-decision-opens",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Double-click a business rule task and the decision opens",
+        "de": "Doppelklick auf eine Business-Rule-Task öffnet die Entscheidung"
+      },
+      "summary": {
+        "en": "How a case was decided used to hide behind a hover: a small table that appeared when the pointer happened to be in the right place, and could not be scrolled, selected or pointed at while somebody else was reading the screen. Double-clicking the task now opens the decision itself — the decision requirements graph, with this case drawn on it. Every input datum shows the value it was given, every decision shows the value it produced, and the decision that answered is marked green. Underneath sit the rule tables, with the rule that carried the result in green and, on the rules that did not fire, the condition that ruled each one out. It is drawn to be turned towards somebody who does not use Atlas.",
+        "de": "Wie ein Fall entschieden wurde, verbarg sich bisher hinter einem Hover: eine kleine Tabelle, die erschien, wenn der Zeiger zufällig richtig stand, und die sich weder scrollen noch markieren liess, während jemand anderes auf den Bildschirm schaute. Ein Doppelklick auf die Aufgabe öffnet jetzt die Entscheidung selbst — den Decision Requirements Graph, mit diesem Fall darauf gezeichnet. Jedes Eingabedatum zeigt den Wert, den es erhalten hat, jede Entscheidung den Wert, den sie ermittelt hat, und die entscheidende Entscheidung ist grün markiert. Darunter stehen die Regeltabellen: die Regel, die das Ergebnis getragen hat, in Grün — und bei den Regeln, die nicht gezogen haben, die Bedingung, an der sie jeweils gescheitert sind. Gezeichnet, um den Bildschirm jemandem zuzudrehen, der Atlas nicht kennt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations",
+        "Decisions"
+      ],
+      "try": {
+        "label": {
+          "en": "Open an instance and double-click a decision",
+          "de": "Instanz öffnen und Entscheidung doppelklicken"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "a-business-rule-task-can-call-a-decision-service",
       "version": "Unreleased",
       "date": null,
@@ -417,24 +446,6 @@
       "summary": {
         "en": "\"Meine Aufträge\" already listed each position and what it was doing, out of the order's own record, and that stays the answer for every reader.",
         "de": "\"Meine Aufträge\" already listed each position and what it was doing, out of the order's own record, and that stays the answer for every reader."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "one-product-may-be-ordered-in-two-shapes-at-once",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "One product may be ordered in two shapes at once.",
-        "de": "One product may be ordered in two shapes at once."
-      },
-      "summary": {
-        "en": "The catalogue describes the same service pulled in twice in different variants as a conflict the orderer resolves, and keeping both is a resolution — a black phone and a silver one.",
-        "de": "The catalogue describes the same service pulled in twice in different variants as a conflict the orderer resolves, and keeping both is a resolution — a black phone and a silver one."
       },
       "link": {
         "label": "Changelog",

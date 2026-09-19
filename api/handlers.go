@@ -3635,7 +3635,13 @@ func (s *Server) handleDataObjectsAcrossInstances(w http.ResponseWriter, r *http
 // raw JSON rather than being re-encoded. Trace is omitted when the decision produced
 // none (a literal-expression decision, or a remote decision returning no trace).
 type decisionEvaluationView struct {
-	At         int64           `json:"at"`
+	At int64 `json:"at"`
+	// AtKey is At again, as a decimal string, and it is not redundant: a nanosecond
+	// timestamp is past 2^53, so a browser cannot hold one as a number without
+	// rounding it (1789824241612033700 parses as …3800). Every client here is a
+	// browser, and the timestamp is how an evaluation is addressed — so the number is
+	// for reading and arithmetic, and this is the identity to hand back.
+	AtKey      string          `json:"atKey"`
 	ElementID  string          `json:"elementId"`
 	DecisionID string          `json:"decisionId"`
 	Inputs     json.RawMessage `json:"inputs"`
@@ -3673,6 +3679,7 @@ func (s *Server) handleInstanceDecisions(w http.ResponseWriter, r *http.Request)
 		scanErr = s.store.DecisionEvaluationHistory(key, func(ts int64, _ uint64, v *model.DecisionEvaluationValue) error {
 			view := decisionEvaluationView{
 				At:         ts,
+				AtKey:      strconv.FormatInt(ts, 10),
 				DecisionID: v.DecisionId,
 				Inputs:     rawJSONOr(v.InputsJSON, "{}"),
 				Outputs:    rawJSONOr(v.OutputsJSON, "{}"),
@@ -3689,6 +3696,101 @@ func (s *Server) handleInstanceDecisions(w http.ResponseWriter, r *http.Request)
 	})
 	if scanErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "read decisions: "+scanErr.Error())
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, out)
+}
+
+// decisionGraphView answers "how was this case decided" in one read: the
+// evaluation itself — what it saw, what it produced, and the trace of which rules
+// fired — together with the decision requirements graph of the model that
+// produced it, so an operator can be shown the decision rather than told about it.
+//
+// The graph is the one the *evaluation* ran against, resolved from the process
+// definition the record carries, not the design-time model as it reads today. A
+// decision that was re-modelled since must not redraw the case that ran under the
+// old shape.
+//
+// Service marks a decision service, whose evaluation retains no rule trace at all
+// (ADR-0398). The distinction is load-bearing for the reader: the graph and the
+// values are still exact, and only the rule-level detail is missing — which is a
+// different sentence from "no rules fired".
+type decisionGraphView struct {
+	At         int64           `json:"at"`
+	AtKey      string          `json:"atKey"`
+	ElementID  string          `json:"elementId,omitempty"`
+	DecisionID string          `json:"decisionId"`
+	ModelName  string          `json:"modelName,omitempty"`
+	Service    bool            `json:"service,omitempty"`
+	Inputs     json.RawMessage `json:"inputs"`
+	Outputs    json.RawMessage `json:"outputs"`
+	Trace      json.RawMessage `json:"trace,omitempty"`
+	Nodes      []dmn.GraphNode `json:"nodes"`
+	Edges      []dmn.GraphEdge `json:"edges"`
+}
+
+// handleInstanceDecisionGraph serves one of an instance's decision evaluations —
+// the one recorded at `at` — with the requirements graph of the decision behind
+// it. It is what the Operations viewers open when a business rule task is
+// double-clicked: the picture of the decision, annotated with this case's values.
+//
+// `at` identifies the evaluation because the record is keyed by timestamp within
+// the instance and the client passes back a timestamp it was served. An unknown
+// instance or timestamp is a 404 rather than an empty document: the caller asked
+// for one specific evaluation, and there is no such thing as an empty one.
+func (s *Server) handleInstanceDecisionGraph(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
+		return
+	}
+	// The path carries the timestamp as the decimal string the listing served
+	// (decisionEvaluationView.AtKey), because a browser rounds a nanosecond
+	// timestamp the moment it parses one as a number. Parsed back here it is exact
+	// again, so the comparison below is the identity it looks like.
+	at, err := strconv.ParseInt(r.PathValue("at"), 10, 64)
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "invalid evaluation timestamp")
+		return
+	}
+	var out *decisionGraphView
+	var scanErr error
+	s.do(func() {
+		scanErr = s.store.DecisionEvaluationHistory(key, func(ts int64, _ uint64, v *model.DecisionEvaluationValue) error {
+			if ts != at {
+				return nil
+			}
+			view := &decisionGraphView{
+				At:         ts,
+				AtKey:      strconv.FormatInt(ts, 10),
+				DecisionID: v.DecisionId,
+				Inputs:     rawJSONOr(v.InputsJSON, "{}"),
+				Outputs:    rawJSONOr(v.OutputsJSON, "{}"),
+				Nodes:      []dmn.GraphNode{},
+				Edges:      []dmn.GraphEdge{},
+			}
+			if v.TraceJSON != "" {
+				view.Trace = json.RawMessage(v.TraceJSON)
+			}
+			if d, ok := s.deployments[v.ProcessDefKey]; ok {
+				view.ElementID = d.cp.ElementBpmnId(v.ElementId)
+			}
+			if g, ok := s.dmnRegistry.Graph(v.ProcessDefKey, v.DecisionId); ok {
+				view.ModelName, view.Nodes, view.Edges = g.ModelName, g.Nodes, g.Edges
+			}
+			view.Service = s.dmnRegistry.IsService(v.ProcessDefKey, v.DecisionId)
+			out = view
+			// The evaluation asked for is in hand; the rest of the instance's decision
+			// history is not this read's business.
+			return errListTruncated
+		})
+	})
+	if err := unlessTruncated(scanErr); err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read decisions: "+err.Error())
+		return
+	}
+	if out == nil {
+		httpapi.Error(w, http.StatusNotFound, "no decision evaluation recorded at that time")
 		return
 	}
 	httpapi.JSON(w, http.StatusOK, out)
