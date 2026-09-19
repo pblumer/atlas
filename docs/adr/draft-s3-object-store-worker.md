@@ -120,9 +120,12 @@ visible in the diagram and resumable by hand.
 ### What bounds the byte path
 
 `get-object` and `put-object` are the two operations where content crosses the seam, and
-both are capped at [`MaxObjectBytes`](../../connector/s3/client.go) — 1 MiB, the same
-number as `limits.Variable`, because the destination of a read *is* a process variable.
-The cap **refuses rather than truncates**, for the reason
+both are capped at [`MaxObjectBytes`](../../connector/s3/client.go), which *is*
+`limits.Limits.Variable` — one mebibyte by default — rather than a number of the
+connector's own. The destination of a read is one process variable, so a cap that could
+differ from the variable's own would only move the failure one step later, and an
+installation that raises the variable budget means to raise this with it. The cap
+**refuses rather than truncates**, for the reason
 [`entra.Request.MaxBytes`](../../connector/entra/client.go) gives: half a PDF is not a
 smaller PDF, it is a file that passes every format check and is broken.
 

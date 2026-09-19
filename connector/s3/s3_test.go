@@ -175,7 +175,7 @@ func TestGetObjectReadsTheDocumentBack(t *testing.T) {
 // not a smaller document: it passes every format check there is and is broken.
 func TestGetObjectRefusesAnObjectLargerThanAVariable(t *testing.T) {
 	f := newFakeStore(t)
-	f.payload = strings.Repeat("x", int(s3.MaxObjectBytes)+1)
+	f.payload = strings.Repeat("x", int(s3.MaxObjectBytes())+1)
 
 	_, err := f.do(s3.Request{Operation: "get-object", Bucket: "b", Key: "gross.pdf"})
 	if err == nil {
@@ -192,7 +192,7 @@ func TestPutObjectRefusesADocumentLargerThanAVariable(t *testing.T) {
 	f := newFakeStore(t)
 	_, err := f.do(s3.Request{
 		Operation: "put-object", Bucket: "b", Key: "gross.pdf",
-		Content: strings.Repeat("x", int(s3.MaxObjectBytes)+1),
+		Content: strings.Repeat("x", int(s3.MaxObjectBytes())+1),
 	})
 	if err == nil {
 		t.Fatal("put-object accepted a document past the variable budget")
