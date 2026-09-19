@@ -1229,7 +1229,9 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         ? `<div class="res">${outs.map(([k, v]) =>
             `<div class="res-row"><span class="res-key">${esc(k)}</span><span class="res-val">${esc(traceValue(v))}</span></div>`).join("")}</div>`
         : `<p class="muted">This decision returned nothing for those inputs — no rule matched.</p>`;
-      testResult.innerHTML = result + renderTrace(res.trace);
+      // A decision service records no trace, so the panel says that rather than
+      // claiming the model has no table logic (dmn-trace.js).
+      testResult.innerHTML = result + renderTrace(res.trace, { service: !!(chosen && chosen.service) });
     } catch (e) {
       testResult.innerHTML = "";
       testErr.textContent = e.message;

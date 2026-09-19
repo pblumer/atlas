@@ -60,7 +60,7 @@ func TestTheDirectoryAndThePickerAreNotTheSameField(t *testing.T) {
 	}
 	// And the picker is filled from what the load already read, rather than asking
 	// for the same list a second time.
-	who := webRegion(t, src, "async function loadWhoIAm(", "\n}")
+	who := webRegion(t, src, "function loadWhoIAm(", "\n}")
 	if strings.Contains(who, "await api('/api/v1/principals')") {
 		t.Error("the directory is read twice per load, once for each of its readers")
 	}

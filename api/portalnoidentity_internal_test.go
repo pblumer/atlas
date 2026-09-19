@@ -53,7 +53,7 @@ func TestTheBasketIsNotFillableWhenItCannotBeSubmitted(t *testing.T) {
 // principal carrying a user id, and a page that inferred it from the mode would
 // disagree the day the two stop meaning the same thing.
 func TestWhetherAnOrderIsPossibleIsTheServersRuleMirrored(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "async function loadWhoIAm(", "\n}")
+	body := webRegion(t, readWeb(t, "portal.js"), "function loadWhoIAm(", "\n}")
 	if !strings.Contains(body, "state.canOrder = state.meID !== ''") {
 		t.Error("whether an order can be placed is not read from the identity the " +
 			"session carries")

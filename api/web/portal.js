@@ -158,6 +158,24 @@ const STRINGS = {
     'find.hits': 'Treffer',
     'find.clear': 'Suche zurücksetzen',
     'find.where': 'in',
+    // The sign-in, for a portal that enforces one. Every string here is read by
+    // somebody who is not an operator and has no server log to consult, so each
+    // one names what to do next rather than what went wrong.
+    'signin.title': 'Bitte melden Sie sich an',
+    'signin.hint': 'Dieses Portal zeigt Ihnen den Katalog, der Ihnen zugeordnet ist, und Ihre eigenen Aufträge. Dazu muss es wissen, wer Sie sind.',
+    'signin.user': 'Benutzername',
+    'signin.password': 'Passwort',
+    'signin.submit': 'Anmelden',
+    'signin.busy': 'Wird angemeldet …',
+    'signin.wrong': 'Benutzername oder Passwort stimmt nicht.',
+    'signin.throttled': 'Zu viele Versuche — das Passwort wurde gar nicht geprüft. Warten Sie einige Minuten und versuchen Sie es dann erneut.',
+    'signin.failed': 'Die Anmeldung liess sich nicht abschliessen. Versuchen Sie es erneut, oder wenden Sie sich an die Stelle, die Ihren Zugang eingerichtet hat.',
+    'signin.expired': 'Ihre Anmeldung ist abgelaufen. Bitte melden Sie sich erneut an.',
+    'signin.sso': 'Anmelden mit',
+    'signin.ssoFailed': 'Die Anmeldung über Ihren Identitätsanbieter hat nicht geklappt. Versuchen Sie es erneut, oder wenden Sie sich an die Stelle, die Ihren Zugang eingerichtet hat.',
+    'signin.or': 'oder mit Benutzername und Passwort',
+    'signin.register': 'Noch kein Konto?',
+    'signin.registerLink': 'Registrieren',
   },
   en: {
     'portal.title': 'Service portal',
@@ -297,6 +315,21 @@ const STRINGS = {
     'find.hits': 'matches',
     'find.clear': 'Clear search',
     'find.where': 'in',
+    'signin.title': 'Please sign in',
+    'signin.hint': 'This portal shows you the catalogue assigned to you, and your own orders. To do that it has to know who you are.',
+    'signin.user': 'Username',
+    'signin.password': 'Password',
+    'signin.submit': 'Sign in',
+    'signin.busy': 'Signing in …',
+    'signin.wrong': 'That username or password is not right.',
+    'signin.throttled': 'Too many attempts — the password was not checked at all. Wait a few minutes and try again.',
+    'signin.failed': 'The sign-in could not be completed. Try again, or ask whoever set up your access.',
+    'signin.expired': 'Your session has run out. Please sign in again.',
+    'signin.sso': 'Sign in with',
+    'signin.ssoFailed': 'Signing in with your identity provider did not work. Try again, or ask whoever set up your access.',
+    'signin.or': 'or sign in with a username and password',
+    'signin.register': 'No account yet?',
+    'signin.registerLink': 'Register',
   },
 };
 
@@ -418,6 +451,41 @@ const state = {
   chosen: new Set(),
   busy: false,
   error: '',
+
+  // --- Who is reading, and whether anybody is ---------------------------------
+
+  // me is the answer to GET /api/v1/auth/me, read once per load and consumed by
+  // everything on the page that depends on it. One read rather than two: the gate
+  // below and loadWhoIAm asked the same question, and two answers to it can
+  // disagree.
+  me: null,
+  // needSignIn is the case this page had no answer for: enforcement is on and
+  // nobody is signed in, so every route here answers 401. It is set only by a
+  // refusal — an unreadable answer leaves it false, because not knowing who
+  // somebody is is not the same as knowing they are nobody.
+  needSignIn: false,
+  // providers is whatever the server federates its login to, empty where it
+  // federates nothing. Read before the form is drawn, because on an installation
+  // that has one there may be no password to type at all.
+  providers: [],
+  // registerURL is where somebody with no account starts, empty where the
+  // instance does not offer that (ADR-0126).
+  registerURL: '',
+  // signinError is what the last attempt is waiting to say, as a catalogue key.
+  // A key and not a sentence: the page is redrawn on every keystroke of state and
+  // a sentence captured in one locale would survive the language switch.
+  signinError: '',
+  // signinBusy is an attempt in flight — one at a time, or an impatient second
+  // press spends one of the five tries the throttle counts.
+  signinBusy: false,
+  // signinUser is what was typed into the username field, kept because an attempt
+  // redraws the page twice — once to say it is busy, once to say what happened —
+  // and a field rebuilt from nothing comes back empty. Somebody who mistyped their
+  // password would have to retype their name as well, which is the small cruelty
+  // that turns a second attempt into a telephone call. The password is deliberately
+  // not kept: clearing it is what every login does, and it is what somebody
+  // retyping expects to find.
+  signinUser: '',
 
   // --- What the mockups add: a shell with three destinations, a cascade that
   // remembers where it is, and a basket that survives moving between products.
@@ -747,14 +815,94 @@ function inBasketNow(release, id) {
   return false;
 }
 
+// api reads one route, and its failures carry their status.
+//
+// The status used to live only inside the message string, which made "was this
+// refused or did it break" a question about parsing text. It is the difference
+// between showing somebody a sign-in and showing them an error, so it travels as
+// a field.
 async function api(path, options) {
   const res = await fetch(path, { credentials: 'same-origin', ...options });
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  if (!res.ok) {
+    const err = new Error(`${res.status} ${await res.text()}`);
+    err.status = res.status;
+    throw err;
+  }
   return res.status === 204 ? null : res.json();
+}
+
+// readMe asks who is reading, and is the gate everything else on this page stands
+// behind.
+//
+// A 401 here is the defect this answers. With enforcement on and no session every
+// route the portal reads is refused: the catalogue read was swallowed and drawn as
+// "no catalogue is assigned to you", which is a statement about entitlement and
+// not about authentication, and the orders read was not swallowed at all — so what
+// a visitor got was an error line with an HTTP status in it, no catalogue, and
+// nothing anywhere offering the sign-in that would have fixed it.
+//
+// Anything else is not a refusal. Unreadable is not forbidden, and the honest
+// response to not knowing is to carry on and offer less: the page loads as it
+// always did, and the controls that need an identity are simply not drawn.
+async function readMe() {
+  state.me = null;
+  state.needSignIn = false;
+  try {
+    state.me = await api('/api/v1/auth/me');
+  } catch (e) {
+    state.needSignIn = e.status === 401;
+  }
+  if (state.needSignIn) forgetTheReader();
+}
+
+// forgetTheReader drops what was resolved for whoever was here, because nobody is
+// now. It matters on the second way in: a session that ran out leaves a catalogue,
+// a release and a basket behind, and a sign-in screen drawn over them names
+// somebody else's catalogue in its heading and marks it with their brand while
+// asking who you are. Nothing is disclosed — it was this browser's own tab — but a
+// page that keeps presenting a catalogue as yours after establishing that you are
+// nobody is a page saying two things at once.
+function forgetTheReader() {
+  state.catalog = null;
+  state.release = null;
+  state.orders = [];
+  state.held = new Map();
+  state.favourites = new Set();
+  state.principals = [];
+  state.directory = new Map();
+  state.basket = new Set();
+  state.me = null;
+  loadWhoIAm();
+}
+
+// loadSignInOptions reads what the sign-in screen may offer before anybody has a
+// session. Both routes are public for exactly this reason, both answer "nothing
+// configured" as an ordinary answer, and neither failing may cost the password
+// form — which is the one control that works everywhere.
+async function loadSignInOptions() {
+  state.providers = [];
+  state.registerURL = '';
+  try {
+    const list = await api('/api/v1/auth/providers');
+    state.providers = Array.isArray(list) ? list : [];
+  } catch { /* no provider, or the server could not say — the password form stands */ }
+  try {
+    const cfg = await api('/api/v1/settings/registration');
+    if (cfg && cfg.enabled && cfg.url) state.registerURL = cfg.url;
+  } catch { /* registration off or unreachable — the line stays hidden */ }
 }
 
 async function load() {
   state.error = '';
+  // First, because everything below needs a session: a load that read the
+  // catalogue first would spend a refusal before establishing there is nobody to
+  // refuse, and would then have to unpick which of the two answers it was.
+  await readMe();
+  if (state.needSignIn) {
+    await loadSignInOptions();
+    render();
+    return;
+  }
   try {
     state.catalog = await api('/api/v1/portal/catalog');
   } catch {
@@ -795,7 +943,7 @@ async function load() {
     state.principals = [];
     state.directory = new Map();
   }
-  await loadWhoIAm();
+  loadWhoIAm();
   render();
 }
 
@@ -807,21 +955,21 @@ async function load() {
 // 403 for almost all of them. Roles come from the same record the session
 // snapshots them from, so what the page hides and what the server refuses cannot
 // drift apart.
-async function loadWhoIAm() {
+//
+// It reads the answer readMe already has rather than asking again. Two reads of
+// one question is one round trip too many and, worse, two answers that can
+// disagree: a session that expires between them would leave the page holding a
+// catalogue for somebody it has just decided is nobody.
+function loadWhoIAm() {
   state.mayOrderForOthers = false;
   state.canOrder = false;
   state.meName = '';
   state.meID = '';
   state.people = [];
-  let me;
-  try {
-    me = await api('/api/v1/auth/me');
-  } catch {
-    // Unreadable is not the same as forbidden, and the honest response to not
-    // knowing is to offer less rather than to guess more: the ordinary portal
-    // still works, ordering for somebody else simply is not offered.
-    return;
-  }
+  const me = state.me;
+  // Nothing was readable. Offer less rather than guess more: the ordinary portal
+  // still works, ordering for somebody else simply is not offered.
+  if (!me) return;
   const user = (me && me.user) || {};
   const roles = user.roles || [];
   // The name, not the id. An id in the corner is the account's identifier and not
@@ -853,6 +1001,118 @@ async function loadWhoIAm() {
   // An empty directory leaves the field taking a typed id. A picker that could not
   // load is a convenience missing, not a screen broken.
   state.people = state.principals.filter((e) => e.type === 'user');
+}
+
+// signIn posts the password form and, on success, loads the portal the visitor
+// asked for.
+//
+// It stays here. The Console's sign-in lands on the Console, which is the wrong
+// product for somebody who followed a link from a mail to order a laptop and
+// holds no Console role — they would land in a shell whose every entry is missing
+// and have to find their own way back. The endpoints are the same; only where it
+// returns to differs, and that is the whole reason this screen exists rather than
+// a redirect.
+async function signIn(username, password) {
+  if (state.signinBusy) return;
+  state.signinBusy = true;
+  state.signinError = '';
+  render();
+  try {
+    await api('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+  } catch (e) {
+    state.signinBusy = false;
+    state.signinError = signInFailureText(e);
+    render();
+    return;
+  }
+  state.signinBusy = false;
+  await load();
+}
+
+// signInFailureText names what refused the attempt, as a catalogue key.
+//
+// A 401 is the only answer that is about the credentials, and it stays vague: the
+// server refuses an unknown account and a wrong password identically so a login
+// cannot be read as a directory, and this screen must not undo that.
+//
+// A 429 is the throttle (ADR-0197), and it is a different
+// failure entirely — it refuses the *attempt*, before the password is looked at,
+// once five have been wrong. Reported as a credential failure it is how somebody
+// spends a quarter of an hour hunting a password that is already correct. It
+// matters more here than on the Console: an operator can read the server log, and
+// the person this page is for can only telephone the desk this portal exists to
+// save. Saying so leaks nothing, because the throttle counts attempts against
+// names that do not exist too.
+//
+// Anything else is not a credential failure either, and the server's own wording
+// does not go onto a pre-auth screen.
+function signInFailureText(e) {
+  if (e && e.status === 401) return 'signin.wrong';
+  if (e && e.status === 429) return 'signin.throttled';
+  return 'signin.failed';
+}
+
+// renderSignIn is the whole page while nobody is signed in: no nav, no catalogue,
+// no basket. Not a banner over the shop — there is no shop to put it over, since
+// every route behind this screen answers 401, and a page drawn around empty lists
+// would report "you are the audience for nothing" to somebody who is simply not
+// signed in yet.
+function renderSignIn() {
+  const form = el('form', { class: 'card signin' });
+  const user = el('input', {
+    name: 'username', autocomplete: 'username', required: 'required',
+    value: state.signinUser,
+    // The field somebody has to fill next: the name on a first visit, the password
+    // once the name survived an attempt.
+    autofocus: state.signinUser ? null : 'autofocus',
+  });
+  const pass = el('input', {
+    name: 'password', type: 'password', autocomplete: 'current-password', required: 'required',
+    autofocus: state.signinUser ? 'autofocus' : null,
+  });
+  form.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    state.signinUser = user.value;
+    signIn(user.value, pass.value);
+  });
+  paint(form,
+    el('h2', { class: 'signin-title' }, t('signin.title')),
+    el('p', { class: 'muted' }, t('signin.hint')),
+    // The callback sends a failed federated attempt back here with ?sso=failed and
+    // no reason. The reason is in the server's audit log, where somebody who can
+    // act on it will find it, rather than in a URL anybody could send anybody.
+    new URLSearchParams(location.search).get('sso') === 'failed'
+      ? el('p', { class: 'error' }, t('signin.ssoFailed'))
+      : null,
+    state.providers.length
+      ? el('div', { class: 'providers' },
+        // returnTo, because the callback lands wherever the login started and its
+        // default is the Console — which is where somebody who followed a link to
+        // order a laptop least belongs. The server takes the value from an
+        // allowlist of the two pages that can start one of these, so this names a
+        // page rather than choosing a destination.
+        state.providers.map((p) => el('a', {
+          class: 'provider',
+          href: `${p.start}${p.start.includes('?') ? '&' : '?'}returnTo=${encodeURIComponent(location.pathname)}`,
+        }, `${t('signin.sso')} ${p.name}`)),
+        el('p', { class: 'muted or' }, t('signin.or')))
+      : null,
+    el('label', { class: 'field' }, t('signin.user'), user),
+    el('label', { class: 'field' }, t('signin.password'), pass),
+    state.signinError
+      ? el('p', { class: 'error', role: 'alert' }, t(state.signinError))
+      : null,
+    el('button', { class: 'primary', type: 'submit', disabled: state.signinBusy },
+      state.signinBusy ? t('signin.busy') : t('signin.submit')),
+    state.registerURL
+      ? el('p', { class: 'muted' }, `${t('signin.register')} `,
+        el('a', { href: state.registerURL }, t('signin.registerLink')))
+      : null);
+  return form;
 }
 
 // products returns what a person picks from: the items nothing else includes.
@@ -2476,7 +2736,14 @@ const INSTANCE_MARK = '/api/v1/settings/logo';
 let mark = null;
 
 function renderMark() {
-  if (!state.catalog) return null;
+  // No catalogue and no sign-in to make: nothing to show a mark for.
+  //
+  // A sign-in screen is the exception, and deliberately so. It asks for a password
+  // while no catalogue is resolved — that is what it is for — and a page asking
+  // for a password while saying nothing about who is asking is the shape of a
+  // phishing page. So it carries the instance's own mark, from the endpoint that
+  // is public precisely because a sign-in screen has to be able to read it.
+  if (!state.catalog && !state.needSignIn) return null;
   if (!mark) {
     // Rendered through an <img> and never inlined, so a script inside an uploaded
     // SVG has no context to run in; the server serves it sandboxed as well.
@@ -2490,10 +2757,13 @@ function renderMark() {
   }
   // Assigning src re-requests the image, and render runs on every repaint — so it
   // is assigned when the catalogue changes and not when the basket does.
-  if (mark.dataset.for !== state.catalog.id) {
-    mark.dataset.for = state.catalog.id;
+  const want = state.catalog ? state.catalog.id : '';
+  if (mark.dataset.for !== want) {
+    mark.dataset.for = want;
     mark.hidden = false;
-    mark.src = `/api/v1/catalogs/${encodeURIComponent(state.catalog.id)}/logo`;
+    mark.src = state.catalog
+      ? `/api/v1/catalogs/${encodeURIComponent(state.catalog.id)}/logo`
+      : INSTANCE_MARK;
   }
   return mark;
 }
@@ -2757,15 +3027,22 @@ function render() {
           class: l === locale ? 'lang on' : 'lang',
           onclick: () => setLocale(l),
         }, l.toUpperCase()))))),
-    renderNav(),
-    state.error ? el('p', { class: 'error' }, state.error,
-      ' ', el('button', { onclick: load }, t('portal.retry'))) : null,
-    state.view === 'catalog' ? renderForWhom() : null,
-    el('h2', {}, t(state.inBasket ? 'basket.title'
-      : state.view === 'orders' ? 'nav.orders'
-        : state.view === 'services' ? 'nav.services' : 'nav.catalog')),
-    currentView(),
-    renderActions());
+    // The header stands on the sign-in screen too — the mark says who is asking,
+    // and the language switch has to be reachable before the sign-in, not after
+    // it: a German-speaking visitor meeting an English form is the case this
+    // page's whole message catalogue exists to avoid. Everything below the header
+    // needs a session, so below the header there is nothing but the sign-in.
+    ...(state.needSignIn ? [renderSignIn()] : [
+      renderNav(),
+      state.error ? el('p', { class: 'error' }, state.error,
+        ' ', el('button', { onclick: load }, t('portal.retry'))) : null,
+      state.view === 'catalog' ? renderForWhom() : null,
+      el('h2', {}, t(state.inBasket ? 'basket.title'
+        : state.view === 'orders' ? 'nav.orders'
+          : state.view === 'services' ? 'nav.services' : 'nav.catalog')),
+      currentView(),
+      renderActions(),
+    ]));
   // After the page exists. Fire and forget: the containers say they are loading
   // until this finishes, and a failure to load the runtime leaves a sentence rather
   // than an empty box.
@@ -2776,5 +3053,19 @@ document.addEventListener('DOMContentLoaded', () => {
   document.documentElement.lang = locale;
   paintFromCache();
   render();
-  load().catch((e) => { state.error = `${t('portal.failed')} ${e.message}`; render(); });
+  load().catch((e) => {
+    // A refusal is not a broken portal. The page is one people leave open, so the
+    // session behind it runs out while it stands there, and the next load is the
+    // same 401 the gate exists for — reported as a failure it is the original
+    // defect one step later, with an HTTP status where the sign-in should be.
+    if (e && e.status === 401) {
+      state.needSignIn = true;
+      state.signinError = 'signin.expired';
+      forgetTheReader();
+      loadSignInOptions().finally(render);
+      return;
+    }
+    state.error = `${t('portal.failed')} ${e.message}`;
+    render();
+  });
 });

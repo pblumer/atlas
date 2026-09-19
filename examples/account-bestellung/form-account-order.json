@@ -4,7 +4,7 @@
   "components": [
     {
       "type": "text",
-      "text": "# 🧩 Account-Bestellung\n\nBestelle ein neues Konto im Tenant **blumer.net**. Wähle den passenden **Kontotyp** — daraus ergeben sich automatisch Aktivierung, Kategorie und Namenskonvention. Ein Administrator gibt die Bestellung frei und setzt das Initialpasswort."
+      "text": "# 🧩 Account-Bestellung\n\nBestelle ein neues Konto im Tenant **contoso.com**. Wähle den passenden **Kontotyp** — daraus ergeben sich automatisch Aktivierung, Kategorie und Namenskonvention. Ein Administrator gibt die Bestellung frei und setzt das Initialpasswort."
     },
     {
       "key": "vorname",

@@ -14,6 +14,28 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A business rule task can call a decision service.** DMN lets a model publish an
+  interface over part of its decision graph: a decision service names what it returns,
+  what it works out internally, and — the part nothing else can express — which
+  decisions it does *not* compute, because the caller supplies their results as a
+  boundary. Atlas ignored them entirely. A model carrying one deployed, the service was
+  simply never looked at, and the only way through was to call the decision inside it:
+  the same value, but the caller then has to know which decision is the right one and
+  which inputs the whole graph happens to need, so nothing inside can be rearranged
+  without breaking every process that calls it.
+
+  A task's decision now names either. The deploy gate, the version pointers, the test
+  panel and the picker all answer for a service exactly as they do for a decision, and
+  a decision inside one stays callable, so nothing already deployed changes. A model
+  that gives one name to both — or to two services — is refused with the name said out
+  loud, rather than one of the two meanings being picked silently. What a service
+  offers as its inputs is what a caller must supply: its input data and its input
+  decisions, nothing else from the graph behind it.
+
+  Two things are worth knowing. A service evaluation records its inputs and outputs but
+  no trace, because the engine offers none for a service. And the editor still cannot
+  *draw* a decision service — a model that has one comes from the temis Modeler, from
+  Camunda, or from hand-written XML.
 - **An incompatibility can be declared on the screen that declares everything else
   about a catalogue.** A product may exclude another — the clerk who may create a
   supplier must not also approve payments to it — and the record has carried that
@@ -169,7 +191,10 @@ _Changed_ / _Removed_ for each version.
   — and never for the people it is offered to: reaching a catalogue as a customer says
   what you may order and nothing about the estate behind it. A modeler who maintains
   no catalogue therefore sees none, exactly as they see no application nobody shared
-  with them.
+  with them — and the picture **says so in words** rather than leaving an empty canvas
+  to be read as a broken feature. It names both reasons and picks neither: whether no
+  catalogue exists yet or none is yours is the one thing this picture must not tell
+  you, because telling you would disclose that catalogues exist which you may not see.
 
 - **A product is assembled from the services that exist, instead of related pairwise.**
   A catalogue is built out of services that each provision themselves; what a product
@@ -534,6 +559,31 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Every process Atlas ships names one mail worker, and it is called `mail`.** The
+  platform processes (ADR-0122) addressed their mail tasks to two different workers,
+  and neither name said what the worker was. The three user management processes —
+  intake, access review, offboarding — named an individual, and the access review sent
+  its "action required" mail to that person's fixed private address; the three
+  approval processes, and the examples built on them, named `portal`. Both values are
+  embedded in the binary and bootstrap-deployed into the system project, so a server
+  nobody had configured yet listed a private person's name under **Workers nothing can
+  serve**, next to a second entry for the same job — two workers to configure for one
+  way of sending mail, one of them keyed to someone else's name.
+
+  There is now one name across all six, and it says what the worker is rather than who
+  first configured one or which screen the mail was sent from: **`mail`**. The
+  review's recipient is asked for on the start form (`meldung_an`, required, validated
+  as an e-mail address) instead of being frozen into the model, which is what the other
+  two processes already did with their own recipients. Nothing about the mail path
+  itself changed: `connector="…"` is still the attribute (ADR-0203 renamed the
+  vocabulary, not the models).
+
+  **For an existing instance:** a mail worker configured under either old name is no
+  longer found — rename it to `mail` under *Console → Workers*, and where both existed,
+  keep the one whose provider you want and delete the other. The changed bytes make the
+  next start deploy one new version of each of the six processes; instances already
+  running stay on the version they started on.
+
 - **The product editor opens beside the product list, level with the row it was
   opened from.** It used to render under the table, which is fine with three products
   and unusable with forty: editing a row near the bottom put the form below everything
@@ -880,6 +930,75 @@ _Changed_ / _Removed_ for each version.
   about the reader rather than about what they are reading.
 
 ### Fixed
+
+- **The decision-service tool in the editor's palette was a button that never worked.**
+  DMN's published interface over part of a decision graph could be carried, edited and
+  round-tripped by the editor, but not drawn: the palette offered the tool and the
+  canvas refused every drop, because the modeling rule that decides what may be created
+  did not list the type. From an author's side it read as a broken button, and the
+  workaround was to write the element into the XML by hand or bring the model from
+  another tool.
+
+  The rule now lists it, the tool has its own icon instead of borrowing the decision's,
+  and a service created this way comes with the divider line that separates what it
+  returns from what it works out internally. The vendored modeler is rebuilt from the
+  fork that carries all of it. What Atlas ships is held to it by a test of its own: the
+  palette offers the tool, the rule allows the drop, and the result survives to the
+  document — asking the rule the interactive path asks, which is the thing that was
+  false.
+
+- **The test panel blamed the model for a silence that belongs to the engine.** A
+  decision service is evaluated without a rule matrix — the engine reports none for one
+  — so testing a service handed the panel an answer with no trace at all. The panel
+  said "this decision has no table logic, so there are no rules to trace", which is
+  false twice over: the decisions behind the interface are usually tables, and nothing
+  about the model is the reason. It now says that a service reports no rule matrix and
+  points at the thing that does: test a decision inside it.
+
+  The two silences are kept apart properly rather than papered over. A trace that
+  exists and holds no table is a statement about the model — a literal expression, a
+  boxed context — and still reads as one. A missing trace is a statement about the run,
+  and reads as one. Measured on the way: a decision whose own logic is a boxed context
+  but which requires a decision table still traces that table, so the older message was
+  right about every case it used to see.
+
+- **The portal asks you to sign in instead of showing you an error.** On an instance
+  started with `--auth`, opening the service portal without a session produced an
+  error line with an HTTP status in it, no catalogue, nothing saying a sign-in was
+  needed and nowhere to give one. The way in was to know that `/index.html` is a
+  different page, that it has a login, and that coming back afterwards would work —
+  knowledge about Atlas' internals, held by exactly the readers this page is not for.
+
+  Every route the portal reads needs a session, and the server answers an anonymous
+  caller 401 before any of them runs. That is right, and it is unchanged. What the
+  page did with those refusals was not: the catalogue read treated its 401 as the
+  ordinary "you are the audience for nothing" answer, so an authentication problem
+  was reported as **"Ihnen ist kein Katalog zugeordnet"**, and the orders read threw
+  out of the load entirely.
+
+  The portal now asks who is reading before it reads anything else, and a refusal
+  draws **a sign-in** rather than a failure. It is the portal's own screen and not a
+  detour through the Console: it returns to the page the visitor asked for rather
+  than to a shell they hold no role for, and the language switch sits above it, so a
+  German-speaking customer is not met by an English-only form. It carries the
+  instance's mark, because a page that asks for a password while saying nothing
+  about who is asking is the shape of a phishing page.
+
+  Three things it gets right that a login form usually does not. **Only a refusal
+  counts**: an instance that cannot answer at all loads the portal as before, rather
+  than showing every customer a form that cannot possibly work. **The throttle is
+  named as itself** — after five wrong guesses the server refuses the attempt for a
+  quarter of an hour without looking at the password, and told it was their password
+  somebody spends that quarter of an hour retyping one that is already correct.
+  **A session that runs out** while the page stands open returns to the sign-in
+  saying so, instead of turning into the same error one step later.
+
+  Where a login is federated, the provider is offered above the password form — an
+  installation that has one has no password to type — and the callback now **lands
+  where the login started** instead of always on the Console. Which page that may be
+  is an allowlist of the two Atlas serves before anybody is signed in: the value
+  travels through the browser, and anything that could express an arbitrary
+  destination would be an open redirect carrying a login's authority.
 
 - **An agent's save no longer clears a product's group.** `atlas_save_catalog_product`
   is a full replace and forwards exactly the fields its schema declares. `productGroup`

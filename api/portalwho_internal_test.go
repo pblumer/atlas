@@ -70,7 +70,7 @@ func TestTheCornerNamesWhoeverTheOrderIsFor(t *testing.T) {
 // go on seeing the word that names nobody, and the page would look exactly as it
 // does when it works.
 func TestTheReadersNameIsLearnedBeforeTheGateIsAsked(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "async function loadWhoIAm(", "\n}")
+	body := webRegion(t, readWeb(t, "portal.js"), "function loadWhoIAm(", "\n}")
 	learned := strings.Index(body, "state.meName = String(")
 	gate := strings.Index(body, "if (!state.mayOrderForOthers) return;")
 	if learned < 0 || gate < 0 {

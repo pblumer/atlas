@@ -59,14 +59,14 @@ type Registry struct {
 	// it. A process may reference decisions from several models (its business rule
 	// tasks are not confined to one), so each key holds a list, appended to by Deploy
 	// and searched by decision id at evaluation time.
-	definitions map[uint64][]*tdmn.Definitions
+	definitions map[uint64][]registered
 	// latest maps a decision id to the newest model registered that provides it, of
 	// either kind. It exists for one reason only: definitions deployed before
 	// deploy-time pinning still resolve latest binding at task activation
 	// (ADR-0063), and they must keep resolving it exactly as they did. Every
 	// register overwrites it, so replaying deployments oldest-first rebuilds it
 	// deterministically. New deployments never read it.
-	latest map[string]*tdmn.Definitions
+	latest map[string]registered
 	// latestDecision maps a decision id to the newest *decision deployment* key
 	// providing it — the deploy-time selector a latest-bound business rule task is
 	// pinned against. Only registerDecision writes it, so bundling a model with a
@@ -79,12 +79,27 @@ type Registry struct {
 	decisionKeys map[uint64]bool
 }
 
+// registered is one compiled model together with what was worked out about it at
+// registration time, because the document it came from is only in hand there
+// (invariant I5: settle it at deploy time, do not re-derive it per evaluation).
+type registered struct {
+	defs *tdmn.Definitions
+	// names is every name a business rule task's decisionId may carry for this
+	// model: its decisions under both of their names (names.go) and its decision
+	// services (services.go).
+	names []string
+	// services describes the decision services this model publishes. temis exposes
+	// no listing of them, so they are read from the document — which the registry
+	// has and an evaluation does not.
+	services []DecisionInfo
+}
+
 // NewRegistry creates an empty registry over a fresh temis engine.
 func NewRegistry() *Registry {
 	return &Registry{
 		engine:         tdmn.New(),
-		definitions:    map[uint64][]*tdmn.Definitions{},
-		latest:         map[string]*tdmn.Definitions{},
+		definitions:    map[uint64][]registered{},
+		latest:         map[string]registered{},
 		latestDecision: map[string]uint64{},
 		decisionKeys:   map[uint64]bool{},
 	}
@@ -111,7 +126,7 @@ func (r *Registry) Deploy(defKey uint64, dmnXML []byte) error {
 	if diags.HasErrors() {
 		return fmt.Errorf("dmn: model for def %d has errors: %v", defKey, diags)
 	}
-	r.register(defKey, defs)
+	r.register(defKey, defs, dmnXML)
 	return nil
 }
 
@@ -140,7 +155,7 @@ func (r *Registry) Reload(defKey uint64, dmnXML []byte) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("dmn: compile model for def %d: %w", defKey, err)
 	}
-	r.register(defKey, defs)
+	r.register(defKey, defs, dmnXML)
 	if !diags.HasErrors() {
 		return "", nil
 	}
@@ -151,11 +166,14 @@ func (r *Registry) Reload(defKey uint64, dmnXML []byte) (string, error) {
 // with, and as the newest model providing every decision it declares — the legacy
 // pointer only pre-pinning definitions read (ADR-0063). Shared by Deploy, Reload
 // and registerDecision so every accepted model is indexed identically.
-func (r *Registry) register(defKey uint64, defs *tdmn.Definitions) {
-	r.definitions[defKey] = append(r.definitions[defKey], defs)
-	for _, id := range addressableDecisions(defs) {
-		r.latest[id] = defs
+func (r *Registry) register(defKey uint64, defs *tdmn.Definitions, src []byte) registered {
+	reg := registered{defs: defs, services: describeServices(defs, src)}
+	reg.names = append(addressableDecisions(defs), serviceNames(reg.services)...)
+	r.definitions[defKey] = append(r.definitions[defKey], reg)
+	for _, id := range reg.names {
+		r.latest[id] = reg
 	}
+	return reg
 }
 
 // DeployDecision compiles a DMN model published as a decision deployment — a
@@ -177,7 +195,7 @@ func (r *Registry) DeployDecision(key uint64, dmnXML []byte) error {
 	if diags.HasErrors() {
 		return fmt.Errorf("dmn: decision %d has errors: %v", key, diags)
 	}
-	r.registerDecision(key, defs)
+	r.registerDecision(key, defs, dmnXML)
 	return nil
 }
 
@@ -192,7 +210,7 @@ func (r *Registry) ReloadDecision(key uint64, dmnXML []byte) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("dmn: compile decision %d: %w", key, err)
 	}
-	r.registerDecision(key, defs)
+	r.registerDecision(key, defs, dmnXML)
 	if !diags.HasErrors() {
 		return "", nil
 	}
@@ -202,10 +220,10 @@ func (r *Registry) ReloadDecision(key uint64, dmnXML []byte) (string, error) {
 // registerDecision indexes a decision deployment: under its key like any other
 // model, and as the newest deployed version of every decision it declares. Shared
 // by DeployDecision and ReloadDecision so both index identically.
-func (r *Registry) registerDecision(key uint64, defs *tdmn.Definitions) {
-	r.register(key, defs)
+func (r *Registry) registerDecision(key uint64, defs *tdmn.Definitions, src []byte) {
+	reg := r.register(key, defs, src)
 	r.decisionKeys[key] = true
-	for _, id := range addressableDecisions(defs) {
+	for _, id := range reg.names {
 		r.latestDecision[id] = key
 	}
 }
@@ -241,14 +259,14 @@ func (r *Registry) UndeployDecision(key uint64) {
 	}
 	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
 
-	r.latest = make(map[string]*tdmn.Definitions, len(r.latest))
+	r.latest = make(map[string]registered, len(r.latest))
 	r.latestDecision = make(map[string]uint64, len(r.latestDecision))
 	for _, k := range keys {
-		for _, defs := range r.definitions[k] {
-			for _, id := range addressableDecisions(defs) {
+		for _, reg := range r.definitions[k] {
+			for _, id := range reg.names {
 				// register's rule: every accepted model, of either kind, moves the legacy
 				// pointer.
-				r.latest[id] = defs
+				r.latest[id] = reg
 				// registerDecision's rule: only a decision deployment moves the pinning
 				// selector.
 				if r.decisionKeys[k] {
@@ -293,11 +311,11 @@ func (r *Registry) LatestDecisionIDs() map[string]bool {
 // modelProviding returns the model in the list that provides the decision id, or
 // nil if none does — how a deployment-bound evaluation finds the bundled model that
 // declares its decision when a process bundles several.
-func modelProviding(list []*tdmn.Definitions, decisionId string) *tdmn.Definitions {
-	for _, defs := range list {
-		for _, id := range addressableDecisions(defs) {
+func modelProviding(list []registered, decisionId string) *tdmn.Definitions {
+	for _, reg := range list {
+		for _, id := range reg.names {
 			if id == decisionId {
-				return defs
+				return reg.defs
 			}
 		}
 	}
@@ -341,11 +359,11 @@ func (r *Registry) EvaluateLatest(ctx context.Context, decisionId string, in map
 
 // EvaluateLatestTraced is EvaluateLatest plus the temis trace (see EvaluateTraced).
 func (r *Registry) EvaluateLatestTraced(ctx context.Context, decisionId string, in map[string]any) (map[string]any, []byte, error) {
-	defs, ok := r.latest[decisionId]
+	reg, ok := r.latest[decisionId]
 	if !ok {
 		return nil, nil, fmt.Errorf("dmn: no model deployed providing decision %q", decisionId)
 	}
-	return evalDecision(ctx, defs, decisionId, in, "the latest deployed model")
+	return evalDecision(ctx, reg.defs, decisionId, in, "the latest deployed model")
 }
 
 // DeployedDecision is a decision available from a deployed model, described for the
@@ -359,6 +377,9 @@ type DeployedDecision struct {
 	Model  string
 	Inputs []DecisionField
 	Output DecisionField
+	// Service marks a decision service — the published interface over part of a
+	// model rather than one decision in it. A task calls either the same way.
+	Service bool
 }
 
 // DeployedDecisions describes every decision provided by the newest deployed model
@@ -368,17 +389,21 @@ type DeployedDecision struct {
 // discipline as Deploy. Results are sorted by decision id for a stable picker.
 func (r *Registry) DeployedDecisions() []DeployedDecision {
 	out := make([]DeployedDecision, 0, len(r.latest))
-	for id, defs := range r.latest {
-		for _, di := range describeDecisions(defs) {
+	for id, reg := range r.latest {
+		// A decision service is offered beside the decisions, because a business rule
+		// task calls either the same way (services.go).
+		described := append(describeDecisions(reg.defs), reg.services...)
+		for _, di := range described {
 			if di.ID != id {
 				continue // describe the one decision this model is latest for
 			}
 			out = append(out, DeployedDecision{
-				ID:     di.ID,
-				Name:   di.Name,
-				Model:  defs.ModelName(),
-				Inputs: di.Inputs,
-				Output: di.Output,
+				ID:      di.ID,
+				Name:    di.Name,
+				Model:   reg.defs.ModelName(),
+				Inputs:  di.Inputs,
+				Output:  di.Output,
+				Service: di.Service,
 			})
 			break
 		}
@@ -395,6 +420,15 @@ func (r *Registry) DeployedDecisions() []DeployedDecision {
 func evalDecision(ctx context.Context, defs *tdmn.Definitions, decisionId string, in map[string]any, where string) (map[string]any, []byte, error) {
 	dec, err := defs.Decision(decisionId)
 	if err != nil {
+		// A decision service is addressed by the same `decisionId` and answers the same
+		// way, so it is tried here rather than at every caller
+		// (ADR-0398). A decision is
+		// preferred only to settle the case the deploy gate refuses — one model giving
+		// the same name to both — for a model that reached the registry some other way,
+		// such as a reload of an older artifact.
+		if svc, serviceErr := defs.Service(decisionId); serviceErr == nil {
+			return evalService(ctx, defs, svc, decisionId, in, where)
+		}
 		return nil, nil, fmt.Errorf("dmn: decision %q in %s: %w", decisionId, where, err)
 	}
 	// The DRG nodes carry both of a decision's names and both of an input's, and
@@ -423,4 +457,29 @@ func evalDecision(ctx context.Context, defs *tdmn.Definitions, decisionId string
 		}
 	}
 	return outputs, trace, nil
+}
+
+// evalService evaluates a decision service — DMN's published interface over part
+// of a model. The caller supplies the service's input data *and* the results of
+// its input decisions, which it does not compute; everything else behind the
+// interface is evaluated internally and stays invisible here.
+//
+// Two things differ from a decision, and both are the engine's shape rather than
+// a choice made here. Its outputs are keyed by **output-decision name**, so each
+// value's declared type is that decision's — which is why the restoration runs
+// once per key (numbers.go). And temis offers no trace option for a service
+// evaluation, so a service call retains its inputs and outputs but no trace
+// (ADR-0066); a decision call is unaffected.
+func evalService(ctx context.Context, defs *tdmn.Definitions, svc *tdmn.CompiledService, name string, in map[string]any, where string) (map[string]any, []byte, error) {
+	nodes := defs.Graph().Nodes
+	res, err := svc.Evaluate(ctx, tdmn.Input(aliasedInputs(nodes, in)))
+	if err != nil {
+		return nil, nil, fmt.Errorf("dmn: evaluate service %q in %s: %w", name, where, err)
+	}
+	outputs := make(map[string]any, len(res.Outputs))
+	for key, v := range res.Outputs {
+		one := restoreNumbers(defs, nodes, key, map[string]any{key: v})
+		outputs[key] = one[key]
+	}
+	return outputs, nil, nil
 }

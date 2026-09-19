@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Workers",
+    "Organization"
+  ],
+  "title": {
+    "en": "One mail worker for every process Atlas ships, and it is called \"mail\"",
+    "de": "Ein Mail-Worker für alle mitgelieferten Prozesse, und er heisst \"mail\""
+  },
+  "summary": {
+    "en": "The processes Atlas ships with itself — user intake, access review, offboarding and the three approvals — send their mails through a worker they name in the model. There used to be two such names, and neither said what the worker was: one was a person's name, embedded in the binary, and the other was the screen the mail happened to be sent from. A fresh instance listed a stranger under \"Workers nothing can serve\" and asked for two workers to be configured for one way of sending mail. All six now name \"mail\", and the access review asks on its start form who should be told when it finds something, instead of carrying a fixed address in the model. If you configured a mail worker under either old name, rename it to \"mail\" under Console → Workers; the next start deploys one new version of each process, and instances already running stay on the version they started on.",
+    "de": "Die mitgelieferten Prozesse — Benutzeraufnahme, Zugriffs-Review, Offboarding und die drei Genehmigungsverfahren — versenden ihre Mails über einen Worker, den sie im Modell benennen. Bisher gab es dafür zwei Namen, und keiner sagte, was der Worker ist: der eine war der Name einer Person und im Binary eingebettet, der andere die Oberfläche, aus der die Mail zufällig stammte. Eine frische Instanz führte deshalb eine fremde Person unter „Workers nothing can serve\" und verlangte zwei konfigurierte Worker für einen einzigen Versandweg. Alle sechs nennen jetzt „mail\", und der Zugriffs-Review fragt im Start-Formular ab, wer bei Handlungsbedarf zu informieren ist, statt eine feste Adresse im Modell zu führen. Wer einen Mail-Worker unter einem der alten Namen konfiguriert hat, benennt ihn unter Console → Workers in „mail\" um; der nächste Start legt je Prozess eine neue Version an, laufende Instanzen bleiben auf ihrer Version."
+  }
+}

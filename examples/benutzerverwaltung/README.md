@@ -73,9 +73,9 @@ deshalb ein einziger Wert und keine Ausnahme.
 
 ### 2. Zugriffs-Review — `proc_benutzer_review`
 ```
-Start (rev-start: Quartal, Umfang, Hinweis)
+Start (rev-start: Quartal, Umfang, Meldung an, Hinweis)
   → ✅ User-Task "Konten prüfen" (rev-pruefen) – ergebnis: ok | handlungsbedarf
-  → (X) Handlungsbedarf?  handlungsbedarf → Meldung-Mail an Security/Admin | ok (Default) → weiter
+  → (X) Handlungsbedarf?  handlungsbedarf → Meldung-Mail an `meldung_an` | ok (Default) → weiter
   → [Script] Review protokollieren
   → Ende
 ```
@@ -92,7 +92,7 @@ Start (off-antrag: Benutzername, Letzter Arbeitstag, Grund, Benachrichtigung an)
 ```
 
 Alle drei sind der Gruppe `benutzerverwaltung` zugewiesen; die Mails laufen über
-den Mail-Worker `Patrick Blumer` — das Attribut heisst weiterhin `connector="…"`
+den Mail-Worker `mail` — das Attribut heisst weiterhin `connector="…"`
 (ADR-0203 benennt die Begriffe um, nicht die Modelle), wie in `proc_cis_onboarding`.
 
 ## Artefakte

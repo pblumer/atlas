@@ -2997,7 +2997,10 @@ export function heatScaleEntries(heat, peak) {
   }));
 }
 
-function legendHTML(graph, layoutMs, notation, peak = 0, band = null) {
+// `offersNothing` says the *delivered* product map was empty, which is not the same as
+// this picture being empty: a search that matches nothing empties the picture too, and
+// that already has its own sentence. The note below is about what the server had.
+function legendHTML(graph, layoutMs, notation, peak = 0, band = null, offersNothing = false) {
   const spoken = notationOf(notation?.id ?? notation);
   const heat = heatOf(spoken);
   const swatch = (entry) => `<span class="mesh-swatch ${entry.tone}">
@@ -3009,6 +3012,22 @@ function legendHTML(graph, layoutMs, notation, peak = 0, band = null) {
   const rules = entries.filter((e) => e.group === "edge").map(swatch).join("");
 
   const notes = [];
+  // An empty product map, said in words. It is the one picture here that is routinely
+  // empty for a reader who has done nothing wrong: the starmap needs the modeler role
+  // and a catalogue is drawn only for whoever *maintains* it, so an architect who
+  // maintains none opens this and sees nothing at all. Without a sentence that reads
+  // as a broken feature rather than as an answer.
+  //
+  // It names both possibilities and picks neither, deliberately. The server could tell
+  // "none exists" from "none is yours" and saying which would disclose that catalogues
+  // exist to somebody this store has decided may not see them — the same reason an
+  // application nobody shared is absent from the landscape rather than counted on it.
+  if (spoken.subject === "products" && offersNothing) {
+    notes.push(`<p class="mesh-note">Nothing is offered on this picture. Either no
+      catalogue has been created yet, or none has been shared with you: a catalogue is
+      drawn for whoever maintains it, and whoever does can share it with you as a
+      viewer.</p>`);
+  }
   if (graph.restricted > 0) {
     notes.push(`<p class="mesh-note"><b>${graph.restricted}</b> node(s) are hidden by your
       access. Their dependencies are drawn, their identities are not — this picture is
@@ -4255,7 +4274,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     lit = null;
     refit();
     applyView();
-    legendSlot.innerHTML = legendHTML(shown, ms, spoken, peak, bandAt);
+    legendSlot.innerHTML = legendHTML(shown, ms, spoken, peak, bandAt, !graph.nodes.length);
     findingsSlot.innerHTML = findingsHTML(shown);
     paintRanking();
     // The freshness line, on every repaint as well as on every tick: a repaint that

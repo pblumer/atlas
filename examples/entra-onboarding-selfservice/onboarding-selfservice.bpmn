@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Onboarding-Self-Service (Entra ID) — eine Atlas-Applikation mit Formularen, die
-  scharf gegen den Tenant blumer.net schreibt, aber nur gegen klar benannte
+  scharf gegen den Tenant contoso.com schreibt, aber nur gegen klar benannte
   Test-Objekte.
 
   Der rote Faden ist die doppelte, fail-closed Absicherung vor jedem Schreibzugriff:
@@ -9,12 +9,12 @@
     Start (Formular onb-start: Vorname, Nachname, UPN, Abteilung, Lizenz?, Gruppe?)
      -> [Script] "Vorschlag"      (displayName + mailNickname aus den Namen)
      -> (X) "Test-Objekt?"        Gate 1: nur ein UPN, der mit jml-test- beginnt UND
-                                  auf @blumer.net endet, geht weiter. Default (alles
+                                  auf @contoso.com endet, geht weiter. Default (alles
                                   andere) -> Ende "Kein Test-Objekt". KEIN Entra-Aufruf.
      -> User-Task "Freigeben"     (Formular onb-freigabe; Admin setzt Initialpasswort)
      -> (X) "Freigegeben?"        Gate 2: nur die ausdrueckliche Entscheidung "anlegen"
                                   legt an. Default -> Ende "Abgelehnt".
-     -> Service "Benutzer anlegen"(entra create-user, Worker "blumer_net" -> konto)
+     -> Service "Benutzer anlegen"(entra create-user, Worker "contoso" -> konto)
      -> (X) "Lizenz?"             optional: nur wenn lizenzSku gesetzt -> assign-license
      -> (X) "Gruppe?"             optional: nur wenn gruppeId gesetzt -> add-group-member
      -> Ende "Arbeitsplatz bereit"
@@ -33,9 +33,9 @@
 
   Laeuft nicht ohne Worker-Instanz: Der Worker-Typ entra ist worker-only
   (ADR-0164/0172), das Tenant-Credential liegt nie in der Engine. Die Service-Tasks
-  parken, bis eine Entra-Worker-Instanz sie abholt; auf atlas.blumer.cloud beaufsichtigt
-  die Engine diese Instanz standardmaessig (ADR-0172), sobald der Worker "blumer_net"
-  unter Console > Workers konfiguriert ist.
+  parken, bis eine Entra-Worker-Instanz sie abholt; auf einem Server, der Worker
+  beaufsichtigt (ADR-0157), startet die Engine diese Instanz standardmaessig
+  (ADR-0172), sobald der Worker "contoso" unter Console > Workers konfiguriert ist.
 
   Startvariablen (Formular onb-start): vorname, nachname, upn, abteilung, lizenzSku?, gruppeId?
 -->
@@ -49,20 +49,20 @@
                   targetNamespace="http://atlas/examples">
 
   <bpmn:process id="proc_entra_onboarding_selfservice" name="Onboarding-Self-Service (Entra ID)" isExecutable="true">
-    <bpmn:documentation>Self-Service-Onboarding fuer den Tenant blumer.net: ein Antragsteller erfasst das
+    <bpmn:documentation>Self-Service-Onboarding fuer den Tenant contoso.com: ein Antragsteller erfasst das
 neue Mitglied, ein Administrator gibt frei und setzt das Initialpasswort, danach legt
 der Entra-Worker das Konto an (create-user) und richtet optional Lizenz und
 Gruppenmitgliedschaft ein.
 
 Scharf, aber nur gegen Test-Objekte: zwei fail-closed Schutz-Gateways sichern jeden
 Schreibzugriff ab. Gate 1 laesst nur einen UPN durch, der mit "jml-test-" beginnt und
-auf "@blumer.net" endet; alles andere endet vor jedem Entra-Aufruf bei "Kein
+auf "@contoso.com" endet; alles andere endet vor jedem Entra-Aufruf bei "Kein
 Test-Objekt". Gate 2 legt nur bei der ausdruecklichen Entscheidung "anlegen" an. Lizenz
 und Gruppe sind zusaetzlich je ueber ein optionales Gateway abgesichert: fehlt die
 Angabe, wird der Schritt uebersprungen.
 
 Jeder Service-Task ist eine Aufgabe des Entra-Worker-Typs (ADR-0172): das Modell waehlt
-die benannte Operation statt eine Graph-URL zu schreiben, und den Worker "blumer_net"
+die benannte Operation statt eine Graph-URL zu schreiben, und den Worker "contoso"
 als Ziel — das Attribut heisst dabei weiterhin connector="…". Sie parken, bis eine
 Entra-Worker-Instanz sie abholt; der Worker-Typ ist worker-only, damit das
 Tenant-Credential nie in die Engine gelangt (ADR-0164/0172).
@@ -91,7 +91,7 @@ in den create-user-Body.</bpmn:documentation>
     </bpmn:scriptTask>
 
     <bpmn:exclusiveGateway id="gw_test" name="Test-Objekt?" default="f_test_reject">
-      <bpmn:documentation>Gate 1, fail-closed: nur ein UPN, der mit "jml-test-" beginnt und auf "@blumer.net"
+      <bpmn:documentation>Gate 1, fail-closed: nur ein UPN, der mit "jml-test-" beginnt und auf "@contoso.com"
 endet, geht zur Freigabe. Der Default-Pfad (jeder andere UPN) fuehrt direkt zum Ende
 "Kein Test-Objekt" — ohne jeden Entra-Aufruf.</bpmn:documentation>
       <bpmn:incoming>f_vorschlag_test</bpmn:incoming>
@@ -118,13 +118,13 @@ create-user. Der Default-Pfad (Ablehnung oder jeder andere Wert) fuehrt zum Ende
     </bpmn:exclusiveGateway>
 
     <bpmn:serviceTask id="anlegen" name="Benutzer anlegen">
-      <bpmn:documentation>create-user: ein POST /users gegen blumer.net. Der Body wird inline als JSON verfasst;
+      <bpmn:documentation>create-user: ein POST /users gegen contoso.com. Der Body wird inline als JSON verfasst;
 String-Werte mit fuehrendem "=" sind FEEL, pro Feld ausgewertet. Der displayName kommt
 aus dem (ggf. angepassten) Freigabe-Wert, mailNickname aus dem Vorschlag, userPrincipalName
 aus dem geprueften UPN. Das Passwort ist die Laufzeit-Variable initialpasswort und steht
 nie im Modell. Die Antwort (Konto samt id) landet in "konto".</bpmn:documentation>
       <bpmn:extensionElements>
-        <atlas:entraConnector connector="blumer_net" operation="create-user" resultVariable="konto"
+        <atlas:entraConnector connector="contoso" operation="create-user" resultVariable="konto"
                               attributes="{ &quot;accountEnabled&quot;: true, &quot;displayName&quot;: &quot;=displayName&quot;, &quot;mailNickname&quot;: &quot;=mailNick&quot;, &quot;userPrincipalName&quot;: &quot;=upn&quot;, &quot;passwordProfile&quot;: { &quot;password&quot;: &quot;=initialpasswort&quot;, &quot;forceChangePasswordNextSignIn&quot;: true } }"/>
       </bpmn:extensionElements>
       <bpmn:incoming>f_frei_anlegen</bpmn:incoming>
@@ -144,7 +144,7 @@ zugewiesen. Ohne Angabe ueberspringt der Default-Pfad den Schritt.</bpmn:documen
 addLicenses mit der skuId aus der Startvariablen, removeLicenses leer. Die id adressiert
 das eben angelegte Konto ueber "=konto.id".</bpmn:documentation>
       <bpmn:extensionElements>
-        <atlas:entraConnector connector="blumer_net" operation="assign-license" userId="=konto.id"
+        <atlas:entraConnector connector="contoso" operation="assign-license" userId="=konto.id"
                               attributes="{ &quot;addLicenses&quot;: [ { &quot;skuId&quot;: &quot;=lizenzSku&quot; } ], &quot;removeLicenses&quot;: [] }"/>
       </bpmn:extensionElements>
       <bpmn:incoming>f_lizenz_do</bpmn:incoming>
@@ -169,7 +169,7 @@ Gruppe aufgenommen. Ohne Angabe ueberspringt der Default-Pfad den Schritt.</bpmn
       <bpmn:documentation>add-group-member: ein POST auf die $ref-Sammlung der Gruppe. userId="=konto.id",
 groupId="=gruppeId" — der Worker baut die absolute @odata.id des Kontos selbst.</bpmn:documentation>
       <bpmn:extensionElements>
-        <atlas:entraConnector connector="blumer_net" operation="add-group-member"
+        <atlas:entraConnector connector="contoso" operation="add-group-member"
                               userId="=konto.id" groupId="=gruppeId"/>
       </bpmn:extensionElements>
       <bpmn:incoming>f_gruppe_do</bpmn:incoming>
@@ -187,7 +187,7 @@ groupId="=gruppeId" — der Worker baut die absolute @odata.id des Kontos selbst
     </bpmn:endEvent>
 
     <bpmn:endEvent id="end_kein_test" name="Kein Test-Objekt">
-      <bpmn:documentation>Der UPN entsprach nicht der Test-Objekt-Regel (jml-test-*@blumer.net). Es wurde nichts
+      <bpmn:documentation>Der UPN entsprach nicht der Test-Objekt-Regel (jml-test-*@contoso.com). Es wurde nichts
 in Entra angelegt.</bpmn:documentation>
       <bpmn:incoming>f_test_reject</bpmn:incoming>
     </bpmn:endEvent>
@@ -198,8 +198,8 @@ in Entra angelegt.</bpmn:documentation>
 
     <bpmn:sequenceFlow id="f_start_vorschlag" sourceRef="start" targetRef="vorschlag"/>
     <bpmn:sequenceFlow id="f_vorschlag_test" sourceRef="vorschlag" targetRef="gw_test"/>
-    <bpmn:sequenceFlow id="f_test_ok" name="jml-test-*@blumer.net" sourceRef="gw_test" targetRef="freigabe">
-      <bpmn:conditionExpression>= starts with(upn, "jml-test-") and ends with(upn, "@blumer.net")</bpmn:conditionExpression>
+    <bpmn:sequenceFlow id="f_test_ok" name="jml-test-*@contoso.com" sourceRef="gw_test" targetRef="freigabe">
+      <bpmn:conditionExpression>= starts with(upn, "jml-test-") and ends with(upn, "@contoso.com")</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="f_test_reject" name="sonst" sourceRef="gw_test" targetRef="end_kein_test"/>
     <bpmn:sequenceFlow id="f_freigabe_gw" sourceRef="freigabe" targetRef="gw_frei"/>
