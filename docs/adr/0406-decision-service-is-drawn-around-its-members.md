@@ -1,4 +1,4 @@
-# ADR-DRAFT: A decision service is drawn, and drawn around its members
+# ADR-0406: A decision service is drawn, and drawn around its members
 
 - **Status:** Accepted
 - **Implementation:** Landed
