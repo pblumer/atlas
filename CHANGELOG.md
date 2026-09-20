@@ -14,6 +14,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A decision graph is drawn the way DMN draws one.** The DRD notation is not
+  styling: the shape is how a reader tells one kind of node from another. A decision
+  is a plain rectangle, input data a stadium with fully rounded ends, a business
+  knowledge model a rectangle with two corners cut off, and a decision service a
+  rounded rectangle with its name in the top right. Atlas drew decisions and
+  knowledge models with rounded corners, which made a decision read as an input
+  datum or a service, and drew a decision service square-cornered with its name
+  centred over whatever it contains. Both pictures now follow the notation, so a
+  model opened in Atlas looks like the same model opened anywhere else.
+
+### Fixed
+
 - **A decision service survives Auto-layout.** Atlas generates a DMN model's diagram
   when one is missing and redraws it on request, but the generator only knew decisions,
   input data and knowledge models. A decision service — the box drawn around part of the

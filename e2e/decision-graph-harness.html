@@ -121,6 +121,16 @@
       window.__atGone = AT_GONE;
       // The plain picture, to prove the renderer app.js shares still draws one.
       window.__plain = () => renderDrgSvg({ nodes: NODES, edges: EDGES });
+      // The same picture with a business knowledge model in it, so the notation the
+      // shapes carry can be read back: a decision is a plain rectangle, input data a
+      // stadium, a knowledge model a clipped-corner box (DMN 1.5 §5.3.3).
+      window.__plainWithBkm = () => renderDrgSvg({
+        nodes: NODES.concat([ {
+          id: "bkm_rate", type: "businessKnowledgeModel", name: "Ratenrechner",
+          x: 900, y: 300, width: 180, height: 80,
+        } ]),
+        edges: EDGES,
+      });
 
       // A focusable element to open from, so the window's focus restore has somewhere
       // to put focus back.
