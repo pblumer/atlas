@@ -671,6 +671,25 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		b.SetSearchableVariables(names)
 	}
+	// The personal variable names (ADR-0314), resolved at deploy time for the same
+	// reason and refused for the same reasons: a nameless entry or a repeated one would
+	// protect nothing while looking like it was working.
+	if raw := strings.TrimSpace(proc.Personal); raw != "" {
+		seen := make(map[string]bool)
+		var names []string
+		for _, part := range strings.Split(raw, ",") {
+			name := strings.TrimSpace(part)
+			if name == "" {
+				return nil, fmt.Errorf("compiler: process %q: personal %q has an empty variable name", proc.Id, proc.Personal)
+			}
+			if seen[name] {
+				return nil, fmt.Errorf("compiler: process %q: personal names %q twice", proc.Id, name)
+			}
+			seen[name] = true
+			names = append(names, name)
+		}
+		b.SetPersonalVariables(names)
+	}
 	ids := make(map[string]int32, len(proc.StartEvents)+len(proc.ServiceTasks)+len(proc.EndEvents))
 	reg := &registrar{b: b, ids: ids, docs: docs, agentParams: agentParams}
 
@@ -1363,6 +1382,12 @@ type xmlProcess struct {
 	// for these names, because indexing every value would double the write path and
 	// index JSON blobs. Empty = nothing indexed, and the process pays nothing.
 	Searchable string `xml:"searchable,attr"`
+	// Personal is a comma-separated list of variable names holding personal data
+	// (ADR-0314). Same shape and same place as Searchable, because that record asks for
+	// a list rather than a mechanism. A declared variable is *payload*: it may be
+	// written, carried and handed to a worker, and it may not be read by any expression
+	// — see personalRefusal. Empty = nothing declared, and the process pays nothing.
+	Personal string `xml:"personal,attr"`
 
 	xmlFlowContent // the process root's flow nodes and sequence flows
 

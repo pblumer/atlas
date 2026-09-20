@@ -537,6 +537,7 @@ type Builder struct {
 	instanceTtlNanos   int64                       // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
 	historyTtlNanos    int64                       // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
 	searchableVars     []string                    // variable names the value index is maintained for, nil = none
+	personalVars       []string                    // variable names holding personal data, nil = none (ADR-0314)
 	isExecutable       bool                        // bpmn:isExecutable; defaults true (set in NewBuilder)
 
 	// flowScope is the enclosing scope every node added now lands in: -1 for the
@@ -877,6 +878,11 @@ func (b *Builder) SetHistoryTtl(nanos int64) { b.historyTtlNanos = nanos }
 // names — see [CompiledProcess.IsSearchableVariable] — so a process that declares
 // none pays nothing for the feature.
 func (b *Builder) SetSearchableVariables(names []string) { b.searchableVars = names }
+
+// SetPersonalVariables declares which variables hold personal data (ADR-0314). The
+// declaration is what makes [Builder.Build] refuse a process that reads one of them in
+// an expression, so it is set before Build rather than checked after it.
+func (b *Builder) SetPersonalVariables(names []string) { b.personalVars = names }
 
 // AddMessageStartEvent adds a message start event and returns its element id. It
 // is a process entry point like a none start event — at runtime it simply flows
@@ -3042,6 +3048,8 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		historyTtlNanos:    b.historyTtlNanos,
 		searchableVars:     b.searchableVars,
 		searchableSet:      searchableSet(b.searchableVars),
+		personalVars:       b.personalVars,
+		personalSet:        searchableSet(b.personalVars),
 		isExecutable:       b.isExecutable,
 		strings:            b.strings,
 	}, nil

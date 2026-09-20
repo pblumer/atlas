@@ -1368,13 +1368,20 @@ type CompiledProcess struct {
 	historyTtlNanos    int64               // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
 	searchableVars     []string            // declared searchable variable names, in the order authored
 	searchableSet      map[string]struct{} // the same names as a set, for the per-write question
-	isExecutable       bool                // bpmn:isExecutable — a non-executable process can't be started
-	elementIds         []int32             // interned source BPMN id per node id (-1 if unset)
-	elementDocs        []int32             // interned <bpmn:documentation> per node id (-1 if undocumented, ADR-0025)
-	repairForms        []int32             // interned repair form id per node id (-1 if none, ADR-0169)
-	documentation      int32               // interned <bpmn:documentation> of the process itself, -1 if none
-	lanes              []LaneDetail        // organizational lanes (ADR-0121); a node's CompiledNode.Lane indexes this
-	strings            []string            // intern table (index → string), for debug/export
+	// personalVars and personalSet are the variables declared to hold personal data
+	// (ADR-0314), in the order authored and as a set. A declared variable is enciphered
+	// under its subject's data key before it becomes a command, which is why it may not
+	// be read by any expression — ciphertext cannot be compared, matched or routed on.
+	// Build refuses a process that does, so nothing downstream has to check.
+	personalVars  []string
+	personalSet   map[string]struct{}
+	isExecutable  bool         // bpmn:isExecutable — a non-executable process can't be started
+	elementIds    []int32      // interned source BPMN id per node id (-1 if unset)
+	elementDocs   []int32      // interned <bpmn:documentation> per node id (-1 if undocumented, ADR-0025)
+	repairForms   []int32      // interned repair form id per node id (-1 if none, ADR-0169)
+	documentation int32        // interned <bpmn:documentation> of the process itself, -1 if none
+	lanes         []LaneDetail // organizational lanes (ADR-0121); a node's CompiledNode.Lane indexes this
+	strings       []string     // intern table (index → string), for debug/export
 	// decisionPins is the exact decision deployment each latest-bound business rule
 	// task evaluates against, resolved once when this definition was deployed and
 	// restored from the deployment record on reload
@@ -2276,6 +2283,23 @@ func (p *CompiledProcess) SearchableVariables() []string { return p.searchableVa
 // this first on every variable write, so a process that declares none pays one
 // comparison rather than a lookup.
 func (p *CompiledProcess) HasSearchableVariables() bool { return len(p.searchableSet) > 0 }
+
+// PersonalVariables are the variable names this process declared as personal data
+// (ADR-0314), in the order they were authored.
+func (p *CompiledProcess) PersonalVariables() []string { return p.personalVars }
+
+// IsPersonal reports whether a variable name was declared personal. The engine asks it
+// where a value crosses an edge — enciphering on the way in, deciphering on the way out —
+// and never in an expression, because [Builder.Build] has already refused a process whose
+// expressions read one.
+func (p *CompiledProcess) IsPersonal(name string) bool {
+	_, ok := p.personalSet[name]
+	return ok
+}
+
+// HasPersonalVariables reports whether this process declares any, so a process that
+// declares none pays one length check and nothing else.
+func (p *CompiledProcess) HasPersonalVariables() bool { return len(p.personalSet) > 0 }
 
 // IsSearchableVariable reports whether name is one of the declared names — the
 // question the engine asks per variable write to decide whether the write is
