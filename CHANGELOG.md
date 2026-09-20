@@ -12,6 +12,26 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A decision service survives Auto-layout.** Atlas generates a DMN model's diagram
+  when one is missing and redraws it on request, but the generator only knew decisions,
+  input data and knowledge models. A decision service — the box drawn around part of the
+  graph, split by a divider line into what the service returns and what it works out
+  internally — was not drawn at all. Auto-layout therefore deleted the box, and the
+  modeler, which reads a service's membership back out of where its decisions sit,
+  concluded the service had no members and wrote that into the model on the next save.
+  The result was a service with no output decision: still deployable, still callable,
+  and returning nothing, with no incident and no validation error to show for it. One
+  click was enough, and only the stored XML showed the damage.
+
+  The generator now draws the service around the decisions it publishes and encapsulates,
+  with the divider between them, and a model whose service is undrawn is laid out afresh
+  instead of being handed to the modeler half-finished. The bundled modeler treats the box
+  as a container too: it is drawn beneath what it holds rather than over it, and moving it
+  carries its decisions with it. A decision the service names as its input boundary stays
+  outside the box, where DMN puts it.
+
 ### Added
 
 - **Double-click a business rule task and the decision opens.** An evaluation has been
