@@ -30,9 +30,13 @@ type xmlServiceDefs struct {
 }
 
 type xmlService struct {
-	ID             string   `xml:"id,attr"`
-	Name           string   `xml:"name,attr"`
-	Outputs        []xmlRef `xml:"outputDecision"`
+	ID      string   `xml:"id,attr"`
+	Name    string   `xml:"name,attr"`
+	Outputs []xmlRef `xml:"outputDecision"`
+	// Encapsulated is read only by the layout generator, which has to know which
+	// compartment of the service box a decision belongs in (layout.go). Describing
+	// a service needs only its name and what it takes, so nothing here reads it.
+	Encapsulated   []xmlRef `xml:"encapsulatedDecision"`
 	InputDecisions []xmlRef `xml:"inputDecision"`
 	InputData      []xmlRef `xml:"inputData"`
 }

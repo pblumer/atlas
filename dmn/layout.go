@@ -3,6 +3,7 @@ package dmn
 import (
 	"encoding/xml"
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
 	"strings"
@@ -144,22 +145,48 @@ type drgEdge struct {
 	target string
 }
 
+// drgService is one decision service: the box to draw, and the decisions it draws
+// around, split by the compartment each belongs in. `inputDecision` is not here
+// because DMN draws it OUTSIDE the box — it names the boundary the caller supplies
+// (services.go).
+type drgService struct {
+	id           string
+	outputs      []string
+	encapsulated []string
+}
+
 // drg is a model's requirements graph plus which of its nodes the model's own
 // diagram already draws.
 type drg struct {
 	nodes []drgNode
 	edges []drgEdge
-	drawn map[string]bool
+	// services are the decision services drawn around parts of that graph. They are
+	// not nodes: they take no layer and require nothing, they are boxes placed
+	// around what they hold once everything else has a position.
+	services []drgService
+	drawn    map[string]bool
 	// modelNS is the document's own MODEL namespace, kept because the diagram to be
 	// written has to match the DMN version the model is in — see dmndiFor.
 	modelNS string
 }
 
-// fullyDrawn reports whether the model's diagram already covers every node. A
-// graph with no nodes counts as drawn: there is nothing to draw.
+// fullyDrawn reports whether the model's diagram already covers every node and
+// every decision service. A graph with no nodes counts as drawn: there is nothing
+// to draw.
+//
+// A service counts. A model whose decisions are all placed but whose service has no
+// shape is the residue of a tool that does not know DMN 1.5, and leaving it alone
+// is not neutral: dmn-js then invents an empty default box, and because it rereads
+// membership from geometry, the next save writes that emptiness back into the
+// document — a service can lose its output decision and start returning nothing.
 func (g drg) fullyDrawn() bool {
 	for _, n := range g.nodes {
 		if !g.drawn[n.id] {
+			return false
+		}
+	}
+	for _, s := range g.services {
+		if !g.drawn[s.id] {
 			return false
 		}
 	}
@@ -174,6 +201,7 @@ type xmlDefs struct {
 	InputData []xmlElem     `xml:"inputData"`
 	Decisions []xmlDecision `xml:"decision"`
 	BKMs      []xmlElem     `xml:"businessKnowledgeModel"`
+	Services  []xmlService  `xml:"decisionService"`
 	DI        []xmlDiagrams `xml:"DMNDI"`
 }
 
@@ -247,6 +275,16 @@ func parseDRG(src []byte) (drg, bool) {
 		}
 		g.nodes = append(g.nodes, n)
 	}
+	for _, svc := range defs.Services {
+		if svc.ID == "" {
+			continue
+		}
+		g.services = append(g.services, drgService{
+			id:           svc.ID,
+			outputs:      localRefs(svc.Outputs),
+			encapsulated: localRefs(svc.Encapsulated),
+		})
+	}
 	if len(g.nodes) == 0 {
 		return drg{}, false
 	}
@@ -278,6 +316,18 @@ func localRef(refs ...*xmlRef) string {
 	return ""
 }
 
+// localRefs is localRef over a list, keeping only the references that name
+// something in this model.
+func localRefs(refs []xmlRef) []string {
+	var out []string
+	for i := range refs {
+		if id := localRef(&refs[i]); id != "" {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
 // --- placement ---
 
 // placed is one node with the box it was given.
@@ -303,6 +353,26 @@ func layout(g drg) []placed {
 		for _, r := range n.requires {
 			if known[r] {
 				requires[n.id] = append(requires[n.id], r)
+			}
+		}
+	}
+	// A decision service draws its output decisions above the divider and its
+	// encapsulated ones below, so the layers have to come out that way round. The
+	// DRG usually says so already — an output decision is what the encapsulated ones
+	// feed — but nothing in DMN requires it, and a layout that contradicts the
+	// declared membership is worse than no layout at all: dmn-js rereads membership
+	// from the geometry, so a picture that put an encapsulated decision on top would
+	// rewrite the document into saying so. These constraints only deepen a layer;
+	// they are never drawn as edges.
+	for _, svc := range g.services {
+		for _, out := range svc.outputs {
+			if !known[out] {
+				continue
+			}
+			for _, enc := range svc.encapsulated {
+				if known[enc] && enc != out {
+					requires[out] = append(requires[out], enc)
+				}
 			}
 		}
 	}
@@ -337,10 +407,17 @@ func layout(g drg) []placed {
 	}
 
 	// Nodes keep the model's own order within a layer, so the same model always
-	// produces the same picture.
+	// produces the same picture — except that a service's members are pulled
+	// together first, so the box drawn around them later is a rectangle holding its
+	// own members rather than a band across whatever else shares the row.
+	group := serviceGroups(g)
 	byLayer := map[int][]drgNode{}
 	for _, n := range g.nodes {
 		byLayer[depth[n.id]] = append(byLayer[depth[n.id]], n)
+	}
+	for l := range byLayer {
+		row := byLayer[l]
+		sort.SliceStable(row, func(i, j int) bool { return group[row[i].id] < group[row[j].id] })
 	}
 	layers := make([]int, 0, len(byLayer))
 	for l := range byLayer {
@@ -379,6 +456,160 @@ func layout(g drg) []placed {
 	return out
 }
 
+// serviceMargin is the space between a decision service's box and the members it
+// is drawn around.
+const serviceMargin = 30.0
+
+// The box a decision service gets when none of its members could be placed — an
+// empty service, or one naming only decisions this model does not declare. It is
+// still drawn, because a service with no shape is exactly the state that makes
+// dmn-js invent one (fullyDrawn).
+const (
+	emptyServiceW = 300.0
+	emptyServiceH = 200.0
+)
+
+// serviceGroups ranks each node by the decision service that draws it, so a row
+// can put one service's members side by side. A node no service draws sorts last,
+// and a node two services both name belongs, for drawing, to the first that claims
+// it — the picture can only nest it once.
+func serviceGroups(g drg) map[string]int {
+	group := make(map[string]int, len(g.nodes))
+	// Everything starts unclaimed, which sorts behind every service: a decision no
+	// service draws — a service's own inputDecision among them — has to end up
+	// beside the box, not inside it.
+	for _, n := range g.nodes {
+		group[n.id] = len(g.services)
+	}
+	for i, svc := range g.services {
+		for _, id := range append(append([]string{}, svc.outputs...), svc.encapsulated...) {
+			if claimed, ok := group[id]; ok && claimed == len(g.services) {
+				group[id] = i
+			}
+		}
+	}
+	return group
+}
+
+// placedService is one decision service's box and the divider that splits it.
+type placedService struct {
+	id         string
+	x, y, w, h float64
+	dividerY   float64
+}
+
+// serviceBoxes draws each decision service around the members that were placed:
+// the bounding box of its decisions plus a margin, with the divider line between
+// the lowest output decision and the highest encapsulated one. Layering already
+// guarantees that order (layout), so the line always has a gap to sit in.
+//
+// A service whose members all landed in one compartment keeps the other one open
+// rather than empty-looking: the divider goes just inside the far edge, which is
+// also what an author dragging a decision in there would produce.
+func serviceBoxes(g drg, places []placed) []placedService {
+	at := make(map[string]placed, len(places))
+	bottom := 0.0
+	for _, p := range places {
+		at[p.node.id] = p
+		if y := p.y + p.h; y > bottom {
+			bottom = y
+		}
+	}
+	// Where a service with nothing to draw around goes: its own row under the graph,
+	// so it neither overlaps the picture nor disappears.
+	emptyX := padding
+	emptyY := bottom + gapY
+
+	out := make([]placedService, 0, len(g.services))
+	for _, svc := range g.services {
+		box, ok := boundsAround(at, svc)
+		if !ok {
+			out = append(out, placedService{
+				id: svc.id, x: emptyX, y: emptyY,
+				w: emptyServiceW, h: emptyServiceH,
+				dividerY: emptyY + emptyServiceH/2,
+			})
+			emptyX += emptyServiceW + gapX
+			continue
+		}
+		out = append(out, box)
+	}
+	return out
+}
+
+// boundsAround computes one service's box from the members that were placed. It
+// reports false when none were.
+func boundsAround(at map[string]placed, svc drgService) (placedService, bool) {
+	var (
+		minX, minY      = 0.0, 0.0
+		maxX, maxY      = 0.0, 0.0
+		outputBottom    = 0.0
+		encapsulatedTop = 0.0
+		seen, hasOut    = false, false
+		hasEncapsulated bool
+	)
+	consider := func(id string, isOutput bool) {
+		p, ok := at[id]
+		if !ok {
+			return
+		}
+		if !seen {
+			minX, minY, maxX, maxY = p.x, p.y, p.x+p.w, p.y+p.h
+			seen = true
+		} else {
+			minX = math.Min(minX, p.x)
+			minY = math.Min(minY, p.y)
+			maxX = math.Max(maxX, p.x+p.w)
+			maxY = math.Max(maxY, p.y+p.h)
+		}
+		if isOutput {
+			if !hasOut || p.y+p.h > outputBottom {
+				outputBottom = p.y + p.h
+			}
+			hasOut = true
+			return
+		}
+		if !hasEncapsulated || p.y < encapsulatedTop {
+			encapsulatedTop = p.y
+		}
+		hasEncapsulated = true
+	}
+	for _, id := range svc.outputs {
+		consider(id, true)
+	}
+	for _, id := range svc.encapsulated {
+		consider(id, false)
+	}
+	if !seen {
+		return placedService{}, false
+	}
+
+	box := placedService{
+		id: svc.id,
+		x:  minX - serviceMargin, y: minY - serviceMargin,
+		w: (maxX - minX) + 2*serviceMargin,
+		h: (maxY - minY) + 2*serviceMargin,
+	}
+	switch {
+	case hasOut && hasEncapsulated:
+		box.dividerY = (outputBottom + encapsulatedTop) / 2
+		// Layering normally puts every output decision above every encapsulated one,
+		// so that midpoint is a gap. Two things defeat it: a requirement cycle, which
+		// stops the depth walk, and a decision the document names in both
+		// compartments, which cannot be on one side of a line. Neither has a divider
+		// that classifies everything correctly, so the box's own middle is used — a
+		// line inside the box beats one outside it.
+		if outputBottom > encapsulatedTop {
+			box.dividerY = box.y + box.h/2
+		}
+	case hasOut:
+		box.dividerY = box.y + box.h - serviceMargin/2
+	default:
+		box.dividerY = box.y + serviceMargin/2
+	}
+	return box, true
+}
+
 // --- emitting ---
 
 // generateDMNDI renders a laid-out graph as a <dmndi:DMNDI> block: a shape per
@@ -398,6 +629,18 @@ func generateDMNDI(g drg) (string, bool) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "  <dmndi:DMNDI xmlns:dmndi=%q xmlns:dc=%q xmlns:di=%q>\n", dmndiFor(g.modelNS), nsDC, nsDI)
 	b.WriteString("    <dmndi:DMNDiagram id=\"DMNDiagram_atlas\">\n")
+	// Decision services come first, and the order is load-bearing: a viewer that
+	// does not treat the box as a container paints shapes in document order, so a
+	// service written after its members would cover them.
+	for _, svc := range serviceBoxes(g, places) {
+		fmt.Fprintf(&b, "      <dmndi:DMNShape id=%q dmnElementRef=%q>\n", "DMNShape_"+xmlAttr(svc.id), xmlAttr(svc.id))
+		fmt.Fprintf(&b, "        <dc:Bounds x=\"%g\" y=\"%g\" width=\"%g\" height=\"%g\"/>\n", svc.x, svc.y, svc.w, svc.h)
+		b.WriteString("        <dmndi:DMNDecisionServiceDividerLine>\n")
+		fmt.Fprintf(&b, "          <di:waypoint x=\"%g\" y=\"%g\"/>\n", svc.x, svc.dividerY)
+		fmt.Fprintf(&b, "          <di:waypoint x=\"%g\" y=\"%g\"/>\n", svc.x+svc.w, svc.dividerY)
+		b.WriteString("        </dmndi:DMNDecisionServiceDividerLine>\n")
+		b.WriteString("      </dmndi:DMNShape>\n")
+	}
 	for _, p := range places {
 		fmt.Fprintf(&b, "      <dmndi:DMNShape id=%q dmnElementRef=%q>\n", "DMNShape_"+xmlAttr(p.node.id), xmlAttr(p.node.id))
 		fmt.Fprintf(&b, "        <dc:Bounds x=\"%g\" y=\"%g\" width=\"%g\" height=\"%g\"/>\n", p.x, p.y, p.w, p.h)

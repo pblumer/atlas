@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-decision-service-survives-auto-layout",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A decision service survives Auto-layout",
+        "de": "Ein Decision Service übersteht das Auto-Layout"
+      },
+      "summary": {
+        "en": "Atlas draws a DMN model's diagram when it has none, and redraws it when you ask. The generator knew decisions, input data and knowledge models — but not a decision service, the box drawn around part of the graph with a divider line separating what the service returns from what it works out internally. Auto-layout deleted that box, and the modeler, which reads a service's membership back out of where its decisions sit, then concluded the service had no members and wrote that into the model on the next save. What was left was a decision service with no output decision: still deployable, still callable from a business rule task, and returning nothing — no incident, no validation error, only the stored XML to show for it. The generator now draws the box around the decisions the service publishes and encapsulates, with the divider between them, and a model whose service went undrawn is laid out afresh instead of being handed to the modeler half-finished. The modeler treats the box as a real container: it is drawn beneath what it holds rather than over it, and moving it takes its decisions along. A decision the service names as its input boundary stays outside the box, where DMN puts it.",
+        "de": "Atlas zeichnet das Diagramm eines DMN-Modells, wenn keines vorhanden ist, und zeichnet es auf Wunsch neu. Der Generator kannte Entscheidungen, Eingabedaten und Knowledge Models — aber keinen Decision Service, also jene Box um einen Teil des Graphen, deren Trennlinie scheidet, was der Service liefert, von dem, was er intern ermittelt. Das Auto-Layout löschte diese Box, und der Modeler, der die Zugehörigkeit eines Service daraus abliest, wo seine Entscheidungen liegen, schloss daraus auf einen Service ohne Mitglieder und schrieb das beim nächsten Speichern ins Modell. Übrig blieb ein Decision Service ohne Output-Entscheidung: weiterhin deploybar, weiterhin aus einer Business Rule Task aufrufbar — und ohne Ergebnis, ohne Incident und ohne Validierungsfehler, sichtbar allein im gespeicherten XML. Der Generator zeichnet die Box nun um die Entscheidungen, die der Service veröffentlicht und kapselt, mit der Trennlinie dazwischen; ein Modell mit ungezeichnetem Service wird neu gelegt, statt halbfertig an den Modeler zu gehen. Der Modeler behandelt die Box als echten Container: Sie wird unter ihrem Inhalt gezeichnet statt darüber, und wer sie verschiebt, nimmt ihre Entscheidungen mit. Eine Entscheidung, die der Service als Eingabegrenze benennt, bleibt ausserhalb der Box — dort, wo DMN sie vorsieht."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Decisions",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open a decision",
+          "de": "Entscheidung öffnen"
+        },
+        "route": "#/modeler/decisions"
+      }
+    },
+    {
       "id": "the-starmap-says-which-dependencies-are-actually-used",
       "version": "Unreleased",
       "date": null,
@@ -433,34 +462,6 @@
           "Später erneut drücken: Die Antwort wird jedes Mal neu geholt, denn sie ist das Einzige auf der Seite, das sich ändert, während sie offen ist.",
           "Eine Position, an der nichts arbeitet, sagt das auch: vor ihrer Reihe und nach ihrem Abschluss steht kein Prozess irgendwo."
         ]
-      }
-    },
-    {
-      "id": "a-model-fix-now-reaches-an-instance-even-when-its-tokens-can",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "An instance can continue in a new instance when it cannot be moved as it is",
-        "de": "Eine Instanz kann in einer neuen Instanz weiterlaufen, wenn sie sich nicht verschieben lässt"
-      },
-      "summary": {
-        "en": "Moving a running instance onto a corrected version keeps everything it has done — but only where each of its tokens still sits on an element the new version has, of the same kind and in the same place. Where it does not, the move is refused, and until now that was the end of the road: cancel the instance and start again by hand. Now you can continue it in a new instance instead. The old one ends where it is, a new instance of the corrected version picks the work up at the elements you tick — proposed for you wherever the element ids survived the edit — and the variables and data objects come with it. Both instances link to each other, so the old replay says where the work went and the new one says where it came from. Open jobs, tasks and incidents end with the old instance, and the dialog says exactly what that costs before you confirm.",
-        "de": "Eine laufende Instanz auf eine korrigierte Version zu verschieben, erhält alles bereits Geleistete — aber nur, solange jedes Token auf einem Element sitzt, das die neue Version ebenfalls hat, in derselben Art und an derselben Stelle. Sonst wird der Wechsel abgelehnt, und damit war der Weg bisher zu Ende: Instanz abbrechen und von Hand neu starten. Neu lässt sie sich stattdessen in einer neuen Instanz fortführen. Die alte endet an Ort und Stelle, eine neue Instanz der korrigierten Version nimmt die Arbeit an den Elementen auf, die man auswählt — vorgeschlagen überall dort, wo die Element-IDs die Änderung überlebt haben —, und Variablen wie Datenobjekte wandern mit. Beide Instanzen sind gegenseitig verlinkt: Der alte Verlauf zeigt, wohin die Arbeit ging, der neue, woher sie kam. Offene Jobs, Aufgaben und Incidents enden mit der alten Instanz; der Dialog benennt vor der Bestätigung genau, was das kostet."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
       }
     }
   ]
