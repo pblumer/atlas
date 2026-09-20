@@ -1,7 +1,7 @@
 # ADR-0404: The whole graph can be walked, in a projection with a stated scope
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-09-19
 - **Deciders:** Atlas maintainers
 
@@ -484,6 +484,45 @@ sequential.** This is what §3's persisted ordinals are quietly worth: assign th
 order* and a component's nodes are contiguous in ordinal space, so its adjacency lists are
 adjacent in the target array. A pass in node order is then a stream, and readahead carries
 it.
+
+#### That premise is conditional, and the condition is arrival concurrency (measured, W1)
+
+The sentence above was written as though key order were enough. **It is not.** W1 built the
+ordinal map and the CSR from a real `ReadView` over state the engine wrote, and measured the
+span of each component's ordinal range — 1.0 meaning a component occupies an unbroken range:
+
+| Instances in flight when they arrive | Ordinal span |
+|---|---|
+| 1 — arrival spread over time | **1.00** |
+| 8 | 5.67 |
+| 64 | 43.00 |
+| 512 | 341.67 |
+
+The law behind those four points is exact, not fitted. The engine mints an instance's *k*
+element instances across *k* batch phases, and with *c* instances in flight each phase lays
+down *c* keys before the next begins, so one component's nodes end up one phase stride
+apart:
+
+    span = ((k − 1)·c + 1) / k
+
+So the premise holds **perfectly** where instances arrive spread over time, which is the
+10 000-a-day installation this record is sized for, and **degrades linearly** with a burst
+— a bulk import, a message storm, a backlog drained after an outage. It is pinned as a law
+rather than a number in `rungraph/locality_test.go`, so a change to the engine's batching
+shows up there rather than as an unexplained slowdown of a walk.
+
+What this costs in practice is smaller than the span suggests, and stating it needs both
+numbers. At 30 nodes per instance and 100 in flight the span is ≈ 97 ordinals, whose
+adjacency lists are ~470 target entries — under 2 KB, so a component's walk still touches
+one or two pages and the table above stands. At 10 000 in flight it is ≈ 9 700 ordinals and
+~185 KB, which is some 45 pages per component: that is where the capped, un-advised
+scattered read this section measured at 74× would bite.
+
+Two ways out, and this record deliberately picks neither yet because nothing depends on it
+until a walk is wired: **assign ordinals grouped by component**, which costs a pass and
+breaks §3's "the ordinal is the scan position" simplicity; or **leave the layout alone and
+make `MADV_RANDOM` the dial's default above a measured concurrency**, which keeps §3 and
+accepts the pages. The choice wants the walk's own profile, which W1 does not have.
 
 | Whole-graph walk, 110 M nodes | time | resident |
 |---|---|---|

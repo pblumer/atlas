@@ -14,6 +14,29 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The run graph's ordinal map and CSR, and the measurement that qualified them.** The
+  projection [ADR-0404](docs/adr/0404-the-whole-graph-can-be-walked.md) decided on is
+  built: a persisted key-to-ordinal map, and the two flat arrays a walk reads. The map is
+  the sorted key array and the ordinal is the index, so there is no second structure to
+  keep consistent and the inverse comes free. Every edge is held at both endpoints,
+  because impact analysis asks in both directions. The build refuses to publish anything
+  partial — a half-built CSR answers wrongly in a way no reader can see.
+
+  The record's own premise turned out to be conditional, which is what building it found.
+  §10 assumed that assigning ordinals in key order makes a component's nodes contiguous,
+  and everything it concludes about where the projection may live rests on that. Measured
+  against state the engine actually wrote, it holds **exactly** where instances arrive
+  spread over time and **degrades linearly** with a burst: the span of a component's
+  ordinal range is 1.00 at sequential arrival, 5.67 at eight instances in flight, 43.00 at
+  sixty-four and 341.67 at five hundred and twelve. The law behind those points is exact
+  rather than fitted, because the engine mints an instance's elements across as many batch
+  phases as it has elements. It is pinned as that law in the tests, so a change to the
+  engine's batching surfaces there instead of as an unexplained slow walk, and the record
+  now carries the numbers, what they cost in pages, and the two ways out — without picking
+  one, because nothing depends on it until a walk is wired.
+
+### Added
+
 - **A process definition and a deployment of it are two different things.** The starmap's
   `process` node has been both at once: what a model *is* — process id and version — and
   the fact that this server holds it, with instances, counters and a state. That is
