@@ -81,18 +81,20 @@ export function renderTraceTable(tt, n) {
 //     expression, a boxed context or another boxed form, so no rule matrix exists to
 //     show. Measured: a decision whose logic is a context but which requires a table
 //     still traces *that* table, so this really is "no table logic here".
-//   - **No trace at all.** Nothing was recorded. A decision service is the case that
-//     matters: temis offers no trace option for one, so the decisions behind the
-//     interface run and report nothing (ADR-0398).
-//     Saying "this decision has no table logic" there would be plainly false — the
-//     decisions inside it are usually tables.
+//   - **No trace at all.** Nothing was recorded. A decision service used to be the
+//     case that mattered: the engine offered no trace option for one, so the
+//     decisions behind the interface ran and reported nothing (ADR-0398). That is
+//     fixed — a service is traced like a decision now — so this silence means the
+//     record predates the fix, or nothing recorded one at all (a remote decision,
+//     ADR-0050). Saying "this decision has no table logic" would be plainly false
+//     either way: the decisions inside a service are usually tables.
 //
 // The caller passes `service` when it knows the thing it ran was one, because only
 // it knows; without it the message says what is true either way.
 export function renderTrace(trace, opts = {}) {
   if (trace === null || trace === undefined) {
     return opts.service
-      ? `<p class="muted">A decision service reports no rule matrix, so there is nothing to trace here. Test a decision inside it to see its rules.</p>`
+      ? `<p class="muted">No rule matrix came back for this service. A decision service reported none until the engine learned to trace one, so this is an older engine answering — a service evaluated here now shows its rules.</p>`
       : `<p class="muted">This evaluation recorded no trace, so there are no rules to show.</p>`;
   }
   const tables = tablesOf(trace);

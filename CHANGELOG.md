@@ -51,6 +51,27 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Eine Entscheidung hinter einer Schnittstelle zeigt jetzt auch ihre Regeln.** Ein
+  Business-Rule-Task kann einen **Decision Service** aufrufen — DMN's veröffentlichte
+  Schnittstelle über einen Teil des Entscheidungsgraphen. Bis jetzt behielt eine solche
+  Auswertung ihre Eingaben und ihr Ergebnis und nichts darüber, wie sie dorthin kam: die
+  Engine bot für einen Service keine Option zum Aufzeichnen an. Damit fehlte die Erklärung
+  genau dort, wo sie am wenigsten zu entbehren ist — die Entscheidungen hinter einer
+  Schnittstelle sind in der Regel Tabellen, und wer einen Fall verantworten muss, konnte
+  „es wurden keine Regeln aufgezeichnet" nicht von „keine Regel hat getroffen"
+  unterscheiden.
+
+  Die Option ist upstream nachgezogen worden (temis#226) und wird hier durchgereicht. Eine
+  Service-Auswertung ab jetzt trägt die Tabellen, die der Service hinter seiner
+  Schnittstelle ausgeführt hat — im Entscheidungsgraph-Fenster mit grün gezogener Regel wie
+  bei jeder anderen Entscheidung. **Die Grenze gilt auch in der Spur:** eine Input-Decision
+  liefert der Aufrufer, der Service berechnet sie nie, also taucht ihre Tabelle nicht auf.
+
+  Was **vorher** aufgezeichnet wurde, trägt weiterhin keine Regeln und wird es nie: ein
+  Datensatz ist eingefrorene Geschichte, nichts, was man nachträglich neu rechnet. Die
+  Oberflächen sagen darum jetzt, *welche* Stille sie vor sich haben — die des Alters eines
+  Datensatzes, nicht die eines Unvermögens der Engine.
+
 - **The starmap says which dependencies are actually used.** Every line on the starmap
   was a *declared* dependency: a call activity names a process, a service task names a
   worker, a business rule task names a decision, and the picture drew all of them the

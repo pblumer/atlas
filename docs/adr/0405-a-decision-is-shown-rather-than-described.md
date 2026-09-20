@@ -4,8 +4,6 @@
 - **Implementation:** Landed
 - **Date:** 2026-09-19
 - **Deciders:** Core team
-- **Open question:** whether a decision service should record a rule trace at all, which is not ours to settle — see _Follow-ups_.
-- **Question checked:** 2026-09
 
 ## Context and problem statement
 
@@ -114,19 +112,30 @@ result-row layout fixed underneath it for every surface that shares it.
   generate one. Both are deploy-time, and neither is on any hot path. The window
   duplicates no state — everything it shows comes from the single read — which means
   it does not follow a live instance while it is open.
-- **Follow-ups / risks to watch:** **a decision service still records no rule trace**
-  ([ADR-0398](0398-a-business-rule-task-can-call-a-decision-service.md)), because
-  temis's `CompiledService.Evaluate` takes no `EvalOption` and the pinned version is
-  already the newest published. The window says so in as many words and keeps drawing
-  the values, which are exact. Fabricating the trace by re-evaluating the output
-  decision was considered and **rejected**: ADR-0066 rejected re-evaluation as the
-  mechanism for exactly this reason, temis states a `Trace` is "derived from the actual
-  evaluation, never reconstructed after the fact", and a model reading `now()` could
-  make a replay name a different rule that produces the same output — undetectable by
-  any output-equality guard, and a silently wrong rule is the worst failure this
-  window has. The fix is upstream and small: `CompiledService.Evaluate` taking
-  `opts ...EvalOption` and setting the evaluator's recorder the way
-  `CompiledDecision.Evaluate` already does.
+- **Follow-ups / risks to watch:** **a decision service recorded no rule trace** when
+  this landed ([ADR-0398](0398-a-business-rule-task-can-call-a-decision-service.md)),
+  because temis's `CompiledService.Evaluate` took no `EvalOption` and the pinned
+  version was already the newest published. The window said so in as many words and
+  kept drawing the values, which are exact.
+
+  **Resolved** (2026-09-20): the option landed upstream — `CompiledService.Evaluate`
+  takes `opts ...EvalOption` (temis#226) — and `evalService` threads `WithTrace`
+  through, so a service evaluated from now on shows its rules in this window like a
+  decision does, green row and all. Two things did not change and are the reason the
+  window's shape was worth building this way:
+
+  - **Records written before the fix carry no trace and never will.** The record is
+    frozen history (ADR-0066), so the window still has to say which silence it is
+    looking at — and now says it about the record's age rather than the engine's
+    ability, which is the true sentence.
+  - **Fabricating the trace by re-evaluating was considered and rejected**, and the
+    reasoning stands independently of the fix: ADR-0066 rejected re-evaluation as the
+    mechanism, temis states a `Trace` is "derived from the actual evaluation, never
+    reconstructed after the fact", and a model reading `now()` could make a replay
+    name a different rule that produces the same output — undetectable by any
+    output-equality guard, and a silently wrong rule is the worst failure this window
+    has. Waiting for the upstream fix cost a few days and bought a trace that is
+    the evaluation's own.
 
 ## Pros and cons of the options
 
