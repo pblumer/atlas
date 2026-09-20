@@ -24,6 +24,11 @@ _Changed_ / _Removed_ for each version.
   centred over whatever it contains. Both pictures now follow the notation, so a
   model opened in Atlas looks like the same model opened anywhere else.
 
+  The modeler follows too: the vendored dmn-js carries the same correction, and a
+  decision service that declares itself collapsed is now drawn as one — name over a
+  plus marker, no divider, nothing nested inside a box the document says is closed —
+  instead of looking expanded.
+
 ### Fixed
 
 - **A decision service survives Auto-layout.** Atlas generates a DMN model's diagram

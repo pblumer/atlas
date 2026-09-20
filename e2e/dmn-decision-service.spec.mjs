@@ -455,3 +455,94 @@ test("the shipped modeler draws a Decision Service as a container", async ({ pag
   });
   expect(result.savedXML).toContain("DMNDecisionServiceDividerLine");
 });
+
+// A Decision Service that declares itself collapsed. DMN draws one as the same
+// rounded rectangle with its name over a plus marker and no divider, because its
+// decisions are folded away (DMN 1.5 Table 5-2).
+const COLLAPSED_DECISION_SERVICE_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20230324/MODEL/"
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20230324/DMNDI/"
+             xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/"
+             namespace="http://temis.example/collapsed"
+             name="Collapsed" id="def_collapsed">
+  <decision id="id_out" name="Out" />
+  <decisionService id="id_svc" name="Collapsed Service">
+    <outputDecision href="#id_out" />
+  </decisionService>
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram id="DMNDiagram_Collapsed">
+      <dmndi:DMNShape id="DMNShape_Svc" dmnElementRef="id_svc" isCollapsed="true">
+        <dc:Bounds x="100" y="80" width="300" height="240" />
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_Out" dmnElementRef="id_out">
+        <dc:Bounds x="130" y="100" width="180" height="80" />
+      </dmndi:DMNShape>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>`;
+
+test("the shipped modeler draws a Decision Service the way DMN draws one", async ({ page }) => {
+  await page.goto("/harness.html");
+  await page.addScriptTag({ url: "/vendor/dmn/dmn-modeler.js" });
+
+  const result = await page.evaluate(async ([expanded, collapsed]) => {
+    document.body.innerHTML = '<div id="dmn" style="width:1200px;height:700px"></div>';
+
+    // The drawn shape, not the invisible hit area diagram-js puts beside it.
+    const read = async (xml) => {
+      const modeler = new window.AtlasDmn.DmnJS({
+        container: "#dmn",
+        dmnVersion: "1.5",
+      });
+      const imported = await modeler.importXML(xml);
+      const viewer = modeler.getActiveViewer();
+      const elementRegistry = viewer.get("elementRegistry");
+      const visual = (id) =>
+        elementRegistry.getGraphics(id).querySelector(".djs-visual");
+
+      const service = elementRegistry.get("id_svc");
+      const serviceVisual = visual("id_svc");
+      const rect = serviceVisual.querySelector("rect");
+      const label = serviceVisual.querySelector("text");
+      const box = label.getBBox();
+
+      const out = {
+        warnings: imported.warnings.map((w) => w.message),
+        serviceRadius: Number(rect.getAttribute("rx")),
+        decisionRadius: Number(
+          visual("id_out").querySelector("rect").getAttribute("rx") || 0,
+        ),
+        labelTop: box.y / service.height,
+        labelCentre: (box.x + box.width / 2) / service.width,
+        rects: serviceVisual.querySelectorAll("rect").length,
+        dividers: serviceVisual.querySelectorAll("polyline").length,
+      };
+
+      modeler.destroy();
+
+      return out;
+    };
+
+    return { expanded: await read(expanded), collapsed: await read(collapsed) };
+  }, [CONTAINED_DECISION_SERVICE_XML, COLLAPSED_DECISION_SERVICE_XML]);
+
+  expect(result.expanded.warnings).toEqual([]);
+  expect(result.collapsed.warnings).toEqual([]);
+
+  // A decision service is a ROUNDED rectangle and a decision a plain one; the
+  // corner is what tells them apart at a glance (DMN 1.5 Figure 5-10).
+  expect(result.expanded.serviceRadius).toBeGreaterThan(0);
+  expect(result.expanded.decisionRadius).toBe(0);
+  expect(result.collapsed.serviceRadius).toBeGreaterThan(0);
+
+  // The name sits in the top right, clear of the output decisions the upper
+  // compartment holds — centred, it would sit on top of them.
+  expect(result.expanded.labelTop).toBeLessThan(0.25);
+  expect(result.expanded.labelCentre).toBeGreaterThan(0.65);
+
+  // Collapsed: the name is centred over a plus marker, and there is no
+  // compartment to divide.
+  expect(result.collapsed.labelCentre).toBeCloseTo(0.5, 1);
+  expect(result.collapsed.rects).toBe(2);
+  expect(result.collapsed.dividers).toBe(0);
+});
