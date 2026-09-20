@@ -172,3 +172,27 @@ test("the plain renderer the Modeler shares still draws a model with no case on 
   expect(svg).toContain("decision table");
   expect(svg).not.toContain("not part of this case");
 });
+
+// The DRD notation is not styling: the shape is how a reader tells one kind of node
+// from another (DMN 1.5 §5.3.3, Table 5-2). Drawing a decision with rounded corners
+// makes it read as an input datum or a decision service, which are the two things it
+// is not.
+test("each kind of node is drawn as the DRD notation draws it", async ({ page }) => {
+  const svg = await page.evaluate(() => window.__plainWithBkm());
+
+  // a decision: a plain rectangle, square corners
+  const decision = svg.match(/<rect x="210" y="100"[^>]*>/);
+  expect(decision, "the decision is drawn").not.toBeNull();
+  expect(decision[0]).not.toContain("rx=");
+
+  // input data: a stadium — a rectangle with fully rounded ends
+  const input = svg.match(/<rect x="60" y="540"[^>]*>/);
+  expect(input, "the input datum is drawn").not.toBeNull();
+  expect(input[0]).toContain('rx="22.5"');
+
+  // a business knowledge model: a rectangle with two corners cut off, which a
+  // rounded rectangle cannot express
+  const bkm = svg.match(/<polygon points="[^"]*"[^>]*>/);
+  expect(bkm, "the knowledge model is drawn as a polygon").not.toBeNull();
+  expect(bkm[0].match(/points="([^"]*)"/)[1].split(" ")).toHaveLength(4);
+});

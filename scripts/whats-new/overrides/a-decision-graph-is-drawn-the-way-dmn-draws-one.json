@@ -1,0 +1,18 @@
+{
+  "tags": ["Decisions", "Modeler"],
+  "title": {
+    "en": "A decision graph is drawn the way DMN draws one",
+    "de": "Ein Entscheidungsgraph wird so gezeichnet, wie DMN ihn zeichnet"
+  },
+  "summary": {
+    "en": "In a decision requirements diagram the shape is not decoration — it is how a reader tells one kind of node from another. DMN draws a decision as a plain rectangle, input data as a stadium with fully rounded ends, a business knowledge model as a rectangle with two corners cut off, and a decision service as a rounded rectangle carrying its name in the top right, clear of the decisions it holds. Atlas drew decisions and knowledge models with rounded corners, which made a decision read as an input datum or as a service; and it drew a decision service square-cornered with its name centred over whatever it contained. Both pictures — the graph in the Modeler and the one the decision window puts a case on — now follow the notation, and a collapsed decision service is drawn as one instead of looking expanded. A model opened in Atlas therefore looks like the same model opened anywhere else.",
+    "de": "In einem Decision Requirements Diagram ist die Form keine Dekoration — an ihr erkennt man, um welche Art von Knoten es sich handelt. DMN zeichnet eine Entscheidung als schlichtes Rechteck, Eingabedaten als Stadion mit vollrunden Enden, ein Business Knowledge Model als Rechteck mit zwei abgeschnittenen Ecken und einen Decision Service als abgerundetes Rechteck, dessen Name oben rechts steht, ausserhalb der Entscheidungen, die er umschliesst. Atlas zeichnete Entscheidungen und Knowledge Models mit runden Ecken, wodurch eine Entscheidung wie ein Eingabedatum oder wie ein Service aussah; und den Decision Service mit eckigen Ecken und dem Namen mittig über seinem Inhalt. Beide Darstellungen — der Graph im Modeler und jener, auf den das Entscheidungsfenster einen Fall zeichnet — folgen nun der Notation, und ein eingeklappter Decision Service wird als solcher gezeichnet statt ausgeklappt zu wirken. Ein in Atlas geöffnetes Modell sieht damit aus wie dasselbe Modell in jedem anderen Werkzeug."
+  },
+  "try": {
+    "label": {
+      "en": "Open a decision",
+      "de": "Entscheidung öffnen"
+    },
+    "route": "#/modeler/decisions"
+  }
+}

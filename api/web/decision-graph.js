@@ -102,6 +102,31 @@ function drgEdges(g, pos) {
   }).join("");
 }
 
+// The shape each kind of node is drawn as, per the DRD notation (DMN 1.5 §5.3.3,
+// Table 5-2). The shape carries the meaning here, so it is not a style choice:
+//
+//   - a decision is a PLAIN rectangle. Rounding its corners makes it read as an
+//     input datum or a decision service, which are the two things it is not;
+//   - input data is a stadium — a rectangle with fully rounded ends;
+//   - a business knowledge model is a rectangle with its top-left and bottom-right
+//     corners cut off.
+//
+// The cut is proportional to the box so a small node does not lose its corners
+// entirely, and capped so a large one keeps the notch the notation shows.
+function nodeShape(type, x, y, w, h, attrs) {
+  if (type === "inputData") {
+    return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h / 2}" ${attrs}/>`;
+  }
+  if (type === "businessKnowledgeModel") {
+    const c = Math.min(14, w * 0.11, h * 0.29);
+    const pts = [
+      [x, y + h], [x + c, y], [x + w, y], [x + w - c, y + h],
+    ].map(([px, py]) => `${px.toFixed(1)},${py.toFixed(1)}`).join(" ");
+    return `<polygon points="${pts}" ${attrs}/>`;
+  }
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" ${attrs}/>`;
+}
+
 // drgSvg wraps drawn edges and nodes in the frame their placement needs.
 function drgSvg(placed, inner) {
   const { minX, minY, W, H } = drgFrame(placed);
@@ -127,7 +152,7 @@ export function renderDrgSvg(g) {
     const stroke = input ? "#3b82f6" : bkm ? "#8b5cf6" : "#111827";
     const sub = input ? (n.dataType || "input data") : bkm ? "knowledge model" : (n.hasTable ? "decision table" : "decision");
     return `<g>
-      <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${input ? h / 2 : 10}" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>
+      ${nodeShape(n.type, x, y, w, h, `fill="${fill}" stroke="${stroke}" stroke-width="1.5"`)}
       <text x="${x + w / 2}" y="${y + h / 2 - 3}" text-anchor="middle" font-size="13" font-weight="600" fill="#111827">${esc(n.name || n.id)}</text>
       <text x="${x + w / 2}" y="${y + h / 2 + 14}" text-anchor="middle" font-size="10.5" fill="#6b7280">${esc(sub)}</text>
     </g>`;
@@ -223,7 +248,7 @@ function renderCaseDrg(view, vals) {
       : `${n.name || n.id}\nThis evaluation records no value for it.`;
     return `<g class="drg-node${hit ? "" : " is-idle"}${isResult ? " is-result" : ""}">
       <title>${esc(title)}</title>
-      <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${input ? h / 2 : 10}" fill="${fill}" stroke="${stroke}" stroke-width="${isResult ? 2.5 : 1.5}"/>
+      ${nodeShape(n.type, x, y, w, h, `fill="${fill}" stroke="${stroke}" stroke-width="${isResult ? 2.5 : 1.5}"`)}
       <text x="${x + w / 2}" y="${y + h / 2 - 4}" text-anchor="middle" font-size="13" font-weight="600" fill="${nameFill}">${esc(clip(n.name || n.id, 26))}</text>
       ${sub}</g>`;
   }).join("");
