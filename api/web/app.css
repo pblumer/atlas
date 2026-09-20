@@ -4557,6 +4557,11 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    are now in the pixels a reader actually sees, at every magnification. */
 .mesh-edge { stroke: var(--mesh-line); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .mesh-edge-uses { stroke-dasharray: 6 4; }
+/* An edge whose counter was read and holds nothing. Quieter, never recoloured: on this
+   canvas colour is kind and severity, and a path nothing has walked is neither a fault
+   nor another kind of thing (ADR-0400). Opacity alone also keeps it distinguishable
+   from a filtered-out edge, which the .mesh-relating rule below takes much further. */
+.mesh-edge-untaken { opacity: 0.35; }
 .mesh-edge-contains { stroke-dasharray: 1 3; opacity: 0.7; stroke-linecap: round; }
 /* The catalogue's lines, in the same three patterns and for the same reasons, because
    a fourth pattern would not be told from the three at a glance. `offers` is the solid
