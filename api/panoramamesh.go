@@ -92,7 +92,16 @@ const meshCacheTTL = 30 * time.Second
 type meshFacts struct {
 	// at is when this structure was read. It dates the answer built from it — the
 	// oldest fact in that answer, which is what a freshness stamp has to be.
-	at        time.Time
+	at time.Time
+	// runtimeID is this server's own identity, the half that makes every key in the
+	// derived graph placeable (ADR-0401 §1). Cached with the structure because it is a
+	// singleton minted once and persisted, not a record that changes under a reader.
+	//
+	// Empty when the read failed. That is deliberately not treated as an error that
+	// fails the whole landscape: the picture of this server is still true, and what an
+	// absent runtime id costs is the ability to *join* it to another server's — which
+	// is stated on the payload rather than guessed at by a consumer.
+	runtimeID string
 	overrides map[string]callOverride
 	decisions []panorama.Decision
 	procs     []structuralProcess
@@ -204,6 +213,12 @@ func (s *Server) readStructure(withDrafts bool, now time.Time) (*meshFacts, erro
 	}
 
 	facts := &meshFacts{at: now, overrides: ovByPID}
+
+	// Read on the loop, like the descriptor route does, and an error leaves it empty
+	// rather than failing the landscape — see meshFacts.runtimeID.
+	if identity, err := s.nodeIdentity(); err == nil {
+		facts.runtimeID = identity.ID
+	}
 
 	// Deployed decisions are engine-wide rather than owned by any application
 	// (ADR-0034), so there is no scope to apply and CanView is simply true. Saying
@@ -377,6 +392,9 @@ func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, panorama
 	held, polled := s.workerHoldings()
 	land := panorama.Landscape{
 		PartialStatus: partial,
+		// Whose keys these are (ADR-0401 §1). Every process below inherits it, because
+		// a local collector reads only this server's deployments.
+		RuntimeID: facts.runtimeID,
 		// Dated by the oldest fact in it. The health below was read a moment ago, the
 		// structure it hangs on may be half a minute old, and a stamp that claimed the
 		// younger of the two would be the picture promising a freshness nobody

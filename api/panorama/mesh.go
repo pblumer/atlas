@@ -21,7 +21,26 @@ import (
 // can route a click without parsing the kind separately.
 const (
 	KindApplication = "application"
-	KindProcess     = "process"
+	// KindProcess is one *deployment*: a definition held by one runtime since one
+	// moment, and the thing that has instances, counters, incidents and a state
+	// (ADR-0401 §2). The name stays `process` because that is what every reader,
+	// route and export already calls it, and renaming a shipped node kind would cost
+	// more than the precision is worth — what the split needed was a second kind for
+	// the half that was missing, not a new word for this one.
+	KindProcess = "process"
+	// KindDefinition is what a model *is*, independent of any server holding it:
+	// process id plus version (ADR-0401 §2). It has no state, no counters and no
+	// runtime, because none of those are properties of a model — they belong to a
+	// deployment of it.
+	//
+	// It is drawn only where a definition has more than one deployment. On a single
+	// runtime a definition has exactly one, always — the collector reads the latest
+	// deployment per process id — so a definition node there would stand in a fixed
+	// 1:1 relation to a process node, which is a field rather than a second thing,
+	// and would spend the measured 400-node budget (ADR-0211 §7) to restate what the
+	// deployment already says. Where there are several it is the thing they have in
+	// common, which is what makes "this process runs in three domains" a drawing.
+	KindDefinition = "definition"
 	// KindWorker is one configured Worker — a target and identity of a Worker Type
 	// (ADR-0203). The store behind it is still the worker store and the model
 	// still names it with connector="…"; those are the contracts that cannot move
@@ -96,6 +115,14 @@ const (
 	// be provisioned first. It is what the fulfilment order is computed from, and the
 	// only catalogue edge whose direction means "after".
 	EdgeRequires = "requires"
+	// EdgeDeploys runs from a definition to a deployment of it (ADR-0401 §2). It is
+	// the one edge on this picture whose two ends are different *kinds* of thing
+	// rather than two resources: a model, and a runtime holding it.
+	//
+	// Deliberately not EdgeContains, which says an application holds processes that
+	// exist nowhere else. A definition is the opposite case — the whole point of
+	// drawing it is that the same model exists in more than one place.
+	EdgeDeploys = "deploys"
 )
 
 // catalogEdgeKinds is which stored arrangement edges this picture draws, and how.
@@ -213,10 +240,14 @@ type Decision struct {
 
 // Process is one deployed process, with the call activities it makes.
 type Process struct {
-	Key           uint64
-	ProcessID     string
-	Name          string
-	Version       int32
+	Key       uint64
+	ProcessID string
+	Name      string
+	Version   int32
+	// RuntimeID is the runtime holding this deployment (ADR-0401 §1). Empty means the
+	// runtime deriving the graph, which is every process a local collector reads — a
+	// server does not have to tell itself where it is.
+	RuntimeID     string
 	ApplicationID string
 	CanView       bool
 	Calls         []Call
@@ -370,6 +401,10 @@ type Product struct {
 
 // Landscape is everything the mesh derives from, already filtered for this caller.
 type Landscape struct {
+	// RuntimeID is the runtime these facts were read off — this server, for a local
+	// collection (ADR-0401 §1). Every process here inherits it unless it carries its
+	// own, which is what a subgraph read from a peer would.
+	RuntimeID    string
 	Applications []Application
 	Processes    []Process
 	// Drafts are the saved diagrams nobody has deployed, and are empty unless the
@@ -502,9 +537,26 @@ type Node struct {
 	// up asking which one they have.
 	Catalog string `json:"catalog,omitempty"`
 	// ProcessID and Version identify a process node well enough to navigate to the
-	// Operations view (L2) without a second lookup.
+	// Operations view (L2) without a second lookup. On a definition node they are the
+	// identity itself rather than a navigation aid (ADR-0401 §2).
 	ProcessID string `json:"processId,omitempty"`
 	Version   int32  `json:"version,omitempty"`
+	// RuntimeID is the runtime holding this deployment — the other half of its
+	// estate-wide name (ADR-0401 §1). Empty on a definition node, which belongs to no
+	// runtime, and on the kinds that are estate-wide by nature: a capability, a value
+	// stream, a product and a published interface are named without one, and needing
+	// to qualify one of those by the server it sits on would mean it was modelled at
+	// the wrong altitude.
+	//
+	// Not to be confused with Runtime further down, which is instance counters. This
+	// field says *where* the deployment is; that one says what has run in it.
+	RuntimeID string `json:"runtimeId,omitempty"`
+	// Definition is the definition node a deployment realises, and is set only where
+	// that definition is drawn — which is where it has more than one deployment. Empty
+	// otherwise, including on the single-runtime case that is every installation
+	// today: the definition is still known there, it is simply the deployment's own
+	// (ProcessID, Version) and needs no second node to hold it.
+	Definition string `json:"definition,omitempty"`
 	// WorkerType is a worker node's Worker Type ("rest", "mail", …). Never its
 	// endpoint and never its credential reference — see [Worker].
 	WorkerType string `json:"workerType,omitempty"`
@@ -634,6 +686,22 @@ type Edge struct {
 type Graph struct {
 	Nodes []Node `json:"nodes"`
 	Edges []Edge `json:"edges"`
+	// RuntimeID is the runtime that derived this subgraph, and it is the half that
+	// makes every key in the document mean something (ADR-0401 §1). A node id here
+	// carries a key, a key carries its partition but not its installation, and two
+	// installations both mint partition 0 counter 1 — so "a bare key is never
+	// published estate-wide", and this is what stops these from being bare.
+	//
+	// Qualifying the document rather than each id is deliberate: the estate-wide name
+	// is the pair `(runtimeId, key)`, and both halves already existed, so nothing new
+	// is minted and no shipped id scheme moves. A reader stitching several subgraphs
+	// is the one that has to qualify per node, and it has what it needs to.
+	//
+	// Empty where the server could not read its own identity, which is a fact about
+	// the reading and not an estate of one: an absent runtime id means these keys
+	// cannot be placed, and a consumer must refuse to join them rather than assume
+	// they are local.
+	RuntimeID string `json:"runtimeId,omitempty"`
 	// Restricted is how many placeholder nodes stand in for resources this caller
 	// may not see. The legend states it, so a filtered picture says that it is
 	// filtered instead of looking complete.
@@ -667,7 +735,38 @@ type Graph struct {
 
 func applicationNodeID(id string) string { return KindApplication + ":" + id }
 func processNodeID(key uint64) string    { return fmt.Sprintf("%s:%d", KindProcess, key) }
-func workerNodeID(id string) string      { return KindWorker + ":" + id }
+
+// definitionNodeID names a definition by what it is rather than by any key: process id
+// plus version (ADR-0401 §2). No runtime qualifies it, which is the point — the same
+// id derived on two servers has to come out the same or the two could never be joined.
+//
+// ADR-0401 gives the deployed model's checksum as a tie-breaker, and it is deliberately
+// not here. The record left open whether to take it over the XML or the compiled form,
+// and measuring both answered it: neither is usable as it stands.
+//
+// Over seven real models, an XML checksum splits a definition an operator sees as one —
+// nudging only the diagram changed the XML every time while leaving the compiled form
+// byte-identical every time, which is exactly what the layout transplant does
+// (ADR-0124/0251). Over the compiled form it is worse in a different direction: the
+// compiled form has no serialization at all, so a checksum means inventing a canonical
+// encoding and freezing it forever; its three maps leak iteration order into the hash
+// unless the encoding sorts them (measured: unsorted, the same model hashed differently
+// within one process); and its values are intern-table indices, so the hash is a
+// function of the compiler's private struct — removing any of six probed fields moved
+// it. Since a definition is recompiled from stored XML on every start
+// (`api/deploystore.go`), that last one means the same model would get a new identity
+// after any Atlas upgrade that touches the compiler. G2 touched it last week.
+//
+// So the tie-breaker wants a third thing neither option named: a designed, public,
+// layout-immune projection of the executable model. That is its own piece of work, and
+// nothing needs it yet — the finding it enables, "these two claim the same version and
+// are not the same bytes", needs two runtimes, and there are none until ADR-0402 is
+// decided and built. Adding the field now with the wrong content would put that finding
+// into the picture as a false positive on every layout nudge.
+func definitionNodeID(processID string, version int32) string {
+	return fmt.Sprintf("%s:%s:%d", KindDefinition, processID, version)
+}
+func workerNodeID(id string) string { return KindWorker + ":" + id }
 
 // draftNodeID keys a draft by its BPMN process id, which is the only identity a
 // draft has — there is no deployment key to key it by, and that absence is the
@@ -718,7 +817,7 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 	}
 	sort.Slice(visible, func(i, j int) bool { return visible[i].Key < visible[j].Key })
 
-	g := Graph{Nodes: []Node{}, Edges: []Edge{}, ObservedAt: opts.ObservedAt}
+	g := Graph{Nodes: []Node{}, Edges: []Edge{}, ObservedAt: opts.ObservedAt, RuntimeID: land.RuntimeID}
 	// Which of the two pictures this is (see the subjects above). The halves below are
 	// gated on it rather than filtered afterwards, because the size budget and the
 	// collapse are about what is *on* the picture: a product filtered out in the
@@ -808,10 +907,15 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 	// the state is the point, because "the process that provisions this is degraded"
 	// is the finding somebody opened the product map for.
 	processNode := func(p Process) Node {
+		runtime := p.RuntimeID
+		if runtime == "" {
+			runtime = land.RuntimeID
+		}
 		return Node{
 			ID: processNodeID(p.Key), Kind: KindProcess, Name: p.Name,
 			Provenance: ProvenanceDerived, ProcessID: p.ProcessID, Version: p.Version,
-			State: p.State, Reason: p.Reason, Incidents: p.Incidents,
+			RuntimeID: runtime,
+			State:     p.State, Reason: p.Reason, Incidents: p.Incidents,
 			OldestIncident: p.OldestIncident, Sites: p.Sites,
 			Runtime: p.Runtime,
 		}
@@ -1151,6 +1255,66 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		applyOverlays(&g, opts.Overlays, visible)
 	}
 
+	// The definition half of ADR-0401 §2, drawn only where it says something.
+	//
+	// This runs over the deployment nodes already on the graph rather than over
+	// land.Processes, which is what makes it subject-agnostic: the landscape draws
+	// every visible process and the product map draws the ones a product binds, and a
+	// definition shared by two deployments is the same finding on either. It has to
+	// stay above the sort below, for the reason addEdge does — but for a different
+	// one: addEdge holds slice indices, and this holds none. It reads node ids, which
+	// the sort does not touch.
+	//
+	// A deployment with no runtime id cannot take part. That is not a technicality: two
+	// records of one definition are two deployments only if something tells them apart,
+	// and without a runtime id they may be the same deployment counted twice — which
+	// is what a collector that could not read its own identity would hand over. Drawing
+	// a definition there would assert an estate on the strength of a failed read.
+	byDefinition := map[string][]int{}
+	for i, n := range g.Nodes {
+		if n.Kind != KindProcess || n.ProcessID == "" || n.RuntimeID == "" {
+			continue
+		}
+		id := definitionNodeID(n.ProcessID, n.Version)
+		byDefinition[id] = append(byDefinition[id], i)
+	}
+	definitionIDs := make([]string, 0, len(byDefinition))
+	for id := range byDefinition {
+		definitionIDs = append(definitionIDs, id)
+	}
+	sort.Strings(definitionIDs) // map order must not reach the payload
+	for _, id := range definitionIDs {
+		at := byDefinition[id]
+		runtimes := map[string]struct{}{}
+		for _, i := range at {
+			runtimes[g.Nodes[i].RuntimeID] = struct{}{}
+		}
+		if len(runtimes) < 2 {
+			continue
+		}
+		// The name is a label for the reader, not part of the identity — that is
+		// (ProcessID, Version) and nothing else. Taken from the first deployment, which
+		// is deterministic because the nodes were appended in a fixed order.
+		//
+		// Two deployments of one definition disagreeing about the name would mean the
+		// same process id at the same version compiled from different models, which is
+		// the "same version, different bytes" finding — and detecting that needs the
+		// checksum definitionNodeID deliberately does not have yet. So the label is one
+		// of them rather than a claim that both agree, and the day the tie-breaker
+		// exists it is the thing that turns the disagreement into a finding instead of
+		// a silently arbitrary caption.
+		first := g.Nodes[at[0]]
+		g.Nodes = append(g.Nodes, Node{
+			ID: id, Kind: KindDefinition, Name: first.Name,
+			Provenance: ProvenanceDerived,
+			ProcessID:  first.ProcessID, Version: first.Version,
+		})
+		for _, i := range at {
+			g.Nodes[i].Definition = id
+			addEdge(Edge{From: id, To: g.Nodes[i].ID, Kind: EdgeDeploys})
+		}
+	}
+
 	sort.SliceStable(g.Edges, func(i, j int) bool {
 		if g.Edges[i].From != g.Edges[j].From {
 			return g.Edges[i].From < g.Edges[j].From
@@ -1343,6 +1507,12 @@ func cluster(full Graph, visible []Process, drafts []Draft, appIDs []string,
 	out := Graph{
 		Nodes: []Node{}, Edges: []Edge{},
 		Restricted: full.Restricted, Clustered: true, ObservedAt: full.ObservedAt,
+		// Carried like the other two: a collapsed picture is still this runtime's, and
+		// dropping the id here would make every over-budget installation unjoinable —
+		// an absent runtime id means "these keys cannot be placed" (ADR-0401 §1), which
+		// is a true thing to say about a failed read and a false one to say about a
+		// large estate.
+		RuntimeID: full.RuntimeID,
 	}
 	for _, id := range appIDs {
 		node := Node{
@@ -1375,6 +1545,12 @@ func clusterProducts(full Graph, catalogs []ProductCatalog, children map[string]
 	out := Graph{
 		Nodes: []Node{}, Edges: []Edge{},
 		Restricted: full.Restricted, Clustered: true, ObservedAt: full.ObservedAt,
+		// Carried like the other two: a collapsed picture is still this runtime's, and
+		// dropping the id here would make every over-budget installation unjoinable —
+		// an absent runtime id means "these keys cannot be placed" (ADR-0401 §1), which
+		// is a true thing to say about a failed read and a false one to say about a
+		// large estate.
+		RuntimeID: full.RuntimeID,
 	}
 	for _, c := range catalogs {
 		out.Nodes = append(out.Nodes, Node{
