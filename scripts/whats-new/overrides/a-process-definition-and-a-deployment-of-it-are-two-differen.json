@@ -1,0 +1,10 @@
+{
+  "hidden": true,
+  "tags": [
+    "Panorama"
+  ],
+  "summary": {
+    "en": "Hidden on purpose. This is identity and API surface: the derived graph now names the runtime it came from, a deployment names the runtime holding it, and a definition node exists for the case where several servers hold one model. On a single server nothing on the picture looks different, and no installation can produce the new node until a federated read exists — so announcing it here would promise a drawing nobody can open.",
+    "de": "Absichtlich verborgen. Es geht um Identität und API-Fläche: der abgeleitete Graph nennt nun die Runtime, aus der er stammt, ein Deployment nennt die Runtime, die es hält, und ein Definitionsknoten existiert für den Fall, dass mehrere Server ein Modell halten. Auf einem einzelnen Server sieht auf dem Bild nichts anders aus, und keine Installation kann den neuen Knoten erzeugen, solange es keinen föderierten Read gibt — eine Ankündigung hier würde also eine Zeichnung versprechen, die niemand öffnen kann."
+  }
+}

@@ -1,18 +1,17 @@
 # ADR-0401: What a node is called when there is more than one log
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-09-18
 - **Deciders:** Atlas maintainers
-- **Open question:** whether two nodes deploying the same process id at the same version
-  hold the same definition. Content addressing answers it for byte-identical models and
-  refuses to answer where the bytes legitimately differ — which is exactly what the
-  layout transplant does ([ADR-0124](0124-server-side-diagram-auto-layout.md),
-  [ADR-0251](0251-adjust-a-deployed-diagram.md)): the same
-  executable model with a nudged diagram. So a checksum over the XML will report two
-  definitions where an operator sees one. Taking it over the *compiled* form instead is
-  the obvious fix and nobody has tested whether the compiled form is stable enough
-  across builds to be an identity.
+- **Open question:** what the definition checksum is taken over. The question this record
+  was written with — XML or the compiled form — was **measured in 2026-09 and answered:
+  neither, as they stand.** See *What the measurement found* below. So the open question
+  is now the narrower one it left: what a canonical projection of the executable model
+  should contain, given that it has to be layout-immune like the compiled form and
+  independent of the compiler's internals like the XML. Nothing needs it yet — the
+  finding it enables requires two runtimes — so it is deliberately unbuilt rather than
+  undecided.
 - **Question checked:** 2026-09
 
 ## Context and problem statement
@@ -110,6 +109,43 @@ Split them:
 Two drawings follow that the estate actually needs and cannot have today: *this process
 runs in three domains*, and *these two claim the same version and are not the same
 bytes*. The second is a finding; nothing today can produce it.
+
+**A definition is derived always and drawn only where it says something.** On a single
+runtime a definition has exactly one deployment, always — the collector reads the latest
+deployment per process id — so a definition node there stands in a permanent 1:1 relation
+to a process node. That is a field rather than a second thing, and drawing it would spend
+the measured 400-node budget (ADR-0211 §7) to restate what the deployment already says:
+200 processes would become 400 nodes and installations that paint today would collapse.
+The identity is therefore always derived and the node appears exactly where a definition
+has more than one deployment, which is the first case where it carries something a reader
+cannot get from the deployment. The expense this record wanted paid early is paid in the
+derivation, which is where the accretion it feared was happening.
+
+### What the measurement found
+
+The open question above — XML or compiled form — was tested over the seven system
+processes, and both candidates fail on different axes:
+
+| | XML checksum | compiled-form checksum |
+|---|---|---|
+| The layout transplant (ADR-0124/0251) | **splits a definition an operator sees as one** — nudging only `bpmndi:` changed the XML in 7 of 7 | **keeps it whole** — the compiled form was byte-identical in 7 of 7, because the compiler never reads `bpmndi:` |
+| Deterministic within one build | yes, trivially | **no, unless the encoding sorts maps** — with `joinReach`, `searchableSet` and `decisionPins` left in iteration order, the same model hashed differently within one process |
+| Survives an Atlas upgrade | yes | **no** — the values are intern-table indices, so the hash is a function of the compiler's private struct; removing any of six probed fields moved it |
+| Needs a format frozen forever | no | yes — `CompiledProcess` has no serialization at all, so a checksum means inventing one |
+
+The third row is the decisive one. A definition is recompiled from stored XML on every
+start (`api/deploystore.go` keeps "the original BPMN XML, enough to recompile the
+definition"), so the compiled form is whatever the running binary produces — the same
+model would get a new identity after any release that touches the compiler, and
+ADR-0400's own implementation touched it.
+
+So the tie-breaker wants a third thing neither option named: a **designed, public,
+layout-immune projection of the executable model**, independent of how the compiler
+happens to represent it. That is its own slice of work. It is not in the identity today,
+and the reason is recorded rather than the field being added with the wrong content: on
+an XML checksum, every diagram nudge would publish the finding *"these two claim the same
+version and are not the same bytes"* as a false positive, which is worse than not being
+able to state it.
 
 ### 3. An application is joined only where a promotion joined it
 

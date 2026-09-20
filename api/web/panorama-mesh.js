@@ -82,6 +82,22 @@ const KIND = {
   // status badge is 3.59 against the canvas and the red 5.44, and a kind must never
   // compete with those (ADR-0211 §4).
   draft: { r: 14, grow: 4, shape: "square", fill: "#fbf6ee", stroke: "var(--muted)", label: "Draft — saved, not deployed", dashed: true },
+  // The model itself, drawn only where more than one server holds it (ADR-0401). It
+  // keeps the process square by the same argument the draft does: shape says what kind
+  // of thing a node is, and a definition is a process — what distinguishes it is that
+  // it is not *a* running one but what several running ones have in common. So it is
+  // drawn a rank larger than a deployment, the way the thing that stands over others is
+  // here, and it is deliberately NOT dashed: the dash means what is drawn is not
+  // running, and a definition with two deployments is running in two places. Dashing it
+  // would say the opposite of the only fact it exists to state.
+  //
+  // This entry exists so the kind cannot fall through to `KIND.process` and be drawn as
+  // a deployment, which is precisely the conflation the split removes. Its colours are
+  // provisional and say so: every other fill here was measured against the canvas and
+  // its neighbours, and this node cannot appear on any installation until a federated
+  // read exists (ADR-0402 is still Proposed), so there is nothing yet to measure it on.
+  // Whoever first sees one owes it the same treatment the others had.
+  definition: { r: 20, grow: 6, shape: "square", fill: "#eef0f6", stroke: "var(--muted)", label: "Definition — one model, several servers" },
   worker: { r: 12, grow: 3.5, shape: "hexagon", fill: "#d9efe1", stroke: "var(--ok)", label: "Worker" },
   decision: { r: 12, grow: 3.5, shape: "triangle", fill: "#dbe6ff", stroke: "var(--accent-hover)", label: "Decision" },
   // A placeholder for something real whose kind we may not learn, so it takes the
@@ -1155,6 +1171,15 @@ const EDGE_KEY = [
     "a part offered beside the whole, ordered only if it is chosen"],
   ["requires", "Dotted line — precedence: this cannot be provisioned before that",
     "this cannot be provisioned before that"],
+  // Last, because it is the structure the rest hangs on and the order above puts
+  // structure last. It is also the only row here whose line a reader cannot currently
+  // see: a definition is drawn only where several servers hold one model (ADR-0401),
+  // which needs a federated read that does not exist yet. The row exists anyway,
+  // because the alternative is a line on the picture with nothing in the key — and the
+  // dash-dot is provisional for the same reason the definition node's fill is: there is
+  // nothing yet to look at it on.
+  ["deploys", "Dash-dot line — deployed here: one model, and a server that holds it",
+    "one model, and a server that holds it"],
 ];
 
 // PULSE_BUDGET is how many beating nodes the view will animate at once.
