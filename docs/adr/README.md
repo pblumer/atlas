@@ -486,10 +486,10 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0398](0398-a-business-rule-task-can-call-a-decision-service.md) | A business rule task can call a decision service | Accepted | Landed |
 | [0399](0399-portal-carries-its-own-sign-in.md) | The service portal carries its own sign-in | Accepted | Landed |
 | [0400](0400-an-edge-that-was-taken-is-not-an-edge-that-was-declared.md) | An edge that was taken is not an edge that was declared | Accepted | Not started |
-| [0401](0401-graph-identity-across-several-logs.md) | What a node is called when there is more than one log | Accepted | Not started |
+| [0401](0401-graph-identity-across-several-logs.md) | What a node is called when there is more than one log | Accepted | Partial |
 | [0402](0402-one-estate-several-nodes.md) | One estate, several nodes — a starmap stitched from subgraphs | Proposed | Not started |
 | [0403](0403-the-estate-graph-is-derived-from-the-log.md) | The estate graph is derived from the log, never the log from the graph | Accepted | Not started |
-| [0404](0404-the-whole-graph-can-be-walked.md) | The whole graph can be walked, in a projection with a stated scope | Accepted | Not started |
+| [0404](0404-the-whole-graph-can-be-walked.md) | The whole graph can be walked, in a projection with a stated scope | Accepted | Partial |
 | [0405](0405-a-decision-is-shown-rather-than-described.md) | A decision is shown, not described | Accepted | Landed |
 | [0406](0406-decision-service-is-drawn-around-its-members.md) | A decision service is drawn, and drawn around its members | Accepted | Landed |
 

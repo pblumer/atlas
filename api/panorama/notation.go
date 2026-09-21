@@ -150,6 +150,7 @@ var notations = []Notation{
 			"The picture uses ArchiMate's icon-only notation — the element's own symbol at full size with the name beneath it — rather than the boxed notation with the type icon in the corner. Both are the standard's; at the size a node is drawn here a corner icon would be a pixel or two, so the icon is the node and the type is written under the name as well.",
 			"The layer colours are convention, not standard. ArchiMate 3.2 states that colour carries no formal semantics and defines none; the fills here are the ones the specification's own figures and the Archi tool use, so a reader recognises the layers at a glance. Nothing in the exported document depends on them.",
 			"Only the five kinds this table names are drawn as ArchiMate elements. A draft, a restricted placeholder and an unresolved dependency keep Atlas's own shape and colour, because ArchiMate has no element for them and dressing them as one would be a claim the notation does not make.",
+			"A process definition — the model itself, drawn where more than one server holds it (ADR-0401) — is one of those. ArchiMate's Application Process is the behaviour that runs, which is what the deployment beneath it already is; naming the definition one too would put the same behaviour on the picture twice. The nearest alternatives are worse rather than imperfect: an Artifact is a file on a node, and this is the thing that is *not* tied to a node, while a Deployment is not an ArchiMate concept at all. So the definition keeps Atlas's own shape, and what the document loses is the one line saying two deployments are the same model.",
 		},
 	},
 	{
@@ -171,6 +172,7 @@ var notations = []Notation{
 			"External systems are absent. C4 puts the thing a component talks to on the diagram; Atlas holds no model of what is behind a worker, only its name and type.",
 			"Relationships carry no technology or protocol label, which is most of what a C4 arrow is for.",
 			"Restricted and unresolved placeholders have no C4 element and keep their own shape. So does a draft: C4 describes a system that exists, and a diagram nobody has deployed is not part of one.",
+			"A process definition keeps its own shape too. C4's Component is the deployment beneath it, and C4 has no notation for one model held by several systems — that is precisely the relationship its levels separate onto different diagrams.",
 			"There is no Person and no Software System: the starmap is derived from what this server runs, and neither is a thing Atlas holds.",
 			"A catalogue and a product have no C4 element and keep Atlas's own shape. C4 describes the structure of a software system across four levels; what an organisation offers its people, and what that offering is assembled from, is not one of them.",
 		},

@@ -12,6 +12,54 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **The run graph's ordinal map and CSR, and the measurement that qualified them.** The
+  projection [ADR-0404](docs/adr/0404-the-whole-graph-can-be-walked.md) decided on is
+  built: a persisted key-to-ordinal map, and the two flat arrays a walk reads. The map is
+  the sorted key array and the ordinal is the index, so there is no second structure to
+  keep consistent and the inverse comes free. Every edge is held at both endpoints,
+  because impact analysis asks in both directions. The build refuses to publish anything
+  partial — a half-built CSR answers wrongly in a way no reader can see.
+
+  The record's own premise turned out to be conditional, which is what building it found.
+  §10 assumed that assigning ordinals in key order makes a component's nodes contiguous,
+  and everything it concludes about where the projection may live rests on that. Measured
+  against state the engine actually wrote, it holds **exactly** where instances arrive
+  spread over time and **degrades linearly** with a burst: the span of a component's
+  ordinal range is 1.00 at sequential arrival, 5.67 at eight instances in flight, 43.00 at
+  sixty-four and 341.67 at five hundred and twelve. The law behind those points is exact
+  rather than fitted, because the engine mints an instance's elements across as many batch
+  phases as it has elements. It is pinned as that law in the tests, so a change to the
+  engine's batching surfaces there instead of as an unexplained slow walk, and the record
+  now carries the numbers, what they cost in pages, and the two ways out — without picking
+  one, because nothing depends on it until a walk is wired.
+
+### Added
+
+- **A process definition and a deployment of it are two different things.** The starmap's
+  `process` node has been both at once: what a model *is* — process id and version — and
+  the fact that this server holds it, with instances, counters and a state. That is
+  harmless with one server and unanswerable with several, because two installations both
+  mint partition 0 counter 1 and nothing in a key says which one did.
+
+  Both halves are now named. Every derived graph says which runtime derived it, and every
+  deployment on it says which runtime holds it, so a key travels with the other half of
+  its estate-wide name instead of alone. Nothing new is minted for this and no published
+  id changes — the runtime id and the key both already existed, and the pair is the name.
+
+  The definition is derived for every deployment and **drawn only where it has more than
+  one**. On a single server it has exactly one, always, so drawing it would put a
+  permanent twin beside every process: a node in a fixed one-to-one relation to another
+  node is a field, not a second thing, and it would spend the measured 400-node layout
+  budget to restate what the deployment already says. Where several servers hold one
+  model, that definition is what they have in common, and *this process runs in three
+  domains* becomes a line rather than a comparison somebody does by opening two tabs.
+
+  Nothing on a single-server picture looks different yet. What changed is that the
+  identity underneath it is now the one an estate can be drawn in, and that features
+  stop accumulating on the conflated form — see [ADR-0401](docs/adr/0401-graph-identity-across-several-logs.md).
+
 ### Fixed
 
 - **A decision graph is drawn the way DMN draws one.** The DRD notation is not
