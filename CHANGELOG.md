@@ -45,9 +45,26 @@ _Changed_ / _Removed_ for each version.
   administration and not to catalogue maintenance — the process models that rather
   than working around it.
 
-  Deliberately absent: the logo, which is a file where a task form carries only
-  text, and languages beyond German and French, which a static form cannot read off
-  the catalogue. Both are said in the example's README rather than left to be
+  **The logo is picked in the task form and never becomes a process variable.** It
+  goes straight from the browser to the catalogue's own logo endpoint when the task
+  is completed. The obvious alternative — base64 through the process — is the one
+  thing this must not do, and `engine/budget.go` says why in the comment on
+  `DefaultMaxVariable`: past a megabyte "it is a document, and a document in a
+  token's scope is rewritten into the log on every touch". A logo is capped at half
+  a megabyte, about 683 KB once base64 has grown it, and every step the process
+  takes afterwards would write it into the write-ahead log again. ADR-0316 kept the
+  same bytes out of the catalogue *record* for a weaker version of that reason.
+
+  It is not a side channel: the endpoint is the one the Console's catalogue screen
+  uses, called by the same browser with the same credentials, and it still demands
+  PNG or SVG, half a megabyte and an administrator — which is the group the theme
+  task is assigned to. The model names a **catalogue**, never a URL: a URL would let
+  a model make whoever completes a task issue any request as them. A failed upload
+  leaves the task open and says why, because a task that finished while its logo did
+  not is a process that believes the catalogue is branded.
+
+  Still deliberately absent: languages beyond German and French, which a static form
+  cannot read off the catalogue. Said in the example's README rather than left to be
   discovered.
 
   The capture itself is **one task and not five**. Choosing the catalogue, entering

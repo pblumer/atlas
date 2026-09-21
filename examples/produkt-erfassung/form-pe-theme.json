@@ -39,8 +39,15 @@
       ]
     },
     {
+      "key": "logo",
+      "type": "filepicker",
+      "label": "Logo",
+      "description": "PNG oder SVG, höchstens 512 KB. Optional — ohne Logo zeigt das Portal die Marke der Instanz.",
+      "accept": ".png,.svg,image/png,image/svg+xml"
+    },
+    {
       "type": "text",
-      "text": "**Das Logo wird hier nicht gesetzt.** Es ist eine Datei, und ein Aufgabenformular trägt heute nur Text. Es wird in der Konsole unter *Katalog → Erscheinungsbild* hochgeladen; der Prozess läuft ohne weiter."
+      "text": "Das Bild geht beim Abschliessen dieser Aufgabe direkt an den Katalog und wird **keine Prozessvariable** — ein halbes Megabyte im Token-Umfang würde bei jedem weiteren Schritt erneut ins Log geschrieben. Schlägt der Upload fehl, bleibt die Aufgabe offen und sagt warum."
     }
   ]
 }

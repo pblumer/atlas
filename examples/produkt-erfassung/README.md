@@ -117,12 +117,53 @@ Eine nicht gesetzte Variable liest sich in FEEL als `null`. Darauf beruhen zwei
 Bedingungen: `katalogId = null` erkennt den ersten Durchlauf, und
 `katalogNeu = true` ist falsch, wenn nie ein Katalog angelegt wurde.
 
-## Was dieses Beispiel nicht tut
+## Das Logo, und warum es nicht durch den Prozess reist
 
-**Das Logo.** Es gehört zum Erscheinungsbild und ist trotzdem nicht hier: ein
-Logo ist eine Datei, und ein Aufgabenformular trägt heute nur Text — die
-Dateiauswahl von form-js wird als Text gelesen und ist für den CSV-Import
-verdrahtet. Das Theme-Formular sagt, wo das Logo stattdessen gesetzt wird.
+Das Bild wird im Theme-Formular gewählt und geht beim **Abschliessen der
+Aufgabe direkt an den Katalog** — `PUT /api/v1/catalogs/{id}/logo`, aus dem
+Browser, mit den Rechten der Person, die abschliesst. Es wird nie eine
+Prozessvariable.
+
+### Warum nicht als Variable
+
+Weil `engine/budget.go` sagt, was das kostet, im Kommentar zu
+`DefaultMaxVariable`: jenseits eines Megabytes „it is a document, and a document
+in a token's scope is rewritten into the log on every touch". Ein Logo ist auf
+ein halbes Megabyte begrenzt, als Base64 rund 683 KB — unter der Grenze, und bei
+**jedem** Schritt, den der Prozess danach noch tut, erneut ins Write-Ahead-Log
+geschrieben. ADR-0316 hat dieselben Bytes schon einmal aus dem *Katalogsatz*
+herausgehalten, mit der schwächeren Begründung „bytes are not a record".
+
+Der rest-Connector könnte sie ohnehin nicht senden: sein `Body` ist eine
+JSON-Map und wird immer als JSON serialisiert.
+
+### Warum das kein Seitenkanal ist
+
+Es ist derselbe Endpunkt, den die Katalogansicht der Konsole benutzt, gerufen
+vom selben Browser mit denselben Anmeldedaten, und er wendet seine eigenen
+Regeln an: PNG oder SVG, ein halbes Megabyte, **Administrator**. Genau der
+Gruppe ist die Theme-Aufgabe zugewiesen — niemand erhält hier ein Recht, das er
+nicht schon hatte.
+
+### Warum das Modell einen Katalog nennt und keine URL
+
+Eine URL liesse ein Modell jemanden beliebige Anfragen absetzen, als diese
+Person. Eine Katalog-Id kann nur heissen „dieses Logo auf diesen Katalog", und
+ob das erlaubt ist, entscheidet weiterhin der Endpunkt.
+
+Die Konvention ist eng und in einer Zeile beschrieben: **trägt eine Aufgabe die
+Variable `logoKatalog` und ist im Formular eine Datei gewählt, geht sie an den
+Logo-Endpunkt dieses Katalogs.** Trägt sie die Variable nicht, gilt unverändert
+der bisherige Weg — die Datei wird als Text gelesen und als `csvText`
+übergeben, wie der CSV-Import es braucht (ADR-0087).
+
+### Was geschieht, wenn der Upload scheitert
+
+Die Aufgabe bleibt offen und sagt, warum. Der Upload läuft **vor** dem
+Abschliessen: eine abgeschlossene Aufgabe, deren Logo nicht ankam, wäre ein
+Prozess, der den Katalog für gebrandet hält.
+
+## Was dieses Beispiel nicht tut
 
 **Mehr als zwei Sprachen.** Die Formulare fragen Deutsch und Französisch. Ein
 statisches Formular kann die Sprachliste des Katalogs nicht lesen, also braucht

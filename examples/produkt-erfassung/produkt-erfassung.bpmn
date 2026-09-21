@@ -67,8 +67,9 @@
   hier wartet nur die Publikation darauf, und ein neuer Katalog geht nicht
   ungebrandet live.
 
-  Das Logo ist bewusst NICHT hier. Es ist eine Datei, und ein Task-Formular
-  trägt heute nur Text; siehe README.md.
+  Das Logo wird im Theme-Formular gewählt und geht beim Abschliessen der Aufgabe
+  direkt an den Katalog, ohne je eine Prozessvariable zu werden. Warum nicht als
+  Variable: siehe die Dokumentation am Script-Task "Ziel des Logos benennen".
 -->
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -301,9 +302,25 @@ Hinter der Freigabe und deshalb genau einmal: eine Verifizierung, die mehrfach z
       <bpmn:outgoing>f_theme</bpmn:outgoing>
       <bpmn:outgoing>f_kein_theme</bpmn:outgoing>
     </bpmn:exclusiveGateway>
-    <bpmn:sequenceFlow id="f_theme" name="ja" sourceRef="gw_theme" targetRef="theme_erfassen">
+    <bpmn:sequenceFlow id="f_theme" name="ja" sourceRef="gw_theme" targetRef="logo_ziel">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= katalogNeu = true</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
+
+    <bpmn:scriptTask id="logo_ziel" name="Ziel des Logos benennen">
+      <bpmn:documentation>Setzt logoKatalog auf den Katalog, dessen Marke das Bild wird.
+
+Die Aufgabenansicht liest diese Variable und schickt ein im Formular gewähltes Bild beim Abschliessen direkt an /api/v1/catalogs/{id}/logo — mit den Rechten der Person, die abschliesst, und das ist hier eine Administratorin, wie der Endpunkt es verlangt.
+
+Bewusst eine Katalog-Id und keine URL. Eine URL liesse ein Modell jemanden beliebige Anfragen als sich selbst absetzen; eine Id kann nur heissen "dieses Logo auf diesen Katalog", und ob das erlaubt ist, entscheidet weiterhin der Endpunkt.
+
+Die Bytes werden nie eine Prozessvariable: ein halbes Megabyte im Token-Umfang schriebe sich bei jedem folgenden Schritt erneut ins Log (siehe engine/budget.go zu DefaultMaxVariable).</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script resultVariable="logoKatalog" expression="= katalogId"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_theme</bpmn:incoming>
+      <bpmn:outgoing>f_ziel_erfassen</bpmn:outgoing>
+    </bpmn:scriptTask>
+    <bpmn:sequenceFlow id="f_ziel_erfassen" sourceRef="logo_ziel" targetRef="theme_erfassen"/>
     <bpmn:sequenceFlow id="f_kein_theme" name="bestehend" sourceRef="gw_theme" targetRef="theme_fertig"/>
 
     <bpmn:userTask id="theme_erfassen" name="Erscheinungsbild festlegen">
@@ -311,12 +328,12 @@ Hinter der Freigabe und deshalb genau einmal: eine Verifizierung, die mehrfach z
 
 Sie liegt hinter der Freigabe des Produkts und vor der Publikation: vorne stehend liesse sie eine Produkterfassung auf eine Farbwahl warten, hier wartet nur die Publikation — und ein neuer Katalog geht nicht ungebrandet live.
 
-Das Logo gehört hierher und ist trotzdem nicht hier: es ist eine Datei, und ein Task-Formular trägt heute nur Text. Das Formular sagt, wo es gesetzt wird.</bpmn:documentation>
+Das Logo gehört hierher und ist jetzt auch hier. Das gewählte Bild geht beim Abschliessen direkt an den Katalog — es wird keine Prozessvariable, weil ein halbes Megabyte im Token-Umfang bei jedem folgenden Schritt erneut ins Log geschrieben würde.</bpmn:documentation>
       <bpmn:extensionElements>
         <zeebe:assignmentDefinition candidateGroups="administration"/>
         <zeebe:formDefinition formId="pe-theme"/>
       </bpmn:extensionElements>
-      <bpmn:incoming>f_theme</bpmn:incoming>
+      <bpmn:incoming>f_ziel_erfassen</bpmn:incoming>
       <bpmn:outgoing>f_theme_setzen</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:sequenceFlow id="f_theme_setzen" sourceRef="theme_erfassen" targetRef="theme_setzen"/>

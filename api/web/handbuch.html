@@ -3365,10 +3365,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               Katalogs nicht lesen.</li>
             <li data-l="en"><b>More languages:</b> the forms ask for German and French. A catalogue declaring others
               needs one more pair of boxes each – a static form cannot read the catalogue's language list.</li>
-            <li data-l="de"><b>Logo:</b> es fehlt bewusst. Eine Datei passt heute nicht durch ein Aufgabenformular;
-              das Theme-Formular sagt, wo es gesetzt wird.</li>
-            <li data-l="en"><b>Logo:</b> deliberately absent. A file does not fit through a task form today; the
-              theme form says where it is set.</li>
+            <li data-l="de"><b>Logo:</b> im Theme-Formular gewählt und beim Abschliessen direkt an den Katalog
+              geschickt — nie als Prozessvariable, weil ein halbes Megabyte im Token-Umfang bei jedem
+              folgenden Schritt erneut ins Log geschrieben würde.</li>
+            <li data-l="en"><b>Logo:</b> picked in the theme form and sent straight to the catalogue on
+              completion — never a process variable, because half a megabyte in a token's scope would be
+              rewritten into the log at every step after it.</li>
           </ul>
         </details>
       </div>
