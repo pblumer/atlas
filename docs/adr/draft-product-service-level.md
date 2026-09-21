@@ -1,6 +1,6 @@
 # ADR-DRAFT: A product may say how long it should take, and that clock decides nothing
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-09-21
 - **Deciders:** Atlas maintainers
@@ -210,7 +210,8 @@ that gets them wrong will be believed:
   `requestedCompletionDate` (the orderer naming a date *they* need) stays unanswered and
   is a different record; and §2 and §8 of
   [`docs/comparisons/catalogue-standards.md`](../comparisons/catalogue-standards.md)
-  need updating if this is accepted.
+  carry this decision, so the row that prompted it now reads as decided-not-built and
+  moves out of that section only when the model carries the field.
 
 ## Pros and cons of the options
 

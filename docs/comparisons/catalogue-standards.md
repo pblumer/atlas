@@ -73,7 +73,7 @@ what `api/catalog` holds when the catalogue is read as a shop.
 | `approval`, `maxDays`, `configForm`, `multipleAllowed` | no equivalent | Ordering policy, not catalogue description. `configForm` has a counterpart in §5 and in TMF633's `targetEntitySchema` (§2). |
 | Release / `Publish` (a frozen, versioned catalogue) | `Catalog.version` and `lifecycleStatus` | Atlas freezes a release so a pending order cannot be edited underneath it (ADR-0312). The standard has no equivalent immutability guarantee in the resource itself. |
 | no equivalent | `attachment` on offering and specification | A product carries no picture or datasheet in Atlas. The portal shows text only. |
-| no equivalent | `isSellable`, `productNumber`, `brand`, `agreement`, `serviceLevelAgreement` | Commercial and contractual concerns an internal catalogue has no use for — except the SLA, which returns as a real gap in §2. |
+| no equivalent | `isSellable`, `productNumber`, `brand`, `agreement`, `serviceLevelAgreement` | Commercial and contractual concerns an internal catalogue has no use for — except the SLA, which returns in §2 as the one row this mapping turned into a record. |
 
 **The relationship types are the notable find.** `dependency` and `exclusivity`
 correspond to Atlas's `requires` and `excludes` edges. Two cautions the earlier
@@ -104,7 +104,7 @@ catalogue of things that get *realized* in target systems, rather than sold.
 | `Variant` + `ConfigForm` | `specCharacteristic` (`ServiceSpecCharacteristic`) and `targetEntitySchema` | `targetEntitySchema` is the standard's "here is the shape of what you must supply", which is the role `configForm` plays (and the role the Open Service Broker parameter schema plays in §5). Atlas names a form id and interprets nothing. |
 | `TargetRef{system, ref}` | `resourceSpecification[]` on the specification, and the customer-facing / resource-facing split the standard is built around | **This revises §1.** A service specification pointing at what realizes it is exactly the join `TargetRef` makes; it is not solely an identity-governance idea. Atlas's version is deliberately a readable claim rather than a resolvable reference (ADR-0333). |
 | `Category`, `ProductGroup` | `ServiceCategory` (`parentId`, `isRoot`, `subCategory`, `serviceCandidate`) | A hierarchy of any depth, against two fixed string levels. |
-| no equivalent | `serviceLevelSpecification` | **A real gap rather than a refusal.** Nothing on an Atlas item says how long provisioning may take or what availability is promised, and an internal service catalogue is the one place people expect that. No record has taken a position on it. |
+| no counterpart in the model **yet**; decided by [ADR-draft-product-service-level](../adr/draft-product-service-level.md) | `serviceLevelSpecification` | This row was the gap that prompted that record, and it is now a decision rather than a silence: a product carries a promise in prose plus an optional target in seconds, and nothing acts on it. Two divergences survive the decision — Atlas **embeds** the promise where the standard **references** a specification, and the span measured is placement to delivery rather than the realizing process's own runtime. Nothing is built, so the Atlas column stays empty until it is. |
 | no equivalent | `attachment`, `constraint`, `featureSpecification`, `relatedParty` | `relatedParty` (with `role`) is how the standard names a service owner. Atlas has `Catalog.Members` and `OwnerID`, which are access control on the catalogue, not a stated owner of the product. |
 | `provisionProcess` / `deprovisionProcess` | no equivalent | TMF633 describes the specification, not its fulfilment — same gap as TMF620, and the reason §5 exists. |
 | Release / `Publish` | no equivalent | As §1. |
@@ -223,7 +223,9 @@ holds in both products. That was decided on other grounds and is not re-opened h
 ## 8. Where the standard is richer, and it is an open question
 
 All of these were decided — or never put — without the standard in view. None is
-re-opened by the mapping; each needs its own record.
+re-opened by the mapping; each needs its own record. One of them now has one: the
+service level below is decided and not yet built, and it stays in this section until
+the model carries it, because until then the standard is still the richer of the two.
 
 - **Price.** `price` is a string (ADR-0361). `ProductOfferingPrice` carries a `Money`,
   a tax rate, a price type and a recurring period. A string cannot be totalled,
@@ -238,10 +240,17 @@ re-opened by the mapping; each needs its own record.
 - **Succession.** `migration` and `substitution` relationships have no Atlas edge kind.
   A withdrawn item names no replacement, which recertification and catalogue
   maintenance both have a use for.
-- **A service level.** TMF633's `serviceLevelSpecification` and TMF622's
-  `requestedCompletionDate` / `expectedCompletionDate` have no counterpart anywhere in
-  Atlas. An internal service catalogue that promises nothing about time is unusual, and
-  no record states that as a choice.
+- **A service level — decided, not yet built.**
+  [ADR-draft-product-service-level](../adr/draft-product-service-level.md) accepts a
+  promise on the product: prose, plus an optional target in seconds borrowed from
+  `capability.SLA`, frozen into the release and copied onto the line, measured from
+  placement to delivery by a report that is a later slice. Nothing acts on the target,
+  and that refusal is the load-bearing half — a missed commitment is not a defect an
+  operator repairs, and the two conditions that actually stall an order already carry a
+  deadline that escalates to a person. Two things stay open beside it: TMF633
+  *references* a `serviceLevelSpecification` where Atlas will embed one, and TMF622's
+  `requestedCompletionDate` — the orderer naming a date they need — is answered by
+  nothing and wants its own record.
 - **An external identifier.** TMF622's `externalId` has no place on an Atlas order or
   item, so a request that originated in another system cannot carry its own id.
 - **Catalogue-specific product attributes.** See §2: the `ServiceCandidate` shape.
