@@ -525,15 +525,28 @@ func evalDecision(ctx context.Context, defs *tdmn.Definitions, decisionId string
 // its input decisions, which it does not compute; everything else behind the
 // interface is evaluated internally and stays invisible here.
 //
-// Two things differ from a decision, and both are the engine's shape rather than
-// a choice made here. Its outputs are keyed by **output-decision name**, so each
+// One thing differs from a decision, and it is the engine's shape rather than a
+// choice made here: its outputs are keyed by **output-decision name**, so each
 // value's declared type is that decision's — which is why the restoration runs
-// once per key (numbers.go). And temis offers no trace option for a service
-// evaluation, so a service call retains its inputs and outputs but no trace
-// (ADR-0066); a decision call is unaffected.
+// once per key (numbers.go).
+//
+// A service is traced like a decision. It was not, for as long as temis's
+// service evaluation took no option to trace with: a task that called a model
+// through its published interface retained its inputs and outputs and nothing
+// about how it got there, which is the one silence ADR-0066 exists to prevent.
+// The option landed upstream (temis#226) and is threaded through here, so an
+// evaluation made from today carries the tables the service ran behind the
+// interface. The boundary holds in the trace as it does in the result: an input
+// decision is supplied rather than computed, so its table never ran and never
+// appears.
+//
+// Evaluations recorded *before* that still carry no trace, and nothing here can
+// give them one — the record is frozen history (ADR-0066), not a thing to
+// recompute. A reader of an old service record still sees exact values and no
+// rules, and the surfaces say so.
 func evalService(ctx context.Context, defs *tdmn.Definitions, svc *tdmn.CompiledService, name string, in map[string]any, where string) (map[string]any, []byte, error) {
 	nodes := defs.Graph().Nodes
-	res, err := svc.Evaluate(ctx, tdmn.Input(aliasedInputs(nodes, in)))
+	res, err := svc.Evaluate(ctx, tdmn.Input(aliasedInputs(nodes, in)), tdmn.WithTrace())
 	if err != nil {
 		return nil, nil, fmt.Errorf("dmn: evaluate service %q in %s: %w", name, where, err)
 	}
@@ -542,5 +555,14 @@ func evalService(ctx context.Context, defs *tdmn.Definitions, svc *tdmn.Compiled
 		one := restoreNumbers(defs, nodes, key, map[string]any{key: v})
 		outputs[key] = one[key]
 	}
-	return outputs, nil, nil
+	var trace []byte
+	if res.Trace != nil {
+		// Same degradation as a decision's: a marshal failure would only mean an
+		// unexpected value shape, so it costs the trace rather than the evaluation
+		// the token depends on.
+		if b, err := json.Marshal(res.Trace); err == nil {
+			trace = b
+		}
+	}
+	return outputs, trace, nil
 }

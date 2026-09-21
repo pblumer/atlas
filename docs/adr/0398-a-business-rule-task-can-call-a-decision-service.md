@@ -140,10 +140,18 @@ the workaround.
 
 **Bad, or merely true**
 
-- **A service call retains no trace.** temis offers no trace option for a service
-  evaluation, so the durable record (ADR-0066) holds its inputs and outputs and
-  nothing about how it got there. A decision call is unaffected. This is the
-  clearest reason to want the accessor upstream.
+- ~~**A service call retains no trace.**~~ **Resolved** (2026-09-20). It was true:
+  temis offered no trace option for a service evaluation, so the durable record
+  (ADR-0066) held a service call's inputs and outputs and nothing about how it got
+  there, while a decision call was unaffected. It was the clearest reason to want
+  the accessor upstream, and the accessor landed there —
+  `CompiledService.Evaluate` takes `opts ...EvalOption` (temis#226) — so
+  `evalService` threads `WithTrace` through and a service call retains its rules
+  like any other. The boundary holds in the trace as in the result: an input
+  decision is supplied rather than computed, so its table never ran and never
+  appears. Records written **before** this carry no trace and never will; the
+  record is frozen history, not a thing to recompute, and the surfaces that read
+  it say which silence they are looking at (ADR-0405).
 - **The service names come from the document, not from the engine.** They are
   verified against it, so nothing unrunnable is offered, but a second reader of
   the XML is a second thing to keep right if DMN's spelling ever changes.

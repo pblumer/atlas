@@ -1,7 +1,7 @@
 dmn-modeler.js is a combined, pre-built bundle (global: window.AtlasDmn) of:
 
   - pblumer/dmn-js@17.10.2
-    commit: 3561e98b46d3b0b3151502e62684f7542b3ebc56
+    commit: 43a65632c4133e101be1ce670225a2850aa35e72
   - pblumer/dmn-moddle
     commit: 23697fac646aaa0bc09d9ce3ae90c96769397bc6
   - dmn-js-properties-panel@3.11.1
@@ -13,9 +13,16 @@ The dmn-js fork is pinned to the exact commit above. Its dmn-js-shared package
 pins dmn-moddle to the exact commit above as well. The fork adds generic DMN 1.5
 Decision Service authoring, divider modeling and editing, semantic roundtrip
 support, importing a Decision Service as a container so the box is drawn beneath
-what it holds and carries its members when moved, and drawing one the way DMN
-draws one — a rounded rectangle with its name in the top right, and a collapsed
-service marked as collapsed; no Atlas-specific behavior is implemented inside
+what it holds and carries its members when moved, laying one out — moving it on
+the canvas without its memberships being re-decided behind the modeler's back —
+and wiring one up, since a Decision Service is an Invocable and a Decision
+invokes it through a Knowledge Requirement (DMN 1.5 Table 2). It also draws the
+DRD the way DMN draws it: Input Data as a stadium at any height, a Decision
+Service as a rounded rectangle with a heavy border and its name in the top
+right, a collapsed service marked as collapsed, and every element under the text
+its DMNDI label gives it rather than its own name. The fork holds all of that
+against a notation table of its own, one row per element and per requirement,
+read off the drawn geometry. No Atlas-specific behavior is implemented inside
 dmn-js or dmn-moddle.
 
 All bpmn.io / MIT (see LICENSE). The properties panel and the Modeler must share
@@ -68,4 +75,4 @@ icon font from the pinned fork distro, plus properties-panel.css from
 @bpmn-io/properties-panel@3.48.0.
 
 SHA-256 dmn-modeler.js:
-3ca69bcf246111d8d861dc8def45d4b39616718c7df557aede2ceca4d08c4498
+ff0370a7a8f36f1461673254b2120d47da80bde479b543cff55f908ac3c6d8f9

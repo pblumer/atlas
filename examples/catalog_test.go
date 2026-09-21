@@ -149,6 +149,11 @@ var catalogSources = []catalogSource{
 			"csv-upload-form.json", "row-correction-form.json"},
 	},
 	{ID: "onboarding", App: "Onboarding", Dir: "onboarding"},
+	// No Start: every service task in it reaches Atlas's own API through a REST
+	// connection the operator configures, so a "run it" button would park a token
+	// in the reader's instance on the first step and teach them nothing.
+	{ID: "produkt-erfassung", App: "Beispiel: Produkt erfassen", Dir: "produkt-erfassung",
+		Main: "produkt-erfassung/produkt-erfassung.bpmn"},
 	{
 		ID: "order-to-cash", App: "Beispiel: Order-to-Cash",
 		Files: []string{"order-to-cash.bpmn", "order-to-cash-live.bpmn"},

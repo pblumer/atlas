@@ -7996,12 +7996,53 @@ async function viewTasks(preselectKey) {
       const { data, errors } = state.mountedForm.submit();
       if (errors && Object.keys(errors).length > 0) { toast("Please fix the highlighted fields", "err"); return; }
       // A file field (form-js filepicker) holds the picked File client-side, not its
-      // bytes — so read the selected file as text and submit it as the `csvText`
-      // variable a CSV-import service task parses (ADR-0087). This keeps the upload a
-      // normal user-task step rather than a side-channel endpoint.
+      // bytes, so completing the task has to do something with it. There are two
+      // answers and the task's own variables choose between them.
       const fileInput = document.querySelector("#task-form input[type=file]");
-      if (fileInput && fileInput.files && fileInput.files.length) {
-        try { data.csvText = await fileInput.files[0].text(); }
+      const picked = fileInput && fileInput.files && fileInput.files.length ? fileInput.files[0] : null;
+      // logoKatalog names the catalogue a picked image is the brand mark of. Where
+      // it is set, the image goes straight to that catalogue's logo endpoint and
+      // never becomes a process variable.
+      //
+      // # Why not carry the bytes through the process
+      //
+      // Because engine/budget.go says what that costs, in the comment on
+      // DefaultMaxVariable: past a megabyte "it is a document, and a document in a
+      // token's scope is rewritten into the log on every touch". A logo is capped at
+      // half a megabyte, which is about 683 KB once base64 has grown it — under the
+      // ceiling and rewritten into the write-ahead log at every step the process
+      // takes afterwards, for ever. ADR-0316 already refused to put these same bytes
+      // in the catalogue *record* for a weaker version of the same reason.
+      //
+      // # Why this is not a side channel
+      //
+      // It is the endpoint the Console's own catalogue screen uses, called by the
+      // same browser with the same credentials, and it applies its own rules: PNG or
+      // SVG, half a megabyte, and an administrator. The task that carries this field
+      // is assigned to administrators for exactly that reason, so nothing here grants
+      // anybody anything they did not already have.
+      //
+      // # Why the model names a catalogue and not a URL
+      //
+      // A URL would let a model make whoever completes a task issue any request it
+      // liked, as them. A catalogue id can only ever mean "put this logo on that
+      // catalogue", and the endpoint still decides whether they may.
+      const logoKatalog = (state.formVars || {}).logoKatalog;
+      if (picked && logoKatalog) {
+        try {
+          await apiBytes("PUT", "/api/v1/catalogs/" + encodeURIComponent(logoKatalog) + "/logo", picked);
+        } catch (err) {
+          // Before the completion and not after: a task that finished while its logo
+          // did not is a process that believes the catalogue is branded. Stopping
+          // here leaves the task where it is, with the file still picked.
+          toast("Logo konnte nicht hochgeladen werden: " + err.message, "err");
+          return;
+        }
+      } else if (picked) {
+        // The other answer, unchanged: read the file as text and submit it as the
+        // `csvText` variable a CSV-import service task parses (ADR-0087). This keeps
+        // that upload a normal user-task step rather than a side-channel endpoint.
+        try { data.csvText = await picked.text(); }
         catch (err) { toast("Datei konnte nicht gelesen werden: " + err.message, "err"); return; }
       }
       payload = { variables: data };
@@ -8037,6 +8078,12 @@ async function viewTasks(preselectKey) {
       try { state.mountedForm.destroy(); } catch { /* already gone */ }
       state.mountedForm = null;
     }
+    // And the variables it was filled from, so the two have one lifetime. This is
+    // hygiene rather than a fix: nothing reads them without a mounted form, and a
+    // mount always sets them, so a stale value cannot currently be reached. Kept
+    // because the day they are read from somewhere else is the day that stops
+    // being true, and the failure then is somebody's logo on another catalogue.
+    state.formVars = null;
   }
 
   // mountForm loads the vendored form-js viewer, the task's bound form schema,
@@ -8063,6 +8110,11 @@ async function viewTasks(preselectKey) {
       await form.importSchema(def.schema, data || {});
       if (state.selected !== t.key) { try { form.destroy(); } catch { /* noop */ } return; }
       state.mountedForm = form;
+      // The variables the form was filled from, kept beside it. Completing the task
+      // needs one the form does not render — which catalogue a picked logo belongs
+      // to — and reading it back off the submitted data would only find the fields
+      // somebody can see and edit.
+      state.formVars = data || {};
     } catch (err) {
       host.innerHTML = `<p class="muted err">Failed to load form: ${esc(err.message)}</p>`;
     }

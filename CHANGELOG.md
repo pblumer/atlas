@@ -112,7 +112,184 @@ _Changed_ / _Removed_ for each version.
   checking a value the same process had built two steps earlier; where a derived value
   arrives from outside the process, it would not be.
 
+### Fixed
+
+- **Renaming a catalogue, or changing the languages it is offered in, failed with
+  "list is not a function".** Both go through one form on the catalogue detail
+  screen, and neither reached the server: the save threw before it got there.
+
+  `catalog-admin.js` has a `list` helper that splits a comma-separated field into
+  trimmed entries, and the save calls it for the languages. A hundred lines above,
+  inside the same function, a DOM element had been bound as
+  `const list = view.querySelector(".product-list")` — which shadowed the helper for
+  the whole of it. The save called an HTML element, and the submit handler caught the
+  `TypeError` and showed its message as a toast.
+
+  That last part is why it was hard to place. A page that cannot run reported itself
+  as a refusal, so the message read like the server rejecting the rename rather than
+  like the screen being broken. The element is named `listEl` now.
+
+  Three guards drive the real detail view: what a rename sends, that the languages
+  arrive as a trimmed list, and that a working save reports nothing. Each fails when
+  the shadowing is put back.
+
 ### Added
+
+- **A product can say what it is, and a process can capture one.** Two halves of the
+  same gap: the product record had no description, and creating a product meant a
+  console form with twenty fields and a hope that somebody looked.
+
+  **`Description`** is a text per language tag, like the name beside it and
+  deliberately unlike the keywords: keywords are for *finding*, and a searcher's
+  language is not the catalogue's, while a description is for *showing* and is read
+  in the language the portal is read in. A release demands nothing of it until there
+  is one — most products need no paragraph — and then demands it in every declared
+  language, because a product described to one audience and not another leaves the
+  other an empty panel. The portal shows it without falling back across languages,
+  unlike the name: a label in the wrong language still identifies the thing, a
+  paragraph in one somebody cannot read is noise where an explanation was promised.
+
+  **`examples/produkt-erfassung/`** is the capture process: catalogue, product data,
+  what it is assembled from, prices — saved as a **draft**, then a **verification**
+  showing every field again and still editable, and only then active, with the
+  question whether to publish the catalogue. Every service task writes back through
+  Atlas's own HTTP API with the `rest` connector and a connection named `atlas`, the
+  route the shipped order fulfilment already takes.
+
+  Three things in it are decisions. The product is saved **before** it is assembled,
+  because the assembly is edges on the catalogue and the catalogue refuses an id no
+  product answers to. The catalogue is **read afresh** before it is written and its
+  revision carried along — a PATCH replaces items and edges whole, and minutes pass
+  in which somebody else may have added a product; without it this process would be
+  exactly the silent overwrite the revision field warns about. And the appearance is
+  **a task of its own for administrators**, because a theme belongs to
+  administration and not to catalogue maintenance — the process models that rather
+  than working around it.
+
+  **The logo is picked in the task form and never becomes a process variable.** It
+  goes straight from the browser to the catalogue's own logo endpoint when the task
+  is completed. The obvious alternative — base64 through the process — is the one
+  thing this must not do, and `engine/budget.go` says why in the comment on
+  `DefaultMaxVariable`: past a megabyte "it is a document, and a document in a
+  token's scope is rewritten into the log on every touch". A logo is capped at half
+  a megabyte, about 683 KB once base64 has grown it, and every step the process
+  takes afterwards would write it into the write-ahead log again. ADR-0316 kept the
+  same bytes out of the catalogue *record* for a weaker version of that reason.
+
+  It is not a side channel: the endpoint is the one the Console's catalogue screen
+  uses, called by the same browser with the same credentials, and it still demands
+  PNG or SVG, half a megabyte and an administrator — which is the group the theme
+  task is assigned to. The model names a **catalogue**, never a URL: a URL would let
+  a model make whoever completes a task issue any request as them. A failed upload
+  leaves the task open and says why, because a task that finished while its logo did
+  not is a process that believes the catalogue is branded.
+
+  Still deliberately absent: languages beyond German and French, which a static form
+  cannot read off the catalogue. Said in the example's README rather than left to be
+  discovered.
+
+  The capture itself is **one task and not five**. Choosing the catalogue, entering
+  the product, saying what it is assembled from and setting the prices are the same
+  work by the same person in one sitting; five tasks would mean claiming and
+  completing four more times, which is slower than the console form the process
+  replaces. What the process is actually for — the verification — stays a station of
+  its own.
+
+  **Two new guards, and both found real defects.** One holds every user task to the
+  form it names: a dangling `formId` compiles, deploys and runs, and the task simply
+  reaches an inbox with nothing to fill in. It immediately found two shipped
+  connection tests pointing at start forms nobody had written; both now exist, with
+  the fields those models already documented.
+
+  The other evaluates the FEEL in a shipped model against sample variables and
+  states what must come back — because compiling proves almost nothing here. It
+  found two defects in this very process: `append(a, b)` appends a whole list as
+  **one element**, so the catalogue was being sent nested edges it cannot read, and
+  `split("de, fr", ",")` leaves the space on, so a keyword arrived as `" M365"` and
+  would never be matched. Both are valid FEEL doing the wrong thing in silence.
+  A third trap is documented rather than relied on: a filter over a list of contexts
+  returns the whole list in this build instead of filtering.
+
+- **Narrow the starmap to the offerings you mean.** The element-type filter beside it
+  answers "which kinds of thing do I want to see". It cannot answer "show me only what
+  is actually orderable", because that is not a kind — it is a property of one — and the
+  search cannot answer it either: a product's state is not a word in its name.
+
+  The Product Map now carries the two facts a catalogue keeps about an offering that
+  nothing else on the picture has. **Product state** lists draft, active and withdrawn;
+  **Approval** lists whether ordering it stops for an approver. Both are boxes and both
+  are on, like the element types above them.
+
+  Three boxes for the state rather than one "active only" switch, because the two states
+  that are not active are not the same thing and the difference is usually the point: a
+  draft is being written, a withdrawn product was real and was retired. Collapsed into
+  "not active" they become one heap and "what did we retire" cannot be asked at all.
+  Three boxes contain the switch anyway — untick two and keep active.
+
+  The approval side is a binary although the rule's kind is not. An installation can
+  register its own approval process under any name, so listing the kinds would grow this
+  control with somebody's own vocabulary and answer a question this picture is not
+  about: which *route* an approval takes is a catalogue matter, and whether an order
+  stops for a human at all is an estate one. A kind Atlas has never heard of counts as
+  stopping for a human, which is the safe reading.
+
+  **It only ever removes products.** A catalogue has no state and a process has no
+  approver, so neither can be filtered by one. That is load-bearing rather than obvious:
+  "carries no approval rule" is exactly how a product without one reads, so a filter
+  that did not first ask what it was looking at would answer "ordered without approval"
+  for every catalogue and every process on the picture, and one unticked box would empty
+  the canvas. A process left with nothing attached stays drawn — that is what switching
+  the whole Product type off already does, and a deployed process is part of the estate
+  in its own right, not an appendage of whatever offers it.
+
+  Like the element-type filter, the cut runs **before** the search and the drilldown, so
+  neither reaches *through* a product you have put down. Emptying the canvas this way
+  says which control did it, rather than sending you to the type boxes or to a search you
+  never typed.
+
+  **An export says which products were switched off**, and this is the narrowing that
+  most needs saying: switching a type off removes a whole layer and the picture looks
+  like it, while filtering products leaves the catalogues, the processes and the shape of
+  the thing intact and quietly removes some tiles. The stamp names what was put down and
+  states the consequence — a catalogue in the file may offer more than the products shown
+  under it. A saved view carries the setting, stored as the catalogue's own words so a
+  view reopened next year still selects the same products however the boxes are worded by
+  then.
+
+- **Put a whole element type down on the starmap.** The Product Map draws four kinds at
+  once — the catalogues, the products they offer, the processes those products bind and
+  a marker where nothing is deployed — and a reader who came to look at one of them had
+  no way to set the other three aside. The search narrows by *name*, which answers a
+  different question: "show me just the catalogues" is not a string anybody can type.
+
+  The right-hand column now lists every element type the picture holds, each with a box,
+  and **every box is on**. It is for putting part of a picture down, not for building one
+  up: the landscape the server sent is the one it meant to send, and a kind nobody has an
+  opinion about stays drawn — including one that arrives later, such as a catalogue
+  somebody shares with you tomorrow.
+
+  Switching a type off takes it off **before** anything else narrows the picture, and that
+  ordering is the whole of the feature. A search keeps a hop of neighbours so a match can
+  be read in place, and a drilldown follows the depth on screen; cut afterwards, both
+  would reach *through* a hidden kind and leave what they found stranded on the canvas.
+  So a process that was only on the picture because a product bound it goes with the
+  products, and an edge whose other end is gone goes with it — a line to nothing is not a
+  claim about the estate.
+
+  Everything that describes the picture follows it. The count over the canvas is the
+  count of what is drawn, not of what arrived; the key stops explaining what is no longer
+  there; and switching *everything* off says so in words rather than borrowing the
+  sentence a search that missed would use, which would send somebody to clear a search
+  they never typed. The boxes are named in whatever vocabulary the picture is read in, so
+  on an ArchiMate projection they say Grouping and Product.
+
+  **An export says which types were off.** A picture narrowed this way leaves no trace on
+  the canvas — no term in a box, no breadcrumb, just fewer things — so a file that called
+  it "the whole starmap" would be exactly the export the stamp exists to prevent. The
+  stamp now names them, and spells out the part a reader of the file cannot work out:
+  what is missing is not only the hidden kind, it is everything that was reachable only
+  through one. A saved view carries the setting for the same reason it carries the search
+  term and the depth: a view is the whole question somebody saved.
 
 - **The run graph's ordinal map and CSR, and the measurement that qualified them.** The
   projection [ADR-0404](docs/adr/0404-the-whole-graph-can-be-walked.md) decided on is
@@ -162,6 +339,30 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A decision service can be laid out and wired up.** Dragging one on the canvas was
+  refused outright — the cursor went red and the box stayed where the import had put
+  it — which is the one thing a diagram carrying several services cannot do without.
+  When it did move, the modeler re-decided which compartment each of its decisions
+  belongs to, and for a decision drawn outside the box, which an imported model may
+  well have, the divider travelling past it turned the service's output decision into
+  an internal one: the service silently lost the interface it publishes. A decision
+  service also could not be connected to anything. DMN makes one an invocable, like a
+  knowledge model, so a decision invokes it through a knowledge requirement; a model
+  that already said so opened and drew correctly, but the connection could not be made
+  by hand. All three are fixed, and the eleven connections the specification permits
+  between DRD elements are now each covered by a test.
+
+  The notation itself is held to the specification as well, in both pictures Atlas
+  draws. Input data is a stadium at any size rather than only at the default one; a
+  decision service carries the heavy border the specification asks for; and an element
+  is drawn under the text its diagram gives it rather than its own name, where the two
+  differ. In the decision graph window a knowledge model was drawn as a parallelogram
+  instead of a rectangle with two corners cut off, and a knowledge requirement ended in
+  the filled arrowhead that belongs to an information requirement — the two say
+  different things, and the arrowhead is half of what says which.
+
+### Fixed
+
 - **A decision graph is drawn the way DMN draws one.** The DRD notation is not
   styling: the shape is how a reader tells one kind of node from another. A decision
   is a plain rectangle, input data a stadium with fully rounded ends, a business
@@ -198,6 +399,27 @@ _Changed_ / _Removed_ for each version.
   outside the box, where DMN puts it.
 
 ### Added
+
+- **Eine Entscheidung hinter einer Schnittstelle zeigt jetzt auch ihre Regeln.** Ein
+  Business-Rule-Task kann einen **Decision Service** aufrufen — DMN's veröffentlichte
+  Schnittstelle über einen Teil des Entscheidungsgraphen. Bis jetzt behielt eine solche
+  Auswertung ihre Eingaben und ihr Ergebnis und nichts darüber, wie sie dorthin kam: die
+  Engine bot für einen Service keine Option zum Aufzeichnen an. Damit fehlte die Erklärung
+  genau dort, wo sie am wenigsten zu entbehren ist — die Entscheidungen hinter einer
+  Schnittstelle sind in der Regel Tabellen, und wer einen Fall verantworten muss, konnte
+  „es wurden keine Regeln aufgezeichnet" nicht von „keine Regel hat getroffen"
+  unterscheiden.
+
+  Die Option ist upstream nachgezogen worden (temis#226) und wird hier durchgereicht. Eine
+  Service-Auswertung ab jetzt trägt die Tabellen, die der Service hinter seiner
+  Schnittstelle ausgeführt hat — im Entscheidungsgraph-Fenster mit grün gezogener Regel wie
+  bei jeder anderen Entscheidung. **Die Grenze gilt auch in der Spur:** eine Input-Decision
+  liefert der Aufrufer, der Service berechnet sie nie, also taucht ihre Tabelle nicht auf.
+
+  Was **vorher** aufgezeichnet wurde, trägt weiterhin keine Regeln und wird es nie: ein
+  Datensatz ist eingefrorene Geschichte, nichts, was man nachträglich neu rechnet. Die
+  Oberflächen sagen darum jetzt, *welche* Stille sie vor sich haben — die des Alters eines
+  Datensatzes, nicht die eines Unvermögens der Engine.
 
 - **The starmap says which dependencies are actually used.** Every line on the starmap
   was a *declared* dependency: a call activity names a process, a service task names a

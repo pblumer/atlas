@@ -258,6 +258,20 @@ func checkCatalogs(in Input, byID map[string]Item, add func(Problem)) {
 						Message: "no text for declared language " + lang})
 				}
 			}
+			// A description is optional as a whole and all-or-nothing once there is
+			// one. Not every product needs a paragraph, so an item without any
+			// publishes; an item with one in German and none in French does not,
+			// because that is a portal telling one audience what the thing is and
+			// showing the other an empty panel. The same half-translated catalogue
+			// the name check above refuses, one field further down.
+			if described(it.Descriptions) {
+				for _, lang := range c.Languages {
+					if strings.TrimSpace(it.Descriptions[lang]) == "" {
+						add(Problem{Catalog: c.ID, Item: id,
+							Message: "has a description but none for declared language " + lang})
+					}
+				}
+			}
 		}
 	}
 }
@@ -775,6 +789,10 @@ func freeze(items []Item) []Item {
 	out := make([]Item, len(items))
 	for i, it := range items {
 		it.Texts = copyTexts(it.Texts)
+		// The description travels with the name, and for the same reason: an order
+		// placed against this release must keep saying what was promised, whatever
+		// the catalogue says next week.
+		it.Descriptions = copyTexts(it.Descriptions)
 		if len(it.Variants) > 0 {
 			vs := make([]Variant, len(it.Variants))
 			for j, v := range it.Variants {
@@ -805,6 +823,20 @@ func freeze(items []Item) []Item {
 	}
 	sort.Slice(out, func(a, b int) bool { return out[a].ID < out[b].ID })
 	return out
+}
+
+// described reports whether an item claims a description at all.
+//
+// Whitespace does not count, for the reason a blank price does not: a field
+// holding three spaces is a field somebody cleared, and reading it as "there is a
+// description here" would demand a translation of nothing in every other language.
+func described(in map[string]string) bool {
+	for _, t := range in {
+		if strings.TrimSpace(t) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func copyTexts(in map[string]string) map[string]string {

@@ -59,7 +59,16 @@
         ownerId: "u1", revision: 3, theme: {},
       };
 
-      const api = async (method, url) => {
+      // Every call the page makes, and every message it shows. The layout cases below
+      // need neither; the catalogue's own save needs both, because its failure mode is
+      // a handler that throws and reports the throw as a toast — which looks exactly
+      // like a server refusal from the outside.
+      window.__sent = [];
+      window.__toasts = [];
+      const toast = (msg, kind) => window.__toasts.push({ msg: String(msg), kind });
+
+      const api = async (method, url, body) => {
+        window.__sent.push({ method, url, body });
         if (/\/catalogs$/.test(url)) return [CAT];
         if (/approver-report/.test(url)) return { problems: [] };
         if (/\/catalogs\/[^/]+\/releases/.test(url)) return [];
@@ -77,11 +86,11 @@
       // The catalogues themselves, which are the same shape one level up: the list, and
       // the catalogue being created beside it.
       window.__mountList = () => viewCatalogs({
-        api, toast: () => {}, view, isSuperseded: () => false,
+        api, toast, view, isSuperseded: () => false,
       });
 
       window.__mount = () => viewCatalogDetail({
-        api, apiBytes: async () => new Uint8Array(), toast: () => {}, view,
+        api, apiBytes: async () => new Uint8Array(), toast, view,
         isSuperseded: () => false, me: { id: "u1", roles: ["admin"] }, enforced: false,
       }, "c1");
       window.__ready = true;

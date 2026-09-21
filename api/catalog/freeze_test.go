@@ -29,6 +29,7 @@ func everything(id string) Item {
 	it.Targets = []TargetRef{{System: "ad", Ref: "CN=X"}}
 	it.Eligible = []string{"grp-a"}
 	it.Keywords = []string{"Fernzugriff"}
+	it.Descriptions = map[string]string{"de": "Verschlüsselter Zugang ins Firmennetz."}
 	return it
 }
 

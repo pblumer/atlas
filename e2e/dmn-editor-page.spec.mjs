@@ -566,10 +566,11 @@ test("a decision that does not run says so in the panel, not as a broken page", 
 });
 
 test("a decision service says why it has no rule matrix, instead of claiming the model has no tables", async ({ page }) => {
-  // temis reports no trace for a service evaluation, so the panel receives an answer
-  // with no trace at all. That is not the same as a decision whose own logic has no
-  // table, and saying so would be false: the decisions behind the interface are
-  // usually tables.
+  // A service is traced like a decision now (ADR-0398, fixed upstream), so this is
+  // an older engine answering: the panel receives a result with no trace at all.
+  // That is still not the same as a decision whose own logic has no table, and
+  // saying so would be false — the decisions behind the interface are usually
+  // tables — so the panel keeps the two apart.
   installMock(page, {
     refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }],
     decisions: [{ id: "Dienst", name: "Dienst", service: true, inputs: [{ name: "amount", type: "number" }], output: { name: "Dienst", type: "" } }],
@@ -583,8 +584,8 @@ test("a decision service says why it has no rule matrix, instead of claiming the
 
   const result = page.locator("#dmn-test-result");
   await expect(result.locator(".res-val")).toHaveText("approve");
-  await expect(result).toContainText("A decision service reports no rule matrix");
-  await expect(result).toContainText("Test a decision inside it");
+  await expect(result).toContainText("No rule matrix came back for this service");
+  await expect(result).toContainText("shows its rules");
   await expect(result).not.toContainText("no table logic");
 });
 

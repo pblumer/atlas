@@ -510,6 +510,12 @@ func (s *Server) collectCatalogue(land *panorama.Landscape, p *httpapi.Principal
 			HomeCatalog: it.HomeCatalog, CanView: visible[it.HomeCatalog],
 			ProvisionProcess:   strings.TrimSpace(it.ProvisionProcess),
 			DeprovisionProcess: strings.TrimSpace(it.DeprovisionProcess),
+			// The store's own spellings, passed through rather than interpreted. What
+			// counts as "requires approval" is a reading and it is made where the
+			// picture is drawn; deciding it here would bake one reading into the
+			// payload and leave a second reader no way to ask a different question.
+			State:    string(it.State),
+			Approval: string(it.Approval.Kind),
 		})
 	}
 	return nil

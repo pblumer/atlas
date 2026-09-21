@@ -21,9 +21,10 @@
 //   - **Nothing is inferred onto a node.** A value is shown where it can be tied to
 //     a node by name — the recorded inputs, the outputs, and the values the trace
 //     says each table's input columns evaluated to. A decision the record cannot
-//     speak for is drawn plainly, as unknown, and says so. A decision service
-//     records no rule trace at all (ADR-0398), and that is stated rather than
-//     rendered as an absence of rules.
+//     speak for is drawn plainly, as unknown, and says so. A record written before
+//     the engine could trace a decision service (ADR-0398, fixed since) carries no
+//     rules, and that is stated — as a fact about the record's age, not about what
+//     the engine can do — rather than rendered as an absence of rules.
 
 import { renderTraceTable, tablesOf as traceTablesOf, fmtVal as traceValue } from "./dmn-trace.js";
 
@@ -97,8 +98,16 @@ function drgEdges(g, pos) {
     const ax = a.x + a.w / 2, ay = a.y + a.h / 2, bx = b.x + b.w / 2, by = b.y + b.h / 2;
     const [x1, y1] = borderPoint(ax, ay, a.w, a.h, bx, by);
     const [x2, y2] = borderPoint(bx, by, b.w, b.h, ax, ay);
-    const dash = e.type === "knowledgeRequirement" ? ` stroke-dasharray="5 4"` : "";
-    return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#94a3b8" stroke-width="1.5"${dash} marker-end="url(#drg-arrow)"/>`;
+    // A knowledge requirement is dashed and ends in an OPEN arrowhead; an information
+    // requirement is solid and ends in a filled one (DMN 1.5 Table 5-2). The head is
+    // not decoration: the two lines mean different things — "this decision needs that
+    // value" against "this decision invokes that logic" — and the head is half of what
+    // says which. data-type is what a reader, and a test, tells them apart by, since an
+    // edge carries no drawn name to be found under.
+    const knowledge = e.type === "knowledgeRequirement";
+    const dash = knowledge ? ` stroke-dasharray="5 4"` : "";
+    const head = knowledge ? "drg-arrow-open" : "drg-arrow";
+    return `<line data-type="${e.type}" x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#94a3b8" stroke-width="1.5"${dash} marker-end="url(#${head})"/>`;
   }).join("");
 }
 
@@ -111,16 +120,19 @@ function drgEdges(g, pos) {
 //   - a business knowledge model is a rectangle with its top-left and bottom-right
 //     corners cut off.
 //
-// The cut is proportional to the box so a small node does not lose its corners
-// entirely, and capped so a large one keeps the notch the notation shows.
+// The cut is proportional to the box, in the proportions the modeler's own renderer
+// cuts it in, so the same model is the same picture in both.
 function nodeShape(type, x, y, w, h, attrs) {
   if (type === "inputData") {
     return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h / 2}" ${attrs}/>`;
   }
   if (type === "businessKnowledgeModel") {
-    const c = Math.min(14, w * 0.11, h * 0.29);
+    // Two corners CUT — the other two stay square. Slanting both whole sides instead
+    // draws a parallelogram, which is not a shape the notation has.
+    const cx = w * 0.11, cy = h * 0.29;
     const pts = [
-      [x, y + h], [x + c, y], [x + w, y], [x + w - c, y + h],
+      [x, y + cy], [x + cx, y], [x + w, y],
+      [x + w, y + h - cy], [x + w - cx, y + h], [x, y + h],
     ].map(([px, py]) => `${px.toFixed(1)},${py.toFixed(1)}`).join(" ");
     return `<polygon points="${pts}" ${attrs}/>`;
   }
@@ -131,8 +143,12 @@ function nodeShape(type, x, y, w, h, attrs) {
 function drgSvg(placed, inner) {
   const { minX, minY, W, H } = drgFrame(placed);
   return `<svg viewBox="${minX.toFixed(0)} ${minY.toFixed(0)} ${W.toFixed(0)} ${H.toFixed(0)}" width="${W.toFixed(0)}" height="${H.toFixed(0)}" style="max-width:100%;height:auto;display:block;font-family:system-ui,-apple-system,sans-serif">
-    <defs><marker id="drg-arrow" markerWidth="10" markerHeight="8" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
-      <path d="M0,0 L8,3 L0,6 z" fill="#94a3b8"/></marker></defs>
+    <defs>
+      <marker id="drg-arrow" markerWidth="10" markerHeight="8" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+        <path d="M0,0 L8,3 L0,6 z" fill="#94a3b8"/></marker>
+      <marker id="drg-arrow-open" markerWidth="10" markerHeight="8" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+        <path d="M0,0 L8,3 L0,6" fill="none" stroke="#94a3b8" stroke-width="1.2"/></marker>
+    </defs>
     ${inner}</svg>`;
 }
 
@@ -263,8 +279,9 @@ function renderCaseDrg(view, vals) {
 // The three silences here are different things, and saying the wrong one is worse
 // than saying nothing (see dmn-trace.js, which draws the matrix itself):
 //
-//   - a decision service records no trace at all, because temis reports none for a
-//     service evaluation (ADR-0398) — the values above are still exact;
+//   - a service evaluation recorded before the engine could trace one carries no
+//     rules (ADR-0398, fixed since) — the values above are still exact, because the
+//     record is frozen history and nothing here recomputes it;
 //   - a trace with no tables means the decision's logic is not a table;
 //   - no trace and no service means nothing was recorded, which is the remote-decision
 //     case (ADR-0050).
@@ -274,10 +291,12 @@ function renderRules(view) {
     return tables.map((tt, i) => renderTraceTable(tt, tables.length > 1 ? i + 1 : 0)).join("");
   }
   if (view.service) {
-    return `<p class="ops-empty">This is a decision <b>service</b> — DMN's published interface over part of
-      the graph — and the engine records no rule-by-rule trace for one. The values on the graph above are
-      exactly what the case carried; what is missing is only which row of which table matched.
-      Calling the decision inside the service directly, rather than the service, records the full matrix.</p>`;
+    return `<p class="ops-empty">No rule matrix was recorded for this case. It ran through a decision
+      <b>service</b> — DMN's published interface over part of the graph — and a service reported no rules
+      until the engine learned to trace one. So this is an older record: the values on the graph above are
+      exactly what it carried, and what is missing is only which row of which table matched. A case decided
+      since shows its rules here, and nothing can add them to this one — the record is what happened, not a
+      thing to re-run.</p>`;
   }
   if (view.trace === null || view.trace === undefined) {
     return `<p class="ops-empty">No trace was recorded for this evaluation, so there are no rules to show.</p>`;

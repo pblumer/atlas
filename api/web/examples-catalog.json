@@ -1314,6 +1314,500 @@
       ]
     },
     {
+      "id": "produkt-erfassung",
+      "path": "produkt-erfassung",
+      "app": "Beispiel: Produkt erfassen",
+      "processes": [
+        {
+          "processId": "proc_produkt_erfassung",
+          "name": "Produkt erfassen",
+          "file": "produkt-erfassung/produkt-erfassung.bpmn",
+          "layout": true,
+          "xml": "\u003c?xml version=\"1.0\" encoding=\"UTF-8\"?\u003e\n\u003c!--\n  Produkt erfassen — vom Katalog bis zur Publikation\n\n  Ein Produkt anzulegen heisst heute: die Konsole öffnen, ein Formular mit\n  zwanzig Feldern ausfüllen, speichern, und darauf vertrauen, dass jemand\n  nachschaut. Dieser Prozess macht dasselbe als Ablauf mit Aufgaben — und\n  gewinnt damit das, was ein Formular nicht hat: eine Prüfung durch eine zweite\n  Ansicht, bevor das Produkt bestellbar wird, und eine Spur, wer was wann\n  entschieden hat.\n\n  Er schreibt ausschliesslich über Atlas' eigene HTTP-API zurück, mit dem\n  rest-Connector und der Verbindung \"atlas\" — derselbe Weg, den der\n  mitgelieferte Auftragserfüllungsprozess geht. Siehe README.md: ohne diese\n  Verbindung parken die Service-Tasks.\n\n  Ablauf\n\n    Start\n     -\u003e Kataloge holen                (GET  /api/v1/catalogs)\n     -\u003e Produkte holen                (GET  /api/v1/catalog-products)\n     -\u003e Erfassung                     (Formular pe-erfassung: Katalog, Produkt,\n                                       Zusammenstellung und Preise in EINER Aufgabe)\n     -\u003e neuer Katalog?  ja: anlegen   (POST /api/v1/catalogs)\n                        nein: übernehmen\n     -\u003e Entwurf sichern               (POST /api/v1/catalog-products, state=draft)\n     -\u003e Verifizieren                  (Formular pe-pruefen)\n        nein: zurück zur Erfassung\n     -\u003e aktiv setzen                  (POST /api/v1/catalog-products, state=active)\n     -\u003e Katalog frisch lesen          (GET  /api/v1/catalogs/{id})\n     -\u003e Angebot schreiben             (PATCH /api/v1/catalogs/{id})\n     -\u003e neuer Katalog? Erscheinungsbild (Formular pe-theme, Gruppe \"administration\")\n                        -\u003e Theme setzen (PUT /api/v1/catalogs/{id}/theme)\n     -\u003e Publizieren?                  (Formular pe-publizieren)\n     -\u003e ja: Katalog publizieren       (POST /api/v1/catalogs/{id}/releases)\n\n  Vier Dinge daran sind Entscheidungen und nicht Folgen.\n\n  ERSTENS: Die Erfassung ist EINE Aufgabe und nicht fünf. Katalogwahl,\n  Produktdaten, Zusammenstellung und Preise sind dieselbe Arbeit derselben\n  Person in derselben Sitzung; fünf Aufgaben daraus zu machen hiesse viermal\n  beanspruchen, abschliessen und auf die nächste warten — ein Assistent, der\n  sich wie ein Behördengang anfühlt, und langsamer als das Konsolenformular,\n  das er ersetzen soll. Der Gewinn dieses Prozesses liegt woanders: in der\n  Verifizierung, die eine echte zweite Station ist.\n\n  ZWEITENS: Der Katalog wird erst NACH der Freigabe beschrieben. Ein abgelehntes\n  Produkt gelangt damit gar nicht erst ins Angebot — sonst stünde ein Entwurf in\n  der Item-Liste und jede Freigabe des Katalogs scheiterte an ihm (\"state is\n  draft, not active\"), bis jemand ihn von Hand entfernt. Es hat noch eine zweite\n  Wirkung: der Schreibvorgang läuft genau einmal, auch wenn die Verifizierung\n  mehrfach zurückschickt, und die Kanten können sich nicht vervielfachen.\n\n  DRITTENS: Vor dem Schreiben am Katalog wird der Katalog frisch gelesen. Ein\n  PATCH ersetzt Items und Edges als Ganzes, und zwischen der Maske und dem\n  Speichern liegen Minuten bis Tage, in denen jemand anderes ein Produkt\n  hinzugefügt haben kann. Ohne den frischen Lesevorgang und die mitgeführte\n  revision wäre dieser Prozess das, wovor der Kommentar am Feld\n  Catalog.Revision warnt: das lautlose Verschwinden fremder Arbeit. Die revision\n  macht daraus eine Absage, die man sieht.\n\n  VIERTENS: Das Erscheinungsbild ist eine eigene Aufgabe für eine andere Gruppe,\n  und sie liegt hinter der Freigabe des Produkts statt davor. Ein Katalog-Theme\n  setzt in Atlas die Administration und nicht die Katalogpflege (ADR-0316,\n  Entscheidung 12) — der Endpunkt antwortet sonst mit 403. Stünde die Aufgabe\n  vorne, wartete eine Produkterfassung auf die Farbwahl einer Administratorin;\n  hier wartet nur die Publikation darauf, und ein neuer Katalog geht nicht\n  ungebrandet live.\n\n  Das Logo wird im Theme-Formular gewählt und geht beim Abschliessen der Aufgabe\n  direkt an den Katalog, ohne je eine Prozessvariable zu werden. Warum nicht als\n  Variable: siehe die Dokumentation am Script-Task \"Ziel des Logos benennen\".\n--\u003e\n\u003cbpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n             xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n             xmlns:zeebe=\"http://camunda.org/schema/zeebe/1.0\"\n             xmlns:atlas=\"http://atlas/schema/1.0\"\n             id=\"defs_produkt_erfassung\" targetNamespace=\"http://atlas/examples\"\u003e\n  \u003cbpmn:process id=\"proc_produkt_erfassung\" name=\"Produkt erfassen\" isExecutable=\"true\"\u003e\n\n    \u003cbpmn:startEvent id=\"start\" name=\"Erfassung begonnen\"\u003e\n      \u003cbpmn:outgoing\u003ef_start_kataloge\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:startEvent\u003e\n    \u003cbpmn:sequenceFlow id=\"f_start_kataloge\" sourceRef=\"start\" targetRef=\"kataloge\"/\u003e\n\n    \u003cbpmn:serviceTask id=\"kataloge\" name=\"Kataloge holen\"\u003e\n      \u003cbpmn:documentation\u003eGET /api/v1/catalogs. Füllt die Auswahlliste der Erfassungsmaske.\n\nVor der Maske und nicht in ihr: ein Startformular kann nichts laden, und eine Liste, in die man die Katalog-Id von Hand tippt, ist eine Liste, in der man sich vertippt.\n\nSchreibt: kataloge.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:taskDefinition type=\"rest\"/\u003e\n        \u003czeebe:taskHeaders\u003e\n          \u003czeebe:header key=\"connector\" value=\"atlas\"/\u003e\n          \u003czeebe:header key=\"method\" value=\"GET\"/\u003e\n        \u003c/zeebe:taskHeaders\u003e\n        \u003czeebe:ioMapping\u003e\n          \u003czeebe:input source=\"=\u0026#34;/api/v1/catalogs\u0026#34;\" target=\"path\"/\u003e\n          \u003czeebe:output source=\"=body\" target=\"kataloge\"/\u003e\n        \u003c/zeebe:ioMapping\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003ef_start_kataloge\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_kataloge_produkte\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:serviceTask\u003e\n    \u003cbpmn:sequenceFlow id=\"f_kataloge_produkte\" sourceRef=\"kataloge\" targetRef=\"produkte\"/\u003e\n\n    \u003cbpmn:serviceTask id=\"produkte\" name=\"Bestehende Produkte holen\"\u003e\n      \u003cbpmn:documentation\u003eGET /api/v1/catalog-products. Füllt die beiden Listen der Zusammenstellung.\n\nSchreibt: produkte.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:taskDefinition type=\"rest\"/\u003e\n        \u003czeebe:taskHeaders\u003e\n          \u003czeebe:header key=\"connector\" value=\"atlas\"/\u003e\n          \u003czeebe:header key=\"method\" value=\"GET\"/\u003e\n        \u003c/zeebe:taskHeaders\u003e\n        \u003czeebe:ioMapping\u003e\n          \u003czeebe:input source=\"=\u0026#34;/api/v1/catalog-products\u0026#34;\" target=\"path\"/\u003e\n          \u003czeebe:output source=\"=body\" target=\"produkte\"/\u003e\n        \u003c/zeebe:ioMapping\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003ef_kataloge_produkte\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_produkte_erfassung\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:serviceTask\u003e\n    \u003cbpmn:sequenceFlow id=\"f_produkte_erfassung\" sourceRef=\"produkte\" targetRef=\"erfassung\"/\u003e\n\n    \u003cbpmn:userTask id=\"erfassung\" name=\"Produkt erfassen\"\u003e\n      \u003cbpmn:documentation\u003eEine Aufgabe für die ganze Erfassung: Katalog, Produktdaten, Zusammenstellung, Preise.\n\nDie Rückkehr aus der Verifizierung landet wieder hier, mit allem Erfassten im Formular. Der Katalogteil ist dann ausgeblendet — er steht bereits fest, und eine zweite Wahl würde einen zweiten Katalog anlegen.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:assignmentDefinition candidateGroups=\"katalogpflege\"/\u003e\n        \u003czeebe:formDefinition formId=\"pe-erfassung\"/\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003ef_produkte_erfassung\u003c/bpmn:incoming\u003e\n      \u003cbpmn:incoming\u003ef_zurueck_erfassung\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_erfassung_gw\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:userTask\u003e\n    \u003cbpmn:sequenceFlow id=\"f_erfassung_gw\" sourceRef=\"erfassung\" targetRef=\"gw_katalog\"/\u003e\n\n    \u003cbpmn:exclusiveGateway id=\"gw_katalog\" name=\"Katalog anlegen?\" default=\"f_katalog_bestehend\"\u003e\n      \u003cbpmn:incoming\u003ef_erfassung_gw\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_katalog_neu\u003c/bpmn:outgoing\u003e\n      \u003cbpmn:outgoing\u003ef_katalog_bestehend\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:exclusiveGateway\u003e\n    \u003cbpmn:sequenceFlow id=\"f_katalog_neu\" name=\"neu, und noch nicht angelegt\" sourceRef=\"gw_katalog\" targetRef=\"katalog_anlegen\"\u003e\n      \u003cbpmn:conditionExpression xsi:type=\"bpmn:tFormalExpression\"\u003e= katalogart = \"neu\" and katalogId = null\u003c/bpmn:conditionExpression\u003e\n    \u003c/bpmn:sequenceFlow\u003e\n    \u003cbpmn:sequenceFlow id=\"f_katalog_bestehend\" name=\"steht schon\" sourceRef=\"gw_katalog\" targetRef=\"katalog_uebernehmen\"/\u003e\n\n    \u003cbpmn:serviceTask id=\"katalog_anlegen\" name=\"Katalog anlegen\"\u003e\n      \u003cbpmn:documentation\u003ePOST /api/v1/catalogs mit Name, Sprachen und Rang.\n\nDie Bedingung am Gateway fragt zusätzlich, ob katalogId noch leer ist. Ohne das legte die Rückkehr aus der Verifizierung jedes Mal einen weiteren Katalog an — eine nicht gesetzte Variable liest sich in FEEL als null, also trifft die Bedingung genau beim ersten Durchlauf zu.\n\nSchreibt: katalogId, katalogNeu.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:taskDefinition type=\"rest\"/\u003e\n        \u003czeebe:taskHeaders\u003e\n          \u003czeebe:header key=\"connector\" value=\"atlas\"/\u003e\n          \u003czeebe:header key=\"method\" value=\"POST\"/\u003e\n        \u003c/zeebe:taskHeaders\u003e\n        \u003czeebe:ioMapping\u003e\n          \u003czeebe:input source=\"=\u0026#34;/api/v1/catalogs\u0026#34;\" target=\"path\"/\u003e\n          \u003czeebe:input source=\"={rank: rang, languages: sprachenListe, texts: {de: katalogname}}\" target=\"body\"/\u003e\n          \u003czeebe:output source=\"=body.id\" target=\"katalogId\"/\u003e\n          \u003czeebe:output source=\"=true\" target=\"katalogNeu\"/\u003e\n        \u003c/zeebe:ioMapping\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003ef_katalog_neu\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_anlegen_entwurf\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:serviceTask\u003e\n    \u003cbpmn:sequenceFlow id=\"f_anlegen_entwurf\" sourceRef=\"katalog_anlegen\" targetRef=\"katalog_steht\"/\u003e\n\n    \u003cbpmn:scriptTask id=\"katalog_uebernehmen\" name=\"Katalog übernehmen\"\u003e\n      \u003cbpmn:documentation\u003eDer bereits gewählte oder der beim ersten Durchlauf angelegte. Beides in einem Ausdruck, damit die Rückkehr aus der Verifizierung nicht auf einen leeren Wert trifft, wenn ursprünglich \"neu\" gewählt wurde.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:script resultVariable=\"katalogId\" expression=\"= if katalogId != null then katalogId else gewaehlterKatalog\"/\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003ef_katalog_bestehend\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_uebernehmen_steht\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:scriptTask\u003e\n    \u003cbpmn:sequenceFlow id=\"f_uebernehmen_steht\" sourceRef=\"katalog_uebernehmen\" targetRef=\"katalog_steht\"/\u003e\n\n    \u003cbpmn:exclusiveGateway id=\"katalog_steht\" name=\"Katalog steht\"\u003e\n      \u003cbpmn:incoming\u003ef_anlegen_entwurf\u003c/bpmn:incoming\u003e\n      \u003cbpmn:incoming\u003ef_uebernehmen_steht\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_steht_entwurf\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:exclusiveGateway\u003e\n    \u003cbpmn:sequenceFlow id=\"f_steht_entwurf\" sourceRef=\"katalog_steht\" targetRef=\"entwurf_sichern\"/\u003e\n\n    \u003cbpmn:serviceTask id=\"entwurf_sichern\" name=\"Produkt als Entwurf sichern\"\u003e\n      \u003cbpmn:documentation\u003ePOST /api/v1/catalog-products mit state=draft. Ein Speichern ist ein vollständiges Ersetzen, deshalb reist alles Erfasste mit — ein Feld, das hier fehlt, wäre ein Feld, das dieser Schritt löscht.\n\nDie Suchbegriffe werden beschnitten und leere Einträge fallen weg: split lässt das Leerzeichen hinter dem Komma stehen, und \" M365\" wäre ein Begriff, den niemand findet.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:taskDefinition type=\"rest\"/\u003e\n        \u003czeebe:taskHeaders\u003e\n          \u003czeebe:header key=\"connector\" value=\"atlas\"/\u003e\n          \u003czeebe:header key=\"method\" value=\"POST\"/\u003e\n        \u003c/zeebe:taskHeaders\u003e\n        \u003czeebe:ioMapping\u003e\n          \u003czeebe:input source=\"=\u0026#34;/api/v1/catalog-products\u0026#34;\" target=\"path\"/\u003e\n          \u003czeebe:input source=\"={id: produktId, homeCatalog: katalogId, state: \u0026#34;draft\u0026#34;, texts: {de: nameDe, fr: nameFr}, descriptions: {de: beschreibungDe, fr: beschreibungFr}, category: kategorie, productGroup: produktgruppe, keywords: if suchbegriffe = null then [] else (for s in split(suchbegriffe, \u0026#34;,\u0026#34;) return replace(s, \u0026#34;^\\s+|\\s+$\u0026#34;, \u0026#34;\u0026#34;))[item != \u0026#34;\u0026#34;], approval: {kind: genehmigungsart, ref: genehmigungsref}, provisionProcess: provisionProzess, deprovisionProcess: deprovisionProzess, multipleAllowed: mehrfach, price: preis, maxDays: maxTage}\" target=\"body\"/\u003e\n        \u003c/zeebe:ioMapping\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003ef_steht_entwurf\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_entwurf_pruefen\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:serviceTask\u003e\n    \u003cbpmn:sequenceFlow id=\"f_entwurf_pruefen\" sourceRef=\"entwurf_sichern\" targetRef=\"pruefen\"/\u003e\n\n    \u003cbpmn:userTask id=\"pruefen\" name=\"Produkt verifizieren\"\u003e\n      \u003cbpmn:documentation\u003eDie Aufgabe, für die es diesen Prozess gibt. Alles Erfasste steht hier noch einmal und ist noch einmal änderbar; erst die Freigabe macht das Produkt bestellbar und nimmt es ins Angebot des Katalogs auf.\n\nBewusst dieselbe Gruppe wie die Erfassung: wer ein Vier-Augen-Prinzip will, setzt hier eine andere Gruppe ein. Das ist eine Frage der Organisation und keine, die ein Beispiel für jemanden beantwortet.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:assignmentDefinition candidateGroups=\"katalogpflege\"/\u003e\n        \u003czeebe:formDefinition formId=\"pe-pruefen\"/\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003ef_entwurf_pruefen\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_pruefen_gw\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:userTask\u003e\n    \u003cbpmn:sequenceFlow id=\"f_pruefen_gw\" sourceRef=\"pruefen\" targetRef=\"gw_pruefen\"/\u003e\n\n    \u003cbpmn:exclusiveGateway id=\"gw_pruefen\" name=\"Freigegeben?\" default=\"f_zurueck_erfassung\"\u003e\n      \u003cbpmn:incoming\u003ef_pruefen_gw\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_freigegeben\u003c/bpmn:outgoing\u003e\n      \u003cbpmn:outgoing\u003ef_zurueck_erfassung\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:exclusiveGateway\u003e\n    \u003cbpmn:sequenceFlow id=\"f_freigegeben\" name=\"ja\" sourceRef=\"gw_pruefen\" targetRef=\"aktiv_setzen\"\u003e\n      \u003cbpmn:conditionExpression xsi:type=\"bpmn:tFormalExpression\"\u003e= freigegeben = true\u003c/bpmn:conditionExpression\u003e\n    \u003c/bpmn:sequenceFlow\u003e\n    \u003cbpmn:sequenceFlow id=\"f_zurueck_erfassung\" name=\"nein, überarbeiten\" sourceRef=\"gw_pruefen\" targetRef=\"erfassung\"/\u003e\n\n    \u003cbpmn:serviceTask id=\"aktiv_setzen\" name=\"Produkt aktiv setzen\"\u003e\n      \u003cbpmn:documentation\u003ePOST /api/v1/catalog-products mit state=active. Erst jetzt kann eine Freigabe des Katalogs das Produkt tragen: publish weist jedes Item zurück, dessen Zustand nicht \"active\" ist.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:taskDefinition type=\"rest\"/\u003e\n        \u003czeebe:taskHeaders\u003e\n          \u003czeebe:header key=\"connector\" value=\"atlas\"/\u003e\n          \u003czeebe:header key=\"method\" value=\"POST\"/\u003e\n        \u003c/zeebe:taskHeaders\u003e\n        \u003czeebe:ioMapping\u003e\n          \u003czeebe:input source=\"=\u0026#34;/api/v1/catalog-products\u0026#34;\" target=\"path\"/\u003e\n          \u003czeebe:input source=\"={id: produktId, homeCatalog: katalogId, state: \u0026#34;active\u0026#34;, texts: {de: nameDe, fr: nameFr}, descriptions: {de: beschreibungDe, fr: beschreibungFr}, category: kategorie, productGroup: produktgruppe, keywords: if suchbegriffe = null then [] else (for s in split(suchbegriffe, \u0026#34;,\u0026#34;) return replace(s, \u0026#34;^\\s+|\\s+$\u0026#34;, \u0026#34;\u0026#34;))[item != \u0026#34;\u0026#34;], approval: {kind: genehmigungsart, ref: genehmigungsref}, provisionProcess: provisionProzess, deprovisionProcess: deprovisionProzess, multipleAllowed: mehrfach, price: preis, maxDays: maxTage}\" target=\"body\"/\u003e\n        \u003c/zeebe:ioMapping\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003ef_freigegeben\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_aktiv_lesen\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:serviceTask\u003e\n    \u003cbpmn:sequenceFlow id=\"f_aktiv_lesen\" sourceRef=\"aktiv_setzen\" targetRef=\"katalog_lesen\"/\u003e\n\n    \u003cbpmn:serviceTask id=\"katalog_lesen\" name=\"Katalog frisch lesen\"\u003e\n      \u003cbpmn:documentation\u003eGET /api/v1/catalogs/{id}. Holt Items, Edges und vor allem die revision.\n\nDer Schritt sieht überflüssig aus und ist der wichtigste im Prozess. Ein PATCH ersetzt Items und Edges als Ganzes; zwischen der Maske und diesem Punkt liegen Minuten bis Tage, in denen jemand anderes ein Produkt hinzugefügt haben kann. Ohne den frischen Stand schriebe der nächste Schritt einen veralteten zurück und das fremde Produkt wäre weg — ohne Fehler und ohne Spur. Mit der revision wird daraus eine Absage, die jemand sieht.\n\nSchreibt: katalogJetzt.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:taskDefinition type=\"rest\"/\u003e\n        \u003czeebe:taskHeaders\u003e\n          \u003czeebe:header key=\"connector\" value=\"atlas\"/\u003e\n          \u003czeebe:header key=\"method\" value=\"GET\"/\u003e\n        \u003c/zeebe:taskHeaders\u003e\n        \u003czeebe:ioMapping\u003e\n          \u003czeebe:input source=\"=\u0026#34;/api/v1/catalogs/\u0026#34; + katalogId\" target=\"path\"/\u003e\n          \u003czeebe:output source=\"=body\" target=\"katalogJetzt\"/\u003e\n        \u003c/zeebe:ioMapping\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003ef_aktiv_lesen\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_lesen_schreiben\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:serviceTask\u003e\n    \u003cbpmn:sequenceFlow id=\"f_lesen_schreiben\" sourceRef=\"katalog_lesen\" targetRef=\"katalog_schreiben\"/\u003e\n\n    \u003cbpmn:serviceTask id=\"katalog_schreiben\" name=\"Angebot und Zusammenstellung schreiben\"\u003e\n      \u003cbpmn:documentation\u003ePATCH /api/v1/catalogs/{id}. Nimmt das freigegebene Produkt ins Angebot und schreibt die Kanten.\n\ncomposition = integral (immer mitbestellt, nicht abwählbar), aggregation = optional (einzeln bestellbar). Das ist keine Übersetzung, sondern genau der Unterschied, den der Katalog ohnehin führt.\n\nconcatenate und nicht append: append hängt eine Liste als EIN Element an und erzeugte damit verschachtelte Kanten, die der Katalog nicht lesen kann.\n\nHinter der Freigabe und deshalb genau einmal: eine Verifizierung, die mehrfach zurückschickt, kann die Kanten nicht vervielfachen.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:taskDefinition type=\"rest\"/\u003e\n        \u003czeebe:taskHeaders\u003e\n          \u003czeebe:header key=\"connector\" value=\"atlas\"/\u003e\n          \u003czeebe:header key=\"method\" value=\"PATCH\"/\u003e\n        \u003c/zeebe:taskHeaders\u003e\n        \u003czeebe:ioMapping\u003e\n          \u003czeebe:input source=\"=\u0026#34;/api/v1/catalogs/\u0026#34; + katalogId\" target=\"path\"/\u003e\n          \u003czeebe:input source=\"={revision: katalogJetzt.revision, items: distinct values(append(katalogJetzt.items, produktId)), edges: concatenate(katalogJetzt.edges, for t in integraleTeile return {from: produktId, to: t, kind: \u0026#34;composition\u0026#34;}, for t in optionaleTeile return {from: produktId, to: t, kind: \u0026#34;aggregation\u0026#34;})}\" target=\"body\"/\u003e\n        \u003c/zeebe:ioMapping\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003ef_lesen_schreiben\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_schreiben_gw\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:serviceTask\u003e\n    \u003cbpmn:sequenceFlow id=\"f_schreiben_gw\" sourceRef=\"katalog_schreiben\" targetRef=\"gw_theme\"/\u003e\n\n    \u003cbpmn:exclusiveGateway id=\"gw_theme\" name=\"Neuer Katalog?\" default=\"f_kein_theme\"\u003e\n      \u003cbpmn:incoming\u003ef_schreiben_gw\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_theme\u003c/bpmn:outgoing\u003e\n      \u003cbpmn:outgoing\u003ef_kein_theme\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:exclusiveGateway\u003e\n    \u003cbpmn:sequenceFlow id=\"f_theme\" name=\"ja\" sourceRef=\"gw_theme\" targetRef=\"logo_ziel\"\u003e\n      \u003cbpmn:conditionExpression xsi:type=\"bpmn:tFormalExpression\"\u003e= katalogNeu = true\u003c/bpmn:conditionExpression\u003e\n    \u003c/bpmn:sequenceFlow\u003e\n\n    \u003cbpmn:scriptTask id=\"logo_ziel\" name=\"Ziel des Logos benennen\"\u003e\n      \u003cbpmn:documentation\u003eSetzt logoKatalog auf den Katalog, dessen Marke das Bild wird.\n\nDie Aufgabenansicht liest diese Variable und schickt ein im Formular gewähltes Bild beim Abschliessen direkt an /api/v1/catalogs/{id}/logo — mit den Rechten der Person, die abschliesst, und das ist hier eine Administratorin, wie der Endpunkt es verlangt.\n\nBewusst eine Katalog-Id und keine URL. Eine URL liesse ein Modell jemanden beliebige Anfragen als sich selbst absetzen; eine Id kann nur heissen \"dieses Logo auf diesen Katalog\", und ob das erlaubt ist, entscheidet weiterhin der Endpunkt.\n\nDie Bytes werden nie eine Prozessvariable: ein halbes Megabyte im Token-Umfang schriebe sich bei jedem folgenden Schritt erneut ins Log (siehe engine/budget.go zu DefaultMaxVariable).\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:script resultVariable=\"logoKatalog\" expression=\"= katalogId\"/\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003ef_theme\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_ziel_erfassen\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:scriptTask\u003e\n    \u003cbpmn:sequenceFlow id=\"f_ziel_erfassen\" sourceRef=\"logo_ziel\" targetRef=\"theme_erfassen\"/\u003e\n    \u003cbpmn:sequenceFlow id=\"f_kein_theme\" name=\"bestehend\" sourceRef=\"gw_theme\" targetRef=\"theme_fertig\"/\u003e\n\n    \u003cbpmn:userTask id=\"theme_erfassen\" name=\"Erscheinungsbild festlegen\"\u003e\n      \u003cbpmn:documentation\u003eEine eigene Aufgabe für eine andere Gruppe, weil das Theme in Atlas der Administration gehört und nicht der Katalogpflege (ADR-0316, Entscheidung 12).\n\nSie liegt hinter der Freigabe des Produkts und vor der Publikation: vorne stehend liesse sie eine Produkterfassung auf eine Farbwahl warten, hier wartet nur die Publikation — und ein neuer Katalog geht nicht ungebrandet live.\n\nDas Logo gehört hierher und ist jetzt auch hier. Das gewählte Bild geht beim Abschliessen direkt an den Katalog — es wird keine Prozessvariable, weil ein halbes Megabyte im Token-Umfang bei jedem folgenden Schritt erneut ins Log geschrieben würde.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:assignmentDefinition candidateGroups=\"administration\"/\u003e\n        \u003czeebe:formDefinition formId=\"pe-theme\"/\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003ef_ziel_erfassen\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_theme_setzen\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:userTask\u003e\n    \u003cbpmn:sequenceFlow id=\"f_theme_setzen\" sourceRef=\"theme_erfassen\" targetRef=\"theme_setzen\"/\u003e\n\n    \u003cbpmn:serviceTask id=\"theme_setzen\" name=\"Theme setzen\"\u003e\n      \u003cbpmn:documentation\u003ePUT /api/v1/catalogs/{id}/theme.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:taskDefinition type=\"rest\"/\u003e\n        \u003czeebe:taskHeaders\u003e\n          \u003czeebe:header key=\"connector\" value=\"atlas\"/\u003e\n          \u003czeebe:header key=\"method\" value=\"PUT\"/\u003e\n        \u003c/zeebe:taskHeaders\u003e\n        \u003czeebe:ioMapping\u003e\n          \u003czeebe:input source=\"=\u0026#34;/api/v1/catalogs/\u0026#34; + katalogId + \u0026#34;/theme\u0026#34;\" target=\"path\"/\u003e\n          \u003czeebe:input source=\"={accent: akzentfarbe, typeface: schriftart}\" target=\"body\"/\u003e\n        \u003c/zeebe:ioMapping\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003ef_theme_setzen\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_setzen_fertig\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:serviceTask\u003e\n    \u003cbpmn:sequenceFlow id=\"f_setzen_fertig\" sourceRef=\"theme_setzen\" targetRef=\"theme_fertig\"/\u003e\n\n    \u003cbpmn:exclusiveGateway id=\"theme_fertig\" name=\"Katalog bereit\"\u003e\n      \u003cbpmn:incoming\u003ef_kein_theme\u003c/bpmn:incoming\u003e\n      \u003cbpmn:incoming\u003ef_setzen_fertig\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_fertig_fragen\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:exclusiveGateway\u003e\n    \u003cbpmn:sequenceFlow id=\"f_fertig_fragen\" sourceRef=\"theme_fertig\" targetRef=\"publizieren_fragen\"/\u003e\n\n    \u003cbpmn:userTask id=\"publizieren_fragen\" name=\"Katalog publizieren?\"\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:assignmentDefinition candidateGroups=\"katalogpflege\"/\u003e\n        \u003czeebe:formDefinition formId=\"pe-publizieren\"/\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003ef_fertig_fragen\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_fragen_gw\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:userTask\u003e\n    \u003cbpmn:sequenceFlow id=\"f_fragen_gw\" sourceRef=\"publizieren_fragen\" targetRef=\"gw_publizieren\"/\u003e\n\n    \u003cbpmn:exclusiveGateway id=\"gw_publizieren\" name=\"Publizieren?\" default=\"f_nicht_publizieren\"\u003e\n      \u003cbpmn:incoming\u003ef_fragen_gw\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_publizieren\u003c/bpmn:outgoing\u003e\n      \u003cbpmn:outgoing\u003ef_nicht_publizieren\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:exclusiveGateway\u003e\n    \u003cbpmn:sequenceFlow id=\"f_publizieren\" name=\"ja\" sourceRef=\"gw_publizieren\" targetRef=\"release\"\u003e\n      \u003cbpmn:conditionExpression xsi:type=\"bpmn:tFormalExpression\"\u003e= publizieren = true\u003c/bpmn:conditionExpression\u003e\n    \u003c/bpmn:sequenceFlow\u003e\n    \u003cbpmn:sequenceFlow id=\"f_nicht_publizieren\" name=\"nein\" sourceRef=\"gw_publizieren\" targetRef=\"ende\"/\u003e\n\n    \u003cbpmn:serviceTask id=\"release\" name=\"Katalog publizieren\"\u003e\n      \u003cbpmn:documentation\u003ePOST /api/v1/catalogs/{id}/releases. Die Freigabe prüft den ganzen Katalog, nicht nur dieses Produkt — fehlt irgendwo ein Prozess, eine Übersetzung oder eine Beschreibung in einer deklarierten Sprache, antwortet sie mit der Liste der Gründe und der Task meldet einen Incident.\u003c/bpmn:documentation\u003e\n      \u003cbpmn:extensionElements\u003e\n        \u003czeebe:taskDefinition type=\"rest\"/\u003e\n        \u003czeebe:taskHeaders\u003e\n          \u003czeebe:header key=\"connector\" value=\"atlas\"/\u003e\n          \u003czeebe:header key=\"method\" value=\"POST\"/\u003e\n        \u003c/zeebe:taskHeaders\u003e\n        \u003czeebe:ioMapping\u003e\n          \u003czeebe:input source=\"=\u0026#34;/api/v1/catalogs/\u0026#34; + katalogId + \u0026#34;/releases\u0026#34;\" target=\"path\"/\u003e\n        \u003c/zeebe:ioMapping\u003e\n      \u003c/bpmn:extensionElements\u003e\n      \u003cbpmn:incoming\u003ef_publizieren\u003c/bpmn:incoming\u003e\n      \u003cbpmn:outgoing\u003ef_release_ende\u003c/bpmn:outgoing\u003e\n    \u003c/bpmn:serviceTask\u003e\n    \u003cbpmn:sequenceFlow id=\"f_release_ende\" sourceRef=\"release\" targetRef=\"ende\"/\u003e\n\n    \u003cbpmn:endEvent id=\"ende\" name=\"Produkt erfasst\"\u003e\n      \u003cbpmn:incoming\u003ef_nicht_publizieren\u003c/bpmn:incoming\u003e\n      \u003cbpmn:incoming\u003ef_release_ende\u003c/bpmn:incoming\u003e\n    \u003c/bpmn:endEvent\u003e\n\n  \u003c/bpmn:process\u003e\n\u003c/bpmn:definitions\u003e"
+        }
+      ],
+      "forms": [
+        {
+          "id": "pe-erfassung",
+          "name": "pe-erfassung",
+          "file": "produkt-erfassung/form-pe-erfassung.json",
+          "schema": {
+            "type": "default",
+            "id": "pe-erfassung",
+            "components": [
+              {
+                "type": "text",
+                "text": "# Produkt erfassen\n\nAlles, was zur Erfassung gehört, in einem Zug. Gespeichert wird als **Entwurf** — sichtbar in der Pflege, nicht bestellbar. Bestellbar wird das Produkt erst durch die Verifizierung danach."
+              },
+              {
+                "type": "group",
+                "label": "Katalog",
+                "id": "grp-katalog",
+                "conditional": {
+                  "hide": "=katalogId != null"
+                },
+                "components": [
+                  {
+                    "key": "katalogart",
+                    "type": "radio",
+                    "label": "Wohin gehört das Produkt?",
+                    "validate": {
+                      "required": true
+                    },
+                    "values": [
+                      {
+                        "value": "bestehend",
+                        "label": "In einen bestehenden Katalog"
+                      },
+                      {
+                        "value": "neu",
+                        "label": "In einen neuen Katalog"
+                      }
+                    ]
+                  },
+                  {
+                    "key": "gewaehlterKatalog",
+                    "type": "select",
+                    "label": "Bestehender Katalog",
+                    "description": "Die Liste kommt vom Server und zeigt, was dieser Zugang sieht.",
+                    "conditional": {
+                      "hide": "=katalogart != \"bestehend\""
+                    },
+                    "valuesExpression": "=for k in kataloge return {value: k.id, label: if k.texts.de != null then k.texts.de else k.id}"
+                  },
+                  {
+                    "key": "katalogname",
+                    "type": "textfield",
+                    "label": "Name des neuen Katalogs",
+                    "conditional": {
+                      "hide": "=katalogart != \"neu\""
+                    }
+                  },
+                  {
+                    "key": "sprachenListe",
+                    "type": "checklist",
+                    "label": "Sprachen",
+                    "description": "Jedes Produkt braucht einen Namen in jeder davon — und eine Beschreibung in jeder, sobald es überhaupt eine hat.",
+                    "defaultValue": [
+                      "de"
+                    ],
+                    "conditional": {
+                      "hide": "=katalogart != \"neu\""
+                    },
+                    "values": [
+                      {
+                        "value": "de",
+                        "label": "Deutsch"
+                      },
+                      {
+                        "value": "fr",
+                        "label": "Französisch"
+                      },
+                      {
+                        "value": "it",
+                        "label": "Italienisch"
+                      },
+                      {
+                        "value": "en",
+                        "label": "Englisch"
+                      }
+                    ]
+                  },
+                  {
+                    "key": "rang",
+                    "type": "number",
+                    "label": "Rang",
+                    "defaultValue": 1,
+                    "description": "Wer mehrere Kataloge erreicht, sieht den mit dem höchsten Rang. Ränge sind eindeutig; eine Kollision weist die Freigabe zurück.",
+                    "conditional": {
+                      "hide": "=katalogart != \"neu\""
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "text": "Der Katalog steht bereits — diese Erfassung ist eine Überarbeitung.",
+                "conditional": {
+                  "hide": "=katalogId = null"
+                }
+              },
+              {
+                "type": "group",
+                "label": "Was das Produkt ist",
+                "id": "grp-produkt",
+                "components": [
+                  {
+                    "key": "produktId",
+                    "type": "textfield",
+                    "label": "Id",
+                    "validate": {
+                      "required": true
+                    },
+                    "description": "Kurz, stabil, wird nie umbenannt. Aufträge und Berechtigungen zeigen für immer hierauf."
+                  },
+                  {
+                    "key": "nameDe",
+                    "type": "textfield",
+                    "label": "Name (de)",
+                    "validate": {
+                      "required": true
+                    }
+                  },
+                  {
+                    "key": "nameFr",
+                    "type": "textfield",
+                    "label": "Name (fr)",
+                    "description": "Pflicht, sobald der Katalog Französisch führt — sonst weist die Freigabe das Produkt zurück."
+                  },
+                  {
+                    "key": "beschreibungDe",
+                    "type": "textarea",
+                    "label": "Beschreibung (de)",
+                    "rows": 3,
+                    "description": "Was die Sache ist, für jemanden, der den Namen gelesen hat und trotzdem unsicher ist. Optional."
+                  },
+                  {
+                    "key": "beschreibungFr",
+                    "type": "textarea",
+                    "label": "Beschreibung (fr)",
+                    "rows": 3,
+                    "description": "Entweder in allen Sprachen oder in keiner: eine Freigabe weist ein Produkt zurück, das einer Zielgruppe erklärt wird und der anderen nicht."
+                  },
+                  {
+                    "key": "kategorie",
+                    "type": "textfield",
+                    "label": "Kategorie",
+                    "description": "Die Überschrift, unter der das Portal gruppiert. Zwei Schreibweisen sind zwei Überschriften."
+                  },
+                  {
+                    "key": "produktgruppe",
+                    "type": "textfield",
+                    "label": "Produktgruppe"
+                  },
+                  {
+                    "key": "suchbegriffe",
+                    "type": "textfield",
+                    "label": "Suchbegriffe",
+                    "description": "Mit Komma getrennt. Synonyme, Abkürzungen, der Name des Vorgängers — wonach jemand sucht, der den Produktnamen nicht kennt."
+                  }
+                ]
+              },
+              {
+                "type": "group",
+                "label": "Genehmigung und Prozesse",
+                "id": "grp-regeln",
+                "components": [
+                  {
+                    "key": "genehmigungsart",
+                    "type": "select",
+                    "label": "Genehmigung",
+                    "defaultValue": "none",
+                    "validate": {
+                      "required": true
+                    },
+                    "values": [
+                      {
+                        "value": "none",
+                        "label": "Keine — wird direkt provisioniert"
+                      },
+                      {
+                        "value": "superior",
+                        "label": "Vorgesetzte Person der bestellenden"
+                      },
+                      {
+                        "value": "role",
+                        "label": "Eine Gruppe (eine beliebige Person daraus)"
+                      },
+                      {
+                        "value": "fixed",
+                        "label": "Eine namentlich genannte Person"
+                      }
+                    ]
+                  },
+                  {
+                    "key": "genehmigungsref",
+                    "type": "textfield",
+                    "label": "Gruppe oder Person",
+                    "description": "Nur für die beiden unteren Arten. Fehlt sie dort, weist die Freigabe das Produkt zurück.",
+                    "conditional": {
+                      "hide": "=not(contains([\"role\", \"fixed\"], genehmigungsart))"
+                    }
+                  },
+                  {
+                    "key": "provisionProzess",
+                    "type": "textfield",
+                    "label": "Provisionierungsprozess",
+                    "validate": {
+                      "required": true
+                    },
+                    "description": "Die BPMN-Prozess-Id, die das Recht erteilt."
+                  },
+                  {
+                    "key": "deprovisionProzess",
+                    "type": "textfield",
+                    "label": "Deprovisionierungsprozess",
+                    "validate": {
+                      "required": true
+                    },
+                    "description": "Und die, die es entzieht. Beide sind Pflicht: ein Katalog, der nur erteilen kann, ist kein Lebenszyklus — und der Tag, an dem in grosser Zahl entzogen werden muss, ist der falsche, um zu merken, dass der Prozess nie geschrieben wurde."
+                  },
+                  {
+                    "key": "mehrfach",
+                    "type": "checkbox",
+                    "label": "Darf mehrfach gehalten werden",
+                    "description": "Zwei Lizenzen, zwei Postfächer. Ohne Haken überspringt der Warenkorb, was jemand schon hat."
+                  }
+                ]
+              },
+              {
+                "type": "group",
+                "label": "Zusammenstellung",
+                "id": "grp-assemble",
+                "components": [
+                  {
+                    "type": "text",
+                    "text": "Woraus besteht dieses Produkt? Die Listen zeigen alles, was der Server als Produkt kennt — auch Entwürfe, denn ein Bündel entsteht oft, bevor seine Teile freigegeben sind. Beides darf leer bleiben."
+                  },
+                  {
+                    "key": "integraleTeile",
+                    "type": "taglist",
+                    "label": "Integral enthalten",
+                    "description": "Wird immer mitbestellt und ist nicht abwählbar. Im Katalog eine composition-Kante.",
+                    "valuesExpression": "=for p in produkte return {value: p.id, label: if p.texts.de != null then p.texts.de else p.id}"
+                  },
+                  {
+                    "key": "optionaleTeile",
+                    "type": "taglist",
+                    "label": "Optional dazu",
+                    "description": "Einzeln bestellbar und darf zu mehreren Ganzen gehören. Im Katalog eine aggregation-Kante.",
+                    "valuesExpression": "=for p in produkte return {value: p.id, label: if p.texts.de != null then p.texts.de else p.id}"
+                  }
+                ]
+              },
+              {
+                "type": "group",
+                "label": "Kommerzielle Sicht",
+                "id": "grp-preis",
+                "components": [
+                  {
+                    "key": "preis",
+                    "type": "textfield",
+                    "label": "Preis",
+                    "description": "Als Satz und nicht als Zahl: „CHF 1'200.–\", „im Grundpaket enthalten\", „auf Anfrage\". Atlas rechnet damit nicht und stellt ihn unverändert dar."
+                  },
+                  {
+                    "key": "maxTage",
+                    "type": "number",
+                    "label": "Höchstdauer in Tagen",
+                    "description": "Obergrenze als Richtlinie — niemand hält das länger als so viele Tage. Leer oder 0 heisst: endet nicht von selbst."
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "pe-pruefen",
+          "name": "pe-pruefen",
+          "file": "produkt-erfassung/form-pe-pruefen.json",
+          "schema": {
+            "type": "default",
+            "id": "pe-pruefen",
+            "components": [
+              {
+                "type": "text",
+                "text": "# Verifizieren\n\nAlles Erfasste steht hier noch einmal und ist noch einmal änderbar. Erst die Freigabe setzt das Produkt auf *aktiv* und macht es bestellbar."
+              },
+              {
+                "key": "produktId",
+                "type": "textfield",
+                "label": "Id",
+                "readonly": true
+              },
+              {
+                "key": "nameDe",
+                "type": "textfield",
+                "label": "Name (de)"
+              },
+              {
+                "key": "nameFr",
+                "type": "textfield",
+                "label": "Name (fr)"
+              },
+              {
+                "key": "beschreibungDe",
+                "type": "textarea",
+                "label": "Beschreibung (de)",
+                "rows": 3
+              },
+              {
+                "key": "beschreibungFr",
+                "type": "textarea",
+                "label": "Beschreibung (fr)",
+                "rows": 3
+              },
+              {
+                "key": "kategorie",
+                "type": "textfield",
+                "label": "Kategorie"
+              },
+              {
+                "key": "produktgruppe",
+                "type": "textfield",
+                "label": "Produktgruppe"
+              },
+              {
+                "key": "suchbegriffe",
+                "type": "textfield",
+                "label": "Suchbegriffe"
+              },
+              {
+                "key": "genehmigungsart",
+                "type": "select",
+                "label": "Genehmigung",
+                "values": [
+                  {
+                    "value": "none",
+                    "label": "Keine"
+                  },
+                  {
+                    "value": "superior",
+                    "label": "Vorgesetzte Person"
+                  },
+                  {
+                    "value": "role",
+                    "label": "Gruppe"
+                  },
+                  {
+                    "value": "fixed",
+                    "label": "Namentlich"
+                  }
+                ]
+              },
+              {
+                "key": "genehmigungsref",
+                "type": "textfield",
+                "label": "Gruppe oder Person"
+              },
+              {
+                "key": "provisionProzess",
+                "type": "textfield",
+                "label": "Provisionierungsprozess"
+              },
+              {
+                "key": "deprovisionProzess",
+                "type": "textfield",
+                "label": "Deprovisionierungsprozess"
+              },
+              {
+                "key": "preis",
+                "type": "textfield",
+                "label": "Preis"
+              },
+              {
+                "key": "maxTage",
+                "type": "number",
+                "label": "Höchstdauer in Tagen"
+              },
+              {
+                "key": "mehrfach",
+                "type": "checkbox",
+                "label": "Darf mehrfach gehalten werden"
+              },
+              {
+                "type": "separator"
+              },
+              {
+                "key": "freigegeben",
+                "type": "checkbox",
+                "label": "Geprüft und freigegeben",
+                "description": "Ohne Haken geht die Erfassung zurück auf die Produktmaske — mit allem, was hier steht."
+              }
+            ]
+          }
+        },
+        {
+          "id": "pe-publizieren",
+          "name": "pe-publizieren",
+          "file": "produkt-erfassung/form-pe-publizieren.json",
+          "schema": {
+            "type": "default",
+            "id": "pe-publizieren",
+            "components": [
+              {
+                "type": "text",
+                "text": "# Katalog publizieren?\n\nDas Produkt ist aktiv. Bestellbar wird es erst mit einer Freigabe des Katalogs — bis dahin liest das Portal die vorige.\n\nDie Freigabe prüft den **ganzen** Katalog, nicht nur dieses Produkt. Fehlt irgendwo ein gebundener Prozess, eine Übersetzung oder eine Beschreibung in einer deklarierten Sprache, antwortet sie mit der Liste der Gründe und dieser Prozess meldet einen Incident."
+              },
+              {
+                "key": "publizieren",
+                "type": "checkbox",
+                "label": "Katalog jetzt publizieren"
+              }
+            ]
+          }
+        },
+        {
+          "id": "pe-theme",
+          "name": "pe-theme",
+          "file": "produkt-erfassung/form-pe-theme.json",
+          "schema": {
+            "type": "default",
+            "id": "pe-theme",
+            "components": [
+              {
+                "type": "text",
+                "text": "# Erscheinungsbild des Katalogs\n\nDiese Aufgabe liegt bei der Administration und nicht bei der Katalogpflege — so trennt Atlas die beiden (ADR-0316). Ein Katalog ohne eigenes Erscheinungsbild übernimmt das der Instanz."
+              },
+              {
+                "key": "akzentfarbe",
+                "type": "textfield",
+                "label": "Akzentfarbe",
+                "description": "Als #rgb oder #rrggbb, klein geschrieben. Alles andere weist der Server zurück, statt die Seite halb gebrandet zu lassen.",
+                "defaultValue": "#3355ff"
+              },
+              {
+                "key": "schriftart",
+                "type": "select",
+                "label": "Schriftart",
+                "defaultValue": "system",
+                "description": "Eine Auswahl und keine URL: eine Web-Schrift würde bei jedem Seitenaufruf einen Dritten erreichen und die Adresse der Besucherin dorthin tragen.",
+                "values": [
+                  {
+                    "value": "system",
+                    "label": "System"
+                  },
+                  {
+                    "value": "humanist",
+                    "label": "Humanist"
+                  },
+                  {
+                    "value": "serif",
+                    "label": "Serif"
+                  },
+                  {
+                    "value": "mono",
+                    "label": "Monospace"
+                  }
+                ]
+              },
+              {
+                "key": "logo",
+                "type": "filepicker",
+                "label": "Logo",
+                "description": "PNG oder SVG, höchstens 512 KB. Optional — ohne Logo zeigt das Portal die Marke der Instanz.",
+                "accept": ".png,.svg,image/png,image/svg+xml"
+              },
+              {
+                "type": "text",
+                "text": "Das Bild geht beim Abschliessen dieser Aufgabe direkt an den Katalog und wird **keine Prozessvariable** — ein halbes Megabyte im Token-Umfang würde bei jedem weiteren Schritt erneut ins Log geschrieben. Schlägt der Upload fehl, bleibt die Aufgabe offen und sagt warum."
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "id": "order-to-cash",
       "path": "order-to-cash.bpmn",
       "app": "Beispiel: Order-to-Cash",
@@ -1381,6 +1875,33 @@
           "file": "google-sheets-antragseingang/google-sheets-verbindungstest.bpmn",
           "xml": "\u003c?xml version=\"1.0\" encoding=\"UTF-8\"?\u003e\n\u003c!--\n  Google-Sheets-Verbindungstest\n\n  Der kuerzeste Prozess, der beweist, dass der Google-Sheets-Worker wirklich an\n  deinem Google-Konto haengt — und der dabei die ganze Schleife zeigt, die ein\n  Prozess mit einer Tabelle faehrt: anlegen, schreiben, anhaengen, lesen.\n\n  Start (Formular gs-start: tabellenname)\n   -\u003e \"Tabelle anlegen\"      (create-spreadsheet -\u003e datei)\n   -\u003e \"Kopfzeile schreiben\"  (write-range A1:C1)\n   -\u003e \"Zeilen anhaengen\"     (append-row, Objekte ueber columns)\n   -\u003e \"Tabelle lesen\"        (read-range mit header -\u003e zeilen)\n   -\u003e Ende \"Tabelle steht\"\n\n  Diesen Prozess zuerst starten. Laeuft er durch, sind Credential, Scopes und\n  Worker-Name richtig — und jeder spaetere Fehler im Antragseingang liegt am\n  Modell, nicht an der Einrichtung. Die angelegte Tabelle liegt im Drive des\n  Dienstkontos; ihre URL steht danach in =datei.spreadsheetUrl.\n\n  BPMN-DI von Hand gesetzt: gerade Hauptachse bei y=200, Pitch 150.\n--\u003e\n\u003cdefinitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n             xmlns:zeebe=\"http://camunda.org/schema/zeebe/1.0\"\n             xmlns:atlas=\"http://atlas/schema/1.0\"\n             xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\"\n             xmlns:omgdc=\"http://www.omg.org/spec/DD/20100524/DC\"\n             xmlns:omgdi=\"http://www.omg.org/spec/DD/20100524/DI\"\n             id=\"defs_gs_verbindungstest\" targetNamespace=\"http://atlas/examples\"\u003e\n  \u003cprocess id=\"proc_gs_verbindungstest\" name=\"Google-Sheets-Verbindungstest\" isExecutable=\"true\"\u003e\n    \u003cdocumentation\u003eLegt eine Tabelle an, schreibt eine Kopfzeile, haengt zwei Zeilen an und liest sie zurueck — um Credential, Scopes und Worker-Namen zu pruefen. Startvariable: tabellenname (wie die neue Tabelle heissen soll).\u003c/documentation\u003e\n\n    \u003cstartEvent id=\"start\" name=\"Test starten\"\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:formDefinition formId=\"gs-start\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003coutgoing\u003ef_start_anlegen\u003c/outgoing\u003e\n    \u003c/startEvent\u003e\n\n    \u003cserviceTask id=\"anlegen\" name=\"Tabelle anlegen\"\u003e\n      \u003cdocumentation\u003eGoogle-Sheets-Worker-Typ, Operation create-spreadsheet. Der Worker-Name \"google\" verweist auf den konfigurierten Worker unter Console -\u003e Workers (das Attribut heisst weiterhin connector); das Credential liegt dort und im Vault, nie im Modell. Anlegen ist die einzige Operation ohne \"spreadsheet\" — sie bringt die Datei erst hervor. sheet benennt das erste Blatt gleich mit, was Sheets in derselben Anfrage kann und Drive nicht; deshalb ist das hier ein Sheets-Aufruf und kein Drive-Upload. resultVariable schreibt die Antwort nach \"datei\", danach ist die Tabelle als =datei.spreadsheetId adressierbar.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003catlas:googleSheetsConnector connector=\"google\" operation=\"create-spreadsheet\"\n          title=\"=tabellenname\"\n          sheet=\"Antraege\"\n          resultVariable=\"datei\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_start_anlegen\u003c/incoming\u003e\n      \u003coutgoing\u003ef_anlegen_kopf\u003c/outgoing\u003e\n    \u003c/serviceTask\u003e\n\n    \u003cserviceTask id=\"kopfzeile\" name=\"Kopfzeile schreiben\"\u003e\n      \u003cdocumentation\u003ewrite-range ueberschreibt genau die genannten Zellen. values ist hier eine FEEL-Liste von Listen — also Zeilen, die Form, die Sheets selbst schreibt; fuer eine einzelne Zeile taete es auch die flache Liste. valueInput bleibt auf dem Standard \"user\": eine Kopfzeile ist Text, und ein Datum oder ein Betrag soll spaeter auch wirklich ein Datum bzw. eine Zahl in der Tabelle werden.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003catlas:googleSheetsConnector connector=\"google\" operation=\"write-range\"\n          spreadsheet=\"=datei.spreadsheetId\"\n          range=\"Antraege!A1:C1\"\n          values=\"=[[\u0026quot;Antragsnummer\u0026quot;, \u0026quot;Name\u0026quot;, \u0026quot;Status\u0026quot;]]\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_anlegen_kopf\u003c/incoming\u003e\n      \u003coutgoing\u003ef_kopf_anhaengen\u003c/outgoing\u003e\n    \u003c/serviceTask\u003e\n\n    \u003cserviceTask id=\"anhaengen\" name=\"Zeilen anhaengen\"\u003e\n      \u003cdocumentation\u003eappend-row haengt hinter der letzten belegten Zeile an, deshalb ist der Bereich eine ganze Spaltengruppe (A:C) und keine feste Zeile. values ist hier eine Liste von OBJEKTEN — die Form, die ein Prozess wirklich in der Hand hat — und columns sagt, welche Felder in welcher Reihenfolge geschrieben werden. Ohne columns lehnt der Deploy ab: die Schluesselreihenfolge eines Objekts ist keine Spaltenreihenfolge, und sie zu raten hiesse, eine vertauschte Tabelle statt eines Fehlers zu liefern. Achtung: die Zustellung ist \"mindestens einmal\" und eine Tabelle hat keinen Idempotenzschluessel — nach einem Absturz zwischen \"angehaengt\" und \"Job fertig\" stehen die Zeilen zweimal da.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003catlas:googleSheetsConnector connector=\"google\" operation=\"append-row\"\n          spreadsheet=\"=datei.spreadsheetId\"\n          range=\"Antraege!A:C\"\n          columns=\"nummer, name, status\"\n          values=\"=[{nummer: \u0026quot;A-1\u0026quot;, name: \u0026quot;Anna Beispiel\u0026quot;, status: \u0026quot;offen\u0026quot;}, {nummer: \u0026quot;A-2\u0026quot;, name: \u0026quot;Bo Beispiel\u0026quot;, status: \u0026quot;offen\u0026quot;}]\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_kopf_anhaengen\u003c/incoming\u003e\n      \u003coutgoing\u003ef_anhaengen_lesen\u003c/outgoing\u003e\n    \u003c/serviceTask\u003e\n\n    \u003cserviceTask id=\"lesen\" name=\"Tabelle lesen\"\u003e\n      \u003cdocumentation\u003eread-range liest die Zeilen zurueck. header=\"true\" macht aus der ersten Zeile des Bereichs die Spaltennamen, sodass \"zeilen\" eine Liste von Objekten ist und nicht eine Liste von Listen — das ist die Form, die ein Multi-Instance-Unterprozess durchlaeuft und die =zeilen[1].Name lesbar macht. FEEL-Listen sind 1-basiert. Ohne header waere dieselbe Zelle =zeilen[2][2], was niemand nach drei Wochen noch entziffert. Der Bereich muss die Kopfzeile enthalten, sonst wird die erste Datenzeile zur Ueberschrift.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003catlas:googleSheetsConnector connector=\"google\" operation=\"read-range\"\n          spreadsheet=\"=datei.spreadsheetId\"\n          range=\"Antraege!A:C\"\n          header=\"true\"\n          resultVariable=\"zeilen\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_anhaengen_lesen\u003c/incoming\u003e\n      \u003coutgoing\u003ef_lesen_ende\u003c/outgoing\u003e\n    \u003c/serviceTask\u003e\n\n    \u003cendEvent id=\"ende\" name=\"Tabelle steht\"\u003e\n      \u003cincoming\u003ef_lesen_ende\u003c/incoming\u003e\n    \u003c/endEvent\u003e\n\n    \u003csequenceFlow id=\"f_start_anlegen\" sourceRef=\"start\" targetRef=\"anlegen\"/\u003e\n    \u003csequenceFlow id=\"f_anlegen_kopf\" sourceRef=\"anlegen\" targetRef=\"kopfzeile\"/\u003e\n    \u003csequenceFlow id=\"f_kopf_anhaengen\" sourceRef=\"kopfzeile\" targetRef=\"anhaengen\"/\u003e\n    \u003csequenceFlow id=\"f_anhaengen_lesen\" sourceRef=\"anhaengen\" targetRef=\"lesen\"/\u003e\n    \u003csequenceFlow id=\"f_lesen_ende\" sourceRef=\"lesen\" targetRef=\"ende\"/\u003e\n  \u003c/process\u003e\n\n  \u003cbpmndi:BPMNDiagram id=\"BPMNDiagram_gs_verbindungstest\"\u003e\n    \u003cbpmndi:BPMNPlane id=\"BPMNPlane_gs_verbindungstest\" bpmnElement=\"proc_gs_verbindungstest\"\u003e\n      \u003cbpmndi:BPMNShape id=\"start_di\" bpmnElement=\"start\"\u003e\n        \u003comgdc:Bounds x=\"152\" y=\"182\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003comgdc:Bounds x=\"136\" y=\"225\" width=\"70\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"anlegen_di\" bpmnElement=\"anlegen\"\u003e\n        \u003comgdc:Bounds x=\"240\" y=\"160\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"kopfzeile_di\" bpmnElement=\"kopfzeile\"\u003e\n        \u003comgdc:Bounds x=\"390\" y=\"160\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"anhaengen_di\" bpmnElement=\"anhaengen\"\u003e\n        \u003comgdc:Bounds x=\"540\" y=\"160\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"lesen_di\" bpmnElement=\"lesen\"\u003e\n        \u003comgdc:Bounds x=\"690\" y=\"160\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"ende_di\" bpmnElement=\"ende\"\u003e\n        \u003comgdc:Bounds x=\"850\" y=\"182\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003comgdc:Bounds x=\"828\" y=\"225\" width=\"80\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n\n      \u003cbpmndi:BPMNEdge id=\"f_start_anlegen_di\" bpmnElement=\"f_start_anlegen\"\u003e\n        \u003comgdi:waypoint x=\"188\" y=\"200\"/\u003e\u003comgdi:waypoint x=\"240\" y=\"200\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_anlegen_kopf_di\" bpmnElement=\"f_anlegen_kopf\"\u003e\n        \u003comgdi:waypoint x=\"340\" y=\"200\"/\u003e\u003comgdi:waypoint x=\"390\" y=\"200\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_kopf_anhaengen_di\" bpmnElement=\"f_kopf_anhaengen\"\u003e\n        \u003comgdi:waypoint x=\"490\" y=\"200\"/\u003e\u003comgdi:waypoint x=\"540\" y=\"200\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_anhaengen_lesen_di\" bpmnElement=\"f_anhaengen_lesen\"\u003e\n        \u003comgdi:waypoint x=\"640\" y=\"200\"/\u003e\u003comgdi:waypoint x=\"690\" y=\"200\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_lesen_ende_di\" bpmnElement=\"f_lesen_ende\"\u003e\n        \u003comgdi:waypoint x=\"790\" y=\"200\"/\u003e\u003comgdi:waypoint x=\"850\" y=\"200\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n    \u003c/bpmndi:BPMNPlane\u003e\n  \u003c/bpmndi:BPMNDiagram\u003e\n\u003c/definitions\u003e"
         }
+      ],
+      "forms": [
+        {
+          "id": "gs-start",
+          "name": "gs-start",
+          "file": "google-sheets-antragseingang/form-gs-start.json",
+          "schema": {
+            "type": "default",
+            "id": "gs-start",
+            "components": [
+              {
+                "type": "text",
+                "text": "# Google-Sheets-Verbindungstest\n\nLegt eine Tabelle an, schreibt eine Kopfzeile, hängt zwei Zeilen an und liest sie zurück — damit Credential, Scopes und Worker-Name einmal geprüft sind, bevor ein echter Prozess davon abhängt."
+              },
+              {
+                "key": "tabellenname",
+                "type": "textfield",
+                "label": "Name der neuen Tabelle",
+                "validate": {
+                  "required": true
+                },
+                "defaultValue": "Atlas-Verbindungstest",
+                "description": "Die Datei wird unter diesem Namen in Google Drive angelegt und bleibt liegen — der Test räumt nicht auf, damit man das Ergebnis ansehen kann."
+              }
+            ]
+          }
+        }
       ]
     },
     {
@@ -1402,6 +1923,41 @@
         }
       ],
       "forms": [
+        {
+          "id": "jvt-start",
+          "name": "jvt-start",
+          "file": "jira-zugangsantrag/form-jvt-start.json",
+          "schema": {
+            "type": "default",
+            "id": "jvt-start",
+            "components": [
+              {
+                "type": "text",
+                "text": "# Jira-Verbindungstest\n\nLegt einen einzelnen Vorgang an, damit Endpoint, Credential und Worker-Name einmal geprüft sind, bevor ein echter Prozess davon abhängt."
+              },
+              {
+                "key": "jiraProjekt",
+                "type": "textfield",
+                "label": "Projektschlüssel",
+                "validate": {
+                  "required": true
+                },
+                "defaultValue": "OPS",
+                "description": "Wie in Jira, in Grossbuchstaben — etwa OPS. Der Vorgang entsteht in diesem Projekt und bleibt dort stehen."
+              },
+              {
+                "key": "vorgangstyp",
+                "type": "textfield",
+                "label": "Vorgangstyp",
+                "validate": {
+                  "required": true
+                },
+                "defaultValue": "Task",
+                "description": "Wie ihn dieses Projekt nennt. Ein Typ, den das Projekt nicht führt, wird von Jira abgelehnt — was der Test dann auch genau so meldet."
+              }
+            ]
+          }
+        },
         {
           "id": "za-antrag",
           "name": "Zugangsantrag",

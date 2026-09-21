@@ -24,8 +24,10 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"unicode"
@@ -283,4 +285,89 @@ func misboundAtlasExtensions(t *testing.T, path, uri string, elements map[string
 		}
 	}
 	return bad
+}
+
+// TestEveryFormReferenceResolves holds a user task to the form it names.
+//
+// A formId is a string in one file and an id in another, and nothing until now
+// joined the two. A typo compiles, deploys and runs: the process reaches the task,
+// the task appears in somebody's inbox, and it has no form — which reads as a
+// broken instance rather than as a broken model, days after the model was written
+// and by somebody who did not write it.
+//
+// Scoped to one example at a time, because a form is shipped with its process and
+// an example that reached into another's forms would install half of something.
+// The system bundle is checked the same way and separately, for the same reason.
+func TestEveryFormReferenceResolves(t *testing.T) {
+	for dir, group := range modelGroups(t) {
+		have := map[string]bool{}
+		for _, f := range group.forms {
+			have[f] = true
+		}
+		for _, ref := range group.refs {
+			if !have[ref.formID] {
+				t.Errorf("%s names form %q, which no form in %s declares — "+
+					"the task would reach somebody's inbox with nothing to fill in",
+					ref.file, ref.formID, dir)
+			}
+		}
+	}
+}
+
+type formRef struct{ file, formID string }
+
+type modelGroup struct {
+	forms []string
+	refs  []formRef
+}
+
+// modelGroups gathers, per directory, the form ids declared there and the form ids
+// the BPMN there references. The flat part of examples/ is one group: a dozen
+// independent scenarios share that folder, and telling them apart would need the
+// catalog's own claim list, which is a different test's business.
+func modelGroups(t *testing.T) map[string]*modelGroup {
+	t.Helper()
+	groups := map[string]*modelGroup{}
+	at := func(dir string) *modelGroup {
+		if groups[dir] == nil {
+			groups[dir] = &modelGroup{}
+		}
+		return groups[dir]
+	}
+	formID := regexp.MustCompile(`formId="([^"]+)"`)
+
+	for _, root := range []string{".", "../api/systemprocesses"} {
+		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			dir := filepath.Dir(path)
+			data, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return readErr
+			}
+			switch filepath.Ext(path) {
+			case ".bpmn":
+				for _, m := range formID.FindAllSubmatch(data, -1) {
+					g := at(dir)
+					g.refs = append(g.refs, formRef{file: path, formID: string(m[1])})
+				}
+			case ".json":
+				var doc struct {
+					ID   string `json:"id"`
+					Type string `json:"type"`
+				}
+				// Only a form-js document has both; every other JSON here is data.
+				if json.Unmarshal(data, &doc) == nil && doc.ID != "" && doc.Type != "" {
+					g := at(dir)
+					g.forms = append(g.forms, doc.ID)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk %s: %v", root, err)
+		}
+	}
+	return groups
 }
