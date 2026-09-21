@@ -2,6 +2,49 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-product-can-say-what-it-is-and-a-process-can-capture-one",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A product can say what it is, and a process can capture one",
+        "de": "Ein Produkt kann sagen, was es ist — und ein Prozess kann eines erfassen"
+      },
+      "summary": {
+        "en": "Two halves of one gap. A catalogue row was a name and a price, and the one thing somebody browsing needs — the sentence saying what the thing actually is — had no field to live in. A product now carries a description per language, like its name, and the portal shows it. It is optional: most products need no paragraph. But a product that has one must have it in every language the catalogue is published in, or the release says no — otherwise one audience is told what the thing is and the other is shown an empty panel. The other half is a capture process under examples/produkt-erfassung: choose or create a catalogue, enter the product data, say what it is assembled from, set the prices. It saves as a draft, and only a verification — every field once more, still editable — sets it active and asks whether to publish the catalogue. What a console form does not have and this gains: a second look before anything is orderable, and a record of who decided what and when. It writes back through Atlas's own API with a REST connection named atlas, which you set up once under Workers. A logo is picked in the task form and goes straight from the browser to the catalogue when the task is completed — never through the process, because half a megabyte in a token's scope would be rewritten into the log at every step after it. The example's README says what it still leaves out and why: languages beyond German and French, because a static form cannot read the catalogue's language list. Along the way a new check held every task to the form it names and found two shipped connection tests pointing at start forms nobody had written — both now exist.",
+        "de": "Zwei Hälften derselben Lücke. Eine Katalogzeile war ein Name und ein Preis, und das Eine, was jemand beim Blättern braucht — der Satz, der sagt, was die Sache eigentlich ist — hatte kein Feld. Ein Produkt führt jetzt eine Beschreibung je Sprache mit, wie seinen Namen, und das Portal zeigt sie. Sie ist optional: die meisten Produkte brauchen keinen Absatz. Wer aber eine hat, braucht sie in jeder Sprache, in der der Katalog publiziert wird, sonst verweigert die Freigabe — andernfalls erfährt eine Zielgruppe, worum es geht, und die andere sieht ein leeres Feld. Die andere Hälfte ist ein Erfassungsprozess unter examples/produkt-erfassung: Katalog wählen oder anlegen, Produktdaten erfassen, die Zusammenstellung festlegen, Preise setzen. Gespeichert wird als Entwurf, und erst eine Verifizierung — alle Felder noch einmal, noch einmal änderbar — setzt das Produkt aktiv und fragt, ob der Katalog publiziert werden soll. Was ein Konsolenformular nicht hat und dieser Ablauf gewinnt: eine zweite Ansicht, bevor etwas bestellbar ist, und eine Spur, wer was wann entschieden hat. Geschrieben wird über Atlas' eigene API mit einer REST-Verbindung namens atlas, die man einmal unter Workers einrichtet. Ein Logo wählt man im Aufgabenformular; es geht beim Abschliessen direkt aus dem Browser an den Katalog und nie durch den Prozess — ein halbes Megabyte im Token-Umfang würde bei jedem folgenden Schritt erneut ins Log geschrieben. Der README des Beispiels sagt, was es weiterhin weglässt und warum: Sprachen über Deutsch und Französisch hinaus, weil ein statisches Formular die Sprachliste des Katalogs nicht lesen kann. Nebenbei hat eine neue Prüfung jede Aufgabe an das Formular gebunden, das sie nennt, und dabei zwei mitgelieferte Verbindungstests gefunden, die auf nie geschriebene Startformulare zeigten — beide gibt es jetzt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Katalog",
+        "Portal",
+        "Prozesse"
+      ],
+      "tutorial": {
+        "en": [
+          "In the Console, open a catalogue, pick a product and find the new “Description” box — one per language the catalogue declares.",
+          "Write one in German only, then publish the catalogue: the release names the language that is missing one, rather than shipping a half-explained product.",
+          "Fill in the other language and publish again; the portal now shows the paragraph above the price.",
+          "For the process: set up a REST worker named “atlas” under Console › Workers, pointing at this server with a catalogue-maintenance login.",
+          "Install “Beispiel: Produkt erfassen” from the handbook's Beispiele chapter and start it.",
+          "Work the tasks in your inbox: catalogue, product data, assembly, prices — then the verification, which is the one that decides.",
+          "As an administrator, open the “Erscheinungsbild festlegen” task, pick a PNG or SVG and complete it — the image goes straight to the catalogue, and if that fails the task stays open and says why."
+        ],
+        "de": [
+          "In der Konsole einen Katalog öffnen, ein Produkt wählen und das neue Feld „Description“ ansehen — je ein Kasten pro deklarierter Sprache.",
+          "Nur auf Deutsch etwas eintragen und den Katalog publizieren: Die Freigabe nennt die Sprache, in der die Beschreibung fehlt, statt ein halb erklärtes Produkt auszuliefern.",
+          "Die zweite Sprache ergänzen und erneut publizieren; das Portal zeigt den Absatz nun über dem Preis.",
+          "Für den Prozess: unter „Console › Workers“ einen rest-Worker namens „atlas“ einrichten, der auf diesen Server zeigt, mit einem Zugang mit Katalogpflege-Recht.",
+          "Im Handbuch unter „Beispiele“ das Beispiel „Produkt erfassen“ installieren und starten.",
+          "Die Aufgaben im Posteingang abarbeiten: Katalog, Produktdaten, Zusammenstellung, Preise — dann die Verifizierung, die die eigentliche Entscheidung ist.",
+          "Als Administratorin die Aufgabe „Erscheinungsbild festlegen“ öffnen, ein PNG oder SVG wählen und abschliessen — das Bild geht direkt an den Katalog, und schlägt das fehl, bleibt die Aufgabe offen und nennt den Grund."
+        ]
+      }
+    },
+    {
       "id": "narrow-the-starmap-to-the-offerings-you-mean",
       "version": "Unreleased",
       "date": null,
@@ -371,51 +414,6 @@
           "Eine Seite darf leer bleiben: links leer heisst \"ab Veröffentlichung\", rechts leer heisst \"bis zum Zurückziehen\". Beide leer ist das gewöhnliche Produkt; für dieses ändert sich nichts.",
           "Katalog veröffentlichen. Ein Produkt, dessen Fenster noch nicht offen ist, bleibt im Portal sichtbar und lässt sich nicht in den Warenkorb legen; die Zeile nennt das Datum.",
           "Die Daten sind die des Servers (UTC) und werden tageweise gepflegt. Für ein Fenster, das auf die Stunde genau gelten muss, ist dieses Feld nicht gedacht."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Catalogues",
-          "de": "Kataloge öffnen"
-        },
-        "route": "#/catalog"
-      }
-    },
-    {
-      "id": "the-four-fields-the-portal-read-and-the-product-editor-could",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The product editor now sets every field the portal reads",
-        "de": "Der Produkteditor setzt jetzt jedes Feld, das das Portal liest"
-      },
-      "summary": {
-        "en": "A product carries twelve fields the portal acts on and the editor rendered eight. The four it left out decide whether a product can be ordered at all: the orderable shapes the basket refuses to proceed without, the search terms that make a service findable by somebody who does not know its name, the groups eligible to receive it, and the ceiling on how long the right may last. They were settable over the API and by nobody else — not by the person whose job it is. All four are on the form now, and the form also says where the two headings are read: Kategorie and Produktgruppe are collected from the products nothing contains, so a product carried inside another one is reached through its carrier and its own heading is never read there. The editor names the carrier instead of leaving you to fill in a column that had stopped reading the field.",
-        "de": "Ein Produkt trägt zwölf Felder, die das Portal auswertet, und der Editor zeigte acht davon. Die vier fehlenden entscheiden darüber, ob ein Produkt überhaupt bestellt werden kann: die Ausführungen, ohne deren Wahl der Warenkorb die Bestellung verweigert, die Suchbegriffe, über die eine Leistung auch ohne Kenntnis ihres Namens gefunden wird, die bezugsberechtigten Gruppen und die Obergrenze für die Dauer des Rechts. Setzbar waren sie nur über die Schnittstelle und sonst von niemandem — nicht von der Person, deren Aufgabe das ist. Alle vier stehen jetzt im Formular, und das Formular sagt zudem, wo die beiden Überschriften gelesen werden: Kategorie und Produktgruppe werden von den Produkten gelesen, die in keinem anderen enthalten sind. Ein Produkt innerhalb eines anderen wird über dieses erreicht, seine eigene Überschrift dort also nie gelesen. Der Editor nennt nun das tragende Produkt, statt Sie eine Spalte füllen zu lassen, die das Feld längst nicht mehr liest."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Catalogue",
-        "Portal"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Console → Catalogues, pick a catalogue and edit one of its products.",
-          "Under what the catalogue shows: the search terms as a comma-separated list — synonyms, the vendor's term, the abbreviation everybody uses — and the orderable shapes as one line each, written id = name.",
-          "Under how an order is handled: the groups eligible to receive it, and the ceiling in days. Empty eligibility narrows nothing and never opens anything, because the catalogue's audience stays the gate; a ceiling of zero is a right that does not end.",
-          "Where the catalogue carries this product inside another one, a note above the two headings names the carrier: the requester reaches the product under the carrier's heading, not under what you write here.",
-          "Publish the catalogue. Until you do, none of it reaches the portal."
-        ],
-        "de": [
-          "Console → Catalogues öffnen, einen Katalog wählen und eines seiner Produkte bearbeiten.",
-          "Im Abschnitt zum Katalogauftritt: die Suchbegriffe als kommagetrennte Liste — Synonyme, die Bezeichnung des Herstellers, die geläufige Abkürzung — und die Ausführungen als je eine Zeile in der Form id = Name.",
-          "Im Abschnitt zur Auftragsbearbeitung: die bezugsberechtigten Gruppen und die Obergrenze in Tagen. Keine Berechtigung eingeschränkt bedeutet keine Einschränkung und öffnet nie etwas, denn das Publikum des Katalogs bleibt die Schranke; eine Obergrenze von null ist ein Recht ohne Ende.",
-          "Ist das Produkt in diesem Katalog Teil eines anderen, nennt ein Hinweis über den beiden Überschriften das tragende Produkt: Die anfordernde Person erreicht das Produkt unter dessen Überschrift, nicht unter der hier eingetragenen.",
-          "Katalog veröffentlichen. Vorher erreicht nichts davon das Portal."
         ]
       },
       "try": {

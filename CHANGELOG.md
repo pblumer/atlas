@@ -14,6 +14,81 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A product can say what it is, and a process can capture one.** Two halves of the
+  same gap: the product record had no description, and creating a product meant a
+  console form with twenty fields and a hope that somebody looked.
+
+  **`Description`** is a text per language tag, like the name beside it and
+  deliberately unlike the keywords: keywords are for *finding*, and a searcher's
+  language is not the catalogue's, while a description is for *showing* and is read
+  in the language the portal is read in. A release demands nothing of it until there
+  is one — most products need no paragraph — and then demands it in every declared
+  language, because a product described to one audience and not another leaves the
+  other an empty panel. The portal shows it without falling back across languages,
+  unlike the name: a label in the wrong language still identifies the thing, a
+  paragraph in one somebody cannot read is noise where an explanation was promised.
+
+  **`examples/produkt-erfassung/`** is the capture process: catalogue, product data,
+  what it is assembled from, prices — saved as a **draft**, then a **verification**
+  showing every field again and still editable, and only then active, with the
+  question whether to publish the catalogue. Every service task writes back through
+  Atlas's own HTTP API with the `rest` connector and a connection named `atlas`, the
+  route the shipped order fulfilment already takes.
+
+  Three things in it are decisions. The product is saved **before** it is assembled,
+  because the assembly is edges on the catalogue and the catalogue refuses an id no
+  product answers to. The catalogue is **read afresh** before it is written and its
+  revision carried along — a PATCH replaces items and edges whole, and minutes pass
+  in which somebody else may have added a product; without it this process would be
+  exactly the silent overwrite the revision field warns about. And the appearance is
+  **a task of its own for administrators**, because a theme belongs to
+  administration and not to catalogue maintenance — the process models that rather
+  than working around it.
+
+  **The logo is picked in the task form and never becomes a process variable.** It
+  goes straight from the browser to the catalogue's own logo endpoint when the task
+  is completed. The obvious alternative — base64 through the process — is the one
+  thing this must not do, and `engine/budget.go` says why in the comment on
+  `DefaultMaxVariable`: past a megabyte "it is a document, and a document in a
+  token's scope is rewritten into the log on every touch". A logo is capped at half
+  a megabyte, about 683 KB once base64 has grown it, and every step the process
+  takes afterwards would write it into the write-ahead log again. ADR-0316 kept the
+  same bytes out of the catalogue *record* for a weaker version of that reason.
+
+  It is not a side channel: the endpoint is the one the Console's catalogue screen
+  uses, called by the same browser with the same credentials, and it still demands
+  PNG or SVG, half a megabyte and an administrator — which is the group the theme
+  task is assigned to. The model names a **catalogue**, never a URL: a URL would let
+  a model make whoever completes a task issue any request as them. A failed upload
+  leaves the task open and says why, because a task that finished while its logo did
+  not is a process that believes the catalogue is branded.
+
+  Still deliberately absent: languages beyond German and French, which a static form
+  cannot read off the catalogue. Said in the example's README rather than left to be
+  discovered.
+
+  The capture itself is **one task and not five**. Choosing the catalogue, entering
+  the product, saying what it is assembled from and setting the prices are the same
+  work by the same person in one sitting; five tasks would mean claiming and
+  completing four more times, which is slower than the console form the process
+  replaces. What the process is actually for — the verification — stays a station of
+  its own.
+
+  **Two new guards, and both found real defects.** One holds every user task to the
+  form it names: a dangling `formId` compiles, deploys and runs, and the task simply
+  reaches an inbox with nothing to fill in. It immediately found two shipped
+  connection tests pointing at start forms nobody had written; both now exist, with
+  the fields those models already documented.
+
+  The other evaluates the FEEL in a shipped model against sample variables and
+  states what must come back — because compiling proves almost nothing here. It
+  found two defects in this very process: `append(a, b)` appends a whole list as
+  **one element**, so the catalogue was being sent nested edges it cannot read, and
+  `split("de, fr", ",")` leaves the space on, so a keyword arrived as `" M365"` and
+  would never be matched. Both are valid FEEL doing the wrong thing in silence.
+  A third trap is documented rather than relied on: a filter over a list of contexts
+  returns the whole list in this build instead of filtering.
+
 - **Narrow the starmap to the offerings you mean.** The element-type filter beside it
   answers "which kinds of thing do I want to see". It cannot answer "show me only what
   is actually orderable", because that is not a kind — it is a property of one — and the

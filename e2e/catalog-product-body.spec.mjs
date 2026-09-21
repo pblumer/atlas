@@ -233,3 +233,40 @@ test("the window round-trips through the two date boxes", async ({ page }) => {
   const again = await build(page, { orderableFrom: boxes[0], orderableUntil: boxes[1] });
   expect(again.lifecycle).toEqual(body.lifecycle);
 });
+
+// The description (#1069). It follows the name exactly — one box per language the
+// catalogue declares, merged over what is stored — and that is the same two-sided
+// rule every rendered control on this form owes: a box somebody can empty must be
+// able to empty its field, and a language this catalogue does not declare must
+// survive a save made here untouched.
+test("a description is written per language, like the name", async ({ page }) => {
+  const body = await build(page, {
+    "t-de": "VPN-Zugang",
+    "d-de": "Verschl\u00fcsselter Zugang ins Firmennetz.",
+    "d-en": "Encrypted access to the company network.",
+  }, {}, ["de", "en"]);
+
+  expect(body.descriptions).toEqual({
+    de: "Verschl\u00fcsselter Zugang ins Firmennetz.",
+    en: "Encrypted access to the company network.",
+  });
+});
+
+test("emptying the box clears that language and leaves the others alone", async ({ page }) => {
+  const body = await build(page, { "d-de": "", "d-en": "Still here." }, {
+    // A description this catalogue's form never rendered, because it does not
+    // declare Italian. It belongs to a catalogue that does, and a save made here
+    // must not be how it disappears.
+    descriptions: { de: "Weg damit.", en: "Old.", it: "Accesso VPN." },
+  }, ["de", "en"]);
+
+  expect(body.descriptions).toEqual({ en: "Still here.", it: "Accesso VPN." });
+});
+
+// A box holding spaces is a box somebody cleared. Carried through as a value it
+// would make the release demand a translation of nothing in every other language.
+test("a product nobody described carries nothing", async ({ page }) => {
+  const body = await build(page, { "d-de": "", "d-en": "   " }, {}, ["de", "en"]);
+
+  expect(body.descriptions).toEqual({});
+});

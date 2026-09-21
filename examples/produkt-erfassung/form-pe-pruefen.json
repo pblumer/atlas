@@ -1,0 +1,115 @@
+{
+  "type": "default",
+  "id": "pe-pruefen",
+  "components": [
+    {
+      "type": "text",
+      "text": "# Verifizieren\n\nAlles Erfasste steht hier noch einmal und ist noch einmal änderbar. Erst die Freigabe setzt das Produkt auf *aktiv* und macht es bestellbar."
+    },
+    {
+      "key": "produktId",
+      "type": "textfield",
+      "label": "Id",
+      "readonly": true
+    },
+    {
+      "key": "nameDe",
+      "type": "textfield",
+      "label": "Name (de)"
+    },
+    {
+      "key": "nameFr",
+      "type": "textfield",
+      "label": "Name (fr)"
+    },
+    {
+      "key": "beschreibungDe",
+      "type": "textarea",
+      "label": "Beschreibung (de)",
+      "rows": 3
+    },
+    {
+      "key": "beschreibungFr",
+      "type": "textarea",
+      "label": "Beschreibung (fr)",
+      "rows": 3
+    },
+    {
+      "key": "kategorie",
+      "type": "textfield",
+      "label": "Kategorie"
+    },
+    {
+      "key": "produktgruppe",
+      "type": "textfield",
+      "label": "Produktgruppe"
+    },
+    {
+      "key": "suchbegriffe",
+      "type": "textfield",
+      "label": "Suchbegriffe"
+    },
+    {
+      "key": "genehmigungsart",
+      "type": "select",
+      "label": "Genehmigung",
+      "values": [
+        {
+          "value": "none",
+          "label": "Keine"
+        },
+        {
+          "value": "superior",
+          "label": "Vorgesetzte Person"
+        },
+        {
+          "value": "role",
+          "label": "Gruppe"
+        },
+        {
+          "value": "fixed",
+          "label": "Namentlich"
+        }
+      ]
+    },
+    {
+      "key": "genehmigungsref",
+      "type": "textfield",
+      "label": "Gruppe oder Person"
+    },
+    {
+      "key": "provisionProzess",
+      "type": "textfield",
+      "label": "Provisionierungsprozess"
+    },
+    {
+      "key": "deprovisionProzess",
+      "type": "textfield",
+      "label": "Deprovisionierungsprozess"
+    },
+    {
+      "key": "preis",
+      "type": "textfield",
+      "label": "Preis"
+    },
+    {
+      "key": "maxTage",
+      "type": "number",
+      "label": "Höchstdauer in Tagen"
+    },
+    {
+      "key": "mehrfach",
+      "type": "checkbox",
+      "label": "Darf mehrfach gehalten werden"
+    },
+    {
+      "type": "separator"
+    },
+    {
+      "key": "freigegeben",
+      "type": "checkbox",
+      "label": "Geprüft und freigegeben",
+      "description": "Ohne Haken geht die Erfassung zurück auf die Produktmaske — mit allem, was hier steht."
+    }
+  ]
+}

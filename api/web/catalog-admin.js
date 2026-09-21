@@ -601,9 +601,19 @@ export function productBody(f, { productID, homeCatalog, langs, stored }) {
     const val = String(f.get(`t-${l}`) || "").trim();
     if (val) texts[l] = val; else delete texts[l];
   }
+  // The descriptions follow the names exactly, merge rule included: this form
+  // renders one box per language *this* catalogue declares, and a description in a
+  // language it does not declare belongs to a catalogue that does and must survive
+  // a save made here. Emptying a rendered box still clears it, or a description
+  // could be written and never taken back.
+  const descriptions = { ...(was.descriptions || {}) };
+  for (const l of langs || []) {
+    const val = String(f.get(`d-${l}`) || "").trim();
+    if (val) descriptions[l] = val; else delete descriptions[l];
+  }
   return {
     ...was,
-    id: productID, homeCatalog, state: f.get("state"), texts,
+    id: productID, homeCatalog, state: f.get("state"), texts, descriptions,
     approval: approvalFrom(f),
     category: String(f.get("category") || "").trim(),
     productGroup: String(f.get("productGroup") || "").trim(),
@@ -1198,6 +1208,15 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
           placeholder="laptop"></label>
       ${langs.map((l) => `<label class="field">Name (${esc(l)})<input name="t-${esc(l)}"
         value="${esc((v.texts || {})[l] || "")}" autocomplete="off"></label>`).join("")}
+      <label class="field wide">Description
+        <span class="muted" style="display:block; margin:2px 0 6px">What the thing
+          <i>is</i>, for somebody who read the name and is still not sure. Optional:
+          most products do not need one. <b>Write it in every language or in
+          none</b> &mdash; a release refuses a product described to one audience and
+          not another, because the second audience gets an empty panel rather than a
+          shorter one.</span>
+        ${langs.map((l) => `<textarea name="d-${esc(l)}" rows="3" class="wide"
+          placeholder="${esc(l)}">${esc((v.descriptions || {})[l] || "")}</textarea>`).join("")}</label>
       ${partOfNote(it, cat, items, langs)}
       <label class="field wide">Category
         <span class="muted" style="display:block; margin:2px 0 6px">The heading the

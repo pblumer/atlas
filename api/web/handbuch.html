@@ -3300,6 +3300,81 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         </details>
       </div>
 
+      <div class="bsp" id="bsp-produkt-erfassung">
+        <h4><span class="rz-emoji" aria-hidden="true">📦</span>
+          <span data-l="de">Produkt erfassen: Atlas pflegt seinen Katalog mit Atlas</span><span data-l="en">Capturing a product: Atlas maintains its catalogue with Atlas</span></h4>
+        <p class="bsp-tags">
+          <span class="tag warn" data-l="de">braucht die Verbindung „atlas“</span><span class="tag warn" data-l="en">needs the "atlas" connection</span>
+          <span class="tag" data-l="de">eine Erfassungsmaske</span><span class="tag" data-l="en">one capture form</span>
+          <span class="tag">examples/produkt-erfassung/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Ein Produkt anzulegen heißt heute: Konsole öffnen, ein Formular mit zwanzig Feldern
+              ausfüllen, speichern – und darauf vertrauen, dass jemand nachschaut. Hier ist es ein Ablauf mit
+              Aufgaben: Katalog wählen oder anlegen, Produktdaten, Zusammenstellung, Preise. Gespeichert wird als
+              <b>Entwurf</b>, und erst eine <b>Verifizierung</b> – dieselben Felder noch einmal, noch einmal
+              änderbar – setzt das Produkt auf aktiv und fragt, ob der Katalog publiziert werden soll. Was ein
+              Formular nicht hat und dieser Ablauf gewinnt: eine zweite Ansicht vor der Bestellbarkeit, und eine
+              Spur, wer was wann entschieden hat.</p>
+            <p data-l="en">Creating a product today means opening the Console, filling in a form with twenty fields,
+              saving, and trusting that somebody looks. Here it is a flow of tasks: choose or create a catalogue,
+              the product data, what it is assembled from, the prices. It saves as a <b>draft</b>, and only a
+              <b>verification</b> – the same fields once more, still editable – sets the product active and asks
+              whether to publish the catalogue. What a form does not have and this flow gains: a second look before
+              anything is orderable, and a record of who decided what, and when.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Ein Prozess, vier Formulare, acht Service-Tasks – und jeder davon schreibt über Atlas'
+              <b>eigene HTTP-API</b> zurück, mit dem rest-Connector und der Verbindung <code>atlas</code>: derselbe
+              Weg, den die mitgelieferte Auftragserfüllung geht. Die ganze Erfassung ist <b>eine Aufgabe</b> und
+              nicht fünf: es ist dieselbe Arbeit derselben Person in derselben Sitzung, und fünfmal beanspruchen
+              und abschliessen wäre langsamer als das Formular, das der Prozess ersetzt. Der Gewinn liegt in der
+              <b>Verifizierung</b>, und die bleibt eine eigene Station. Der Katalog wird <b>erst nach der Freigabe</b>
+              beschrieben, sodass ein abgelehntes Produkt gar nicht erst ins Angebot gerät und der Schreibvorgang
+              genau einmal läuft. Vorher wird der Katalog <b>frisch gelesen</b> und seine <code>revision</code>
+              mitgeführt – ein PATCH ersetzt Items und Edges als Ganzes, und in der Zwischenzeit kann jemand
+              anderes ein Produkt hinzugefügt haben. Das Erscheinungsbild ist eine <b>eigene Aufgabe für die
+              Administration</b> und liegt hinten, damit eine Erfassung nicht auf eine Farbwahl wartet.</p>
+            <p data-l="en">One process, four forms, eight service tasks – and every one of them writes back through
+              Atlas's <b>own HTTP API</b>, with the rest connector and a connection named <code>atlas</code>: the
+              same route the shipped order fulfilment takes. The whole capture is <b>one task</b> and not five: it
+              is the same work by the same person in one sitting, and claiming and completing five would be slower
+              than the form the process replaces. The gain is the <b>verification</b>, and that stays a station of
+              its own. The catalogue is written <b>only after approval</b>, so a rejected product never reaches the
+              offering and the write runs exactly once. Before it, the catalogue is <b>read afresh</b> and its
+              <code>revision</code> carried along – a PATCH replaces items and edges whole, and in the meantime
+              somebody else may have added a product. The appearance is <b>a task of its own for administrators</b>
+              and sits at the back, so a capture never waits on a choice of colour.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="bsp-more">
+          <summary><span data-l="de">Als Vorlage nehmen</span><span data-l="en">Use it as a template</span></summary>
+          <ul>
+            <li data-l="de"><b>Vier-Augen-Prinzip:</b> die Verifizierung trägt dieselbe Gruppe wie die Erfassung.
+              Eine andere Gruppe dort, und niemand gibt das eigene Produkt frei.</li>
+            <li data-l="en"><b>Two pairs of eyes:</b> the verification carries the same group as the capture. Put a
+              different group there and nobody releases their own product.</li>
+            <li data-l="de"><b>Mehr Sprachen:</b> die Formulare fragen Deutsch und Französisch. Ein Katalog, der
+              weitere deklariert, braucht je ein Feldpaar mehr – ein statisches Formular kann die Sprachliste des
+              Katalogs nicht lesen.</li>
+            <li data-l="en"><b>More languages:</b> the forms ask for German and French. A catalogue declaring others
+              needs one more pair of boxes each – a static form cannot read the catalogue's language list.</li>
+            <li data-l="de"><b>Logo:</b> im Theme-Formular gewählt und beim Abschliessen direkt an den Katalog
+              geschickt — nie als Prozessvariable, weil ein halbes Megabyte im Token-Umfang bei jedem
+              folgenden Schritt erneut ins Log geschrieben würde.</li>
+            <li data-l="en"><b>Logo:</b> picked in the theme form and sent straight to the catalogue on
+              completion — never a process variable, because half a megabyte in a token's scope would be
+              rewritten into the log at every step after it.</li>
+          </ul>
+        </details>
+      </div>
+
       <div class="bsp" id="bsp-onboarding">
         <h4><span class="rz-emoji" aria-hidden="true">🚀</span>
           <span data-l="de">Onboarding: Atlas onboardet mit Atlas</span><span data-l="en">Onboarding: Atlas onboards with Atlas</span></h4>
