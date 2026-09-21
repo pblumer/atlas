@@ -156,7 +156,7 @@ Backup and restore, including whole-instance snapshots ([ADR-0107](docs/adr/0107
 - **[Postman onboarding kit](postman/)** — import the collection + environment and drive the HTTP API (deploy, run instances, work user tasks) in five minutes
 - **[n8n comparison](docs/comparisons/n8n.md)** — where integration automation and durable BPMN orchestration differ, and how they can work together
 - **[MIM comparison](docs/comparisons/mim.md)** — Microsoft Identity Manager's connector surface mapped to Atlas Worker Types, and the gaps that remain
-- **[Catalogue standards](docs/comparisons/catalogue-standards.md)** — the catalogue, order, and inventory models mapped onto TM Forum's TMF620/622/637, the Open Service Broker API, and open-source identity governance: what corresponds, where Atlas differs on purpose, and what was examined and found inapplicable
+- **[Catalogue standards](docs/comparisons/catalogue-standards.md)** — the catalogue, order, and inventory models mapped onto TM Forum's TMF620/622/633/637, the Open Service Broker API, and open-source identity governance: what corresponds, where Atlas differs on purpose, and what was examined and found inapplicable
 - **[Deploying Atlas](deploy/)** — the container image ([`Dockerfile`](Dockerfile)) and a [Helm chart](deploy/helm/atlas) for running the server on Kubernetes
 - **[Compliance](docs/compliance/)** — the Swiss federal **ISDS-Konzept** (P042-Hi01) answered for Atlas, in German, plus the product gaps a Bund deployment would have to close
 - **[Roadmap](ROADMAP.md)** — where this is going · **[Changelog](CHANGELOG.md)** — what changed in each release
