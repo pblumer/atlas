@@ -111,6 +111,12 @@ func catalogItemProps() map[string]any {
 			"resolve through this product, so retiring one means setting \"withdrawn\" here."),
 		"texts": objectProp("The product's name per language tag. Publishing refuses a product " +
 			"missing a text for any language its catalogue declares."),
+		"descriptions": objectProp("What the product IS, per language tag, beside the name in " +
+			"texts — the sentence somebody reads when the name was not enough. Optional as a " +
+			"whole: most products need none, and one with none publishes. Once there is one, " +
+			"publishing demands it in EVERY language the catalogue declares, because a product " +
+			"explained to one audience and not another leaves the other an empty panel. " +
+			"Whitespace does not count as one."),
 		"approval": objectProp("How an order line for this product is approved: {kind, ref}. " +
 			"kind is \"none\" (ordered without approval), \"fixed\" (ref names one principal), " +
 			"\"role\" (ref names a group; any member may approve), \"superior\" (the RECIPIENT's " +
