@@ -14,6 +14,52 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Narrow the starmap to the offerings you mean.** The element-type filter beside it
+  answers "which kinds of thing do I want to see". It cannot answer "show me only what
+  is actually orderable", because that is not a kind — it is a property of one — and the
+  search cannot answer it either: a product's state is not a word in its name.
+
+  The Product Map now carries the two facts a catalogue keeps about an offering that
+  nothing else on the picture has. **Product state** lists draft, active and withdrawn;
+  **Approval** lists whether ordering it stops for an approver. Both are boxes and both
+  are on, like the element types above them.
+
+  Three boxes for the state rather than one "active only" switch, because the two states
+  that are not active are not the same thing and the difference is usually the point: a
+  draft is being written, a withdrawn product was real and was retired. Collapsed into
+  "not active" they become one heap and "what did we retire" cannot be asked at all.
+  Three boxes contain the switch anyway — untick two and keep active.
+
+  The approval side is a binary although the rule's kind is not. An installation can
+  register its own approval process under any name, so listing the kinds would grow this
+  control with somebody's own vocabulary and answer a question this picture is not
+  about: which *route* an approval takes is a catalogue matter, and whether an order
+  stops for a human at all is an estate one. A kind Atlas has never heard of counts as
+  stopping for a human, which is the safe reading.
+
+  **It only ever removes products.** A catalogue has no state and a process has no
+  approver, so neither can be filtered by one. That is load-bearing rather than obvious:
+  "carries no approval rule" is exactly how a product without one reads, so a filter
+  that did not first ask what it was looking at would answer "ordered without approval"
+  for every catalogue and every process on the picture, and one unticked box would empty
+  the canvas. A process left with nothing attached stays drawn — that is what switching
+  the whole Product type off already does, and a deployed process is part of the estate
+  in its own right, not an appendage of whatever offers it.
+
+  Like the element-type filter, the cut runs **before** the search and the drilldown, so
+  neither reaches *through* a product you have put down. Emptying the canvas this way
+  says which control did it, rather than sending you to the type boxes or to a search you
+  never typed.
+
+  **An export says which products were switched off**, and this is the narrowing that
+  most needs saying: switching a type off removes a whole layer and the picture looks
+  like it, while filtering products leaves the catalogues, the processes and the shape of
+  the thing intact and quietly removes some tiles. The stamp names what was put down and
+  states the consequence — a catalogue in the file may offer more than the products shown
+  under it. A saved view carries the setting, stored as the catalogue's own words so a
+  view reopened next year still selects the same products however the boxes are worded by
+  then.
+
 - **Put a whole element type down on the starmap.** The Product Map draws four kinds at
   once — the catalogues, the products they offer, the processes those products bind and
   a marker where nothing is deployed — and a reader who came to look at one of them had

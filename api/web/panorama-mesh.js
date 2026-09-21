@@ -2712,16 +2712,29 @@ function filterGraph(graph, { term, band, heat, at = Date.now() } = {}) {
   return around(graph, matched, CONTEXT_HOPS);
 }
 
-// emptyBecause names what emptied the canvas, because the three reasons need three
-// different actions from the reader.
+// emptyBecause names what emptied the canvas, because each reason needs a different
+// action from the reader.
 //
 // A search that missed sends them to the search box; a type filter that has taken
-// everything off sends them four inches to the right. Telling the second as the
-// first is how somebody clears a search they never typed and concludes the view is
-// broken — and with every box unticked there is no term on screen to explain it.
-export function emptyBecause(term, band, visible) {
-  if (!visible.nodes.length) {
+// everything off sends them four inches to the right; the product facets send them
+// four inches further down. Telling any of those as a search that missed is how
+// somebody clears a search they never typed and concludes the view is broken — and
+// with the boxes unticked there is no term on screen to explain it.
+//
+// The two cuts are told apart by what each one left, which is why this is given both
+// graphs: "nothing survived the type filter" and "the type filter left only products
+// and the facets took those" are one empty canvas with two different remedies.
+export function emptyBecause(term, band, visible, afterKinds) {
+  const kept = afterKinds || visible;
+  if (!kept.nodes.length) {
     return "Every element type is switched off, so there is nothing to draw.";
+  }
+  if (!visible.nodes.length) {
+    // Everything that survived the type filter was a product, and the facets took
+    // all of them. Naming the type filter here would send the reader to a control
+    // that is not the one holding their picture shut.
+    return "Every product is filtered out by the state and approval boxes, " +
+      "and there is nothing else on this picture to draw.";
   }
   return `Nothing matches ${term ? `“${esc(term)}”` : "that"}${band && term ? " in that band" : ""}.`;
 }
@@ -2763,6 +2776,134 @@ export function withoutKinds(graph, hidden) {
 export function kindsPresent(graph) {
   const here = new Set((graph?.nodes || []).map((n) => n.kind));
   return Object.keys(KIND).filter((kind) => here.has(kind));
+}
+
+// PRODUCT_STATE is what the catalogue says an offering is, in the order an offering
+// moves through: written, orderable, retired.
+//
+// Three boxes and not one "active only" switch, though one switch is the question
+// most often asked. The two states that are not active are different things, and
+// the difference is usually the point: "what did we retire" is a real question
+// about the estate, and a single switch cannot ask it — it can only refuse to
+// answer. Three boxes contain the switch anyway (untick two, keep active) and cost
+// a reader nothing to ignore.
+const PRODUCT_STATE = {
+  draft: { label: "Draft — being written, not orderable" },
+  active: { label: "Active — orderable" },
+  withdrawn: { label: "Withdrawn — retired, still resolvable" },
+};
+
+// APPROVAL is the binary an approval rule reduces to for the purpose of narrowing a
+// picture.
+//
+// A binary here although the rule's kind is an open set — none, fixed, role,
+// superior, and whatever name an installation registered a fifth under. Listing the
+// kinds would make this control grow with the installation's own vocabulary, and it
+// would answer a question nobody asked this picture: which *route* an approval takes
+// is a catalogue matter, and whether an order stops for a human at all is an estate
+// one. The kind is on the node, so a control that does want the route can be built
+// on the same fact without a second server change.
+const APPROVAL = {
+  required: { label: "Needs approval before it is provisioned" },
+  none: { label: "Ordered without approval" },
+};
+
+// approvalOf reads a node's approval bucket. Anything that is not the catalogue's
+// "none" — including a registered process name this build has never heard of —
+// stops an order for somebody, which is the whole of what this asks.
+//
+// A product carrying no rule at all reads as none, which is what the store means by
+// an item with an empty approval: nothing stops the order.
+const approvalOf = (node) => (node.approvalKind && node.approvalKind !== "none" ? "required" : "none");
+
+// withoutProducts is the picture with some of the *offerings* put down: the ones
+// whose catalogue state, or whose answer to "does this stop for an approver",
+// the reader has switched off.
+//
+// # Why this only ever touches products
+//
+// A catalogue has no state and a process has no approver. Every other kind is
+// therefore passed through untouched, and that is a rule rather than an accident:
+// a facet belonging to one kind of thing must not become a reason to remove
+// another, or "hide the withdrawn products" would quietly take the catalogue that
+// offers them with it.
+//
+// # Why an orphan is left standing
+//
+// Removing a product removes its edges, which can leave a process on the canvas
+// with nothing attached. That is the same thing switching the whole Product type
+// off already does, and it is the honest answer: a deployed process is part of the
+// estate in its own right, not an appendage of whatever offers it. Sweeping it up
+// would invent a rule — "a process exists only through its product" — that is not
+// true of this landscape and that no control on screen would explain.
+//
+// # Why it cuts before the search and the drilldown
+//
+// The same reason [withoutKinds] does, and it is applied in the same place: both of
+// those reach outwards for context, and a product that is switched off must not be
+// what they reach. "Hide the withdrawn products" and "hide them unless a drilldown
+// happens to pass through one" are not the same instruction.
+//
+// Nothing switched off, same graph, same object.
+export function withoutProducts(graph, hiddenStates, hiddenApprovals) {
+  const states = hiddenStates && hiddenStates.size ? hiddenStates : null;
+  const approvals = hiddenApprovals && hiddenApprovals.size ? hiddenApprovals : null;
+  if (!states && !approvals) return graph;
+  const keep = new Set(graph.nodes.filter((n) => {
+    if (n.kind !== "product") return true;
+    // A product whose state the server did not send has no opinion against it and
+    // stays — the same polarity every box on this panel uses. It also means a
+    // payload from a build before these facets existed draws exactly as it did.
+    if (states && n.productState && states.has(n.productState)) return false;
+    if (approvals && approvals.has(approvalOf(n))) return false;
+    return true;
+  }).map((n) => n.id));
+  return {
+    ...graph,
+    nodes: graph.nodes.filter((n) => keep.has(n.id)),
+    edges: graph.edges.filter((e) => keep.has(e.from) && keep.has(e.to)),
+  };
+}
+
+// statesPresent and approvalsPresent are what the two facet filters offer.
+//
+// From the *delivered* landscape and never the drawn one, for the reason
+// [kindsPresent] is: built from the survivors, switching a state off would remove
+// its own box and leave a picture nobody can widen again without reloading.
+//
+// A state this build has no label for still gets a box, labelled with its own
+// spelling. That is the difference from [kindsPresent], and it is deliberate: an
+// unlabelled kind is one of a closed set this file draws and can reasonably not
+// know, but a catalogue state it does not recognise is a value from a store that
+// has moved on — and leaving it boxless would make it the one thing on the picture
+// that cannot be put down.
+export function statesPresent(graph) {
+  const here = new Set();
+  for (const n of graph?.nodes || []) {
+    if (n.kind === "product" && n.productState) here.add(n.productState);
+  }
+  const known = Object.keys(PRODUCT_STATE).filter((st) => here.has(st));
+  const rest = [...here].filter((st) => !PRODUCT_STATE[st]).sort();
+  return [...known, ...rest];
+}
+
+export function approvalsPresent(graph) {
+  const here = new Set();
+  for (const n of graph?.nodes || []) {
+    if (n.kind === "product") here.add(approvalOf(n));
+  }
+  return Object.keys(APPROVAL).filter((bucket) => here.has(bucket));
+}
+
+// labelForState names a state for the control. A state this build knows gets the
+// curated wording; one it does not gets its own, so the box says something rather
+// than nothing.
+export function labelForState(state) {
+  return PRODUCT_STATE[state]?.label || state;
+}
+
+export function labelForApproval(bucket) {
+  return APPROVAL[bucket]?.label || bucket;
 }
 
 // around cuts the graph down to a set of nodes and whatever is within `hops` of
@@ -4033,6 +4174,20 @@ export async function mountPanoramaMesh(view, { api, toast }) {
                arrives later arrives switched on. -->
           <span class="mesh-kinds-head">Element types</span>
           <div id="mesh-kinds" class="mesh-kinds"></div>
+          <!-- The two facets an offering has that nothing else on the picture does:
+               what the catalogue says it is, and whether ordering it stops for an
+               approver. Same polarity as the boxes above and for the same reason,
+               which is also why they are boxes rather than an "active only" switch:
+               one panel that means "shown" with a tick in one place and "narrowed to"
+               with a tick in another is a panel nobody can read twice the same way.
+
+               Both are hidden entirely on a picture with no products, so a landscape
+               that is not a catalogue carries no control for a thing it does not
+               have. -->
+          <span class="mesh-kinds-head" id="mesh-states-head" hidden>Product state</span>
+          <div id="mesh-states" class="mesh-kinds"></div>
+          <span class="mesh-kinds-head" id="mesh-approvals-head" hidden>Approval</span>
+          <div id="mesh-approvals" class="mesh-kinds"></div>
         </div>
         <div id="mesh-panel-slot"></div>
         <div id="mesh-findings-slot"></div>
@@ -4100,6 +4255,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const depthField = document.getElementById("mesh-depth");
   const depthAny = document.getElementById("mesh-depth-any");
   const kindsSlot = document.getElementById("mesh-kinds");
+  const statesSlot = document.getElementById("mesh-states");
+  const statesHead = document.getElementById("mesh-states-head");
+  const approvalsSlot = document.getElementById("mesh-approvals");
+  const approvalsHead = document.getElementById("mesh-approvals-head");
 
   // hiddenKinds is what the reader has switched off, and it holds the *hidden* ones
   // rather than the shown ones. That polarity is the whole of "every type is on to
@@ -4135,6 +4294,64 @@ export async function mountPanoramaMesh(view, { api, toast }) {
         `<input type="checkbox" data-kind="${esc(kind)}"${hiddenKinds.has(kind) ? "" : " checked"}/>` +
         ` ${esc(label)}</label>`;
     }).join("");
+  }
+
+  // The two facet sets, holding the switched-off values for the same reason
+  // hiddenKinds does: a state or an approval bucket nobody has an opinion about is
+  // absent from these and is therefore drawn.
+  const hiddenStates = new Set();
+  const hiddenApprovals = new Set();
+
+  // renderFacetFilters redraws both facet controls from the delivered landscape.
+  //
+  // Rebuilt rather than patched, and from the payload rather than the drawing, for
+  // the two reasons renderKindFilter is: the products under it change when the
+  // subject does, and a control built from the survivors could not switch back on
+  // what it had just switched off.
+  //
+  // A facet with fewer than two values offers no choice — a picture whose products
+  // are all active has nothing to narrow by state — so its head and its boxes go
+  // together. Hiding the boxes and leaving the heading would caption an empty space.
+  function renderFacetFilters(delivered) {
+    for (const [slot, head, values, label, attr, hidden] of [
+      [statesSlot, statesHead, statesPresent(delivered), labelForState, "state", hiddenStates],
+      [approvalsSlot, approvalsHead, approvalsPresent(delivered), labelForApproval, "approval", hiddenApprovals],
+    ]) {
+      if (values.length < 2) {
+        slot.innerHTML = "";
+        slot.hidden = true;
+        head.hidden = true;
+        continue;
+      }
+      slot.hidden = false;
+      head.hidden = false;
+      slot.innerHTML = values.map((value) => {
+        const full = label(value);
+        return `<label class="mesh-kind" title="${esc(full)}">` +
+          `<input type="checkbox" data-${attr}="${esc(value)}"${hidden.has(value) ? "" : " checked"}/>` +
+          ` ${esc(full.split(" — ")[0])}</label>`;
+      }).join("");
+    }
+  }
+
+  // One handler for both, because they do the same thing to different sets and two
+  // copies of "tick means shown" would eventually disagree about which.
+  for (const [slot, attr, hidden] of [
+    [statesSlot, "state", hiddenStates],
+    [approvalsSlot, "approval", hiddenApprovals],
+  ]) {
+    slot.addEventListener("change", (ev) => {
+      const box = ev.target.closest(`input[data-${attr}]`);
+      if (!box) return;
+      const value = box.dataset[attr];
+      if (box.checked) hidden.delete(value);
+      else hidden.add(value);
+      // Exactly what the type boxes do, and deliberately no more: a drilldown may
+      // be standing on a product that has just gone, and paint() steps back one
+      // station and says so. Clearing the whole walk here would throw away the way
+      // the reader came for the sake of a node they can no longer stand on.
+      paint();
+    });
   }
 
   kindsSlot.addEventListener("change", (ev) => {
@@ -4390,7 +4607,13 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // drilldown, the search, the counts. The one deliberate exception is the size
     // reference a few lines down, which stays the delivered landscape for the reason
     // stated there: narrowing must not make the smaller of two nodes swell.
-    const visible = withoutKinds(graph, hiddenKinds);
+    const afterKinds = withoutKinds(graph, hiddenKinds);
+    // And the offerings the reader has put down, in the same place and before the
+    // same things. Two cuts rather than one because they answer to two controls and
+    // remove on two different grounds — a kind is gone entirely, a product is gone
+    // for what the catalogue says about it — and the empty canvas has to be able to
+    // name which of them emptied it.
+    const visible = withoutProducts(afterKinds, hiddenStates, hiddenApprovals);
     const drilledGraph = here ? drillInto(visible, here, hops) : null;
     if (here && !drilledGraph) {
       // The node under the reader's feet was undeployed while they stood on it. Step
@@ -4425,6 +4648,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // From the payload, so a kind that has just been switched off still has the box
     // that switches it back on.
     renderKindFilter(graph, spoken);
+    renderFacetFilters(graph);
     paintDrillChip();
     // A selection that the filter removed is no longer selected: highlighting a node
     // that is not on screen would leave the panel describing something invisible.
@@ -4445,7 +4669,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     at = new Map(placed.map((n) => [n.id, n]));
     surface.innerHTML = shown.nodes.length
       ? svg
-      : `<p class="mesh-empty-filter">${emptyBecause(term, band, visible)}</p>`;
+      : `<p class="mesh-empty-filter">${emptyBecause(term, band, visible, afterKinds)}</p>`;
     index();
     nameTheNodes();
     // The rendered SVG carries none of the hover highlight, so the record of what is
@@ -5126,6 +5350,21 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     scope.hiddenKinds = kindsPresent(graph)
       .filter((kind) => hiddenKinds.has(kind))
       .map((kind) => typeIn(kind, spoken)?.name || KIND[kind].label.split(" — ")[0]);
+    // And the offerings put down, which narrow a picture exactly as invisibly: a
+    // catalogue drawn with half its products missing looks like a catalogue with
+    // half as many products. Named in the words on the control rather than the
+    // store's codes — the file is read by somebody who was not sitting here, and
+    // "withdrawn" is a column value where "Withdrawn — retired" is a sentence.
+    //
+    // Filtered through what the landscape actually holds, like the kinds above, so
+    // a stale switch for a state no product on this picture carries cannot put a
+    // clause in the stamp about something that was never drawn.
+    scope.hiddenStates = statesPresent(graph)
+      .filter((state) => hiddenStates.has(state))
+      .map((state) => labelForState(state).split(" — ")[0]);
+    scope.hiddenApprovals = approvalsPresent(graph)
+      .filter((bucket) => hiddenApprovals.has(bucket))
+      .map((bucket) => labelForApproval(bucket));
     return {
       // The server's reading, never this browser's clock: one dates the facts, the
       // other dates the save, and an export exists to be read later.
@@ -5453,6 +5692,12 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // exactly the picture it was looking at.
     hiddenKinds.clear();
     for (const kind of v.hiddenKinds || []) hiddenKinds.add(kind);
+    // The product facets, on the same terms and for the same reason: a view named
+    // for the active offerings has to reopen on the active offerings.
+    hiddenStates.clear();
+    for (const state of v.hiddenStates || []) hiddenStates.add(state);
+    hiddenApprovals.clear();
+    for (const bucket of v.hiddenApprovals || []) hiddenApprovals.add(bucket);
     // A view saved before notations existed carries none, and the derived drawing is
     // what it was looking at.
     notationPick.value = notationOf(v.notation).id === v.notation ? v.notation : "atlas";
@@ -5547,6 +5792,8 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       instances: weighted()?.key === "instances",
       drafts: draftsToggle.checked,
       hiddenKinds,
+      hiddenStates,
+      hiddenApprovals,
       trail,
       frameView,
       world,

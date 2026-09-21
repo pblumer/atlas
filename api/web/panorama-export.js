@@ -86,7 +86,19 @@ export function scopeText(scope = {}) {
   // rather than replacing one of them: a reader has to be able to see both that the
   // picture was drilled and that a kind is missing from what the drilldown found.
   const off = Array.isArray(scope.hiddenKinds) ? scope.hiddenKinds.filter(Boolean) : [];
-  const without = off.length ? `, without ${listOf(off)}` : "";
+  // The product facets narrow the same way and leave the same absence of a trace,
+  // so they join the same clause rather than starting a second one: a reader
+  // needs one sentence saying what this picture is, not three competing ones.
+  //
+  // Joined to the types by the same "without", because from the file's point of
+  // view they did the same thing — something that was in the landscape is not in
+  // this picture. Which control did it is the next line's business.
+  const facets = [
+    ...(Array.isArray(scope.hiddenStates) ? scope.hiddenStates.filter(Boolean) : []),
+    ...(Array.isArray(scope.hiddenApprovals) ? scope.hiddenApprovals.filter(Boolean) : []),
+  ];
+  const gone = [...off, ...facets];
+  const without = gone.length ? `, without ${listOf(gone)}` : "";
   if (scope.kind === "filter" && scope.term) return `filtered by “${scope.term}”${without}`;
   if (scope.kind === "drill") {
     const hops = scope.hops === "all" || scope.hops === Infinity ? "any" : scope.hops;
@@ -98,7 +110,7 @@ export function scopeText(scope = {}) {
       ? ` (via ${scope.via.join(" › ")})` : "";
     return `drilled into ${scope.name || "one node"}${via}, within ${hops} hop(s)${without}`;
   }
-  return off.length ? `the starmap${without}` : "the whole starmap";
+  return gone.length ? `the starmap${without}` : "the whole starmap";
 }
 
 // listOf joins names the way a sentence does. Two joined by "and" rather than by a
@@ -210,6 +222,22 @@ export function stampLines(meta = {}) {
   if (off.length) {
     lines.push({ text: `Element types switched off: ${off.join(", ")}. Nothing of those ` +
       `kinds is drawn, and nothing that was only reachable through one.` });
+  }
+  // And which offerings were put down, said separately from the types above because
+  // what it costs the reader is different. Switching a type off removes a whole
+  // layer and the picture looks like it. Filtering products by a catalogue facet
+  // leaves the catalogues, the processes and the shape of the thing intact and
+  // removes some of the tiles — which is the narrowing a reader is least likely to
+  // notice and most likely to draw a conclusion from. "This catalogue offers four
+  // things" is exactly the sentence this line exists to stop somebody writing.
+  const facetOff = [
+    ...(Array.isArray(meta.scope?.hiddenStates) ? meta.scope.hiddenStates.filter(Boolean) : []),
+    ...(Array.isArray(meta.scope?.hiddenApprovals) ? meta.scope.hiddenApprovals.filter(Boolean) : []),
+  ];
+  if (facetOff.length) {
+    lines.push({ text: `Products switched off: ${facetOff.join(", ")}. Every other ` +
+      `element type is drawn in full, so a catalogue here may offer more than the ` +
+      `products shown under it.` });
   }
   // A maintenance window is rings on three nodes and nothing else. On screen the
   // panel beside the canvas says what they are; in a file there is no panel, and a

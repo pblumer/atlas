@@ -397,6 +397,28 @@ type Product struct {
 	// reached, so the binding names an id and never a version.
 	ProvisionProcess   string
 	DeprovisionProcess string
+	// State is the item's catalogue state as the store spells it — "draft",
+	// "active", "withdrawn" (see [catalog.State]) — and it is carried rather than
+	// reduced to a flag.
+	//
+	// Three values and not a boolean, because the two that are not active are not
+	// the same thing and a reader narrowing by this is usually asking about
+	// precisely that difference: a draft is an item somebody is still writing, a
+	// withdrawn one is an item that was real and was retired. Collapsed into
+	// "not active" they become one heap, and "what did we retire" — the question
+	// that sends somebody to this picture in the first place — can no longer be
+	// asked at all.
+	State string
+	// Approval is the item's approval rule kind, as [catalog.ApprovalKind] spells
+	// it: "none", "fixed", "role", "superior", or the name a registered process is
+	// known by. Empty from a store that has no rule on the item.
+	//
+	// The kind and not a "needs approval" boolean, for the reason above and one
+	// more: the set is open — a fifth kind is modelled and registered under a name
+	// rather than built in — so the fact is a string this package must not try to
+	// enumerate. Whether that adds up to "requires approval" is a reading, and a
+	// reading belongs where the picture is drawn.
+	Approval string
 }
 
 // Landscape is everything the mesh derives from, already filtered for this caller.
@@ -536,6 +558,21 @@ type Node struct {
 	// application, and one field holding two kinds of container is how a reader ends
 	// up asking which one they have.
 	Catalog string `json:"catalog,omitempty"`
+	// ProductState and ApprovalKind are a product node's two catalogue facets, and
+	// are empty on every other kind — see [Product.State] and [Product.Approval]
+	// for why each carries the store's own spelling rather than a flag.
+	//
+	// ProductState is deliberately *not* the State field further down. That one is
+	// the observation state behind Severity — whether this thing is healthy — and
+	// these two are what the catalogue says the offering is. A withdrawn product
+	// whose provisioning process is green is an ordinary state of affairs, and one
+	// field answering both questions is how a reader ends up reading the wrong one.
+	//
+	// They reach only products this caller may see: a product they may not is drawn
+	// as a restricted placeholder of another kind entirely and never gets here, so
+	// no facet of a hidden offering leaves the server.
+	ProductState string `json:"productState,omitempty"`
+	ApprovalKind string `json:"approvalKind,omitempty"`
 	// ProcessID and Version identify a process node well enough to navigate to the
 	// Operations view (L2) without a second lookup. On a definition node they are the
 	// identity itself rather than a navigation aid (ADR-0401 §2).
@@ -1159,6 +1196,11 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 			node := Node{
 				ID: productNodeID(id), Kind: KindProduct, Name: it.Name,
 				Provenance: ProvenanceDerived,
+				// What the catalogue says this offering is. Only ever reached for a
+				// product this caller may view — the branch above sends the others to a
+				// restricted placeholder — so this is not a second place to get the
+				// visibility rule right.
+				ProductState: it.State, ApprovalKind: it.Approval,
 			}
 			if home, ok := foldInto[id]; ok {
 				node.Catalog = catalogNodeID(home)

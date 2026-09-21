@@ -508,3 +508,103 @@ func TestABoundProcessCarriesItsTroubleOntoTheProductMap(t *testing.T) {
 		t.Errorf("severity = %q, want the class degraded maps to", node.Severity)
 	}
 }
+
+// TestAProductCarriesWhatTheCatalogueSaysItIs is the two facets reaching the
+// picture at all (#1067).
+//
+// They are carried rather than reduced here, and the test says so on purpose: the
+// derivation's job is to put the catalogue's own words on the node, and deciding
+// what counts as "requires approval" is a reading made where the picture is drawn.
+// A derivation that answered that question would bake one reading into the payload
+// and leave a second reader no way to ask a different one.
+func TestAProductCarriesWhatTheCatalogueSaysItIs(t *testing.T) {
+	phone := prod("phone", "Apple iPhone", "cat_1", "", "")
+	phone.State, phone.Approval = "active", "superior"
+	pager := prod("pager", "Pager", "cat_1", "", "")
+	pager.State, pager.Approval = "withdrawn", "none"
+	// A rule kind nothing in this package knows, which is the ordinary state of an
+	// installation that registered its own approval process.
+	board := prod("board", "Server rack", "cat_1", "", "")
+	board.State, board.Approval = "draft", "four-eyes-board"
+	land := Landscape{
+		Catalogs: []ProductCatalog{cat("cat_1", "Mobile devices", "phone", "pager", "board")},
+		Products: []Product{phone, pager, board},
+	}
+
+	g := DeriveGraph(land, Options{Subject: SubjectProducts})
+
+	for _, want := range []struct{ id, state, approval string }{
+		{"product:phone", "active", "superior"},
+		{"product:pager", "withdrawn", "none"},
+		{"product:board", "draft", "four-eyes-board"},
+	} {
+		n := nodeByID(t, g, want.id)
+		if n.ProductState != want.state || n.ApprovalKind != want.approval {
+			t.Errorf("%s carries state %q approval %q; want %q and %q",
+				want.id, n.ProductState, n.ApprovalKind, want.state, want.approval)
+		}
+		// The facets must not have been mistaken for the observation state, which is
+		// the field they sit next to and the one collision that would be silent: a
+		// withdrawn product reading as a health finding would colour the picture.
+		if n.State != StateUnbound || n.Severity != SeverityUnknown {
+			t.Errorf("%s reports an observation it cannot have: state %q severity %q",
+				want.id, n.State, n.Severity)
+		}
+	}
+}
+
+// TestNothingButAProductCarriesTheCatalogueFacets is the other half, and it is the
+// half a filter depends on.
+//
+// "Carries no approval rule" is how a product without one reads, and it is equally
+// how a catalogue reads if anything ever sets the field on one. A picture narrowed
+// to "products that need approval" would then drop the catalogue offering them,
+// which is a narrowing nobody asked for and no control on screen would explain.
+func TestNothingButAProductCarriesTheCatalogueFacets(t *testing.T) {
+	phone := prod("phone", "Apple iPhone", "cat_1", "provision-phone", "")
+	phone.State, phone.Approval = "active", "superior"
+	land := Landscape{
+		Processes: []Process{{Key: 1, ProcessID: "provision-phone", Version: 1, Name: "Provision a phone", CanView: true}},
+		Catalogs:  []ProductCatalog{cat("cat_1", "Mobile devices", "phone")},
+		Products:  []Product{phone},
+	}
+
+	g := DeriveGraph(land, Options{Subject: SubjectProducts})
+
+	for _, n := range g.Nodes {
+		if n.Kind == KindProduct {
+			continue
+		}
+		if n.ProductState != "" || n.ApprovalKind != "" {
+			t.Errorf("a %s node carries a catalogue facet: state %q approval %q — %#v",
+				n.Kind, n.ProductState, n.ApprovalKind, n)
+		}
+	}
+}
+
+// TestAProductTheCallerMayNotSeeLeaksNoFacet keeps the two facts behind the same
+// wall the product's name is behind.
+//
+// A restricted product is drawn as a placeholder of another kind entirely, so this
+// is not a second place the visibility rule has to be got right — it is the
+// assertion that it stays that way. What a catalogue somebody may not read charges
+// for, and whether it needs their manager's signature, is as much that catalogue's
+// business as what it is called.
+func TestAProductTheCallerMayNotSeeLeaksNoFacet(t *testing.T) {
+	hidden := prod("secret", "Executive laptop", "cat_2", "", "")
+	hidden.CanView = false
+	hidden.State, hidden.Approval = "active", "fixed"
+	open := cat("cat_1", "Mobile devices", "secret")
+	land := Landscape{Catalogs: []ProductCatalog{open}, Products: []Product{hidden}}
+
+	g := DeriveGraph(land, Options{Subject: SubjectProducts})
+
+	for _, n := range g.Nodes {
+		if n.ProductState != "" || n.ApprovalKind != "" {
+			t.Errorf("a facet of a product this caller may not see reached the payload: %#v", n)
+		}
+		if n.Name == "Executive laptop" {
+			t.Errorf("a restricted product was drawn by name: %#v", n)
+		}
+	}
+}
