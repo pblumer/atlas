@@ -175,8 +175,37 @@ compacted log no longer holds genesis at all (ADR-0131). So:
 ### 5. One pass computes membership; a query is a lookup. The cloud is an aggregation, not a clustering
 
 The whole-graph walk is a batch job, not a request. One pass over the CSR computes
-**connected components** by union-find, which for this topology *is* the instance-family
-decomposition. Queries are then lookups against that membership, not walks.
+**connected components** by union-find. Queries are then lookups against that membership,
+not walks.
+
+**A component is not an instance, and this section said it was (measured, W2).** The
+sentence above used to end "which for this topology *is* the instance-family
+decomposition". On engine-written state that holds for a nested shape and fails for a flat
+one:
+
+| shape | 64 instances → | components |
+|---|---|---|
+| start → subprocess(start → task) + interrupting boundary timer | 192 nodes, 128 edges | **64** — one per instance |
+| start → parallel gateway → two service tasks | 128 nodes, **0 edges** | **128** — two per instance |
+
+The cause is exact rather than statistical. A live element instance at the process
+instance's own scope carries `FlowScopeKey` pointing at the **process instance**, which is
+not an element instance and therefore not a node of this projection — so two parallel
+top-level branches have nothing joining them. Nesting and boundary attachment supply the
+join; a flat fork does not.
+
+So a component is the **reference-connected** group: what a walk from one node would reach.
+That is the grouping impact analysis asks for, and it is the right thing for this structure
+to compute. What it is *not* is the instance decomposition — and that one needs no
+union-find at all, because `ProcessInstanceKey` is a field on the element instance the
+store already hands over. The distinction is worth this much space because the wrong
+reading is the expensive one: an API named after instance families, answering
+reference-connectivity, would have had every caller believing it answered the cheaper
+question. `rungraph.Membership` is named `SameComponent`/`Members` for that reason.
+
+None of the arithmetic below changes. Components are still the only decomposition this data
+can carry, for the two reasons the next paragraphs give; what changed is what a component
+coincides with.
 
 The cloud is a **group-by along dimensions the nodes already carry** — definition,
 element, worker, incident state, time bucket — and not a community detection. An earlier
