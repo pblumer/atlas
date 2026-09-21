@@ -35,6 +35,33 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The run graph answers "what is this connected to" as a lookup, and the measurement renamed the question.** [ADR-0404](docs/adr/0404-the-whole-graph-can-be-walked.md) §5's projection gains the half it was missing: one union-find pass over the CSR, and a `rungraph.Membership` over the labels it produces. `SameComponent` — the query an impact analysis asks a million times — is a binary search and one array read, touching no part of the graph. Enumeration (`Members`, `Size`, `Count`) is one pass over the label array and says so in its own documentation, because the two costs are different and a caller has to know which it is paying.
+
+  It is a wrapper rather than an index, and that is a budget decision. §2 sizes *one*
+  union-find array — 420 MB at 110 million nodes — and the pass already flattens it so a
+  lookup is a single read. Grouping members by component for O(1) enumeration would double
+  that, to make the rare query faster on the rare graph: §9 makes the narrow scope the entry
+  and the whole graph the exception, so enumerating happens on thousands of nodes, where a
+  scan is free.
+
+  **The acceptance measurement disproved the record's own sentence, which is the second time
+  a W-item has done that.** §5 said connected components "for this topology *is* the
+  instance-family decomposition". Measured on engine-written state: a nested shape gives one
+  component per instance; a flat one with two parallel top-level branches gives **two**, and
+  sixty-four instances become a hundred and twenty-eight components with zero edges between
+  the branches. The cause is exact — a live element instance at the process instance's own
+  scope points at the *process instance*, which is not an element instance and therefore not
+  a node, so nothing joins two top-level siblings.
+
+  So a component is the **reference-connected** group, which is what impact analysis wants,
+  and it is not the instance — a grouping that needs no union-find at all, since
+  `ProcessInstanceKey` is a field on the value the store already hands over. The API is named
+  `SameComponent` and not `SameFamily` for exactly that reason: the wrong name would have had
+  every caller believe it answered the cheaper question. §5 now carries the table, the cause
+  and the distinction, and W1's own comment claiming the same thing is corrected.
+
+### Added
+
 - **Personal data can be erased: a declared variable is enciphered under its data subject's own key, and destroying that key makes every copy unreadable.**
   A process names the variables that hold personal data and the one variable holding the id
   of the person they are about — `atlas:personal="vorname,nachname"` and
