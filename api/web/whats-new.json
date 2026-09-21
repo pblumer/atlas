@@ -2,6 +2,42 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "renaming-a-catalogue-or-changing-the-languages-it-is-offered",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Renaming a catalogue works again",
+        "de": "Einen Katalog umbenennen geht wieder"
+      },
+      "summary": {
+        "en": "Renaming a catalogue, or changing the languages it is offered in, failed with “list is not a function”. Both go through the same form on the catalogue screen, and neither reached the server at all — the save threw before it got there. Behind it: the file has a small helper called `list` that splits a comma-separated field, and further up in the same function a page element had been given the same name, which hid the helper. The save then called an element instead of a function. What made it hard to place is that the screen catches what it throws and shows the message, so a page that could not run reported itself as if the server had refused the rename. It is fixed, and three checks now drive the real screen: what a rename sends, that the languages arrive as a proper trimmed list, and that a save which works says nothing went wrong.",
+        "de": "Einen Katalog umbenennen oder seine Sprachen ändern scheiterte mit „list is not a function“. Beides läuft über dasselbe Formular im Katalogbildschirm, und keines erreichte den Server überhaupt — das Speichern brach vorher ab. Dahinter steckte: Die Datei hat eine kleine Hilfsfunktion namens `list`, die ein kommagetrenntes Feld zerlegt, und weiter oben in derselben Funktion trug ein Seitenelement denselben Namen und verdeckte sie. Das Speichern rief damit ein Element statt einer Funktion auf. Schwer einzuordnen war es, weil der Bildschirm den Fehler abfängt und dessen Meldung anzeigt — eine Seite, die nicht laufen konnte, meldete sich also so, als hätte der Server das Umbenennen abgelehnt. Behoben, und drei Prüfungen fahren jetzt den echten Bildschirm: was ein Umbenennen sendet, dass die Sprachen als saubere, beschnittene Liste ankommen, und dass ein gelungenes Speichern nichts meldet."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Katalog",
+        "Konsole"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Catalog and pick a catalogue.",
+          "Change its name in the top form, or edit the comma-separated languages beside it.",
+          "Press Save — it saves, where before it showed “list is not a function”.",
+          "Spaces around a language code are trimmed: “de, fr ,it” is stored as three codes."
+        ],
+        "de": [
+          "„Catalog“ öffnen und einen Katalog wählen.",
+          "Im oberen Formular den Namen ändern oder die kommagetrennten Sprachen daneben bearbeiten.",
+          "„Save“ drücken — es speichert, wo vorher „list is not a function“ erschien.",
+          "Leerzeichen um ein Sprachkürzel werden entfernt: „de, fr ,it“ wird als drei Kürzel gespeichert."
+        ]
+      }
+    },
+    {
       "id": "the-catalogue-screen-now-says-what-the-portal-is-actually-of",
       "version": "Unreleased",
       "date": null,
@@ -379,49 +415,6 @@
           "de": "Entscheidungen öffnen"
         },
         "route": "#/console/decisions"
-      }
-    },
-    {
-      "id": "an-incompatibility-can-be-declared-on-the-screen-that-declar",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Declare which two products may never be held together",
-        "de": "Festlegen, welche zwei Produkte nie zusammen bezogen werden dürfen"
-      },
-      "summary": {
-        "en": "A product may exclude another — the clerk who may create a supplier must not also approve payments to it. The record has carried that since the decision was made, publishing freezes it into a release in both directions, and an order that would produce the combination is refused rather than reported afterwards. The Console knew three edge kinds of four, so the rule was enforced the whole time and could be declared only over the API: one that already existed appeared in no table and could not be removed there. It is now the third question the relations section asks, beside structure and precedence. One incompatibility is one row however it was stored, removing it removes both directions, and adding the same fact backwards is refused instead of stored twice.",
-        "de": "Ein Produkt kann ein anderes ausschliessen — wer Kreditoren erfassen darf, soll nicht auch Zahlungen an sie freigeben. Der Datensatz trägt das seit der entsprechenden Entscheidung, die Veröffentlichung friert es in beiden Richtungen in ein Release ein, und eine Bestellung, die die Kombination erzeugen würde, wird abgewiesen statt im Nachhinein gemeldet. Die Konsole kannte drei der vier Kantenarten: Die Regel galt also durchgehend und liess sich nur über die Schnittstelle festlegen; eine bestehende erschien in keiner Tabelle und war dort nicht entfernbar. Sie ist jetzt die dritte Frage im Abschnitt zu den Beziehungen, neben Struktur und Reihenfolge. Eine Unverträglichkeit ist eine Zeile, gleich wie sie gespeichert wurde; das Entfernen nimmt beide Richtungen, und dasselbe rückwärts nochmals einzutragen wird abgewiesen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Catalogue",
-        "Governance"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Console → Catalogues and pick a catalogue. The relations section now shows three tables: structure, precedence, incompatibility.",
-          "Use the pairwise form below them: pick a product, choose \"must not be held with\", pick the other. It is pairwise because it belongs to neither product.",
-          "The two directions are one fact. The table draws one row, and removing it clears both — so you never have to remember which way round it was entered.",
-          "Publish the catalogue. From then on an order that would give one person both is refused when it is placed, with the pair named."
-        ],
-        "de": [
-          "Console → Catalogues öffnen und einen Katalog wählen. Der Abschnitt zu den Beziehungen zeigt jetzt drei Tabellen: Struktur, Reihenfolge, Unverträglichkeit.",
-          "Das paarweise Formular darunter verwenden: ein Produkt wählen, \"must not be held with\" auswählen, das andere wählen. Die Aussage ist paarweise, weil sie zu keinem der beiden Produkte allein gehört.",
-          "Beide Richtungen sind eine Aussage. Die Tabelle zeigt eine Zeile, und das Entfernen löscht beide — man muss sich also nicht merken, in welcher Richtung erfasst wurde.",
-          "Katalog veröffentlichen. Danach wird eine Bestellung, die einer Person beides gäbe, bei der Aufgabe abgewiesen, unter Nennung des Paares."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Catalogues",
-          "de": "Kataloge öffnen"
-        },
-        "route": "#/catalog"
       }
     }
   ]

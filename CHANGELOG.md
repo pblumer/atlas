@@ -12,6 +12,27 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Renaming a catalogue, or changing the languages it is offered in, failed with
+  "list is not a function".** Both go through one form on the catalogue detail
+  screen, and neither reached the server: the save threw before it got there.
+
+  `catalog-admin.js` has a `list` helper that splits a comma-separated field into
+  trimmed entries, and the save calls it for the languages. A hundred lines above,
+  inside the same function, a DOM element had been bound as
+  `const list = view.querySelector(".product-list")` — which shadowed the helper for
+  the whole of it. The save called an HTML element, and the submit handler caught the
+  `TypeError` and showed its message as a toast.
+
+  That last part is why it was hard to place. A page that cannot run reported itself
+  as a refusal, so the message read like the server rejecting the rename rather than
+  like the screen being broken. The element is named `listEl` now.
+
+  Three guards drive the real detail view: what a rename sends, that the languages
+  arrive as a trimmed list, and that a working save reports nothing. Each fails when
+  the shadowing is put back.
+
 ### Added
 
 - **The catalogue screen now says what the portal is actually offering.** A catalogue
