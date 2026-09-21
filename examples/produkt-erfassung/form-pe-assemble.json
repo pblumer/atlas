@@ -1,0 +1,28 @@
+{
+  "type": "default",
+  "id": "pe-assemble",
+  "components": [
+    {
+      "type": "text",
+      "text": "# Zusammenstellen\n\nWoraus besteht dieses Produkt? Die Listen zeigen alles, was der Server als Produkt kennt — auch Entwürfe, denn ein Bündel entsteht oft, bevor seine Teile freigegeben sind."
+    },
+    {
+      "key": "integraleTeile",
+      "type": "taglist",
+      "label": "Integral enthalten",
+      "description": "Wird immer mitbestellt und ist nicht abwählbar. Im Katalog eine composition-Kante.",
+      "valuesExpression": "=for p in produkte return {value: p.id, label: if p.texts.de != null then p.texts.de else p.id}"
+    },
+    {
+      "key": "optionaleTeile",
+      "type": "taglist",
+      "label": "Optional dazu",
+      "description": "Einzeln bestellbar und darf zu mehreren Ganzen gehören. Im Katalog eine aggregation-Kante.",
+      "valuesExpression": "=for p in produkte return {value: p.id, label: if p.texts.de != null then p.texts.de else p.id}"
+    },
+    {
+      "type": "text",
+      "text": "Beides darf leer bleiben — ein Produkt ohne Teile ist der Normalfall, kein unfertiger Zustand."
+    }
+  ]
+}

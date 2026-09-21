@@ -1,0 +1,405 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Produkt erfassen — vom Katalog bis zur Publikation
+
+  Ein Produkt anzulegen heisst heute: die Konsole öffnen, ein Formular mit
+  zwanzig Feldern ausfüllen, speichern, und darauf vertrauen, dass jemand
+  nachschaut. Dieser Prozess macht dasselbe als Ablauf mit Aufgaben — und
+  gewinnt damit das, was ein Formular nicht hat: eine Prüfung durch eine zweite
+  Person, bevor das Produkt bestellbar wird, und eine Spur, wer was wann
+  entschieden hat.
+
+  Er schreibt ausschliesslich über Atlas' eigene HTTP-API zurück, mit dem
+  rest-Connector und der Verbindung "atlas" — derselbe Weg, den der
+  mitgelieferte Auftragserfüllungsprozess geht. Siehe README.md: ohne diese
+  Verbindung parken die Service-Tasks.
+
+  Ablauf
+
+    Start
+     -> Kataloge holen                (GET  /api/v1/catalogs)
+     -> Katalogfrage                  (Formular pe-katalog)
+     -> neu?  ja: Katalog anlegen     (POST /api/v1/catalogs)
+              -> Erscheinungsbild     (Formular pe-theme, Gruppe "administration")
+              -> Theme setzen         (PUT  /api/v1/catalogs/{id}/theme)
+        nein: gewählten Katalog übernehmen
+     -> Produktdaten                  (Formular pe-produkt)
+     -> Produkt als Entwurf sichern   (POST /api/v1/catalog-products, state=draft)
+     -> Produkte holen                (GET  /api/v1/catalog-products)
+     -> Zusammenstellen               (Formular pe-assemble)
+     -> Katalog frisch lesen          (GET  /api/v1/catalogs/{id})
+     -> Katalog schreiben             (PATCH /api/v1/catalogs/{id})
+     -> Preise                        (Formular pe-preise)
+     -> Entwurf mit Preis sichern     (POST /api/v1/catalog-products, state=draft)
+     -> Verifizieren                  (Formular pe-pruefen)
+     -> freigegeben? nein: zurück zu Produktdaten
+                     ja:   aktiv setzen (POST /api/v1/catalog-products, state=active)
+     -> Publizieren?                  (Formular pe-publizieren)
+     -> ja: Katalog publizieren       (POST /api/v1/catalogs/{id}/releases)
+
+  Drei Dinge daran sind Entscheidungen und nicht Folgen.
+
+  ERSTENS: Das Produkt wird gesichert, BEVOR es zusammengestellt wird — nicht
+  danach, wie man es aufschreiben würde. Die Zusammenstellung sind Kanten am
+  Katalog, die auf die Produkt-ID zeigen, und der Katalog weist eine ID zurück,
+  zu der kein Produkt existiert (api/catalog/service.go: "eine ID, die wie ein
+  Produkt aussieht"). Zusammenstellen vor dem Sichern wäre also ein Schritt, der
+  immer scheitert. Der Zustand "draft" trägt dabei genau das, was er soll: das
+  Produkt ist da, aber nicht bestellbar, bis es geprüft ist.
+
+  ZWEITENS: Vor dem Schreiben am Katalog wird der Katalog frisch gelesen. Ein
+  PATCH ersetzt Items und Edges als Ganzes, und zwischen der Maske und dem
+  Speichern liegen Minuten, in denen jemand anderes ein Produkt hinzugefügt
+  haben kann. Ohne den frischen Lesevorgang und die mitgeführte revision wäre
+  dieser Prozess das, wovor der Kommentar am Feld Catalog.Revision warnt: das
+  lautlose Verschwinden fremder Arbeit. Die revision macht daraus eine Absage,
+  die man sieht.
+
+  DRITTENS: Das Erscheinungsbild ist eine eigene Aufgabe für eine andere Gruppe.
+  Ein Katalog-Theme setzt in Atlas die Administration und nicht die
+  Katalogpflege (ADR-0316, Entscheidung 12) — der Endpunkt antwortet sonst mit
+  403. Der Prozess umgeht das nicht, er bildet es ab.
+
+  Das Logo ist bewusst NICHT hier. Es ist eine Datei, und ein Task-Formular
+  trägt heute nur Text; siehe README.md.
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             id="defs_produkt_erfassung" targetNamespace="http://atlas/examples">
+  <bpmn:process id="proc_produkt_erfassung" name="Produkt erfassen" isExecutable="true">
+
+    <bpmn:startEvent id="start" name="Erfassung begonnen">
+      <bpmn:outgoing>f_start_kataloge</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="f_start_kataloge" sourceRef="start" targetRef="kataloge"/>
+
+    <bpmn:serviceTask id="kataloge" name="Kataloge holen">
+      <bpmn:documentation>GET /api/v1/catalogs. Füllt die Auswahlliste der nächsten Maske.
+
+Vor der Frage und nicht in ihr: ein Startformular kann nichts laden, und eine Liste, in die man die Katalog-ID von Hand tippt, ist eine Liste, in der man sich vertippt.
+
+Schreibt: kataloge.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest"/>
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas"/>
+          <zeebe:header key="method" value="GET"/>
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;/api/v1/catalogs&#34;" target="path"/>
+          <zeebe:output source="=body" target="kataloge"/>
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_start_kataloge</bpmn:incoming>
+      <bpmn:outgoing>f_kataloge_wahl</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_kataloge_wahl" sourceRef="kataloge" targetRef="katalogwahl"/>
+
+    <bpmn:userTask id="katalogwahl" name="Katalog wählen oder anlegen">
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="katalogpflege"/>
+        <zeebe:formDefinition formId="pe-katalog"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_kataloge_wahl</bpmn:incoming>
+      <bpmn:outgoing>f_wahl_gw</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="f_wahl_gw" sourceRef="katalogwahl" targetRef="gw_katalog"/>
+
+    <bpmn:exclusiveGateway id="gw_katalog" name="Neuer Katalog?" default="f_katalog_bestehend">
+      <bpmn:incoming>f_wahl_gw</bpmn:incoming>
+      <bpmn:outgoing>f_katalog_neu</bpmn:outgoing>
+      <bpmn:outgoing>f_katalog_bestehend</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="f_katalog_neu" name="neu" sourceRef="gw_katalog" targetRef="katalog_anlegen">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= katalogart = "neu"</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_katalog_bestehend" name="bestehend" sourceRef="gw_katalog" targetRef="katalog_uebernehmen"/>
+
+    <bpmn:serviceTask id="katalog_anlegen" name="Katalog anlegen">
+      <bpmn:documentation>POST /api/v1/catalogs. Legt den Katalog mit Name, Sprachen und Rang an.
+
+Schreibt: katalogId.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest"/>
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas"/>
+          <zeebe:header key="method" value="POST"/>
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;/api/v1/catalogs&#34;" target="path"/>
+          <zeebe:input source="={rank: rang, languages: split(sprachen, &#34;,&#34;), texts: {de: katalogname}}" target="body"/>
+          <zeebe:output source="=body.id" target="katalogId"/>
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_katalog_neu</bpmn:incoming>
+      <bpmn:outgoing>f_anlegen_theme</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_anlegen_theme" sourceRef="katalog_anlegen" targetRef="theme_erfassen"/>
+
+    <bpmn:userTask id="theme_erfassen" name="Erscheinungsbild festlegen">
+      <bpmn:documentation>Eine eigene Aufgabe für eine andere Gruppe, weil das Theme in Atlas der Administration gehört und nicht der Katalogpflege (ADR-0316, Entscheidung 12). Der Prozess bildet die Trennung ab, statt sie zu umgehen.
+
+Das Logo gehört hierher und ist trotzdem nicht hier: es ist eine Datei, und ein Task-Formular trägt heute nur Text. Das Formular sagt, wo es gesetzt wird.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="administration"/>
+        <zeebe:formDefinition formId="pe-theme"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_anlegen_theme</bpmn:incoming>
+      <bpmn:outgoing>f_theme_setzen</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="f_theme_setzen" sourceRef="theme_erfassen" targetRef="theme_setzen"/>
+
+    <bpmn:serviceTask id="theme_setzen" name="Theme setzen">
+      <bpmn:documentation>PUT /api/v1/catalogs/{id}/theme.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest"/>
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas"/>
+          <zeebe:header key="method" value="PUT"/>
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;/api/v1/catalogs/&#34; + katalogId + &#34;/theme&#34;" target="path"/>
+          <zeebe:input source="={accent: akzentfarbe, typeface: schriftart}" target="body"/>
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_theme_setzen</bpmn:incoming>
+      <bpmn:outgoing>f_theme_join</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_theme_join" sourceRef="theme_setzen" targetRef="katalog_steht"/>
+
+    <bpmn:scriptTask id="katalog_uebernehmen" name="Gewählten Katalog übernehmen">
+      <bpmn:extensionElements>
+        <zeebe:script resultVariable="katalogId" expression="= gewaehlterKatalog"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_katalog_bestehend</bpmn:incoming>
+      <bpmn:outgoing>f_uebernehmen_join</bpmn:outgoing>
+    </bpmn:scriptTask>
+    <bpmn:sequenceFlow id="f_uebernehmen_join" sourceRef="katalog_uebernehmen" targetRef="katalog_steht"/>
+
+    <bpmn:exclusiveGateway id="katalog_steht" name="Katalog steht">
+      <bpmn:incoming>f_theme_join</bpmn:incoming>
+      <bpmn:incoming>f_uebernehmen_join</bpmn:incoming>
+      <bpmn:outgoing>f_steht_produkt</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="f_steht_produkt" sourceRef="katalog_steht" targetRef="produktdaten"/>
+
+    <bpmn:userTask id="produktdaten" name="Produktdaten erfassen">
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="katalogpflege"/>
+        <zeebe:formDefinition formId="pe-produkt"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_steht_produkt</bpmn:incoming>
+      <bpmn:incoming>f_zurueck_produkt</bpmn:incoming>
+      <bpmn:outgoing>f_produkt_entwurf</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="f_produkt_entwurf" sourceRef="produktdaten" targetRef="entwurf_sichern"/>
+
+    <bpmn:serviceTask id="entwurf_sichern" name="Produkt als Entwurf sichern">
+      <bpmn:documentation>POST /api/v1/catalog-products mit state=draft.
+
+Vor dem Zusammenstellen und nicht danach: die Zusammenstellung sind Kanten am Katalog, die auf diese Produkt-ID zeigen, und der Katalog weist eine ID zurück, zu der kein Produkt existiert. "draft" trägt dabei genau, was es soll — das Produkt ist da und nicht bestellbar.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest"/>
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas"/>
+          <zeebe:header key="method" value="POST"/>
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;/api/v1/catalog-products&#34;" target="path"/>
+          <zeebe:input source="={id: produktId, homeCatalog: katalogId, state: &#34;draft&#34;, texts: {de: nameDe, fr: nameFr}, descriptions: {de: beschreibungDe, fr: beschreibungFr}, category: kategorie, productGroup: produktgruppe, keywords: split(suchbegriffe, &#34;,&#34;), approval: {kind: genehmigungsart, ref: genehmigungsref}, provisionProcess: provisionProzess, deprovisionProcess: deprovisionProzess, multipleAllowed: mehrfach}" target="body"/>
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_produkt_entwurf</bpmn:incoming>
+      <bpmn:outgoing>f_entwurf_produkte</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_entwurf_produkte" sourceRef="entwurf_sichern" targetRef="produkte"/>
+
+    <bpmn:serviceTask id="produkte" name="Bestehende Produkte holen">
+      <bpmn:documentation>GET /api/v1/catalog-products. Füllt die beiden Listen der Zusammenstellung.
+
+Schreibt: produkte.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest"/>
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas"/>
+          <zeebe:header key="method" value="GET"/>
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;/api/v1/catalog-products&#34;" target="path"/>
+          <zeebe:output source="=body" target="produkte"/>
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_entwurf_produkte</bpmn:incoming>
+      <bpmn:outgoing>f_produkte_assemble</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_produkte_assemble" sourceRef="produkte" targetRef="assemble"/>
+
+    <bpmn:userTask id="assemble" name="Produkt zusammenstellen">
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="katalogpflege"/>
+        <zeebe:formDefinition formId="pe-assemble"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_produkte_assemble</bpmn:incoming>
+      <bpmn:outgoing>f_assemble_lesen</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="f_assemble_lesen" sourceRef="assemble" targetRef="katalog_lesen"/>
+
+    <bpmn:serviceTask id="katalog_lesen" name="Katalog frisch lesen">
+      <bpmn:documentation>GET /api/v1/catalogs/{id}. Holt Items, Edges und vor allem die revision.
+
+Der Schritt sieht überflüssig aus und ist der wichtigste im Prozess. Ein PATCH ersetzt Items und Edges als Ganzes; zwischen der Maske und diesem Punkt liegen Minuten, in denen jemand anderes ein Produkt hinzugefügt haben kann. Ohne den frischen Stand schriebe der nächste Schritt einen veralteten zurück und das fremde Produkt wäre weg — ohne Fehler und ohne Spur. Mit der revision wird daraus eine Absage, die jemand sieht.
+
+Schreibt: katalogJetzt.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest"/>
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas"/>
+          <zeebe:header key="method" value="GET"/>
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;/api/v1/catalogs/&#34; + katalogId" target="path"/>
+          <zeebe:output source="=body" target="katalogJetzt"/>
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_assemble_lesen</bpmn:incoming>
+      <bpmn:outgoing>f_lesen_schreiben</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_lesen_schreiben" sourceRef="katalog_lesen" targetRef="katalog_schreiben"/>
+
+    <bpmn:serviceTask id="katalog_schreiben" name="Angebot und Zusammenstellung schreiben">
+      <bpmn:documentation>PATCH /api/v1/catalogs/{id}. Nimmt das Produkt ins Angebot und schreibt die Kanten.
+
+composition = integral (immer mitbestellt, nicht abwählbar), aggregation = optional (einzeln bestellbar). Das ist keine Übersetzung, sondern genau der Unterschied, den der Katalog ohnehin führt.
+
+Die revision aus dem vorigen Schritt reist mit: sie macht aus einem lautlosen Überschreiben eine Absage.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest"/>
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas"/>
+          <zeebe:header key="method" value="PATCH"/>
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;/api/v1/catalogs/&#34; + katalogId" target="path"/>
+          <zeebe:input source="={revision: katalogJetzt.revision, items: distinct values(append(katalogJetzt.items, produktId)), edges: append(katalogJetzt.edges, for t in integraleTeile return {from: produktId, to: t, kind: &#34;composition&#34;}, for t in optionaleTeile return {from: produktId, to: t, kind: &#34;aggregation&#34;})}" target="body"/>
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_lesen_schreiben</bpmn:incoming>
+      <bpmn:outgoing>f_schreiben_preise</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_schreiben_preise" sourceRef="katalog_schreiben" targetRef="preise"/>
+
+    <bpmn:userTask id="preise" name="Kommerzielle Sicht">
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="katalogpflege"/>
+        <zeebe:formDefinition formId="pe-preise"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_schreiben_preise</bpmn:incoming>
+      <bpmn:outgoing>f_preise_sichern</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="f_preise_sichern" sourceRef="preise" targetRef="preis_sichern"/>
+
+    <bpmn:serviceTask id="preis_sichern" name="Entwurf mit Preis sichern">
+      <bpmn:documentation>POST /api/v1/catalog-products, weiter als Entwurf. Ein Speichern ist ein vollständiges Ersetzen, deshalb reist alles Erfasste mit — ein Feld, das hier fehlt, wäre ein Feld, das dieser Schritt löscht.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest"/>
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas"/>
+          <zeebe:header key="method" value="POST"/>
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;/api/v1/catalog-products&#34;" target="path"/>
+          <zeebe:input source="={id: produktId, homeCatalog: katalogId, state: &#34;draft&#34;, texts: {de: nameDe, fr: nameFr}, descriptions: {de: beschreibungDe, fr: beschreibungFr}, category: kategorie, productGroup: produktgruppe, keywords: split(suchbegriffe, &#34;,&#34;), approval: {kind: genehmigungsart, ref: genehmigungsref}, provisionProcess: provisionProzess, deprovisionProcess: deprovisionProzess, multipleAllowed: mehrfach, price: preis, maxDays: maxTage}" target="body"/>
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_preise_sichern</bpmn:incoming>
+      <bpmn:outgoing>f_sichern_pruefen</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_sichern_pruefen" sourceRef="preis_sichern" targetRef="pruefen"/>
+
+    <bpmn:userTask id="pruefen" name="Produkt verifizieren">
+      <bpmn:documentation>Die Aufgabe, für die es diesen Prozess gibt. Alles Erfasste steht hier noch einmal und ist noch einmal änderbar; erst die Freigabe macht das Produkt bestellbar.
+
+Bewusst dieselbe Gruppe wie die Erfassung: wer ein Vier-Augen-Prinzip will, setzt hier eine andere Gruppe ein. Das ist eine Frage der Organisation und keine, die ein Beispiel für jemanden beantwortet.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="katalogpflege"/>
+        <zeebe:formDefinition formId="pe-pruefen"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_sichern_pruefen</bpmn:incoming>
+      <bpmn:outgoing>f_pruefen_gw</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="f_pruefen_gw" sourceRef="pruefen" targetRef="gw_pruefen"/>
+
+    <bpmn:exclusiveGateway id="gw_pruefen" name="Freigegeben?" default="f_zurueck_produkt">
+      <bpmn:incoming>f_pruefen_gw</bpmn:incoming>
+      <bpmn:outgoing>f_freigegeben</bpmn:outgoing>
+      <bpmn:outgoing>f_zurueck_produkt</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="f_freigegeben" name="ja" sourceRef="gw_pruefen" targetRef="aktiv_setzen">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= freigegeben = true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_zurueck_produkt" name="nein, überarbeiten" sourceRef="gw_pruefen" targetRef="produktdaten"/>
+
+    <bpmn:serviceTask id="aktiv_setzen" name="Produkt aktiv setzen">
+      <bpmn:documentation>POST /api/v1/catalog-products mit state=active. Erst jetzt kann eine Freigabe des Katalogs das Produkt tragen: publish weist jedes Item zurück, dessen Zustand nicht "active" ist.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest"/>
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas"/>
+          <zeebe:header key="method" value="POST"/>
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;/api/v1/catalog-products&#34;" target="path"/>
+          <zeebe:input source="={id: produktId, homeCatalog: katalogId, state: &#34;active&#34;, texts: {de: nameDe, fr: nameFr}, descriptions: {de: beschreibungDe, fr: beschreibungFr}, category: kategorie, productGroup: produktgruppe, keywords: split(suchbegriffe, &#34;,&#34;), approval: {kind: genehmigungsart, ref: genehmigungsref}, provisionProcess: provisionProzess, deprovisionProcess: deprovisionProzess, multipleAllowed: mehrfach, price: preis, maxDays: maxTage}" target="body"/>
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_freigegeben</bpmn:incoming>
+      <bpmn:outgoing>f_aktiv_publizieren</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_aktiv_publizieren" sourceRef="aktiv_setzen" targetRef="publizieren_fragen"/>
+
+    <bpmn:userTask id="publizieren_fragen" name="Katalog publizieren?">
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="katalogpflege"/>
+        <zeebe:formDefinition formId="pe-publizieren"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_aktiv_publizieren</bpmn:incoming>
+      <bpmn:outgoing>f_fragen_gw</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="f_fragen_gw" sourceRef="publizieren_fragen" targetRef="gw_publizieren"/>
+
+    <bpmn:exclusiveGateway id="gw_publizieren" name="Publizieren?" default="f_nicht_publizieren">
+      <bpmn:incoming>f_fragen_gw</bpmn:incoming>
+      <bpmn:outgoing>f_publizieren</bpmn:outgoing>
+      <bpmn:outgoing>f_nicht_publizieren</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="f_publizieren" name="ja" sourceRef="gw_publizieren" targetRef="release">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= publizieren = true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_nicht_publizieren" name="nein" sourceRef="gw_publizieren" targetRef="ende"/>
+
+    <bpmn:serviceTask id="release" name="Katalog publizieren">
+      <bpmn:documentation>POST /api/v1/catalogs/{id}/releases. Die Freigabe prüft den ganzen Katalog, nicht nur dieses Produkt — fehlt irgendwo ein Prozess, eine Übersetzung oder eine Beschreibung in einer deklarierten Sprache, antwortet sie mit der Liste der Gründe und der Task meldet einen Incident.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest"/>
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas"/>
+          <zeebe:header key="method" value="POST"/>
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;/api/v1/catalogs/&#34; + katalogId + &#34;/releases&#34;" target="path"/>
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_publizieren</bpmn:incoming>
+      <bpmn:outgoing>f_release_ende</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_release_ende" sourceRef="release" targetRef="ende"/>
+
+    <bpmn:endEvent id="ende" name="Produkt erfasst">
+      <bpmn:incoming>f_nicht_publizieren</bpmn:incoming>
+      <bpmn:incoming>f_release_ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+  </bpmn:process>
+</bpmn:definitions>

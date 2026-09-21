@@ -1,0 +1,33 @@
+{
+  "tags": [
+    "Katalog",
+    "Portal",
+    "Prozesse"
+  ],
+  "title": {
+    "en": "A product can say what it is, and a process can capture one",
+    "de": "Ein Produkt kann sagen, was es ist — und ein Prozess kann eines erfassen"
+  },
+  "summary": {
+    "en": "Two halves of one gap. A catalogue row was a name and a price, and the one thing somebody browsing needs — the sentence saying what the thing actually is — had no field to live in. A product now carries a description per language, like its name, and the portal shows it. It is optional: most products need no paragraph. But a product that has one must have it in every language the catalogue is published in, or the release says no — otherwise one audience is told what the thing is and the other is shown an empty panel. The other half is a capture process under examples/produkt-erfassung: choose or create a catalogue, enter the product data, say what it is assembled from, set the prices. It saves as a draft, and only a verification — every field once more, still editable — sets it active and asks whether to publish the catalogue. What a console form does not have and this gains: a second look before anything is orderable, and a record of who decided what and when. It writes back through Atlas's own API with a REST connection named atlas, which you set up once under Workers. The example's README says what it deliberately leaves out and why: the logo, because a file does not fit through a task form today, and languages beyond German and French, because a static form cannot read the catalogue's language list. Along the way a new check held every task to the form it names and found two shipped connection tests pointing at start forms nobody had written — both now exist.",
+    "de": "Zwei Hälften derselben Lücke. Eine Katalogzeile war ein Name und ein Preis, und das Eine, was jemand beim Blättern braucht — der Satz, der sagt, was die Sache eigentlich ist — hatte kein Feld. Ein Produkt führt jetzt eine Beschreibung je Sprache mit, wie seinen Namen, und das Portal zeigt sie. Sie ist optional: die meisten Produkte brauchen keinen Absatz. Wer aber eine hat, braucht sie in jeder Sprache, in der der Katalog publiziert wird, sonst verweigert die Freigabe — andernfalls erfährt eine Zielgruppe, worum es geht, und die andere sieht ein leeres Feld. Die andere Hälfte ist ein Erfassungsprozess unter examples/produkt-erfassung: Katalog wählen oder anlegen, Produktdaten erfassen, die Zusammenstellung festlegen, Preise setzen. Gespeichert wird als Entwurf, und erst eine Verifizierung — alle Felder noch einmal, noch einmal änderbar — setzt das Produkt aktiv und fragt, ob der Katalog publiziert werden soll. Was ein Konsolenformular nicht hat und dieser Ablauf gewinnt: eine zweite Ansicht, bevor etwas bestellbar ist, und eine Spur, wer was wann entschieden hat. Geschrieben wird über Atlas' eigene API mit einer REST-Verbindung namens atlas, die man einmal unter Workers einrichtet. Der README des Beispiels sagt, was es bewusst weglässt und warum: das Logo, weil eine Datei heute nicht durch ein Aufgabenformular passt, und Sprachen über Deutsch und Französisch hinaus, weil ein statisches Formular die Sprachliste des Katalogs nicht lesen kann. Nebenbei hat eine neue Prüfung jede Aufgabe an das Formular gebunden, das sie nennt, und dabei zwei mitgelieferte Verbindungstests gefunden, die auf nie geschriebene Startformulare zeigten — beide gibt es jetzt."
+  },
+  "tutorial": {
+    "en": [
+      "In the Console, open a catalogue, pick a product and find the new “Description” box — one per language the catalogue declares.",
+      "Write one in German only, then publish the catalogue: the release names the language that is missing one, rather than shipping a half-explained product.",
+      "Fill in the other language and publish again; the portal now shows the paragraph above the price.",
+      "For the process: set up a REST worker named “atlas” under Console › Workers, pointing at this server with a catalogue-maintenance login.",
+      "Install “Beispiel: Produkt erfassen” from the handbook's Beispiele chapter and start it.",
+      "Work the tasks in your inbox: catalogue, product data, assembly, prices — then the verification, which is the one that decides."
+    ],
+    "de": [
+      "In der Konsole einen Katalog öffnen, ein Produkt wählen und das neue Feld „Description“ ansehen — je ein Kasten pro deklarierter Sprache.",
+      "Nur auf Deutsch etwas eintragen und den Katalog publizieren: Die Freigabe nennt die Sprache, in der die Beschreibung fehlt, statt ein halb erklärtes Produkt auszuliefern.",
+      "Die zweite Sprache ergänzen und erneut publizieren; das Portal zeigt den Absatz nun über dem Preis.",
+      "Für den Prozess: unter „Console › Workers“ einen rest-Worker namens „atlas“ einrichten, der auf diesen Server zeigt, mit einem Zugang mit Katalogpflege-Recht.",
+      "Im Handbuch unter „Beispiele“ das Beispiel „Produkt erfassen“ installieren und starten.",
+      "Die Aufgaben im Posteingang abarbeiten: Katalog, Produktdaten, Zusammenstellung, Preise — dann die Verifizierung, die die eigentliche Entscheidung ist."
+    ]
+  }
+}

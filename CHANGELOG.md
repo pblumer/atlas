@@ -14,6 +14,48 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A product can say what it is, and a process can capture one.** Two halves of the
+  same gap: the product record had no description, and creating a product meant a
+  console form with twenty fields and a hope that somebody looked.
+
+  **`Description`** is a text per language tag, like the name beside it and
+  deliberately unlike the keywords: keywords are for *finding*, and a searcher's
+  language is not the catalogue's, while a description is for *showing* and is read
+  in the language the portal is read in. A release demands nothing of it until there
+  is one — most products need no paragraph — and then demands it in every declared
+  language, because a product described to one audience and not another leaves the
+  other an empty panel. The portal shows it without falling back across languages,
+  unlike the name: a label in the wrong language still identifies the thing, a
+  paragraph in one somebody cannot read is noise where an explanation was promised.
+
+  **`examples/produkt-erfassung/`** is the capture process: catalogue, product data,
+  what it is assembled from, prices — saved as a **draft**, then a **verification**
+  showing every field again and still editable, and only then active, with the
+  question whether to publish the catalogue. Every service task writes back through
+  Atlas's own HTTP API with the `rest` connector and a connection named `atlas`, the
+  route the shipped order fulfilment already takes.
+
+  Three things in it are decisions. The product is saved **before** it is assembled,
+  because the assembly is edges on the catalogue and the catalogue refuses an id no
+  product answers to. The catalogue is **read afresh** before it is written and its
+  revision carried along — a PATCH replaces items and edges whole, and minutes pass
+  in which somebody else may have added a product; without it this process would be
+  exactly the silent overwrite the revision field warns about. And the appearance is
+  **a task of its own for administrators**, because a theme belongs to
+  administration and not to catalogue maintenance — the process models that rather
+  than working around it.
+
+  Deliberately absent: the logo, which is a file where a task form carries only
+  text, and languages beyond German and French, which a static form cannot read off
+  the catalogue. Both are said in the example's README rather than left to be
+  discovered.
+
+  **A new guard holds every user task to the form it names** — and found two shipped
+  connection tests referencing start forms that were never written. A dangling
+  `formId` compiles, deploys and runs: the task simply reaches somebody's inbox with
+  nothing to fill in. Both forms now exist, written from what those models already
+  documented they need.
+
 - **Narrow the starmap to the offerings you mean.** The element-type filter beside it
   answers "which kinds of thing do I want to see". It cannot answer "show me only what
   is actually orderable", because that is not a kind — it is a property of one — and the

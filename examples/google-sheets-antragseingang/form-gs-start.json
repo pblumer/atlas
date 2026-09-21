@@ -1,0 +1,20 @@
+{
+  "type": "default",
+  "id": "gs-start",
+  "components": [
+    {
+      "type": "text",
+      "text": "# Google-Sheets-Verbindungstest\n\nLegt eine Tabelle an, schreibt eine Kopfzeile, hängt zwei Zeilen an und liest sie zurück — damit Credential, Scopes und Worker-Name einmal geprüft sind, bevor ein echter Prozess davon abhängt."
+    },
+    {
+      "key": "tabellenname",
+      "type": "textfield",
+      "label": "Name der neuen Tabelle",
+      "validate": {
+        "required": true
+      },
+      "defaultValue": "Atlas-Verbindungstest",
+      "description": "Die Datei wird unter diesem Namen in Google Drive angelegt und bleibt liegen — der Test räumt nicht auf, damit man das Ergebnis ansehen kann."
+    }
+  ]
+}

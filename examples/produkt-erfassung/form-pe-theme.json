@@ -1,0 +1,46 @@
+{
+  "type": "default",
+  "id": "pe-theme",
+  "components": [
+    {
+      "type": "text",
+      "text": "# Erscheinungsbild des Katalogs\n\nDiese Aufgabe liegt bei der Administration und nicht bei der Katalogpflege — so trennt Atlas die beiden (ADR-0316). Ein Katalog ohne eigenes Erscheinungsbild übernimmt das der Instanz."
+    },
+    {
+      "key": "akzentfarbe",
+      "type": "textfield",
+      "label": "Akzentfarbe",
+      "description": "Als #rgb oder #rrggbb, klein geschrieben. Alles andere weist der Server zurück, statt die Seite halb gebrandet zu lassen.",
+      "defaultValue": "#3355ff"
+    },
+    {
+      "key": "schriftart",
+      "type": "select",
+      "label": "Schriftart",
+      "defaultValue": "system",
+      "description": "Eine Auswahl und keine URL: eine Web-Schrift würde bei jedem Seitenaufruf einen Dritten erreichen und die Adresse der Besucherin dorthin tragen.",
+      "values": [
+        {
+          "value": "system",
+          "label": "System"
+        },
+        {
+          "value": "humanist",
+          "label": "Humanist"
+        },
+        {
+          "value": "serif",
+          "label": "Serif"
+        },
+        {
+          "value": "mono",
+          "label": "Monospace"
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "text": "**Das Logo wird hier nicht gesetzt.** Es ist eine Datei, und ein Aufgabenformular trägt heute nur Text. Es wird in der Konsole unter *Katalog → Erscheinungsbild* hochgeladen; der Prozess läuft ohne weiter."
+    }
+  ]
+}
