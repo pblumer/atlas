@@ -155,6 +155,16 @@ Three cheaper answers were available and each is wrong:
 - **A conventional variable name.** That is the modelling recommendation R-06 already has,
   which is why R-06 is still amber.
 
+And once values are sealed under it, the subject cannot move. Sealing follows whatever the
+data-subject variable says at the moment of each write, so changing it halfway splits one
+person's values across two keys — after which erasing either subject leaves the other half
+readable while the request looks honoured, and nothing downstream could notice, because
+every value opens perfectly well under the key it names. The writer refuses such a write
+with an incident, and refuses it only once something has actually been sealed: correcting a
+mistyped id before any personal value exists costs nothing, and refusing that would be
+pedantry dressed as safety. Afterwards the honest remedy is a new instance, not a retry,
+which the incident says.
+
 The subject's id stays in the clear, deliberately: it is a reference, which is what the rule
 above keeps readable, and it may be routed on, matched and indexed like any other variable.
 Declaring it searchable is the intended combination — erasing a person starts with finding
@@ -168,6 +178,15 @@ checkpoint, the OpenSearch document, last year's backup, the instance snapshot a
 operator exported — all of them hold bytes that the destroyed key decrypted. Nothing
 has to be found, coordinated or reached. The tape in the safe is covered by the same
 act as the live store, and that is something no retention schedule can claim.
+
+An erasure writes one line to the security audit trail
+([ADR-0197](0197-login-throttle-and-audit-log.md)), naming the subject and who acted, and that
+line is load-bearing rather than informative: afterwards the key is gone, the ciphertext
+says nothing and the subject leaves no other trace anywhere in Atlas, so it is the only
+remaining evidence that a request was honoured, when, and by whom. Demonstrability is half
+of what the obligation asks for, and an operator who had destroyed the data but could not
+show it would have satisfied neither half. It is the one place these events carry a personal
+identifier, deliberately: an erasure record that does not say who was erased proves nothing.
 
 Note what is *not* claimed: this is erasure in the sense of rendering the data
 permanently unreadable, not physical removal of the bytes. Whether that satisfies a

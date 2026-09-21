@@ -204,3 +204,115 @@ func TestAProcessDeclaringNothingIsUnaffected(t *testing.T) {
 		t.Error("a process that declares nothing personal no longer writes a plain value")
 	}
 }
+
+// TestMovingTheDataSubjectIsRefusedOnceSomethingIsSealed closes the quietest hole the
+// mechanism had.
+//
+// Sealing follows whatever the data-subject variable says at the moment of the write. Change
+// it halfway and one person's values are split across two keys — after which erasing either
+// subject leaves the other half readable, while the request looks honoured. Nothing
+// downstream could notice, because every value opens perfectly well under the key it names.
+func TestMovingTheDataSubjectIsRefusedOnceSomethingIsSealed(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	cp := personalProcess(t)
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key,
+		model.VariableValue{Name: "pnr", Kind: model.VarString, Text: "P-4711"},
+		enciphered("vorname"),
+	)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	var piKey uint64
+	if err := h.store.ActiveProcessInstances(func(key uint64, _ *model.ProcessInstanceValue) error {
+		piKey = key
+		return nil
+	}); err != nil {
+		t.Fatalf("ActiveProcessInstances: %v", err)
+	}
+
+	p.SetVariables(piKey, piKey, "operator",
+		model.VariableValue{Name: "pnr", Kind: model.VarString, Text: "P-0815"})
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	var subject model.VariableValue
+	if err := h.store.VariablesOfScope(piKey, func(v *model.VariableValue) error {
+		if v.Name == "pnr" {
+			subject = *v
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("VariablesOfScope: %v", err)
+	}
+	if subject.Text != "P-4711" {
+		t.Errorf("the data subject moved to %q; the values sealed under P-4711 would now outlive an erasure of it", subject.Text)
+	}
+	var reasons []model.IncidentReason
+	if err := h.store.Incidents(func(_ uint64, v *model.IncidentValue) error {
+		reasons = append(reasons, v.Reason)
+		if v.Reason == model.IncidentDataSubjectMoved && !strings.Contains(v.Message, "two keys") {
+			t.Errorf("the incident does not say what the danger is: %s", v.Message)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("Incidents: %v", err)
+	}
+	if len(reasons) != 1 || reasons[0] != model.IncidentDataSubjectMoved {
+		t.Errorf("incident reasons = %v, want one IncidentDataSubjectMoved", reasons)
+	}
+}
+
+// TestCorrectingTheDataSubjectBeforeAnythingIsSealedIsAllowed is the other side, and it is
+// why the refusal asks whether anything has actually been sealed rather than simply
+// freezing the variable. A mistyped id corrected before any personal value exists costs
+// nothing, and refusing it would be pedantry dressed up as safety.
+func TestCorrectingTheDataSubjectBeforeAnythingIsSealedIsAllowed(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	cp := personalProcess(t)
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key, model.VariableValue{Name: "pnr", Kind: model.VarString, Text: "P-4711"})
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	var piKey uint64
+	if err := h.store.ActiveProcessInstances(func(key uint64, _ *model.ProcessInstanceValue) error {
+		piKey = key
+		return nil
+	}); err != nil {
+		t.Fatalf("ActiveProcessInstances: %v", err)
+	}
+	p.SetVariables(piKey, piKey, "operator",
+		model.VariableValue{Name: "pnr", Kind: model.VarString, Text: "P-0815"})
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	var subject model.VariableValue
+	if err := h.store.VariablesOfScope(piKey, func(v *model.VariableValue) error {
+		if v.Name == "pnr" {
+			subject = *v
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("VariablesOfScope: %v", err)
+	}
+	if subject.Text != "P-0815" {
+		t.Errorf("the correction was refused although nothing was sealed yet: pnr = %q", subject.Text)
+	}
+	if n, err := h.store.IncidentCount(); err != nil || n != 0 {
+		t.Errorf("IncidentCount = %d (%v), want 0", n, err)
+	}
+}

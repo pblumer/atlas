@@ -47,14 +47,22 @@ _Changed_ / _Removed_ for each version.
   no search could ever match it. An engine-evaluated expression that writes *into* a declared
   variable, because the engine cannot encipher and the value would be stored in the clear. And
   a deployment declaring personal data on a server started with `--vault=false`, because
-  there would be no key to destroy. On top of that the engine refuses, at the write itself,
-  any declared value that arrives readable — the check that makes the rule hold on paths no
-  deploy can see, such as a message payload that correlates into a running instance.
+  there would be no key to destroy. On top of that the engine refuses two things at the write
+  itself: any declared value that arrives readable — the check that makes the rule hold on
+  paths no deploy can see, such as a message payload that correlates into a running instance
+  — and a write that would change an instance's data subject after values are already sealed
+  under the previous one, because that would split one person's data across two keys and then
+  erasing either would leave the other half readable. Correcting the subject before anything
+  is sealed goes through.
 
   Erasure is its own admin-gated route (`DELETE /api/v1/personal-data/{subject}`, with
-  `GET /api/v1/personal-data` listing who is still erasable), and the secrets endpoints
-  refuse the reserved name region outright: overwriting a data key would make somebody's
-  data unreadable without erasing it, silently and with no record that it happened.
+  `GET /api/v1/personal-data` listing who is still erasable), and it writes one line to the
+  security audit trail naming the subject and who acted — the only evidence that survives
+  it, since the key is gone and the subject leaves no other trace, and being able to *show*
+  that a request was honoured is half of what the obligation asks for. The secrets endpoints
+  refuse the reserved name region outright, and audit the attempt: overwriting a data key
+  would make somebody's data unreadable without erasing it, silently and with no record that
+  it happened.
 
   The honest cost, paid in the one real example. Encipherment needs a subject and a deletion
   request needs an id it can name, so `account-bestellung`'s start form grew a

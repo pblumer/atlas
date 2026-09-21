@@ -15,12 +15,14 @@ package api
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/vault"
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
@@ -79,7 +81,7 @@ func (s *Server) personalSealingFor(cp *compiler.CompiledProcess, scope uint64, 
 	}
 	if subject == "" {
 		// A start carries its subject in the same submission as the personal values, and
-		// a later write can too — an output mapping that writes both at once.
+		// a later write can too — a worker completing with both at once.
 		for i := range vars {
 			if vars[i].Name == name {
 				subject = subjectText(&vars[i])
@@ -360,6 +362,11 @@ func (s *Server) handleEraseDataSubject(w http.ResponseWriter, r *http.Request) 
 	case opErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "erase data subject: "+opErr.Error())
 	default:
+		// The audit line is the only evidence left that this happened: the key is gone,
+		// the ciphertext says nothing, and the subject leaves no other trace. An erasure
+		// nobody can demonstrate is half a control (ADR-0197, ADR-0314).
+		audit(r, logging.PersonalDataErased, "erased a data subject's personal data",
+			slog.String("subject", subject), slog.Bool("hadKey", had))
 		httpapi.JSON(w, http.StatusOK, map[string]any{"subject": subject, "erased": had})
 	}
 }

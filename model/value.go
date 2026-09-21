@@ -1351,6 +1351,17 @@ const (
 	// the write, so re-delivering the value through a path that does seal lets it
 	// through.
 	IncidentPersonalInTheClear IncidentReason = 4
+	// IncidentDataSubjectMoved marks an element whose write was refused because it
+	// would have changed the instance's data subject after values were already sealed
+	// under the previous one (ADR-0314).
+	//
+	// Allowing it would split one person's data across two keys, and then erasing
+	// either of them would leave the other half readable — silently, which is the
+	// failure the whole mechanism exists to prevent. Before anything is sealed the
+	// change is harmless and goes through; afterwards the honest remedy is a new
+	// instance with the right subject, so this does not become a retry somebody can
+	// resolve their way out of.
+	IncidentDataSubjectMoved IncidentReason = 5
 )
 
 func (*IncidentValue) ValueType() ValueType { return VTIncident }

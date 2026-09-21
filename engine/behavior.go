@@ -4652,6 +4652,30 @@ func parkClearPersonalWrite(c *ProcessingContext, scope uint64, name string) {
 	c.AppendIncidentEvent(model.IntentIncidentCreated, inc)
 }
 
+// parkMovedDataSubject refuses a write that would change the instance's data subject
+// after values were sealed under the previous one, and parks an incident naming it
+// (ADR-0314).
+func parkMovedDataSubject(c *ProcessingContext, scope uint64, name string) {
+	inc := model.IncidentValue{
+		ElementInstanceKey: scope,
+		RaisedAt:           c.Now(),
+		Message: "the write to \"" + name + "\" would change this instance's data subject, and personal values are " +
+			"already enciphered under the previous one. Allowing it would split one person's data across two keys, " +
+			"so erasing either subject would leave the other half readable. Start an instance with the correct " +
+			"data subject instead; resolving this will only retry the same write",
+		Reason: model.IncidentDataSubjectMoved,
+	}
+	if ei := c.GetElementInstance(scope); ei != nil {
+		inc.ProcessInstanceKey, inc.ElementId = ei.ProcessInstanceKey, ei.ElementId
+	} else if ei := c.GetElementInstance(c.producer); ei != nil {
+		inc.ElementInstanceKey = c.producer
+		inc.ProcessInstanceKey, inc.ElementId = ei.ProcessInstanceKey, ei.ElementId
+	} else {
+		inc.ProcessInstanceKey = scope
+	}
+	c.AppendIncidentEvent(model.IntentIncidentCreated, inc)
+}
+
 // readList reads a stored JSON list variable back into FEEL values; nil if absent or
 // not a list.
 func readList(c *ProcessingContext, scope uint64, name string) []expr.Value {

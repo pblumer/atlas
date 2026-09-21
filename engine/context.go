@@ -392,10 +392,11 @@ func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.Var
 	// here freezes the answer into the event, and replay indexes exactly what the live
 	// write indexed (I6).
 	v.Indexed = c.indexesVariable(cp, atRoot, v.Name)
-	// A declared personal value that arrived readable is refused, whatever wrote it
-	// (ADR-0314). A delete is exempt for the reason it is exempt from the budget below.
-	if intent != model.IntentVariableDeleted && clearPersonalWrite(cp, &v) {
-		parkClearPersonalWrite(c, v.ScopeKey, v.Name)
+	// A declared personal value that arrived readable is refused, whatever wrote it, and
+	// so is a write that moves the instance's data subject out from under values already
+	// sealed (ADR-0314). A delete is exempt for the reason it is exempt from the budget
+	// below.
+	if intent != model.IntentVariableDeleted && refusePersonalWrite(c, cp, &v) {
 		return false
 	}
 	// A value past the budget is not written and not silently dropped: an incident
@@ -415,8 +416,7 @@ func (c *ProcessingContext) appendCollection(intent model.Intent, v model.Variab
 	v.ProducerKey = c.producer
 	cp, atRoot := c.processOfScope(v.ScopeKey)
 	v.Indexed = c.indexesVariable(cp, atRoot, v.Name)
-	if intent != model.IntentVariableDeleted && clearPersonalWrite(cp, &v) {
-		parkClearPersonalWrite(c, v.ScopeKey, v.Name)
+	if intent != model.IntentVariableDeleted && refusePersonalWrite(c, cp, &v) {
 		return false
 	}
 	return c.appendVariable(intent, v, c.p.collectionCeiling())
@@ -438,8 +438,7 @@ func (c *ProcessingContext) appendVariableElement(v model.VariableValue) bool {
 	v.ProducerKey = c.producer
 	cp, atRoot := c.processOfScope(v.ScopeKey)
 	v.Indexed = c.indexesVariable(cp, atRoot, v.Name)
-	if clearPersonalWrite(cp, &v) {
-		parkClearPersonalWrite(c, v.ScopeKey, v.Name)
+	if refusePersonalWrite(c, cp, &v) {
 		return false
 	}
 	c.appendEvent(v.ScopeKey, model.VTVariable, model.IntentVariableElementSet, inflightValue{variable: v})
@@ -507,6 +506,59 @@ func clearPersonalWrite(cp *compiler.CompiledProcess, v *model.VariableValue) bo
 		return false
 	}
 	return cp.IsPersonal(v.Name) && !v.IsEnciphered()
+}
+
+// movedDataSubject reports whether this write would point the instance at a different
+// data subject than the one its values are already sealed under.
+//
+// The hazard is quiet and total: sealing follows whatever the data-subject variable says
+// at the moment of the write, so changing it halfway splits one person's values across
+// two keys — and then erasing either subject leaves the other half readable while the
+// request looks honoured. Nothing downstream could notice, because each value opens
+// perfectly well under the key it names.
+//
+// The first write is how the subject arrives, and a change *before* anything has been
+// sealed costs nothing — correcting a mistyped id then is ordinary, and refusing it would
+// be pedantry. So the refusal asks the one question that matters: has anything already
+// been sealed? Only the instance root is scanned, and that is where the answer is: a
+// personal value can reach an instance from a start, a worker's result or an operator's
+// write, and all three land at the root — while an engine-evaluated mapping, the one
+// thing that writes into an activity-local scope, is refused from touching a declared
+// variable at deploy time.
+func movedDataSubject(c *ProcessingContext, cp *compiler.CompiledProcess, v *model.VariableValue) bool {
+	if cp == nil || !cp.HasPersonalVariables() || v.Name != cp.DataSubjectVariable() {
+		return false
+	}
+	old := c.ResolveVariable(v.ScopeKey, v.Name)
+	if old == nil || (old.Kind == v.Kind && old.Text == v.Text && old.Bool == v.Bool) {
+		return false
+	}
+	piKey := v.ScopeKey
+	if ei := c.GetElementInstance(v.ScopeKey); ei != nil {
+		piKey = ei.ProcessInstanceKey
+	}
+	sealed := false
+	c.VariablesOfScope(piKey, func(existing model.VariableValue) {
+		if !sealed && cp.IsPersonal(existing.Name) && existing.IsEnciphered() {
+			sealed = true
+		}
+	})
+	return sealed
+}
+
+// refusePersonalWrite parks an incident and reports true when ADR-0314 forbids this
+// write. It is the one place the three appenders ask, so no write path can be the one
+// that forgot.
+func refusePersonalWrite(c *ProcessingContext, cp *compiler.CompiledProcess, v *model.VariableValue) bool {
+	switch {
+	case clearPersonalWrite(cp, v):
+		parkClearPersonalWrite(c, v.ScopeKey, v.Name)
+		return true
+	case movedDataSubject(c, cp, v):
+		parkMovedDataSubject(c, v.ScopeKey, v.Name)
+		return true
+	}
+	return false
 }
 
 // markConditionDirty notes that a variable changed in the given scope, so the batch loop will

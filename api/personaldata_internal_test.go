@@ -1,15 +1,19 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/pblumer/atlas/api/vault"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
@@ -312,6 +316,67 @@ func TestErasingASubjectLeavesTheEngineUntouched(t *testing.T) {
 	}
 	if err := json.Unmarshal(body, &erasure); err != nil || erasure.Erased {
 		t.Errorf("the second erasure reported %s, want erased=false", body)
+	}
+}
+
+// captureAuditLog points the process logger at a buffer in the JSON shape an operator
+// ships to a SIEM, and restores stderr afterwards. The api_test package has its own copy;
+// an internal test cannot reach it, and duplicating fifteen lines beats exporting a test
+// helper from production code.
+type auditSink struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *auditSink) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *auditSink) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func captureAuditLog(t *testing.T) *auditSink {
+	t.Helper()
+	sink := &auditSink{}
+	if err := logging.Setup(sink, logging.FormatJSON); err != nil {
+		t.Fatalf("logging.Setup: %v", err)
+	}
+	t.Cleanup(func() { _ = logging.Setup(os.Stderr, logging.DefaultFormat) })
+	return sink
+}
+
+// TestAnErasureLeavesAnAuditLine is not a nicety. After an erasure the key is gone, the
+// ciphertext says nothing and the subject leaves no other trace anywhere in Atlas — so this
+// line is the *only* remaining evidence that a deletion request was honoured, on the date it
+// was honoured, by whom. Demonstrability is half of what the obligation asks for, and
+// without it an operator would have destroyed the data and be unable to show it.
+func TestAnErasureLeavesAnAuditLine(t *testing.T) {
+	srv := newServerForErrors(t)
+	startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711","vorname":"Ida"}}`)
+
+	sink := captureAuditLog(t)
+	if code, body := serveInternal(t, srv, http.MethodDelete, "/api/v1/personal-data/P-4711", "", ""); code != http.StatusOK {
+		t.Fatalf("erase: status=%d body=%s", code, body)
+	}
+	line := sink.String()
+	for _, want := range []string{"personal_data.erased", "P-4711"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the audit trail does not record %q: %s", want, line)
+		}
+	}
+
+	// And the attempt to reach a data key through the secrets API is a security-relevant
+	// refusal, so it is recorded too.
+	if code, _ := serveInternal(t, srv, http.MethodPut, "/api/v1/secrets/"+vault.DataKeyName("P-0815"), `{"value":"AAAA"}`, "application/json"); code != http.StatusForbidden {
+		t.Fatalf("the secrets API accepted a data-key name: %d", code)
+	}
+	if !strings.Contains(sink.String(), "personal_data.key_write_refused") {
+		t.Errorf("a refused data-key write is not audited: %s", sink.String())
 	}
 }
 
