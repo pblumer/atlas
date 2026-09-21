@@ -60,6 +60,35 @@
       }
     },
     {
+      "id": "eine-entscheidung-hinter-einer-schnittstelle-zeigt-jetzt-auc",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A decision behind an interface now shows its rules too",
+        "de": "Eine Entscheidung hinter einer Schnittstelle zeigt jetzt auch ihre Regeln"
+      },
+      "summary": {
+        "en": "A business rule task can call a decision service — DMN's published interface over part of a decision graph. Until now such an evaluation kept its inputs and its answer and nothing about how it got there, because the engine offered no way to record the rules behind an interface. That left the explanation missing exactly where it is least affordable: the decisions behind an interface are usually tables, and somebody accounting for a case could not tell \"no rules were recorded\" from \"no rules matched\". A service evaluated from now on carries the tables it ran, shown in the decision graph with the rule that fired in green, like any other decision. The boundary holds there too: a decision the caller supplied is never computed, so its table does not appear. Cases decided earlier keep their exact values and no rules — a record is frozen history — and the screens now say which of the two silences they are looking at.",
+        "de": "Ein Business-Rule-Task kann einen Decision Service aufrufen — DMNs veröffentlichte Schnittstelle über einen Teil eines Entscheidungsgraphen. Bisher behielt eine solche Auswertung ihre Eingaben und ihr Ergebnis und nichts darüber, wie sie dorthin kam, weil die Engine keine Möglichkeit bot, die Regeln hinter einer Schnittstelle aufzuzeichnen. Damit fehlte die Erklärung genau dort, wo sie am wenigsten zu entbehren ist: die Entscheidungen hinter einer Schnittstelle sind in der Regel Tabellen, und wer einen Fall verantworten muss, konnte „es wurden keine Regeln aufgezeichnet\" nicht von „keine Regel hat getroffen\" unterscheiden. Eine Service-Auswertung ab jetzt trägt die Tabellen, die sie ausgeführt hat — im Entscheidungsgraph mit grün gezogener Regel wie bei jeder anderen Entscheidung. Die Grenze gilt auch dort: eine vom Aufrufer gelieferte Entscheidung wird nie berechnet, ihre Tabelle taucht also nicht auf. Früher entschiedene Fälle behalten ihre exakten Werte und keine Regeln — ein Datensatz ist eingefrorene Geschichte — und die Oberflächen sagen jetzt, welche der beiden Stillen sie vor sich haben."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations",
+        "Decisions"
+      ],
+      "try": {
+        "label": {
+          "en": "Open an instance and double-click a decision",
+          "de": "Instanz öffnen und Entscheidung doppelklicken"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "the-starmap-says-which-dependencies-are-actually-used",
       "version": "Unreleased",
       "date": null,
@@ -409,46 +438,6 @@
           "Bei einer Ablehnung eine Begründung schreiben; sie wird der bestellenden Person mitgeteilt. Dann „Approve\" oder „Reject\" drücken.",
           "Warten weitere Genehmigungen desselben Auftrags, das Kästchen über den Schaltflächen ankreuzen — eine Entscheidung, eine Begründung.",
           "Die eigenständige Genehmigungsseite bleibt für den Link aus der Benachrichtigungsmail; an ihr ändert sich nichts."
-        ]
-      }
-    },
-    {
-      "id": "a-product-can-carry-a-picture",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Put a picture on a product",
-        "de": "Ein Bild am Produkt hinterlegen"
-      },
-      "summary": {
-        "en": "A catalogue read as a list of names, which is fine for a person who already knows what they are ordering and no help at all to everybody else. A product now carries a picture — a photograph of the thing or the vendor's logo — chosen in the product editor and shown in the portal when somebody opens the product. PNG, JPEG and SVG, served back exactly as uploaded: nothing is resized or re-encoded, because a catalogue that re-encodes your picture has decided your product looks near enough. It is visible to everybody a catalogue offering the product is for, not only to the person who maintains it, which matters because the same product is often offered by several catalogues to different audiences. And it is deliberately not frozen into a release: a better photograph of the same laptop is not a different laptop, so it appears on orders already placed instead of a stale copy being kept for them.",
-        "de": "Ein Katalog las sich als Liste von Namen — für jemanden, der ohnehin weiss, was er bestellt, in Ordnung, für alle anderen keine Hilfe. Ein Produkt trägt jetzt ein Bild: eine Aufnahme der Sache oder das Logo des Herstellers, im Produkteditor gewählt und im Portal sichtbar, sobald jemand das Produkt öffnet. PNG, JPEG und SVG, unverändert ausgeliefert: Es wird nichts skaliert und nichts neu codiert, denn ein Katalog, der Ihr Bild neu codiert, hat entschieden, dass Ihr Produkt ungefähr so aussieht. Sichtbar ist es für alle, an die sich ein Katalog mit diesem Produkt richtet, nicht nur für die Person, die es pflegt — das zählt, weil dasselbe Produkt oft in mehreren Katalogen für verschiedene Zielgruppen steht. Und es wird bewusst nicht in eine Freigabe eingefroren: Eine bessere Aufnahme desselben Notebooks ist kein anderes Notebook, also erscheint sie auch an bereits erteilten Bestellungen, statt dort eine veraltete Kopie zu halten."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Catalogue",
-        "Portal"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Catalogue, pick a catalogue and open one of its products.",
-          "Under \"What the catalogue shows\", choose a file beside Picture — PNG, JPEG or SVG.",
-          "Save. The picture is stored as a second step, so a product the server refuses never acquires one.",
-          "Open the portal, find the product and press the \"i\" beside it: the picture is at the top of the panel.",
-          "To take it away, open the product again and tick \"Remove the picture this product has\", then save.",
-          "A product with no picture shows none — no gap and no broken-image icon, because that is the ordinary case."
-        ],
-        "de": [
-          "Katalog öffnen, einen Katalog wählen und eines seiner Produkte öffnen.",
-          "Unter „What the catalogue shows\" bei „Picture\" eine Datei wählen — PNG, JPEG oder SVG.",
-          "Speichern. Das Bild wird als zweiter Schritt abgelegt, damit ein vom Server abgelehntes Produkt nie eines erhält.",
-          "Portal öffnen, das Produkt suchen und daneben auf „i\" drücken: Das Bild steht zuoberst im Feld.",
-          "Zum Entfernen das Produkt erneut öffnen, „Remove the picture this product has\" ankreuzen und speichern.",
-          "Ein Produkt ohne Bild zeigt keines — keine Lücke und kein Platzhaltersymbol, denn das ist der Normalfall."
         ]
       }
     }
