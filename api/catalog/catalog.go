@@ -132,10 +132,35 @@ type Item struct {
 	State       State  `json:"state"`
 	// Texts holds the item's name per language tag. A release proves it carries one
 	// for every language its catalogue declares.
-	Texts     map[string]string `json:"texts"`
-	Lifecycle Lifecycle         `json:"lifecycle,omitempty"`
-	Variants  []Variant         `json:"variants,omitempty"`
-	Approval  Approval          `json:"approval"`
+	Texts map[string]string `json:"texts"`
+	// Descriptions is what this product *is*, per language tag, beside the name
+	// Texts carries. Empty is the ordinary state for a product whose name says
+	// enough, and means no description anywhere rather than an empty one.
+	//
+	// # Why per language and not one string
+	//
+	// Every other text a person reads off a product is per locale, and this is the
+	// one somebody reads when the name was not enough — which is exactly when not
+	// being able to read it matters. A catalogue declaring German and French could
+	// otherwise translate the name of a thing and not the sentence explaining it.
+	//
+	// It is deliberately not Keywords, which is flat for the opposite reason:
+	// keywords are for *finding* and a searcher's language is not the catalogue's,
+	// while a description is for *showing* and is read in the language the portal
+	// is being read in.
+	//
+	// # What a release demands of it
+	//
+	// Nothing, until there is one. A product with no description publishes, because
+	// not every product needs a paragraph. A product with a description in one of
+	// the catalogue's declared languages and not another does not, because that is
+	// a portal where one audience is told what the thing is and the other is shown
+	// an empty panel — the half-translated catalogue the name check already
+	// refuses, in the field a reader turns to second.
+	Descriptions map[string]string `json:"descriptions,omitempty"`
+	Lifecycle    Lifecycle         `json:"lifecycle,omitempty"`
+	Variants     []Variant         `json:"variants,omitempty"`
+	Approval     Approval          `json:"approval"`
 	// ProvisionProcess and DeprovisionProcess are the BPMN process ids bound to this
 	// item. Both are required to publish: a catalogue that can only grant is not a
 	// lifecycle, and the day somebody must revoke at scale is the wrong day to find

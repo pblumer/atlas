@@ -82,6 +82,15 @@ func (s *Server) handleCreateInstanceByProcessID(w http.ResponseWriter, r *http.
 // Split out when the by-id route arrived, so the two cannot answer differently
 // about a process that is deployed but not executable.
 func (s *Server) startInstance(w http.ResponseWriter, key uint64, startVars []model.VariableValue) {
+	// A start form is where personal data most often enters, so it is sealed here —
+	// before the CreateInstance command, which therefore already holds ciphertext
+	// (ADR-0314). This is the funnel for the JSON start body and the API start; the CSV
+	// upload and the public form seal on their own paths, which resolve their definition
+	// differently.
+	if err := s.encipherStartVars(key, startVars); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	var (
 		found       bool
 		notExec     bool

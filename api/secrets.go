@@ -3,10 +3,12 @@ package api
 import (
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/pblumer/atlas/api/vault"
+	"github.com/pblumer/atlas/logging"
 
 	"github.com/pblumer/atlas/api/httpapi"
 )
@@ -44,6 +46,12 @@ func (s *Server) handleSetSecret(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.PathValue("name"))
 	if name == "" {
 		httpapi.Error(w, http.StatusBadRequest, "secret name is required")
+		return
+	}
+	if vault.IsDataKeyName(name) {
+		auditRefusal(r, logging.PersonalDataKeyWriteRefused, "refused an attempt to overwrite a data subject's personal-data key through the secrets API",
+			slog.String("name", name))
+		httpapi.Error(w, http.StatusForbidden, "that name belongs to a data subject's personal-data key, which is not an operator secret: overwriting it would make that subject's data unreadable without erasing it, silently and irreversibly (ADR-0314)")
 		return
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
@@ -99,6 +107,12 @@ func (s *Server) handleDeleteSecret(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.PathValue("name"))
 	if name == "" {
 		httpapi.Error(w, http.StatusBadRequest, "secret name is required")
+		return
+	}
+	if vault.IsDataKeyName(name) {
+		auditRefusal(r, logging.PersonalDataKeyWriteRefused, "refused an attempt to delete a data subject's personal-data key through the secrets API",
+			slog.String("name", name))
+		httpapi.Error(w, http.StatusForbidden, "that name belongs to a data subject's personal-data key. Deleting it erases that subject's personal data everywhere, which is a deliberate act with its own route: DELETE /api/v1/personal-data/{subject} (ADR-0314)")
 		return
 	}
 	var delErr error

@@ -14,6 +14,202 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Personal data can be erased: a declared variable is enciphered under its data subject's own key, and destroying that key makes every copy unreadable.**
+  A process names the variables that hold personal data and the one variable holding the id
+  of the person they are about — `atlas:personal="vorname,nachname"` and
+  `atlas:dataSubject="personalnummer"`. Each data subject gets a random key of their own,
+  stored as an ordinary secret in the vault and therefore sealed under the master key: no
+  new key material on disk and no second store. Erasing that person deletes the one key.
+
+  What makes this an answer to a deletion request rather than another retention setting:
+  **every copy carries the same ciphertext.** The WAL segment, the state record, the
+  recovery checkpoint, the exported OpenSearch document, an instance snapshot somebody
+  exported, last year's backup tape — all of them hold bytes the destroyed key decrypted.
+  Nothing has to be found, coordinated or reached, which is something no retention schedule
+  can claim. What is *not* claimed: this renders the data permanently unreadable, it does
+  not remove the bytes, and whether that satisfies a given supervisory authority is a legal
+  judgement for the operator's data protection officer.
+
+  The engine never enciphers and never deciphers. A command already carries ciphertext, so
+  nothing is enciphered per command on the hot path; state stores and returns bytes, never
+  holds a key and never fails because one is gone, so an erased subject's instance replays
+  exactly as it did before. Sealing happens where values enter — a start submission, a
+  public form, a CSV batch, a worker's completion, a task's submitted form, an operator's
+  override — and opening happens at the two places a person or a worker actually needs the
+  value: the payload handed to a worker, and the form a person fills in. Everywhere else —
+  the timeline, the variable audit, instance lists — the value is reported as what it is,
+  "personal, for subject X", rather than as base64 nobody can read.
+
+  Four things are refused rather than warned about. A declaration with no data subject, and
+  a data subject with nothing declared, because personal data with no subject could never be
+  erased and a subject with nothing personal protects nothing. A variable declared both
+  personal and searchable, because the index would hold ciphertext under a random nonce and
+  no search could ever match it. An engine-evaluated expression that writes *into* a declared
+  variable, because the engine cannot encipher and the value would be stored in the clear. And
+  a deployment declaring personal data on a server started with `--vault=false`, because
+  there would be no key to destroy. On top of that the engine refuses two things at the write
+  itself: any declared value that arrives readable — the check that makes the rule hold on
+  paths no deploy can see, such as a message payload that correlates into a running instance
+  — and a write that would change an instance's data subject after values are already sealed
+  under the previous one, because that would split one person's data across two keys and then
+  erasing either would leave the other half readable. Correcting the subject before anything
+  is sealed goes through.
+
+  Erasure is its own admin-gated route (`DELETE /api/v1/personal-data/{subject}`, with
+  `GET /api/v1/personal-data` listing who is still erasable), and it writes one line to the
+  security audit trail naming the subject and who acted — the only evidence that survives
+  it, since the key is gone and the subject leaves no other trace, and being able to *show*
+  that a request was honoured is half of what the obligation asks for. The secrets endpoints
+  refuse the reserved name region outright, and audit the attempt: overwriting a data key
+  would make somebody's data unreadable without erasing it, silently and with no record that
+  it happened.
+
+  The honest cost, paid in the one real example. Encipherment needs a subject and a deletion
+  request needs an id it can name, so `account-bestellung`'s start form grew a
+  Personalnummer no business requirement asked for — and for a new joiner that id comes from
+  outside Atlas, because the account being ordered is the reason they have no account yet.
+  And erasing a subject with a running instance leaves that instance unable to provision:
+  its job is withheld and the reason is logged, which is correct and is not yet the clear
+  message it should be.
+
+- **A process can declare which variables hold personal data, and the compiler refuses a
+  deployment that computes on one.** The declaration is one attribute —
+  `atlas:personal="vorname,nachname"` — in the same shape and the same place as the
+  searchable-variable list. What it buys is not a warning: a declared variable is
+  enciphered before it ever becomes a command, and ciphertext cannot be compared, matched
+  or routed on, so a process that reads one in a gateway condition, a mapping, a script or
+  a timer expression **does not deploy**. The error names the variable, the kind of
+  expression and the expression itself.
+
+  That is the whole point of doing it here. The modelling recommendation this answers has
+  been amber for exactly one reason — it relied on a modeller remembering — and a compiler
+  that holds both the declaration and every compiled expression can simply decide it.
+
+  The rule's edge is where the code evaluates the expression, not where it would be
+  convenient. A worker's own expressions are outside it: that is the one place the record
+  permits plaintext, for the duration of one call, and it is where a transform combining
+  personal values belongs. So `= "Hallo " + vorname` in a mail body is fine and the same
+  text in an output mapping is not — because one runs in the worker and the other in the
+  engine.
+
+  Nothing changes for a process that declares nothing, which is every existing model.
+
+### Changed
+
+- **The Account-Bestellung example builds its UPN in the worker, and lost a gateway doing
+  it.** It is the proof the personal-data rule needed: the example took a first and last
+  name from a public form and built a UPN, a mailNickname and a display name out of them,
+  in one script and three output mappings the engine evaluated. All four moved into the
+  create-user task's own attributes expression. It deploys, and **no exception to the rule
+  was needed** — which is what its record could not establish against any process that
+  existed.
+
+  The cost is stated rather than quietly absorbed: a fail-closed gateway used to check the
+  computed UPN against `jml-test-*@contoso.com` before any write, and there is no such
+  process variable any more. The test-object boundary is now the `jml-test-` literal inside
+  the connector's attributes expression — in the model, visible in review, but structural
+  instead of checked at runtime. Here that is a small loss, because the gateway was
+  checking a value the same process had built two steps earlier; where a derived value
+  arrives from outside the process, it would not be.
+
+### Fixed
+
+- **Renaming a catalogue, or changing the languages it is offered in, failed with
+  "list is not a function".** Both go through one form on the catalogue detail
+  screen, and neither reached the server: the save threw before it got there.
+
+  `catalog-admin.js` has a `list` helper that splits a comma-separated field into
+  trimmed entries, and the save calls it for the languages. A hundred lines above,
+  inside the same function, a DOM element had been bound as
+  `const list = view.querySelector(".product-list")` — which shadowed the helper for
+  the whole of it. The save called an HTML element, and the submit handler caught the
+  `TypeError` and showed its message as a toast.
+
+  That last part is why it was hard to place. A page that cannot run reported itself
+  as a refusal, so the message read like the server rejecting the rename rather than
+  like the screen being broken. The element is named `listEl` now.
+
+  Three guards drive the real detail view: what a rename sends, that the languages
+  arrive as a trimmed list, and that a working save reports nothing. Each fails when
+  the shadowing is put back.
+
+### Added
+
+- **A product can say what it is, and a process can capture one.** Two halves of the
+  same gap: the product record had no description, and creating a product meant a
+  console form with twenty fields and a hope that somebody looked.
+
+  **`Description`** is a text per language tag, like the name beside it and
+  deliberately unlike the keywords: keywords are for *finding*, and a searcher's
+  language is not the catalogue's, while a description is for *showing* and is read
+  in the language the portal is read in. A release demands nothing of it until there
+  is one — most products need no paragraph — and then demands it in every declared
+  language, because a product described to one audience and not another leaves the
+  other an empty panel. The portal shows it without falling back across languages,
+  unlike the name: a label in the wrong language still identifies the thing, a
+  paragraph in one somebody cannot read is noise where an explanation was promised.
+
+  **`examples/produkt-erfassung/`** is the capture process: catalogue, product data,
+  what it is assembled from, prices — saved as a **draft**, then a **verification**
+  showing every field again and still editable, and only then active, with the
+  question whether to publish the catalogue. Every service task writes back through
+  Atlas's own HTTP API with the `rest` connector and a connection named `atlas`, the
+  route the shipped order fulfilment already takes.
+
+  Three things in it are decisions. The product is saved **before** it is assembled,
+  because the assembly is edges on the catalogue and the catalogue refuses an id no
+  product answers to. The catalogue is **read afresh** before it is written and its
+  revision carried along — a PATCH replaces items and edges whole, and minutes pass
+  in which somebody else may have added a product; without it this process would be
+  exactly the silent overwrite the revision field warns about. And the appearance is
+  **a task of its own for administrators**, because a theme belongs to
+  administration and not to catalogue maintenance — the process models that rather
+  than working around it.
+
+  **The logo is picked in the task form and never becomes a process variable.** It
+  goes straight from the browser to the catalogue's own logo endpoint when the task
+  is completed. The obvious alternative — base64 through the process — is the one
+  thing this must not do, and `engine/budget.go` says why in the comment on
+  `DefaultMaxVariable`: past a megabyte "it is a document, and a document in a
+  token's scope is rewritten into the log on every touch". A logo is capped at half
+  a megabyte, about 683 KB once base64 has grown it, and every step the process
+  takes afterwards would write it into the write-ahead log again. ADR-0316 kept the
+  same bytes out of the catalogue *record* for a weaker version of that reason.
+
+  It is not a side channel: the endpoint is the one the Console's catalogue screen
+  uses, called by the same browser with the same credentials, and it still demands
+  PNG or SVG, half a megabyte and an administrator — which is the group the theme
+  task is assigned to. The model names a **catalogue**, never a URL: a URL would let
+  a model make whoever completes a task issue any request as them. A failed upload
+  leaves the task open and says why, because a task that finished while its logo did
+  not is a process that believes the catalogue is branded.
+
+  Still deliberately absent: languages beyond German and French, which a static form
+  cannot read off the catalogue. Said in the example's README rather than left to be
+  discovered.
+
+  The capture itself is **one task and not five**. Choosing the catalogue, entering
+  the product, saying what it is assembled from and setting the prices are the same
+  work by the same person in one sitting; five tasks would mean claiming and
+  completing four more times, which is slower than the console form the process
+  replaces. What the process is actually for — the verification — stays a station of
+  its own.
+
+  **Two new guards, and both found real defects.** One holds every user task to the
+  form it names: a dangling `formId` compiles, deploys and runs, and the task simply
+  reaches an inbox with nothing to fill in. It immediately found two shipped
+  connection tests pointing at start forms nobody had written; both now exist, with
+  the fields those models already documented.
+
+  The other evaluates the FEEL in a shipped model against sample variables and
+  states what must come back — because compiling proves almost nothing here. It
+  found two defects in this very process: `append(a, b)` appends a whole list as
+  **one element**, so the catalogue was being sent nested edges it cannot read, and
+  `split("de, fr", ",")` leaves the space on, so a keyword arrived as `" M365"` and
+  would never be matched. Both are valid FEEL doing the wrong thing in silence.
+  A third trap is documented rather than relied on: a filter over a list of contexts
+  returns the whole list in this build instead of filtering.
+
 - **Narrow the starmap to the offerings you mean.** The element-type filter beside it
   answers "which kinds of thing do I want to see". It cannot answer "show me only what
   is actually orderable", because that is not a kind — it is a property of one — and the

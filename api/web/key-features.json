@@ -1,6 +1,6 @@
 {
   "_comment": "What the Console's landing page says Atlas *is* (rendered by web/key-features.js, guarded by api/keyfeatures_test.go). A handful of evergreen statements, not a feature list: an entry earns its place by being true a year from now and by changing what somebody expects of the product, not by being new. Every field is required in BOTH languages — a tile that falls back to English is what the EN/DE toggle exists to avoid — the title is a label of at most 60 characters, and the text is one sentence. `reviewedThrough` names the newest CHANGELOG '### Added' bullet this tile has been held against; a change that adds a bullet above it must ask whether the tile is still complete and then move the marker, which is the whole mechanism that keeps this current. Answering \"no, nothing to add\" is the normal case.",
-  "reviewedThrough": "Narrow the starmap to the offerings you mean.",
+  "reviewedThrough": "Personal data can be erased: a declared variable is enciphered under its data subject's own key, and destroying that key makes every copy unreadable.",
   "title": {
     "en": "Key features",
     "de": "Kernmerkmale"
@@ -94,8 +94,8 @@
         "de": "Business Capabilities, nicht nur Prozesse"
       },
       "text": {
-        "en": "A flat, tagged register of what the organisation must be able to do, each capability with its scope, its business owner, what it requires of others, and how it is done today \u2014 a process here, a worker, a purchased system or a person. What nothing yet automates is a list you can read, and every record says when somebody last confirmed it still describes reality.",
-        "de": "Ein flaches, getaggtes Verzeichnis dessen, was die Organisation k\u00f6nnen muss: jede Capability mit ihrem Scope, ihrem fachlichen Owner, dem, was sie von anderen ben\u00f6tigt, und der Art, wie sie heute erbracht wird \u2014 ein Prozess hier, ein Worker, ein zugekauftes System oder ein Mensch. Was noch nichts automatisiert, ist eine lesbare Liste, und jeder Eintrag sagt, wann ihn zuletzt jemand best\u00e4tigt hat."
+        "en": "A flat, tagged register of what the organisation must be able to do, each capability with its scope, its business owner, what it requires of others, and how it is done today — a process here, a worker, a purchased system or a person. What nothing yet automates is a list you can read, and every record says when somebody last confirmed it still describes reality.",
+        "de": "Ein flaches, getaggtes Verzeichnis dessen, was die Organisation können muss: jede Capability mit ihrem Scope, ihrem fachlichen Owner, dem, was sie von anderen benötigt, und der Art, wie sie heute erbracht wird — ein Prozess hier, ein Worker, ein zugekauftes System oder ein Mensch. Was noch nichts automatisiert, ist eine lesbare Liste, und jeder Eintrag sagt, wann ihn zuletzt jemand bestätigt hat."
       }
     },
     {
@@ -173,6 +173,17 @@
       "text": {
         "en": "Backup and restore including instance snapshots, recovery checkpoints with WAL compaction, incidents with retries, grouped by cause and resolvable in bulk, migration of running instances onto a new process version, an audit log, Prometheus metrics, an OpenAPI spec, OpenSearch export with history retention, authentication with per-project membership, and versioned git-backed process applications.",
         "de": "Backup und Restore inklusive Instanz-Snapshots, Recovery-Checkpoints mit WAL-Kompaktierung, Incidents mit Retries, nach Ursache gruppiert und als Gruppe auflösbar, Migration laufender Instanzen auf eine neue Prozessversion, ein Audit-Log, Prometheus-Metriken, OpenAPI-Spec, OpenSearch-Export mit History-Retention, Authentifizierung mit Projekt-Mitgliedschaften und versionierte, git-gestützte Process Applications."
+      }
+    },
+    {
+      "id": "personal-data",
+      "title": {
+        "en": "Erasable personal data",
+        "de": "Löschbare Personendaten"
+      },
+      "text": {
+        "en": "A process declares which variables hold personal data, each data subject's values are enciphered under a key of their own, and destroying that one key renders every copy unreadable at once — the live store, the event log, checkpoints, exports and the backups nobody can reach any more.",
+        "de": "Ein Prozess deklariert, welche Variablen Personendaten enthalten, die Werte jeder betroffenen Person werden unter einem eigenen Schlüssel verschlüsselt, und die Zerstörung dieses einen Schlüssels macht jede Kopie auf einmal unlesbar — den Live-Zustand, das Event-Log, Checkpoints, Exporte und die Backups, die niemand mehr erreicht."
       }
     },
     {

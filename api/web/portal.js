@@ -373,6 +373,22 @@ function textOf(texts, fallback) {
   return texts[locale] || texts.de || texts.en || Object.values(texts)[0] || fallback;
 }
 
+// The product's description in the language this page is being read in, or nothing.
+//
+// Deliberately without [textOf]'s fall through the other languages. A name in the
+// wrong language still identifies the thing — it is a label, and a reader matches
+// it against what they clicked. A paragraph in a language somebody does not read
+// is not a shorter explanation, it is noise where an explanation was promised.
+//
+// And it should never happen here: the portal reads a *release*, and publishing
+// refuses a product described in one declared language and not another. So a
+// fallback would only ever fire for a state the release rejects, and firing it
+// would quietly undo the rule rather than surface the gap.
+function descriptionOf(item) {
+  const d = (item || {}).descriptions;
+  return d && typeof d[locale] === 'string' ? d[locale].trim() : '';
+}
+
 // The typeface stacks the server ships, mirrored here because the page paints
 // with them. The server refuses a name that is not one of these, so the two
 // cannot drift into a catalogue naming a face the page has no stack for.
@@ -1421,6 +1437,11 @@ function infoPanel(rel, item) {
   return el('div', { class: 'card' },
     el('h3', {}, textOf(item.texts, item.id)),
     productPicture(item.id),
+    // Above the ordering facts and not muted, because it is the one thing on this
+    // card written for the person deciding rather than about the transaction.
+    // Absent entirely where there is none — an empty paragraph would leave a gap
+    // that reads as something that failed to load.
+    descriptionOf(item) ? el('p', { class: 'product-description' }, descriptionOf(item)) : null,
     el('p', { class: 'muted' }, `${t('info.id')}: ${item.id}`),
     // As the catalogue wrote it, never reformatted. A price here is a sentence
     // somebody chose — "CHF 1'200.–", "im Grundpaket enthalten" — and a page that

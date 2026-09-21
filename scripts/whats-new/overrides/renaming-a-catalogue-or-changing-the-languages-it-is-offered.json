@@ -1,0 +1,28 @@
+{
+  "tags": [
+    "Katalog",
+    "Konsole"
+  ],
+  "title": {
+    "en": "Renaming a catalogue works again",
+    "de": "Einen Katalog umbenennen geht wieder"
+  },
+  "summary": {
+    "en": "Renaming a catalogue, or changing the languages it is offered in, failed with “list is not a function”. Both go through the same form on the catalogue screen, and neither reached the server at all — the save threw before it got there. Behind it: the file has a small helper called `list` that splits a comma-separated field, and further up in the same function a page element had been given the same name, which hid the helper. The save then called an element instead of a function. What made it hard to place is that the screen catches what it throws and shows the message, so a page that could not run reported itself as if the server had refused the rename. It is fixed, and three checks now drive the real screen: what a rename sends, that the languages arrive as a proper trimmed list, and that a save which works says nothing went wrong.",
+    "de": "Einen Katalog umbenennen oder seine Sprachen ändern scheiterte mit „list is not a function“. Beides läuft über dasselbe Formular im Katalogbildschirm, und keines erreichte den Server überhaupt — das Speichern brach vorher ab. Dahinter steckte: Die Datei hat eine kleine Hilfsfunktion namens `list`, die ein kommagetrenntes Feld zerlegt, und weiter oben in derselben Funktion trug ein Seitenelement denselben Namen und verdeckte sie. Das Speichern rief damit ein Element statt einer Funktion auf. Schwer einzuordnen war es, weil der Bildschirm den Fehler abfängt und dessen Meldung anzeigt — eine Seite, die nicht laufen konnte, meldete sich also so, als hätte der Server das Umbenennen abgelehnt. Behoben, und drei Prüfungen fahren jetzt den echten Bildschirm: was ein Umbenennen sendet, dass die Sprachen als saubere, beschnittene Liste ankommen, und dass ein gelungenes Speichern nichts meldet."
+  },
+  "tutorial": {
+    "en": [
+      "Open Catalog and pick a catalogue.",
+      "Change its name in the top form, or edit the comma-separated languages beside it.",
+      "Press Save — it saves, where before it showed “list is not a function”.",
+      "Spaces around a language code are trimmed: “de, fr ,it” is stored as three codes."
+    ],
+    "de": [
+      "„Catalog“ öffnen und einen Katalog wählen.",
+      "Im oberen Formular den Namen ändern oder die kommagetrennten Sprachen daneben bearbeiten.",
+      "„Save“ drücken — es speichert, wo vorher „list is not a function“ erschien.",
+      "Leerzeichen um ein Sprachkürzel werden entfernt: „de, fr ,it“ wird als drei Kürzel gespeichert."
+    ]
+  }
+}

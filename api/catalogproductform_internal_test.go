@@ -220,9 +220,13 @@ func TestTheFormSaysWhereTheTwoHeadingsAreRead(t *testing.T) {
 // box per language, an approval is a kind plus the ref that kind asks for, and
 // eligibility is a picker that degrades to an id field.
 var productFieldControls = map[string]string{
-	"id":                 `name="id"`,
-	"state":              `name="state"`,
-	"texts":              "name=\"t-${esc(l)}\"",
+	"id":    `name="id"`,
+	"state": `name="state"`,
+	"texts": "name=\"t-${esc(l)}\"",
+	// A box per language, like the name above it and for the same reason: the
+	// field is a map per language tag, so one control could only ever maintain
+	// one of its entries.
+	"descriptions":       "name=\"d-${esc(l)}\"",
 	"variants":           `name="variants"`,
 	"approval":           `name="akind"`,
 	"provisionProcess":   `procSelect("provisionProcess"`,

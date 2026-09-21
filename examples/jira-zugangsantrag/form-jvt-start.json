@@ -1,0 +1,30 @@
+{
+  "type": "default",
+  "id": "jvt-start",
+  "components": [
+    {
+      "type": "text",
+      "text": "# Jira-Verbindungstest\n\nLegt einen einzelnen Vorgang an, damit Endpoint, Credential und Worker-Name einmal geprüft sind, bevor ein echter Prozess davon abhängt."
+    },
+    {
+      "key": "jiraProjekt",
+      "type": "textfield",
+      "label": "Projektschlüssel",
+      "validate": {
+        "required": true
+      },
+      "defaultValue": "OPS",
+      "description": "Wie in Jira, in Grossbuchstaben — etwa OPS. Der Vorgang entsteht in diesem Projekt und bleibt dort stehen."
+    },
+    {
+      "key": "vorgangstyp",
+      "type": "textfield",
+      "label": "Vorgangstyp",
+      "validate": {
+        "required": true
+      },
+      "defaultValue": "Task",
+      "description": "Wie ihn dieses Projekt nennt. Ein Typ, den das Projekt nicht führt, wird von Jira abgelehnt — was der Test dann auch genau so meldet."
+    }
+  ]
+}

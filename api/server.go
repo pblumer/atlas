@@ -2655,10 +2655,29 @@ func (s *Server) drive() error {
 		// The slow part, with nobody waiting on it: a handler makes the outbound call
 		// a worker exists for, and the caller that dispatched this round is the only
 		// one that waits for it.
-		outcomes := s.jobRunner.Work(jobs, view)
+		// The round's handlers see plaintext for a declared personal value: every
+		// connector resolves its expressions over this reader, and ADR-0314 sends the
+		// transforms that combine personal values into the worker precisely because the
+		// plaintext exists there for the duration of one call. Wrapping happens here,
+		// off the run loop, so the vault read is off it too.
+		outcomes := s.jobRunner.Work(jobs, s.personalReader(view))
 		_ = view.Close()
 		if len(outcomes) == 0 {
 			return nil // nothing this runner serves; the rest is an external worker's
+		}
+		// What a handler returns is a worker result landing a job's output, which is
+		// ADR-0314's in edge as much as an external worker's HTTP completion is — and it
+		// does not pass through that endpoint, so it is sealed here, off the loop, before
+		// Submit turns it into a command. A failure to seal fails the job: writing the
+		// plaintext instead would put an un-erasable value in the log, which is the one
+		// outcome this mechanism exists to prevent.
+		for i := range outcomes {
+			if outcomes[i].Err != nil || len(outcomes[i].Completion.Outputs) == 0 {
+				continue
+			}
+			if sealErr := s.encipherJobVars(outcomes[i].Job.Key, outcomes[i].Completion.Outputs); sealErr != nil {
+				outcomes[i].Err = sealErr
+			}
 		}
 		s.driveMu.Lock()
 		s.do(func() { s.jobRunner.Submit(outcomes) })

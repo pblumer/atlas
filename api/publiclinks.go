@@ -282,6 +282,26 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// The public form is the path a portal's personal data actually arrives on, so it
+	// has to seal (ADR-0314) — and its definition is only known once the token is
+	// resolved, which the loop owns. Hence a resolution visit of its own before the
+	// start: sealing reads the vault and must not happen on the loop, and the command
+	// must already hold ciphertext. A token that resolves to nothing seals nothing and
+	// falls through to the 404 the start below reports.
+	var sealDefKey uint64
+	s.do(func() {
+		if link, ok, e := s.publicLinks.Get(token); e == nil && ok {
+			if d := s.latestDeploymentByProcessID(link.ProcessID); d != nil {
+				sealDefKey = d.Key
+			}
+		}
+	})
+	if sealDefKey != 0 {
+		if err := s.encipherStartVars(sealDefKey, vars); err != nil {
+			httpapi.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
 	var (
 		found   bool
 		notExec bool
