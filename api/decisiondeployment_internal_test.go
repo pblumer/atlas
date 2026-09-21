@@ -453,6 +453,50 @@ func TestUploadRefusesUncompilableDMN(t *testing.T) {
 	}
 }
 
+// serviceNoOutputDMN declares a decision service that returns nothing: it evaluates
+// a decision internally and names no output decision, which DMN requires one or more
+// of (1.5 Table 17). temis compiles it happily — there is nothing to compute wrong
+// about a service with nothing to return.
+const serviceNoOutputDMN = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20230324/MODEL/" id="d" name="Rating" namespace="http://atlas/dmn/noout">
+  <inputData id="in1" name="Amount"><variable id="v1" name="amount" typeRef="number"/></inputData>
+  <decision id="dec1" name="Risk">
+    <variable id="v2" name="risk" typeRef="string"/>
+    <informationRequirement id="ir1"><requiredInput href="#in1"/></informationRequirement>
+    <literalExpression id="le1"><text>if amount &gt; 100 then "high" else "low"</text></literalExpression>
+  </decision>
+  <decisionService id="svc1" name="Rating Service">
+    <encapsulatedDecision href="#dec1"/>
+  </decisionService>
+</definitions>`
+
+// TestUploadRefusesAServiceThatPublishesNothing closes the door this repository
+// learned about the hard way. A decision service whose output decisions went missing
+// is not rejected by anything downstream: it compiles, it is listed, the picker
+// offers it, a business rule task calls it, and the task completes with the variable
+// it was to fill still unset. Nothing anywhere says so.
+//
+// So it is refused at the upload, which is the last place somebody is still holding
+// the model, and the refusal names the service rather than the file.
+func TestUploadRefusesAServiceThatPublishesNothing(t *testing.T) {
+	srv, dir := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+
+	code, b := x.do(http.MethodPost, "/api/v1/dmn-models?name=rating", serviceNoOutputDMN)
+
+	if code != http.StatusBadRequest {
+		t.Fatalf("upload = %d %s, want 400", code, b)
+	}
+	if !strings.Contains(string(b), "Rating Service") {
+		t.Errorf("body = %s, want it to name the service the author has to fix", b)
+	}
+	// Refused means not stored: a model folder that quietly kept it would hand the
+	// next deploy the same broken service.
+	if _, err := os.Stat(filepath.Join(dir, "dmn-models", "rating.dmn")); !os.IsNotExist(err) {
+		t.Errorf("the refused model was stored anyway (stat err = %v)", err)
+	}
+}
+
 // TestPublishRefusesADecisionThatStoppedCompiling is the other half of "never
 // partly visible": a reference whose model became invalid after it was stored — a
 // model folder is a folder, and a file in it can be edited by something other than
