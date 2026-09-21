@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Decisions",
+    "Modeler"
+  ],
+  "title": {
+    "en": "A decision service that answers with nothing is now refused",
+    "de": "Ein Decision Service, der nichts zurückgibt, wird jetzt abgewiesen"
+  },
+  "summary": {
+    "en": "A decision service returns its output decisions — that is what a caller gets, and the reason to address the service instead of the decision inside it. Atlas used to accept one that named none. It compiled, it appeared in the picker, a business rule task called it, and the task completed with the variable it was meant to fill still empty: no error, in the engine or in the log, just a process carrying on past a decision that was never made. Saving or deploying such a model is now refused, and the message names the service rather than the file, so you know which box to fix. A model already stored with the fault shows as invalid in the model list and cannot be deployed until it is repaired. Unfinished work is unaffected — a service you are still building belongs in a draft, which is saved without this check.",
+    "de": "Ein Decision Service gibt seine Output-Entscheidungen zurück — das ist es, was ein Aufrufer erhält, und der Grund, den Service statt die Entscheidung darin anzusprechen. Atlas hat bisher auch einen akzeptiert, der keine benennt. Er kompilierte, erschien in der Auswahl, ein Business-Rule-Task rief ihn auf, und der Task war abgeschlossen, während die Variable, die er füllen sollte, leer blieb: kein Fehler, weder in der Engine noch im Log, nur ein Prozess, der über eine nie getroffene Entscheidung hinweglief. Das Speichern und das Deployen eines solchen Modells wird nun abgewiesen, und die Meldung nennt den Service statt der Datei, damit klar ist, welcher Kasten zu korrigieren ist. Ein bereits gespeichertes Modell mit diesem Fehler wird in der Modellliste als ungültig ausgewiesen und lässt sich erst nach der Korrektur deployen. Unfertiges bleibt unberührt — ein Service, an dem Sie noch bauen, gehört in einen Entwurf, und der wird ohne diese Prüfung gespeichert."
+  },
+  "try": {
+    "label": {
+      "en": "Open the decisions",
+      "de": "Entscheidungen öffnen"
+    },
+    "route": "#/console/decisions"
+  }
+}

@@ -41,6 +41,42 @@ type xmlService struct {
 	InputData      []xmlRef `xml:"inputData"`
 }
 
+// servicesPublishingNothing names the decision services a document declares with no
+// output decision, in document order.
+//
+// DMN gives a service one or more of them (1.5 Table 17: outputDecisions [1..*]):
+// they are what it answers with, and the whole reason to address a service rather
+// than the decision inside it. One with none is not an incomplete model that still
+// half works — temis compiles it, Atlas lists it, the decision picker offers it, a
+// business rule task calls it, and the answer is empty.
+//
+// It is read from the document rather than from the compiled model because the
+// engine does not object: a service with nothing to return is, to a compiler, a
+// service with nothing to do.
+func servicesPublishingNothing(src []byte) []string {
+	var parsed xmlServiceDefs
+	if err := xml.Unmarshal(src, &parsed); err != nil {
+		return nil
+	}
+	var out []string
+	for _, s := range parsed.Services {
+		if len(s.Outputs) > 0 {
+			continue
+		}
+		switch {
+		case s.Name != "":
+			out = append(out, s.Name)
+		case s.ID != "":
+			out = append(out, s.ID)
+		default:
+			// A service with neither is refused all the same: it is the document that
+			// is wrong, and saying so without a name beats letting it through.
+			out = append(out, "(unnamed)")
+		}
+	}
+	return out
+}
+
 // serviceNames reduces described services to the names they answer to, in
 // document order and each name once. A model that declares one name twice is
 // refused by [nameCollisions], so the repetition only reaches here through a
