@@ -21,9 +21,10 @@
 //   - **Nothing is inferred onto a node.** A value is shown where it can be tied to
 //     a node by name — the recorded inputs, the outputs, and the values the trace
 //     says each table's input columns evaluated to. A decision the record cannot
-//     speak for is drawn plainly, as unknown, and says so. A decision service
-//     records no rule trace at all (ADR-0398), and that is stated rather than
-//     rendered as an absence of rules.
+//     speak for is drawn plainly, as unknown, and says so. A record written before
+//     the engine could trace a decision service (ADR-0398, fixed since) carries no
+//     rules, and that is stated — as a fact about the record's age, not about what
+//     the engine can do — rather than rendered as an absence of rules.
 
 import { renderTraceTable, tablesOf as traceTablesOf, fmtVal as traceValue } from "./dmn-trace.js";
 
