@@ -1,4 +1,4 @@
-# ADR-DRAFT: Requirements as design-time records, attached by a declared edge
+# ADR-0407: Requirements as design-time records, attached by a declared edge
 
 - **Status:** Proposed
 - **Implementation:** Not started
