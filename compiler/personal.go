@@ -241,8 +241,11 @@ func (p *CompiledProcess) refuseExpressionsReadingPersonalData() error {
 		if kind == "" {
 			kind = site.path
 		}
+		// No article before %s: the kinds start with both vowels and consonants ("output
+		// mapping", "input mapping"), and "a output mapping" in a deploy error is the kind
+		// of sloppiness that makes a reader trust the rest of the message less.
 		return fmt.Errorf(
-			"compiler: a %s reads personal variable(s) %v: %q — a variable declared personal is enciphered "+
+			"compiler: %s reads personal variable(s) %v: %q — a variable declared personal is enciphered "+
 				"before the engine sees it, so it cannot be compared, matched or routed on. Move the transform into "+
 				"the worker that needs the result, where the plaintext exists for one call (ADR-0314, ADR-0047)",
 			kind, hits, site.e.Source())

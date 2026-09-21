@@ -1,15 +1,19 @@
 # ADR-0314: Personal data in the portal — a reference by default, a destroyable key for the rest
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-09-11
 - **Deciders:** Atlas maintainers
-- **Open question:** Whether every portal process can be written without computing on
-  a declared personal variable. The rule below refuses a deployment that reads one in
-  an expression, and `examples/account-bestellung` already does exactly that — it
-  builds a UPN from a mail nickname in a script task. Whether such transforms move
-  cleanly into the worker, or whether the rule has to admit a narrow exception, is
-  established by no portal process that exists yet.
+- **Open question:** answered, and closed by a real process rather than by argument.
+  `examples/account-bestellung` built a UPN, a mailNickname and a display name out of a
+  first and last name — one `zeebe:script` plus three output mappings, all engine-evaluated.
+  All four moved into the create-user task's own `attributes` expression, the process
+  declares `atlas:personal="vorname,nachname"`, and it deploys. **No exception was needed.**
+  What it cost is recorded below rather than glossed: the example lost a fail-closed gateway.
+  The question that replaces it is narrower and belongs to the enciphering step: whether a
+  worker expression still sees plaintext once values are enciphered — the exemption in
+  `compiler/personal.go` holds only while the values a worker binds are deciphered before
+  it binds them.
 - **Question checked:** 2026-09
 
 ## Context and problem statement
@@ -150,6 +154,27 @@ every compiled expression, so this is decidable at deploy time and belongs there
 (I5, [ADR-0008](0008-feel-expression-strategy.md)). A rule that relies on a modeller
 remembering is the modelling recommendation R-06 already has, and it is the reason
 R-06 is still amber.
+
+#### What it costs, measured on the one process that had to move (2026-09)
+
+The transform moved cleanly, and something else did not survive. `account-bestellung` had
+**two** fail-closed gateways, and the first checked the process's own computed UPN against
+`jml-test-*@contoso.com` before any write reached Entra. With the construction in the
+worker there is no such process variable, so there is nothing for a gateway to read: the
+test-object boundary is now carried by the `jml-test-` literal inside the connector's
+`attributes` expression — in the BPMN, visible in review, but **structural rather than
+checked at runtime**.
+
+So the rule has a consequence this record did not state: **it removes the ability to assert
+a runtime invariant on a value derived from personal data.** Not on the personal data itself,
+which was never routable, but on anything computed from it — and derived identifiers are
+exactly what such gateways tend to guard.
+
+It is a smaller loss here than it first looks, which is why the example took it rather than
+an exception: the gateway was checking a value the same process had built two steps earlier,
+so it guarded a disagreement between a script and a check. Once construction and boundary
+are one expression, they cannot disagree. Where the derived value comes from *outside* the
+process, that reasoning does not transfer and the loss is real.
 
 Routing therefore happens on references, which is what the rule above already makes
 available: a task is assigned to a principal id, not to a name; an approval routes to

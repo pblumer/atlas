@@ -14,6 +14,48 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A process can declare which variables hold personal data, and the compiler refuses a
+  deployment that computes on one.** The declaration is one attribute —
+  `atlas:personal="vorname,nachname"` — in the same shape and the same place as the
+  searchable-variable list. What it buys is not a warning: a declared variable is
+  enciphered before it ever becomes a command, and ciphertext cannot be compared, matched
+  or routed on, so a process that reads one in a gateway condition, a mapping, a script or
+  a timer expression **does not deploy**. The error names the variable, the kind of
+  expression and the expression itself.
+
+  That is the whole point of doing it here. The modelling recommendation this answers has
+  been amber for exactly one reason — it relied on a modeller remembering — and a compiler
+  that holds both the declaration and every compiled expression can simply decide it.
+
+  The rule's edge is where the code evaluates the expression, not where it would be
+  convenient. A worker's own expressions are outside it: that is the one place the record
+  permits plaintext, for the duration of one call, and it is where a transform combining
+  personal values belongs. So `= "Hallo " + vorname` in a mail body is fine and the same
+  text in an output mapping is not — because one runs in the worker and the other in the
+  engine.
+
+  Nothing changes for a process that declares nothing, which is every existing model.
+
+### Changed
+
+- **The Account-Bestellung example builds its UPN in the worker, and lost a gateway doing
+  it.** It is the proof the personal-data rule needed: the example took a first and last
+  name from a public form and built a UPN, a mailNickname and a display name out of them,
+  in one script and three output mappings the engine evaluated. All four moved into the
+  create-user task's own attributes expression. It deploys, and **no exception to the rule
+  was needed** — which is what its record could not establish against any process that
+  existed.
+
+  The cost is stated rather than quietly absorbed: a fail-closed gateway used to check the
+  computed UPN against `jml-test-*@contoso.com` before any write, and there is no such
+  process variable any more. The test-object boundary is now the `jml-test-` literal inside
+  the connector's attributes expression — in the model, visible in review, but structural
+  instead of checked at runtime. Here that is a small loss, because the gateway was
+  checking a value the same process had built two steps earlier; where a derived value
+  arrives from outside the process, it would not be.
+
+### Added
+
 - **The run graph's ordinal map and CSR, and the measurement that qualified them.** The
   projection [ADR-0404](docs/adr/0404-the-whole-graph-can-be-walked.md) decided on is
   built: a persisted key-to-ordinal map, and the two flat arrays a walk reads. The map is
