@@ -14,6 +14,41 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Put a whole element type down on the starmap.** The Product Map draws four kinds at
+  once — the catalogues, the products they offer, the processes those products bind and
+  a marker where nothing is deployed — and a reader who came to look at one of them had
+  no way to set the other three aside. The search narrows by *name*, which answers a
+  different question: "show me just the catalogues" is not a string anybody can type.
+
+  The right-hand column now lists every element type the picture holds, each with a box,
+  and **every box is on**. It is for putting part of a picture down, not for building one
+  up: the landscape the server sent is the one it meant to send, and a kind nobody has an
+  opinion about stays drawn — including one that arrives later, such as a catalogue
+  somebody shares with you tomorrow.
+
+  Switching a type off takes it off **before** anything else narrows the picture, and that
+  ordering is the whole of the feature. A search keeps a hop of neighbours so a match can
+  be read in place, and a drilldown follows the depth on screen; cut afterwards, both
+  would reach *through* a hidden kind and leave what they found stranded on the canvas.
+  So a process that was only on the picture because a product bound it goes with the
+  products, and an edge whose other end is gone goes with it — a line to nothing is not a
+  claim about the estate.
+
+  Everything that describes the picture follows it. The count over the canvas is the
+  count of what is drawn, not of what arrived; the key stops explaining what is no longer
+  there; and switching *everything* off says so in words rather than borrowing the
+  sentence a search that missed would use, which would send somebody to clear a search
+  they never typed. The boxes are named in whatever vocabulary the picture is read in, so
+  on an ArchiMate projection they say Grouping and Product.
+
+  **An export says which types were off.** A picture narrowed this way leaves no trace on
+  the canvas — no term in a box, no breadcrumb, just fewer things — so a file that called
+  it "the whole starmap" would be exactly the export the stamp exists to prevent. The
+  stamp now names them, and spells out the part a reader of the file cannot work out:
+  what is missing is not only the hidden kind, it is everything that was reachable only
+  through one. A saved view carries the setting for the same reason it carries the search
+  term and the depth: a view is the whole question somebody saved.
+
 - **The run graph's ordinal map and CSR, and the measurement that qualified them.** The
   projection [ADR-0404](docs/adr/0404-the-whole-graph-can-be-walked.md) decided on is
   built: a persisted key-to-ordinal map, and the two flat arrays a walk reads. The map is
