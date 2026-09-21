@@ -25,6 +25,9 @@ type meshNode struct {
 	// deployment, and the definition node it realises where one is drawn.
 	RuntimeID  string `json:"runtimeId"`
 	Definition string `json:"definition"`
+	// The two catalogue facets a product node carries, and nothing else does.
+	ProductState string `json:"productState"`
+	ApprovalKind string `json:"approvalKind"`
 }
 
 type meshEdge struct {

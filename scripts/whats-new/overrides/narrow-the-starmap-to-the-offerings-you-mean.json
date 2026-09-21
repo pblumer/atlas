@@ -1,0 +1,34 @@
+{
+  "tags": [
+    "Panorama",
+    "Catalogue"
+  ],
+  "title": {
+    "en": "Narrow the starmap to the offerings you mean",
+    "de": "Die Starmap auf die gemeinten Angebote einschränken"
+  },
+  "summary": {
+    "en": "The element-type filter beside this one answers “which kinds of thing do I want to see”. It cannot answer “show me only what is actually orderable”, because that is not a kind — it is a property of one — and the search cannot answer it either, since a product's state is not a word in its name. The Product Map now carries the two facts your catalogue keeps about an offering that nothing else on the picture has. Product state lists draft, active and withdrawn; Approval lists whether ordering it stops for an approver. Both are boxes and both are on, like the element types above them. Three boxes for the state rather than one “active only” switch, because a draft and a withdrawn product are not the same thing and the difference is usually the point — collapsed into “not active” they become one heap and “what did we retire” cannot be asked at all. Three boxes contain the switch anyway: untick two and keep active. The approval side is a simple yes or no although the rule behind it is not, because you can register your own approval process under any name, and which route an approval takes is a catalogue matter while whether an order stops for a human at all is an estate one. A rule Atlas has never heard of counts as stopping for a human. It only ever removes products: a catalogue has no state and a process has no approver, so nothing else on the picture can be filtered by one, and a process left with nothing attached stays drawn — a deployed process is part of the estate in its own right. Like the element-type filter, the cut happens before the search and the drilldown, so neither reaches through a product you have put down. An exported file names the products that were switched off and says the part you could not otherwise see: a catalogue in that file may offer more than the products shown under it. A saved view remembers the setting.",
+    "de": "Der Elementtyp-Filter daneben beantwortet die Frage „welche Arten von Dingen will ich sehen“. Er beantwortet nicht „zeig mir nur das, was tatsächlich bestellbar ist“, denn das ist keine Art, sondern eine Eigenschaft einer Art — und die Suche beantwortet es ebenso wenig, weil der Zustand eines Produkts kein Wort in seinem Namen ist. Die Product Map führt jetzt die beiden Angaben mit, die Ihr Katalog zu einem Angebot führt und die sonst nichts auf dem Bild hat. „Product state“ führt Entwurf, aktiv und zurückgezogen auf; „Approval“ führt auf, ob eine Bestellung bei einer genehmigenden Person anhält. Beides sind Kästchen, und beide sind gesetzt, wie die Elementtypen darüber. Drei Kästchen für den Zustand statt eines Schalters „nur aktive“, weil ein Entwurf und ein zurückgezogenes Produkt nicht dasselbe sind und der Unterschied meist gerade der Punkt ist: Zu „nicht aktiv“ zusammengefasst werden sie ein Haufen, und „was haben wir zurückgezogen“ lässt sich gar nicht mehr fragen. Die drei Kästchen enthalten den Schalter ohnehin — zwei Haken weg, aktiv stehen lassen. Die Genehmigungsseite ist ein schlichtes Ja oder Nein, obwohl die Regel dahinter es nicht ist: Sie können einen eigenen Genehmigungsprozess unter beliebigem Namen registrieren, und welchen Weg eine Genehmigung nimmt, ist eine Katalogfrage — ob eine Bestellung überhaupt bei einem Menschen anhält, ist eine Frage an die Landschaft. Eine Regel, die Atlas nicht kennt, zählt als Anhalten bei einem Menschen. Entfernt werden ausschliesslich Produkte: Ein Katalog hat keinen Zustand und ein Prozess keine genehmigende Person, also lässt sich sonst nichts auf dem Bild danach filtern. Ein Prozess, an dem nichts mehr hängt, bleibt gezeichnet — ein deployter Prozess gehört der Landschaft aus eigenem Recht an. Wie beim Elementtyp-Filter greift der Schnitt vor Suche und Drilldown, sodass keines von beiden durch ein weggelegtes Produkt hindurchgreift. Eine exportierte Datei nennt die abgeschalteten Produkte und sagt, was man ihr sonst nicht ansieht: Ein Katalog darin bietet unter Umständen mehr an, als die darunter gezeigten Produkte vermuten lassen. Eine gespeicherte Sicht merkt sich die Einstellung."
+  },
+  "tutorial": {
+    "en": [
+      "Open Panorama › Starmap and set View to “Product Map”.",
+      "In the right-hand column, under “Element types”, find “Product state” and “Approval”. Each lists one box per value your picture actually holds, all ticked.",
+      "Untick Withdrawn and Draft: what is left are the offerings somebody can order today, with the catalogues and processes untouched.",
+      "Untick “Ordered without approval” as well — now only the products that stop for an approver are drawn.",
+      "Tick them back: the boxes are still there, because the list is built from what the server sent rather than from what survived.",
+      "Press “SVG” with something switched off and read the stamp at the foot of the file — it names what was put down and warns that a catalogue may offer more than is shown.",
+      "Name the arrangement under “Saved views” and press Save; reopening it narrows the picture the same way."
+    ],
+    "de": [
+      "Öffnen Sie „Panorama › Starmap“ und stellen Sie „View“ auf „Product Map“.",
+      "In der rechten Spalte unter „Element types“ finden Sie „Product state“ und „Approval“. Beide führen je ein Kästchen pro Wert auf, den Ihr Bild tatsächlich enthält, alle gesetzt.",
+      "Nehmen Sie die Haken bei „Withdrawn“ und „Draft“ weg: übrig bleibt, was heute bestellbar ist — Kataloge und Prozesse bleiben unberührt.",
+      "Nehmen Sie zusätzlich den Haken bei „Ordered without approval“ weg — nun sind nur noch die Produkte gezeichnet, die bei einer genehmigenden Person anhalten.",
+      "Setzen Sie die Haken wieder: Die Kästchen sind noch da, weil die Liste aus dem stammt, was der Server geliefert hat, und nicht aus dem, was übrig geblieben ist.",
+      "Drücken Sie bei abgeschalteter Auswahl auf „SVG“ und lesen Sie den Stempel am Fuss der Datei — er nennt das Weggelegte und weist darauf hin, dass ein Katalog mehr anbieten kann als gezeigt.",
+      "Benennen Sie die Anordnung unter „Saved views“ und drücken Sie „Save“; beim erneuten Öffnen wird das Bild gleich eingeschränkt."
+    ]
+  }
+}

@@ -4887,12 +4887,21 @@ button.mesh-crumb:focus-visible { outline: 2px solid var(--accent); outline-offs
   width: 68px; padding: 5px 8px; border: 1px solid var(--border-strong); border-radius: 6px;
   background: var(--surface); color: var(--text); font: inherit; font-size: 13px;
 }
-/* Element types: one box per kind on the picture, stacked rather than wrapped into
-   a paragraph of words. A reader ticks these while looking at the canvas, so what
-   matters is that the list can be run down with the eye and that each row is a
-   target big enough to hit — not that it is compact. The heading takes the same
-   muted weight as Show and Depth, because it is the same kind of control. */
+/* Element types, product state and approval: one box per value on the picture,
+   stacked rather than wrapped into a paragraph of words. A reader ticks these while
+   looking at the canvas, so what matters is that the list can be run down with the
+   eye and that each row is a target big enough to hit — not that it is compact. The
+   headings take the same muted weight as Show and Depth, because they are the same
+   kind of control.
+
+   The three lists share one class on purpose. They are one instrument with three
+   scales — tick to show, untick to put down — and giving the facet lists their own
+   look would suggest they answer to a different rule than the boxes above them. */
 .mesh-kinds-head { color: var(--muted); }
+/* Air above a heading that follows a list, so the three groups read as three and
+   not as one long column with words in it. Only between them: the first heading
+   sits under Depth and takes the panel's own spacing. */
+.mesh-kinds + .mesh-kinds-head { margin-top: 8px; }
 .mesh-kinds { display: flex; flex-direction: column; gap: 2px; }
 .mesh-kind {
   display: flex; align-items: center; gap: 6px;
