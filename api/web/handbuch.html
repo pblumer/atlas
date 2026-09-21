@@ -3305,7 +3305,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <span data-l="de">Produkt erfassen: Atlas pflegt seinen Katalog mit Atlas</span><span data-l="en">Capturing a product: Atlas maintains its catalogue with Atlas</span></h4>
         <p class="bsp-tags">
           <span class="tag warn" data-l="de">braucht die Verbindung „atlas“</span><span class="tag warn" data-l="en">needs the "atlas" connection</span>
-          <span class="tag" data-l="de">sechs Formulare</span><span class="tag" data-l="en">six forms</span>
+          <span class="tag" data-l="de">eine Erfassungsmaske</span><span class="tag" data-l="en">one capture form</span>
           <span class="tag">examples/produkt-erfassung/</span>
         </p>
         <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
@@ -3328,24 +3328,27 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           </div>
           <div>
             <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
-            <p data-l="de">Ein Prozess, sechs Formulare, acht Service-Tasks – und jeder davon schreibt über Atlas'
+            <p data-l="de">Ein Prozess, vier Formulare, acht Service-Tasks – und jeder davon schreibt über Atlas'
               <b>eigene HTTP-API</b> zurück, mit dem rest-Connector und der Verbindung <code>atlas</code>: derselbe
-              Weg, den die mitgelieferte Auftragserfüllung geht. Drei Stellen sind Entscheidungen und keine Folgen.
-              Das Produkt wird gesichert <b>bevor</b> es zusammengestellt wird, weil die Zusammenstellung Kanten am
-              Katalog sind und der Katalog eine Id zurückweist, zu der kein Produkt existiert. Vor dem Schreiben am
-              Katalog wird der Katalog <b>frisch gelesen</b> und seine <code>revision</code> mitgeführt – ein PATCH
-              ersetzt Items und Edges als Ganzes, und zwischen Maske und Speichern liegen Minuten, in denen jemand
-              anderes ein Produkt hinzugefügt haben kann. Das Erscheinungsbild ist eine <b>eigene Aufgabe für die
-              Administration</b>, weil ein Theme in Atlas nicht der Katalogpflege gehört.</p>
-            <p data-l="en">One process, six forms, eight service tasks – and every one of them writes back through
+              Weg, den die mitgelieferte Auftragserfüllung geht. Die ganze Erfassung ist <b>eine Aufgabe</b> und
+              nicht fünf: es ist dieselbe Arbeit derselben Person in derselben Sitzung, und fünfmal beanspruchen
+              und abschliessen wäre langsamer als das Formular, das der Prozess ersetzt. Der Gewinn liegt in der
+              <b>Verifizierung</b>, und die bleibt eine eigene Station. Der Katalog wird <b>erst nach der Freigabe</b>
+              beschrieben, sodass ein abgelehntes Produkt gar nicht erst ins Angebot gerät und der Schreibvorgang
+              genau einmal läuft. Vorher wird der Katalog <b>frisch gelesen</b> und seine <code>revision</code>
+              mitgeführt – ein PATCH ersetzt Items und Edges als Ganzes, und in der Zwischenzeit kann jemand
+              anderes ein Produkt hinzugefügt haben. Das Erscheinungsbild ist eine <b>eigene Aufgabe für die
+              Administration</b> und liegt hinten, damit eine Erfassung nicht auf eine Farbwahl wartet.</p>
+            <p data-l="en">One process, four forms, eight service tasks – and every one of them writes back through
               Atlas's <b>own HTTP API</b>, with the rest connector and a connection named <code>atlas</code>: the
-              same route the shipped order fulfilment takes. Three points are decisions rather than consequences.
-              The product is saved <b>before</b> it is assembled, because the assembly is edges on the catalogue and
-              the catalogue refuses an id no product answers to. Before writing to the catalogue it is
-              <b>read afresh</b> and its <code>revision</code> carried along – a PATCH replaces items and edges
-              whole, and minutes pass between the form and the save in which somebody else may have added a product.
-              The appearance is <b>a task of its own for administrators</b>, because a theme in Atlas does not
-              belong to catalogue maintenance.</p>
+              same route the shipped order fulfilment takes. The whole capture is <b>one task</b> and not five: it
+              is the same work by the same person in one sitting, and claiming and completing five would be slower
+              than the form the process replaces. The gain is the <b>verification</b>, and that stays a station of
+              its own. The catalogue is written <b>only after approval</b>, so a rejected product never reaches the
+              offering and the write runs exactly once. Before it, the catalogue is <b>read afresh</b> and its
+              <code>revision</code> carried along – a PATCH replaces items and edges whole, and in the meantime
+              somebody else may have added a product. The appearance is <b>a task of its own for administrators</b>
+              and sits at the back, so a capture never waits on a choice of colour.</p>
           </div>
         </div>
         <div class="rz-actions"></div>

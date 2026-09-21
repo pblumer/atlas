@@ -31,54 +31,91 @@ für das Erscheinungsbild.
 | Schritt | Art | API |
 |---|---|---|
 | Kataloge holen | Service | `GET /api/v1/catalogs` |
-| Katalog wählen oder anlegen | Aufgabe | Formular `pe-katalog` |
-| Katalog anlegen | Service | `POST /api/v1/catalogs` |
-| Erscheinungsbild festlegen | Aufgabe | Formular `pe-theme`, Gruppe `administration` |
-| Theme setzen | Service | `PUT /api/v1/catalogs/{id}/theme` |
-| Produktdaten erfassen | Aufgabe | Formular `pe-produkt` |
-| Produkt als Entwurf sichern | Service | `POST /api/v1/catalog-products` (`state: draft`) |
 | Bestehende Produkte holen | Service | `GET /api/v1/catalog-products` |
-| Produkt zusammenstellen | Aufgabe | Formular `pe-assemble` |
+| **Produkt erfassen** | **Aufgabe** | Formular `pe-erfassung` — Katalog, Produktdaten, Zusammenstellung und Preise in **einer** Maske |
+| Katalog anlegen (nur bei „neu") | Service | `POST /api/v1/catalogs` |
+| Produkt als Entwurf sichern | Service | `POST /api/v1/catalog-products` (`state: draft`) |
+| **Produkt verifizieren** | **Aufgabe** | Formular `pe-pruefen` — zurück zur Erfassung oder freigeben |
+| Produkt aktiv setzen | Service | `POST /api/v1/catalog-products` (`state: active`) |
 | Katalog frisch lesen | Service | `GET /api/v1/catalogs/{id}` |
 | Angebot und Zusammenstellung schreiben | Service | `PATCH /api/v1/catalogs/{id}` |
-| Kommerzielle Sicht | Aufgabe | Formular `pe-preise` |
-| Entwurf mit Preis sichern | Service | `POST /api/v1/catalog-products` |
-| Produkt verifizieren | Aufgabe | Formular `pe-pruefen` |
-| Produkt aktiv setzen | Service | `POST /api/v1/catalog-products` (`state: active`) |
+| Erscheinungsbild (nur bei „neu") | Aufgabe | Formular `pe-theme`, Gruppe `administration` |
+| Theme setzen | Service | `PUT /api/v1/catalogs/{id}/theme` |
 | Katalog publizieren? | Aufgabe | Formular `pe-publizieren` |
 | Katalog publizieren | Service | `POST /api/v1/catalogs/{id}/releases` |
 
-## Drei Entscheidungen
+## Vier Entscheidungen
 
-### Das Produkt wird gesichert, bevor es zusammengestellt wird
+### Die Erfassung ist eine Aufgabe und nicht fünf
 
-Aufgeschrieben würde man es andersherum: erst alles erfassen, dann speichern.
-Das geht nicht. Die Zusammenstellung sind **Kanten am Katalog**, die auf die
-Produkt-ID zeigen, und der Katalog weist eine ID zurück, zu der kein Produkt
-existiert — sonst erschiene die Absage erst bei der nächsten Freigabe, als
-`unknown item`, weit weg von der Ursache.
+Katalogwahl, Produktdaten, Zusammenstellung und Preise sind dieselbe Arbeit
+derselben Person in derselben Sitzung. Fünf Aufgaben daraus zu machen hiesse
+viermal beanspruchen, abschliessen und auf die nächste warten — ein Assistent,
+der sich wie ein Behördengang anfühlt, und langsamer als das Konsolenformular,
+das er ersetzen soll.
 
-Der Zustand `draft` trägt dabei genau das, was er soll: das Produkt ist da,
-sichtbar in der Pflege, und nicht bestellbar, bis es geprüft ist.
+Der Gewinn dieses Prozesses liegt woanders und bleibt vollständig erhalten: in
+der **Verifizierung**, die eine echte zweite Station ist, mit einer Entscheidung
+und einer Spur.
+
+### Der Katalog wird erst nach der Freigabe beschrieben
+
+Ein abgelehntes Produkt gelangt damit gar nicht erst ins Angebot. Sonst stünde
+ein Entwurf in der Item-Liste des Katalogs, und jede Freigabe scheiterte an ihm
+(`state is draft, not active`), bis jemand ihn von Hand entfernt.
+
+Es hat eine zweite Wirkung, die genauso wichtig ist: der Schreibvorgang läuft
+**genau einmal**, auch wenn die Verifizierung mehrfach zurückschickt — die
+Kanten können sich nicht vervielfachen.
+
+Das Produkt selbst wird trotzdem vor der Prüfung gesichert, als Entwurf: es muss
+existieren, damit die Verifizierung etwas Reales vor sich hat, und `draft` trägt
+genau das — vorhanden, nicht bestellbar.
 
 ### Vor dem Schreiben wird der Katalog frisch gelesen
 
 Der Schritt sieht überflüssig aus und ist der wichtigste im Prozess.
 
 Ein `PATCH` ersetzt `items` und `edges` **als Ganzes**. Zwischen der Maske und
-dem Speichern liegen Minuten, in denen jemand anderes ein Produkt hinzugefügt
-haben kann. Ohne den frischen Stand schriebe der Prozess einen veralteten zurück
-und das fremde Produkt wäre weg — ohne Fehler und ohne Spur. Genau davor warnt
-der Kommentar am Feld `Catalog.Revision`.
+dem Speichern liegen Minuten bis Tage, in denen jemand anderes ein Produkt
+hinzugefügt haben kann. Ohne den frischen Stand schriebe der Prozess einen
+veralteten zurück und das fremde Produkt wäre weg — ohne Fehler und ohne Spur.
+Genau davor warnt der Kommentar am Feld `Catalog.Revision`.
 
 Deshalb wird die `revision` mitgeführt: sie macht aus einem lautlosen
 Überschreiben eine Absage, die jemand sieht.
 
-### Das Erscheinungsbild ist eine eigene Aufgabe
+### Das Erscheinungsbild ist eine eigene Aufgabe, und sie liegt hinten
 
 Ein Katalog-Theme setzt in Atlas die **Administration** und nicht die
 Katalogpflege (ADR-0316, Entscheidung 12); der Endpunkt antwortet sonst mit
-`403`. Der Prozess umgeht das nicht, er bildet es ab.
+`403`.
+
+Sie liegt hinter der Freigabe des Produkts statt davor. Vorne stehend liesse sie
+eine Produkterfassung auf die Farbwahl einer Administratorin warten. Hier wartet
+nur die Publikation darauf — und ein neuer Katalog geht nicht ungebrandet live.
+
+### Drei Fallen im FEEL, die im Modell gelöst sind
+
+Sie sind erwähnenswert, weil sie stillschweigend das Falsche tun statt zu
+scheitern, und weil jede beim Nachbauen wieder auftritt:
+
+- **`append` verkettet keine Listen.** `append(liste, andereListe)` hängt die
+  zweite als *ein Element* an und erzeugt verschachtelte Kanten, die der Katalog
+  nicht lesen kann. Richtig ist `concatenate`.
+- **`split` lässt Leerzeichen stehen.** `split("de, fr", ",")` ergibt
+  `["de", " fr"]`. Die Suchbegriffe werden deshalb mit
+  `replace(s, "^\s+|\s+$", "")` beschnitten und leere Einträge fallen weg.
+  Die Sprachen umgeht das Problem ganz: sie sind eine Auswahlliste im Formular
+  und damit schon eine Liste.
+- **Ein Filter über eine Liste von Kontexten filtert nicht.** `edges[from != x]`
+  gibt in diesem Build *alles* zurück, statt zu filtern oder zu scheitern.
+  Darauf beruht keine Zeile hier — der Katalog wird stattdessen genau einmal
+  geschrieben, sodass nichts zu entfernen ist.
+
+Eine nicht gesetzte Variable liest sich in FEEL als `null`. Darauf beruhen zwei
+Bedingungen: `katalogId = null` erkennt den ersten Durchlauf, und
+`katalogNeu = true` ist falsch, wenn nie ein Katalog angelegt wurde.
 
 ## Was dieses Beispiel nicht tut
 

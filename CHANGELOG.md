@@ -50,11 +50,27 @@ _Changed_ / _Removed_ for each version.
   the catalogue. Both are said in the example's README rather than left to be
   discovered.
 
-  **A new guard holds every user task to the form it names** — and found two shipped
-  connection tests referencing start forms that were never written. A dangling
-  `formId` compiles, deploys and runs: the task simply reaches somebody's inbox with
-  nothing to fill in. Both forms now exist, written from what those models already
-  documented they need.
+  The capture itself is **one task and not five**. Choosing the catalogue, entering
+  the product, saying what it is assembled from and setting the prices are the same
+  work by the same person in one sitting; five tasks would mean claiming and
+  completing four more times, which is slower than the console form the process
+  replaces. What the process is actually for — the verification — stays a station of
+  its own.
+
+  **Two new guards, and both found real defects.** One holds every user task to the
+  form it names: a dangling `formId` compiles, deploys and runs, and the task simply
+  reaches an inbox with nothing to fill in. It immediately found two shipped
+  connection tests pointing at start forms nobody had written; both now exist, with
+  the fields those models already documented.
+
+  The other evaluates the FEEL in a shipped model against sample variables and
+  states what must come back — because compiling proves almost nothing here. It
+  found two defects in this very process: `append(a, b)` appends a whole list as
+  **one element**, so the catalogue was being sent nested edges it cannot read, and
+  `split("de, fr", ",")` leaves the space on, so a keyword arrived as `" M365"` and
+  would never be matched. Both are valid FEEL doing the wrong thing in silence.
+  A third trap is documented rather than relied on: a filter over a list of contexts
+  returns the whole list in this build instead of filtering.
 
 - **Narrow the starmap to the offerings you mean.** The element-type filter beside it
   answers "which kinds of thing do I want to see". It cannot answer "show me only what
