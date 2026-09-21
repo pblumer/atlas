@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/pblumer/atlas/model"
 )
 
 // W5 of ADR-0314, the enciphering half. What these tests pin is not that AES works —
@@ -293,6 +295,8 @@ func TestParseEnvelopeIsStrict(t *testing.T) {
 		`{"atlas:personal":{"subject":"P-4711","kind":3,"nonce":"","value":""}}`,
 		`{"atlas:personal":{"subject":"","kind":3,"nonce":"AAAA","value":"AAAA"}}`,
 		`{"atlas:personal":{"subject":"P","kind":3,"nonce":"not base64!","value":"AAAA"}}`,
+		`{"atlas:personal":{"subject":"P","kind":3,"nonce":"AAAAAAAAAAAAAAAA","value":""}}`,
+		`{"atlas:personal":{"subject":"P","kind":3,"nonce":"AAAAAAAAAAAAAAAA","value":"not base64!"}}`,
 		`{"atlas:personal":{"subject":"P","kind":3,"nonce":"AAAA","value":"AAAA"},"x":1}`,
 	} {
 		if IsEnciphered(bad) {
@@ -324,5 +328,87 @@ func TestSealWithoutASubjectIsRefused(t *testing.T) {
 	}
 	if _, err := v.Open("vorname", Envelope{}); err == nil {
 		t.Error("Open accepted an envelope with no subject")
+	}
+}
+
+// TestACorruptedDataKeyIsNamedNotGuessed is about what an operator sees when the vault
+// directory has been restored from an inconsistent backup, or a key file edited by hand.
+// The failure has to say that the *key* is wrong, because the alternative — a raw AEAD
+// authentication error on every value — reads like the data being corrupt and sends the
+// reader looking in the wrong place.
+func TestACorruptedDataKeyIsNamedNotGuessed(t *testing.T) {
+	v := newTestVault(t)
+	env, err := v.Seal("P-4711", "vorname", 3, "Ida")
+	if err != nil {
+		t.Fatalf("Seal: %v", err)
+	}
+	// Not through the personal API: this is what a restore or a hand edit leaves behind.
+	if _, err := v.Set(DataKeyName("P-4711"), "not-a-key"); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{"open", func() error { _, e := v.Open("vorname", env); return e }()},
+		{"seal", func() error { _, e := v.Seal("P-4711", "nachname", 3, "Iversen"); return e }()},
+	} {
+		if tc.err == nil {
+			t.Errorf("%s accepted a data key that is not 32 bytes", tc.name)
+			continue
+		}
+		if !strings.Contains(tc.err.Error(), "32 bytes") || !strings.Contains(tc.err.Error(), "P-4711") {
+			t.Errorf("%s error %q names neither the size nor the subject", tc.name, tc.err)
+		}
+	}
+}
+
+// TestTheEnvelopeMarkerIsTheOneTheEngineLooksFor keeps the two spellings of the same thing
+// from drifting. The engine recognises a sealed value by model.EncipheredMarker without
+// being able to open one; this package builds the envelope from its own member name. If the
+// two stopped agreeing, the writer's refusal would stop seeing values this package seals —
+// and a personal value would be accepted in the clear.
+func TestTheEnvelopeMarkerIsTheOneTheEngineLooksFor(t *testing.T) {
+	if want := `{"` + envelopeKey + `":`; model.EncipheredMarker != want {
+		t.Errorf("model.EncipheredMarker = %q, but this package writes %q", model.EncipheredMarker, want)
+	}
+}
+
+// TestADataKeyFromAnotherInstallationIsNamed is the operator error this has to survive: a
+// vault directory copied from another installation, or restored beside a regenerated key
+// file. The data key is itself a secret sealed under the master key, so the master key it
+// was sealed under is what the failure has to name — otherwise every value of that subject
+// reports its own decrypt failure and the reader looks for corrupt data instead of a wrong
+// key.
+func TestADataKeyFromAnotherInstallationIsNamed(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "vault")
+	first, err := New(dir, testVaultKey(t))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	env, err := first.Seal("P-4711", "vorname", 3, "Ida")
+	if err != nil {
+		t.Fatalf("Seal: %v", err)
+	}
+
+	// The same directory, a different master key: what a regenerated key file leaves.
+	second, err := New(dir, testVaultKey(t))
+	if err != nil {
+		t.Fatalf("New (second): %v", err)
+	}
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{"open", func() error { _, e := second.Open("vorname", env); return e }()},
+		{"seal", func() error { _, e := second.Seal("P-4711", "nachname", 3, "Iversen"); return e }()},
+	} {
+		if tc.err == nil {
+			t.Errorf("%s worked under a different master key", tc.name)
+			continue
+		}
+		if !strings.Contains(tc.err.Error(), "different master key") {
+			t.Errorf("%s error %q does not say the master key is wrong", tc.name, tc.err)
+		}
 	}
 }

@@ -309,6 +309,8 @@ func (s *Server) handleListDataSubjects(w http.ResponseWriter, _ *http.Request) 
 		httpapi.Error(w, http.StatusServiceUnavailable, "vault not configured")
 		return
 	}
+	// DataSubjects always answers with a slice, empty when nothing is sealed, so a client
+	// iterating the answer never has to special-case null.
 	var (
 		metas   []vault.Meta
 		loadErr error
@@ -317,9 +319,6 @@ func (s *Server) handleListDataSubjects(w http.ResponseWriter, _ *http.Request) 
 	if loadErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "list data subjects: "+loadErr.Error())
 		return
-	}
-	if metas == nil {
-		metas = []vault.Meta{}
 	}
 	httpapi.JSON(w, http.StatusOK, metas)
 }

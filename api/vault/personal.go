@@ -116,16 +116,17 @@ type envelopeJSON struct {
 }
 
 // Text renders the envelope as the canonical JSON that is stored and transported.
+//
+// The marshal error is discarded rather than handled: every field is a string or a uint8,
+// so encoding/json cannot fail here, and a branch nothing can reach is a branch nothing can
+// test.
 func (e Envelope) Text() string {
-	raw, err := json.Marshal(map[string]envelopeJSON{envelopeKey: {
+	raw, _ := json.Marshal(map[string]envelopeJSON{envelopeKey: {
 		Subject: e.Subject,
 		Kind:    e.Kind,
 		Nonce:   base64.StdEncoding.EncodeToString(e.nonce),
 		Value:   base64.StdEncoding.EncodeToString(e.ct),
 	}})
-	if err != nil { // unreachable: every field is a string or a uint8
-		return ""
-	}
 	return string(raw)
 }
 

@@ -2,6 +2,7 @@ package examples
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -104,5 +105,59 @@ func TestAccountBestellungNamesWhoseDataItHolds(t *testing.T) {
 	// And it stays findable: erasing a person starts with finding their instances.
 	if !cp.IsSearchableVariable(subject) {
 		t.Errorf("the data subject %q is not searchable, so an operator cannot find the instances to erase", subject)
+	}
+}
+
+// TestNoExampleIsRefusedByADeclarationItDoesNotCompute is the rule's false-positive guard,
+// and the only place it can be had cheaply: every expression kind ADR-0314's refusal walks
+// has to be *present* in a process for the walk over it to mean anything, and no fixture
+// worth maintaining carries timers, boundary events, multi-instance activities, user-task
+// assignment expressions, correlation keys, data associations and inline scripts at once.
+// The example corpus carries all of them between its twenty-five models.
+//
+// So each model gets a declaration naming variables it has never heard of, and must still
+// deploy. A refusal here would mean the rule fires on an expression that does not read the
+// declared name — which is the failure mode that would quietly make the declaration
+// unusable in any real process, and which a small fixture cannot show.
+func TestNoExampleIsRefusedByADeclarationItDoesNotCompute(t *testing.T) {
+	models, err := filepath.Glob("*/*.bpmn")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(models) < 20 {
+		t.Fatalf("found %d example models; the glob no longer matches the corpus", len(models))
+	}
+	const decl = ` atlas:personal="atlasTestPersonalVar" atlas:dataSubject="atlasTestSubjectVar"`
+	checked := 0
+	for _, path := range models {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		model := string(raw)
+		// Only models that already deploy can say anything about the declaration. One that
+		// does not is a different test's business.
+		if _, err := compiler.ParseAll(1, 1, strings.NewReader(model)); err != nil {
+			continue
+		}
+		// The declaration goes on the first executable process. A model that already
+		// declares personal data (account-bestellung) is left alone: it is the subject of
+		// the tests above.
+		if strings.Contains(model, "atlas:personal=") {
+			continue
+		}
+		i := strings.Index(model, `isExecutable="true"`)
+		if i < 0 {
+			continue
+		}
+		j := i + len(`isExecutable="true"`)
+		declared := model[:j] + decl + model[j:]
+		if _, err := compiler.ParseAll(1, 1, strings.NewReader(declared)); err != nil {
+			t.Errorf("%s is refused by a declaration naming variables it never mentions: %v", path, err)
+		}
+		checked++
+	}
+	if checked < 15 {
+		t.Fatalf("only %d models were checked; the injection no longer finds its anchor", checked)
 	}
 }

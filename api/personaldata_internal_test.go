@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/pblumer/atlas/api/vault"
+	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/model"
@@ -484,10 +485,10 @@ func TestAnEncipheredValueIsLabelledNotShown(t *testing.T) {
 
 func ptrOf(v model.VariableValue) *model.VariableValue { return &v }
 
-// TestAPersonalDeployIsRefusedWithoutAVault keeps the declaration from becoming a lie on
-// a server that cannot honour it. With no vault there is no key, so the values would be
-// stored in the clear while the model said they were protected.
-func TestAPersonalDeployIsRefusedWithoutAVault(t *testing.T) {
+// newServerWithoutVault is a server started the way `--vault=false` starts one: nothing can
+// be sealed, so nothing that declares personal data may run.
+func newServerWithoutVault(t *testing.T) *Server {
+	t.Helper()
 	dir := t.TempDir()
 	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
 	if err != nil {
@@ -510,12 +511,474 @@ func TestAPersonalDeployIsRefusedWithoutAVault(t *testing.T) {
 		_ = store.Close()
 		_ = log.Close()
 	})
+	return srv
+}
 
+// TestAPersonalDeployIsRefusedWithoutAVault keeps the declaration from becoming a lie on
+// a server that cannot honour it. With no vault there is no key, so the values would be
+// stored in the clear while the model said they were protected.
+func TestAPersonalDeployIsRefusedWithoutAVault(t *testing.T) {
+	srv := newServerWithoutVault(t)
 	code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", personalBPMN, "application/xml")
 	if code == http.StatusOK {
 		t.Fatalf("a process declaring personal data deployed with the vault disabled: %s", body)
 	}
 	if !strings.Contains(string(body), "vault") {
 		t.Errorf("the refusal does not say why: %s", body)
+	}
+}
+
+// TestTheErasureRoutesAnswerWithoutAVault is what an operator meets on a server that runs
+// without one: the routes exist, and they say the vault is not configured rather than
+// reporting an empty list of data subjects — which would read as "nobody has personal data
+// here" when the truth is that nothing could have been sealed in the first place.
+func TestTheErasureRoutesAnswerWithoutAVault(t *testing.T) {
+	srv := newServerWithoutVault(t)
+	for _, tc := range []struct{ method, path string }{
+		{http.MethodGet, "/api/v1/personal-data"},
+		{http.MethodDelete, "/api/v1/personal-data/P-4711"},
+	} {
+		if code, body := serveInternal(t, srv, tc.method, tc.path, "", ""); code != http.StatusServiceUnavailable {
+			t.Errorf("%s %s: status=%d body=%s, want 503", tc.method, tc.path, code, body)
+		}
+	}
+	// And the reader a connector would be handed is the plain one, because with no vault
+	// there is nothing to open.
+	if got := srv.personalReader(srv.store); got != state.Reader(srv.store) {
+		t.Error("a server with no vault still wraps its reader, which would cost every read a parse for nothing")
+	}
+	// Sealing refuses rather than storing the value readable, which is the one thing it
+	// must never do. This path is unreachable through a handler — the deploy above is
+	// refused first — and is the layer under it.
+	vars := []model.VariableValue{{Name: "vorname", Kind: model.VarString, Text: "Ida"}}
+	cp := mustCompilePersonal(t, srv)
+	if err := srv.seal(personalSealing{cp: cp, subject: "P-4711"}, vars); err == nil {
+		t.Error("sealing succeeded with no vault")
+	} else if !strings.Contains(err.Error(), "vault") {
+		t.Errorf("the refusal does not say why: %v", err)
+	}
+	if vars[0].Text != "Ida" || vars[0].Kind != model.VarString {
+		t.Errorf("a refused seal changed the value anyway: %+v", vars[0])
+	}
+}
+
+// mustCompilePersonal compiles the fixture process without deploying it, for the layers
+// below the handlers.
+func mustCompilePersonal(t *testing.T, _ *Server) *compiler.CompiledProcess {
+	t.Helper()
+	deployables, err := compiler.ParseAll(1, 1, strings.NewReader(personalBPMN))
+	if err != nil {
+		t.Fatalf("compile the fixture: %v", err)
+	}
+	return deployables[0].Process
+}
+
+// TestADataSubjectMustBeAnIdentifierNotAValue is the fail-closed reading of the subject. The
+// vault names a key by a string, so a boolean or a structured value is not a subject anybody
+// could later ask an erasure for — and accepting one would seal data under a name no request
+// can reach.
+func TestADataSubjectMustBeAnIdentifierNotAValue(t *testing.T) {
+	srv := newServerForErrors(t)
+	code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", personalBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy: status=%d body=%s", code, body)
+	}
+	var deploy struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &deploy); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+	path := fmt.Sprintf("/api/v1/processes/%d/instances", deploy.Key)
+	for _, subject := range []string{`true`, `{"nr":4711}`, `["P-4711"]`, `null`} {
+		body := `{"variables":{"personalnummer":` + subject + `,"vorname":"Ida"}}`
+		if code, resp := serveInternal(t, srv, http.MethodPost, path, body, "application/json"); code != http.StatusBadRequest {
+			t.Errorf("a data subject of %s was accepted: status=%d body=%s", subject, code, resp)
+		}
+	}
+	// A number is an identifier — a personnel number usually is one — so it is accepted.
+	if code, resp := serveInternal(t, srv, http.MethodPost, path, `{"variables":{"personalnummer":4711,"vorname":"Ida"}}`, "application/json"); code != http.StatusOK {
+		t.Errorf("a numeric data subject was refused: status=%d body=%s", code, resp)
+	}
+}
+
+// TestSealingIsIdempotentAndKeepsTheValuesType covers the two things the sealing loop has to
+// get right beyond the happy path: a value that is already an envelope must not be wrapped
+// twice — a re-submitted form would otherwise nest one envelope in another and the opened
+// value would come back as JSON — and a boolean has to return as a boolean.
+func TestSealingIsIdempotentAndKeepsTheValuesType(t *testing.T) {
+	srv := newServerForErrors(t)
+	cp := mustCompilePersonal(t, srv)
+	p := personalSealing{cp: cp, subject: "P-4711"}
+
+	vars := []model.VariableValue{
+		{Name: "vorname", Kind: model.VarBool, Bool: true},
+		{Name: "kontotyp", Kind: model.VarString, Text: "A"},
+		{Name: "leer", Kind: model.VarNull},
+	}
+	if err := srv.seal(p, vars); err != nil {
+		t.Fatalf("seal: %v", err)
+	}
+	if !vault.IsEnciphered(vars[0].Text) {
+		t.Fatalf("the boolean was not sealed: %+v", vars[0])
+	}
+	if vars[1].Text != "A" || vars[2].Kind != model.VarNull {
+		t.Errorf("an undeclared value or a null was touched: %+v %+v", vars[1], vars[2])
+	}
+
+	sealedOnce := vars[0].Text
+	if err := srv.seal(p, vars); err != nil {
+		t.Fatalf("second seal: %v", err)
+	}
+	if vars[0].Text != sealedOnce {
+		t.Errorf("a sealed value was sealed again: %s then %s", sealedOnce, vars[0].Text)
+	}
+
+	// And it opens back as the boolean it was, which is what the envelope's kind is for.
+	opened, err := srv.personalReader(srv.store).(personalReader).open(&vars[0])
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if opened.Kind != model.VarBool || !opened.Bool || opened.Text != "" {
+		t.Errorf("the boolean came back as %+v", *opened)
+	}
+}
+
+// TestSealingAsksNothingOfAnUnknownInstance keeps the edges from failing a request because
+// the thing they were asked about is gone. A job completed twice, an instance cancelled
+// between two calls: the edge finds no definition, seals nothing, and leaves the handler to
+// report the 404 it was going to report anyway.
+func TestSealingAsksNothingOfAnUnknownInstance(t *testing.T) {
+	srv := newServerForErrors(t)
+	vars := []model.VariableValue{{Name: "vorname", Kind: model.VarString, Text: "Ida"}}
+	if err := srv.encipherScopeVars(999999, vars); err != nil {
+		t.Errorf("encipherScopeVars on an unknown scope: %v", err)
+	}
+	if err := srv.encipherJobVars(999999, vars); err != nil {
+		t.Errorf("encipherJobVars on an unknown job: %v", err)
+	}
+	if err := srv.encipherStartVars(999999, vars); err != nil {
+		t.Errorf("encipherStartVars on an unknown definition: %v", err)
+	}
+	if vars[0].Text != "Ida" {
+		t.Errorf("a value was sealed for an instance that does not exist: %+v", vars[0])
+	}
+	// No variables is the commonest completion of all, and it must not cost a visit to the
+	// run loop at all.
+	if err := srv.encipherScopeVars(999999, nil); err != nil {
+		t.Errorf("encipherScopeVars with no variables: %v", err)
+	}
+	var cp *compiler.CompiledProcess
+	srv.do(func() { cp = srv.compiledOfScope(999999) })
+	if cp != nil {
+		t.Error("compiledOfScope found a definition for a scope that does not exist")
+	}
+}
+
+// TestErasingNeedsASubject is the last refusal on the route: a blank subject would delete a
+// vault entry named by the prefix alone, which belongs to nobody.
+func TestErasingNeedsASubject(t *testing.T) {
+	srv := newServerForErrors(t)
+	if code, body := serveInternal(t, srv, http.MethodDelete, "/api/v1/personal-data/%20", "", ""); code != http.StatusBadRequest {
+		t.Errorf("a blank data subject was accepted: status=%d body=%s", code, body)
+	}
+	// And with no subject ever sealed, the listing is an empty array rather than null: a
+	// client iterating the answer should not have to special-case "none yet".
+	code, body := serveInternal(t, srv, http.MethodGet, "/api/v1/personal-data", "", "")
+	if code != http.StatusOK || strings.TrimSpace(string(body)) != "[]" {
+		t.Errorf("empty listing = status %d body %s, want 200 []", code, body)
+	}
+}
+
+// TestEveryWriteEndpointFailsClosedWithoutASubject is the fail-closed property at each door
+// rather than at one. A start that cannot resolve a data subject is refused (above); a
+// worker's completion, a task's form and an operator's override have to be refused for the
+// same reason, and each is a separate call site that could have been the one that forgot.
+//
+// The instance here is started without its data subject — which is allowed, because it
+// carries no personal value yet — so every later attempt to write one has nobody to seal for.
+func TestEveryWriteEndpointFailsClosedWithoutASubject(t *testing.T) {
+	srv := newServerForErrors(t)
+	_, jobKey, instKey := startPersonalInstance(t, srv, `{"variables":{"kontotyp":"A"}}`)
+
+	for _, tc := range []struct{ name, path, body string }{
+		{
+			name: "operator override",
+			path: fmt.Sprintf("/api/v1/instances/%d/variables", instKey),
+			body: `{"variables":{"vorname":"Ida"}}`,
+		},
+		{
+			name: "worker completion",
+			path: fmt.Sprintf("/api/v1/jobs/%d/complete", jobKey),
+			body: `{"reason":"test","variables":{"vorname":"Ida"}}`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			code, body := serveInternal(t, srv, http.MethodPost, tc.path, tc.body, "application/json")
+			if code != http.StatusBadRequest {
+				t.Fatalf("status=%d body=%s, want 400", code, body)
+			}
+			if !strings.Contains(string(body), "personalnummer") {
+				t.Errorf("the refusal does not name the variable to supply: %s", body)
+			}
+		})
+	}
+	// Nothing was written, which is the point: a refused seal must not leave the value
+	// behind in the clear.
+	var found bool
+	srv.do(func() {
+		_ = srv.store.VariablesOfScope(instKey, func(v *model.VariableValue) error {
+			if v.Name == "vorname" {
+				found = true
+			}
+			return nil
+		})
+	})
+	if found {
+		t.Error("a refused write left the personal value in the instance")
+	}
+}
+
+// TestTheVariableAuditLabelsAnEncipheredOverride answers ADR-0314's own follow-up for the one
+// view whose whole subject is that somebody changed a value by hand. It has to show *that*
+// the value is personal and whose, not the envelope and not the plaintext: an audit trail is
+// read to find out who acted, and spending a vault read per row to show a name nobody asked
+// for would be the wrong trade in the one place the actor matters most.
+func TestTheVariableAuditLabelsAnEncipheredOverride(t *testing.T) {
+	srv := newServerForErrors(t)
+	_, _, instKey := startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711"}}`)
+
+	path := fmt.Sprintf("/api/v1/instances/%d/variables", instKey)
+	if code, body := serveInternal(t, srv, http.MethodPost, path, `{"variables":{"vorname":"Ida"}}`, "application/json"); code != http.StatusOK {
+		t.Fatalf("set variables: status=%d body=%s", code, body)
+	}
+	code, body := serveInternal(t, srv, http.MethodGet, fmt.Sprintf("/api/v1/instances/%d/variable-audit", instKey), "", "")
+	if code != http.StatusOK {
+		t.Fatalf("variable audit: status=%d body=%s", code, body)
+	}
+	var audit []struct {
+		Name  string `json:"name"`
+		Kind  string `json:"kind"`
+		Value any    `json:"value"`
+	}
+	if err := json.Unmarshal(body, &audit); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	var row *struct {
+		Name  string `json:"name"`
+		Kind  string `json:"kind"`
+		Value any    `json:"value"`
+	}
+	for i := range audit {
+		if audit[i].Name == "vorname" {
+			row = &audit[i]
+		}
+	}
+	if row == nil {
+		t.Fatalf("the override is not in the audit trail: %s", body)
+	}
+	if row.Kind != "personal" {
+		t.Errorf("kind = %q, want personal", row.Kind)
+	}
+	text, _ := row.Value.(string)
+	if !strings.Contains(text, "P-4711") || strings.Contains(text, "Ida") || strings.Contains(text, "atlas:personal") {
+		t.Errorf("value = %#v, want a label naming the subject and neither the plaintext nor the envelope", row.Value)
+	}
+}
+
+// TestASealThatFailsIsReportedNotSwallowed covers the edge's own failure. A vault whose data
+// key has been corrupted — a restore beside a regenerated key file — must stop the write, not
+// let it through in the clear: the value would be un-erasable and the model would say
+// otherwise.
+func TestASealThatFailsIsReportedNotSwallowed(t *testing.T) {
+	srv := newServerForErrors(t)
+	cp := mustCompilePersonal(t, srv)
+	p := personalSealing{cp: cp, subject: "P-4711"}
+
+	// A key that is not a key, left where a restore would leave one.
+	srv.do(func() {
+		if _, err := srv.vault.Set(vault.DataKeyName("P-4711"), "not-a-key"); err != nil {
+			t.Errorf("Set: %v", err)
+		}
+	})
+	vars := []model.VariableValue{{Name: "vorname", Kind: model.VarString, Text: "Ida"}}
+	err := srv.seal(p, vars)
+	if err == nil {
+		t.Fatal("a broken data key let the write through")
+	}
+	if !strings.Contains(err.Error(), "32 bytes") {
+		t.Errorf("the error does not name the problem: %v", err)
+	}
+	if vars[0].Text != "Ida" || vars[0].Kind != model.VarString {
+		t.Errorf("the value was altered by a failed seal: %+v", vars[0])
+	}
+}
+
+// userTaskPersonalBPMN parks on a *user task* rather than a service task, so the task-form
+// door can be tested: completing a task is its own endpoint and its own call to the sealing
+// edge, and a door that forgot to seal would look exactly like one that did.
+const userTaskPersonalBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:atlas="http://atlas/schema/1.0"
+                    xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="freigabe" isExecutable="true" atlas:personal="vorname" atlas:dataSubject="personalnummer">
+    <startEvent id="start"/>
+    <userTask id="freigeben">
+      <extensionElements><zeebe:assignmentDefinition assignee="admin"/></extensionElements>
+    </userTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="freigeben"/>
+    <sequenceFlow id="f2" sourceRef="freigeben" targetRef="end"/>
+  </process>
+</definitions>`
+
+// TestTheTaskFormDoorSealsAndFailsClosed is that door: a form's submitted personal value is
+// enciphered before it becomes a command, and a submission with no data subject to seal
+// under is refused rather than stored readable.
+func TestTheTaskFormDoorSealsAndFailsClosed(t *testing.T) {
+	srv := newServerForErrors(t)
+	code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", userTaskPersonalBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy: status=%d body=%s", code, body)
+	}
+	var deploy struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &deploy); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+	start := fmt.Sprintf("/api/v1/processes/%d/instances", deploy.Key)
+
+	// First without a data subject: the form's answer cannot be sealed, so it is refused.
+	if code, body = serveInternal(t, srv, http.MethodPost, start, "{}", "application/json"); code != http.StatusOK {
+		t.Fatalf("create instance: status=%d body=%s", code, body)
+	}
+	taskKey, instKey := openUserTask(t, srv)
+	complete := fmt.Sprintf("/api/v1/tasks/%d/complete", taskKey)
+	code, body = serveInternal(t, srv, http.MethodPost, complete, `{"variables":{"vorname":"Ida"}}`, "application/json")
+	if code != http.StatusBadRequest {
+		t.Fatalf("a form answer with no data subject: status=%d body=%s, want 400", code, body)
+	}
+	if !strings.Contains(string(body), "personalnummer") {
+		t.Errorf("the refusal does not name the variable to supply: %s", body)
+	}
+
+	// Then with one: the value is sealed on the way in.
+	setVars := fmt.Sprintf("/api/v1/instances/%d/variables", instKey)
+	if code, body = serveInternal(t, srv, http.MethodPost, setVars, `{"variables":{"personalnummer":"P-4711"}}`, "application/json"); code != http.StatusOK {
+		t.Fatalf("set the data subject: status=%d body=%s", code, body)
+	}
+	if code, body = serveInternal(t, srv, http.MethodPost, complete, `{"variables":{"vorname":"Ida"}}`, "application/json"); code != http.StatusOK {
+		t.Fatalf("complete the task: status=%d body=%s", code, body)
+	}
+	if stored := rootVar(t, srv, instKey, "vorname"); !vault.IsEnciphered(stored.Text) {
+		t.Errorf("a form's personal answer landed in the clear: kind=%d text=%q", stored.Kind, stored.Text)
+	}
+}
+
+// openUserTask returns the single open user task's job key and its instance.
+func openUserTask(t *testing.T, srv *Server) (taskKey, instKey uint64) {
+	t.Helper()
+	srv.do(func() {
+		_ = srv.store.ActiveElementInstances(func(_ uint64, v *model.ElementInstanceValue) error {
+			if instKey == 0 {
+				instKey = v.ProcessInstanceKey
+			}
+			return nil
+		})
+		_ = srv.store.ActivatableJobs(compiler.UserTaskJobTypeIndex, func(k uint64) error {
+			taskKey = k
+			return nil
+		})
+	})
+	if taskKey == 0 || instKey == 0 {
+		t.Fatalf("no open user task found (task=%d inst=%d)", taskKey, instKey)
+	}
+	return taskKey, instKey
+}
+
+// publicFormPersonalBPMN carries a start form, which is what a public link may be issued
+// for — and a public form is the door a portal's personal data actually arrives through.
+const publicFormPersonalBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:atlas="http://atlas/schema/1.0"
+                    xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="bestellung" isExecutable="true" atlas:personal="vorname" atlas:dataSubject="personalnummer">
+    <startEvent id="start">
+      <extensionElements><zeebe:formDefinition formId="bestellformular"/></extensionElements>
+    </startEvent>
+    <serviceTask id="provision">
+      <extensionElements><zeebe:taskDefinition type="provision" retries="5"/></extensionElements>
+    </serviceTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="provision"/>
+    <sequenceFlow id="f2" sourceRef="provision" targetRef="end"/>
+  </process>
+</definitions>`
+
+// TestThePublicFormDoorSealsAndFailsClosed is the door this mechanism is most likely to be
+// used through, and the only in-edge whose definition is not known until a token is resolved
+// — which is why it seals in a visit of its own before the start command. An unsealed public
+// form would put personal data from the open internet into the log in the clear.
+func TestThePublicFormDoorSealsAndFailsClosed(t *testing.T) {
+	srv := newServerForErrors(t)
+	code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", publicFormPersonalBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy: status=%d body=%s", code, body)
+	}
+	code, body = serveInternal(t, srv, http.MethodPost, "/api/v1/public-links", `{"processId":"bestellung"}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("create public link: status=%d body=%s", code, body)
+	}
+	var link struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(body, &link); err != nil || link.Token == "" {
+		t.Fatalf("decode link: %v (%s)", err, body)
+	}
+	start := "/public/forms/" + link.Token + "/start"
+
+	// Without a data subject the submission is refused, rather than stored readable.
+	code, body = serveInternal(t, srv, http.MethodPost, start, `{"variables":{"vorname":"Ida"}}`, "application/json")
+	if code != http.StatusBadRequest {
+		t.Fatalf("a public submission with no data subject: status=%d body=%s, want 400", code, body)
+	}
+	if !strings.Contains(string(body), "personalnummer") {
+		t.Errorf("the refusal does not name the variable to supply: %s", body)
+	}
+
+	// With one it starts, and the value is an envelope before it ever becomes a command.
+	code, body = serveInternal(t, srv, http.MethodPost, start,
+		`{"variables":{"personalnummer":"P-4711","vorname":"Ida"}}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("public start: status=%d body=%s", code, body)
+	}
+	instKey := mustInstanceOf(t, srv)
+	stored := rootVar(t, srv, instKey, "vorname")
+	if !vault.IsEnciphered(stored.Text) {
+		t.Fatalf("a public form's personal value landed in the clear: kind=%d text=%q", stored.Kind, stored.Text)
+	}
+	if strings.Contains(stored.Text, "Ida") {
+		t.Errorf("the stored value carries the plaintext: %s", stored.Text)
+	}
+}
+
+// TestAJobIsWithheldWhenItsValuesCannotBeOpened is the consequence ADR-0314 accepts, at the
+// level it happens: the payload assembly cannot open a value whose subject has been erased, so
+// the job is not handed to a worker at all. Handing it over with a blank or a ciphertext name
+// would have the worker provision an account for nobody.
+func TestAJobIsWithheldWhenItsValuesCannotBeOpened(t *testing.T) {
+	srv := newServerForErrors(t)
+	_, jobKey, _ := startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711","vorname":"Ida"}}`)
+
+	var before, after bool
+	srv.do(func() { _, before = srv.pulledJob(jobKey, "provision") })
+	if !before {
+		t.Fatal("the job could not be read even before the erasure")
+	}
+	if code, body := serveInternal(t, srv, http.MethodDelete, "/api/v1/personal-data/P-4711", "", ""); code != http.StatusOK {
+		t.Fatalf("erase: status=%d body=%s", code, body)
+	}
+	srv.do(func() { _, after = srv.pulledJob(jobKey, "provision") })
+	if after {
+		t.Error("the job is still handed out after its subject was erased, which would send a worker an unreadable name")
 	}
 }

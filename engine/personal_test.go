@@ -316,3 +316,132 @@ func TestCorrectingTheDataSubjectBeforeAnythingIsSealedIsAllowed(t *testing.T) {
 		t.Errorf("IncidentCount = %d (%v), want 0", n, err)
 	}
 }
+
+// TestARefusedWriteNamesTheElementItHappenedOn is about where the incident lands. A write
+// into an activity-local scope — an operator correcting a subprocess's own variable, a
+// mapping writing into a task's scope — has to park on *that element*, because that is where
+// an operator looks and what a resolve resumes. Attaching it to the instance root instead
+// would leave the diagram showing nothing wrong.
+func TestARefusedWriteNamesTheElementItHappenedOn(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	cp := personalProcess(t)
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key, model.VariableValue{Name: "pnr", Kind: model.VarString, Text: "P-4711"})
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	// The parked user task's own scope.
+	var piKey, elKey uint64
+	if err := h.store.ActiveElementInstances(func(key uint64, v *model.ElementInstanceValue) error {
+		if v.ProcessInstanceKey != key { // not the instance root itself
+			piKey, elKey = v.ProcessInstanceKey, key
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("ActiveElementInstances: %v", err)
+	}
+	if elKey == 0 {
+		t.Fatal("the instance has no element instance to write into")
+	}
+
+	p.SetVariables(piKey, elKey, "operator",
+		model.VariableValue{Name: "vorname", Kind: model.VarString, Text: "Ida"})
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	var got *model.IncidentValue
+	if err := h.store.Incidents(func(_ uint64, v *model.IncidentValue) error {
+		got = v
+		return nil
+	}); err != nil {
+		t.Fatalf("Incidents: %v", err)
+	}
+	if got == nil {
+		t.Fatal("a clear personal write into an activity scope was not refused")
+	}
+	if got.ElementInstanceKey != elKey {
+		t.Errorf("the incident is on element instance %d, want the scope written to (%d)", got.ElementInstanceKey, elKey)
+	}
+	if got.ProcessInstanceKey != piKey {
+		t.Errorf("the incident names process instance %d, want %d", got.ProcessInstanceKey, piKey)
+	}
+	if got.ElementId == 0 && got.Reason != model.IncidentPersonalInTheClear {
+		t.Errorf("incident = %+v, want one naming the element and the reason", got)
+	}
+}
+
+// TestMovingTheDataSubjectInsideAnActivityIsRefusedToo covers the scope the first test does
+// not. A subprocess's own scope can shadow the instance's data subject, and a write there
+// would point the sealing edge at a different person for every value written inside that
+// activity — the same split as moving it at the root, with the incident belonging on the
+// element rather than on the instance.
+func TestMovingTheDataSubjectInsideAnActivityIsRefusedToo(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	cp := personalProcess(t)
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key,
+		model.VariableValue{Name: "pnr", Kind: model.VarString, Text: "P-4711"},
+		enciphered("vorname"),
+	)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	var piKey, elKey uint64
+	if err := h.store.ActiveElementInstances(func(key uint64, v *model.ElementInstanceValue) error {
+		if v.ProcessInstanceKey != key {
+			piKey, elKey = v.ProcessInstanceKey, key
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("ActiveElementInstances: %v", err)
+	}
+	if elKey == 0 {
+		t.Fatal("the instance has no element instance to write into")
+	}
+
+	p.SetVariables(piKey, elKey, "operator",
+		model.VariableValue{Name: "pnr", Kind: model.VarString, Text: "P-0815"})
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	var shadow bool
+	if err := h.store.VariablesOfScope(elKey, func(v *model.VariableValue) error {
+		if v.Name == "pnr" {
+			shadow = true
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("VariablesOfScope: %v", err)
+	}
+	if shadow {
+		t.Error("the activity scope now shadows the data subject; values written in it would seal under the wrong person")
+	}
+	var got *model.IncidentValue
+	if err := h.store.Incidents(func(_ uint64, v *model.IncidentValue) error {
+		got = v
+		return nil
+	}); err != nil {
+		t.Fatalf("Incidents: %v", err)
+	}
+	if got == nil || got.Reason != model.IncidentDataSubjectMoved {
+		t.Fatalf("incident = %+v, want IncidentDataSubjectMoved", got)
+	}
+	if got.ElementInstanceKey != elKey {
+		t.Errorf("the incident is on %d, want the activity scope %d", got.ElementInstanceKey, elKey)
+	}
+}

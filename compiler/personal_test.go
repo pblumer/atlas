@@ -361,3 +361,85 @@ func TestPersonalAndSearchableAreMutuallyExclusive(t *testing.T) {
 		t.Errorf("a searchable data subject was refused, which is how a subject's instances are found: %v", err)
 	}
 }
+
+// TestEveryEngineWriteTargetIsRefused walks the rest of the write side. An output mapping is
+// the one a modeller reaches for first, and the reason the others matter is that each is a
+// place the *engine* computes a value and stores it: an inline script's result variable, a
+// multi-instance activity's output collection, and the per-iteration element variable a loop
+// binds. None of them can be enciphered, because the engine holds no key — so each would
+// write a declared variable in the clear.
+func TestEveryEngineWriteTargetIsRefused(t *testing.T) {
+	for _, tc := range []struct{ name, body, want string }{
+		{
+			name: "script task result variable",
+			want: "script task result variable",
+			body: `<bpmn:scriptTask id="t">
+      <bpmn:extensionElements><zeebe:script expression="= kuerzel" resultVariable="vorname"/></bpmn:extensionElements>
+    </bpmn:scriptTask>
+    <bpmn:sequenceFlow id="fa" sourceRef="s" targetRef="t"/>`,
+		},
+		{
+			name: "multi-instance output collection",
+			want: "multi-instance output collection",
+			body: `<bpmn:serviceTask id="t">
+      <bpmn:extensionElements><zeebe:taskDefinition type="w"/></bpmn:extensionElements>
+      <bpmn:multiInstanceLoopCharacteristics>
+        <bpmn:loopCardinality>= 3</bpmn:loopCardinality>
+        <bpmn:extensionElements>
+          <zeebe:loopCharacteristics outputCollection="vorname" outputElement="= kuerzel"/>
+        </bpmn:extensionElements>
+      </bpmn:multiInstanceLoopCharacteristics>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="fa" sourceRef="s" targetRef="t"/>`,
+		},
+		{
+			name: "multi-instance element variable",
+			want: "multi-instance element variable",
+			body: `<bpmn:serviceTask id="t">
+      <bpmn:extensionElements><zeebe:taskDefinition type="w"/></bpmn:extensionElements>
+      <bpmn:multiInstanceLoopCharacteristics>
+        <bpmn:extensionElements>
+          <zeebe:loopCharacteristics inputCollection="= posten" inputElement="vorname"/>
+        </bpmn:extensionElements>
+      </bpmn:multiInstanceLoopCharacteristics>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="fa" sourceRef="s" targetRef="t"/>`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Parse(1, 1, strings.NewReader(personalModel(`atlas:personal="vorname" atlas:dataSubject="pnr"`, tc.body)))
+			if err == nil {
+				t.Fatalf("%s writing a personal variable was accepted; the value would be stored in the clear", tc.name)
+			}
+			for _, want := range []string{"vorname", tc.want, "holds no key"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not mention %q", err, want)
+				}
+			}
+		})
+	}
+}
+
+// TestHasPersonalVariablesIsTheCheapQuestion pins the guard every caller asks first. It is
+// what keeps a process that declares nothing from paying for the feature — the engine asks
+// it on every variable write — so it has to answer false for such a process and true for one
+// that declares.
+func TestHasPersonalVariablesIsTheCheapQuestion(t *testing.T) {
+	declared, err := Parse(1, 1, strings.NewReader(personalModel(`atlas:personal="vorname" atlas:dataSubject="pnr"`, "")))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if !declared.HasPersonalVariables() {
+		t.Error("a process that declares personal data reports none")
+	}
+	plain, err := Parse(1, 1, strings.NewReader(personalModel("", "")))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if plain.HasPersonalVariables() {
+		t.Error("a process that declares nothing reports personal variables, so every write would pay for the check")
+	}
+	if plain.DataSubjectVariable() != "" {
+		t.Errorf("DataSubjectVariable() = %q on a process that declares nothing", plain.DataSubjectVariable())
+	}
+}
