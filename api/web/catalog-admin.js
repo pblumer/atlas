@@ -1624,7 +1624,13 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
   // on a narrow viewport the property is ignored and the panel is stacked under the
   // list, exactly as it used to be.
   const cols = view.querySelector(".product-cols");
-  const list = view.querySelector(".product-list");
+  // listEl and not `list`: this module has a `list` helper at the top that splits a
+  // comma-separated field, and the catalogue's own save calls it a hundred lines
+  // below. A DOM element named `list` shadowed it for the whole of this function, so
+  // renaming a catalogue or changing its languages threw "list is not a function" —
+  // caught by the submit handler and shown as a toast, which is why it read as a
+  // server refusal rather than as a page that could not run.
+  const listEl = view.querySelector(".product-list");
   // The column itself, which is what carries the offset: the two panels inside it are
   // containers and only one of them holds anything at a time.
   const side = view.querySelector(".product-side");
@@ -1647,9 +1653,9 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
   // the panel is aligned to, and both arrive as ordinary events on the list. One
   // frame later the table has been rebuilt, so this re-measures rather than predicts.
   const realign = () => requestAnimationFrame(align);
-  if (list) {
-    list.addEventListener("click", realign);
-    list.addEventListener("input", realign);
+  if (listEl) {
+    listEl.addEventListener("click", realign);
+    listEl.addEventListener("input", realign);
   }
   // A viewport change moves the row with no event on the list at all, and a narrow
   // one takes the second column away entirely. Observed rather than bound to
