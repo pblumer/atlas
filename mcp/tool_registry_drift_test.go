@@ -799,6 +799,15 @@ var mcpOmittedRoutes = map[string]string{
 	"PUT /api/v1/secrets/{name}":    "credential storage is not an agent capability",
 	"DELETE /api/v1/secrets/{name}": "credential storage is not an agent capability",
 
+	// Personal-data erasure (ADR-0314): the most irreversible operation the API has, and
+	// the one furthest from an agent's business. Destroying a data subject's key makes
+	// every copy of their data unreadable everywhere, with no restore, on the strength of
+	// a legal request a person received and has to answer for; an agent one call away
+	// from it is a hazard no convenience pays for. The listing is omitted with it because
+	// it enumerates identified people and serves the same operator task.
+	"GET /api/v1/personal-data":              "enumerating data subjects is an operator's task, not an agent capability",
+	"DELETE /api/v1/personal-data/{subject}": "erasing a person's data is irreversible and answers a legal request; it stays with a human operator",
+
 	// UI theme: org-wide branding config for the Console, an admin/UI concern.
 	"GET /api/v1/settings/theme":    "UI branding is a Console concern, not an agent action",
 	"PUT /api/v1/settings/theme":    "UI branding is a Console concern, not an agent action",
