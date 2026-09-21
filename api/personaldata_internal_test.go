@@ -294,6 +294,17 @@ func TestErasingASubjectLeavesTheEngineUntouched(t *testing.T) {
 		}
 	}
 
+	// And the form read says so plainly rather than failing as a server error: the
+	// instance holds a value nobody can read any more, which is the intended outcome and
+	// not a fault to debug.
+	code, body = serveInternal(t, srv, http.MethodGet, fmt.Sprintf("/api/v1/instances/%d/variables", instKey), "", "")
+	if code != http.StatusConflict {
+		t.Errorf("reading an erased instance's variables: status=%d body=%s, want 409", code, body)
+	}
+	if !strings.Contains(string(body), "erased") {
+		t.Errorf("the refusal does not say what happened: %s", body)
+	}
+
 	// A repeated request is not an error, and says that there was nothing left to erase.
 	code, body = serveInternal(t, srv, http.MethodDelete, "/api/v1/personal-data/P-4711", "", "")
 	if code != http.StatusOK {

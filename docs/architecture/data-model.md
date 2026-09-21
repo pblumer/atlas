@@ -150,6 +150,8 @@ type TimerValue struct {
 
 **Reference, don't copy.** Variables live in their own variable state, referenced by scope key — never embedded in a job record. Otherwise the log bloats and the same data is written many times over.
 
+**A variable can be a sealed envelope.** A value whose process declared it personal is enciphered before it becomes a command, and what every store holds is a small JSON object naming the data subject and carrying the ciphertext ([ADR-0314](../adr/0314-portal-personal-data.md)). It is an ordinary `VTVariable` record in every other respect, which is the point: the writer never opens one, `applyToState` stores and returns the bytes, and the column families, checkpoints, exports and backups all end up carrying the same ciphertext. Destroying that subject's key in the vault therefore makes every one of those copies unreadable at once, with nothing to find or coordinate. The engine can still *recognise* one without a key — the envelope's marker is a constant beside the variable's own encoding — which is what lets the writer refuse a declared value that arrives in the clear.
+
 ## Serialization
 
 The log is written millions of times per second, so the encoding is directly throughput-relevant. JSON is disqualified (reflection, allocations, parsing). Options, pragmatic to extreme:

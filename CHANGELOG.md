@@ -14,6 +14,56 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Personal data can be erased: a declared variable is enciphered under its data subject's own key, and destroying that key makes every copy unreadable.**
+  A process names the variables that hold personal data and the one variable holding the id
+  of the person they are about — `atlas:personal="vorname,nachname"` and
+  `atlas:dataSubject="personalnummer"`. Each data subject gets a random key of their own,
+  stored as an ordinary secret in the vault and therefore sealed under the master key: no
+  new key material on disk and no second store. Erasing that person deletes the one key.
+
+  What makes this an answer to a deletion request rather than another retention setting:
+  **every copy carries the same ciphertext.** The WAL segment, the state record, the
+  recovery checkpoint, the exported OpenSearch document, an instance snapshot somebody
+  exported, last year's backup tape — all of them hold bytes the destroyed key decrypted.
+  Nothing has to be found, coordinated or reached, which is something no retention schedule
+  can claim. What is *not* claimed: this renders the data permanently unreadable, it does
+  not remove the bytes, and whether that satisfies a given supervisory authority is a legal
+  judgement for the operator's data protection officer.
+
+  The engine never enciphers and never deciphers. A command already carries ciphertext, so
+  nothing is enciphered per command on the hot path; state stores and returns bytes, never
+  holds a key and never fails because one is gone, so an erased subject's instance replays
+  exactly as it did before. Sealing happens where values enter — a start submission, a
+  public form, a CSV batch, a worker's completion, a task's submitted form, an operator's
+  override — and opening happens at the two places a person or a worker actually needs the
+  value: the payload handed to a worker, and the form a person fills in. Everywhere else —
+  the timeline, the variable audit, instance lists — the value is reported as what it is,
+  "personal, for subject X", rather than as base64 nobody can read.
+
+  Four things are refused rather than warned about. A declaration with no data subject, and
+  a data subject with nothing declared, because personal data with no subject could never be
+  erased and a subject with nothing personal protects nothing. A variable declared both
+  personal and searchable, because the index would hold ciphertext under a random nonce and
+  no search could ever match it. An engine-evaluated expression that writes *into* a declared
+  variable, because the engine cannot encipher and the value would be stored in the clear. And
+  a deployment declaring personal data on a server started with `--vault=false`, because
+  there would be no key to destroy. On top of that the engine refuses, at the write itself,
+  any declared value that arrives readable — the check that makes the rule hold on paths no
+  deploy can see, such as a message payload that correlates into a running instance.
+
+  Erasure is its own admin-gated route (`DELETE /api/v1/personal-data/{subject}`, with
+  `GET /api/v1/personal-data` listing who is still erasable), and the secrets endpoints
+  refuse the reserved name region outright: overwriting a data key would make somebody's
+  data unreadable without erasing it, silently and with no record that it happened.
+
+  The honest cost, paid in the one real example. Encipherment needs a subject and a deletion
+  request needs an id it can name, so `account-bestellung`'s start form grew a
+  Personalnummer no business requirement asked for — and for a new joiner that id comes from
+  outside Atlas, because the account being ordered is the reason they have no account yet.
+  And erasing a subject with a running instance leaves that instance unable to provision:
+  its job is withheld and the reason is logged, which is correct and is not yet the clear
+  message it should be.
+
 - **A process can declare which variables hold personal data, and the compiler refuses a
   deployment that computes on one.** The declaration is one attribute —
   `atlas:personal="vorname,nachname"` — in the same shape and the same place as the

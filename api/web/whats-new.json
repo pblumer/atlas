@@ -2,6 +2,24 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "personal-data-can-be-erased-a-declared-variable-is-enciphere",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Personal data can be erased: a declared variable is enciphered under its data subject's own key, and destroying that key makes every copy unreadable.",
+        "de": "Personal data can be erased: a declared variable is enciphered under its data subject's own key, and destroying that key makes every copy unreadable."
+      },
+      "summary": {
+        "en": "A process names the variables that hold personal data and the one variable holding the id of the person they are about — atlas:personal=\"vorname,nachname\" and atlas:dataSubject=\"personalnummer\".",
+        "de": "A process names the variables that hold personal data and the one variable holding the id of the person they are about — atlas:personal=\"vorname,nachname\" and atlas:dataSubject=\"personalnummer\"."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "a-process-can-declare-which-variables-hold-personal-data-and",
       "version": "Unreleased",
       "date": null,
@@ -373,53 +391,6 @@
           "de": "Panorama › Starmap öffnen"
         },
         "route": "#/panorama/starmap"
-      }
-    },
-    {
-      "id": "a-product-is-assembled-from-the-services-that-exist-instead-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Assemble a product from the services you already have",
-        "de": "Ein Produkt aus den vorhandenen Services zusammensetzen"
-      },
-      "summary": {
-        "en": "A catalogue is built out of services, each of which provisions itself. What a product adds is an arrangement: which of those services come with it and cannot be deselected, and which are offered beside it. Until now you said that as edges — pick a from, pick a relationship, pick a to — one at a time, into a table sorted by relationship. It was the stored data, and it never showed what one product is made of. Every product row now has an Assemble button. It lists every other product the catalogue offers and asks one question per row, with three answers that leave nothing out: not part of it, included, optional — each pre-selected from how it stands today. One save writes that product's whole arrangement and leaves everything else exactly as it was: every other product's parts, and every precedence relation, including this product's own. The save carries the revision the page was read at, so a colleague editing the same catalogue cannot have their work silently overwritten. And a choice that closes a loop is refused before it is written, naming the product that already contains this one — directly or through another. Publishing still proves the whole catalogue; the refusal simply arrives while you still know which choice you just made. The pairwise form stays for precedence, which is the one relation that really is about two products and belongs to neither.",
-        "de": "Ein Katalog besteht aus Services, die sich je selbst bereitstellen. Was ein Produkt hinzufügt, ist eine Anordnung: welche dieser Services fest dazugehören und nicht abwählbar sind, und welche daneben angeboten werden. Bisher sagte man das über Kanten — ein „von\" wählen, eine Beziehung, ein „zu\" — einzeln, in eine nach Beziehung sortierte Tabelle. Das war die gespeicherte Form, und sie zeigte nie, woraus ein Produkt besteht. Jede Produktzeile hat nun eine Schaltfläche „assemble\". Sie listet jedes andere Produkt des Katalogs und stellt je Zeile eine Frage, mit drei Antworten, die nichts offenlassen: nicht Bestandteil, enthalten, optional — jeweils vorbelegt mit dem heutigen Stand. Ein Speichern schreibt die ganze Anordnung dieses Produkts und lässt alles andere unberührt: die Bestandteile jedes anderen Produkts und jede Vorrangbeziehung, auch die dieses Produkts. Mitgeschickt wird die Revision, mit der die Seite gelesen wurde; die Arbeit einer Kollegin am selben Katalog kann so nicht stillschweigend überschrieben werden. Und eine Wahl, die einen Kreis schliesst, wird abgelehnt, bevor sie geschrieben wird — benannt wird dabei das Produkt, das dieses bereits enthält, direkt oder über ein weiteres. Das Veröffentlichen prüft weiterhin den ganzen Katalog; die Ablehnung kommt nur dann, wenn man noch weiss, welche Wahl man gerade getroffen hat. Das paarweise Formular bleibt für den Vorrang — die eine Beziehung, die tatsächlich zwei Produkte betrifft und zu keinem von beiden gehört."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Catalogue",
-        "Portal"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Catalogue, choose a catalogue, and make sure it offers at least two products.",
-          "Press Assemble on the product that is the whole — the package, say.",
-          "Set each of the other products to not part of it, included or optional. What it is today is already selected.",
-          "Press Save the arrangement. The structure table above shows the result, with everybody else's rows untouched.",
-          "Try to put the whole inside one of its own parts: the kit refuses and names the product that already contains it, and nothing is written.",
-          "Use the pairwise form below for precedence only — what has to be provisioned before what."
-        ],
-        "de": [
-          "Öffnen Sie „Catalogue\", wählen Sie einen Katalog und stellen Sie sicher, dass er mindestens zwei Produkte anbietet.",
-          "Drücken Sie „assemble\" beim Produkt, das das Ganze ist — etwa beim Paket.",
-          "Setzen Sie jedes andere Produkt auf „not part of it\", „included\" oder „optional\". Der heutige Stand ist bereits gewählt.",
-          "Drücken Sie „Save the arrangement\". Die Struktur-Tabelle darüber zeigt das Ergebnis, die Zeilen aller anderen Produkte unverändert.",
-          "Versuchen Sie, das Ganze in einen seiner eigenen Bestandteile zu legen: Der Baukasten lehnt ab, nennt das Produkt, das es bereits enthält, und schreibt nichts.",
-          "Das paarweise Formular darunter dient nur noch dem Vorrang — was vor was bereitgestellt sein muss."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Catalogue",
-          "de": "Catalogue öffnen"
-        },
-        "route": "#/catalog"
       }
     }
   ]

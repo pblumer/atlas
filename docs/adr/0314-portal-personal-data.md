@@ -4,17 +4,26 @@
 - **Implementation:** Partial
 - **Date:** 2026-09-11
 - **Deciders:** Atlas maintainers
-- **Open question:** answered, and closed by a real process rather than by argument.
-  `examples/account-bestellung` built a UPN, a mailNickname and a display name out of a
-  first and last name — one `zeebe:script` plus three output mappings, all engine-evaluated.
-  All four moved into the create-user task's own `attributes` expression, the process
-  declares `atlas:personal="vorname,nachname"`, and it deploys. **No exception was needed.**
-  What it cost is recorded below rather than glossed: the example lost a fail-closed gateway.
-  The question that replaces it is narrower and belongs to the enciphering step: whether a
-  worker expression still sees plaintext once values are enciphered — the exemption in
-  `compiler/personal.go` holds only while the values a worker binds are deciphered before
-  it binds them.
+- **Open question:** whether an erasure can be carried out *responsibly* without the engine
+  knowing which instances a subject appears in. Destroying the key is one call and reaches
+  every copy; finding the live instances that will then park rests entirely on the model
+  having declared the data-subject variable searchable, which nothing enforces. The route
+  destroys the key either way. Checked by reading the code and the one example, not by an
+  operator having done it: no erasure has been carried out on a real installation.
 - **Question checked:** 2026-09
+
+Two earlier questions are closed. Whether a portal process can be written without computing
+on a declared variable was closed by a real process rather than by argument:
+`examples/account-bestellung` built a UPN, a mailNickname and a display name out of a first
+and last name — one `zeebe:script` plus three output mappings, all engine-evaluated — all
+four moved into the create-user task's own `attributes` expression, and it deploys with **no
+exception needed**. What that cost is recorded below rather than glossed: the example lost a
+fail-closed gateway, and later grew a Personalnummer it had no business reason for. And
+whether a worker expression still sees plaintext once values are enciphered is closed by
+construction: every connector builds its FEEL bindings through one function over a
+`state.Reader`, and the reader handed to them opens enciphered values as it yields them. Had
+it not, all 74 exempted expression fields would have evaluated FEEL over ciphertext while
+still looking correct.
 
 ## Context and problem statement
 
@@ -108,6 +117,51 @@ destroying that key would make the whole instance unreadable, so this adds one l
   ever becomes a command.
 - Erasing a subject deletes that one vault entry.
 
+Two things this stated loosely, corrected by building it (2026-09).
+
+The id is **not** necessarily a principal id. This record assumed the subject is already a
+principal in Atlas; the one real process that needed the mechanism is an account order,
+whose subject is a joiner with no principal precisely because the account is what is being
+ordered. The vault entry is named by whatever id the model declares, which for that process
+comes from outside Atlas — and the model had to grow a field to carry it, which is recorded
+as a cost below.
+
+And the key is **stored** rather than derived, which is not an implementation preference. A
+key derived from the master key and the subject id (HKDF, say) would need no storage at all
+— which is exactly what makes it useless here. There would be nothing to destroy.
+
+### Whose key: the data subject is declared, not inferred
+
+This record said a declared variable "is enciphered under that data key" and never said how
+an instance knows whose key that is. The gap cannot be left to the enciphering code, because
+both ways of getting it wrong are silent: encipher under the wrong subject and an erasure
+destroys the wrong key, so the data stays readable; encipher under too broad a subject and
+it destroys somebody else's data along with it.
+
+So the model says it. `atlas:dataSubject` names the one variable holding the id of the
+person the declared variables are about, and the compiler refuses the two declarations apart
+— personal data with no subject could never be erased, which is the whole purpose, and a
+subject with nothing personal enciphers nothing while looking like protection.
+
+Three cheaper answers were available and each is wrong:
+
+- **The instance's starter.** An account is ordered *for* somebody, routinely by somebody
+  else. The starter is the wrong person about half the time, and nothing would say so.
+- **A key per instance**, which needs no declaration at all. The key must outlive the
+  instance's state record, and history retention deletes that routinely
+  ([ADR-0115](0115-history-retention-hard-delete.md)); after it there would be nothing left
+  to find the key by, so the ciphertext in every backup would stay readable forever. This is
+  the argument that settles it: erasure has to work after retention has already run.
+- **A conventional variable name.** That is the modelling recommendation R-06 already has,
+  which is why R-06 is still amber.
+
+The subject's id stays in the clear, deliberately: it is a reference, which is what the rule
+above keeps readable, and it may be routed on, matched and indexed like any other variable.
+Declaring it searchable is the intended combination — erasing a person starts with finding
+their instances. Declaring a *personal* variable searchable is refused instead: the index
+stores what the engine sees, which is ciphertext under a random nonce, so two writes of one
+name differ and no exact match could ever hit.
+
 The property that makes this the answer to R-06 and not merely another retention knob:
 **every copy carries the same ciphertext.** The WAL segment, the state record, the
 checkpoint, the OpenSearch document, last year's backup, the instance snapshot an
@@ -135,6 +189,52 @@ inside the invariants:
 - `applyToState` stores and returns bytes. It never holds a key, never fails on a
   missing one, and replays a destroyed subject's instance exactly as it replayed it
   before — the ciphertext is still there and still deterministic (I4).
+
+#### Where those edges turned out to be (2026-09)
+
+Named as built, because "at the edge" is only an instruction until somebody has to find
+them:
+
+- **In.** A start submission (JSON body, CSV upload, public form link), a worker's
+  completion, a task's submitted form, an operator's variable override, and the in-process
+  job runner's own handler outputs. That last one is the one worth naming: it never passes
+  through the HTTP completion endpoint, so an in-process connector would otherwise have
+  been a hole in the middle of the mechanism. Each seals off the run loop, and each fails
+  closed when no data subject can be resolved — storing the value in the clear would leave
+  it un-erasable forever, and sealing it under an empty subject would give every instance
+  one shared key.
+- **Out.** The payload handed to a worker, and the variable read a task's form and detail
+  are built from. For connector expressions the intervention is a single one rather than
+  one per connector: every connector builds its FEEL bindings through
+  `state.VisibleVariablesMap` over a `state.Reader`, so the reader handed to them is one
+  that opens enciphered values as it yields them. It covers the nineteen that exist and any
+  that follow.
+- **Neither.** The timeline, the variable audit and the instance lists report an enciphered
+  value as *what it is* — personal, and whose — rather than printing base64 or spending a
+  vault read per row. That answers the follow-up below about the variable audit, in the
+  cheapest way available.
+
+One thing that reading follows from, and is worth stating so it is not discovered by
+inference: **enciphering is about erasability, not access control.** What a caller may read
+of an instance at all is [ADR-0275](0275-instance-visibility.md)'s decision, and a
+declared variable does not quietly become a second boundary with different rules.
+
+#### The check the edges cannot be: the writer refuses a value in the clear
+
+Not every path into an instance has an edge to seal at. A message payload correlates to its
+instance *inside the engine*, which holds no key and must not have one. So the single writer
+refuses a write of a declared variable that arrives readable, and parks an incident naming
+it. Without that check, that one path would write an un-erasable personal value while the
+declaration said the opposite, and nothing about it would look wrong.
+
+It can ask the question without a key: an enciphered value carries a marker, and recognising
+one is a prefix comparison on bytes the engine already holds. That is why the marker lives
+beside the variable's own encoding while the sealing stays in the vault.
+
+The compiler refuses the deploy-time half of the same thing: an engine-evaluated expression
+may not *write* into a declared variable either. The engine cannot encipher, so a value it
+computes into one would be stored in the clear; and the variable is not thereby unusable,
+because a name arrives from a form, a worker or an operator, and every one of those seals.
 
 Which variables are personal is **declared on the process**, as a comma-separated
 attribute resolved at compile time — the same shape and the same place as the
@@ -198,10 +298,24 @@ portal process.
   refuses while instances are running. Key loss is now data loss for that subject, so
   vault backup discipline (M-03 in the ISDS concept) becomes load-bearing for business
   data, not only for credentials.
+- **Negative / what building it cost (2026-09):** Three, each paid somewhere the design
+  did not predict. **A field in the model:** encipherment needs a subject and a deletion
+  request needs an id it can name, so `account-bestellung`'s start form grew a
+  Personalnummer no business requirement asked for — and for a joiner that id necessarily
+  comes from outside Atlas. **A read on the writer:** the worker payload and the connector
+  payload are both assembled on the run loop today, so opening a value there is a vault
+  file read on the single writer — bounded, and only for instances that carry personal
+  data, but on the writer. Moving connector resolution off the loop
+  ([ADR-0239](0239-off-loop-queries.md)'s pattern) is the fix and is not done. **A log
+  line where an incident belongs:** a job whose values can no longer be opened is withheld
+  from activation and says so in the log, which is diagnosable but is not the incident this
+  record predicted; a worker polling for it sees nothing.
 - **Follow-ups / risks to watch:** Whether erasure should be blocked while the subject
-  has running instances or entitlements — this record does not decide it. Whether the
-  variable audit ([ADR-0098](0098-external-variable-modification-audit.md)) needs to
-  show that a value was declared personal rather than showing ciphertext. Key rotation
+  has running instances or entitlements — this record still does not decide it, and the
+  route destroys the key regardless, which is what the open question above is about.
+  Whether a withheld job should raise an incident rather than a log line. Whether the
+  variable audit ([ADR-0098](0098-external-variable-modification-audit.md)) needs more than
+  the "personal, for subject X" label the views now show. Key rotation
   is out of scope here: the master key rotates as it does today, and a data key is
   never rotated, because a rotated data key would leave the old ciphertext readable
   under the old one and defeat the purpose.

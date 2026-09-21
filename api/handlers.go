@@ -2839,7 +2839,14 @@ func (s *Server) handleInstanceVariables(w http.ResponseWriter, r *http.Request)
 			return nil
 		})
 	})
-	if scanErr != nil {
+	switch {
+	case errors.Is(scanErr, vault.ErrErased):
+		// Not a fault: this instance carries a value whose data subject has been erased,
+		// so it is permanently unreadable and the form cannot be prefilled. Saying so is
+		// the difference between the outcome ADR-0314 intends and a 500 somebody debugs.
+		httpapi.Error(w, http.StatusConflict, "this instance holds personal data whose data subject has been erased, so it can no longer be read or completed: "+scanErr.Error())
+		return
+	case scanErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read variables: "+scanErr.Error())
 		return
 	}
@@ -3010,14 +3017,24 @@ func (s *Server) handleInstanceVariableAudit(w http.ResponseWriter, r *http.Requ
 	var scanErr error
 	s.do(func() {
 		scanErr = s.store.VariableAuditHistory(key, func(ts int64, _ uint64, v *model.VariableAuditValue) error {
-			out = append(out, variableAuditView{
+			view := variableAuditView{
 				At:    ts,
 				Actor: v.Actor,
 				Scope: v.ScopeKey,
 				Name:  v.Name,
 				Value: nativeVar(&model.VariableValue{Kind: v.Kind, Bool: v.Bool, Text: v.Text}),
 				Kind:  varKindName(v.Kind),
-			})
+			}
+			// The audit's subject is that somebody overrode this variable, not what the
+			// value was, so an enciphered value is reported as what it is rather than as
+			// the envelope it is stored as — the same reading the timeline takes, and the
+			// answer to the question ADR-0314 left open for this view.
+			if v.Kind == model.VarJSON {
+				if env, ok := vault.ParseEnvelope(v.Text); ok {
+					view.Kind, view.Value = "personal", "enciphered for data subject "+env.Subject
+				}
+			}
+			out = append(out, view)
 			return nil
 		})
 	})
