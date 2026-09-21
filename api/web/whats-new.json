@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-decision-service-can-be-laid-out-and-wired-up",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A decision service can be moved, and wired to the decision that calls it",
+        "de": "Ein Decision Service lässt sich verschieben und mit der Entscheidung verbinden, die ihn aufruft"
+      },
+      "summary": {
+        "en": "Dragging a decision service on the canvas was refused outright, which a diagram holding several of them cannot do without. When it did move, the editor re-decided which of its decisions the service returns and which it only works out internally — and for a decision drawn outside the box, an imported model's may well be, that silently cost the service the interface it publishes. A decision service could also not be connected to anything, although DMN makes one invocable exactly as a knowledge model is. All three are fixed. The shapes follow the specification too: input data is a stadium at any size, a decision service carries a heavier border than a decision, a knowledge model is a rectangle with two corners cut rather than a slanted box, and a knowledge requirement ends in an open arrowhead — the one thing that tells it from an information requirement.",
+        "de": "Einen Decision Service auf der Zeichenfläche zu verschieben wurde schlicht verweigert — und genau darauf kommt es an, sobald ein Diagramm mehrere davon trägt. Bewegte er sich doch, entschied der Editor neu, welche seiner Entscheidungen der Service zurückgibt und welche er nur intern ermittelt; bei einer Entscheidung ausserhalb des Kastens, wie sie in importierten Modellen vorkommt, kostete das den Service still die Schnittstelle, die er veröffentlicht. Verbinden liess sich ein Decision Service ausserdem gar nicht, obwohl DMN ihn genauso aufrufbar macht wie ein Knowledge Model. Alle drei Punkte sind behoben. Auch die Formen folgen nun der Spezifikation: Input Data ist in jeder Grösse ein Stadion, ein Decision Service trägt eine kräftigere Umrandung als eine Entscheidung, ein Knowledge Model ist ein Rechteck mit zwei abgeschnittenen Ecken statt eines schiefen Kastens, und ein Knowledge Requirement endet in einer offenen Pfeilspitze — dem einzigen Merkmal, das es von einem Information Requirement unterscheidet."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Decisions",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the decisions",
+          "de": "Entscheidungen öffnen"
+        },
+        "route": "#/console/decisions"
+      }
+    },
+    {
       "id": "a-decision-graph-is-drawn-the-way-dmn-draws-one",
       "version": "Unreleased",
       "date": null,
@@ -409,46 +438,6 @@
           "Bei einer Ablehnung eine Begründung schreiben; sie wird der bestellenden Person mitgeteilt. Dann „Approve\" oder „Reject\" drücken.",
           "Warten weitere Genehmigungen desselben Auftrags, das Kästchen über den Schaltflächen ankreuzen — eine Entscheidung, eine Begründung.",
           "Die eigenständige Genehmigungsseite bleibt für den Link aus der Benachrichtigungsmail; an ihr ändert sich nichts."
-        ]
-      }
-    },
-    {
-      "id": "a-product-can-carry-a-picture",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Put a picture on a product",
-        "de": "Ein Bild am Produkt hinterlegen"
-      },
-      "summary": {
-        "en": "A catalogue read as a list of names, which is fine for a person who already knows what they are ordering and no help at all to everybody else. A product now carries a picture — a photograph of the thing or the vendor's logo — chosen in the product editor and shown in the portal when somebody opens the product. PNG, JPEG and SVG, served back exactly as uploaded: nothing is resized or re-encoded, because a catalogue that re-encodes your picture has decided your product looks near enough. It is visible to everybody a catalogue offering the product is for, not only to the person who maintains it, which matters because the same product is often offered by several catalogues to different audiences. And it is deliberately not frozen into a release: a better photograph of the same laptop is not a different laptop, so it appears on orders already placed instead of a stale copy being kept for them.",
-        "de": "Ein Katalog las sich als Liste von Namen — für jemanden, der ohnehin weiss, was er bestellt, in Ordnung, für alle anderen keine Hilfe. Ein Produkt trägt jetzt ein Bild: eine Aufnahme der Sache oder das Logo des Herstellers, im Produkteditor gewählt und im Portal sichtbar, sobald jemand das Produkt öffnet. PNG, JPEG und SVG, unverändert ausgeliefert: Es wird nichts skaliert und nichts neu codiert, denn ein Katalog, der Ihr Bild neu codiert, hat entschieden, dass Ihr Produkt ungefähr so aussieht. Sichtbar ist es für alle, an die sich ein Katalog mit diesem Produkt richtet, nicht nur für die Person, die es pflegt — das zählt, weil dasselbe Produkt oft in mehreren Katalogen für verschiedene Zielgruppen steht. Und es wird bewusst nicht in eine Freigabe eingefroren: Eine bessere Aufnahme desselben Notebooks ist kein anderes Notebook, also erscheint sie auch an bereits erteilten Bestellungen, statt dort eine veraltete Kopie zu halten."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Catalogue",
-        "Portal"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Catalogue, pick a catalogue and open one of its products.",
-          "Under \"What the catalogue shows\", choose a file beside Picture — PNG, JPEG or SVG.",
-          "Save. The picture is stored as a second step, so a product the server refuses never acquires one.",
-          "Open the portal, find the product and press the \"i\" beside it: the picture is at the top of the panel.",
-          "To take it away, open the product again and tick \"Remove the picture this product has\", then save.",
-          "A product with no picture shows none — no gap and no broken-image icon, because that is the ordinary case."
-        ],
-        "de": [
-          "Katalog öffnen, einen Katalog wählen und eines seiner Produkte öffnen.",
-          "Unter „What the catalogue shows\" bei „Picture\" eine Datei wählen — PNG, JPEG oder SVG.",
-          "Speichern. Das Bild wird als zweiter Schritt abgelegt, damit ein vom Server abgelehntes Produkt nie eines erhält.",
-          "Portal öffnen, das Produkt suchen und daneben auf „i\" drücken: Das Bild steht zuoberst im Feld.",
-          "Zum Entfernen das Produkt erneut öffnen, „Remove the picture this product has\" ankreuzen und speichern.",
-          "Ein Produkt ohne Bild zeigt keines — keine Lücke und kein Platzhaltersymbol, denn das ist der Normalfall."
         ]
       }
     }

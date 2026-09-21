@@ -14,6 +14,30 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A decision service can be laid out and wired up.** Dragging one on the canvas was
+  refused outright — the cursor went red and the box stayed where the import had put
+  it — which is the one thing a diagram carrying several services cannot do without.
+  When it did move, the modeler re-decided which compartment each of its decisions
+  belongs to, and for a decision drawn outside the box, which an imported model may
+  well have, the divider travelling past it turned the service's output decision into
+  an internal one: the service silently lost the interface it publishes. A decision
+  service also could not be connected to anything. DMN makes one an invocable, like a
+  knowledge model, so a decision invokes it through a knowledge requirement; a model
+  that already said so opened and drew correctly, but the connection could not be made
+  by hand. All three are fixed, and the eleven connections the specification permits
+  between DRD elements are now each covered by a test.
+
+  The notation itself is held to the specification as well, in both pictures Atlas
+  draws. Input data is a stadium at any size rather than only at the default one; a
+  decision service carries the heavy border the specification asks for; and an element
+  is drawn under the text its diagram gives it rather than its own name, where the two
+  differ. In the decision graph window a knowledge model was drawn as a parallelogram
+  instead of a rectangle with two corners cut off, and a knowledge requirement ended in
+  the filled arrowhead that belongs to an information requirement — the two say
+  different things, and the arrowhead is half of what says which.
+
+### Fixed
+
 - **A decision graph is drawn the way DMN draws one.** The DRD notation is not
   styling: the shape is how a reader tells one kind of node from another. A decision
   is a plain rectangle, input data a stadium with fully rounded ends, a business
