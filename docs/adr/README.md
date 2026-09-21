@@ -399,7 +399,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0311](0311-portal-approval-page.md) | The approver decides on a page of their own, in the customer's colours | Accepted | Partial |
 | [0312](0312-portal-catalogue-order-inventory.md) | Catalogue, order, inventory — three models, not one | Accepted | Partial |
 | [0313](0313-portal-language-follows-the-browser.md) | The portal follows the browser's language; the console still does not | Accepted | Not started |
-| [0314](0314-portal-personal-data.md) | Personal data in the portal — a reference by default, a destroyable key for the rest | Accepted | Not started |
+| [0314](0314-portal-personal-data.md) | Personal data in the portal — a reference by default, a destroyable key for the rest | Accepted | Partial |
 | [0315](0315-portal-roles-and-responsibilities.md) | Who runs the portal — a role for the operation, a catalogue for the object | Accepted | Partial |
 | [0316](0316-portal-theme-per-catalogue.md) | A theme belongs to a catalogue, the sign-in screen belongs to the operator | Accepted | Partial |
 | [0317](0317-task-commands-are-an-object-question.md) | Acting on a user task is an object question | Accepted | Landed |

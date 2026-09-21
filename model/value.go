@@ -526,6 +526,24 @@ func (v *VariableValue) IndexText() (string, bool) {
 	return text, true
 }
 
+// EncipheredMarker opens the JSON envelope a personal value is stored as (ADR-0314).
+//
+// It lives here, beside the variable's own encoding, because it is part of what a
+// stored variable can *be* — and because the engine has to recognise one without being
+// able to open it. The sealing and opening live in the vault, which is the only place
+// that may hold a key; this const is what keeps the two from drifting, since the vault
+// builds and matches its envelopes against it.
+const EncipheredMarker = `{"atlas:personal":`
+
+// IsEnciphered reports whether this value holds a sealed personal value rather than a
+// readable one. It needs no key, which is the point: the single writer uses it to refuse
+// a write of a declared personal variable that arrived in the clear — the one check that
+// makes the rule hold on every path into an instance, including the ones no edge can
+// seal because the target instance is only known once a message correlates.
+func (v *VariableValue) IsEnciphered() bool {
+	return v.Kind == VarJSON && strings.HasPrefix(v.Text, EncipheredMarker)
+}
+
 func (v *VariableValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.ScopeKey)
 	dst = appendString(dst, v.Name)
@@ -1321,6 +1339,29 @@ const (
 	// that will not fit. Resolving retries the write, so correcting the data — or
 	// raising the budget — lets it through.
 	IncidentVariableTooLarge IncidentReason = 3
+	// IncidentPersonalInTheClear marks an element whose write was refused because it
+	// carried a value the process declared personal (ADR-0314) and carried it in the
+	// clear. Such a value is enciphered where it enters Atlas — a form, a worker's
+	// result, an operator's write — and the engine cannot do it: it holds no key, by
+	// the same invariant that keeps applyToState free of side effects (I4).
+	//
+	// So a write that arrives readable came from a path with no edge to seal at, and
+	// the honest outcome is to refuse it: writing it would put a value in the log that
+	// no erasure could ever reach, while the model said the opposite. Resolving retries
+	// the write, so re-delivering the value through a path that does seal lets it
+	// through.
+	IncidentPersonalInTheClear IncidentReason = 4
+	// IncidentDataSubjectMoved marks an element whose write was refused because it
+	// would have changed the instance's data subject after values were already sealed
+	// under the previous one (ADR-0314).
+	//
+	// Allowing it would split one person's data across two keys, and then erasing
+	// either of them would leave the other half readable — silently, which is the
+	// failure the whole mechanism exists to prevent. Before anything is sealed the
+	// change is harmless and goes through; afterwards the honest remedy is a new
+	// instance with the right subject, so this does not become a retry somebody can
+	// resolve their way out of.
+	IncidentDataSubjectMoved IncidentReason = 5
 )
 
 func (*IncidentValue) ValueType() ValueType { return VTIncident }

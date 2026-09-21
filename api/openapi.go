@@ -1567,6 +1567,12 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/secrets/{name}", s.handleDeleteSecret, apiOp{
 			summary: "Delete a secret from the encrypted vault", tag: "Secrets", role: RoleAdmin, status: http.StatusNoContent}},
 
+		{"GET", "/api/v1/personal-data", s.handleListDataSubjects, apiOp{
+			summary: "List the data subjects whose personal data is still readable (ids only, never content) (ADR-0314)", tag: "Secrets", role: RoleAdmin, resp: jsonBody("Data subjects", tArray())}},
+		{"DELETE", "/api/v1/personal-data/{subject}", s.handleEraseDataSubject, apiOp{
+			summary: "Erase one data subject: destroy their key, making every copy of their personal data permanently unreadable (ADR-0314)", tag: "Secrets", role: RoleAdmin,
+			resp: jsonBody("Erasure outcome", schemaObj(map[string]any{"subject": tString(), "erased": tBool()}))}},
+
 		{"GET", "/api/v1/settings/theme", s.handleGetTheme, apiOp{
 			summary: "Get the org-wide UI brand accent colour (public; applied before login)", tag: "System", role: roleAny,
 			resp: jsonBody("Theme", schemaObj(map[string]any{"accent": tString()}))}},

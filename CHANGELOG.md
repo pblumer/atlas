@@ -12,6 +12,106 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **Personal data can be erased: a declared variable is enciphered under its data subject's own key, and destroying that key makes every copy unreadable.**
+  A process names the variables that hold personal data and the one variable holding the id
+  of the person they are about — `atlas:personal="vorname,nachname"` and
+  `atlas:dataSubject="personalnummer"`. Each data subject gets a random key of their own,
+  stored as an ordinary secret in the vault and therefore sealed under the master key: no
+  new key material on disk and no second store. Erasing that person deletes the one key.
+
+  What makes this an answer to a deletion request rather than another retention setting:
+  **every copy carries the same ciphertext.** The WAL segment, the state record, the
+  recovery checkpoint, the exported OpenSearch document, an instance snapshot somebody
+  exported, last year's backup tape — all of them hold bytes the destroyed key decrypted.
+  Nothing has to be found, coordinated or reached, which is something no retention schedule
+  can claim. What is *not* claimed: this renders the data permanently unreadable, it does
+  not remove the bytes, and whether that satisfies a given supervisory authority is a legal
+  judgement for the operator's data protection officer.
+
+  The engine never enciphers and never deciphers. A command already carries ciphertext, so
+  nothing is enciphered per command on the hot path; state stores and returns bytes, never
+  holds a key and never fails because one is gone, so an erased subject's instance replays
+  exactly as it did before. Sealing happens where values enter — a start submission, a
+  public form, a CSV batch, a worker's completion, a task's submitted form, an operator's
+  override — and opening happens at the two places a person or a worker actually needs the
+  value: the payload handed to a worker, and the form a person fills in. Everywhere else —
+  the timeline, the variable audit, instance lists — the value is reported as what it is,
+  "personal, for subject X", rather than as base64 nobody can read.
+
+  Four things are refused rather than warned about. A declaration with no data subject, and
+  a data subject with nothing declared, because personal data with no subject could never be
+  erased and a subject with nothing personal protects nothing. A variable declared both
+  personal and searchable, because the index would hold ciphertext under a random nonce and
+  no search could ever match it. An engine-evaluated expression that writes *into* a declared
+  variable, because the engine cannot encipher and the value would be stored in the clear. And
+  a deployment declaring personal data on a server started with `--vault=false`, because
+  there would be no key to destroy. On top of that the engine refuses two things at the write
+  itself: any declared value that arrives readable — the check that makes the rule hold on
+  paths no deploy can see, such as a message payload that correlates into a running instance
+  — and a write that would change an instance's data subject after values are already sealed
+  under the previous one, because that would split one person's data across two keys and then
+  erasing either would leave the other half readable. Correcting the subject before anything
+  is sealed goes through.
+
+  Erasure is its own admin-gated route (`DELETE /api/v1/personal-data/{subject}`, with
+  `GET /api/v1/personal-data` listing who is still erasable), and it writes one line to the
+  security audit trail naming the subject and who acted — the only evidence that survives
+  it, since the key is gone and the subject leaves no other trace, and being able to *show*
+  that a request was honoured is half of what the obligation asks for. The secrets endpoints
+  refuse the reserved name region outright, and audit the attempt: overwriting a data key
+  would make somebody's data unreadable without erasing it, silently and with no record that
+  it happened.
+
+  The honest cost, paid in the one real example. Encipherment needs a subject and a deletion
+  request needs an id it can name, so `account-bestellung`'s start form grew a
+  Personalnummer no business requirement asked for — and for a new joiner that id comes from
+  outside Atlas, because the account being ordered is the reason they have no account yet.
+  And erasing a subject with a running instance leaves that instance unable to provision:
+  its job is withheld and the reason is logged, which is correct and is not yet the clear
+  message it should be.
+
+- **A process can declare which variables hold personal data, and the compiler refuses a
+  deployment that computes on one.** The declaration is one attribute —
+  `atlas:personal="vorname,nachname"` — in the same shape and the same place as the
+  searchable-variable list. What it buys is not a warning: a declared variable is
+  enciphered before it ever becomes a command, and ciphertext cannot be compared, matched
+  or routed on, so a process that reads one in a gateway condition, a mapping, a script or
+  a timer expression **does not deploy**. The error names the variable, the kind of
+  expression and the expression itself.
+
+  That is the whole point of doing it here. The modelling recommendation this answers has
+  been amber for exactly one reason — it relied on a modeller remembering — and a compiler
+  that holds both the declaration and every compiled expression can simply decide it.
+
+  The rule's edge is where the code evaluates the expression, not where it would be
+  convenient. A worker's own expressions are outside it: that is the one place the record
+  permits plaintext, for the duration of one call, and it is where a transform combining
+  personal values belongs. So `= "Hallo " + vorname` in a mail body is fine and the same
+  text in an output mapping is not — because one runs in the worker and the other in the
+  engine.
+
+  Nothing changes for a process that declares nothing, which is every existing model.
+
+### Changed
+
+- **The Account-Bestellung example builds its UPN in the worker, and lost a gateway doing
+  it.** It is the proof the personal-data rule needed: the example took a first and last
+  name from a public form and built a UPN, a mailNickname and a display name out of them,
+  in one script and three output mappings the engine evaluated. All four moved into the
+  create-user task's own attributes expression. It deploys, and **no exception to the rule
+  was needed** — which is what its record could not establish against any process that
+  existed.
+
+  The cost is stated rather than quietly absorbed: a fail-closed gateway used to check the
+  computed UPN against `jml-test-*@contoso.com` before any write, and there is no such
+  process variable any more. The test-object boundary is now the `jml-test-` literal inside
+  the connector's attributes expression — in the model, visible in review, but structural
+  instead of checked at runtime. Here that is a small loss, because the gateway was
+  checking a value the same process had built two steps earlier; where a derived value
+  arrives from outside the process, it would not be.
+
 ### Fixed
 
 - **Renaming a catalogue, or changing the languages it is offered in, failed with

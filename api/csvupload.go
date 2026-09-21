@@ -94,6 +94,12 @@ func (s *Server) handleCreateInstanceFromCSV(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// A CSV batch can carry personal data in its rows like any other start (ADR-0314).
+	if err := s.encipherStartVars(key, startVars); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	var (
 		found   bool
 		notExec bool
