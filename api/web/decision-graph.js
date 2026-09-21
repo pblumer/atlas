@@ -21,9 +21,10 @@
 //   - **Nothing is inferred onto a node.** A value is shown where it can be tied to
 //     a node by name — the recorded inputs, the outputs, and the values the trace
 //     says each table's input columns evaluated to. A decision the record cannot
-//     speak for is drawn plainly, as unknown, and says so. A decision service
-//     records no rule trace at all (ADR-0398), and that is stated rather than
-//     rendered as an absence of rules.
+//     speak for is drawn plainly, as unknown, and says so. A record written before
+//     the engine could trace a decision service (ADR-0398, fixed since) carries no
+//     rules, and that is stated — as a fact about the record's age, not about what
+//     the engine can do — rather than rendered as an absence of rules.
 
 import { renderTraceTable, tablesOf as traceTablesOf, fmtVal as traceValue } from "./dmn-trace.js";
 
@@ -263,8 +264,9 @@ function renderCaseDrg(view, vals) {
 // The three silences here are different things, and saying the wrong one is worse
 // than saying nothing (see dmn-trace.js, which draws the matrix itself):
 //
-//   - a decision service records no trace at all, because temis reports none for a
-//     service evaluation (ADR-0398) — the values above are still exact;
+//   - a service evaluation recorded before the engine could trace one carries no
+//     rules (ADR-0398, fixed since) — the values above are still exact, because the
+//     record is frozen history and nothing here recomputes it;
 //   - a trace with no tables means the decision's logic is not a table;
 //   - no trace and no service means nothing was recorded, which is the remote-decision
 //     case (ADR-0050).
@@ -274,10 +276,12 @@ function renderRules(view) {
     return tables.map((tt, i) => renderTraceTable(tt, tables.length > 1 ? i + 1 : 0)).join("");
   }
   if (view.service) {
-    return `<p class="ops-empty">This is a decision <b>service</b> — DMN's published interface over part of
-      the graph — and the engine records no rule-by-rule trace for one. The values on the graph above are
-      exactly what the case carried; what is missing is only which row of which table matched.
-      Calling the decision inside the service directly, rather than the service, records the full matrix.</p>`;
+    return `<p class="ops-empty">No rule matrix was recorded for this case. It ran through a decision
+      <b>service</b> — DMN's published interface over part of the graph — and a service reported no rules
+      until the engine learned to trace one. So this is an older record: the values on the graph above are
+      exactly what it carried, and what is missing is only which row of which table matched. A case decided
+      since shows its rules here, and nothing can add them to this one — the record is what happened, not a
+      thing to re-run.</p>`;
   }
   if (view.trace === null || view.trace === undefined) {
     return `<p class="ops-empty">No trace was recorded for this evaluation, so there are no rules to show.</p>`;
