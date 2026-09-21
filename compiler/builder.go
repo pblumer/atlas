@@ -2992,7 +2992,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		},
 		func(fid int32) int32 { return b.flows[fid].Target })
 
-	return &CompiledProcess{
+	p := &CompiledProcess{
 		Key:                b.key,
 		BpmnProcessId:      b.intern(b.bpmnProcessId),
 		Version:            b.version,
@@ -3052,7 +3052,15 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		personalSet:        searchableSet(b.personalVars),
 		isExecutable:       b.isExecutable,
 		strings:            b.strings,
-	}, nil
+	}
+	// ADR-0314's rule, last because it reads the assembled expressions: a process that
+	// computes on a variable it declared personal does not deploy. Placed here rather
+	// than in Parse so a process built through this Builder is held to it too — the
+	// refusal is a property of the compiled process, not of one way of authoring it.
+	if err := p.refuseExpressionsReadingPersonalData(); err != nil {
+		return nil, err
+	}
+	return p, nil
 }
 
 func (b *Builder) validNode(id int32) bool {
