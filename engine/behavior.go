@@ -4626,6 +4626,56 @@ func parkOversizedWrite(c *ProcessingContext, scope uint64, name string, size, c
 	c.AppendIncidentEvent(model.IntentIncidentCreated, inc)
 }
 
+// parkClearPersonalWrite refuses a write of a declared personal variable that arrived
+// readable, and parks an incident naming it (ADR-0314). It mirrors parkOversizedWrite,
+// including how it locates the element to attach to, because the two are the same shape:
+// the work happened and its *result* is what cannot be written.
+func parkClearPersonalWrite(c *ProcessingContext, scope uint64, name string) {
+	inc := model.IncidentValue{
+		ElementInstanceKey: scope,
+		RaisedAt:           c.Now(),
+		Message: "the value written to \"" + name + "\" is declared personal (atlas:personal) and arrived in the clear. " +
+			"A personal value is enciphered where it enters Atlas — a form submission, a worker's result, an operator's write — " +
+			"and the engine cannot encipher it, because it holds no key. This write came from a path with no such edge, " +
+			"most likely a message payload or an inbound event. Deliver the value through a task or a worker result, " +
+			"or stop declaring it personal; then resolve to retry the write",
+		Reason: model.IncidentPersonalInTheClear,
+	}
+	if ei := c.GetElementInstance(scope); ei != nil {
+		inc.ProcessInstanceKey, inc.ElementId = ei.ProcessInstanceKey, ei.ElementId
+	} else if ei := c.GetElementInstance(c.producer); ei != nil {
+		inc.ElementInstanceKey = c.producer
+		inc.ProcessInstanceKey, inc.ElementId = ei.ProcessInstanceKey, ei.ElementId
+	} else {
+		inc.ProcessInstanceKey = scope // an instance-root write: the instance is the subject
+	}
+	c.AppendIncidentEvent(model.IntentIncidentCreated, inc)
+}
+
+// parkMovedDataSubject refuses a write that would change the instance's data subject
+// after values were sealed under the previous one, and parks an incident naming it
+// (ADR-0314).
+func parkMovedDataSubject(c *ProcessingContext, scope uint64, name string) {
+	inc := model.IncidentValue{
+		ElementInstanceKey: scope,
+		RaisedAt:           c.Now(),
+		Message: "the write to \"" + name + "\" would change this instance's data subject, and personal values are " +
+			"already enciphered under the previous one. Allowing it would split one person's data across two keys, " +
+			"so erasing either subject would leave the other half readable. Start an instance with the correct " +
+			"data subject instead; resolving this will only retry the same write",
+		Reason: model.IncidentDataSubjectMoved,
+	}
+	if ei := c.GetElementInstance(scope); ei != nil {
+		inc.ProcessInstanceKey, inc.ElementId = ei.ProcessInstanceKey, ei.ElementId
+	} else if ei := c.GetElementInstance(c.producer); ei != nil {
+		inc.ElementInstanceKey = c.producer
+		inc.ProcessInstanceKey, inc.ElementId = ei.ProcessInstanceKey, ei.ElementId
+	} else {
+		inc.ProcessInstanceKey = scope
+	}
+	c.AppendIncidentEvent(model.IntentIncidentCreated, inc)
+}
+
 // readList reads a stored JSON list variable back into FEEL values; nil if absent or
 // not a list.
 func readList(c *ProcessingContext, scope uint64, name string) []expr.Value {

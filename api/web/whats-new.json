@@ -2,6 +2,74 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "personal-data-can-be-erased-a-declared-variable-is-enciphere",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Personal data can be erased: a declared variable is enciphered under its data subject's own key, and destroying that key makes every copy unreadable.",
+        "de": "Personal data can be erased: a declared variable is enciphered under its data subject's own key, and destroying that key makes every copy unreadable."
+      },
+      "summary": {
+        "en": "A process names the variables that hold personal data and the one variable holding the id of the person they are about — atlas:personal=\"vorname,nachname\" and atlas:dataSubject=\"personalnummer\".",
+        "de": "A process names the variables that hold personal data and the one variable holding the id of the person they are about — atlas:personal=\"vorname,nachname\" and atlas:dataSubject=\"personalnummer\"."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "a-process-can-declare-which-variables-hold-personal-data-and",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Say which variables are personal, and the deploy holds you to it",
+        "de": "Sagen, welche Variablen personenbezogen sind — und das Deployment hält Sie daran"
+      },
+      "summary": {
+        "en": "One attribute on the process names the variables that hold personal data. A declared variable is encrypted before the engine ever sees it, and ciphertext cannot be compared or joined — so a model that reads one in a gateway condition, a mapping, a script or a timer no longer deploys, and the error names the variable, the kind of expression and the expression itself. Where such a value has to be combined, that belongs in the worker, which evaluates its own expressions and holds the plaintext for one call only. Nothing changes for a process that declares nothing.",
+        "de": "Ein Attribut am Prozess benennt die Variablen, die Personendaten halten. Eine deklarierte Variable wird verschlüsselt, bevor die Engine sie überhaupt sieht, und Chiffrat lässt sich nicht vergleichen oder verketten — ein Modell, das sie in einer Gateway-Bedingung, einem Mapping, einem Script oder einem Timer liest, deployt daher nicht mehr, und der Fehler nennt die Variable, die Art des Ausdrucks und den Ausdruck selbst. Muss ein solcher Wert verbunden werden, gehört das in den Worker: er wertet seine eigenen Ausdrücke aus und hält den Klartext nur für die Dauer eines Aufrufs. Für einen Prozess, der nichts deklariert, ändert sich nichts."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Security"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "the-account-bestellung-example-builds-its-upn-in-the-worker-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The Account-Bestellung example builds its UPN in the worker, and lost a gateway doing it.",
+        "de": "The Account-Bestellung example builds its UPN in the worker, and lost a gateway doing it."
+      },
+      "summary": {
+        "en": "The example that orders an Entra account took a first and last name from a public form and built a UPN out of them in the process. Under the new personal-data rule it cannot, so the create-user task builds it instead — and it deploys with no exception to the rule, which is what the record behind the rule could not show against any process that existed. One thing was lost and is worth knowing: a gateway used to check the finished UPN against the test-object pattern before any write, and there is no such process variable now. The boundary is the literal in the task's own expression — visible in the model, but no longer checked while the instance runs.",
+        "de": "Das Beispiel, das ein Entra-Konto bestellt, nahm Vor- und Nachnamen aus einem öffentlichen Formular und baute daraus im Prozess einen UPN. Unter der neuen Personendaten-Regel darf es das nicht, also baut ihn der create-user-Task — und es deployt ohne Ausnahme von der Regel, was die Aufzeichnung dahinter an keinem existierenden Prozess zeigen konnte. Eines ging verloren und sollte man wissen: ein Gateway prüfte den fertigen UPN vor jedem Schreibzugriff gegen das Test-Objekt-Muster, und diese Prozessvariable gibt es nicht mehr. Die Grenze ist das Literal im Ausdruck des Tasks — im Modell sichtbar, aber während des Laufs nicht mehr geprüft."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler"
+      ]
+    },
+    {
       "id": "renaming-a-catalogue-or-changing-the-languages-it-is-offered",
       "version": "Unreleased",
       "date": null,
@@ -314,107 +382,6 @@
           "de": "Starmap öffnen"
         },
         "route": "#/panorama/starmap"
-      }
-    },
-    {
-      "id": "double-click-a-business-rule-task-and-the-decision-opens",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Double-click a business rule task and the decision opens",
-        "de": "Doppelklick auf eine Business-Rule-Task öffnet die Entscheidung"
-      },
-      "summary": {
-        "en": "How a case was decided used to hide behind a hover: a small table that appeared when the pointer happened to be in the right place, and could not be scrolled, selected or pointed at while somebody else was reading the screen. Double-clicking the task now opens the decision itself — the decision requirements graph, with this case drawn on it. Every input datum shows the value it was given, every decision shows the value it produced, and the decision that answered is marked green. Underneath sit the rule tables, with the rule that carried the result in green and, on the rules that did not fire, the condition that ruled each one out. It is drawn to be turned towards somebody who does not use Atlas.",
-        "de": "Wie ein Fall entschieden wurde, verbarg sich bisher hinter einem Hover: eine kleine Tabelle, die erschien, wenn der Zeiger zufällig richtig stand, und die sich weder scrollen noch markieren liess, während jemand anderes auf den Bildschirm schaute. Ein Doppelklick auf die Aufgabe öffnet jetzt die Entscheidung selbst — den Decision Requirements Graph, mit diesem Fall darauf gezeichnet. Jedes Eingabedatum zeigt den Wert, den es erhalten hat, jede Entscheidung den Wert, den sie ermittelt hat, und die entscheidende Entscheidung ist grün markiert. Darunter stehen die Regeltabellen: die Regel, die das Ergebnis getragen hat, in Grün — und bei den Regeln, die nicht gezogen haben, die Bedingung, an der sie jeweils gescheitert sind. Gezeichnet, um den Bildschirm jemandem zuzudrehen, der Atlas nicht kennt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations",
-        "Decisions"
-      ],
-      "try": {
-        "label": {
-          "en": "Open an instance and double-click a decision",
-          "de": "Instanz öffnen und Entscheidung doppelklicken"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "a-business-rule-task-can-call-a-decision-service",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A process can call a decision service, not just a decision",
-        "de": "Ein Prozess kann einen Decision Service aufrufen, nicht nur eine Entscheidung"
-      },
-      "summary": {
-        "en": "A DMN model can publish an interface over part of its decision graph: a decision service says what it returns, what it works out internally, and which decisions it expects the caller to supply instead of computing them. Atlas ignored those interfaces, so the only way in was to call a decision inside the model — which means every caller has to know its internals. A business rule task now names either, and what a service asks for is only what a caller must supply. A decision inside a service stays callable, so nothing already running changes.",
-        "de": "Ein DMN-Modell kann eine Schnittstelle über einen Teil seines Entscheidungsgraphen veröffentlichen: Ein Decision Service benennt, was er zurückgibt, was er intern ermittelt und welche Entscheidungen er nicht selbst berechnet, sondern vom Aufrufer erwartet. Atlas hat solche Schnittstellen ignoriert; der einzige Weg hinein führte über eine Entscheidung im Modell — womit jeder Aufrufer dessen Interna kennen muss. Ein Business-Rule-Task benennt jetzt beides, und ein Service verlangt nur, was ein Aufrufer beisteuern muss. Eine Entscheidung innerhalb eines Service bleibt aufrufbar; an Laufendem ändert sich nichts."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Decisions",
-        "Processes"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the decisions",
-          "de": "Entscheidungen öffnen"
-        },
-        "route": "#/console/decisions"
-      }
-    },
-    {
-      "id": "an-incompatibility-can-be-declared-on-the-screen-that-declar",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Declare which two products may never be held together",
-        "de": "Festlegen, welche zwei Produkte nie zusammen bezogen werden dürfen"
-      },
-      "summary": {
-        "en": "A product may exclude another — the clerk who may create a supplier must not also approve payments to it. The record has carried that since the decision was made, publishing freezes it into a release in both directions, and an order that would produce the combination is refused rather than reported afterwards. The Console knew three edge kinds of four, so the rule was enforced the whole time and could be declared only over the API: one that already existed appeared in no table and could not be removed there. It is now the third question the relations section asks, beside structure and precedence. One incompatibility is one row however it was stored, removing it removes both directions, and adding the same fact backwards is refused instead of stored twice.",
-        "de": "Ein Produkt kann ein anderes ausschliessen — wer Kreditoren erfassen darf, soll nicht auch Zahlungen an sie freigeben. Der Datensatz trägt das seit der entsprechenden Entscheidung, die Veröffentlichung friert es in beiden Richtungen in ein Release ein, und eine Bestellung, die die Kombination erzeugen würde, wird abgewiesen statt im Nachhinein gemeldet. Die Konsole kannte drei der vier Kantenarten: Die Regel galt also durchgehend und liess sich nur über die Schnittstelle festlegen; eine bestehende erschien in keiner Tabelle und war dort nicht entfernbar. Sie ist jetzt die dritte Frage im Abschnitt zu den Beziehungen, neben Struktur und Reihenfolge. Eine Unverträglichkeit ist eine Zeile, gleich wie sie gespeichert wurde; das Entfernen nimmt beide Richtungen, und dasselbe rückwärts nochmals einzutragen wird abgewiesen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Catalogue",
-        "Governance"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Console → Catalogues and pick a catalogue. The relations section now shows three tables: structure, precedence, incompatibility.",
-          "Use the pairwise form below them: pick a product, choose \"must not be held with\", pick the other. It is pairwise because it belongs to neither product.",
-          "The two directions are one fact. The table draws one row, and removing it clears both — so you never have to remember which way round it was entered.",
-          "Publish the catalogue. From then on an order that would give one person both is refused when it is placed, with the pair named."
-        ],
-        "de": [
-          "Console → Catalogues öffnen und einen Katalog wählen. Der Abschnitt zu den Beziehungen zeigt jetzt drei Tabellen: Struktur, Reihenfolge, Unverträglichkeit.",
-          "Das paarweise Formular darunter verwenden: ein Produkt wählen, \"must not be held with\" auswählen, das andere wählen. Die Aussage ist paarweise, weil sie zu keinem der beiden Produkte allein gehört.",
-          "Beide Richtungen sind eine Aussage. Die Tabelle zeigt eine Zeile, und das Entfernen löscht beide — man muss sich also nicht merken, in welcher Richtung erfasst wurde.",
-          "Katalog veröffentlichen. Danach wird eine Bestellung, die einer Person beides gäbe, bei der Aufgabe abgewiesen, unter Nennung des Paares."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Catalogues",
-          "de": "Kataloge öffnen"
-        },
-        "route": "#/catalog"
       }
     }
   ]

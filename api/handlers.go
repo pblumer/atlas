@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api/layout"
+	"github.com/pblumer/atlas/api/vault"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/agent"
@@ -1009,6 +1010,17 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 	deployables, err := compiler.ParseAll(s.nextKey, 1, bytes.NewReader(body))
 	if err != nil {
 		return nil, err, nil
+	}
+	// A personal declaration is a promise that the values can be destroyed, and the
+	// thing that gets destroyed is a key in the vault. With no vault there is no key,
+	// so the values would be stored in the clear while the model said otherwise — the
+	// deploy is refused rather than accepted into that state (ADR-0314).
+	if s.vault == nil {
+		for i := range deployables {
+			if cp := deployables[i].Process; cp.HasPersonalVariables() {
+				return nil, fmt.Errorf("process %q declares personal variables (atlas:personal), which are enciphered under a key in the vault, and this server runs with the vault disabled: the values would be stored in the clear and nothing could be erased. Enable the vault or drop the declaration (ADR-0314)", cp.BpmnProcessId), nil
+			}
+		}
 	}
 	// Spend the keys ParseAll just handed out, durably, before any record claims one
 	// (ADR-0339). ParseAll assigned
@@ -2733,6 +2745,22 @@ type variableView struct {
 
 func toVariableView(v *model.VariableValue) variableView {
 	out := variableView{Name: v.Name}
+	// An enciphered value is reported as what it is, never as the base64 it looks like.
+	// This is the answer to the question ADR-0314 left open — whether the variable audit
+	// should show that a value was declared personal rather than showing ciphertext — and
+	// it is answered here rather than by deciphering, because these views (the timeline,
+	// the audit, an instance list) are about what happened to a value and when, not about
+	// the value; opening one per row would mean a vault read per row for a screen that
+	// does not need the content. The two edges that do need it open it (ADR-0314's "out
+	// at the edge"), and what a caller may read of an instance at all is decided by
+	// ADR-0275, not here.
+	if v.Kind == model.VarJSON {
+		if env, ok := vault.ParseEnvelope(v.Text); ok {
+			out.Kind = "personal"
+			out.Value = "enciphered for data subject " + env.Subject
+			return out
+		}
+	}
 	switch v.Kind {
 	case model.VarBool:
 		out.Kind = "boolean"
@@ -2799,14 +2827,26 @@ func (s *Server) handleInstanceVariables(w http.ResponseWriter, r *http.Request)
 	out := map[string]any{}
 	var scanErr error
 	s.do(func() {
-		scanErr = s.store.VisibleVariablesOfScope(key, func(v *model.VariableValue) error {
+		// The other edge ADR-0314 permits plaintext at: this is what a task's form is
+		// prefilled from and what a task detail shows. Enciphering is about
+		// *erasability*, not about access control — what a caller may read of an
+		// instance is decided by acc above (ADR-0275), and a declared variable does not
+		// quietly become a second, differently-ruled access boundary.
+		scanErr = state.VisibleVariables(s.personalReader(s.store), key, func(v *model.VariableValue) error {
 			if acc.allows(v.Name) {
 				out[v.Name] = nativeVar(v)
 			}
 			return nil
 		})
 	})
-	if scanErr != nil {
+	switch {
+	case errors.Is(scanErr, vault.ErrErased):
+		// Not a fault: this instance carries a value whose data subject has been erased,
+		// so it is permanently unreadable and the form cannot be prefilled. Saying so is
+		// the difference between the outcome ADR-0314 intends and a 500 somebody debugs.
+		httpapi.Error(w, http.StatusConflict, "this instance holds personal data whose data subject has been erased, so it can no longer be read or completed: "+scanErr.Error())
+		return
+	case scanErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read variables: "+scanErr.Error())
 		return
 	}
@@ -2861,6 +2901,17 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	scopeKey := payload.ScopeKey
+	// A declared personal value is enciphered here, before it becomes a command, exactly
+	// as it would be on the way in from a form or a worker (ADR-0314). An operator
+	// correction is not an exception to erasability.
+	sealScope := scopeKey
+	if sealScope == 0 {
+		sealScope = key
+	}
+	if err := s.encipherScopeVars(sealScope, vars); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	// Who is making the change, for the audit trail (ADR-0098): the authenticated
 	// principal's username, or "" when auth is off (single-user) or the caller is
 	// unidentified. Read off the request before the run loop, like every other
@@ -2966,14 +3017,24 @@ func (s *Server) handleInstanceVariableAudit(w http.ResponseWriter, r *http.Requ
 	var scanErr error
 	s.do(func() {
 		scanErr = s.store.VariableAuditHistory(key, func(ts int64, _ uint64, v *model.VariableAuditValue) error {
-			out = append(out, variableAuditView{
+			view := variableAuditView{
 				At:    ts,
 				Actor: v.Actor,
 				Scope: v.ScopeKey,
 				Name:  v.Name,
 				Value: nativeVar(&model.VariableValue{Kind: v.Kind, Bool: v.Bool, Text: v.Text}),
 				Kind:  varKindName(v.Kind),
-			})
+			}
+			// The audit's subject is that somebody overrode this variable, not what the
+			// value was, so an enciphered value is reported as what it is rather than as
+			// the envelope it is stored as — the same reading the timeline takes, and the
+			// answer to the question ADR-0314 left open for this view.
+			if v.Kind == model.VarJSON {
+				if env, ok := vault.ParseEnvelope(v.Text); ok {
+					view.Kind, view.Value = "personal", "enciphered for data subject "+env.Subject
+				}
+			}
+			out = append(out, view)
 			return nil
 		})
 	})
@@ -4872,6 +4933,13 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// A worker result landing a job's output is one of the two edges ADR-0314 enciphers
+	// at: the completion command must already hold ciphertext, so nothing is enciphered
+	// per command on the processor path (I1).
+	if err := s.encipherJobVars(key, vars); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	// An agent round's answer rides here beside the variables (ADR-0254). Read before
 	// the run loop like the variables are, because turning arguments into variables is
 	// a parse and a parse that fails is a 400, not a job that dies inside the loop.
@@ -5198,6 +5266,12 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	}
 	vars, err := parseStartVariables(body)
 	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// The form's answer is the other half of the in edge: a submitted personal value is
+	// enciphered before it becomes a command (ADR-0314).
+	if err := s.encipherJobVars(key, vars); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -6067,12 +6141,18 @@ type connectorPayload struct {
 // registry are readable.
 func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *model.ElementInstanceValue, cp *compiler.CompiledProcess) *connectorPayload {
 	node := cp.Node(ei.ElementId)
+	// Every kind below resolves its own expressions over the variables this reader
+	// yields, so wrapping it once is what makes a worker expression see the plaintext of
+	// a declared personal value rather than the envelope it is stored as (ADR-0314).
+	// compiler/personal.go exempts worker-evaluated expressions from the refusal on
+	// exactly that basis, and the exemption is only true because of this line.
+	rd := s.personalReader(s.store)
 	// A script task is its own node type rather than a task, but it resolves
 	// the same way and for the same reason: the source is in the compiled process and
 	// the variables it sees come from walking the scope chain, neither of which a
 	// worker has. What it needs on the far side is an interpreter, not a credential.
 	if node.Type == compiler.TypeScriptJobTask {
-		j, err := script.Resolve(s.store, cp, cp.ScriptJobTask(node.Detail), jv.ElementInstanceKey)
+		j, err := script.Resolve(rd, cp, cp.ScriptJobTask(node.Detail), jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
@@ -6090,7 +6170,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 	// A plain ad-hoc parks no job on its container at all, so a job here is an agent
 	// round by construction — and Resolve says so itself rather than trusting that.
 	if node.Type == compiler.TypeAdHocSubProcess {
-		r, err := agent.Resolve(s.store, cp, ei, jv.ElementInstanceKey)
+		r, err := agent.Resolve(rd, cp, ei, jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
@@ -6108,7 +6188,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// The one arm that is not a connector task's. What a worker needs is the
 		// decision id and the input context the engine built for it; what comes back
 		// is more than variables, which is why this kind went last (ADR-0233).
-		j, err := temis.Resolve(s.store, cp, cp.BusinessRuleTask(node.Detail), ei, jv.ElementInstanceKey)
+		j, err := temis.Resolve(rd, cp, cp.BusinessRuleTask(node.Detail), ei, jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
@@ -6117,7 +6197,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"inputs": j.Inputs, "resultVariable": j.Result,
 		}}
 	case compiler.CsvImportJobTypeIndex:
-		j, err := csvimport.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		j, err := csvimport.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
 		if err != nil {
 			// The worker will fail the job with a message of its own; refusing to lease
 			// here would park the token with nothing said about why.
@@ -6131,7 +6211,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 	case compiler.LdifJobTypeIndex:
 		// A pure transform: what travels is the file text (or the entries) and the
 		// format, and there is no credential to leave behind.
-		j, err := ldif.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		j, err := ldif.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
@@ -6143,7 +6223,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// The message travels; the SMTP host and password do not. What names the
 		// credential is the worker's name, which the worker resolves against its
 		// own configuration — the whole of ADR-0168's decision, in one field.
-		j, err := mail.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey, mailDirectory{s})
+		j, err := mail.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey, mailDirectory{s})
 		if err != nil {
 			return nil
 		}
@@ -6157,7 +6237,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// operator-managed instance behind a name (ADR-0106) — so what names the
 		// credential is the worker's name, resolved against the worker's own
 		// configuration.
-		j, err := remedy.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		j, err := remedy.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}
@@ -6172,7 +6252,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// credential is the worker's name, resolved against the worker's own
 		// configuration. That is also what lets the worker operate as a different
 		// Atlassian account from anything the engine holds.
-		j, err := jira.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		j, err := jira.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}
@@ -6207,7 +6287,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// (ADR-0235) — so what travels is the *Worker's* name,
 		// resolved against the Worker Instance's own configuration. That is also what
 		// lets it act as a different Google identity from anything the engine holds.
-		j, err := googlesheets.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		j, err := googlesheets.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}
@@ -6220,7 +6300,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 	case compiler.DiscordJobTypeIndex:
 		// The channel, the message and the body travel; the bot token does not exist
 		// here to travel. Same split as Jira's above (ADR-0258).
-		j, err := discord.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		j, err := discord.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}
@@ -6234,7 +6314,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// The statement and its bound parameters travel; the DSN does not exist here
 		// to travel. SQL is the first kind with no in-process handler at all, so this
 		// is not one of two paths that could drift — it is the only one (ADR-0173).
-		j, err := sqldb.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		j, err := sqldb.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
@@ -6248,7 +6328,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// What does not is the bind password: the *reference* travels and whoever runs
 		// the job resolves it, so an offloaded AD task never reads the engine's vault
 		// (ADR-0168).
-		j, err := ad.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
+		j, err := ad.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
@@ -6271,7 +6351,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// the credentials do not: the bind-password and client-certificate
 		// *references* travel and whoever runs the job resolves them, so an offloaded
 		// LDAP task never reads the engine's vault (ADR-0168).
-		j, err := ldap.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
+		j, err := ldap.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
@@ -6287,7 +6367,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// REST's arm exactly, and for REST's reason: everything about the call is model
 		// data and travels resolved, while the credential behind authSecret stays a
 		// reference for whoever runs the job to resolve (ADR-0168).
-		j, err := soap.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
+		j, err := soap.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
@@ -6300,7 +6380,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// Jira's arm exactly, and for Jira's reason: the task names its instance, and
 		// the Graph endpoint and OAuth bundle stay with the worker — a URL is half a
 		// credential (ADR-0141/0168). The site and list are model data and travel.
-		j, err := sharepoint.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		j, err := sharepoint.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}
@@ -6313,7 +6393,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// derived from them: a parked job's payload is read by an operator, and the
 		// derivation's own failure cases (a get with no id) belong where both halves
 		// reach them (ADR-0168).
-		j, err := scim.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		j, err := scim.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}
@@ -6326,7 +6406,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 	case compiler.EntraJobTypeIndex:
 		// The operation and the ids travel; the tenant's app credential does not
 		// exist here to travel. Worker-only, like the SQL kinds (ADR-0172).
-		j, err := entra.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		j, err := entra.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
@@ -6344,7 +6424,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// worker under the connector's name (ADR-0036/0168); what travels is what only
 		// the engine has — including a write's event body, which is the task's input
 		// mappings or the variables it sees, and exists nowhere but in engine state.
-		j, err := clio.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		j, err := clio.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}
@@ -6357,7 +6437,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 	case compiler.WebScrapeJobTypeIndex:
 		// No credential at all here — what the worker adds is network reach. A page
 		// only reachable from somewhere the engine is not is the case for moving it.
-		j, err := webscrape.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
+		j, err := webscrape.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
@@ -6377,7 +6457,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// The authored auth travels — its type, username, api-key header name, OAuth
 		// endpoint and the *reference* naming the secret. The secret behind that
 		// reference does not: the worker resolves it from its own store.
-		j, err := rest.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		j, err := rest.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}
@@ -6428,11 +6508,21 @@ func (s *Server) pulledJob(jobKey uint64, typeName string) (pulledJob, bool) {
 			j.Connector = s.resolveConnectorTask(jobKey, jv, ei, d.cp)
 		}
 	}
-	// The task's own scope chain, so an input mapping shadows the instance value.
-	if err := s.store.VisibleVariablesOfScope(jv.ElementInstanceKey, func(v *model.VariableValue) error {
+	// The task's own scope chain, so an input mapping shadows the instance value — read
+	// through the opening reader, because the payload handed to a worker is one of the two
+	// edges ADR-0314 permits plaintext at. A worker that received the envelope would
+	// either send ciphertext to the far end or fail on it, and either way the transform
+	// the record moves *into* the worker could not be written.
+	if err := state.VisibleVariables(s.personalReader(s.store), jv.ElementInstanceKey, func(v *model.VariableValue) error {
 		j.Variables[v.Name] = nativeVar(v)
 		return nil
 	}); err != nil {
+		// The one read failure worth naming: a value whose data subject has been erased
+		// cannot be opened, so this job cannot be handed out at all. ADR-0314 accepts
+		// that consequence — an erased subject's live instance can no longer provision —
+		// but it must not be silent, or a worker polls forever with nothing saying why.
+		logging.Warn(logging.PersonalValueUnreadable, "withholding a job whose variables cannot be read",
+			slog.Uint64("jobKey", jobKey), slog.String("reason", err.Error()))
 		return pulledJob{}, false
 	}
 	return j, true

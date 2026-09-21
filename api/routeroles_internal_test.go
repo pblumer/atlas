@@ -89,6 +89,14 @@ var wantAdminRoutes = []string{
 	"GET /api/v1/secrets",
 	"PUT /api/v1/secrets/{name}",
 	"DELETE /api/v1/secrets/{name}",
+	// Erasing a data subject destroys the key their personal data was enciphered
+	// under, which makes every copy of it — live store, checkpoints, exports, backups
+	// — permanently unreadable in one act (ADR-0314). It is the most irreversible
+	// operation the API has: there is no restore, because the point is that no copy
+	// survives. The listing is gated with it because it enumerates who is still
+	// erasable, and because the two belong to one operator task.
+	"GET /api/v1/personal-data",
+	"DELETE /api/v1/personal-data/{subject}",
 
 	// Org-wide settings. Every one of them is read by somebody who is not an
 	// administrator — the login screen reads three before anyone is anybody — so it

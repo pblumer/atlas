@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Modeler",
+    "Security"
+  ],
+  "title": {
+    "en": "Say which variables are personal, and the deploy holds you to it",
+    "de": "Sagen, welche Variablen personenbezogen sind — und das Deployment hält Sie daran"
+  },
+  "summary": {
+    "en": "One attribute on the process names the variables that hold personal data. A declared variable is encrypted before the engine ever sees it, and ciphertext cannot be compared or joined — so a model that reads one in a gateway condition, a mapping, a script or a timer no longer deploys, and the error names the variable, the kind of expression and the expression itself. Where such a value has to be combined, that belongs in the worker, which evaluates its own expressions and holds the plaintext for one call only. Nothing changes for a process that declares nothing.",
+    "de": "Ein Attribut am Prozess benennt die Variablen, die Personendaten halten. Eine deklarierte Variable wird verschlüsselt, bevor die Engine sie überhaupt sieht, und Chiffrat lässt sich nicht vergleichen oder verketten — ein Modell, das sie in einer Gateway-Bedingung, einem Mapping, einem Script oder einem Timer liest, deployt daher nicht mehr, und der Fehler nennt die Variable, die Art des Ausdrucks und den Ausdruck selbst. Muss ein solcher Wert verbunden werden, gehört das in den Worker: er wertet seine eigenen Ausdrücke aus und hält den Klartext nur für die Dauer eines Aufrufs. Für einen Prozess, der nichts deklariert, ändert sich nichts."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}
