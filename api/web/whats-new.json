@@ -2,6 +2,24 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "the-run-graph-answers-what-is-this-connected-to-as-a-lookup-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The run graph answers \"what is this connected to\" as a lookup, and the measurement renamed the question.",
+        "de": "The run graph answers \"what is this connected to\" as a lookup, and the measurement renamed the question."
+      },
+      "summary": {
+        "en": "ADR-0404 §5's projection gains the half it was missing: one union-find pass over the CSR, and a rungraph.Membership over the labels it produces.",
+        "de": "ADR-0404 §5's projection gains the half it was missing: one union-find pass over the CSR, and a rungraph.Membership over the labels it produces."
+      },
+      "link": {
+        "label": "ADR-0404",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0404-the-whole-graph-can-be-walked.md"
+      }
+    },
+    {
       "id": "personal-data-can-be-erased-a-declared-variable-is-enciphere",
       "version": "Unreleased",
       "date": null,
@@ -367,35 +385,6 @@
           "de": "Entscheidung öffnen"
         },
         "route": "#/modeler/decisions"
-      }
-    },
-    {
-      "id": "eine-entscheidung-hinter-einer-schnittstelle-zeigt-jetzt-auc",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A decision behind an interface now shows its rules too",
-        "de": "Eine Entscheidung hinter einer Schnittstelle zeigt jetzt auch ihre Regeln"
-      },
-      "summary": {
-        "en": "A business rule task can call a decision service — DMN's published interface over part of a decision graph. Until now such an evaluation kept its inputs and its answer and nothing about how it got there, because the engine offered no way to record the rules behind an interface. That left the explanation missing exactly where it is least affordable: the decisions behind an interface are usually tables, and somebody accounting for a case could not tell \"no rules were recorded\" from \"no rules matched\". A service evaluated from now on carries the tables it ran, shown in the decision graph with the rule that fired in green, like any other decision. The boundary holds there too: a decision the caller supplied is never computed, so its table does not appear. Cases decided earlier keep their exact values and no rules — a record is frozen history — and the screens now say which of the two silences they are looking at.",
-        "de": "Ein Business-Rule-Task kann einen Decision Service aufrufen — DMNs veröffentlichte Schnittstelle über einen Teil eines Entscheidungsgraphen. Bisher behielt eine solche Auswertung ihre Eingaben und ihr Ergebnis und nichts darüber, wie sie dorthin kam, weil die Engine keine Möglichkeit bot, die Regeln hinter einer Schnittstelle aufzuzeichnen. Damit fehlte die Erklärung genau dort, wo sie am wenigsten zu entbehren ist: die Entscheidungen hinter einer Schnittstelle sind in der Regel Tabellen, und wer einen Fall verantworten muss, konnte „es wurden keine Regeln aufgezeichnet\" nicht von „keine Regel hat getroffen\" unterscheiden. Eine Service-Auswertung ab jetzt trägt die Tabellen, die sie ausgeführt hat — im Entscheidungsgraph mit grün gezogener Regel wie bei jeder anderen Entscheidung. Die Grenze gilt auch dort: eine vom Aufrufer gelieferte Entscheidung wird nie berechnet, ihre Tabelle taucht also nicht auf. Früher entschiedene Fälle behalten ihre exakten Werte und keine Regeln — ein Datensatz ist eingefrorene Geschichte — und die Oberflächen sagen jetzt, welche der beiden Stillen sie vor sich haben."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations",
-        "Decisions"
-      ],
-      "try": {
-        "label": {
-          "en": "Open an instance and double-click a decision",
-          "de": "Instanz öffnen und Entscheidung doppelklicken"
-        },
-        "route": "#/operations"
       }
     }
   ]

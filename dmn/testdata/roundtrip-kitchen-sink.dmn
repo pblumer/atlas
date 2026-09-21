@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  One model carrying as much of the DMN 1.5 surface as an author can actually
+  produce, so a round trip through Atlas and through the shipped editor can be held
+  to giving back everything it was given.
+
+  It is deliberately more than any screen shows: a foreign extension element, a type
+  definition with allowed values, a business context element, a knowledge source with
+  a location, a knowledge model with an encapsulated function, all three requirement
+  kinds, a decision table with a hit policy, annotations and per-rule descriptions, a
+  decision service naming all three kinds of member, an annotation with a non-default
+  text format, and a diagram carrying a shared style, a size, labels, a collapsed
+  flag, a listed-input-data flag, a divider line and edge waypoints.
+
+  Nothing here is decoration. Each of these is a thing somebody wrote down on
+  purpose, and losing it silently on save is the failure this fixture exists to make
+  visible. Read by dmn/roundtrip_test.go and by e2e/dmn-fidelity.spec.mjs.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20230324/MODEL/"
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20230324/DMNDI/"
+             xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/"
+             xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/"
+             xmlns:atlas="http://atlas.example/ext"
+             id="def_sink" name="Kitchen Sink" namespace="http://example.com/sink"
+             exporter="Atlas round-trip fixture" exporterVersion="1.0">
+  <extensionElements>
+    <atlas:note kind="provenance">written by hand</atlas:note>
+  </extensionElements>
+  <itemDefinition id="it_rating" name="Rating" isCollection="false">
+    <typeRef>string</typeRef>
+    <allowedValues id="av_rating"><text>"A","B","C"</text></allowedValues>
+  </itemDefinition>
+  <performanceIndicator id="pi_speed" name="Throughput" />
+  <organisationalUnit id="ou_risk" name="Risk" />
+  <inputData id="in_amount" name="Amount">
+    <description>How much is asked for</description>
+    <variable id="v_amount" name="amount" typeRef="number" />
+  </inputData>
+  <knowledgeSource id="ks_policy" name="Policy" locationURI="http://example.com/policy.pdf">
+    <authorityRequirement id="ar_ks"><requiredInput href="#in_amount" /></authorityRequirement>
+  </knowledgeSource>
+  <businessKnowledgeModel id="bkm_rate" name="Instalment">
+    <encapsulatedLogic id="fn_rate" kind="FEEL">
+      <formalParameter id="fp_a" name="a" typeRef="number" />
+      <literalExpression id="le_rate"><text>a * 0.05</text></literalExpression>
+    </encapsulatedLogic>
+    <knowledgeRequirement id="kr_self"><requiredKnowledge href="#bkm_rate2" /></knowledgeRequirement>
+  </businessKnowledgeModel>
+  <businessKnowledgeModel id="bkm_rate2" name="Helper" />
+  <decision id="dec_risk" name="Risk">
+    <question>How risky?</question>
+    <allowedAnswers>low, high</allowedAnswers>
+    <variable id="v_risk" name="risk" typeRef="Rating" />
+    <informationRequirement id="ir_amount"><requiredInput href="#in_amount" /></informationRequirement>
+    <knowledgeRequirement id="kr_rate"><requiredKnowledge href="#bkm_rate" /></knowledgeRequirement>
+    <authorityRequirement id="ar_policy"><requiredAuthority href="#ks_policy" /></authorityRequirement>
+    <decisionTable id="dt_risk" hitPolicy="FIRST" preferredOrientation="Rule-as-Row" outputLabel="risk">
+      <input id="di_amount" label="amount">
+        <inputExpression id="ie_amount" typeRef="number"><text>amount</text></inputExpression>
+      </input>
+      <output id="do_risk" name="risk" typeRef="string" />
+      <annotation name="Why" />
+      <rule id="r1">
+        <description>small is safe</description>
+        <inputEntry id="ue1"><text>&lt; 1000</text></inputEntry>
+        <outputEntry id="oe1"><text>"A"</text></outputEntry>
+        <annotationEntry><text>under the floor</text></annotationEntry>
+      </rule>
+      <rule id="r2">
+        <inputEntry id="ue2"><text>-</text></inputEntry>
+        <outputEntry id="oe2"><text>"C"</text></outputEntry>
+        <annotationEntry><text>everything else</text></annotationEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+  <decision id="dec_out" name="Answer">
+    <variable id="v_out" name="answer" typeRef="string" />
+    <informationRequirement id="ir_risk"><requiredDecision href="#dec_risk" /></informationRequirement>
+    <decisionOwner href="#ou_risk" />
+    <decisionMaker href="#ou_risk" />
+    <literalExpression id="le_out" expressionLanguage="FEEL"><text>if risk = "A" then "yes" else "no"</text></literalExpression>
+  </decision>
+  <decisionService id="svc" name="Rating Service">
+    <outputDecision href="#dec_out" />
+    <encapsulatedDecision href="#dec_risk" />
+    <inputData href="#in_amount" />
+  </decisionService>
+  <textAnnotation id="ta_note" textFormat="text/html">
+    <text>reviewed quarterly</text>
+  </textAnnotation>
+  <association id="as_note" associationDirection="One">
+    <sourceRef href="#dec_out" />
+    <targetRef href="#ta_note" />
+  </association>
+  <dmndi:DMNDI>
+    <dmndi:DMNStyle id="style_shared" fontSize="14" fontBold="true" fillColor="#eeeeee" strokeColor="#333333" />
+    <dmndi:DMNDiagram id="dia" name="Main">
+      <dmndi:Size width="1200" height="800" />
+      <dmndi:DMNShape id="sh_amount" dmnElementRef="in_amount" isListedInputData="false" useAlternativeInputDataShape="true">
+        <dc:Bounds x="100" y="400" width="125" height="45" />
+        <dmndi:DMNLabel><dmndi:Text>Amount asked</dmndi:Text></dmndi:DMNLabel>
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="sh_risk" dmnElementRef="dec_risk">
+        <dc:Bounds x="100" y="260" width="180" height="80" />
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="sh_out" dmnElementRef="dec_out">
+        <dc:Bounds x="100" y="120" width="180" height="80" />
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="sh_svc" dmnElementRef="svc" isCollapsed="false">
+        <dc:Bounds x="60" y="80" width="300" height="300" />
+        <dmndi:DMNDecisionServiceDividerLine>
+          <di:waypoint x="60" y="220" />
+          <di:waypoint x="360" y="220" />
+        </dmndi:DMNDecisionServiceDividerLine>
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="sh_bkm" dmnElementRef="bkm_rate">
+        <dc:Bounds x="460" y="260" width="135" height="46" />
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="sh_bkm2" dmnElementRef="bkm_rate2">
+        <dc:Bounds x="460" y="400" width="135" height="46" />
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="sh_ks" dmnElementRef="ks_policy">
+        <dc:Bounds x="660" y="260" width="100" height="63" />
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="sh_ta" dmnElementRef="ta_note">
+        <dc:Bounds x="660" y="120" width="125" height="60" />
+      </dmndi:DMNShape>
+      <dmndi:DMNEdge id="ed_amount" dmnElementRef="ir_amount">
+        <di:waypoint x="162" y="400" />
+        <di:waypoint x="162" y="340" />
+        <dmndi:DMNLabel><dmndi:Text>needs</dmndi:Text></dmndi:DMNLabel>
+      </dmndi:DMNEdge>
+      <dmndi:DMNEdge id="ed_risk" dmnElementRef="ir_risk">
+        <di:waypoint x="190" y="260" />
+        <di:waypoint x="190" y="200" />
+      </dmndi:DMNEdge>
+      <dmndi:DMNEdge id="ed_note" dmnElementRef="as_note">
+        <di:waypoint x="280" y="160" />
+        <di:waypoint x="660" y="150" />
+      </dmndi:DMNEdge>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>
