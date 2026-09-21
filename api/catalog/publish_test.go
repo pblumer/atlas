@@ -771,3 +771,82 @@ func TestAPublishThatDoesNotSayWhatItIsForIsRefused(t *testing.T) {
 	_, problems = Publish(Input{CatalogID: "gone", Catalogs: two})
 	contains(t, problems, "is not in this input")
 }
+
+// A description is optional as a whole and all-or-nothing once there is one
+// (#1069). The rule is not "every product needs a paragraph" — most do not — it is
+// that a product which explains itself must explain itself to everybody the
+// catalogue is published for.
+
+// bilingual is an item a two-language catalogue accepts by name, so these tests
+// fail on the description rule or not at all.
+func bilingual(id string) Item {
+	it := item(id)
+	it.Texts = map[string]string{"de": id, "fr": id}
+	return it
+}
+
+func TestAProductNeedsNoDescriptionAtAll(t *testing.T) {
+	it := bilingual("vpn")
+
+	_, problems := Publish(Input{
+		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de", "fr"}, Items: []string{"vpn"}}},
+		Items:    []Item{it},
+	})
+
+	if len(problems) != 0 {
+		t.Fatalf("the fixture itself is unpublishable: %+v", problems)
+	}
+}
+
+func TestADescriptionInOneLanguageIsNotACatalogueInTwo(t *testing.T) {
+	it := bilingual("vpn")
+	it.Descriptions = map[string]string{"de": "Verschlüsselter Zugang ins Firmennetz."}
+
+	_, problems := Publish(Input{
+		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de", "fr"}, Items: []string{"vpn"}}},
+		Items:    []Item{it},
+	})
+
+	contains(t, problems, "none for declared language fr")
+	// And not a complaint about the language it does have.
+	for _, p := range problems {
+		if strings.Contains(p.Message, "declared language de") {
+			t.Errorf("the language that has a description was faulted: %+v", p)
+		}
+	}
+}
+
+// Whitespace is not a description. Read as one it would demand a translation of
+// nothing in every other language the catalogue declares — turning a field
+// somebody cleared into a wall in front of the release.
+func TestADescriptionOfSpacesIsNoDescription(t *testing.T) {
+	it := bilingual("vpn")
+	it.Descriptions = map[string]string{"de": "   "}
+
+	_, problems := Publish(Input{
+		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de", "fr"}, Items: []string{"vpn"}}},
+		Items:    []Item{it},
+	})
+
+	for _, p := range problems {
+		if strings.Contains(p.Message, "description") {
+			t.Errorf("blank spaces were read as a description: %+v", p)
+		}
+	}
+}
+
+// A description in every declared language is the case the rule exists to let
+// through.
+func TestADescriptionInEveryLanguagePublishes(t *testing.T) {
+	it := bilingual("vpn")
+	it.Descriptions = map[string]string{"de": "Zugang ins Firmennetz.", "fr": "Accès au réseau."}
+
+	_, problems := Publish(Input{
+		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de", "fr"}, Items: []string{"vpn"}}},
+		Items:    []Item{it},
+	})
+
+	if len(problems) != 0 {
+		t.Errorf("a fully translated description was refused: %+v", problems)
+	}
+}
