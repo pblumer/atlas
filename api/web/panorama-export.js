@@ -80,7 +80,14 @@ export function formatObserved(seconds) {
 // scopeText names which landscape this is, in the reader's terms. "The whole
 // landscape" is a claim, so it is only made when nothing narrowed the picture.
 export function scopeText(scope = {}) {
-  if (scope.kind === "filter" && scope.term) return `filtered by “${scope.term}”`;
+  // Element types switched off narrow the picture as surely as a term does, and
+  // they leave no trace on the canvas — no word in a box, no breadcrumb, just fewer
+  // things. So the clause composes with whichever of the three scopes applies
+  // rather than replacing one of them: a reader has to be able to see both that the
+  // picture was drilled and that a kind is missing from what the drilldown found.
+  const off = Array.isArray(scope.hiddenKinds) ? scope.hiddenKinds.filter(Boolean) : [];
+  const without = off.length ? `, without ${listOf(off)}` : "";
+  if (scope.kind === "filter" && scope.term) return `filtered by “${scope.term}”${without}`;
   if (scope.kind === "drill") {
     const hops = scope.hops === "all" || scope.hops === Infinity ? "any" : scope.hops;
     // The path, when there is one. A picture cropped to one node with no account of
@@ -89,9 +96,16 @@ export function scopeText(scope = {}) {
     // route matters most.
     const via = Array.isArray(scope.via) && scope.via.length
       ? ` (via ${scope.via.join(" › ")})` : "";
-    return `drilled into ${scope.name || "one node"}${via}, within ${hops} hop(s)`;
+    return `drilled into ${scope.name || "one node"}${via}, within ${hops} hop(s)${without}`;
   }
-  return "the whole starmap";
+  return off.length ? `the starmap${without}` : "the whole starmap";
+}
+
+// listOf joins names the way a sentence does. Two joined by "and" rather than by a
+// comma, because the line is read aloud in a ticket as often as it is scanned.
+function listOf(names) {
+  if (names.length === 1) return names[0];
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
 // exportName is the file's name. Sortable date first, because the second thing
@@ -186,6 +200,16 @@ export function stampLines(meta = {}) {
       `Atlas's own resources in ${spoken.short}'s vocabulary — nothing here was modelled, ` +
       `and this is not a ${spoken.short} document.` });
     for (const loss of spoken.loss || []) lines.push({ text: `— ${loss}` });
+  }
+  // And what switching a type off actually cost, which the headline clause states
+  // but does not explain. The second sentence is the part a reader of the file
+  // cannot work out for themselves: what is missing is not only the hidden kind, it
+  // is everything the picture reached *through* one — a process that was on screen
+  // only because a product bound it goes with the products.
+  const off = Array.isArray(meta.scope?.hiddenKinds) ? meta.scope.hiddenKinds.filter(Boolean) : [];
+  if (off.length) {
+    lines.push({ text: `Element types switched off: ${off.join(", ")}. Nothing of those ` +
+      `kinds is drawn, and nothing that was only reachable through one.` });
   }
   // A maintenance window is rings on three nodes and nothing else. On screen the
   // panel beside the canvas says what they are; in a file there is no panel, and a

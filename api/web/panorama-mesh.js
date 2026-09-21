@@ -2712,6 +2712,59 @@ function filterGraph(graph, { term, band, heat, at = Date.now() } = {}) {
   return around(graph, matched, CONTEXT_HOPS);
 }
 
+// emptyBecause names what emptied the canvas, because the three reasons need three
+// different actions from the reader.
+//
+// A search that missed sends them to the search box; a type filter that has taken
+// everything off sends them four inches to the right. Telling the second as the
+// first is how somebody clears a search they never typed and concludes the view is
+// broken — and with every box unticked there is no term on screen to explain it.
+export function emptyBecause(term, band, visible) {
+  if (!visible.nodes.length) {
+    return "Every element type is switched off, so there is nothing to draw.";
+  }
+  return `Nothing matches ${term ? `“${esc(term)}”` : "that"}${band && term ? " in that band" : ""}.`;
+}
+
+// withoutKinds is the landscape with whole element types switched off.
+//
+// A different kind of narrowing from every other one on this page, and it has to
+// be applied before them rather than beside them. The search narrows by *name* and
+// keeps a hop of neighbours so a match can be read in place; a drilldown does the
+// same from one node. Both of those reach outwards, and a type that is switched off
+// must not be what they reach — "hide the products" and "hide the products unless
+// something you searched for happens to touch one" are not the same instruction,
+// and only the first is one anybody would give.
+//
+// So this cuts first and everything else works on what is left. An edge with an end
+// that is gone goes with it: a line to nothing is not a claim about the estate, it
+// is a line.
+//
+// Empty set, same graph, same object. Switching nothing off is the ordinary case and
+// must not cost a copy of the landscape on every repaint.
+export function withoutKinds(graph, hidden) {
+  if (!hidden || !hidden.size) return graph;
+  const keep = new Set(graph.nodes.filter((n) => !hidden.has(n.kind)).map((n) => n.id));
+  return {
+    ...graph,
+    nodes: graph.nodes.filter((n) => keep.has(n.id)),
+    edges: graph.edges.filter((e) => keep.has(e.from) && keep.has(e.to)),
+  };
+}
+
+// kindsPresent is what the type filter offers: every kind the *delivered* landscape
+// holds, in the order KIND declares them, so the control reads the same way twice
+// running.
+//
+// The delivered one and never the drawn one. Built from what survives the filter,
+// switching a kind off would remove its own box — and a picture that cannot be
+// widened again from any control on screen is a picture somebody has to reload to
+// escape. That is the whole reason this takes the payload as its argument.
+export function kindsPresent(graph) {
+  const here = new Set((graph?.nodes || []).map((n) => n.kind));
+  return Object.keys(KIND).filter((kind) => here.has(kind));
+}
+
 // around cuts the graph down to a set of nodes and whatever is within `hops` of
 // them, marking which of the survivors were asked for and which are only there to
 // explain them.
@@ -3969,6 +4022,17 @@ export async function mountPanoramaMesh(view, { api, toast }) {
               <input id="mesh-depth-any" type="checkbox"/> all
             </label>
           </div>
+          <!-- Which kinds of thing are on the picture at all. The search answers
+               "where is the one called X", which is the wrong question for "show me
+               the catalogues" — that is not a string anybody can type. Every box is
+               on to begin with, because the picture the server sent is the picture
+               it meant to send, and this is for putting part of it down rather than
+               for building one up.
+
+               Filled in on every paint from the delivered landscape, so a kind that
+               arrives later arrives switched on. -->
+          <span class="mesh-kinds-head">Element types</span>
+          <div id="mesh-kinds" class="mesh-kinds"></div>
         </div>
         <div id="mesh-panel-slot"></div>
         <div id="mesh-findings-slot"></div>
@@ -4035,6 +4099,54 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const dirSelect = document.getElementById("mesh-direction");
   const depthField = document.getElementById("mesh-depth");
   const depthAny = document.getElementById("mesh-depth-any");
+  const kindsSlot = document.getElementById("mesh-kinds");
+
+  // hiddenKinds is what the reader has switched off, and it holds the *hidden* ones
+  // rather than the shown ones. That polarity is the whole of "every type is on to
+  // begin with": a kind nobody has an opinion about is absent from this set and is
+  // therefore drawn, so a catalogue shared with somebody tomorrow arrives on their
+  // picture rather than silently missing from it. Held the other way round, every
+  // kind that did not exist when the set was written would be off.
+  const hiddenKinds = new Set();
+
+  // renderKindFilter redraws the boxes from the delivered landscape.
+  //
+  // Rebuilt rather than patched, because the kinds on the picture change under it —
+  // a live re-read, a subject change, the drafts toggle — and a list that only ever
+  // grew would keep offering to hide something the server stopped sending.
+  //
+  // Named in whatever vocabulary the picture is read in, which is the rule the key
+  // already follows: a reader on a projection should not have to translate the
+  // control back into Atlas's own words to use it.
+  function renderKindFilter(delivered, spoken) {
+    const kinds = kindsPresent(delivered);
+    // Nothing to choose between. One kind is not a filter, it is a switch for
+    // emptying the canvas, and a control that can only do damage is better absent.
+    if (kinds.length < 2) {
+      kindsSlot.innerHTML = "";
+      kindsSlot.hidden = true;
+      return;
+    }
+    kindsSlot.hidden = false;
+    kindsSlot.innerHTML = kinds.map((kind) => {
+      const typed = typeIn(kind, spoken);
+      const label = typed?.name || KIND[kind].label.split(" — ")[0];
+      return `<label class="mesh-kind" title="${esc(KIND[kind].label)}">` +
+        `<input type="checkbox" data-kind="${esc(kind)}"${hiddenKinds.has(kind) ? "" : " checked"}/>` +
+        ` ${esc(label)}</label>`;
+    }).join("");
+  }
+
+  kindsSlot.addEventListener("change", (ev) => {
+    const box = ev.target.closest("input[data-kind]");
+    if (!box) return;
+    if (box.checked) hiddenKinds.delete(box.dataset.kind);
+    else hiddenKinds.add(box.dataset.kind);
+    // Back to the whole picture of whatever is left. A drilldown is a path through
+    // nodes, and one of its stations may be a kind that has just gone — leaving the
+    // walk standing would draw a picture cut from a node nobody can see.
+    paint();
+  });
 
   // depthValue is the control read as one answer, in the spelling everything
   // downstream already speaks: "all", or a number of hops as a string. Keeping the
@@ -4270,7 +4382,16 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // picture — the ones before it are how they got here — so a trail of six is the
     // same cost as a drilldown of one.
     const here = drilledAt();
-    const drilledGraph = here ? drillInto(graph, here, hops) : null;
+    // Whole element types the reader has put down, taken off before anything else
+    // narrows: the search and the drilldown both reach outwards for context, and a
+    // kind that is switched off must not be what they reach.
+    //
+    // Everything below that asks "what is on this picture" asks `visible` — the
+    // drilldown, the search, the counts. The one deliberate exception is the size
+    // reference a few lines down, which stays the delivered landscape for the reason
+    // stated there: narrowing must not make the smaller of two nodes swell.
+    const visible = withoutKinds(graph, hiddenKinds);
+    const drilledGraph = here ? drillInto(visible, here, hops) : null;
     if (here && !drilledGraph) {
       // The node under the reader's feet was undeployed while they stood on it. Step
       // back rather than throwing the whole path away: the way they came is still a
@@ -4300,7 +4421,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // a criterion with no control showing it is a picture nobody can widen again.
     const band = heatNow ? heatBand(heatScaleMarks(heatNow, peak), bandAt) : null;
     if (!band) bandAt = null;
-    shown = drilledGraph || filterGraph(graph, { term, band, heat: heatNow, at: measuredAt });
+    shown = drilledGraph || filterGraph(visible, { term, band, heat: heatNow, at: measuredAt });
+    // From the payload, so a kind that has just been switched off still has the box
+    // that switches it back on.
+    renderKindFilter(graph, spoken);
     paintDrillChip();
     // A selection that the filter removed is no longer selected: highlighting a node
     // that is not on screen would leave the panel describing something invisible.
@@ -4321,8 +4445,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     at = new Map(placed.map((n) => [n.id, n]));
     surface.innerHTML = shown.nodes.length
       ? svg
-      : `<p class="mesh-empty-filter">Nothing matches ${
-        term ? `“${esc(term)}”` : "that"}${band && term ? " in that band" : ""}.</p>`;
+      : `<p class="mesh-empty-filter">${emptyBecause(term, band, visible)}</p>`;
     index();
     nameTheNodes();
     // The rendered SVG carries none of the hover highlight, so the record of what is
@@ -4343,7 +4466,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // of them misreporting the search.
     const context = shown.nodes.length - (shown.matched?.size ?? shown.nodes.length);
     if (drilledAt()) {
-      count.textContent = `${context} of ${graph.nodes.length} node(s) within ` +
+      count.textContent = `${context} of ${visible.nodes.length} node(s) within ` +
         `${depthAny.checked ? "any" : depthValue()} hop(s)`;
     } else {
       // Two criteria, one sentence, and it names them: a count on its own over a
@@ -4353,10 +4476,14 @@ export async function mountPanoramaMesh(view, { api, toast }) {
         term ? `“${term}”` : null,
         band ? bandPhrase(heatNow, heatScaleMarks(heatNow, peak), bandAt).toLowerCase() : null,
       ].filter(Boolean);
+      // Counted against what the types leave, not against the payload: a header
+      // saying five over a canvas holding three is the header and the drawing
+      // disagreeing, which is the failure the two-number sentence above exists to
+      // avoid in the first place.
       count.textContent = asked.length
-        ? `${shown.matched?.size ?? 0} of ${graph.nodes.length} node(s) match ` +
+        ? `${shown.matched?.size ?? 0} of ${visible.nodes.length} node(s) match ` +
           `${asked.join(" and ")}` + (context ? `, ${context} shown for context` : "")
-        : `${graph.nodes.length} node(s), ${graph.edges.length} edge(s)`;
+        : `${visible.nodes.length} node(s), ${visible.edges.length} edge(s)`;
     }
     refresh();
     // And check, one frame later, that the box the graph was just settled for is
@@ -4992,6 +5119,13 @@ export async function mountPanoramaMesh(view, { api, toast }) {
           hops: depthValue(),
         }
       : term ? { kind: "filter", term } : { kind: "all" };
+    // The types the reader put down, in the words the picture uses for them. Part of
+    // the scope rather than a fact beside it: it is one of the things that make this
+    // file a picture of part of the landscape, and the stamp's whole job is to say
+    // which part.
+    scope.hiddenKinds = kindsPresent(graph)
+      .filter((kind) => hiddenKinds.has(kind))
+      .map((kind) => typeIn(kind, spoken)?.name || KIND[kind].label.split(" — ")[0]);
     return {
       // The server's reading, never this browser's clock: one dates the facts, the
       // other dates the save, and an export exists to be read later.
@@ -5312,6 +5446,13 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     bandAt = Number.isFinite(v.band) && v.band >= 0 ? v.band : null;
     dirSelect.value = v.direction || "dependents";
     setDepth(v.depth ?? "2");
+    // The element types that were switched off. Restored before the paint below,
+    // like every other narrowing: the picture a view saved is the one it was named
+    // for, and one that reopens with everything on answers a different question.
+    // A view written before this control existed carries an empty list, which is
+    // exactly the picture it was looking at.
+    hiddenKinds.clear();
+    for (const kind of v.hiddenKinds || []) hiddenKinds.add(kind);
     // A view saved before notations existed carries none, and the derived drawing is
     // what it was looking at.
     notationPick.value = notationOf(v.notation).id === v.notation ? v.notation : "atlas";
@@ -5405,6 +5546,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       // answer it about the one weighting they had.
       instances: weighted()?.key === "instances",
       drafts: draftsToggle.checked,
+      hiddenKinds,
       trail,
       frameView,
       world,

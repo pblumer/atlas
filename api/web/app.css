@@ -4887,6 +4887,24 @@ button.mesh-crumb:focus-visible { outline: 2px solid var(--accent); outline-offs
   width: 68px; padding: 5px 8px; border: 1px solid var(--border-strong); border-radius: 6px;
   background: var(--surface); color: var(--text); font: inherit; font-size: 13px;
 }
+/* Element types: one box per kind on the picture, stacked rather than wrapped into
+   a paragraph of words. A reader ticks these while looking at the canvas, so what
+   matters is that the list can be run down with the eye and that each row is a
+   target big enough to hit — not that it is compact. The heading takes the same
+   muted weight as Show and Depth, because it is the same kind of control. */
+.mesh-kinds-head { color: var(--muted); }
+.mesh-kinds { display: flex; flex-direction: column; gap: 2px; }
+.mesh-kind {
+  display: flex; align-items: center; gap: 6px;
+  /* Not muted, unlike the labels above it. Those name a control; these name the
+     things on the canvas, and a list of kinds greyed out reads as a list of kinds
+     that are switched off. */
+  color: var(--text); cursor: pointer;
+  /* A long ArchiMate word — "Application Collaboration" — must not widen the column
+     the canvas is sharing. */
+  overflow-wrap: anywhere;
+}
+.mesh-kind input { margin: 0; flex: 0 0 auto; }
 .mesh-depth input[type="number"]:disabled { color: var(--muted); background: var(--bg); }
 .mesh-depth-all {
   display: inline-flex; align-items: center; gap: 5px;
