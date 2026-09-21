@@ -2,6 +2,42 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "two-shipped-connection-tests-could-not-be-started",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Two connection tests that could not be started",
+        "de": "Zwei Verbindungstests, die sich nicht starten liessen"
+      },
+      "summary": {
+        "en": "The Jira and Google-Sheets examples each ship a small connection test — a model you run once to check that the credential, the endpoint and the worker name are right, before a real process depends on them. Both named a start form that had never been written, so starting either gave you a task with nothing to fill in. Both forms now exist, asking exactly what those models already documented they need: the Jira project key and issue type, and a name for the new spreadsheet. The reason nobody noticed is the more useful half of this. A form id is a string in one file and an id in another, and nothing joined the two, so a typo compiled, deployed and ran perfectly — the process reached the task, the task appeared in somebody's inbox, and it simply had no form. That gap is closed: every user task in a shipped model is now held to the form it names.",
+        "de": "Das Jira- und das Google-Sheets-Beispiel liefern je einen kleinen Verbindungstest mit — ein Modell, das man einmal laufen lässt, um Credential, Endpunkt und Worker-Namen zu prüfen, bevor ein echter Prozess davon abhängt. Beide nannten ein Startformular, das nie geschrieben worden war; wer eines startete, bekam eine Aufgabe ohne Eingabefelder. Beide Formulare gibt es jetzt, und sie fragen genau das, was die Modelle ohnehin dokumentieren: Projektschlüssel und Vorgangstyp für Jira, einen Namen für die neue Tabelle bei Google Sheets. Die nützlichere Hälfte ist der Grund, warum das niemandem auffiel. Eine Formular-Id ist eine Zeichenkette in der einen Datei und eine Id in der anderen, und nichts verband die beiden — ein Tippfehler liess sich einwandfrei übersetzen, deployen und ausführen: Der Prozess erreichte die Aufgabe, die Aufgabe erschien im Posteingang, und sie hatte schlicht kein Formular. Diese Lücke ist geschlossen: Jede Benutzeraufgabe in einem mitgelieferten Modell wird jetzt an das Formular gebunden, das sie nennt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Beispiele",
+        "Prozesse"
+      ],
+      "tutorial": {
+        "en": [
+          "Install “Beispiel: Zugangsantrag (Jira)” or “Beispiel: Antragseingang (Sheets)” from the handbook's Beispiele chapter.",
+          "Start the connection test (jira-verbindungstest or google-sheets-verbindungstest).",
+          "The start form now appears and asks what the test needs — previously it was empty.",
+          "Configure the matching worker under Console › Workers first, or the service task after the form will park until you do."
+        ],
+        "de": [
+          "Im Handbuch unter „Beispiele“ das Jira- oder das Google-Sheets-Beispiel installieren.",
+          "Den Verbindungstest starten („jira-verbindungstest“ bzw. „google-sheets-verbindungstest“).",
+          "Das Startformular erscheint nun und fragt, was der Test braucht — vorher war es leer.",
+          "Vorher unter „Console › Workers“ den passenden Worker einrichten, sonst parkt der Service-Task nach dem Formular, bis das geschehen ist."
+        ]
+      }
+    },
+    {
       "id": "narrow-the-starmap-to-the-offerings-you-mean",
       "version": "Unreleased",
       "date": null,
@@ -371,51 +407,6 @@
           "Eine Seite darf leer bleiben: links leer heisst \"ab Veröffentlichung\", rechts leer heisst \"bis zum Zurückziehen\". Beide leer ist das gewöhnliche Produkt; für dieses ändert sich nichts.",
           "Katalog veröffentlichen. Ein Produkt, dessen Fenster noch nicht offen ist, bleibt im Portal sichtbar und lässt sich nicht in den Warenkorb legen; die Zeile nennt das Datum.",
           "Die Daten sind die des Servers (UTC) und werden tageweise gepflegt. Für ein Fenster, das auf die Stunde genau gelten muss, ist dieses Feld nicht gedacht."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Catalogues",
-          "de": "Kataloge öffnen"
-        },
-        "route": "#/catalog"
-      }
-    },
-    {
-      "id": "the-four-fields-the-portal-read-and-the-product-editor-could",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The product editor now sets every field the portal reads",
-        "de": "Der Produkteditor setzt jetzt jedes Feld, das das Portal liest"
-      },
-      "summary": {
-        "en": "A product carries twelve fields the portal acts on and the editor rendered eight. The four it left out decide whether a product can be ordered at all: the orderable shapes the basket refuses to proceed without, the search terms that make a service findable by somebody who does not know its name, the groups eligible to receive it, and the ceiling on how long the right may last. They were settable over the API and by nobody else — not by the person whose job it is. All four are on the form now, and the form also says where the two headings are read: Kategorie and Produktgruppe are collected from the products nothing contains, so a product carried inside another one is reached through its carrier and its own heading is never read there. The editor names the carrier instead of leaving you to fill in a column that had stopped reading the field.",
-        "de": "Ein Produkt trägt zwölf Felder, die das Portal auswertet, und der Editor zeigte acht davon. Die vier fehlenden entscheiden darüber, ob ein Produkt überhaupt bestellt werden kann: die Ausführungen, ohne deren Wahl der Warenkorb die Bestellung verweigert, die Suchbegriffe, über die eine Leistung auch ohne Kenntnis ihres Namens gefunden wird, die bezugsberechtigten Gruppen und die Obergrenze für die Dauer des Rechts. Setzbar waren sie nur über die Schnittstelle und sonst von niemandem — nicht von der Person, deren Aufgabe das ist. Alle vier stehen jetzt im Formular, und das Formular sagt zudem, wo die beiden Überschriften gelesen werden: Kategorie und Produktgruppe werden von den Produkten gelesen, die in keinem anderen enthalten sind. Ein Produkt innerhalb eines anderen wird über dieses erreicht, seine eigene Überschrift dort also nie gelesen. Der Editor nennt nun das tragende Produkt, statt Sie eine Spalte füllen zu lassen, die das Feld längst nicht mehr liest."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Catalogue",
-        "Portal"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Console → Catalogues, pick a catalogue and edit one of its products.",
-          "Under what the catalogue shows: the search terms as a comma-separated list — synonyms, the vendor's term, the abbreviation everybody uses — and the orderable shapes as one line each, written id = name.",
-          "Under how an order is handled: the groups eligible to receive it, and the ceiling in days. Empty eligibility narrows nothing and never opens anything, because the catalogue's audience stays the gate; a ceiling of zero is a right that does not end.",
-          "Where the catalogue carries this product inside another one, a note above the two headings names the carrier: the requester reaches the product under the carrier's heading, not under what you write here.",
-          "Publish the catalogue. Until you do, none of it reaches the portal."
-        ],
-        "de": [
-          "Console → Catalogues öffnen, einen Katalog wählen und eines seiner Produkte bearbeiten.",
-          "Im Abschnitt zum Katalogauftritt: die Suchbegriffe als kommagetrennte Liste — Synonyme, die Bezeichnung des Herstellers, die geläufige Abkürzung — und die Ausführungen als je eine Zeile in der Form id = Name.",
-          "Im Abschnitt zur Auftragsbearbeitung: die bezugsberechtigten Gruppen und die Obergrenze in Tagen. Keine Berechtigung eingeschränkt bedeutet keine Einschränkung und öffnet nie etwas, denn das Publikum des Katalogs bleibt die Schranke; eine Obergrenze von null ist ein Recht ohne Ende.",
-          "Ist das Produkt in diesem Katalog Teil eines anderen, nennt ein Hinweis über den beiden Überschriften das tragende Produkt: Die anfordernde Person erreicht das Produkt unter dessen Überschrift, nicht unter der hier eingetragenen.",
-          "Katalog veröffentlichen. Vorher erreicht nichts davon das Portal."
         ]
       },
       "try": {

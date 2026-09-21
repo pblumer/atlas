@@ -1381,6 +1381,33 @@
           "file": "google-sheets-antragseingang/google-sheets-verbindungstest.bpmn",
           "xml": "\u003c?xml version=\"1.0\" encoding=\"UTF-8\"?\u003e\n\u003c!--\n  Google-Sheets-Verbindungstest\n\n  Der kuerzeste Prozess, der beweist, dass der Google-Sheets-Worker wirklich an\n  deinem Google-Konto haengt — und der dabei die ganze Schleife zeigt, die ein\n  Prozess mit einer Tabelle faehrt: anlegen, schreiben, anhaengen, lesen.\n\n  Start (Formular gs-start: tabellenname)\n   -\u003e \"Tabelle anlegen\"      (create-spreadsheet -\u003e datei)\n   -\u003e \"Kopfzeile schreiben\"  (write-range A1:C1)\n   -\u003e \"Zeilen anhaengen\"     (append-row, Objekte ueber columns)\n   -\u003e \"Tabelle lesen\"        (read-range mit header -\u003e zeilen)\n   -\u003e Ende \"Tabelle steht\"\n\n  Diesen Prozess zuerst starten. Laeuft er durch, sind Credential, Scopes und\n  Worker-Name richtig — und jeder spaetere Fehler im Antragseingang liegt am\n  Modell, nicht an der Einrichtung. Die angelegte Tabelle liegt im Drive des\n  Dienstkontos; ihre URL steht danach in =datei.spreadsheetUrl.\n\n  BPMN-DI von Hand gesetzt: gerade Hauptachse bei y=200, Pitch 150.\n--\u003e\n\u003cdefinitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n             xmlns:zeebe=\"http://camunda.org/schema/zeebe/1.0\"\n             xmlns:atlas=\"http://atlas/schema/1.0\"\n             xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\"\n             xmlns:omgdc=\"http://www.omg.org/spec/DD/20100524/DC\"\n             xmlns:omgdi=\"http://www.omg.org/spec/DD/20100524/DI\"\n             id=\"defs_gs_verbindungstest\" targetNamespace=\"http://atlas/examples\"\u003e\n  \u003cprocess id=\"proc_gs_verbindungstest\" name=\"Google-Sheets-Verbindungstest\" isExecutable=\"true\"\u003e\n    \u003cdocumentation\u003eLegt eine Tabelle an, schreibt eine Kopfzeile, haengt zwei Zeilen an und liest sie zurueck — um Credential, Scopes und Worker-Namen zu pruefen. Startvariable: tabellenname (wie die neue Tabelle heissen soll).\u003c/documentation\u003e\n\n    \u003cstartEvent id=\"start\" name=\"Test starten\"\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:formDefinition formId=\"gs-start\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003coutgoing\u003ef_start_anlegen\u003c/outgoing\u003e\n    \u003c/startEvent\u003e\n\n    \u003cserviceTask id=\"anlegen\" name=\"Tabelle anlegen\"\u003e\n      \u003cdocumentation\u003eGoogle-Sheets-Worker-Typ, Operation create-spreadsheet. Der Worker-Name \"google\" verweist auf den konfigurierten Worker unter Console -\u003e Workers (das Attribut heisst weiterhin connector); das Credential liegt dort und im Vault, nie im Modell. Anlegen ist die einzige Operation ohne \"spreadsheet\" — sie bringt die Datei erst hervor. sheet benennt das erste Blatt gleich mit, was Sheets in derselben Anfrage kann und Drive nicht; deshalb ist das hier ein Sheets-Aufruf und kein Drive-Upload. resultVariable schreibt die Antwort nach \"datei\", danach ist die Tabelle als =datei.spreadsheetId adressierbar.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003catlas:googleSheetsConnector connector=\"google\" operation=\"create-spreadsheet\"\n          title=\"=tabellenname\"\n          sheet=\"Antraege\"\n          resultVariable=\"datei\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_start_anlegen\u003c/incoming\u003e\n      \u003coutgoing\u003ef_anlegen_kopf\u003c/outgoing\u003e\n    \u003c/serviceTask\u003e\n\n    \u003cserviceTask id=\"kopfzeile\" name=\"Kopfzeile schreiben\"\u003e\n      \u003cdocumentation\u003ewrite-range ueberschreibt genau die genannten Zellen. values ist hier eine FEEL-Liste von Listen — also Zeilen, die Form, die Sheets selbst schreibt; fuer eine einzelne Zeile taete es auch die flache Liste. valueInput bleibt auf dem Standard \"user\": eine Kopfzeile ist Text, und ein Datum oder ein Betrag soll spaeter auch wirklich ein Datum bzw. eine Zahl in der Tabelle werden.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003catlas:googleSheetsConnector connector=\"google\" operation=\"write-range\"\n          spreadsheet=\"=datei.spreadsheetId\"\n          range=\"Antraege!A1:C1\"\n          values=\"=[[\u0026quot;Antragsnummer\u0026quot;, \u0026quot;Name\u0026quot;, \u0026quot;Status\u0026quot;]]\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_anlegen_kopf\u003c/incoming\u003e\n      \u003coutgoing\u003ef_kopf_anhaengen\u003c/outgoing\u003e\n    \u003c/serviceTask\u003e\n\n    \u003cserviceTask id=\"anhaengen\" name=\"Zeilen anhaengen\"\u003e\n      \u003cdocumentation\u003eappend-row haengt hinter der letzten belegten Zeile an, deshalb ist der Bereich eine ganze Spaltengruppe (A:C) und keine feste Zeile. values ist hier eine Liste von OBJEKTEN — die Form, die ein Prozess wirklich in der Hand hat — und columns sagt, welche Felder in welcher Reihenfolge geschrieben werden. Ohne columns lehnt der Deploy ab: die Schluesselreihenfolge eines Objekts ist keine Spaltenreihenfolge, und sie zu raten hiesse, eine vertauschte Tabelle statt eines Fehlers zu liefern. Achtung: die Zustellung ist \"mindestens einmal\" und eine Tabelle hat keinen Idempotenzschluessel — nach einem Absturz zwischen \"angehaengt\" und \"Job fertig\" stehen die Zeilen zweimal da.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003catlas:googleSheetsConnector connector=\"google\" operation=\"append-row\"\n          spreadsheet=\"=datei.spreadsheetId\"\n          range=\"Antraege!A:C\"\n          columns=\"nummer, name, status\"\n          values=\"=[{nummer: \u0026quot;A-1\u0026quot;, name: \u0026quot;Anna Beispiel\u0026quot;, status: \u0026quot;offen\u0026quot;}, {nummer: \u0026quot;A-2\u0026quot;, name: \u0026quot;Bo Beispiel\u0026quot;, status: \u0026quot;offen\u0026quot;}]\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_kopf_anhaengen\u003c/incoming\u003e\n      \u003coutgoing\u003ef_anhaengen_lesen\u003c/outgoing\u003e\n    \u003c/serviceTask\u003e\n\n    \u003cserviceTask id=\"lesen\" name=\"Tabelle lesen\"\u003e\n      \u003cdocumentation\u003eread-range liest die Zeilen zurueck. header=\"true\" macht aus der ersten Zeile des Bereichs die Spaltennamen, sodass \"zeilen\" eine Liste von Objekten ist und nicht eine Liste von Listen — das ist die Form, die ein Multi-Instance-Unterprozess durchlaeuft und die =zeilen[1].Name lesbar macht. FEEL-Listen sind 1-basiert. Ohne header waere dieselbe Zelle =zeilen[2][2], was niemand nach drei Wochen noch entziffert. Der Bereich muss die Kopfzeile enthalten, sonst wird die erste Datenzeile zur Ueberschrift.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003catlas:googleSheetsConnector connector=\"google\" operation=\"read-range\"\n          spreadsheet=\"=datei.spreadsheetId\"\n          range=\"Antraege!A:C\"\n          header=\"true\"\n          resultVariable=\"zeilen\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_anhaengen_lesen\u003c/incoming\u003e\n      \u003coutgoing\u003ef_lesen_ende\u003c/outgoing\u003e\n    \u003c/serviceTask\u003e\n\n    \u003cendEvent id=\"ende\" name=\"Tabelle steht\"\u003e\n      \u003cincoming\u003ef_lesen_ende\u003c/incoming\u003e\n    \u003c/endEvent\u003e\n\n    \u003csequenceFlow id=\"f_start_anlegen\" sourceRef=\"start\" targetRef=\"anlegen\"/\u003e\n    \u003csequenceFlow id=\"f_anlegen_kopf\" sourceRef=\"anlegen\" targetRef=\"kopfzeile\"/\u003e\n    \u003csequenceFlow id=\"f_kopf_anhaengen\" sourceRef=\"kopfzeile\" targetRef=\"anhaengen\"/\u003e\n    \u003csequenceFlow id=\"f_anhaengen_lesen\" sourceRef=\"anhaengen\" targetRef=\"lesen\"/\u003e\n    \u003csequenceFlow id=\"f_lesen_ende\" sourceRef=\"lesen\" targetRef=\"ende\"/\u003e\n  \u003c/process\u003e\n\n  \u003cbpmndi:BPMNDiagram id=\"BPMNDiagram_gs_verbindungstest\"\u003e\n    \u003cbpmndi:BPMNPlane id=\"BPMNPlane_gs_verbindungstest\" bpmnElement=\"proc_gs_verbindungstest\"\u003e\n      \u003cbpmndi:BPMNShape id=\"start_di\" bpmnElement=\"start\"\u003e\n        \u003comgdc:Bounds x=\"152\" y=\"182\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003comgdc:Bounds x=\"136\" y=\"225\" width=\"70\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"anlegen_di\" bpmnElement=\"anlegen\"\u003e\n        \u003comgdc:Bounds x=\"240\" y=\"160\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"kopfzeile_di\" bpmnElement=\"kopfzeile\"\u003e\n        \u003comgdc:Bounds x=\"390\" y=\"160\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"anhaengen_di\" bpmnElement=\"anhaengen\"\u003e\n        \u003comgdc:Bounds x=\"540\" y=\"160\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"lesen_di\" bpmnElement=\"lesen\"\u003e\n        \u003comgdc:Bounds x=\"690\" y=\"160\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"ende_di\" bpmnElement=\"ende\"\u003e\n        \u003comgdc:Bounds x=\"850\" y=\"182\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003comgdc:Bounds x=\"828\" y=\"225\" width=\"80\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n\n      \u003cbpmndi:BPMNEdge id=\"f_start_anlegen_di\" bpmnElement=\"f_start_anlegen\"\u003e\n        \u003comgdi:waypoint x=\"188\" y=\"200\"/\u003e\u003comgdi:waypoint x=\"240\" y=\"200\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_anlegen_kopf_di\" bpmnElement=\"f_anlegen_kopf\"\u003e\n        \u003comgdi:waypoint x=\"340\" y=\"200\"/\u003e\u003comgdi:waypoint x=\"390\" y=\"200\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_kopf_anhaengen_di\" bpmnElement=\"f_kopf_anhaengen\"\u003e\n        \u003comgdi:waypoint x=\"490\" y=\"200\"/\u003e\u003comgdi:waypoint x=\"540\" y=\"200\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_anhaengen_lesen_di\" bpmnElement=\"f_anhaengen_lesen\"\u003e\n        \u003comgdi:waypoint x=\"640\" y=\"200\"/\u003e\u003comgdi:waypoint x=\"690\" y=\"200\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f_lesen_ende_di\" bpmnElement=\"f_lesen_ende\"\u003e\n        \u003comgdi:waypoint x=\"790\" y=\"200\"/\u003e\u003comgdi:waypoint x=\"850\" y=\"200\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n    \u003c/bpmndi:BPMNPlane\u003e\n  \u003c/bpmndi:BPMNDiagram\u003e\n\u003c/definitions\u003e"
         }
+      ],
+      "forms": [
+        {
+          "id": "gs-start",
+          "name": "gs-start",
+          "file": "google-sheets-antragseingang/form-gs-start.json",
+          "schema": {
+            "type": "default",
+            "id": "gs-start",
+            "components": [
+              {
+                "type": "text",
+                "text": "# Google-Sheets-Verbindungstest\n\nLegt eine Tabelle an, schreibt eine Kopfzeile, hängt zwei Zeilen an und liest sie zurück — damit Credential, Scopes und Worker-Name einmal geprüft sind, bevor ein echter Prozess davon abhängt."
+              },
+              {
+                "key": "tabellenname",
+                "type": "textfield",
+                "label": "Name der neuen Tabelle",
+                "validate": {
+                  "required": true
+                },
+                "defaultValue": "Atlas-Verbindungstest",
+                "description": "Die Datei wird unter diesem Namen in Google Drive angelegt und bleibt liegen — der Test räumt nicht auf, damit man das Ergebnis ansehen kann."
+              }
+            ]
+          }
+        }
       ]
     },
     {
@@ -1402,6 +1429,41 @@
         }
       ],
       "forms": [
+        {
+          "id": "jvt-start",
+          "name": "jvt-start",
+          "file": "jira-zugangsantrag/form-jvt-start.json",
+          "schema": {
+            "type": "default",
+            "id": "jvt-start",
+            "components": [
+              {
+                "type": "text",
+                "text": "# Jira-Verbindungstest\n\nLegt einen einzelnen Vorgang an, damit Endpoint, Credential und Worker-Name einmal geprüft sind, bevor ein echter Prozess davon abhängt."
+              },
+              {
+                "key": "jiraProjekt",
+                "type": "textfield",
+                "label": "Projektschlüssel",
+                "validate": {
+                  "required": true
+                },
+                "defaultValue": "OPS",
+                "description": "Wie in Jira, in Grossbuchstaben — etwa OPS. Der Vorgang entsteht in diesem Projekt und bleibt dort stehen."
+              },
+              {
+                "key": "vorgangstyp",
+                "type": "textfield",
+                "label": "Vorgangstyp",
+                "validate": {
+                  "required": true
+                },
+                "defaultValue": "Task",
+                "description": "Wie ihn dieses Projekt nennt. Ein Typ, den das Projekt nicht führt, wird von Jira abgelehnt — was der Test dann auch genau so meldet."
+              }
+            ]
+          }
+        },
         {
           "id": "za-antrag",
           "name": "Zugangsantrag",

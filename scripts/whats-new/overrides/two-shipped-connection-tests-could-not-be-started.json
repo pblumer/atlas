@@ -1,0 +1,28 @@
+{
+  "tags": [
+    "Beispiele",
+    "Prozesse"
+  ],
+  "title": {
+    "en": "Two connection tests that could not be started",
+    "de": "Zwei Verbindungstests, die sich nicht starten liessen"
+  },
+  "summary": {
+    "en": "The Jira and Google-Sheets examples each ship a small connection test — a model you run once to check that the credential, the endpoint and the worker name are right, before a real process depends on them. Both named a start form that had never been written, so starting either gave you a task with nothing to fill in. Both forms now exist, asking exactly what those models already documented they need: the Jira project key and issue type, and a name for the new spreadsheet. The reason nobody noticed is the more useful half of this. A form id is a string in one file and an id in another, and nothing joined the two, so a typo compiled, deployed and ran perfectly — the process reached the task, the task appeared in somebody's inbox, and it simply had no form. That gap is closed: every user task in a shipped model is now held to the form it names.",
+    "de": "Das Jira- und das Google-Sheets-Beispiel liefern je einen kleinen Verbindungstest mit — ein Modell, das man einmal laufen lässt, um Credential, Endpunkt und Worker-Namen zu prüfen, bevor ein echter Prozess davon abhängt. Beide nannten ein Startformular, das nie geschrieben worden war; wer eines startete, bekam eine Aufgabe ohne Eingabefelder. Beide Formulare gibt es jetzt, und sie fragen genau das, was die Modelle ohnehin dokumentieren: Projektschlüssel und Vorgangstyp für Jira, einen Namen für die neue Tabelle bei Google Sheets. Die nützlichere Hälfte ist der Grund, warum das niemandem auffiel. Eine Formular-Id ist eine Zeichenkette in der einen Datei und eine Id in der anderen, und nichts verband die beiden — ein Tippfehler liess sich einwandfrei übersetzen, deployen und ausführen: Der Prozess erreichte die Aufgabe, die Aufgabe erschien im Posteingang, und sie hatte schlicht kein Formular. Diese Lücke ist geschlossen: Jede Benutzeraufgabe in einem mitgelieferten Modell wird jetzt an das Formular gebunden, das sie nennt."
+  },
+  "tutorial": {
+    "en": [
+      "Install “Beispiel: Zugangsantrag (Jira)” or “Beispiel: Antragseingang (Sheets)” from the handbook's Beispiele chapter.",
+      "Start the connection test (jira-verbindungstest or google-sheets-verbindungstest).",
+      "The start form now appears and asks what the test needs — previously it was empty.",
+      "Configure the matching worker under Console › Workers first, or the service task after the form will park until you do."
+    ],
+    "de": [
+      "Im Handbuch unter „Beispiele“ das Jira- oder das Google-Sheets-Beispiel installieren.",
+      "Den Verbindungstest starten („jira-verbindungstest“ bzw. „google-sheets-verbindungstest“).",
+      "Das Startformular erscheint nun und fragt, was der Test braucht — vorher war es leer.",
+      "Vorher unter „Console › Workers“ den passenden Worker einrichten, sonst parkt der Service-Task nach dem Formular, bis das geschehen ist."
+    ]
+  }
+}

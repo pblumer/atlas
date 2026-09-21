@@ -12,6 +12,24 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Two shipped connection tests could not be started.** `jira-verbindungstest.bpmn`
+  and `google-sheets-verbindungstest.bpmn` name a start form each — `jvt-start` and
+  `gs-start` — and neither form had ever been written. Both models document the
+  variables they need (`jiraProjekt` and `vorgangstyp`; `tabellenname`), so both forms
+  now exist with exactly those fields and nothing invented.
+
+  **The reason nobody noticed is the more useful half.** A `formId` is a string in one
+  file and an id in another, and nothing joined the two. A typo compiles, deploys and
+  runs perfectly: the process reaches the task, the task appears in somebody's inbox,
+  and it simply has no form to fill in — days after the model was written and in front
+  of somebody who did not write it.
+
+  `TestEveryFormReferenceResolves` now holds every user task to the form it names,
+  per example and for the system bundle, because a form ships with its process and an
+  example reaching into another's forms would install half of something.
+
 ### Added
 
 - **Narrow the starmap to the offerings you mean.** The element-type filter beside it
