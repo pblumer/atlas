@@ -7,6 +7,13 @@
       "text": "# 🧩 Account-Bestellung\n\nBestelle ein neues Konto im Tenant **contoso.com**. Wähle den passenden **Kontotyp** — daraus ergeben sich automatisch Aktivierung, Kategorie und Namenskonvention. Ein Administrator gibt die Bestellung frei und setzt das Initialpasswort."
     },
     {
+      "key": "personalnummer",
+      "type": "textfield",
+      "label": "Personalnummer",
+      "description": "Identifiziert die Person, fuer die das Konto bestellt wird. Vorname und Nachname werden unter einem Schluessel verschluesselt, der zu dieser Nummer gehoert (ADR-0314) — ohne sie gibt es nichts, was auf ein Loeschbegehren hin zerstoert werden koennte.",
+      "validate": { "required": true }
+    },
+    {
       "key": "vorname",
       "type": "textfield",
       "label": "Vorname",

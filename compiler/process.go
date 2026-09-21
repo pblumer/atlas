@@ -1373,15 +1373,22 @@ type CompiledProcess struct {
 	// under its subject's data key before it becomes a command, which is why it may not
 	// be read by any expression — ciphertext cannot be compared, matched or routed on.
 	// Build refuses a process that does, so nothing downstream has to check.
-	personalVars  []string
-	personalSet   map[string]struct{}
-	isExecutable  bool         // bpmn:isExecutable — a non-executable process can't be started
-	elementIds    []int32      // interned source BPMN id per node id (-1 if unset)
-	elementDocs   []int32      // interned <bpmn:documentation> per node id (-1 if undocumented, ADR-0025)
-	repairForms   []int32      // interned repair form id per node id (-1 if none, ADR-0169)
-	documentation int32        // interned <bpmn:documentation> of the process itself, -1 if none
-	lanes         []LaneDetail // organizational lanes (ADR-0121); a node's CompiledNode.Lane indexes this
-	strings       []string     // intern table (index → string), for debug/export
+	personalVars []string
+	personalSet  map[string]struct{}
+	// dataSubjectVar is the variable holding the id of the person the personal
+	// variables are about: the name the enciphering edge resolves the data key by, and
+	// the name an erasure destroys a key under. Empty exactly when nothing is personal
+	// — Build refuses one declaration without the other, because personal data with no
+	// subject could never be erased and a subject with nothing personal enciphers
+	// nothing.
+	dataSubjectVar string
+	isExecutable   bool         // bpmn:isExecutable — a non-executable process can't be started
+	elementIds     []int32      // interned source BPMN id per node id (-1 if unset)
+	elementDocs    []int32      // interned <bpmn:documentation> per node id (-1 if undocumented, ADR-0025)
+	repairForms    []int32      // interned repair form id per node id (-1 if none, ADR-0169)
+	documentation  int32        // interned <bpmn:documentation> of the process itself, -1 if none
+	lanes          []LaneDetail // organizational lanes (ADR-0121); a node's CompiledNode.Lane indexes this
+	strings        []string     // intern table (index → string), for debug/export
 	// decisionPins is the exact decision deployment each latest-bound business rule
 	// task evaluates against, resolved once when this definition was deployed and
 	// restored from the deployment record on reload
@@ -2296,6 +2303,12 @@ func (p *CompiledProcess) IsPersonal(name string) bool {
 	_, ok := p.personalSet[name]
 	return ok
 }
+
+// DataSubjectVariable is the variable holding the id of the person this process's
+// personal variables are about (ADR-0314), or "" when nothing is personal. An edge that
+// enciphers reads this variable's value to find the data key; an edge that deciphers
+// does not need it, because an enciphered value names its own subject.
+func (p *CompiledProcess) DataSubjectVariable() string { return p.dataSubjectVar }
 
 // HasPersonalVariables reports whether this process declares any, so a process that
 // declares none pays one length check and nothing else.

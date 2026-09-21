@@ -4,7 +4,8 @@
   DMN-gesteuertem Kontotyp-Mapping, menschlicher Freigabe und Entra-Provisionierung.
   Scharf gegen contoso.com, aber fail-closed nur fuer klar benannte Test-Objekte.
 
-    Start (oeffentliches Formular account-order: Vorname, Nachname, Kontotyp, Begruendung)
+    Start (oeffentliches Formular account-order: Personalnummer, Vorname, Nachname,
+                                                 Kontotyp, Begruendung)
      -> [DMN] "Profil bestimmen"   KontotypMapping: kontotyp A/E/T/S -> profil
                                    { kuerzel, accountEnabled, kategorie, usageLocation }
      -> [Script] "aufbereiten"     mailNick, upn = jml-test-<kuerzel>-<mailNick>@contoso.com,
@@ -19,6 +20,12 @@
   der Script-Task, nicht die Tabelle — so bleibt die Test-Objekt-Grenze eine
   Prozess-Invariante. Beide Gateways sind fail-closed (Default = ablehnen/Ende).
 
+  Personendaten (ADR-0314): vorname und nachname sind als personal deklariert und
+  werden unter einem Schluessel verschluesselt, der zur Personalnummer gehoert. Die
+  Personalnummer selbst bleibt im Klartext — sie ist die Referenz, nicht der Inhalt —
+  und ist searchable, damit ein Betreiber die Instanzen einer Person findet, bevor er
+  deren Schluessel zerstoert.
+
   Worker-only (ADR-0164/0172): das Tenant-Credential liegt nie in der Engine.
   Berechtigung: User.ReadWrite.All.
 -->
@@ -31,10 +38,10 @@
                   id="defs_account_bestellung"
                   targetNamespace="http://atlas/examples">
 
-  <bpmn:process id="proc_account_bestellung" name="Account-Bestellung (Entra ID)" isExecutable="true" atlas:personal="vorname,nachname">
+  <bpmn:process id="proc_account_bestellung" name="Account-Bestellung (Entra ID)" isExecutable="true" atlas:personal="vorname,nachname" atlas:dataSubject="personalnummer" atlas:searchable="personalnummer">
     <bpmn:documentation>Oeffentlich bestellbare Account-Provisionierung fuer contoso.com. Ein oeffentliches
-Start-Formular (ADR-0029) nimmt Vorname, Nachname, Kontotyp (A/E/T/S) und eine
-Begruendung entgegen. Eine DMN-Regel (KontotypMapping) bildet den Typ auf ein Profil
+Start-Formular (ADR-0029) nimmt Personalnummer, Vorname, Nachname, Kontotyp (A/E/T/S)
+und eine Begruendung entgegen. Eine DMN-Regel (KontotypMapping) bildet den Typ auf ein Profil
 ab (kuerzel, accountEnabled, kategorie, usageLocation). Den UPN
 jml-test-&lt;kuerzel&gt;-&lt;vorname&gt;.&lt;nachname&gt;@contoso.com baut der create-user-Task selbst,
 nicht der Prozess: Vorname und Nachname sind als personal deklariert (ADR-0314), und eine
@@ -46,6 +53,11 @@ an. Ein zweites pruefte fruehen den gebauten UPN gegen jml-test-*@contoso.com; d
 Variable gibt es nicht mehr, und die Test-Objekt-Grenze traegt jetzt das Literal im
 attributes-Ausdruck des create-user-Tasks — im Modell sichtbar, aber strukturell statt zur
 Laufzeit geprueft.
+Die Personalnummer ist als atlas:dataSubject deklariert: sie benennt die Person, zu der
+vorname und nachname gehoeren, und damit den Schluessel, unter dem beide verschluesselt
+werden. Ohne sie waere die Deklaration nicht deploybar — ein verschluesselter Wert ohne
+Betroffene liesse sich nie loeschen, und genau darum geht es. Sie bleibt im Klartext,
+ist als searchable deklariert und darf in Ausdruecken stehen, weil sie eine Referenz ist.
 Der create-user-Task ist worker-only (ADR-0172). Berechtigung: User.ReadWrite.All.</bpmn:documentation>
 
     <bpmn:startEvent id="start" name="Bestellung erfasst">

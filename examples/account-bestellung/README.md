@@ -15,7 +15,8 @@ UPN-Prüfung auf die eigenen Werte zu setzen.
 ## Der Ablauf
 
 ```
-Start (öffentliches Formular account-order: Vorname, Nachname, Kontotyp, Begründung)
+Start (öffentliches Formular account-order: Personalnummer, Vorname, Nachname,
+                                            Kontotyp, Begründung)
   → [DMN] Profil bestimmen   KontotypMapping: A/E/T/S → { kuerzel, accountEnabled,
                              kategorie, usageLocation }
   → [Script] kategorie aus dem Profil übernehmen
@@ -41,7 +42,8 @@ Prozess — wer die Regeln je Typ ändert, ändert die Tabelle. Das `jml-test-`-
 steht nicht in der Tabelle, damit die **Test-Objekt-Grenze im Modell sichtbar** bleibt.
 
 > **Was dieses Beispiel über Personendaten zeigt.** Der Prozess deklariert
-> `atlas:personal="vorname,nachname"` ([ADR-0314](../../docs/adr/0314-portal-personal-data.md)).
+> `atlas:personal="vorname,nachname"` und `atlas:dataSubject="personalnummer"`
+> ([ADR-0314](../../docs/adr/0314-portal-personal-data.md)).
 > Eine so deklarierte Variable wird verschlüsselt, bevor sie ein Kommando wird, und
 > Chiffrat lässt sich nicht vergleichen oder verketten — der Compiler **verweigert**
 > deshalb ein Deployment, in dem sie in einem Ausdruck steht, den die Engine auswertet.
@@ -56,6 +58,17 @@ steht nicht in der Tabelle, damit die **Test-Objekt-Grenze im Modell sichtbar** 
 > Prozessvariable gibt es nicht mehr, also gibt es das Gatter nicht mehr. Die Grenze
 > trägt jetzt das Literal im `attributes`-Ausdruck — im Modell sichtbar und im Review
 > prüfbar, aber **strukturell statt zur Laufzeit** geprüft.
+>
+> Der zweite Preis steht im Formular: die **Personalnummer** ist neu, und sie ist nicht
+> fachlich motiviert, sondern von der Löschbarkeit erzwungen. Verschlüsselt wird unter
+> einem Schlüssel, der zu einer Person gehört — also muss das Modell sagen, *welche*
+> Person, und zwar mit einer Kennung, die eine Löschanfrage benennen kann. Ein Vorname
+> und ein Nachname sind keine solche Kennung. Für einen Eintritt kommt sie zwangsläufig
+> von außen (aus dem HR-System), denn im Tenant existiert die Person noch nicht: das
+> Konto wird ja gerade erst bestellt. Die Nummer bleibt im Klartext — sie ist die
+> Referenz, nicht der Inhalt — ist `atlas:searchable` und darf deshalb in Ausdrücken
+> stehen, sodass ein Betreiber die Instanzen einer Person findet, bevor er deren
+> Schlüssel zerstört.
 
 ## Das einbettbare Widget
 

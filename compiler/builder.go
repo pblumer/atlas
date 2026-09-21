@@ -538,6 +538,7 @@ type Builder struct {
 	historyTtlNanos    int64                       // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
 	searchableVars     []string                    // variable names the value index is maintained for, nil = none
 	personalVars       []string                    // variable names holding personal data, nil = none (ADR-0314)
+	dataSubjectVar     string                      // variable holding the data subject's id, "" = none (ADR-0314)
 	isExecutable       bool                        // bpmn:isExecutable; defaults true (set in NewBuilder)
 
 	// flowScope is the enclosing scope every node added now lands in: -1 for the
@@ -883,6 +884,11 @@ func (b *Builder) SetSearchableVariables(names []string) { b.searchableVars = na
 // declaration is what makes [Builder.Build] refuse a process that reads one of them in
 // an expression, so it is set before Build rather than checked after it.
 func (b *Builder) SetPersonalVariables(names []string) { b.personalVars = names }
+
+// SetDataSubjectVariable declares which variable holds the id of the person the
+// personal variables are about (ADR-0314). It is the name the enciphering edge looks
+// the data key up by, and the name the erasure route destroys a key under.
+func (b *Builder) SetDataSubjectVariable(name string) { b.dataSubjectVar = name }
 
 // AddMessageStartEvent adds a message start event and returns its element id. It
 // is a process entry point like a none start event — at runtime it simply flows
@@ -3050,6 +3056,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		searchableSet:      searchableSet(b.searchableVars),
 		personalVars:       b.personalVars,
 		personalSet:        searchableSet(b.personalVars),
+		dataSubjectVar:     b.dataSubjectVar,
 		isExecutable:       b.isExecutable,
 		strings:            b.strings,
 	}

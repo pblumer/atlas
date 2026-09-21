@@ -60,3 +60,49 @@ func TestAccountBestellungHoldsUnderThePersonalDataRule(t *testing.T) {
 		t.Error("putting the personal transform back into an output mapping was accepted; the rule does not bite on this model")
 	}
 }
+
+// TestAccountBestellungNamesWhoseDataItHolds is the second thing the real process taught,
+// and it is not a detail of the example. Crypto-shredding encrypts under a key belonging
+// to *a person*, so a model that declares personal data must also say which person —
+// with an identifier a deletion request can name. A first name and a last name are not
+// such an identifier.
+//
+// For an account order that identifier necessarily comes from outside Atlas: the subject
+// is a joiner who has no principal in the tenant yet, because the account is what is
+// being ordered. So the start form grew a Personalnummer that no business requirement
+// asked for. That is a cost of the mechanism, paid in the model, and it is worth pinning
+// here — the alternative designs (a key per instance, the starter as subject) are exactly
+// the ones this assertion would let through.
+func TestAccountBestellungNamesWhoseDataItHolds(t *testing.T) {
+	raw, err := os.ReadFile("account-bestellung/account-bestellung.bpmn")
+	if err != nil {
+		t.Fatal(err)
+	}
+	deployables, err := compiler.ParseAll(1, 1, strings.NewReader(string(raw)))
+	if err != nil {
+		t.Fatalf("the example no longer deploys: %v", err)
+	}
+	cp := deployables[0].Process
+
+	subject := cp.DataSubjectVariable()
+	if subject == "" {
+		t.Fatal("the example declares personal data but names no data subject, so nothing could ever be erased")
+	}
+	if cp.IsPersonal(subject) {
+		t.Errorf("the data subject %q is itself declared personal, which would hide the name of its own key", subject)
+	}
+	// The form has to ask for it. A declaration naming a variable no form fills and no
+	// worker writes would leave every instance with an empty subject — and the edge
+	// refuses to encipher then, so every order would fail at the first personal value.
+	form, err := os.ReadFile("account-bestellung/form-account-order.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(form), `"key": "`+subject+`"`) {
+		t.Errorf("the start form does not collect %q, so no instance would have a data subject", subject)
+	}
+	// And it stays findable: erasing a person starts with finding their instances.
+	if !cp.IsSearchableVariable(subject) {
+		t.Errorf("the data subject %q is not searchable, so an operator cannot find the instances to erase", subject)
+	}
+}

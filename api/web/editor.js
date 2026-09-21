@@ -330,6 +330,35 @@ const searchableProblem = (s) => {
   return "";
 };
 
+// personalProblem mirrors the compiler's reading of atlas:personal and
+// atlas:dataSubject (ADR-0314; compiler/parse.go). Four of the five refusals are
+// cross-checks between declarations rather than a malformed list, which is exactly why
+// they are worth showing while authoring: a modeller who declares personal data and no
+// subject has written something that cannot be deployed at all, and finding that out at
+// deploy time means finding it after the model is finished.
+const personalProblem = (personal, subject, searchable) => {
+  const names = String(personal || "").trim();
+  const subj = String(subject || "").trim();
+  const seen = new Set();
+  if (names) {
+    for (const part of names.split(",")) {
+      const name = part.trim();
+      if (!name) return "Personal variables: an entry has no name — check for a doubled or trailing comma";
+      if (seen.has(name)) return `Personal variables: "${name}" is named twice`;
+      seen.add(name);
+    }
+  }
+  if (subj.includes(",")) return "Data subject: name one variable — a value is enciphered under exactly one subject's key";
+  if (seen.size && !subj) return "Personal variables need a Data subject: without the variable holding that person's id there is no key to encipher under, and nothing to destroy on an erasure request";
+  if (subj && !seen.size) return "Data subject is declared but nothing is personal, so it enciphers nothing";
+  if (subj && seen.has(subj)) return `Data subject "${subj}" cannot itself be personal: it is what says whose key opens a value`;
+  for (const part of String(searchable || "").split(",")) {
+    const name = part.trim();
+    if (name && seen.has(name)) return `"${name}" cannot be both personal and searchable: a personal value is indexed as ciphertext, so no search could match it`;
+  }
+  return "";
+};
+
 // SEARCHABLE_STRUCTURED_TYPES are the types the value index cannot hold. It answers
 // equality and prefix over a byte string, so a structured value is left out rather than
 // stored under its exact encoding (ADR-0244) — a declaration naming one indexes nothing
@@ -6550,6 +6579,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           <label class="field"><span>Searchable variables</span><input type="text" id="f-psearch" value="${esc(rootBo.searchable || "")}" placeholder="identityId, item"/></label>
           <div id="f-psearch-marks" class="sv-marks"></div>
           <p class="muted" style="font-size:12px">The variable names this process wants to be <b>found by</b>, comma-separated. A declared name is answered from a value index, so searching <code>identityId=MT-1998</code> over this version in Operations costs the number of matches instead of a read through every instance &mdash; and a trailing <code>*</code> asks for a prefix. Indexed is a variable at the instance's <b>top level</b> whose value is text, a number or true/false and stays under 256 bytes; a JSON structure or a variable local to one activity is not. A declared name is matched <b>exactly</b>, upper and lower case included, while an undeclared one keeps the read-through search it always had. Declaring nothing costs nothing, so name the one or two business keys you actually search by &mdash; a status that thousands of instances share is a poor declaration. It applies to instances started after the next deploy.</p>
+          <label class="field"><span>Personal variables</span><input type="text" id="f-ppersonal" value="${esc(rootBo.personal || "")}" placeholder="vorname, nachname"/></label>
+          <label class="field"><span>Data subject variable</span><input type="text" id="f-psubject" value="${esc(rootBo.dataSubject || "")}" placeholder="personalnummer"/></label>
+          <p class="muted" style="font-size:12px">The variables that hold <b>personal data</b>, comma-separated, and the one variable holding the <b>id of the person</b> they are about. A declared name is enciphered under a key belonging to that person before it ever reaches the engine, and erasing the person destroys that one key &mdash; which makes every copy of every value unreadable at once, including the backups nobody can reach any more. The price is that the engine can no longer read the value: a declared variable may be written, carried and handed to a worker, but it may <b>not appear in any expression</b> the engine evaluates &mdash; no gateway or flow condition, no input/output mapping, no script. Build what you need from it inside the worker that needs the result, where the plaintext exists for one call. The deploy refuses a model that breaks this, and refuses the two declarations apart: personal data with no subject could never be erased, and a subject with nothing personal enciphers nothing.</p>
           ${startVarsHTML}
           ${messagesManagerHTML(modeler)}
           ${signalsManagerHTML(modeler)}
@@ -6605,6 +6637,27 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           const problem = searchableProblem(v);
           if (problem) toast(problem, "err");
           try { modeling.updateProperties(rootEl, { searchable: v || undefined }); } catch { /* ignore */ }
+          // A name declared searchable *and* personal is refused by the deploy, so the
+          // warning belongs here too — the mistake can be made from either field.
+          warnPersonal();
+        });
+        // The personal declaration and its data subject are checked together, because
+        // four of the five things the deploy refuses are disagreements *between* them.
+        const personalEl = body.querySelector("#f-ppersonal");
+        const subjectEl = body.querySelector("#f-psubject");
+        const warnPersonal = () => {
+          const problem = personalProblem(personalEl.value, subjectEl.value, searchEl.value);
+          if (problem) toast(problem, "err");
+        };
+        personalEl.addEventListener("change", (e) => {
+          const v = (e.target.value || "").trim();
+          try { modeling.updateProperties(rootEl, { personal: v || undefined }); } catch { /* ignore */ }
+          warnPersonal();
+        });
+        subjectEl.addEventListener("change", (e) => {
+          const v = (e.target.value || "").trim();
+          try { modeling.updateProperties(rootEl, { dataSubject: v || undefined }); } catch { /* ignore */ }
+          warnPersonal();
         });
         body.querySelector("#f-pexec").addEventListener("change", (e) => {
           try { modeling.updateProperties(rootEl, { isExecutable: e.target.checked }); } catch { /* ignore */ }

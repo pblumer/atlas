@@ -25,7 +25,7 @@ func TestPersonalDeclarationIsReadFromTheProcess(t *testing.T) {
 	const model = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:atlas="http://atlas/schema/1.0" id="defs">
-  <bpmn:process id="p" isExecutable="true" atlas:personal="vorname, nachname">
+  <bpmn:process id="p" isExecutable="true" atlas:personal="vorname, nachname" atlas:dataSubject="pnr">
     <bpmn:startEvent id="s"/>
     <bpmn:endEvent id="e"/>
     <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="e"/>
@@ -59,7 +59,7 @@ func TestADeclarationThatCannotMeanAnythingFailsTheDeploy(t *testing.T) {
 			model := `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:atlas="http://atlas/schema/1.0" id="defs">
-  <bpmn:process id="p" isExecutable="true" atlas:personal="` + tc.decl + `">
+  <bpmn:process id="p" isExecutable="true" atlas:personal="` + tc.decl + `" atlas:dataSubject="pnr">
     <bpmn:startEvent id="s"/>
     <bpmn:endEvent id="e"/>
     <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="e"/>
@@ -125,7 +125,7 @@ func TestADeployRefusesAnExpressionThatReadsAPersonalVariable(t *testing.T) {
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:atlas="http://atlas/schema/1.0"
                   xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs">
-  <bpmn:process id="p" isExecutable="true" atlas:personal="vorname">
+  <bpmn:process id="p" isExecutable="true" atlas:personal="vorname" atlas:dataSubject="pnr">
     <bpmn:startEvent id="s"/>
     ` + tc.body + `
   </bpmn:process>
@@ -160,7 +160,7 @@ func TestAWorkerExpressionMayReadAPersonalVariable(t *testing.T) {
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:atlas="http://atlas/schema/1.0"
                   xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs">
-  <bpmn:process id="p" isExecutable="true" atlas:personal="vorname">
+  <bpmn:process id="p" isExecutable="true" atlas:personal="vorname" atlas:dataSubject="pnr">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
       <bpmn:extensionElements>
@@ -186,7 +186,7 @@ func TestAnUndeclaredVariableInAnExpressionIsFine(t *testing.T) {
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:atlas="http://atlas/schema/1.0"
                   xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs">
-  <bpmn:process id="p" isExecutable="true" atlas:personal="nachname">
+  <bpmn:process id="p" isExecutable="true" atlas:personal="nachname" atlas:dataSubject="pnr">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
       <bpmn:extensionElements>
@@ -214,7 +214,7 @@ func TestAPersonalVariableMayStillBeWrittenAndCarried(t *testing.T) {
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:atlas="http://atlas/schema/1.0"
                   xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs">
-  <bpmn:process id="p" isExecutable="true" atlas:personal="vorname">
+  <bpmn:process id="p" isExecutable="true" atlas:personal="vorname" atlas:dataSubject="pnr">
     <bpmn:startEvent id="s"/>
     <bpmn:serviceTask id="t">
       <bpmn:extensionElements>
@@ -229,5 +229,108 @@ func TestAPersonalVariableMayStillBeWrittenAndCarried(t *testing.T) {
 </bpmn:definitions>`
 	if _, err := Parse(1, 1, strings.NewReader(model)); err != nil {
 		t.Fatalf("writing *to* a personal variable was refused, which makes it unusable rather than uncomputable: %v", err)
+	}
+}
+
+// personalModel builds the smallest process that carries a declaration, with the given
+// attributes on bpmn:process and an optional extra element body.
+func personalModel(attrs, body string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs">
+  <bpmn:process id="p" isExecutable="true" ` + attrs + `>
+    <bpmn:startEvent id="s"/>
+    ` + body + `
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+}
+
+// TestADeclarationWithoutADataSubjectIsRefused is the question ADR-0314 left implicit
+// and the one that cannot be left implicit: the record says a declared variable "is
+// enciphered under that data key" without saying how an instance knows whose key that
+// is. Enciphering under the wrong subject makes an erasure either ineffective — the
+// wrong key destroyed — or too broad, and both failures are silent.
+//
+// So the two declarations are refused apart. Personal data with no subject could never
+// be erased, which is the entire purpose; a subject with nothing personal enciphers
+// nothing and only looks like protection.
+func TestADeclarationWithoutADataSubjectIsRefused(t *testing.T) {
+	for _, tc := range []struct{ name, attrs, want string }{
+		{"personal without a subject", `atlas:personal="vorname"`, "no atlas:dataSubject"},
+		{"a subject with nothing personal", `atlas:dataSubject="pnr"`, "no variable is declared personal"},
+		{"two subjects", `atlas:personal="vorname" atlas:dataSubject="pnr, andere"`, "more than one variable"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Parse(1, 1, strings.NewReader(personalModel(tc.attrs, "")))
+			if err == nil {
+				t.Fatalf("Parse accepted %s", tc.attrs)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error %q does not say %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestTheDataSubjectMayNotItselfBePersonal closes the circularity. The subject variable
+// is what the enciphering edge looks the key up by; enciphered, there would be nothing
+// left to look it up with, and the instance's values would be sealed under a key nobody
+// could name. It stays in the clear because it is a reference, which is exactly what
+// ADR-0314's primary defence keeps readable.
+func TestTheDataSubjectMayNotItselfBePersonal(t *testing.T) {
+	_, err := Parse(1, 1, strings.NewReader(personalModel(`atlas:personal="vorname,pnr" atlas:dataSubject="pnr"`, "")))
+	if err == nil {
+		t.Fatal("Parse accepted a data subject that is itself declared personal")
+	}
+	if !strings.Contains(err.Error(), "itself declared personal") {
+		t.Errorf("error %q does not name the problem", err)
+	}
+}
+
+// TestTheDataSubjectIsStillARoutableValue is the other half of that, and it is what
+// keeps the rule usable: ADR-0314 sends routing onto references, so the one reference
+// this mechanism introduces must be readable by expressions like any other variable.
+// A rule that refused it would leave a process unable to branch on the very id it
+// enciphers by.
+func TestTheDataSubjectIsStillARoutableValue(t *testing.T) {
+	body := `<bpmn:exclusiveGateway id="gw"/>
+    <bpmn:endEvent id="e2"/>
+    <bpmn:sequenceFlow id="fa" sourceRef="s" targetRef="gw"/>
+    <bpmn:sequenceFlow id="fb" sourceRef="gw" targetRef="e2">
+      <bpmn:conditionExpression>= starts with(pnr, "P-")</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>`
+	cp, err := Parse(1, 1, strings.NewReader(personalModel(`atlas:personal="vorname" atlas:dataSubject="pnr"`, body)))
+	if err != nil {
+		t.Fatalf("a gateway reading the data subject's id was refused: %v", err)
+	}
+	if got := cp.DataSubjectVariable(); got != "pnr" {
+		t.Errorf("DataSubjectVariable() = %q, want pnr", got)
+	}
+}
+
+// TestPersonalAndSearchableAreMutuallyExclusive refuses a promise the mechanism cannot
+// keep. The value index stores what the engine sees, and for a declared variable that
+// is ciphertext under a random nonce: two writes of the same name produce different
+// bytes, so an exact match can never match. Accepting the declaration would build an
+// index that answers every query with nothing, which is the failure mode hardest to
+// notice — a search that finds nothing looks like a search over data that is not there.
+func TestPersonalAndSearchableAreMutuallyExclusive(t *testing.T) {
+	_, err := Parse(1, 1, strings.NewReader(personalModel(`atlas:personal="vorname" atlas:searchable="vorname" atlas:dataSubject="pnr"`, "")))
+	if err == nil {
+		t.Fatal("Parse accepted a variable declared both personal and searchable")
+	}
+	for _, want := range []string{"vorname", "personal and searchable", "ciphertext"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not mention %q", err, want)
+		}
+	}
+	// The subject id, by contrast, is exactly what an operator needs to find a
+	// subject's instances before erasing them — so declaring *it* searchable is not
+	// only allowed, it is the intended combination.
+	if _, err := Parse(1, 1, strings.NewReader(personalModel(`atlas:personal="vorname" atlas:searchable="pnr" atlas:dataSubject="pnr"`, ""))); err != nil {
+		t.Errorf("a searchable data subject was refused, which is how a subject's instances are found: %v", err)
 	}
 }
