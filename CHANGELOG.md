@@ -12,6 +12,27 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A decision service that answers with nothing is refused rather than deployed.**
+  DMN gives a decision service one or more output decisions: they are what it returns,
+  and the whole reason to address a service instead of the decision inside it. Atlas
+  accepted one with none. It compiled, it was listed, the decision picker offered it, a
+  business rule task called it — and the task completed with the variable it was to
+  fill still unset. No error, in the engine or in the log; the process simply carried
+  on past a decision that was never made.
+
+  That is not hypothetical. A service's membership lives in its references and its
+  picture in the diagram, nothing in the format holds the two in step, and an editor
+  that rewrote the picture wrote the interface away with it. Every check between there
+  and the disk said the model was fine.
+
+  The check now runs where a model arrives and where a deploy asks whether one is
+  sound, and it names the service rather than the file, so an author knows which box
+  to fix. A model already stored with the fault reads as invalid in the model list and
+  cannot be deployed until it is repaired. Work in progress is unaffected: an
+  unfinished service belongs in a draft, which is saved without this gate.
+
 ### Added
 
 - **Personal data can be erased: a declared variable is enciphered under its data subject's own key, and destroying that key makes every copy unreadable.**

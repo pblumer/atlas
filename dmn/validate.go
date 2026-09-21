@@ -68,6 +68,9 @@ func (v *Validator) Validate(ctx context.Context, modelRef string) (ValidationRe
 	if collisions := nameCollisions(defs, xml); len(collisions) > 0 {
 		return ValidationResult{Resolved: true, Message: collisionMessage(collisions)}, nil
 	}
+	if empty := servicesPublishingNothing(xml); len(empty) > 0 {
+		return ValidationResult{Resolved: true, Message: publishesNothingMessage(empty)}, nil
+	}
 	names, aliases := decisionNames(defs)
 	return ValidationResult{
 		Resolved:  true,
@@ -205,6 +208,9 @@ func (v *Validator) ValidateXML(ctx context.Context, xml []byte) ValidationResul
 	if collisions := nameCollisions(defs, xml); len(collisions) > 0 {
 		return ValidationResult{Resolved: true, Message: collisionMessage(collisions)}
 	}
+	if empty := servicesPublishingNothing(xml); len(empty) > 0 {
+		return ValidationResult{Resolved: true, Message: publishesNothingMessage(empty)}
+	}
 	names, aliases := decisionNames(defs)
 	return ValidationResult{Resolved: true, Valid: true, ModelName: defs.ModelName(), Decisions: names, Aliases: aliases, Services: serviceNames(describeServices(defs, xml))}
 }
@@ -216,6 +222,25 @@ func (v *Validator) ValidateXML(ctx context.Context, xml []byte) ValidationResul
 func collisionMessage(names []string) string {
 	return "more than one thing is called " + strings.Join(quoted(names), ", ") +
 		" — a business rule task names one string, so each name has to mean one decision or one decision service"
+}
+
+// publishesNothingMessage says which decision services return nothing.
+//
+// The failure this refuses is silence, which is why it is refused at the gate rather
+// than left to evaluation: the task completes, the variable it was to fill is unset,
+// and the process carries on past a decision that was never made. Nobody is told.
+//
+// It is also how a stored model came to be broken in the first place. A service's
+// membership lives in references and its picture in the diagram, an editor rewrote
+// one and the interface went with it, and every check between there and the disk
+// said the model was fine. This one does not.
+func publishesNothingMessage(names []string) string {
+	subject, verb := "the decision service ", " returns nothing"
+	if len(names) > 1 {
+		subject, verb = "the decision services ", " return nothing"
+	}
+	return subject + strings.Join(quoted(names), ", ") + verb +
+		" — a decision service publishes one or more output decisions (DMN 1.5 Table 17), and they are what it answers with"
 }
 
 // quoted renders names for a message, so a name with a space in it still reads as

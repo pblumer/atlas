@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-decision-service-that-answers-with-nothing-is-refused-rath",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A decision service that answers with nothing is now refused",
+        "de": "Ein Decision Service, der nichts zurückgibt, wird jetzt abgewiesen"
+      },
+      "summary": {
+        "en": "A decision service returns its output decisions — that is what a caller gets, and the reason to address the service instead of the decision inside it. Atlas used to accept one that named none. It compiled, it appeared in the picker, a business rule task called it, and the task completed with the variable it was meant to fill still empty: no error, in the engine or in the log, just a process carrying on past a decision that was never made. Saving or deploying such a model is now refused, and the message names the service rather than the file, so you know which box to fix. A model already stored with the fault shows as invalid in the model list and cannot be deployed until it is repaired. Unfinished work is unaffected — a service you are still building belongs in a draft, which is saved without this check.",
+        "de": "Ein Decision Service gibt seine Output-Entscheidungen zurück — das ist es, was ein Aufrufer erhält, und der Grund, den Service statt die Entscheidung darin anzusprechen. Atlas hat bisher auch einen akzeptiert, der keine benennt. Er kompilierte, erschien in der Auswahl, ein Business-Rule-Task rief ihn auf, und der Task war abgeschlossen, während die Variable, die er füllen sollte, leer blieb: kein Fehler, weder in der Engine noch im Log, nur ein Prozess, der über eine nie getroffene Entscheidung hinweglief. Das Speichern und das Deployen eines solchen Modells wird nun abgewiesen, und die Meldung nennt den Service statt der Datei, damit klar ist, welcher Kasten zu korrigieren ist. Ein bereits gespeichertes Modell mit diesem Fehler wird in der Modellliste als ungültig ausgewiesen und lässt sich erst nach der Korrektur deployen. Unfertiges bleibt unberührt — ein Service, an dem Sie noch bauen, gehört in einen Entwurf, und der wird ohne diese Prüfung gespeichert."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Decisions",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the decisions",
+          "de": "Entscheidungen öffnen"
+        },
+        "route": "#/console/decisions"
+      }
+    },
+    {
       "id": "personal-data-can-be-erased-a-declared-variable-is-enciphere",
       "version": "Unreleased",
       "date": null,
@@ -353,35 +382,6 @@
           "de": "Instanz öffnen und Entscheidung doppelklicken"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "the-starmap-says-which-dependencies-are-actually-used",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The starmap says which dependencies are actually used",
-        "de": "Der Starmap sagt, welche Abhängigkeiten wirklich genutzt werden"
-      },
-      "summary": {
-        "en": "Every line on the starmap was a declared dependency, and the picture drew a worker nobody has ever called exactly like one carrying the whole business. Each line now carries how often it was taken, joined from the activation count the engine has folded per element since the Operations heatmap needed one — so it costs no new bookkeeping. One decision called from two tasks is still one line, with both counts together. A line nothing has taken is drawn quieter and says so on hover, always with the window it was counted over: the counter belongs to the deployed version, so a redeploy starts a fresh one, and a zero on a version deployed this morning says nothing about the path.",
-        "de": "Jede Linie auf dem Starmap war eine deklarierte Abhängigkeit, und das Bild zeichnete einen Worker, den nie jemand aufgerufen hat, genau wie einen, der das ganze Geschäft trägt. Jede Linie trägt nun, wie oft sie genommen wurde — verknüpft mit dem Aktivierungszähler, den die Engine seit der Operations-Heatmap ohnehin pro Element führt, also ohne neue Buchführung. Eine Entscheidung, die von zwei Tasks aufgerufen wird, bleibt eine Linie, mit beiden Zählern zusammen. Eine Linie, die nichts genommen hat, wird leiser gezeichnet und sagt es beim Überfahren — immer mit dem Zeitfenster, über das gezählt wurde: der Zähler gehört zur deployten Version, ein erneutes Deployment beginnt einen neuen, und eine Null auf einer heute Morgen deployten Version sagt nichts über den Pfad."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama",
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the starmap",
-          "de": "Starmap öffnen"
-        },
-        "route": "#/panorama/starmap"
       }
     }
   ]
