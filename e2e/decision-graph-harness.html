@@ -7,12 +7,14 @@
          credit approval whose decision requirements graph has two input decisions
          feeding a third, and whose published interface is a decision service.
 
-         The two fixtures are the two readings the window has to get right. The
-         DECISION was called directly, so the engine recorded the rule matrix and the
-         window can say which row carried the answer. The SERVICE was called through
-         its interface, which records no trace at all (ADR-0398) — the values are
-         still exact, and only the rule-level detail is missing. Telling those two
-         apart is the whole job, so they are both here.
+         The fixtures are the readings the window has to get right. The DECISION was
+         called directly, so the engine recorded the rule matrix and the window can
+         say which row carried the answer. The SERVICE is here twice, because a
+         service now records its rules like a decision does (ADR-0398, fixed
+         upstream) while the records made before that still carry none: the traced
+         one is the normal case from now on, and the bare one is an old record whose
+         values are exact and whose rules are simply not there. Telling those apart
+         is the whole job.
 
          The api() stub answers exactly what the server's
          /instances/{key}/decisions/{at}/graph route serves, including the DMNDI
@@ -85,13 +87,22 @@
       const AT = "1789824241612033700";
       const AT_SERVICE = "1789824241612033701";
       const AT_GONE = "1789824241612033702";
+      const AT_SERVICE_TRACED = "1789824241612033703";
       const CASES = {
         // Called as a decision: the engine recorded the matrix.
         [AT]: {
           at: Number(AT), atKey: AT, elementId: "brt_freigabe", decisionId: "Kreditentscheid",
           modelName: "Kreditfreigabe", inputs: INPUTS, outputs: OUTPUTS, trace: TRACE, nodes: NODES, edges: EDGES,
         },
-        // Called through the service interface: no trace exists for one.
+        // Called through the service interface and recorded since the engine learned
+        // to trace one: the rules are there, same as for a decision.
+        [AT_SERVICE_TRACED]: {
+          at: Number(AT_SERVICE_TRACED), atKey: AT_SERVICE_TRACED, elementId: "brt_freigabe",
+          decisionId: "Kreditfreigabe", modelName: "Kreditfreigabe", service: true,
+          inputs: INPUTS, outputs: OUTPUTS, trace: TRACE, nodes: NODES, edges: EDGES,
+        },
+        // Called through the service interface before that: an old record, values
+        // exact and no rules, and nothing can add them after the fact.
         [AT_SERVICE]: {
           at: Number(AT_SERVICE), atKey: AT_SERVICE, elementId: "brt_freigabe", decisionId: "Kreditfreigabe",
           modelName: "Kreditfreigabe", service: true, inputs: INPUTS, outputs: OUTPUTS, nodes: NODES, edges: EDGES,
@@ -118,6 +129,7 @@
       window.__close = closeDecisionGraph;
       window.__at = AT;
       window.__atService = AT_SERVICE;
+      window.__atServiceTraced = AT_SERVICE_TRACED;
       window.__atGone = AT_GONE;
       // The plain picture, to prove the renderer app.js shares still draws one.
       window.__plain = () => renderDrgSvg({ nodes: NODES, edges: EDGES });

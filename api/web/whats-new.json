@@ -2,6 +2,55 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "put-a-whole-element-type-down-on-the-starmap",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Put a whole element type down",
+        "de": "Einen ganzen Elementtyp weglegen"
+      },
+      "summary": {
+        "en": "The Product Map draws four kinds of thing at once — your catalogues, the products they offer, the processes those products bind, and a marker wherever nothing is deployed. Somebody who opened it to look at one of those had no way to set the other three aside: the search narrows by name, and “show me just the catalogues” is not a name. The right-hand column now lists every element type on the picture, each with a box, and every box is on. It is for putting part of a picture down rather than for building one up, so a kind nobody has an opinion about stays drawn — including one that turns up later, such as a catalogue somebody shares with you next week. Switching a type off removes it before anything else narrows the picture, which is the part that makes it behave the way you expect: a search keeps a hop of neighbours and a drilldown follows the depth on screen, and neither may reach through something you have put down. So a process that was only there because a product bound it goes with the products, and a line whose other end has gone goes with it. Everything describing the picture follows the picture: the count over the canvas counts what is drawn, the key stops explaining what is not, and switching everything off says so in plain words instead of borrowing the sentence a fruitless search would use. On an ArchiMate projection the boxes are named in ArchiMate's words. An exported file names the types that were switched off, and says the thing a reader of the file could not work out — that what is missing is not only that kind, but everything that was reachable only through it. A saved view remembers the setting, like the search term and the depth beside it.",
+        "de": "Die Product Map zeichnet vier Arten von Dingen gleichzeitig — Ihre Kataloge, die angebotenen Produkte, die Prozesse, die diese Produkte binden, und eine Markierung überall dort, wo nichts deployt ist. Wer sie geöffnet hat, um eines davon anzusehen, konnte die übrigen drei nicht beiseitelegen: Die Suche schränkt über den Namen ein, und „zeig mir nur die Kataloge“ ist kein Name. Die rechte Spalte führt nun jeden Elementtyp auf, den das Bild enthält, je mit einem Kästchen, und jedes Kästchen ist gesetzt. Es dient dazu, einen Teil des Bildes wegzulegen, nicht dazu, eines aufzubauen — ein Typ, zu dem niemand eine Meinung hat, bleibt gezeichnet, auch einer, der später dazukommt, etwa ein Katalog, den jemand nächste Woche für Sie freigibt. Das Abschalten eines Typs entfernt ihn, bevor irgendetwas anderes das Bild einschränkt, und genau das lässt es sich so verhalten, wie man es erwartet: Eine Suche behält einen Nachbarschritt, ein Drilldown folgt der eingestellten Tiefe, und keines von beiden darf durch etwas hindurchgreifen, das Sie weggelegt haben. Ein Prozess, der nur deshalb auf dem Bild war, weil ein Produkt ihn bindet, geht also mit den Produkten, und eine Linie, deren anderes Ende fehlt, geht mit ihr. Alles, was das Bild beschreibt, folgt dem Bild: Die Zählung über der Fläche zählt das Gezeichnete, die Legende erklärt nichts mehr, was nicht da ist, und wenn alles abgeschaltet ist, steht das in Worten da statt im Satz einer erfolglosen Suche. Auf einer ArchiMate-Projektion tragen die Kästchen die Bezeichnungen von ArchiMate. Eine exportierte Datei nennt die abgeschalteten Typen und sagt das, was man der Datei sonst nicht ansieht: Es fehlt nicht nur dieser Typ, sondern auch alles, was nur über ihn erreichbar war. Eine gespeicherte Sicht merkt sich die Einstellung, wie den Suchbegriff und die Tiefe daneben."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Panorama",
+        "Catalogue"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Panorama › Starmap and set View to “Product Map”.",
+          "Look at the right-hand column, under Depth: “Element types” lists one box per kind on the picture, all ticked.",
+          "Untick Product. The products go, and so do the lines that ran to them and the processes that were only there because a product bound them.",
+          "Type a catalogue's name into the search box: the products stay away, rather than coming back as context for the match.",
+          "Tick Product again — the box is still there, because the list is built from what the server sent rather than from what is left on screen.",
+          "Press “SVG” with a type switched off and read the stamp at the foot of the file: it names what is missing.",
+          "Name the arrangement under “Saved views” and press Save; reopening it puts the same types back down."
+        ],
+        "de": [
+          "Öffnen Sie „Panorama › Starmap“ und stellen Sie „View“ auf „Product Map“.",
+          "Sehen Sie in die rechte Spalte unter „Depth“: „Element types“ führt je ein Kästchen pro Typ auf dem Bild auf, alle gesetzt.",
+          "Nehmen Sie den Haken bei „Product“ weg. Die Produkte verschwinden, ebenso die Linien zu ihnen und die Prozesse, die nur wegen eines Produkts dort waren.",
+          "Tippen Sie den Namen eines Katalogs in das Suchfeld: Die Produkte bleiben weg, statt als Umfeld des Treffers zurückzukehren.",
+          "Setzen Sie den Haken wieder — das Kästchen ist noch da, weil die Liste aus dem stammt, was der Server geliefert hat, und nicht aus dem, was auf dem Bildschirm übrig ist.",
+          "Drücken Sie bei abgeschaltetem Typ auf „SVG“ und lesen Sie den Stempel am Fuss der Datei: Er nennt, was fehlt.",
+          "Benennen Sie die Anordnung unter „Saved views“ und speichern Sie sie; beim erneuten Öffnen liegen dieselben Typen wieder weg."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Panorama › Starmap",
+          "de": "Panorama › Starmap öffnen"
+        },
+        "route": "#/panorama/starmap"
+      }
+    },
+    {
       "id": "a-decision-service-can-be-laid-out-and-wired-up",
       "version": "Unreleased",
       "date": null,
@@ -86,6 +135,35 @@
           "de": "Entscheidung öffnen"
         },
         "route": "#/modeler/decisions"
+      }
+    },
+    {
+      "id": "eine-entscheidung-hinter-einer-schnittstelle-zeigt-jetzt-auc",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A decision behind an interface now shows its rules too",
+        "de": "Eine Entscheidung hinter einer Schnittstelle zeigt jetzt auch ihre Regeln"
+      },
+      "summary": {
+        "en": "A business rule task can call a decision service — DMN's published interface over part of a decision graph. Until now such an evaluation kept its inputs and its answer and nothing about how it got there, because the engine offered no way to record the rules behind an interface. That left the explanation missing exactly where it is least affordable: the decisions behind an interface are usually tables, and somebody accounting for a case could not tell \"no rules were recorded\" from \"no rules matched\". A service evaluated from now on carries the tables it ran, shown in the decision graph with the rule that fired in green, like any other decision. The boundary holds there too: a decision the caller supplied is never computed, so its table does not appear. Cases decided earlier keep their exact values and no rules — a record is frozen history — and the screens now say which of the two silences they are looking at.",
+        "de": "Ein Business-Rule-Task kann einen Decision Service aufrufen — DMNs veröffentlichte Schnittstelle über einen Teil eines Entscheidungsgraphen. Bisher behielt eine solche Auswertung ihre Eingaben und ihr Ergebnis und nichts darüber, wie sie dorthin kam, weil die Engine keine Möglichkeit bot, die Regeln hinter einer Schnittstelle aufzuzeichnen. Damit fehlte die Erklärung genau dort, wo sie am wenigsten zu entbehren ist: die Entscheidungen hinter einer Schnittstelle sind in der Regel Tabellen, und wer einen Fall verantworten muss, konnte „es wurden keine Regeln aufgezeichnet\" nicht von „keine Regel hat getroffen\" unterscheiden. Eine Service-Auswertung ab jetzt trägt die Tabellen, die sie ausgeführt hat — im Entscheidungsgraph mit grün gezogener Regel wie bei jeder anderen Entscheidung. Die Grenze gilt auch dort: eine vom Aufrufer gelieferte Entscheidung wird nie berechnet, ihre Tabelle taucht also nicht auf. Früher entschiedene Fälle behalten ihre exakten Werte und keine Regeln — ein Datensatz ist eingefrorene Geschichte — und die Oberflächen sagen jetzt, welche der beiden Stillen sie vor sich haben."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations",
+        "Decisions"
+      ],
+      "try": {
+        "label": {
+          "en": "Open an instance and double-click a decision",
+          "de": "Instanz öffnen und Entscheidung doppelklicken"
+        },
+        "route": "#/operations"
       }
     },
     {
@@ -352,93 +430,6 @@
           "de": "Panorama › Starmap öffnen"
         },
         "route": "#/panorama/starmap"
-      }
-    },
-    {
-      "id": "a-product-is-assembled-from-the-services-that-exist-instead-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Assemble a product from the services you already have",
-        "de": "Ein Produkt aus den vorhandenen Services zusammensetzen"
-      },
-      "summary": {
-        "en": "A catalogue is built out of services, each of which provisions itself. What a product adds is an arrangement: which of those services come with it and cannot be deselected, and which are offered beside it. Until now you said that as edges — pick a from, pick a relationship, pick a to — one at a time, into a table sorted by relationship. It was the stored data, and it never showed what one product is made of. Every product row now has an Assemble button. It lists every other product the catalogue offers and asks one question per row, with three answers that leave nothing out: not part of it, included, optional — each pre-selected from how it stands today. One save writes that product's whole arrangement and leaves everything else exactly as it was: every other product's parts, and every precedence relation, including this product's own. The save carries the revision the page was read at, so a colleague editing the same catalogue cannot have their work silently overwritten. And a choice that closes a loop is refused before it is written, naming the product that already contains this one — directly or through another. Publishing still proves the whole catalogue; the refusal simply arrives while you still know which choice you just made. The pairwise form stays for precedence, which is the one relation that really is about two products and belongs to neither.",
-        "de": "Ein Katalog besteht aus Services, die sich je selbst bereitstellen. Was ein Produkt hinzufügt, ist eine Anordnung: welche dieser Services fest dazugehören und nicht abwählbar sind, und welche daneben angeboten werden. Bisher sagte man das über Kanten — ein „von\" wählen, eine Beziehung, ein „zu\" — einzeln, in eine nach Beziehung sortierte Tabelle. Das war die gespeicherte Form, und sie zeigte nie, woraus ein Produkt besteht. Jede Produktzeile hat nun eine Schaltfläche „assemble\". Sie listet jedes andere Produkt des Katalogs und stellt je Zeile eine Frage, mit drei Antworten, die nichts offenlassen: nicht Bestandteil, enthalten, optional — jeweils vorbelegt mit dem heutigen Stand. Ein Speichern schreibt die ganze Anordnung dieses Produkts und lässt alles andere unberührt: die Bestandteile jedes anderen Produkts und jede Vorrangbeziehung, auch die dieses Produkts. Mitgeschickt wird die Revision, mit der die Seite gelesen wurde; die Arbeit einer Kollegin am selben Katalog kann so nicht stillschweigend überschrieben werden. Und eine Wahl, die einen Kreis schliesst, wird abgelehnt, bevor sie geschrieben wird — benannt wird dabei das Produkt, das dieses bereits enthält, direkt oder über ein weiteres. Das Veröffentlichen prüft weiterhin den ganzen Katalog; die Ablehnung kommt nur dann, wenn man noch weiss, welche Wahl man gerade getroffen hat. Das paarweise Formular bleibt für den Vorrang — die eine Beziehung, die tatsächlich zwei Produkte betrifft und zu keinem von beiden gehört."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Catalogue",
-        "Portal"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Catalogue, choose a catalogue, and make sure it offers at least two products.",
-          "Press Assemble on the product that is the whole — the package, say.",
-          "Set each of the other products to not part of it, included or optional. What it is today is already selected.",
-          "Press Save the arrangement. The structure table above shows the result, with everybody else's rows untouched.",
-          "Try to put the whole inside one of its own parts: the kit refuses and names the product that already contains it, and nothing is written.",
-          "Use the pairwise form below for precedence only — what has to be provisioned before what."
-        ],
-        "de": [
-          "Öffnen Sie „Catalogue\", wählen Sie einen Katalog und stellen Sie sicher, dass er mindestens zwei Produkte anbietet.",
-          "Drücken Sie „assemble\" beim Produkt, das das Ganze ist — etwa beim Paket.",
-          "Setzen Sie jedes andere Produkt auf „not part of it\", „included\" oder „optional\". Der heutige Stand ist bereits gewählt.",
-          "Drücken Sie „Save the arrangement\". Die Struktur-Tabelle darüber zeigt das Ergebnis, die Zeilen aller anderen Produkte unverändert.",
-          "Versuchen Sie, das Ganze in einen seiner eigenen Bestandteile zu legen: Der Baukasten lehnt ab, nennt das Produkt, das es bereits enthält, und schreibt nichts.",
-          "Das paarweise Formular darunter dient nur noch dem Vorrang — was vor was bereitgestellt sein muss."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Catalogue",
-          "de": "Catalogue öffnen"
-        },
-        "route": "#/catalog"
-      }
-    },
-    {
-      "id": "an-approval-is-read-and-decided-in-the-inbox",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Decide an approval without leaving your inbox",
-        "de": "Genehmigungen direkt im Posteingang entscheiden"
-      },
-      "summary": {
-        "en": "An approval has always been an ordinary task, so it was always in your inbox — as a row that said \"Genehmigen\" and nothing else, next to thirteen other rows that also said \"Genehmigen\". To learn what one was, you opened a second page in another tab. Now the row names the product and what it costs, the detail says who it is for, who ordered it and which order it belongs to, and you approve or reject it right there, with the reason a rejection needs. Where the same order has more approvals waiting for you, one decision can cover them under one reason. There is one change worth knowing about: for the approval Atlas ships, the general Complete button is gone from that task, because it answered the same question by accident — a task completed with nothing filled in reads as \"not approved\", and that was being recorded as a rejection nobody had written a word about. If your own approval model is in use, nothing changes: its form and its Complete button stay exactly as they were, because only that model knows what completing it means.",
-        "de": "Eine Genehmigung war immer schon eine gewöhnliche Aufgabe und damit immer schon im Posteingang — als Zeile, auf der „Genehmigen\" stand und sonst nichts, neben dreizehn weiteren Zeilen, auf denen ebenfalls „Genehmigen\" stand. Um zu erfahren, worum es ging, musste man eine zweite Seite in einem anderen Reiter öffnen. Jetzt nennt die Zeile das Produkt und was es kostet, die Detailansicht nennt die Empfängerin, die bestellende Person und den Auftrag — und entschieden wird an Ort und Stelle, mit der Begründung, die eine Ablehnung braucht. Warten weitere Genehmigungen desselben Auftrags auf Sie, deckt eine Entscheidung sie unter einer Begründung ab. Eine Änderung ist erwähnenswert: Bei der mitgelieferten Genehmigung fehlt bei dieser Aufgabe die allgemeine Schaltfläche „Complete task\", denn sie beantwortete dieselbe Frage versehentlich — eine ohne Eingaben abgeschlossene Aufgabe liest sich als „nicht genehmigt\", und das wurde als Ablehnung verbucht, zu der niemand ein Wort geschrieben hatte. Wer ein eigenes Genehmigungsmodell einsetzt, merkt nichts davon: Dessen Formular und dessen Abschluss-Schaltfläche bleiben unverändert, weil nur dieses Modell weiss, was sein Abschluss bedeutet."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Tasks",
-        "Portal"
-      ],
-      "tutorial": {
-        "en": [
-          "Order something in the portal whose product asks for an approval, as somebody whose approver you are.",
-          "Open Tasks. The row says \"Genehmigen\" and, under it, the product and its cost.",
-          "Select it: the Approval block leads the detail with the product, the variant, who it is for and the order.",
-          "Write a reason if you are refusing — it is what the person who ordered is told — then press Approve or Reject.",
-          "If the same order has more approvals waiting for you, tick the box above the buttons to decide them together under one reason.",
-          "The separate approval page is still there for the link in the notification mail; nothing about it changed."
-        ],
-        "de": [
-          "Im Portal etwas bestellen lassen, dessen Produkt eine Genehmigung verlangt — von jemandem, dessen Genehmiger Sie sind.",
-          "„Tasks\" öffnen. Die Zeile nennt „Genehmigen\" und darunter das Produkt samt Kosten.",
-          "Zeile auswählen: Der Block „Approval\" führt die Detailansicht an — Produkt, Ausführung, Empfängerin und Auftrag.",
-          "Bei einer Ablehnung eine Begründung schreiben; sie wird der bestellenden Person mitgeteilt. Dann „Approve\" oder „Reject\" drücken.",
-          "Warten weitere Genehmigungen desselben Auftrags, das Kästchen über den Schaltflächen ankreuzen — eine Entscheidung, eine Begründung.",
-          "Die eigenständige Genehmigungsseite bleibt für den Link aus der Benachrichtigungsmail; an ihr ändert sich nichts."
-        ]
       }
     }
   ]

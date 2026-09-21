@@ -12,6 +12,89 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **Put a whole element type down on the starmap.** The Product Map draws four kinds at
+  once — the catalogues, the products they offer, the processes those products bind and
+  a marker where nothing is deployed — and a reader who came to look at one of them had
+  no way to set the other three aside. The search narrows by *name*, which answers a
+  different question: "show me just the catalogues" is not a string anybody can type.
+
+  The right-hand column now lists every element type the picture holds, each with a box,
+  and **every box is on**. It is for putting part of a picture down, not for building one
+  up: the landscape the server sent is the one it meant to send, and a kind nobody has an
+  opinion about stays drawn — including one that arrives later, such as a catalogue
+  somebody shares with you tomorrow.
+
+  Switching a type off takes it off **before** anything else narrows the picture, and that
+  ordering is the whole of the feature. A search keeps a hop of neighbours so a match can
+  be read in place, and a drilldown follows the depth on screen; cut afterwards, both
+  would reach *through* a hidden kind and leave what they found stranded on the canvas.
+  So a process that was only on the picture because a product bound it goes with the
+  products, and an edge whose other end is gone goes with it — a line to nothing is not a
+  claim about the estate.
+
+  Everything that describes the picture follows it. The count over the canvas is the
+  count of what is drawn, not of what arrived; the key stops explaining what is no longer
+  there; and switching *everything* off says so in words rather than borrowing the
+  sentence a search that missed would use, which would send somebody to clear a search
+  they never typed. The boxes are named in whatever vocabulary the picture is read in, so
+  on an ArchiMate projection they say Grouping and Product.
+
+  **An export says which types were off.** A picture narrowed this way leaves no trace on
+  the canvas — no term in a box, no breadcrumb, just fewer things — so a file that called
+  it "the whole starmap" would be exactly the export the stamp exists to prevent. The
+  stamp now names them, and spells out the part a reader of the file cannot work out:
+  what is missing is not only the hidden kind, it is everything that was reachable only
+  through one. A saved view carries the setting for the same reason it carries the search
+  term and the depth: a view is the whole question somebody saved.
+
+- **The run graph's ordinal map and CSR, and the measurement that qualified them.** The
+  projection [ADR-0404](docs/adr/0404-the-whole-graph-can-be-walked.md) decided on is
+  built: a persisted key-to-ordinal map, and the two flat arrays a walk reads. The map is
+  the sorted key array and the ordinal is the index, so there is no second structure to
+  keep consistent and the inverse comes free. Every edge is held at both endpoints,
+  because impact analysis asks in both directions. The build refuses to publish anything
+  partial — a half-built CSR answers wrongly in a way no reader can see.
+
+  The record's own premise turned out to be conditional, which is what building it found.
+  §10 assumed that assigning ordinals in key order makes a component's nodes contiguous,
+  and everything it concludes about where the projection may live rests on that. Measured
+  against state the engine actually wrote, it holds **exactly** where instances arrive
+  spread over time and **degrades linearly** with a burst: the span of a component's
+  ordinal range is 1.00 at sequential arrival, 5.67 at eight instances in flight, 43.00 at
+  sixty-four and 341.67 at five hundred and twelve. The law behind those points is exact
+  rather than fitted, because the engine mints an instance's elements across as many batch
+  phases as it has elements. It is pinned as that law in the tests, so a change to the
+  engine's batching surfaces there instead of as an unexplained slow walk, and the record
+  now carries the numbers, what they cost in pages, and the two ways out — without picking
+  one, because nothing depends on it until a walk is wired.
+
+### Added
+
+- **A process definition and a deployment of it are two different things.** The starmap's
+  `process` node has been both at once: what a model *is* — process id and version — and
+  the fact that this server holds it, with instances, counters and a state. That is
+  harmless with one server and unanswerable with several, because two installations both
+  mint partition 0 counter 1 and nothing in a key says which one did.
+
+  Both halves are now named. Every derived graph says which runtime derived it, and every
+  deployment on it says which runtime holds it, so a key travels with the other half of
+  its estate-wide name instead of alone. Nothing new is minted for this and no published
+  id changes — the runtime id and the key both already existed, and the pair is the name.
+
+  The definition is derived for every deployment and **drawn only where it has more than
+  one**. On a single server it has exactly one, always, so drawing it would put a
+  permanent twin beside every process: a node in a fixed one-to-one relation to another
+  node is a field, not a second thing, and it would spend the measured 400-node layout
+  budget to restate what the deployment already says. Where several servers hold one
+  model, that definition is what they have in common, and *this process runs in three
+  domains* becomes a line rather than a comparison somebody does by opening two tabs.
+
+  Nothing on a single-server picture looks different yet. What changed is that the
+  identity underneath it is now the one an estate can be drawn in, and that features
+  stop accumulating on the conflated form — see [ADR-0401](docs/adr/0401-graph-identity-across-several-logs.md).
+
 ### Fixed
 
 - **A decision service can be laid out and wired up.** Dragging one on the canvas was
@@ -74,6 +157,27 @@ _Changed_ / _Removed_ for each version.
   outside the box, where DMN puts it.
 
 ### Added
+
+- **Eine Entscheidung hinter einer Schnittstelle zeigt jetzt auch ihre Regeln.** Ein
+  Business-Rule-Task kann einen **Decision Service** aufrufen — DMN's veröffentlichte
+  Schnittstelle über einen Teil des Entscheidungsgraphen. Bis jetzt behielt eine solche
+  Auswertung ihre Eingaben und ihr Ergebnis und nichts darüber, wie sie dorthin kam: die
+  Engine bot für einen Service keine Option zum Aufzeichnen an. Damit fehlte die Erklärung
+  genau dort, wo sie am wenigsten zu entbehren ist — die Entscheidungen hinter einer
+  Schnittstelle sind in der Regel Tabellen, und wer einen Fall verantworten muss, konnte
+  „es wurden keine Regeln aufgezeichnet" nicht von „keine Regel hat getroffen"
+  unterscheiden.
+
+  Die Option ist upstream nachgezogen worden (temis#226) und wird hier durchgereicht. Eine
+  Service-Auswertung ab jetzt trägt die Tabellen, die der Service hinter seiner
+  Schnittstelle ausgeführt hat — im Entscheidungsgraph-Fenster mit grün gezogener Regel wie
+  bei jeder anderen Entscheidung. **Die Grenze gilt auch in der Spur:** eine Input-Decision
+  liefert der Aufrufer, der Service berechnet sie nie, also taucht ihre Tabelle nicht auf.
+
+  Was **vorher** aufgezeichnet wurde, trägt weiterhin keine Regeln und wird es nie: ein
+  Datensatz ist eingefrorene Geschichte, nichts, was man nachträglich neu rechnet. Die
+  Oberflächen sagen darum jetzt, *welche* Stille sie vor sich haben — die des Alters eines
+  Datensatzes, nicht die eines Unvermögens der Engine.
 
 - **The starmap says which dependencies are actually used.** Every line on the starmap
   was a *declared* dependency: a call activity names a process, a service task names a

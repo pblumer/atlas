@@ -66,6 +66,46 @@ test("a filtered or drilled export says which landscape it is", async ({ page })
   expect(lines.everything[0].text).toContain("within any hop(s)");
 });
 
+// A picture with whole element types switched off is narrowed as surely as a
+// filtered one, and the narrowing leaves no trace on the canvas: there is no term
+// in a box and no breadcrumb, just fewer things. A file that called it "the whole
+// starmap" would be the one kind of export this stamp exists to prevent.
+test("an export says which element types were switched off", async ({ page }) => {
+  const lines = await page.evaluate(() => ({
+    off: window.exporter.stampLines({
+      scope: { kind: "all", hiddenKinds: ["Product", "Unresolved"] },
+      drawn: { nodes: 12 }, total: 40,
+    }),
+    andDrilled: window.exporter.stampLines({
+      scope: { kind: "drill", name: "Billing", hops: "2", hiddenKinds: ["Worker"] },
+      drawn: { nodes: 4 }, total: 40,
+    }),
+    none: window.exporter.stampLines({
+      scope: { kind: "all", hiddenKinds: [] }, drawn: { nodes: 40 }, total: 40,
+    }),
+  }));
+
+  // Not "the whole starmap": it is not.
+  expect(lines.off[0].text).not.toContain("the whole starmap");
+  expect(lines.off[0].text).toContain("Product");
+  expect(lines.off[0].text).toContain("Unresolved");
+
+  // It composes with every other narrowing rather than replacing it — a reader has
+  // to be able to see both that the picture was drilled and that a kind is missing
+  // from what the drilldown found.
+  expect(lines.andDrilled[0].text).toContain("drilled into Billing");
+  expect(lines.andDrilled[0].text).toContain("Worker");
+
+  // And the consequence a reader of the file cannot see for themselves: what is
+  // missing is not only the hidden kind.
+  const spelt = lines.off.map((l) => l.text).join(" ");
+  expect(spelt).toMatch(/only reachable through/i);
+
+  // An empty list is not a narrowing, and must not read as one.
+  expect(lines.none[0].text).toContain("the whole starmap");
+  expect(lines.none.map((l) => l.text).join(" ")).not.toMatch(/switched off/i);
+});
+
 // Everything the picture cannot show has to travel with it. On screen these are in
 // the legend beside the canvas; in a file there is no beside.
 test("what the picture is not showing is written into it", async ({ page }) => {

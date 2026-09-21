@@ -12,7 +12,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/microsoft/go-mssqldb v1.10.0
 	github.com/pblumer/feel v0.0.0-20260722114835-38f697db2c7d
-	github.com/pblumer/temis v0.0.0-20260911201220-856ba3df3db5
+	github.com/pblumer/temis v0.0.0-20260920114449-ccd898df737f
 	github.com/prometheus/client_golang v1.15.0
 	github.com/prometheus/client_model v0.3.0
 	go.opentelemetry.io/otel v1.45.0
@@ -62,5 +62,5 @@ require (
 	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
+	google.golang.org/protobuf v1.36.12 // indirect
 )

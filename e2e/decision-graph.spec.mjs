@@ -94,17 +94,30 @@ test("the rule that carried the answer is shown, with why the ones above it did 
   await expect(nearMiss.locator("td.mcell.is-no")).toContainText("<= 0.15");
 });
 
-test("a decision service says why there is no rule matrix instead of showing none", async ({ page }) => {
+test("a decision service shows its rules like a decision does", async ({ page }) => {
+  // The normal case since the engine learned to trace a service: the window makes
+  // no distinction, because there is none left to make.
+  await page.evaluate(() => window.__open(window.__atServiceTraced));
+  await page.waitForSelector(".drg-rules .mgrid");
+
+  await expect(page.locator(".drg-tag")).toHaveText(/decision service/i);
+  await expect(page.locator(".drg-rules .mtable-head")).toContainText("Rule 6 fired");
+  await expect(page.locator(".drg-rules tr.mrule.is-hit")).toHaveCount(1);
+  // And none of the older record's apology.
+  await expect(page.locator(".drg-rules")).not.toContainText("No rule matrix was recorded");
+});
+
+test("a service record made before the engine could trace one says so", async ({ page }) => {
   await page.evaluate(() => window.__open(window.__atService));
   await page.waitForSelector(".drg-canvas svg");
 
   await expect(page.locator(".drg-tag")).toHaveText(/decision service/i);
-  // The distinction the window turns on: the values are exact, and only the
-  // rule-level detail is missing. Reading this as "nothing matched" would be a
-  // different, and false, account of the case.
+  // The distinction the window turns on: the values are exact, only the rule-level
+  // detail is missing, and it is missing because of when the record was made — not
+  // because nothing matched, which would be a different and false account.
   const rules = page.locator(".drg-rules");
-  await expect(rules).toContainText("records no rule-by-rule trace");
-  await expect(rules).toContainText("exactly what the case carried");
+  await expect(rules).toContainText("No rule matrix was recorded");
+  await expect(rules).toContainText("exactly what it carried");
   await expect(page.locator(".drg-rules .mgrid")).toHaveCount(0);
 
   // The graph still carries the case, which is the point of saying it that way.

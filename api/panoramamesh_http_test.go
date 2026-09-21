@@ -21,6 +21,10 @@ type meshNode struct {
 	Version     int32  `json:"version"`
 	WorkerType  string `json:"workerType"`
 	Children    int    `json:"children"`
+	// RuntimeID and Definition are the ADR-0401 §2 split: which runtime holds this
+	// deployment, and the definition node it realises where one is drawn.
+	RuntimeID  string `json:"runtimeId"`
+	Definition string `json:"definition"`
 }
 
 type meshEdge struct {
@@ -38,6 +42,7 @@ type meshGraph struct {
 	Edges      []meshEdge `json:"edges"`
 	Restricted int        `json:"restricted"`
 	Clustered  bool       `json:"clustered"`
+	RuntimeID  string     `json:"runtimeId"`
 }
 
 func getMesh(t *testing.T, ts *httptest.Server) meshGraph {
@@ -564,5 +569,85 @@ func TestPanoramaMeshCountsWhatActuallyTookTheEdge(t *testing.T) {
 	if after.TakenSince != before.TakenSince {
 		t.Errorf("TakenSince moved from %d to %d; the window is the deployment and does not change under traffic",
 			before.TakenSince, after.TakenSince)
+	}
+}
+
+// TestPanoramaMeshNamesTheRuntimeItDerivedFrom is ADR-0401 §1 against a real server.
+//
+// The derivation tests are handed a runtime id and check that it travels. What they
+// cannot check is the half that matters here: that the id on the payload is *this
+// installation's own* — the one the node descriptor publishes and a peer would use to
+// address it. A graph carrying a runtime id nobody else would recognise is worse than
+// one carrying none, because a consumer would join on it.
+//
+// So this asserts the two ends agree: GET /api/v1/node and GET /api/v1/panorama/mesh.
+func TestPanoramaMeshNamesTheRuntimeItDerivedFrom(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/node", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("GET node status = %d, body = %s", code, body)
+	}
+	var descriptor struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &descriptor); err != nil {
+		t.Fatalf("decode descriptor: %v", err)
+	}
+	if descriptor.ID == "" {
+		t.Fatal("the node descriptor has no id; this server cannot name itself at all")
+	}
+
+	g := getMesh(t, ts)
+	if g.RuntimeID != descriptor.ID {
+		t.Errorf("mesh runtimeId = %q, descriptor id = %q — the keys in this document must be attributable to the runtime a peer would address (ADR-0401 §1)",
+			g.RuntimeID, descriptor.ID)
+	}
+}
+
+// TestPanoramaMeshDeploymentNamesItsRuntimeAndDrawsNoDefinition pins both halves of
+// what ADR-0401 §2 does on a server that holds one of everything — which is every
+// installation today.
+//
+// A deployment says which runtime holds it, so the pair `(runtimeId, key)` is complete
+// without a second lookup. And no definition node is drawn, because the collector reads
+// the latest deployment per process id: the definition has exactly one deployment, the
+// two would stand in a permanent 1:1 relation, and a node per process against a measured
+// 400-node budget is what the rule exists to avoid.
+func TestPanoramaMeshDeploymentNamesItsRuntimeAndDrawsNoDefinition(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", workerMeshBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status = %d, body = %s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+
+	g := getMesh(t, ts)
+	node := meshNodeByID(t, g, meshProcessID(dep.Key))
+	if node.RuntimeID == "" {
+		t.Error("the deployment carries no runtime id, so its key cannot be placed (ADR-0401 §1)")
+	}
+	if node.RuntimeID != g.RuntimeID {
+		t.Errorf("deployment runtimeId = %q, graph runtimeId = %q — a locally read deployment belongs to the deriving runtime",
+			node.RuntimeID, g.RuntimeID)
+	}
+	if node.Definition != "" {
+		t.Errorf("deployment names definition %q; nothing draws one here, so nothing should point at one", node.Definition)
+	}
+	for _, n := range g.Nodes {
+		if n.Kind == "definition" {
+			t.Errorf("drew a definition node on a single-runtime server: %+v", n)
+		}
+	}
+	for _, e := range g.Edges {
+		if e.Kind == "deploys" {
+			t.Errorf("drew a %q edge with no definition node to carry it: %+v", e.Kind, e)
+		}
 	}
 }
