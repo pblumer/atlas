@@ -947,6 +947,12 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/catalogs/{id}/releases", s.catalogs.HandleListReleases, apiOp{
 			summary: "A catalogue's releases, newest first", tag: "Catalogue", role: roleAny,
 			resp: jsonBody("Releases", tArray())}},
+		{"GET", "/api/v1/catalogs/{id}/unpublished", s.catalogs.HandleUnpublished, apiOp{
+			summary: "What publishing this catalogue would change for the people ordering: " +
+				"products it would add, products the portal is still offering that it would " +
+				"take away, and products edited since the release it is serving",
+			tag: "Catalogue", role: roleAny,
+			resp: jsonBody("The difference between the newest release and the catalogue", tObject())}},
 		{"GET", "/api/v1/portal/favourites", s.handleListFavourites, apiOp{
 			summary: "The products you have marked to find again. Always your own — there is no way to ask about anybody else, because nothing needs to see what another person bookmarked. A favourite stores a product id and nothing else: it says \"show me this again\", never \"I may have this\", so a catalogue reassignment or a withdrawn product leaves the mark alone and simply resolves to less",
 			tag:     "Catalogue", role: RoleUser,

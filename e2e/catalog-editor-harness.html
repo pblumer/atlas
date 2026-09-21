@@ -59,9 +59,16 @@
         ownerId: "u1", revision: 3, theme: {},
       };
 
+      // What publishing would change, which each spec sets before it mounts. null is
+      // the default and stands for a read that did not answer — the case the page
+      // has to draw nothing for, so it is also the one every other spec here runs
+      // under without knowing about this at all.
+      window.__unpublished = null;
+
       const api = async (method, url) => {
         if (/\/catalogs$/.test(url)) return [CAT];
         if (/approver-report/.test(url)) return { problems: [] };
+        if (/\/unpublished$/.test(url)) return window.__unpublished;
         if (/\/catalogs\/[^/]+\/releases/.test(url)) return [];
         if (/\/catalogs\/[^/]+$/.test(url)) return CAT;
         if (/\/catalog-products$/.test(url)) return ITEMS;

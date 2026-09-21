@@ -145,6 +145,14 @@ func TestCatalogueToolsRoundTrip(t *testing.T) {
 		!strings.Contains(text, "vpn") {
 		t.Fatalf("releases after withdrawal = (%q, isErr=%v), want the release unchanged", text, isErr)
 	}
+
+	// Which is precisely why the difference has to be askable. The release is
+	// unchanged and the product is not — an agent that read only the two calls
+	// above would have to compare revisions nobody thinks to compare.
+	if text, isErr = callText(t, ts, "atlas_catalog_unpublished", map[string]any{"id": cat}); isErr ||
+		!strings.Contains(text, `"changed"`) || !strings.Contains(text, "vpn") {
+		t.Fatalf("unpublished after withdrawal = (%q, isErr=%v), want the edited product reported", text, isErr)
+	}
 }
 
 // TestCatalogueToolsRefuseAnUnknownCatalogue: every id-taking tool forwards the
@@ -152,7 +160,8 @@ func TestCatalogueToolsRoundTrip(t *testing.T) {
 // message a person would.
 func TestCatalogueToolsRefuseAnUnknownCatalogue(t *testing.T) {
 	ts := newAtlas(t)
-	for _, tool := range []string{"atlas_get_catalog", "atlas_publish_catalog", "atlas_catalog_releases"} {
+	for _, tool := range []string{"atlas_get_catalog", "atlas_publish_catalog", "atlas_catalog_releases",
+		"atlas_catalog_unpublished"} {
 		t.Run(tool, func(t *testing.T) {
 			text, isErr := callText(t, ts, tool, map[string]any{"id": "cat_nothing"})
 			if !isErr {

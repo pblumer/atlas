@@ -650,9 +650,9 @@ const maxDaysFrom = (f) => {
 // ---------- One catalogue ----------
 
 export async function viewCatalogDetail({ api, apiBytes, toast, view, isSuperseded, me, enforced }, id) {
-  let cat, items, releases, processes, forms, dir, people;
+  let cat, items, releases, processes, forms, dir, people, unpublished;
   try {
-    [cat, items, releases, processes, forms, dir, people] = await Promise.all([
+    [cat, items, releases, processes, forms, dir, people, unpublished] = await Promise.all([
       api("GET", `/api/v1/catalogs/${encodeURIComponent(id)}`),
       api("GET", "/api/v1/catalog-products"),
       api("GET", `/api/v1/catalogs/${encodeURIComponent(id)}/releases`),
@@ -669,6 +669,11 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
       // that carries a *username* — the principals directory carries display names
       // and ids, and an approval for a named person is matched by username.
       api("GET", "/api/v1/users/assignable").catch(() => null),
+      // What publishing would change for the people ordering. .catch(() => null)
+      // and deliberately not an empty answer: null is "not known" and draws
+      // nothing, where an empty difference is drawn as "the portal is serving this
+      // as it stands" — a claim a read that failed is in no position to make.
+      api("GET", `/api/v1/catalogs/${encodeURIComponent(id)}/unpublished`).catch(() => null),
     ]);
   } catch (e) {
     if (isSuperseded()) return;
@@ -777,6 +782,7 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
     <p class="muted" style="max-width:62ch">Publishing freezes everything above into a release.
       An order names one release and is immune to every edit made afterwards, which is why a
       catalogue can be reworked while approvals are still pending.</p>
+    ${unpublishedCard(unpublished, langs)}
     <div class="row"><button class="btn" data-act="publish">Publish</button></div>
     <div class="publish-report"></div>
     ${releases.length ? `<table class="table" style="margin-top:12px">
@@ -787,6 +793,78 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
 
   wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList,
     mayShare(cat, me, enforced), mayTheme(me, enforced), dir, people);
+}
+
+// ---------- What publishing would change ----------
+//
+// The portal serves a release — a frozen copy — and every screen above serves the
+// live catalogue. Both are right, and between one publish and the next they say
+// different things with nothing on either saying so.
+//
+// One direction of that is invisible rather than merely unstated. Take a product
+// out of a catalogue and it leaves this screen at once; the portal goes on
+// offering it from the release. It is then absent from every screen its
+// maintainer has and present on the one they do not, so the case most worth
+// knowing about is the only one nothing could show. The release table underneath
+// listed dates and left the reader to work out whether today's catalogue is one
+// of them, which is not a question a date answers.
+//
+// The quiet case is drawn too, and for the same reason: "the portal is offering
+// this exactly as it stands" is an answer somebody needs, and a panel that speaks
+// up only when something is wrong cannot be told apart from one that failed to
+// check.
+
+// unpublishedCard states the difference between the newest release and the
+// catalogue above it. langs picks the language a name is read in, the same way the
+// product table picks it.
+function unpublishedCard(diff, langs) {
+  // Not known — an older server, or a read that failed. Nothing is drawn: silence
+  // reads as "no answer here", where either sentence below would be a claim about
+  // the portal that this page cannot support.
+  if (!diff) return "";
+  // Never published is already said under the release table, and in that state
+  // every offered product counts as added — a list nobody needs to read to learn
+  // that the portal shows this catalogue to nobody at all.
+  if (!diff.released) return "";
+
+  const against = `<span class="muted">against ${esc(diff.releaseId)}, published
+    ${esc(fmtTime(diff.releasedAt))}</span>`;
+  const added = diff.added || [], removed = diff.removed || [], changed = diff.changed || [];
+  if (!added.length && !removed.length && !changed.length) {
+    return `<div class="card portal-current" style="margin:12px 0">
+      <div class="row"><span class="pill ok">Nothing to publish</span>
+      The portal is offering this catalogue exactly as it stands.</div>
+      <p class="muted" style="margin:6px 0 0">${against}</p></div>`;
+  }
+
+  // The state is worth saying on a product about to be added, and only there: a
+  // draft or withdrawn product is offered but not orderable, so publishing it
+  // changes the catalogue and changes nothing for the person ordering. Said here,
+  // that is one sentence; found afterwards, it is a republish.
+  const names = (list, withState) => `<ul style="margin:0; padding-left:18px">${list
+    .map((x) => `<li>${esc(textOf(x.texts, langs, x.id))}
+      <span class="muted">${esc(x.id)}</span>${withState && x.state && x.state !== "active"
+    ? ` <span class="pill warn">${esc((STATES.find((st) => st.id === x.state) || {}).name || x.state)}</span>`
+    : ""}</li>`).join("")}</ul>`;
+
+  const block = (list, kind, title, note, withState) => list.length
+    ? `<div class="portal-${kind}" style="margin:12px 0 0"><b>${title} (${list.length})</b>
+        <p class="muted" style="margin:2px 0 6px; max-width:62ch">${note}</p>
+        ${names(list, withState)}</div>`
+    : "";
+
+  // Removed first, because it is the one the reader cannot find anywhere else.
+  return `<div class="card portal-behind" style="margin:12px 0; border-color:#b26b00">
+    <div class="row"><span class="pill warn">Unpublished changes</span>${against}</div>
+    ${block(removed, "removed", "Still offered on the portal", `Not in this catalogue any more.
+      The release goes on offering them, and this is the only screen that says so —
+      publishing is what takes them away from the people ordering.`, false)}
+    ${block(added, "added", "Not on the portal yet", `Offered here and absent from the release.
+      Publishing puts them in front of the people ordering; one that is still in draft
+      or withdrawn is published along with the rest and stays unorderable.`, true)}
+    ${block(changed, "changed", "Edited since the release", `Offered in both. The portal is showing
+      the name, description, price or state the product had when it was published.`, false)}
+  </div>`;
 }
 
 function productRow(it, iid, langs, canAssemble) {
