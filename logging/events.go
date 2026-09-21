@@ -349,4 +349,13 @@ var (
 	CallOverrideSkipped      = newEvent("call_override.skipped")
 	CollabParticipantsReaped = newEvent("collab.participants_reaped")
 	PlaygroundSessionsReaped = newEvent("playground.sessions_reaped")
+
+	// PersonalValueUnreadable says a job could not be handed to a worker because one
+	// of the variables it would carry is a personal value whose data subject has been
+	// erased (ADR-0314). The record predicts this — "erasing a subject with a live
+	// instance leaves that instance unable to provision" — and predicts that it will
+	// read as an incident rather than a clear message. This is the line that at least
+	// makes it diagnosable: without it the job is simply never handed out, and a worker
+	// polls forever with nothing anywhere saying why.
+	PersonalValueUnreadable = newEvent("personal_data.value_unreadable")
 )

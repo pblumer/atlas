@@ -3064,6 +3064,9 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 	// computes on a variable it declared personal does not deploy. Placed here rather
 	// than in Parse so a process built through this Builder is held to it too — the
 	// refusal is a property of the compiled process, not of one way of authoring it.
+	if err := p.refuseEngineWritesToPersonalData(); err != nil {
+		return nil, err
+	}
 	if err := p.refuseExpressionsReadingPersonalData(); err != nil {
 		return nil, err
 	}

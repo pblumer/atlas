@@ -253,6 +253,63 @@ func (p *CompiledProcess) refuseExpressionsReadingPersonalData() error {
 	return nil
 }
 
+// refuseEngineWritesToPersonalData is the other direction of the same rule, and it exists
+// because enciphering happens at an edge and the engine has no key.
+//
+// A declared variable may be *written* — that is how a name gets into an instance at all —
+// but only by something that can seal it: a form submission, a worker's result, an
+// operator's write. An engine-evaluated expression cannot. An output mapping computing a
+// value into a declared variable would write it readable, in the log, permanently
+// un-erasable, while the declaration promised the opposite.
+//
+// So the writes the engine performs itself are refused here, where it is decidable (I5),
+// rather than left to park as an incident at runtime. The runtime check stays as the
+// backstop for the paths no deploy can see — a message payload correlating into an
+// instance — and it is also what covers any write target this list misses, which is worth
+// saying plainly: unlike the expression sites, a write target is an interned index
+// indistinguishable by reflection from any other int32, so there is no completeness guard
+// for this half beyond reading it.
+func (p *CompiledProcess) refuseEngineWritesToPersonalData() error {
+	if len(p.personalSet) == 0 {
+		return nil
+	}
+	refuse := func(kind, name string) error {
+		if name == "" || !p.IsPersonal(name) {
+			return nil
+		}
+		return fmt.Errorf(
+			"compiler: %s writes personal variable %q — the engine cannot encipher a value, because it holds no key, "+
+				"so a value it computes into a declared variable would be stored in the clear and could never be erased. "+
+				"A personal value may only be written by something that seals it: a form, a worker's result, or an "+
+				"operator. Have the worker that produces it return it under that name (ADR-0314, ADR-0047)",
+			kind, name)
+	}
+	for i := range p.ioInputs {
+		if err := refuse("input mapping", p.Intern(p.ioInputs[i].Target)); err != nil {
+			return err
+		}
+	}
+	for i := range p.ioOutputs {
+		if err := refuse("output mapping", p.Intern(p.ioOutputs[i].Target)); err != nil {
+			return err
+		}
+	}
+	for i := range p.scriptTasks {
+		if err := refuse("script task result variable", p.scriptTasks[i].ResultVar); err != nil {
+			return err
+		}
+	}
+	for i := range p.multiInstances {
+		if err := refuse("multi-instance output collection", p.Intern(p.multiInstances[i].OutputCollection)); err != nil {
+			return err
+		}
+		if err := refuse("multi-instance element variable", p.Intern(p.multiInstances[i].InputElement)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // expressionSites lists every engine-evaluated compiled expression in the process.
 //
 // Written out by hand rather than found by reflection, because reading unexported fields

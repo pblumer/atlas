@@ -204,31 +204,58 @@ func TestAnUndeclaredVariableInAnExpressionIsFine(t *testing.T) {
 	}
 }
 
-// TestAPersonalVariableMayStillBeWrittenAndCarried keeps the rule from being wider than the
-// record makes it. A declared variable is payload: it may be set by a form, handed to a
-// worker and stored. What it may not be is *read by an engine expression*. A rule that also
-// refused it as an output mapping's `target` would make the variable unusable rather than
-// uncomputable, and no portal process could then hold a name at all.
-func TestAPersonalVariableMayStillBeWrittenAndCarried(t *testing.T) {
-	const model = `<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:atlas="http://atlas/schema/1.0"
-                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs">
-  <bpmn:process id="p" isExecutable="true" atlas:personal="vorname" atlas:dataSubject="pnr">
-    <bpmn:startEvent id="s"/>
-    <bpmn:serviceTask id="t">
+// TestAnEngineWriteToAPersonalVariableIsRefused is the rule's other direction, and it
+// corrects what this test used to assert.
+//
+// It used to accept an output mapping writing *into* a declared variable, on the reasoning
+// that refusing it "would make the variable unusable rather than uncomputable, and no
+// portal process could then hold a name at all". That reasoning was wrong on the facts.
+// The engine holds no key and cannot encipher, so a value it computes into a declared
+// variable is stored readable, in the log, permanently un-erasable — while the declaration
+// says the opposite. And the variable is not unusable without it: a name arrives from a
+// form, from a worker's result or from an operator, and each of those is an edge that
+// seals. Those are exactly how names actually arrive.
+//
+// The writer refuses such a write at runtime too (engine/personal_test.go), for the paths
+// no deploy can see. Refusing it here as well is not redundancy: it turns a parked incident
+// somebody has to diagnose into a deploy that does not happen.
+func TestAnEngineWriteToAPersonalVariableIsRefused(t *testing.T) {
+	body := `<bpmn:serviceTask id="t">
       <bpmn:extensionElements>
         <zeebe:taskDefinition type="w"/>
         <zeebe:ioMapping><zeebe:output source="= kuerzel" target="vorname"/></zeebe:ioMapping>
       </bpmn:extensionElements>
     </bpmn:serviceTask>
-    <bpmn:endEvent id="e"/>
-    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
-    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
-  </bpmn:process>
-</bpmn:definitions>`
-	if _, err := Parse(1, 1, strings.NewReader(model)); err != nil {
-		t.Fatalf("writing *to* a personal variable was refused, which makes it unusable rather than uncomputable: %v", err)
+    <bpmn:sequenceFlow id="fa" sourceRef="s" targetRef="t"/>`
+	_, err := Parse(1, 1, strings.NewReader(personalModel(`atlas:personal="vorname" atlas:dataSubject="pnr"`, body)))
+	if err == nil {
+		t.Fatal("an output mapping computing a value into a personal variable was accepted; it would be stored in the clear")
+	}
+	for _, want := range []string{"vorname", "output mapping", "holds no key"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not mention %q", err, want)
+		}
+	}
+}
+
+// TestAPersonalVariableIsStillUsable is what keeps the rule from being wider than the
+// mechanism needs. A declared variable is payload: it may arrive, be carried through the
+// process and be handed to a worker. Nothing in the model has to mention it for that to
+// work — which is why a process that declares one and computes on none deploys.
+func TestAPersonalVariableIsStillUsable(t *testing.T) {
+	body := `<bpmn:serviceTask id="t">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="w"/>
+        <zeebe:ioMapping><zeebe:output source="= kuerzel" target="kennung"/></zeebe:ioMapping>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="fa" sourceRef="s" targetRef="t"/>`
+	cp, err := Parse(1, 1, strings.NewReader(personalModel(`atlas:personal="vorname" atlas:dataSubject="pnr"`, body)))
+	if err != nil {
+		t.Fatalf("a process that merely carries a personal variable was refused: %v", err)
+	}
+	if !cp.IsPersonal("vorname") {
+		t.Error("the declaration did not survive the build")
 	}
 }
 

@@ -385,12 +385,19 @@ func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.Var
 	// promoting its child's result, a loop promoting its body's) can never carry the
 	// producer of the write it was copied from (ADR-0219).
 	v.ProducerKey = c.producer
+	cp, atRoot := c.processOfScope(v.ScopeKey)
 	// Whether this write belongs in the variable value index is stamped here for the
 	// same reason, and for one more: applyToState holds the record and nothing else,
 	// so it cannot ask a compiled process whether a name is searchable. Deciding it
 	// here freezes the answer into the event, and replay indexes exactly what the live
 	// write indexed (I6).
-	v.Indexed = c.indexesVariable(v.ScopeKey, v.Name)
+	v.Indexed = c.indexesVariable(cp, atRoot, v.Name)
+	// A declared personal value that arrived readable is refused, whatever wrote it
+	// (ADR-0314). A delete is exempt for the reason it is exempt from the budget below.
+	if intent != model.IntentVariableDeleted && clearPersonalWrite(cp, &v) {
+		parkClearPersonalWrite(c, v.ScopeKey, v.Name)
+		return false
+	}
 	// A value past the budget is not written and not silently dropped: an incident
 	// names the variable and both sizes, and resolving retries
 	// (ADR-0294). Deleting is never refused — a delete carries
@@ -406,7 +413,12 @@ func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.Var
 // (ADR-0294).
 func (c *ProcessingContext) appendCollection(intent model.Intent, v model.VariableValue) bool {
 	v.ProducerKey = c.producer
-	v.Indexed = c.indexesVariable(v.ScopeKey, v.Name)
+	cp, atRoot := c.processOfScope(v.ScopeKey)
+	v.Indexed = c.indexesVariable(cp, atRoot, v.Name)
+	if intent != model.IntentVariableDeleted && clearPersonalWrite(cp, &v) {
+		parkClearPersonalWrite(c, v.ScopeKey, v.Name)
+		return false
+	}
 	return c.appendVariable(intent, v, c.p.collectionCeiling())
 }
 
@@ -424,7 +436,12 @@ func (c *ProcessingContext) appendCollection(intent model.Intent, v model.Variab
 // over: this is the one guarantee the change gives up.
 func (c *ProcessingContext) appendVariableElement(v model.VariableValue) bool {
 	v.ProducerKey = c.producer
-	v.Indexed = c.indexesVariable(v.ScopeKey, v.Name)
+	cp, atRoot := c.processOfScope(v.ScopeKey)
+	v.Indexed = c.indexesVariable(cp, atRoot, v.Name)
+	if clearPersonalWrite(cp, &v) {
+		parkClearPersonalWrite(c, v.ScopeKey, v.Name)
+		return false
+	}
 	c.appendEvent(v.ScopeKey, model.VTVariable, model.IntentVariableElementSet, inflightValue{variable: v})
 	c.markConditionDirty(v.ScopeKey)
 	return true
@@ -444,6 +461,22 @@ func (c *ProcessingContext) appendVariable(intent model.Intent, v model.Variable
 	return true
 }
 
+// processOfScope is the compiled process a write's scope belongs to, and whether that
+// scope is the instance's own root rather than an activity-local one.
+//
+// Both per-write questions below need exactly this, so it is resolved once: the reads
+// are the same one or two the index question already did, because an element instance
+// names its definition itself.
+func (c *ProcessingContext) processOfScope(scopeKey uint64) (cp *compiler.CompiledProcess, atRoot bool) {
+	if ei := c.GetElementInstance(scopeKey); ei != nil {
+		return c.process(ei.ProcessDefKey), false
+	}
+	if pi := c.GetProcessInstance(scopeKey); pi != nil {
+		return c.process(pi.ProcessDefKey), true
+	}
+	return nil, false
+}
+
 // indexesVariable reports whether a write of name into scopeKey belongs in the
 // variable value index: the scope has to be the instance's own root — an
 // activity-local scope is scratch state that disappears when the activity completes
@@ -452,16 +485,28 @@ func (c *ProcessingContext) appendVariable(intent model.Intent, v model.Variable
 //
 // A process that declares nothing costs one length check here, the same shape as the
 // conditional-event question below it.
-func (c *ProcessingContext) indexesVariable(scopeKey uint64, name string) bool {
-	if c.GetElementInstance(scopeKey) != nil {
-		return false // an activity-local scope, not the instance root
-	}
-	pi := c.GetProcessInstance(scopeKey)
-	if pi == nil {
+func (c *ProcessingContext) indexesVariable(cp *compiler.CompiledProcess, atRoot bool, name string) bool {
+	return atRoot && cp != nil && cp.HasSearchableVariables() && cp.IsSearchableVariable(name)
+}
+
+// clearPersonalWrite reports whether this write must be refused because it carries a
+// value the process declared personal and carries it readable.
+//
+// It is the backstop that makes ADR-0314's rule hold on *every* path into an instance,
+// not only the ones an edge could be put on. A form submission, a worker's result and an
+// operator's write are all sealed before they become commands; a message payload is not,
+// because the instance it correlates into is only known here, inside the engine, which
+// holds no key. Without this check that one path would write personal data in the clear,
+// permanently un-erasable, while the declaration said otherwise and nothing looked wrong.
+//
+// A delete carries no value and a null hides nothing, so neither is refused. The
+// enciphered-or-not question is a prefix check on bytes the engine already holds, which
+// is why it can be asked here at all (I4: no key, no I/O, deterministic).
+func clearPersonalWrite(cp *compiler.CompiledProcess, v *model.VariableValue) bool {
+	if cp == nil || !cp.HasPersonalVariables() || v.Kind == model.VarNull {
 		return false
 	}
-	cp := c.process(pi.ProcessDefKey)
-	return cp != nil && cp.HasSearchableVariables() && cp.IsSearchableVariable(name)
+	return cp.IsPersonal(v.Name) && !v.IsEnciphered()
 }
 
 // markConditionDirty notes that a variable changed in the given scope, so the batch loop will

@@ -37,19 +37,32 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/pblumer/atlas/model"
 )
 
 // dataKeyPrefix reserves a region of the vault's name space for data keys. A data key
 // is not a credential an operator sets or reads: the secrets API refuses to write or
 // delete a name in this region, and List omits them, so the only way to remove one is
 // the erasure route that says what it is doing.
-const dataKeyPrefix = "atlas:personal-data-key/"
+//
+// The separator is a colon and not a slash deliberately. A slash would make the name
+// unroutable through /api/v1/secrets/{name} and so unreachable by accident — but an
+// accident of routing is not a defence, and a later change of that pattern would open
+// it silently. A colon keeps the name addressable, which is what lets the refusal in
+// those handlers be exercised end to end and stay the thing that actually guards it.
+const dataKeyPrefix = "atlas:personal-data-key:"
 
 // envelopeKey is the single JSON member an enciphered value is wrapped in. It makes
 // the ciphertext self-describing, which is what lets the opening edge work from the
 // value alone: it does not have to re-resolve which variables a definition declared
 // personal, and it therefore still opens a value whose process has since been
 // migrated to a version that declares something else (ADR-0314).
+//
+// It is derived from [model.EncipheredMarker] rather than spelled again, because the
+// engine recognises an envelope by that marker without being able to open one: two
+// spellings of the same thing would let the writer's refusal and this package's format
+// drift apart, and the failure would be a personal value accepted in the clear.
 const envelopeKey = "atlas:personal"
 
 // ErrErased is returned by Open when the subject's data key is gone: the value is
@@ -126,7 +139,7 @@ func (e Envelope) Text() string {
 // forged envelope simply fails to open and only affects the instance its author
 // submitted it to.
 func ParseEnvelope(text string) (Envelope, bool) {
-	if !strings.HasPrefix(text, `{"`+envelopeKey+`":`) {
+	if !strings.HasPrefix(text, model.EncipheredMarker) {
 		return Envelope{}, false
 	}
 	var wrapper map[string]envelopeJSON
