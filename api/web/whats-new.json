@@ -134,6 +134,35 @@
       }
     },
     {
+      "id": "a-decision-service-can-be-laid-out-and-wired-up",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A decision service can be moved, and wired to the decision that calls it",
+        "de": "Ein Decision Service lässt sich verschieben und mit der Entscheidung verbinden, die ihn aufruft"
+      },
+      "summary": {
+        "en": "Dragging a decision service on the canvas was refused outright, which a diagram holding several of them cannot do without. When it did move, the editor re-decided which of its decisions the service returns and which it only works out internally — and for a decision drawn outside the box, an imported model's may well be, that silently cost the service the interface it publishes. A decision service could also not be connected to anything, although DMN makes one invocable exactly as a knowledge model is. All three are fixed. The shapes follow the specification too: input data is a stadium at any size, a decision service carries a heavier border than a decision, a knowledge model is a rectangle with two corners cut rather than a slanted box, and a knowledge requirement ends in an open arrowhead — the one thing that tells it from an information requirement.",
+        "de": "Einen Decision Service auf der Zeichenfläche zu verschieben wurde schlicht verweigert — und genau darauf kommt es an, sobald ein Diagramm mehrere davon trägt. Bewegte er sich doch, entschied der Editor neu, welche seiner Entscheidungen der Service zurückgibt und welche er nur intern ermittelt; bei einer Entscheidung ausserhalb des Kastens, wie sie in importierten Modellen vorkommt, kostete das den Service still die Schnittstelle, die er veröffentlicht. Verbinden liess sich ein Decision Service ausserdem gar nicht, obwohl DMN ihn genauso aufrufbar macht wie ein Knowledge Model. Alle drei Punkte sind behoben. Auch die Formen folgen nun der Spezifikation: Input Data ist in jeder Grösse ein Stadion, ein Decision Service trägt eine kräftigere Umrandung als eine Entscheidung, ein Knowledge Model ist ein Rechteck mit zwei abgeschnittenen Ecken statt eines schiefen Kastens, und ein Knowledge Requirement endet in einer offenen Pfeilspitze — dem einzigen Merkmal, das es von einem Information Requirement unterscheidet."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Decisions",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the decisions",
+          "de": "Entscheidungen öffnen"
+        },
+        "route": "#/console/decisions"
+      }
+    },
+    {
       "id": "a-decision-graph-is-drawn-the-way-dmn-draws-one",
       "version": "Unreleased",
       "date": null,
@@ -383,51 +412,6 @@
           "Eine Seite darf leer bleiben: links leer heisst \"ab Veröffentlichung\", rechts leer heisst \"bis zum Zurückziehen\". Beide leer ist das gewöhnliche Produkt; für dieses ändert sich nichts.",
           "Katalog veröffentlichen. Ein Produkt, dessen Fenster noch nicht offen ist, bleibt im Portal sichtbar und lässt sich nicht in den Warenkorb legen; die Zeile nennt das Datum.",
           "Die Daten sind die des Servers (UTC) und werden tageweise gepflegt. Für ein Fenster, das auf die Stunde genau gelten muss, ist dieses Feld nicht gedacht."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Catalogues",
-          "de": "Kataloge öffnen"
-        },
-        "route": "#/catalog"
-      }
-    },
-    {
-      "id": "the-four-fields-the-portal-read-and-the-product-editor-could",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The product editor now sets every field the portal reads",
-        "de": "Der Produkteditor setzt jetzt jedes Feld, das das Portal liest"
-      },
-      "summary": {
-        "en": "A product carries twelve fields the portal acts on and the editor rendered eight. The four it left out decide whether a product can be ordered at all: the orderable shapes the basket refuses to proceed without, the search terms that make a service findable by somebody who does not know its name, the groups eligible to receive it, and the ceiling on how long the right may last. They were settable over the API and by nobody else — not by the person whose job it is. All four are on the form now, and the form also says where the two headings are read: Kategorie and Produktgruppe are collected from the products nothing contains, so a product carried inside another one is reached through its carrier and its own heading is never read there. The editor names the carrier instead of leaving you to fill in a column that had stopped reading the field.",
-        "de": "Ein Produkt trägt zwölf Felder, die das Portal auswertet, und der Editor zeigte acht davon. Die vier fehlenden entscheiden darüber, ob ein Produkt überhaupt bestellt werden kann: die Ausführungen, ohne deren Wahl der Warenkorb die Bestellung verweigert, die Suchbegriffe, über die eine Leistung auch ohne Kenntnis ihres Namens gefunden wird, die bezugsberechtigten Gruppen und die Obergrenze für die Dauer des Rechts. Setzbar waren sie nur über die Schnittstelle und sonst von niemandem — nicht von der Person, deren Aufgabe das ist. Alle vier stehen jetzt im Formular, und das Formular sagt zudem, wo die beiden Überschriften gelesen werden: Kategorie und Produktgruppe werden von den Produkten gelesen, die in keinem anderen enthalten sind. Ein Produkt innerhalb eines anderen wird über dieses erreicht, seine eigene Überschrift dort also nie gelesen. Der Editor nennt nun das tragende Produkt, statt Sie eine Spalte füllen zu lassen, die das Feld längst nicht mehr liest."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Catalogue",
-        "Portal"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Console → Catalogues, pick a catalogue and edit one of its products.",
-          "Under what the catalogue shows: the search terms as a comma-separated list — synonyms, the vendor's term, the abbreviation everybody uses — and the orderable shapes as one line each, written id = name.",
-          "Under how an order is handled: the groups eligible to receive it, and the ceiling in days. Empty eligibility narrows nothing and never opens anything, because the catalogue's audience stays the gate; a ceiling of zero is a right that does not end.",
-          "Where the catalogue carries this product inside another one, a note above the two headings names the carrier: the requester reaches the product under the carrier's heading, not under what you write here.",
-          "Publish the catalogue. Until you do, none of it reaches the portal."
-        ],
-        "de": [
-          "Console → Catalogues öffnen, einen Katalog wählen und eines seiner Produkte bearbeiten.",
-          "Im Abschnitt zum Katalogauftritt: die Suchbegriffe als kommagetrennte Liste — Synonyme, die Bezeichnung des Herstellers, die geläufige Abkürzung — und die Ausführungen als je eine Zeile in der Form id = Name.",
-          "Im Abschnitt zur Auftragsbearbeitung: die bezugsberechtigten Gruppen und die Obergrenze in Tagen. Keine Berechtigung eingeschränkt bedeutet keine Einschränkung und öffnet nie etwas, denn das Publikum des Katalogs bleibt die Schranke; eine Obergrenze von null ist ein Recht ohne Ende.",
-          "Ist das Produkt in diesem Katalog Teil eines anderen, nennt ein Hinweis über den beiden Überschriften das tragende Produkt: Die anfordernde Person erreicht das Produkt unter dessen Überschrift, nicht unter der hier eingetragenen.",
-          "Katalog veröffentlichen. Vorher erreicht nichts davon das Portal."
         ]
       },
       "try": {
