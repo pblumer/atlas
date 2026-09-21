@@ -2,6 +2,24 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "the-run-graph-answers-what-is-this-connected-to-as-a-lookup-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The run graph answers \"what is this connected to\" as a lookup, and the measurement renamed the question.",
+        "de": "The run graph answers \"what is this connected to\" as a lookup, and the measurement renamed the question."
+      },
+      "summary": {
+        "en": "ADR-0404 §5's projection gains the half it was missing: one union-find pass over the CSR, and a rungraph.Membership over the labels it produces.",
+        "de": "ADR-0404 §5's projection gains the half it was missing: one union-find pass over the CSR, and a rungraph.Membership over the labels it produces."
+      },
+      "link": {
+        "label": "ADR-0404",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0404-the-whole-graph-can-be-walked.md"
+      }
+    },
+    {
       "id": "personal-data-can-be-erased-a-declared-variable-is-enciphere",
       "version": "Unreleased",
       "date": null,
@@ -353,35 +371,6 @@
           "de": "Instanz öffnen und Entscheidung doppelklicken"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "the-starmap-says-which-dependencies-are-actually-used",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The starmap says which dependencies are actually used",
-        "de": "Der Starmap sagt, welche Abhängigkeiten wirklich genutzt werden"
-      },
-      "summary": {
-        "en": "Every line on the starmap was a declared dependency, and the picture drew a worker nobody has ever called exactly like one carrying the whole business. Each line now carries how often it was taken, joined from the activation count the engine has folded per element since the Operations heatmap needed one — so it costs no new bookkeeping. One decision called from two tasks is still one line, with both counts together. A line nothing has taken is drawn quieter and says so on hover, always with the window it was counted over: the counter belongs to the deployed version, so a redeploy starts a fresh one, and a zero on a version deployed this morning says nothing about the path.",
-        "de": "Jede Linie auf dem Starmap war eine deklarierte Abhängigkeit, und das Bild zeichnete einen Worker, den nie jemand aufgerufen hat, genau wie einen, der das ganze Geschäft trägt. Jede Linie trägt nun, wie oft sie genommen wurde — verknüpft mit dem Aktivierungszähler, den die Engine seit der Operations-Heatmap ohnehin pro Element führt, also ohne neue Buchführung. Eine Entscheidung, die von zwei Tasks aufgerufen wird, bleibt eine Linie, mit beiden Zählern zusammen. Eine Linie, die nichts genommen hat, wird leiser gezeichnet und sagt es beim Überfahren — immer mit dem Zeitfenster, über das gezählt wurde: der Zähler gehört zur deployten Version, ein erneutes Deployment beginnt einen neuen, und eine Null auf einer heute Morgen deployten Version sagt nichts über den Pfad."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama",
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the starmap",
-          "de": "Starmap öffnen"
-        },
-        "route": "#/panorama/starmap"
       }
     }
   ]

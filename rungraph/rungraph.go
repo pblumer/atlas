@@ -269,9 +269,17 @@ func eachEdge(src Source, ords *Ordinals, fn func(from, to uint32)) (seen int, e
 }
 
 // Components labels every node with its connected component, in one pass over the CSR by
-// union-find (ADR-0404 §5). For this topology that pass *is* the instance-family
-// decomposition: the run graph is a forest of millions of small components, so "which
-// family does this element belong to" is a label lookup afterwards rather than a walk.
+// union-find (ADR-0404 §5). The run graph is a forest of millions of small components, so
+// "what is this element connected to" becomes a label lookup afterwards rather than a walk —
+// which is what [Graph.Membership] is over this array.
+//
+// This comment used to say the pass *is* the instance-family decomposition, repeating §5. W2's
+// acceptance measurement on engine-written state disproved it: two service tasks on parallel
+// top-level branches of one instance share only the process instance as a parent, and a
+// process instance is not an element instance, so nothing joins them and one instance becomes
+// two components (rungraph/component_test.go). A component is the **reference-connected**
+// group, which is the grouping impact analysis wants; the instance grouping is a field on the
+// element instance and needs none of this.
 //
 // The return is one label per ordinal, and the label is the smallest ordinal in the
 // component. That choice is not cosmetic: it makes the label stable under a rebuild that
