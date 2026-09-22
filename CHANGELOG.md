@@ -14,6 +14,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A folded decision service stays folded.** `EnsureDiagram` lays a model's whole
+  graph out afresh whenever its diagram covers only some of the nodes, on the reasoning
+  that a partial diagram is the residue of a tool that drew what it could. A collapsed
+  decision service looks exactly like that from the outside and is the opposite: DMN
+  draws one by leaving its definition out of the view, so a diagram missing exactly its
+  members is a diagram somebody arranged that way. Re-laying it unfolded the fold on
+  every read, which meant a fold could never survive being saved. The exception is
+  narrow — a collapsed service's own members and nothing else; the service still needs
+  its own shape, because one with no box at all is the residue the rule exists for.
+
 - **A decision service is offered where the author looks for it.** The Modeler's
   decision picker is built from two lists: what an application's DMN references offer,
   and — as a fallback — what the engine has deployed. Describing a reference returned
@@ -79,6 +89,24 @@ _Changed_ / _Removed_ for each version.
   unfinished service belongs in a draft, which is saved without this gate.
 
 ### Added
+
+- **A decision service can be folded away on the canvas.** A DRD carrying several
+  decision services is unreadable with every decision inside every one of them on
+  screen, and DMN has an answer for it: a collapsed service, drawn as a box with its
+  name and nothing of its definition (1.5 §6.2.4). The Modeler now offers it on the
+  service's context pad, both ways, as one undoable step.
+
+  A fold takes away depiction, not model. The decisions stay in the graph and stay
+  editable — the view list is built from the graph rather than from the diagram — and
+  what is saved is a diagram without their shapes, with the service marked as
+  collapsed. Neither of the obvious implementations would have done that: deleting the
+  shapes takes the decisions out of the model, and re-creating a requirement on unfold
+  tears it out of the decision that owns it.
+
+  One limit, stated rather than hidden: where the decisions were does not survive a
+  save. DMN offers nowhere to keep the position of something a diagram does not show,
+  so unfolding restores the arrangement exactly within a session and lays it out afresh
+  after a reload.
 
 - **The run graph can be drawn as a cloud, and the cloud turns out not to need the graph.** [ADR-0404](docs/adr/0404-the-whole-graph-can-be-walked.md) §5 says the cloud is an aggregation rather than a clustering. Building it showed what that buys: a group-by is not a graph operation, so `rungraph.BuildCloud` costs one scan of the store and a map sized by the number of *cells* — no ordinal map, no CSR, no union-find, and none of the 2,448 MB the structure costs at 110 million nodes. An installation large enough that §9 refuses the whole-graph *walk* can still be shown the whole-graph *cloud*. What it loses is the walk and the drill-down from a cell to its members, not the density.
 

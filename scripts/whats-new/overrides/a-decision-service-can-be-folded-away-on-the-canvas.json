@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Modeler",
+    "DMN"
+  ],
+  "title": {
+    "en": "Fold a decision service away on the canvas",
+    "de": "Einen Decision Service auf der Fläche zuklappen"
+  },
+  "summary": {
+    "en": "A decision requirement diagram with several decision services on it is hard to read when every decision inside every one of them is on screen. DMN has an answer for that: a collapsed service, drawn as a box with its name and nothing of its definition. The Modeler now offers it on the service's own context pad, both ways, and folding or unfolding is a single step you can undo. What goes away is the picture, not the model — the decisions stay in the graph, stay listed, and their tables stay editable. One limit worth knowing: where the decisions sat is not kept across a save, because DMN offers nowhere to record the position of something a diagram does not show. Unfold in the same session and everything returns where you had it; unfold after reopening the file and the box is arranged afresh.",
+    "de": "Ein Decision Requirement Diagram mit mehreren Decision Services wird unübersichtlich, sobald jede Entscheidung in jedem davon auf dem Bildschirm steht. DMN hat dafür eine Antwort: den zugeklappten Service, gezeichnet als Kasten mit seinem Namen und nichts von seiner Definition. Der Modeler bietet das jetzt am Context Pad des Service an, in beide Richtungen, und Zu- oder Aufklappen ist ein einzelner Schritt, den man rückgängig machen kann. Weg ist das Bild, nicht das Modell — die Entscheidungen bleiben im Graph, bleiben gelistet, und ihre Tabellen bleiben bearbeitbar. Eine Einschränkung, die man kennen sollte: Wo die Entscheidungen lagen, überlebt kein Speichern, denn DMN sieht keinen Ort vor, an dem die Position von etwas festgehalten würde, das ein Diagramm nicht zeigt. Klappt man in derselben Sitzung wieder auf, steht alles dort, wo man es hatte; klappt man nach erneutem Öffnen auf, wird der Kasten neu angeordnet."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

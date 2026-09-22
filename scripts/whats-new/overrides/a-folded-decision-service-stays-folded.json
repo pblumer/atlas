@@ -1,0 +1,13 @@
+{
+  "tags": [
+    "DMN"
+  ],
+  "title": {
+    "en": "A folded decision service stays folded",
+    "de": "Ein zugeklappter Decision Service bleibt zugeklappt"
+  },
+  "summary": {
+    "en": "Atlas draws a diagram for a decision model that has none, and lays the whole thing out afresh when a model's diagram covers only part of it — on the reasoning that half a diagram is usually the leftovers of a tool that drew what it could. A folded decision service looks exactly like that from the outside and is the opposite: DMN folds one by leaving its contents out of the picture on purpose. So Atlas was unfolding, on every read, what somebody had just folded — and a fold could never survive being saved. It now recognises the one case: a diagram missing exactly the decisions of a folded service is complete. Anything else missing is still drawn, including a service with no box of its own at all.",
+    "de": "Atlas erzeugt für ein Entscheidungsmodell ohne Diagramm eines und legt das ganze Diagramm neu an, wenn es nur einen Teil des Modells abdeckt — mit der Begründung, ein halbes Diagramm sei meist der Rest eines Werkzeugs, das zeichnete, was es konnte. Ein zugeklappter Decision Service sieht von aussen genauso aus und ist das Gegenteil: DMN klappt ihn zu, indem sein Inhalt absichtlich aus dem Bild bleibt. Atlas klappte also bei jedem Lesen wieder auf, was jemand gerade zugeklappt hatte — und eine Faltung überlebte kein Speichern. Jetzt erkennt Atlas diesen einen Fall: Ein Diagramm, dem genau die Entscheidungen eines zugeklappten Service fehlen, ist vollständig. Alles andere, was fehlt, wird weiterhin gezeichnet, auch ein Service ganz ohne eigenen Kasten."
+  }
+}
