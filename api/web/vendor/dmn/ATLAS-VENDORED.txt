@@ -1,7 +1,7 @@
 dmn-modeler.js is a combined, pre-built bundle (global: window.AtlasDmn) of:
 
   - pblumer/dmn-js@17.10.2
-    commit: da6a4d78a777065a58b3644db1751cb838d6f956
+    commit: 1cd07fe8b62d249f369ad3ed6f046f6233180046
   - pblumer/dmn-moddle
     commit: ac76928df99382c36833d9300fd98acc604dc673
   - dmn-js-properties-panel@3.11.1
