@@ -2,6 +2,10 @@
   "tags": [
     "Modeler"
   ],
+  "title": {
+    "en": "The Entra account example no longer builds the UPN in the process",
+    "de": "Das Entra-Konto-Beispiel baut den UPN nicht mehr im Prozess"
+  },
   "summary": {
     "en": "The example that orders an Entra account took a first and last name from a public form and built a UPN out of them in the process. Under the new personal-data rule it cannot, so the create-user task builds it instead — and it deploys with no exception to the rule, which is what the record behind the rule could not show against any process that existed. One thing was lost and is worth knowing: a gateway used to check the finished UPN against the test-object pattern before any write, and there is no such process variable now. The boundary is the literal in the task's own expression — visible in the model, but no longer checked while the instance runs.",
     "de": "Das Beispiel, das ein Entra-Konto bestellt, nahm Vor- und Nachnamen aus einem öffentlichen Formular und baute daraus im Prozess einen UPN. Unter der neuen Personendaten-Regel darf es das nicht, also baut ihn der create-user-Task — und es deployt ohne Ausnahme von der Regel, was die Aufzeichnung dahinter an keinem existierenden Prozess zeigen konnte. Eines ging verloren und sollte man wissen: ein Gateway prüfte den fertigen UPN vor jedem Schreibzugriff gegen das Test-Objekt-Muster, und diese Prozessvariable gibt es nicht mehr. Die Grenze ist das Literal im Ausdruck des Tasks — im Modell sichtbar, aber während des Laufs nicht mehr geprüft."

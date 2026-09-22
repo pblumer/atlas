@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Security",
+    "Data"
+  ],
+  "title": {
+    "en": "Personal data can be erased, not merely hidden",
+    "de": "Personendaten können gelöscht werden, nicht nur verborgen"
+  },
+  "summary": {
+    "en": "A process declares which of its variables hold personal data and which variable identifies the person they are about. Each such person gets a random key of their own, kept as an ordinary secret in the vault, and the declared values are enciphered under it wherever they enter Atlas. Erasing that person deletes the one key — and every copy becomes unreadable at the same moment: the log, the state, the recovery checkpoint, the exported search documents, a snapshot somebody took, last year's backup. Nothing has to be found, coordinated or reached, which no retention schedule can claim. Workers and the people filling in forms still get the plaintext they need; the timeline, the variable audit and the instance lists report \"personal data of subject X\" instead of base64 nobody can read. Erasure is an admin-only route and writes one line to the security audit trail naming the subject and who acted, which is the only evidence that survives it. What is not claimed: the bytes remain and are only rendered permanently unreadable, and whether that answers a given supervisory authority's deletion request is a legal judgement for your data protection officer.",
+    "de": "Ein Prozess deklariert, welche seiner Variablen Personendaten enthalten und welche Variable die betroffene Person identifiziert. Jede solche Person erhält einen eigenen Zufallsschlüssel, der als gewöhnliches Secret im Vault liegt, und die deklarierten Werte werden damit verschlüsselt, sobald sie in Atlas eintreffen. Das Löschen dieser Person entfernt diesen einen Schlüssel — und im selben Moment ist jede Kopie unlesbar: das Log, der State, der Recovery-Checkpoint, die exportierten Suchdokumente, ein von jemandem gezogener Snapshot, das Backup vom letzten Jahr. Nichts muss gesucht, koordiniert oder erreicht werden, was keine Aufbewahrungsregel leisten kann. Worker und Personen, die Formulare ausfüllen, erhalten weiterhin den Klartext, den sie brauchen; Timeline, Variablen-Audit und Instanzlisten melden stattdessen «Personendaten zu Subjekt X» statt Base64, das niemand lesen kann. Das Löschen ist eine rein administrative Route und schreibt eine Zeile in den Security-Audit-Trail mit Subjekt und handelnder Person — das einzige Beweismittel, das es überdauert. Nicht behauptet wird: die Bytes bleiben und werden lediglich dauerhaft unlesbar gemacht, und ob das die Löschanfrage einer bestimmten Aufsichtsbehörde beantwortet, ist eine rechtliche Beurteilung Ihres Datenschutzbeauftragten."
+  }
+}
