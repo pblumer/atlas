@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-decision-service-is-offered-where-the-author-looks-for-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The decision picker lists a decision service where you look for it",
+        "de": "Der Entscheidungs-Picker führt einen Decision Service dort, wo man ihn sucht"
+      },
+      "summary": {
+        "en": "A decision service is the published interface over part of a decision model — the thing a business rule task is meant to call. The picker was built only from the decisions its application's models offer, so a service could get into the list only by having been deployed: with no model file behind it, and so in no application. It ended up under \"other decisions\", below every decision it is made of. Now it is listed with its own model file, and the list is grouped the way you read it: one group per decision file, your application's files first, the services above the decisions inside them. A decision that belongs to a service says so, because calling it directly reaches past the interface the service exists to be.",
+        "de": "Ein Decision Service ist die veröffentlichte Schnittstelle über einen Teil eines Entscheidungsmodells — das, was ein Business Rule Task aufrufen soll. Der Picker wurde nur aus den Entscheidungen der Modelle einer Applikation gebaut; ein Service kam deshalb nur in die Liste, wenn er bereits deployt war: ohne Modelldatei dahinter und damit in keiner Applikation. Er landete unter „andere Entscheidungen\", unterhalb jeder Entscheidung, aus der er besteht. Jetzt steht er bei seiner Modelldatei, und die Liste ist so gegliedert, wie man sie liest: eine Gruppe je Entscheidungsdatei, die Dateien der eigenen Applikation zuerst, die Services über den Entscheidungen darin. Eine Entscheidung, die zu einem Service gehört, sagt das — denn sie direkt aufzurufen greift an der Schnittstelle vorbei, für die es den Service gibt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "DMN"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "a-product-s-description-was-stored-frozen-into-the-release-a",
       "version": "Unreleased",
       "date": null,
@@ -384,35 +413,6 @@
           "de": "Panorama › Starmap öffnen"
         },
         "route": "#/panorama/starmap"
-      }
-    },
-    {
-      "id": "a-decision-service-can-be-laid-out-and-wired-up",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A decision service can be moved, and wired to the decision that calls it",
-        "de": "Ein Decision Service lässt sich verschieben und mit der Entscheidung verbinden, die ihn aufruft"
-      },
-      "summary": {
-        "en": "Dragging a decision service on the canvas was refused outright, which a diagram holding several of them cannot do without. When it did move, the editor re-decided which of its decisions the service returns and which it only works out internally — and for a decision drawn outside the box, an imported model's may well be, that silently cost the service the interface it publishes. A decision service could also not be connected to anything, although DMN makes one invocable exactly as a knowledge model is. All three are fixed. The shapes follow the specification too: input data is a stadium at any size, a decision service carries a heavier border than a decision, a knowledge model is a rectangle with two corners cut rather than a slanted box, and a knowledge requirement ends in an open arrowhead — the one thing that tells it from an information requirement.",
-        "de": "Einen Decision Service auf der Zeichenfläche zu verschieben wurde schlicht verweigert — und genau darauf kommt es an, sobald ein Diagramm mehrere davon trägt. Bewegte er sich doch, entschied der Editor neu, welche seiner Entscheidungen der Service zurückgibt und welche er nur intern ermittelt; bei einer Entscheidung ausserhalb des Kastens, wie sie in importierten Modellen vorkommt, kostete das den Service still die Schnittstelle, die er veröffentlicht. Verbinden liess sich ein Decision Service ausserdem gar nicht, obwohl DMN ihn genauso aufrufbar macht wie ein Knowledge Model. Alle drei Punkte sind behoben. Auch die Formen folgen nun der Spezifikation: Input Data ist in jeder Grösse ein Stadion, ein Decision Service trägt eine kräftigere Umrandung als eine Entscheidung, ein Knowledge Model ist ein Rechteck mit zwei abgeschnittenen Ecken statt eines schiefen Kastens, und ein Knowledge Requirement endet in einer offenen Pfeilspitze — dem einzigen Merkmal, das es von einem Information Requirement unterscheidet."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Decisions",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the decisions",
-          "de": "Entscheidungen öffnen"
-        },
-        "route": "#/console/decisions"
       }
     }
   ]

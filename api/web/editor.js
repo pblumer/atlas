@@ -7983,25 +7983,61 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         const inProject = new Set((scoped || []).map(decKey));
         const seen = new Set();
         const catalog = [];
-        const optionFor = (d) => {
-          const label = d.model ? `${d.name} · ${d.model}` : d.name;
-          return `<option value="${esc(d.id)}" data-key="${esc(decKey(d))}"${d.id === cur ? " selected" : ""}>${esc(label)}</option>`;
-        };
-        const takeGroup = (list) => {
-          const out = [];
+        // One group per decision file, this application's files first. A flat list
+        // ordered by where an entry happened to come from put a decision service
+        // below every decision it is made of; the file is the unit an author thinks
+        // in, so it is the unit the list is cut into.
+        const files = new Map();
+        const take = (list, mine) => {
           for (const d of list || []) {
             if (seen.has(decKey(d))) continue;
             seen.add(decKey(d));
             catalog.push(d);
-            out.push(optionFor(d));
+            // Keyed by handle where there is one. An entry with none reached the
+            // catalog because it is deployed, not because a reference points at it,
+            // so it is grouped by the model name it reports and marked as such.
+            const key = d.modelRef || "\u0000deployed\u0000" + (d.model || "");
+            let f = files.get(key);
+            if (!f) {
+              f = {
+                model: d.model || d.modelRef || "(unnamed model)",
+                mine: mine,
+                deployed: !d.modelRef,
+                items: [],
+              };
+              files.set(key, f);
+            }
+            f.items.push(d);
           }
-          return out;
         };
-        const projectOpts = takeGroup(scoped);
-        const otherOpts = takeGroup((all || []).filter((d) => !inProject.has(decKey(d))));
-        const parts = [`<option value="">— choose a decision —</option>`];
-        if (projectOpts.length) parts.push(`<optgroup label="This project">${projectOpts.join("")}</optgroup>`);
-        if (otherOpts.length) parts.push(`<optgroup label="${projectOpts.length ? "Other decisions" : "Available decisions"}">${otherOpts.join("")}</optgroup>`);
+        take(scoped, true);
+        take((all || []).filter((d) => !inProject.has(decKey(d))), false);
+        const optionFor = (d, note) => {
+          const label = note ? `${d.name} — ${note}` : d.name;
+          return `<option value="${esc(d.id)}" data-key="${esc(decKey(d))}"${d.id === cur ? " selected" : ""}>${esc(label)}</option>`;
+        };
+        // Within a file: the published interfaces, then the decisions. A decision a
+        // service is made of says which one. Calling it works and answers correctly,
+        // which is why it needs saying — it reaches past the interface the service
+        // exists to be, and ties this task to an arrangement the service was meant to
+        // stay free to change (DMN §10.4).
+        const groupFor = (f) => {
+          const services = f.items.filter((d) => d.service);
+          const decisions = f.items.filter((d) => !d.service);
+          const inside = new Map();
+          for (const s of services) {
+            for (const m of s.members || []) if (!inside.has(m)) inside.set(m, s.name);
+          }
+          const opts = services
+            .map((d) => optionFor(d, "decision service"))
+            .concat(decisions.map((d) => optionFor(d, inside.has(d.id) ? "inside " + inside.get(d.id) : "")));
+          const where = f.deployed
+            ? " — deployed only"
+            : !f.mine && projectId ? " — other application" : "";
+          return `<optgroup label="${esc(f.model + where)}">${opts.join("")}</optgroup>`;
+        };
+        const parts = [`<option value="">— choose a decision —</option>`]
+          .concat(Array.from(files.values(), groupFor));
         fpick.innerHTML = parts.join("");
         fpick._catalog = catalog;
         // Offer the current decision's full declared inputs in the name combobox,
