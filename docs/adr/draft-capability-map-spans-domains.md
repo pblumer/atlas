@@ -4,7 +4,7 @@
 - **Implementation:** Not started
 - **Date:** 2026-09-21
 - **Deciders:** Atlas maintainers
-- **Open question:** how the estate-wide map is *read* — whether a node federates by querying its peers, or whether the map is replicated and one node is its source of truth. Both need a cross-installation identity that does not exist in the tree beyond [ADR-0129](0129-remote-deployment-targets.md) deployment targets; [ADR-0373](0373-published-process-interface.md) carries the same question one level down and reaches the same conclusion
+- **Open question:** what grant a node presents when it reads a peer's map. The *shape* of the estate-wide read is settled — a live read, each node asking its peers, no replicated map and no source-of-truth node — and so is what comes back, the reference-record shape below. What is not settled is the cross-installation identity behind it: nothing in the tree carries one beyond [ADR-0129](0129-remote-deployment-targets.md) deployment targets, and [ADR-0373](0373-published-process-interface.md) leaves the neighbouring grant (`observe`) undecided for the same reason
 - **Question checked:** 2026-09
 
 ## Context and problem statement
@@ -189,12 +189,30 @@ thing it is supposed to own.
 
 ### What is deliberately not decided
 
-- **The estate-wide read.** Nothing here lets one screen show the whole value
-  stream across domains. That needs either a federation — each node querying its
-  peers, with an identity and a grant per peer — or a source-of-truth map with a
-  distribution mechanism. It is the open question in the front matter, and it is
-  the same one ADR-0373 asks about interface discovery. Answering both at once,
-  later, is likely cheaper than answering either now.
+- **The grant behind the estate-wide read.** Nothing here lets one screen show the
+  whole value stream across domains, and two of the three questions that would need
+  are already answered, so state them rather than leave the whole thing open.
+
+  *How it is read* is a **live read**: each node asks its peers when somebody opens
+  the picture, so whichever node you have open is the centre of it. There is no
+  replicated map and no node designated to hold one — the estate map has no writes
+  to arbitrate, so it needs neither a source of truth nor anything elected, and a
+  peer that does not answer degrades to the `unreachable` the landscape already
+  models. The machinery is the one ADR-0189 §6 already uses for deployment targets:
+  resolved off the run loop, bounded concurrency, a deadline, a response-size limit,
+  verified TLS, per-target error isolation.
+
+  *What comes back* is the **reference-record shape** — key, name, scope, inputs,
+  outputs, owner, SLAs, domain — and never a peer's local map in full. A peer's
+  `realizations` say which applications and processes exist behind its boundary, and
+  a picture must not become the way to read another domain's internals without a
+  grant. The read discloses what that domain already published, and nothing it did
+  not.
+
+  *Under what authority* is the part left open, and it is a real gap rather than a
+  formality: reading a peer's map is adjacent to the `observe` grant ADR-0373 names
+  and deliberately does not decide. Answering it there and here at once is likely
+  cheaper than answering either alone.
 - **SLA and commitment as one statement.** A capability's `slas` (metric,
   threshold, window, counterparty) and an entry point's **commitment** in ADR-0373
   ("by when an accepted message will be correlated, and to whom that is promised")
