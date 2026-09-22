@@ -49,6 +49,7 @@ func serviceOrderingAt(t *testing.T, now, from, until int64) *Service {
 		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error { return nil },
 		func() string { return "https://atlas.example.ch" },
+		func() string { return "http://atlas.test" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
 }
 
@@ -187,6 +188,7 @@ func TestTheOrderIsStampedWithTheMomentItWasChecked(t *testing.T) {
 		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error { return nil },
 		func() string { return "https://atlas.example.ch" },
+		func() string { return "http://atlas.test" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
 
 	placed := do(t, s.HandlePlace, someone("usr_1"), "POST",

@@ -7,21 +7,28 @@ Dieser Prozess macht dasselbe als Ablauf mit Aufgaben und gewinnt damit das, was
 ein Formular nicht hat: eine Prüfung durch eine zweite Ansicht, bevor das Produkt
 bestellbar wird, und eine Spur, wer was wann entschieden hat.
 
-## Voraussetzung: die Verbindung `atlas`
+## Dieses Beispiel läuft derzeit nicht
 
-Jeder Service-Task schreibt über Atlas' **eigene HTTP-API** zurück — mit dem
-`rest`-Connector und einer Verbindung namens `atlas`. Das ist derselbe Weg, den
-der mitgelieferte Auftragserfüllungsprozess
-(`api/systemprocesses/auftrag-erfuellung.bpmn`) geht.
+Jeder Service-Task hier schreibt über Atlas' **eigene HTTP-API** zurück, und er
+tut es in der Form, die sich als nicht ausführbar erwiesen hat: ein gewöhnlicher
+Service-Task des Job-Typs `rest`, dessen Ziel und Methode in Task-Headern stehen.
 
-Diese Verbindung wird unter **Console → Workers** eingerichtet: ein Worker vom
-Typ `rest` mit dem Namen `atlas`, dessen Basis-URL auf diesen Server zeigt und
-dessen Credential ein Zugang mit Katalogpflege-Recht ist.
+Beides trägt nicht. `rest` ist kein reservierter Job-Typ — der heisst
+`io.atlas.http.rest` — und ein geleaster Job führt überhaupt keine Task-Header
+mit sich. Die Tokens parken deshalb ohne zu scheitern: kein Wiederholungsversuch,
+kein Incident, nichts Rotes. Der frühere Rat, dazu unter **Console → Workers**
+einen Worker vom Typ `rest` namens `atlas` einzurichten, lässt sich nicht
+befolgen; diesen Worker-Typ gibt es nicht.
 
-**Ohne sie parken die Service-Tasks.** Sie scheitern nicht und sie verlieren
-nichts — sie warten, bis die Verbindung da ist, und laufen dann weiter. Das ist
-der Grund, warum dieses Beispiel im Handbuch keinen „Ausführen"-Knopf hat: er
-würde im ersten Schritt einen Token parken und nichts zeigen.
+Die mitgelieferten Systemprozesse (`api/systemprocesses/`) sind inzwischen
+korrigiert: ihre Aufrufe sind echte `<atlas:restConnector>`-Tasks, und die
+Adresse ihres eigenen Servers bekommen sie in der Startvariablen `atlasApiBase`.
+Dieses Beispiel ist es **noch nicht**. Es hat keine solche Startvariable, weil es
+von Hand gestartet wird und nicht vom Auftragsportal — was es braucht, ist eine
+eigene Entscheidung darüber, woher es die Adresse nimmt.
+
+Bis dahin ist es als Vorlage zu lesen und nicht als lauffähiges Beispiel. Das ist
+auch der Grund, warum es im Handbuch keinen „Ausführen"-Knopf hat.
 
 Zwei Gruppen kommen vor: `katalogpflege` für die Erfassung und `administration`
 für das Erscheinungsbild.

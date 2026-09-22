@@ -31,6 +31,42 @@ _Changed_ / _Removed_ for each version.
   Input Data element is still drawn as an oval — and the round-trip guard that holds the
   shipped editor to what it loses and what it complains about now records neither.
 
+- **The shipped fulfilment and approval processes could never run.** They do all their
+  work by calling Atlas's own API, and for four releases those calls were authored as
+  plain service tasks of a job type named `rest`, carrying their target and method in
+  task headers. Three things were wrong with that at once, and none of them is visible
+  from the model: `rest` is not a reserved job type (the REST one is
+  `io.atlas.http.rest`), so nothing leases it; a leased job carries no task headers at
+  all, so the target and the verb reached nobody; and the remedy both the models and
+  the product-capture example instruct — configure "a worker of type `rest` named
+  `atlas`" under Console → Workers — cannot be carried out, because there is no such
+  Worker Type to configure.
+
+  What that produced is the worst failure available: the tokens **park**. Parked work
+  is waiting, not failed — no retry is spent, no incident is raised, nothing turns red.
+  On the installation that reported it, fourteen orders stood at "Wartet" for weeks
+  with twelve jobs parked, zero incidents, zero open tasks, and a clean approver
+  report.
+
+  The calls are now real `<atlas:restConnector>` tasks, which compile to the reserved
+  REST job type the engine serves itself — and which the shipped `rest` worker serves
+  where an operator has offloaded the kind. Nothing to configure either way. They are
+  told where Atlas is through a new `atlasApiBase` start variable, set from the same
+  address the server hands its supervised workers and passed on to every process the
+  orchestration starts. `portalBaseUrl` is deliberately not reused for it: that one is
+  the operator's external origin *or empty*, and a request built on an empty base is
+  this same silent failure in a new place.
+
+  One operator step remains and it is one that exists: an API token with the `operator`
+  role, named by the models as a secret reference and read from
+  `ATLAS_CONNECTOR_ATLAS_TOKEN`. That obligation was always documented. The difference
+  is that its mechanism is real, and that a missing token now fails the call loudly
+  instead of parking it.
+
+  `examples/produkt-erfassung` still carries the old shape — it is started by hand
+  rather than by the portal, so it has no `atlasApiBase` and needs its own answer for
+  where Atlas is. Its README says so now instead of instructing the setup step that
+  cannot be carried out.
 - **Saving a product said "apiBytes is not defined" and quietly left the product
   offered by nothing.** The catalogue screen hands its event handlers a bag of what
   the shell owns — the API caller, the byte uploader, the toast. The product form's
@@ -148,7 +184,41 @@ _Changed_ / _Removed_ for each version.
   surface with callers that are not this page, and a screen that stopped drawing a
   button for a route is not a reason to withdraw the route.
 
+### Changed
+
+- **The Workers view says what a worker asks for, not only what it has been given.**
+  Each worker's `types` counts the jobs it has *leased*, so a worker that is connected
+  and polling a queue with no work in it looked exactly like a worker that is not
+  there. Every poll now records the job type it asked for, productive or not, and the
+  row carries it as `serves`. Without that, "is anybody serving this job type?" is
+  unanswerable for every quiet queue — and the fulfilment report added in this release
+  would call a healthy idle installation broken.
+
 ### Added
+
+- **A report that says which services cannot be fulfilled here.** A catalogue binds a
+  product to processes by name. Nothing checks those names when the binding is written,
+  nothing checks them when the catalogue is published, and nothing complains when an
+  order reaches one. There are two ways it fails, and the second one hides: a process
+  that was never deployed raises an incident somebody can see, but a deployed process
+  waiting on a job type nothing works raises nothing at all. A parked token is work
+  waiting, not work failed — no retry spent, no incident, nothing red. The order stands
+  at "Wartet", and the first person to notice is whoever is waiting for the laptop.
+
+  `GET /api/v1/catalog-products/fulfilment-report` and `atlas_catalog_fulfilment_report`
+  answer it. They walk the whole path an order takes — the fulfilment orchestration, the
+  approval process where the rule needs one, then provisioning and the return — because
+  any of them stops it, and a check of the product's own binding alone would call an
+  installation healthy while every order on it stood still. That is the case this was
+  written from: fourteen orders held on the orchestration's first service task, every
+  product bound correctly, the approver report clean, nothing red anywhere.
+
+  It reads the newest release of each catalogue you maintain, since that is what can be
+  ordered today, and it reports a problem on the shared orchestration once rather than
+  once per product — that is one fact about the installation, and repeated against ten
+  services it would bury the ten. It is the approver report's sibling and reads beside
+  it: that one asks whether the rule reaches a person, this one whether the work reaches
+  a worker.
 
 - **A decision service can be folded away on the canvas.** A DRD carrying several
   decision services is unreadable with every decision inside every one of them on

@@ -2,6 +2,42 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "the-shipped-fulfilment-and-approval-processes-could-never-ru",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Orders are actually worked now — the shipped processes could never run",
+        "de": "Aufträge werden jetzt wirklich bearbeitet — die mitgelieferten Prozesse konnten nie laufen"
+      },
+      "summary": {
+        "en": "The fulfilment orchestration and the three approval processes do all their work by calling Atlas's own API, and those calls were authored in a shape that cannot be executed: a job type nothing serves, with the target and the HTTP method placed in task headers that never reach a worker at all. The documented fix — configure a worker of type \"rest\" named \"atlas\" — could not be carried out either, because there is no such worker type. And the failure was silent by construction: parked work is waiting, not failed, so no retry was spent, no incident appeared, and nothing turned red. One installation had fourteen orders standing at \"Waiting\" for weeks with nothing anywhere to say why. The calls are real REST connector tasks now, running on the job type the engine already serves, and they are told this server's own address when the order starts. Nothing to configure. One step remains and it is a real one: an API token with the operator role, read from ATLAS_CONNECTOR_ATLAS_TOKEN — and a missing token now fails the call visibly instead of parking it.",
+        "de": "Die Auftragserfüllung und die drei Genehmigungsprozesse erledigen ihre ganze Arbeit über Aufrufe an Atlas' eigene API, und diese Aufrufe waren in einer Form hinterlegt, die sich nicht ausführen lässt: ein Job-Typ, den niemand bedient, mit Zieladresse und HTTP-Methode in Task-Headern, die einen Worker überhaupt nie erreichen. Auch der dokumentierte Ausweg — einen Worker vom Typ „rest\" namens „atlas\" einrichten — liess sich nicht befolgen, denn diesen Worker-Typ gibt es nicht. Und der Fehler war bauartbedingt stumm: geparkte Arbeit wartet, sie scheitert nicht, also wurde kein Wiederholungsversuch verbraucht, es erschien kein Incident, und nichts wurde rot. Auf einer Installation standen vierzehn Aufträge wochenlang auf „Wartet\", ohne dass irgendetwas den Grund nannte. Die Aufrufe sind nun echte REST-Connector-Tasks auf jenem Job-Typ, den die Engine ohnehin bedient, und sie erfahren beim Start des Auftrags die Adresse ihres eigenen Servers. Einzurichten ist nichts. Ein Schritt bleibt, und er ist real: ein API-Token mit der Rolle operator, gelesen aus ATLAS_CONNECTOR_ATLAS_TOKEN — ein fehlendes Token lässt den Aufruf jetzt sichtbar scheitern, statt ihn zu parken."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Self-service portal",
+        "Processes"
+      ],
+      "tutorial": {
+        "en": [
+          "Mint an API token with the operator role under Console → API tokens.",
+          "Set ATLAS_CONNECTOR_ATLAS_TOKEN to its secret in the server's environment and restart.",
+          "Place an order in the service portal.",
+          "Under Operations → Instances the fulfilment process moves past its first step; an order needing approval appears in the approver's task list."
+        ],
+        "de": [
+          "Unter Konsole → API-Tokens ein Token mit der Rolle operator erzeugen.",
+          "ATLAS_CONNECTOR_ATLAS_TOKEN in der Serverumgebung auf dessen Geheimnis setzen und neu starten.",
+          "Im Leistungsportal eine Bestellung aufgeben.",
+          "Unter Betrieb → Instanzen läuft die Auftragserfüllung über ihren ersten Schritt hinaus; ein genehmigungspflichtiger Auftrag erscheint im Postkorb der genehmigenden Person."
+        ]
+      }
+    },
+    {
       "id": "saving-a-product-said-apibytes-is-not-defined-and-quietly-le",
       "version": "Unreleased",
       "date": null,
@@ -241,6 +277,63 @@
       ]
     },
     {
+      "id": "the-workers-view-says-what-a-worker-asks-for-not-only-what-i",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Tell a quiet worker from an absent one",
+        "de": "Einen stillen Worker von einem abwesenden unterscheiden"
+      },
+      "summary": {
+        "en": "A worker's row counted the jobs it had been given. A worker that is connected and polling a queue with no work in it therefore looked exactly like a worker that is not running at all — and \"is anybody serving this queue?\" was unanswerable for every quiet queue, which is most of them most of the time. Each poll now records the job type it asked for, whether or not a job came back, and the row shows it beside the counts.",
+        "de": "Die Zeile eines Workers zählte die Aufträge, die er erhalten hatte. Ein verbundener Worker, der eine Warteschlange ohne Arbeit abfragt, sah damit genauso aus wie ein Worker, der gar nicht läuft — und die Frage „bedient das überhaupt jemand?\" war für jede stille Warteschlange unbeantwortbar, also für die meisten die meiste Zeit. Jede Abfrage vermerkt nun den Job-Typ, nach dem gefragt wurde, unabhängig davon, ob ein Auftrag zurückkam, und die Zeile zeigt ihn neben den Zählern."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations"
+      ]
+    },
+    {
+      "id": "a-report-that-says-which-services-cannot-be-fulfilled-here",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "See which services would leave an order waiting forever",
+        "de": "Sehen, welche Leistungen einen Auftrag ewig warten lassen"
+      },
+      "summary": {
+        "en": "A catalogue binds a product to processes by name, and nothing has ever checked those names — not when the binding is written, not when the catalogue is published, not when an order reaches one. A process that was never deployed at least raises an incident. A deployed process waiting on a job type nothing works raises nothing at all: a parked token is work waiting rather than work failed, so no retry is spent, no incident appears, and no operations view turns red. The order stands at \"Wartet\" and the first person to notice is whoever is waiting for the laptop. The new report says it. It walks the whole path an order takes — the fulfilment orchestration, the approval process where the rule needs one, then provisioning and the return — because any of them stops it, and it reads what your catalogues actually offer today rather than what they say in the editor.",
+        "de": "Ein Katalog bindet ein Produkt über Namen an Prozesse, und diese Namen wurden bisher nirgends geprüft — weder beim Erfassen der Bindung noch beim Publizieren noch wenn ein Auftrag sie erreicht. Ein nie ausgelieferter Prozess erzeugt immerhin einen Incident. Ein ausgelieferter Prozess, der auf einem Job-Typ wartet, den niemand bedient, erzeugt gar nichts: ein geparkter Token ist wartende und keine gescheiterte Arbeit, also wird kein Wiederholungsversuch verbraucht, es erscheint kein Incident, und keine Betriebssicht schlägt an. Der Auftrag steht auf „Wartet\", und bemerkt wird es zuerst von der Person, die auf das Notebook wartet. Der neue Bericht sagt es. Er geht den ganzen Weg ab, den ein Auftrag nimmt — die Auftragserfüllung, den Genehmigungsprozess, sofern die Regel einen verlangt, dann Provisionierung und Rücknahme —, weil jede Station ihn anhalten kann, und er liest, was die Kataloge heute tatsächlich anbieten, nicht was im Editor steht."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue",
+        "Operations"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Catalogue in the console.",
+          "Read the report at GET /api/v1/catalog-products/fulfilment-report, or ask for it over MCP with atlas_catalog_fulfilment_report.",
+          "A row with no product is about the shared orchestration and stops every order alike; fix that one first.",
+          "A row naming a job type means nothing is working that queue — start the worker it needs."
+        ],
+        "de": [
+          "In der Konsole den Katalog öffnen.",
+          "Den Bericht unter GET /api/v1/catalog-products/fulfilment-report lesen oder über MCP mit atlas_catalog_fulfilment_report abrufen.",
+          "Eine Zeile ohne Produkt betrifft die gemeinsame Auftragserfüllung und hält jeden Auftrag gleichermassen auf; diese zuerst beheben.",
+          "Eine Zeile mit einem Job-Typ bedeutet, dass diese Warteschlange niemand bedient — den zugehörigen Worker starten."
+        ]
+      }
+    },
+    {
       "id": "a-decision-service-can-be-folded-away-on-the-canvas",
       "version": "Unreleased",
       "date": null,
@@ -268,78 +361,6 @@
         },
         "route": "#/modeler"
       }
-    },
-    {
-      "id": "personal-data-can-be-erased-a-declared-variable-is-enciphere",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Personal data can be erased, not merely hidden",
-        "de": "Personendaten können gelöscht werden, nicht nur verborgen"
-      },
-      "summary": {
-        "en": "A process declares which of its variables hold personal data and which variable identifies the person they are about. Each such person gets a random key of their own, kept as an ordinary secret in the vault, and the declared values are enciphered under it wherever they enter Atlas. Erasing that person deletes the one key — and every copy becomes unreadable at the same moment: the log, the state, the recovery checkpoint, the exported search documents, a snapshot somebody took, last year's backup. Nothing has to be found, coordinated or reached, which no retention schedule can claim. Workers and the people filling in forms still get the plaintext they need; the timeline, the variable audit and the instance lists report \"personal data of subject X\" instead of base64 nobody can read. Erasure is an admin-only route and writes one line to the security audit trail naming the subject and who acted, which is the only evidence that survives it. What is not claimed: the bytes remain and are only rendered permanently unreadable, and whether that answers a given supervisory authority's deletion request is a legal judgement for your data protection officer.",
-        "de": "Ein Prozess deklariert, welche seiner Variablen Personendaten enthalten und welche Variable die betroffene Person identifiziert. Jede solche Person erhält einen eigenen Zufallsschlüssel, der als gewöhnliches Secret im Vault liegt, und die deklarierten Werte werden damit verschlüsselt, sobald sie in Atlas eintreffen. Das Löschen dieser Person entfernt diesen einen Schlüssel — und im selben Moment ist jede Kopie unlesbar: das Log, der State, der Recovery-Checkpoint, die exportierten Suchdokumente, ein von jemandem gezogener Snapshot, das Backup vom letzten Jahr. Nichts muss gesucht, koordiniert oder erreicht werden, was keine Aufbewahrungsregel leisten kann. Worker und Personen, die Formulare ausfüllen, erhalten weiterhin den Klartext, den sie brauchen; Timeline, Variablen-Audit und Instanzlisten melden stattdessen «Personendaten zu Subjekt X» statt Base64, das niemand lesen kann. Das Löschen ist eine rein administrative Route und schreibt eine Zeile in den Security-Audit-Trail mit Subjekt und handelnder Person — das einzige Beweismittel, das es überdauert. Nicht behauptet wird: die Bytes bleiben und werden lediglich dauerhaft unlesbar gemacht, und ob das die Löschanfrage einer bestimmten Aufsichtsbehörde beantwortet, ist eine rechtliche Beurteilung Ihres Datenschutzbeauftragten."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Security",
-        "Data"
-      ]
-    },
-    {
-      "id": "a-process-can-declare-which-variables-hold-personal-data-and",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Say which variables are personal, and the deploy holds you to it",
-        "de": "Sagen, welche Variablen personenbezogen sind — und das Deployment hält Sie daran"
-      },
-      "summary": {
-        "en": "One attribute on the process names the variables that hold personal data. A declared variable is encrypted before the engine ever sees it, and ciphertext cannot be compared or joined — so a model that reads one in a gateway condition, a mapping, a script or a timer no longer deploys, and the error names the variable, the kind of expression and the expression itself. Where such a value has to be combined, that belongs in the worker, which evaluates its own expressions and holds the plaintext for one call only. Nothing changes for a process that declares nothing.",
-        "de": "Ein Attribut am Prozess benennt die Variablen, die Personendaten halten. Eine deklarierte Variable wird verschlüsselt, bevor die Engine sie überhaupt sieht, und Chiffrat lässt sich nicht vergleichen oder verketten — ein Modell, das sie in einer Gateway-Bedingung, einem Mapping, einem Script oder einem Timer liest, deployt daher nicht mehr, und der Fehler nennt die Variable, die Art des Ausdrucks und den Ausdruck selbst. Muss ein solcher Wert verbunden werden, gehört das in den Worker: er wertet seine eigenen Ausdrücke aus und hält den Klartext nur für die Dauer eines Aufrufs. Für einen Prozess, der nichts deklariert, ändert sich nichts."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Security"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "the-account-bestellung-example-builds-its-upn-in-the-worker-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The Entra account example no longer builds the UPN in the process",
-        "de": "Das Entra-Konto-Beispiel baut den UPN nicht mehr im Prozess"
-      },
-      "summary": {
-        "en": "The example that orders an Entra account took a first and last name from a public form and built a UPN out of them in the process. Under the new personal-data rule it cannot, so the create-user task builds it instead — and it deploys with no exception to the rule, which is what the record behind the rule could not show against any process that existed. One thing was lost and is worth knowing: a gateway used to check the finished UPN against the test-object pattern before any write, and there is no such process variable now. The boundary is the literal in the task's own expression — visible in the model, but no longer checked while the instance runs.",
-        "de": "Das Beispiel, das ein Entra-Konto bestellt, nahm Vor- und Nachnamen aus einem öffentlichen Formular und baute daraus im Prozess einen UPN. Unter der neuen Personendaten-Regel darf es das nicht, also baut ihn der create-user-Task — und es deployt ohne Ausnahme von der Regel, was die Aufzeichnung dahinter an keinem existierenden Prozess zeigen konnte. Eines ging verloren und sollte man wissen: ein Gateway prüfte den fertigen UPN vor jedem Schreibzugriff gegen das Test-Objekt-Muster, und diese Prozessvariable gibt es nicht mehr. Die Grenze ist das Literal im Ausdruck des Tasks — im Modell sichtbar, aber während des Laufs nicht mehr geprüft."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler"
-      ]
     }
   ]
 }

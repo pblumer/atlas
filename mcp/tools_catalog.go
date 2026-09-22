@@ -302,6 +302,29 @@ func catalogTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_catalog_fulfilment_report",
+			Description: "Which of the services you offer cannot be fulfilled on this " +
+				"installation. A catalogue binds a product to processes by name, and nothing " +
+				"checks those names — not when the binding is written, not when the catalogue " +
+				"is published, not when an order reaches one. Two ways it fails: the process " +
+				"was never deployed, or it is deployed and waits on a job type nothing works. " +
+				"THE SECOND RAISES NO INCIDENT AT ALL: a parked token is work waiting, not " +
+				"work failed, so no retry is spent, nothing turns red, and the order simply " +
+				"stands at waiting. This is the only place it is said. It walks the whole path " +
+				"an order takes — the fulfilment orchestration, the approval process where the " +
+				"rule needs one, then provisioning and the return — because any of them stops " +
+				"it, and it reads the newest release of each catalogue you maintain, since " +
+				"that is what can be ordered today. A problem on the shared orchestration is " +
+				"reported once and names no product: it is one fact about the installation and " +
+				"stops every order alike. Run it beside atlas_catalog_approver_report, which " +
+				"asks the other half — that one whether the rule reaches a person, this one " +
+				"whether the work reaches a worker.",
+			InputSchema: noArgs(),
+			Handler: func(c *Client, _ map[string]any) (string, error) {
+				return asText(c.get("/api/v1/catalog-products/fulfilment-report"))
+			},
+		},
+		{
 			Name: "atlas_save_catalog_product",
 			Description: "Create or change one product or service. THIS IS A FULL REPLACE: every " +
 				"field you leave out is CLEARED, including translations, variants, keywords, " +

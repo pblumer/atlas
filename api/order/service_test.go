@@ -81,6 +81,7 @@ func newService(t *testing.T) *Service {
 		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error { return nil },
 		func() string { return "https://atlas.example.ch" },
+		func() string { return "http://atlas.test" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
 }
 
@@ -303,6 +304,7 @@ func serviceGatedBy(t *testing.T, allow bool) *Service {
 		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error { return nil },
 		func() string { return "https://atlas.example.ch" },
+		func() string { return "http://atlas.test" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
 }
 
@@ -355,6 +357,7 @@ func TestAFailingAccessCheckIsAnError(t *testing.T) {
 		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error { return nil },
 		func() string { return "https://atlas.example.ch" },
+		func() string { return "http://atlas.test" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
 
 	rec := do(t, s.HandlePlace, someone("usr_1"), "POST", `{"releaseId":"rel_1","items":["account"]}`)
@@ -380,6 +383,7 @@ func TestAFailingReleaseLookupIsAnError(t *testing.T) {
 		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error { return nil },
 		func() string { return "https://atlas.example.ch" },
+		func() string { return "http://atlas.test" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
 
 	rec := do(t, s.HandlePlace, someone("usr_1"), "POST", `{"releaseId":"rel_1","items":["account"]}`)
@@ -429,6 +433,7 @@ func TestAnUnreadableStoreIsAnError(t *testing.T) {
 		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error { return nil },
 		func() string { return "https://atlas.example.ch" },
+		func() string { return "http://atlas.test" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
 
 	for _, tt := range []struct {
@@ -600,6 +605,7 @@ func TestReportingWakesTheFulfilmentProcess(t *testing.T) {
 			return nil
 		},
 		func() string { return "https://atlas.example.ch" },
+		func() string { return "http://atlas.test" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
 
 	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
@@ -649,6 +655,7 @@ func TestAFailedWakeIsReported(t *testing.T) {
 			return nil
 		},
 		func() string { return "https://atlas.example.ch" },
+		func() string { return "http://atlas.test" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
 
 	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
@@ -689,6 +696,7 @@ func TestAnOrderNobodyWillFulfilIsReported(t *testing.T) {
 		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error { return errTest },
 		func() string { return "https://atlas.example.ch" },
+		func() string { return "http://atlas.test" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
 
 	rec := do(t, s.HandlePlace, someone("usr_1"), "POST",
@@ -779,6 +787,7 @@ func TestARejectionWakesTheFulfilmentProcess(t *testing.T) {
 			return nil
 		},
 		func() string { return "https://atlas.example.ch" },
+		func() string { return "http://atlas.test" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
 
 	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
@@ -891,6 +900,7 @@ func TestPlacingCarriesTheOrchestratorsStartVariables(t *testing.T) {
 			return nil
 		},
 		func() string { return "https://atlas.example.ch" },
+		func() string { return "http://atlas.test" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
 
 	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
@@ -929,6 +939,7 @@ func TestAnUnconfiguredOriginIsAnEmptyStringAndNotAnAbsence(t *testing.T) {
 		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error { got = vars; return nil },
 		func() string { return "" },
+		func() string { return "http://atlas.test" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
 
 	do(t, s.HandlePlace, someone("usr_1"), "POST", `{"releaseId":"rel_1","items":["account"]}`)
@@ -992,6 +1003,7 @@ func TestOrderingInSomebodyElsesNameNeedsTheRole(t *testing.T) {
 			func(*httpapi.Principal) bool { return may },
 			func(message, orderID string, vars map[string]string) error { return nil },
 			func() string { return "https://atlas.example.ch" },
+			func() string { return "http://atlas.test" },
 			ignoreGrant, ignoreRevoke, holdsNothing)
 	}
 
@@ -1040,6 +1052,7 @@ func TestOrderingForYourselfNeedsNothingExtra(t *testing.T) {
 		func(*httpapi.Principal) bool { return false },
 		func(message, orderID string, vars map[string]string) error { return nil },
 		func() string { return "https://atlas.example.ch" },
+		func() string { return "http://atlas.test" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
 
 	for _, tc := range []struct{ name, body string }{

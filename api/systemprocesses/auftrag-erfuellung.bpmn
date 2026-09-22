@@ -4,6 +4,7 @@
                   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
                   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
                   xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
                   id="Definitions_AuftragErfuellung"
                   targetNamespace="http://bpmn.io/schema/bpmn">
   <bpmn:message id="Msg_Placed" name="atlas.order.placed">
@@ -28,7 +29,9 @@ Warum keine Call Activity: zeebe:calledElement processId ist ein statisches Attr
 
 Warum kein Polling: die Provisionierungsprozesse melden ihr Ergebnis selbst, und dieses Melden veröffentlicht atlas.order.advanced. Der Prozess wartet darauf, statt in Intervallen zu fragen.
 
-Voraussetzung beim Betreiber: ein REST-Worker namens „atlas“, der auf diese Atlas-Instanz zeigt und ein API-Token mit der Rolle operator trägt.</bpmn:documentation>
+Voraussetzung beim Betreiber: ein API-Token mit der Rolle operator, hinterlegt unter ATLAS_CONNECTOR_ATLAS_TOKEN (ADR-0041). Die Aufrufe gehen an Atlas' eigene API und tragen dieses Token als Bearer; die Adresse kommt aus der Startvariablen atlasApiBase und nicht aus dem Modell, weil sie je Installation verschieden ist.
+
+Kein Worker ist einzurichten. Die Service-Tasks sind REST-Connector-Tasks des reservierten Typs io.atlas.http.rest, den die Engine selbst bedient — und, wo der Betreiber diese Art ausgelagert hat, der mitgelieferte rest-Worker.</bpmn:documentation>
 
     <bpmn:startEvent id="Start" name="Auftrag aufgegeben">
       <bpmn:documentation>Wird von POST /api/v1/orders ausgelöst, sobald der Auftrag geschrieben ist. Die Nachricht trägt orderId, und diese Instanz gehört von da an zu genau diesem Auftrag.</bpmn:documentation>
@@ -43,15 +46,10 @@ Bewusst pro Position und nicht pro Welle: eine Welle kann teilweise scheitern, u
 
 Schreibt: bereit (Liste von Positionen).</bpmn:documentation>
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="rest" />
-        <zeebe:taskHeaders>
-          <zeebe:header key="connector" value="atlas" />
-          <zeebe:header key="method" value="GET" />
-        </zeebe:taskHeaders>
-        <zeebe:ioMapping>
-          <zeebe:input source="=&#34;/api/v1/orders/&#34; + orderId + &#34;/next&#34;" target="path" />
-          <zeebe:output source="=body" target="bereit" />
-        </zeebe:ioMapping>
+        <atlas:restConnector method="GET"
+          url="=atlasApiBase + &#34;/api/v1/orders/&#34; + orderId + &#34;/next&#34;"
+          resultVariable="bereit"
+          authType="bearer" authSecret="atlas" />
       </bpmn:extensionElements>
       <bpmn:incoming>F_Start_Next</bpmn:incoming>
       <bpmn:incoming>F_Warten_Next</bpmn:incoming>
@@ -74,14 +72,12 @@ Gestartet wird nicht immer der Provisionierungsprozess: verlangt die Position ei
 
 Beide Prozessnamen kommen aus der Antwort von /next, nicht aus dem Katalog. Eingefroren ist, was der Katalog versprochen hat: das Produkt, die Variante und die Regel, unter der genehmigt wird. Welches Modell diese Regel ausfuehrt, ist dagegen die Verdrahtung dieser Installation und wird beim Lesen aufgelöst — sonst bräche ein Betreiber, der einen Genehmigungsprozess neu deployt, jeden bereits wartenden Auftrag. Ist approvalProcess leer, braucht die Position keine Genehmigung.</bpmn:documentation>
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="rest" />
-        <zeebe:taskHeaders>
-          <zeebe:header key="connector" value="atlas" />
-          <zeebe:header key="method" value="POST" />
-          <zeebe:header key="path" value="/api/v1/instances" />
-        </zeebe:taskHeaders>
+        <atlas:restConnector method="POST"
+          url="=atlasApiBase + &#34;/api/v1/instances&#34;"
+          authType="bearer" authSecret="atlas" />
         <zeebe:ioMapping>
-          <zeebe:input source="={processId: if position.approvalProcess = &#34;&#34; then position.provisionProcess else position.approvalProcess, variables: {orderId: orderId, itemId: position.itemId, positionId: position.id, variantId: position.variantId, recipient: recipient, orderer: orderer, provisionProcess: position.provisionProcess, approvalRef: position.approval.ref}}" target="body" />
+          <zeebe:input source="=if position.approvalProcess = &#34;&#34; then position.provisionProcess else position.approvalProcess" target="processId" />
+          <zeebe:input source="={orderId: orderId, itemId: position.itemId, positionId: position.id, variantId: position.variantId, recipient: recipient, orderer: orderer, provisionProcess: position.provisionProcess, approvalRef: position.approval.ref, atlasApiBase: atlasApiBase, portalBaseUrl: portalBaseUrl}" target="variables" />
         </zeebe:ioMapping>
       </bpmn:extensionElements>
       <bpmn:incoming>F_Gw_Starten</bpmn:incoming>

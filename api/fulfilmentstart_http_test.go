@@ -2,9 +2,7 @@ package api_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"strings"
 	"testing"
 )
 
@@ -64,39 +62,11 @@ func TestTheFulfilmentProcessKnowsItsOrder(t *testing.T) {
 			"variable in every request it makes and correlates on it", carries, ord)
 	}
 
-	// And the consequence, which is the half a variable check alone would miss: the
-	// first thing the orchestration does is ask which positions may start, and the
-	// address it asks at is built from that variable. Null in, null path, and an
-	// order nothing ever works on.
-	code, tl := cReq(t, admin, ts, "GET", fmt.Sprintf("/api/v1/instances/%d/timeline", orchestration), "")
-	if code != http.StatusOK {
-		t.Fatalf("read the timeline: %d (%s)", code, tl)
-	}
-	var timeline struct {
-		Steps []struct {
-			ElementID string `json:"elementId"`
-			Inputs    []struct {
-				Name  string `json:"name"`
-				Value string `json:"value"`
-			} `json:"inputs"`
-		} `json:"steps"`
-	}
-	if err := json.Unmarshal(tl, &timeline); err != nil {
-		t.Fatalf("decode timeline: %v (%s)", err, tl)
-	}
-	asked := ""
-	for _, s := range timeline.Steps {
-		if s.ElementID != "Next" {
-			continue
-		}
-		for _, in := range s.Inputs {
-			if in.Name == "path" {
-				asked = in.Value
-			}
-		}
-	}
-	if !strings.Contains(asked, ord) {
-		t.Errorf("the orchestration asks for %q, which names no order — so nothing it "+
-			"is told to start is ever started", asked)
-	}
+	// The consequence — that the orchestration's first request is built from this
+	// variable and actually lands — is proved end to end in
+	// TestTheOrchestrationReachesAtlasAndMovesOn. It used to be read here, out of
+	// the timeline's `path` input, because that step was a plain service task whose
+	// address was an input mapping. It is a REST connector task now: the address is
+	// resolved into the job rather than written into the scope, and the only honest
+	// check of it is whether the call came back.
 }
