@@ -1,0 +1,91 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas decision picker e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountEditor against a mock `api`, to verify
+         how the business rule task's decision picker is cut up (ADR-0050). The catalog
+         below is the shape that exposed the bug: a decision service reachable only
+         because it was deployed, with no model handle and therefore in no application,
+         listed under "other" below every decision it is made of. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountEditor } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_pick" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="antrag" name="Antrag" isExecutable="true">
+    <bpmn:startEvent id="Start_1" name="Start"><bpmn:outgoing>f0</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:businessRuleTask id="Activity_rule" name="Freigabe">
+      <bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing>
+    </bpmn:businessRuleTask>
+    <bpmn:endEvent id="End_1" name="End"><bpmn:incoming>f1</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="Activity_rule"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="Activity_rule" targetRef="End_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="antrag">
+    <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Activity_rule_di" bpmnElement="Activity_rule"><dc:Bounds x="260" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="420" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="260" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="360" y="138"/><di:waypoint x="420" y="138"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // Kreditfreigabe publishes Kreditentscheid and evaluates Tragbarkeit internally.
+      // Bonität is its *input* decision — the caller's boundary, outside the service —
+      // so it must not be marked as one of its members.
+      const svc = {
+        id: "Kreditfreigabe", name: "Kreditfreigabe", model: "Kreditfreigabe", modelRef: "kreditfreigabe",
+        service: true, members: [ "Kreditentscheid", "Tragbarkeit" ],
+        inputs: [ { name: "betrag", type: "number" }, { name: "bonitaet", type: "string" } ],
+        output: { name: "entscheid", type: "string" },
+      };
+      const dec = (id, model, modelRef) => ({
+        id, name: id, model, modelRef, inputs: [ { name: "x", type: "number" } ], output: { name: id },
+      });
+      // The application's own references. The server lists a service first; the picker
+      // must not depend on that, so this list deliberately buries it in the middle.
+      const SCOPED = [
+        dec("Bonität", "Kreditfreigabe", "kreditfreigabe"),
+        dec("Tragbarkeit", "Kreditfreigabe", "kreditfreigabe"),
+        svc,
+        dec("Kreditentscheid", "Kreditfreigabe", "kreditfreigabe"),
+        dec("praemie", "Tarif 2027", "praemie-tarif"),
+      ];
+      // Everything the engine can resolve: the above, plus another application's model
+      // and one reachable only because it is deployed (no model handle).
+      const ALL = SCOPED.concat([
+        dec("Alter prüfen", "Alter", "alter"),
+        { ...dec("Freigabe", "freigabe", ""), modelRef: "" },
+      ]);
+
+      const api = async (method, url) => {
+        if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (method === "GET" && /\/processes$/.test(url)) return [];
+        if (method === "GET" && /\/drafts$/.test(url)) return [];
+        if (method === "GET" && /\/decisions\?projectId=/.test(url)) return SCOPED;
+        if (method === "GET" && /\/decisions$/.test(url)) return ALL;
+        if (method === "GET" && /\/decisions/.test(url)) return ALL;
+        if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
+        return {};
+      };
+
+      window.__mount = () => mountEditor(view, { api, toast: noop, key: 42, projectId: "app-1" });
+      window.__select = (id) =>
+        window.__atlasModeler.get("selection").select(window.__atlasModeler.get("elementRegistry").get(id));
+      window.__xml = async () => (await window.__atlasModeler.saveXML({ format: true })).xml;
+      window.__ready = true;
+    </script>
+  </body>
+</html>

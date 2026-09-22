@@ -9,10 +9,11 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// decisionCatalogItem is one decision offered to the Modeler's business-rule-task
-// picker: which model it lives in and its self-described inputs and output, so the
-// panel can list decisions and auto-fill input mappings and the result variable
-// instead of making the author type ids and parameters by hand (ADR-0050).
+// decisionCatalogItem is one thing a business rule task can call, offered to the
+// Modeler's picker: a decision or a decision service, which model it lives in, and
+// its self-described inputs and output, so the panel can list them and auto-fill
+// input mappings and the result variable instead of making the author type ids and
+// parameters by hand (ADR-0050).
 type decisionCatalogItem struct {
 	ID       string              `json:"id"`
 	Name     string              `json:"name"`
@@ -20,14 +21,26 @@ type decisionCatalogItem struct {
 	ModelRef string              `json:"modelRef"`
 	Inputs   []dmn.DecisionField `json:"inputs"`
 	Output   dmn.DecisionField   `json:"output"`
+	// Service marks the published interface over part of a model rather than one
+	// decision in it, and Members names the decisions that interface is made of. A
+	// task calls either with the same one string, so the picker cannot tell them
+	// apart from the shape of the entry — it has to be told.
+	Service bool     `json:"service,omitempty"`
+	Members []string `json:"members,omitempty"`
 }
 
-// handleListDecisions returns the decisions available from the DMN references
-// (optionally narrowed to one project with ?projectId=), each with its inputs and
-// output. The reference records are read on the run loop; resolving and compiling
-// each model — I/O and CPU — runs off it, exactly like the per-reference validate
-// endpoint (ADR-0034). A model that fails to resolve is skipped so one broken
-// reference does not blank the whole catalog.
+// handleListDecisions returns what the DMN references offer a business rule task
+// (optionally narrowed to one application with ?projectId=), each with its inputs
+// and output. The reference records are read on the run loop; resolving and
+// compiling each model — I/O and CPU — runs off it, exactly like the per-reference
+// validate endpoint (ADR-0034). A model that fails to resolve is skipped so one
+// broken reference does not blank the whole catalog.
+//
+// "What the references offer" is decisions *and* decision services, because a task
+// calls either with the same one string. Listing only the decisions left a service
+// to arrive by the deployed route below — with no model handle, and therefore in no
+// application — so the one thing an author is meant to call sat under "other",
+// below every decision it is made of.
 func (s *Server) handleListDecisions(w http.ResponseWriter, r *http.Request) {
 	filter := r.URL.Query().Get("projectId")
 	var (
@@ -81,6 +94,8 @@ func (s *Server) handleListDecisions(w http.ResponseWriter, r *http.Request) {
 				ModelRef: rec.ModelRef,
 				Inputs:   d.Inputs,
 				Output:   d.Output,
+				Service:  d.Service,
+				Members:  d.Members,
 			})
 		}
 	}
@@ -109,6 +124,10 @@ func (s *Server) handleListDecisions(w http.ResponseWriter, r *http.Request) {
 				ModelRef: "",
 				Inputs:   d.Inputs,
 				Output:   d.Output,
+				// No Members: the registry describes what it can evaluate, not how the
+				// model was drawn. An entry reaching the catalog this way has no model
+				// handle either, so there is nothing for a member marker to point at.
+				Service: d.Service,
 			})
 		}
 	}

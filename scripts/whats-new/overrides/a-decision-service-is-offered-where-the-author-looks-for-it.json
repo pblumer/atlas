@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Modeler",
+    "DMN"
+  ],
+  "title": {
+    "en": "The decision picker lists a decision service where you look for it",
+    "de": "Der Entscheidungs-Picker führt einen Decision Service dort, wo man ihn sucht"
+  },
+  "summary": {
+    "en": "A decision service is the published interface over part of a decision model — the thing a business rule task is meant to call. The picker was built only from the decisions its application's models offer, so a service could get into the list only by having been deployed: with no model file behind it, and so in no application. It ended up under \"other decisions\", below every decision it is made of. Now it is listed with its own model file, and the list is grouped the way you read it: one group per decision file, your application's files first, the services above the decisions inside them. A decision that belongs to a service says so, because calling it directly reaches past the interface the service exists to be.",
+    "de": "Ein Decision Service ist die veröffentlichte Schnittstelle über einen Teil eines Entscheidungsmodells — das, was ein Business Rule Task aufrufen soll. Der Picker wurde nur aus den Entscheidungen der Modelle einer Applikation gebaut; ein Service kam deshalb nur in die Liste, wenn er bereits deployt war: ohne Modelldatei dahinter und damit in keiner Applikation. Er landete unter „andere Entscheidungen\", unterhalb jeder Entscheidung, aus der er besteht. Jetzt steht er bei seiner Modelldatei, und die Liste ist so gegliedert, wie man sie liest: eine Gruppe je Entscheidungsdatei, die Dateien der eigenen Applikation zuerst, die Services über den Entscheidungen darin. Eine Entscheidung, die zu einem Service gehört, sagt das — denn sie direkt aufzurufen greift an der Schnittstelle vorbei, für die es den Service gibt."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}
