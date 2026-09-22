@@ -58,7 +58,7 @@
     </form>
     <pre id="out"></pre>
     <script type="module">
-      import { productBody, variantLines, dateOf } from "/catalog-admin.js";
+      import { productBody, variantLines, dateOf, headingList } from "/catalog-admin.js";
 
       const form = document.getElementById("f");
       const out = document.getElementById("out");
@@ -108,6 +108,12 @@
 
       // And what a date box is filled with, which is the other half of the window's.
       window.dateBox = (ns) => dateOf(ns);
+
+      // What the heading box is filled with — the other half of ITS round trip,
+      // and the half that matters most here: the box holds the key and every
+      // wording at once, so a render the save cannot read back loses wordings on
+      // a save that changed nothing.
+      window.headingBox = (key, texts, langs) => headingList(key, texts, langs);
 
       window.__ready = true;
     </script>

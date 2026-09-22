@@ -4,9 +4,13 @@ import "testing"
 
 // The heading a product sits under (ADR-0360).
 //
-// A heading and nothing else: no ordering, no translation, no entity. So the
-// catalogue has exactly one thing to check, the same one a price and a form id
-// get — that a product claiming to carry one carries something readable.
+// A heading and nothing else: no ordering and no entity. So the catalogue has
+// exactly one thing to check about the string itself, the same one a price and a
+// form id get — that a product claiming to carry one carries something readable.
+//
+// The heading's wording per language, which ADR-0360 did not have and which
+// ADR-draft-translatable-catalogue-headings added beside this string, is checked in
+// categorytexts_test.go. This file is about the key.
 
 func grouped(id, category string) Item {
 	it := item(id)

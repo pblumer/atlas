@@ -54,10 +54,14 @@ func TestAProductCarriesItsGroupTheWayItCarriesItsCategory(t *testing.T) {
 	// one that collects the groups and the one that decides what falls under the
 	// group now open. Either reading a field the release does not carry leaves every
 	// product under one group.
+	//
+	// Two spellings are accepted because the two halves legitimately have them: the
+	// column names the field to the function that collects both headings, and the
+	// filter reads it off the product. Renaming the tag still fails both.
 	for _, fn := range []string{"function groupsOf(", "function inGroup("} {
 		body := webRegion(t, src, fn, "\n}")
 		body = strings.ReplaceAll(body, "state."+key, "state.<the open group>")
-		if !strings.Contains(body, "."+key) {
+		if !strings.Contains(body, "."+key) && !strings.Contains(body, "'"+key+"'") {
 			t.Errorf("the release spells the group %q and %s never reads it, so every "+
 				"product sits under one group", key, strings.TrimSuffix(fn, "("))
 		}

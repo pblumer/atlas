@@ -14,6 +14,27 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The product-capture example runs.** It shipped in the shape that could never
+  execute — plain service tasks of a job type nothing serves, with the target and the
+  HTTP method in task headers no worker receives — and its README instructed a setup
+  step that cannot be carried out, because there is no `rest` Worker Type to configure.
+  Its tokens parked without failing, so nothing anywhere said so.
+
+  Its nine calls are `<atlas:restConnector>` tasks now, on the reserved job type the
+  engine serves itself. Nothing to configure for them. Two things the example does
+  need, and both are real: a start form asks for this Atlas's address once, because a
+  hand-started model has nobody to hand it one — the shipped fulfilment process gets
+  the same variable from the server, which starts it — and the operator's API token
+  under `ATLAS_CONNECTOR_ATLAS_TOKEN`, without which the first call answers 401 and
+  raises an incident rather than parking.
+
+  The payloads are one input mapping per JSON key, because a connector task sends its
+  activity-local scope: a single expression targeting `body` would have nested the
+  whole payload one level under that name. The guard that holds those payloads to
+  their shapes — flat edges, trimmed keywords, every field present in a full replace —
+  now assembles the body exactly as the connector does instead of reading one
+  expression.
+
 - **An attribute the editor could not read survived only by being ignored.** DMN 1.5 lets
   an author say that Input Data is to be drawn as the paper sheet symbol rather than the
   backwards compatible oval. The editor's descriptor had that flag typed as an association
@@ -195,6 +216,34 @@ _Changed_ / _Removed_ for each version.
   would call a healthy idle installation broken.
 
 ### Added
+
+- **The portal's two heading columns read in the reader's language.** A catalogue
+  declares its languages and refuses to publish a product named in one of them and not
+  another, so a catalogue kept in German, French, English and Italian translated every
+  product name, every shape and every description — and then filed all of them under
+  two German words. Kategorie and Produktgruppe were the last text on the page that did
+  not reach the reader in their own language, and nothing said so: the German word
+  rendered, and it looked deliberate.
+
+  A product now carries a wording per language beside each heading. The string that was
+  there stays exactly as it was — it is the **key**: what the portal groups by, what a
+  search hit opens the cascade at, what a published release already holds. So nothing
+  was migrated, no release changed meaning, and a product that carries no wording still
+  renders its key in every language, which is every product written before this and
+  every single-language catalogue.
+
+  In the Console both headings are one box each, the wordings in the order the catalogue
+  declares its languages and separated by semicolons: `Arbeitsplatz; Poste de travail;
+  Workplace; Postazione`. One wording means the heading is not translated. What is
+  stored is a map per language tag and never the list, so reordering a catalogue's
+  languages cannot re-label the products already saved.
+
+  Publishing holds the wordings to the rule a description already follows — optional as
+  a whole, all-or-nothing once there is one — and refuses two more states it can prove:
+  a wording with no key to group by, and one key worded two ways by two products, which
+  would make one column head say one of the two with nothing saying a choice was made.
+  The column also sorts by what the reader sees rather than by the key, or a French
+  reader would be handed a column ordered by German words.
 
 - **A report that says which services cannot be fulfilled here.** A catalogue binds a
   product to processes by name. Nothing checks those names when the binding is written,

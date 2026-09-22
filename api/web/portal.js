@@ -715,20 +715,61 @@ function partsOf(release, id) {
 //
 // Sorted alphabetically, because a heading is a string and there is nothing on it
 // to sort by. An ordering of its own would be the entity the decision refused,
-// arriving through the back door.
+// arriving through the back door. The bucket is always last and only appears when
+// something is in it: a heading for nothing is a heading nobody can use, and
+// hiding uncategorised products entirely would lose them.
 //
-// The bucket is always last and only appears when something is in it: a heading
-// for nothing is a heading nobody can use, and hiding uncategorised products
-// entirely would lose them.
+// Both of those live in headingsOf below, with the reading of the heading itself,
+// because the services view draws the same two columns off a different set of
+// products — and a second implementation of this is how the two screens came to
+// disagree about a heading once already.
 function categoriesOf(release) {
-  const named = new Set();
-  let uncategorised = false;
-  for (const it of products(release)) {
-    const c = (it.category || '').trim();
-    if (c) named.add(c); else uncategorised = true;
+  return headingsOf(products(release), 'category');
+}
+
+// headingOf is one product's heading, in the language this page is being read in.
+//
+// Two fields and not one: the string on the product is the KEY — what everything
+// groups by, what a search hit sets to open the cascade at the right column, what
+// an already published release holds — and the map beside it is how that key is
+// written for a reader (ADR-draft-translatable-catalogue-headings). Where the
+// catalogue has no translation the key renders, which is every product written
+// before the field existed and every catalogue declaring one language.
+//
+// It reads through textOf, so a heading reaches a reader by exactly the rule every
+// other text on this page does: the page's own locale first, then whatever the
+// catalogue does have. The two language lists are not the same list, and a heading
+// stored in German and French with nothing shown to an English reader is the gap
+// the description already learned about.
+function headingOf(item, field) {
+  const key = ((item || {})[field] || '').trim();
+  if (!key) return '';
+  return textOf((item || {})[`${field}Texts`], key);
+}
+
+// headingsOf collects one of the two heading fields off a set of products: each
+// distinct key, and the wording to show it under.
+//
+// **Sorted by the wording, not by the key.** The wording is what is on the screen,
+// and a French reader given a column ordered by German words would be reading an
+// order nothing on the page explains. The bucket for products carrying none stays
+// last, as before.
+//
+// Where two products agree on the key and disagree on the wording, the first in
+// release order wins — deterministic, because a release is sorted by id. It is not
+// a state a published catalogue can be in: publishing refuses the disagreement,
+// for the reason it refuses a half-translated heading.
+function headingsOf(items, field) {
+  const wording = new Map();
+  let none = false;
+  for (const it of items) {
+    const key = (it[field] || '').trim();
+    if (!key) { none = true; continue; }
+    if (!wording.has(key)) wording.set(key, headingOf(it, field));
   }
-  const out = [...named].sort((a, b) => a.localeCompare(b, locale));
-  if (uncategorised) out.push('');
+  const out = [...wording].map(([key, text]) => ({ key, text }))
+    .sort((a, b) => a.text.localeCompare(b.text, locale));
+  if (none) out.push({ key: '', text: '' });
   return out;
 }
 
@@ -746,19 +787,10 @@ function categoriesOf(release) {
 // in two categories appears under both. Nothing is contradicted, because nothing
 // anywhere claims a group belongs to one.
 //
-// Sorted alphabetically and bucketed like the categories above, for the reasons
-// given there: there is nothing on a string to sort by, and hiding the ungrouped
-// products would lose them.
+// Sorted and bucketed like the categories above, through the same function and
+// for the reasons given there.
 function groupsOf(release) {
-  const named = new Set();
-  let ungrouped = false;
-  for (const it of products(release).filter(inCategory)) {
-    const g = (it.productGroup || '').trim();
-    if (g) named.add(g); else ungrouped = true;
-  }
-  const out = [...named].sort((a, b) => a.localeCompare(b, locale));
-  if (ungrouped) out.push('');
-  return out;
+  return headingsOf(products(release).filter(inCategory), 'productGroup');
 }
 
 // inGroup reports whether a product belongs under the group now selected. null is
@@ -1688,10 +1720,10 @@ function renderCatalogue() {
       onOpen: () => { state.category = null; clearBelow(0); render(); },
     }),
     headings.map((h) => cell({
-      text: h || t('cat.none'),
-      open: state.category === h,
+      text: h.text || t('cat.none'),
+      open: state.category === h.key,
       onOpen: () => {
-        state.category = state.category === h ? null : h;
+        state.category = state.category === h.key ? null : h.key;
         clearBelow(0);
         render();
       },
@@ -1710,10 +1742,10 @@ function renderCatalogue() {
       onOpen: () => { state.group = null; clearBelow(1); render(); },
     }),
     groups.map((g) => cell({
-      text: g || t('group.none'),
-      open: state.group === g,
+      text: g.text || t('group.none'),
+      open: state.group === g.key,
       onOpen: () => {
-        state.group = state.group === g ? null : g;
+        state.group = state.group === g.key ? null : g.key;
         clearBelow(1);
         render();
       },
@@ -2612,16 +2644,7 @@ function depthOf(release, id) {
 // at categoriesOf: there is nothing on a string to sort by, and the bucket is last
 // and only appears when something is in it.
 function headingsHeld(rel, by, ids, field) {
-  const named = new Set();
-  let none = false;
-  for (const id of ids) {
-    const root = by[rootOf(rel, id)] || {};
-    const value = (root[field] || '').trim();
-    if (value) named.add(value); else none = true;
-  }
-  const out = [...named].sort((a, b) => a.localeCompare(b, locale));
-  if (none) out.push('');
-  return out;
+  return headingsOf(ids.map((id) => by[rootOf(rel, id)] || {}), field);
 }
 
 function renderServices() {
@@ -2675,13 +2698,13 @@ function renderServices() {
         // catalogue's: this screen answers "what do I have", and a heading with
         // nothing of theirs under it would be a column of other people's shelves.
         headingsHeld(rel, by, ids, 'category')
-          .map((c) => cell({ text: c || t('cat.none') }))),
+          .map((c) => cell({ text: c.text || t('cat.none') }))),
       // The product group beside the heading, read off what this person holds for
       // the same reason the heading is: this screen answers "what do I have".
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.group')),
         headingsHeld(rel, by, ids, 'productGroup')
-          .map((g) => cell({ text: g || t('group.none') }))),
+          .map((g) => cell({ text: g.text || t('group.none') }))),
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.offering')),
         at('offering').map(row)),
