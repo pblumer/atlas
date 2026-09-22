@@ -319,6 +319,7 @@ func TestAnUnreadableStoreIsAnError(t *testing.T) {
 		{"save product", s.HandleSaveItem, "POST", `{"id":"a"}`, false},
 		{"publish", s.HandlePublish, "POST", "", true},
 		{"list releases", s.HandleListReleases, "GET", "", true},
+		{"unpublished changes", s.HandleUnpublished, "GET", "", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
