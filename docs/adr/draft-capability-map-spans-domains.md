@@ -209,6 +209,30 @@ thing it is supposed to own.
   grant. The read discloses what that domain already published, and nothing it did
   not.
 
+  It carries one thing more: **the domain names that peer knows** — its own, and
+  the ones its reference records name. Names only. Without them the width of a map
+  would depend on how diligently somebody here typed foreign dependencies, rather
+  than on what the estate contains, and a domain nobody here ever dealt with would
+  be missing from every picture with nobody to miss it. With them, a viewer can say
+  *billing exists and this node has no way to reach it*, which is a finding an
+  operator can act on rather than a hole nobody sees.
+
+  Two bounds make that safe, and both already have a precedent in the tree. **A
+  name travels; an address never does.** Panorama's `Target` discloses a peer's
+  name to every caller and withholds its base URL and credential reference, because
+  those are "this operator's map of where their infrastructure lives"
+  (`api/panorama/mesh.go`) — the same line holds here. And **learning a name is not
+  learning a peer**: it must never auto-configure a target. Adding one stays an
+  operator's act, because a target is a trust relationship
+  ([ADR-0129](0129-remote-deployment-targets.md)), and a picture that quietly
+  acquired peers would be deciding who this node talks to.
+
+  Stated honestly, the name list does disclose a peer's dependency neighbourhood —
+  that credit works with billing and with fraud. That is what a map of an estate is
+  for, and it is the same order of disclosure the reference record already makes;
+  it is written down here rather than discovered later by somebody who assumed the
+  answer was scoped to the asker.
+
   *How far it reaches* is **one hop**. A peer answers for its own domain, out of
   its own store, and never forwards the question or aggregates an answer on
   somebody else's behalf. The read is therefore not recursive, and that is a
