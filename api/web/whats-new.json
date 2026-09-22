@@ -37,6 +37,39 @@
       }
     },
     {
+      "id": "the-portal-s-link-into-an-order-s-process-answered-where-nob",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "\"View the process\" answers next to the order it was pressed on",
+        "de": "„Prozess ansehen“ antwortet neben dem Auftrag, bei dem gedrückt wurde"
+      },
+      "summary": {
+        "en": "The link on an order row opens the process fulfilling it. When there is no process to open — none started yet, or none left — it used to say so above the table, out of sight of anybody who pressed a button in a row further down: the page appeared to do nothing, which is how it was reported. The answer is now under the button that asked for it. One of those two cases was not even said: where an instance survives only in the exported event log, the link followed it into a replay view that could only report a failure to load. That case now has words of its own, on the portal, naming the one cause the server is certain of.",
+        "de": "Der Verweis auf einer Auftragszeile öffnet den Prozess, der den Auftrag erfüllt. Gab es keinen zu öffnenden Prozess — noch keiner gestartet oder keiner mehr vorhanden —, stand die Auskunft bisher oberhalb der Tabelle und damit ausserhalb des Blickfelds derjenigen, die weiter unten eine Schaltfläche gedrückt hatten: die Seite schien nichts zu tun, und so wurde es gemeldet. Die Antwort steht nun unter der Schaltfläche, die sie ausgelöst hat. Einer der beiden Fälle wurde überdies gar nicht benannt: liegt eine Instanz nur noch im ausgelagerten Ereignisprotokoll, folgte der Verweis ihr in eine Ansicht, die bloss einen Ladefehler melden konnte. Dieser Fall hat nun eigene Worte im Portal und nennt jene Ursache, derer der Server sicher ist."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Self-service portal"
+      ],
+      "tutorial": {
+        "en": [
+          "Open \"My orders\" in the service portal.",
+          "Press \"View the process\" on an order — the running process opens.",
+          "On an order whose process has finished, the reason appears under the button."
+        ],
+        "de": [
+          "Im Leistungsportal „Meine Aufträge“ öffnen.",
+          "Bei einem Auftrag „Prozess ansehen“ drücken — der laufende Prozess öffnet sich.",
+          "Bei einem Auftrag ohne laufenden Prozess erscheint der Grund unter der Schaltfläche."
+        ]
+      }
+    },
+    {
       "id": "a-folded-decision-service-stays-folded",
       "version": "Unreleased",
       "date": null,
@@ -187,6 +220,27 @@
       }
     },
     {
+      "id": "the-two-links-on-a-portal-order-s-position-rows",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Removed",
+      "title": {
+        "en": "A position row is down to what acts on the position",
+        "de": "Die Positionszeile zeigt nur noch, was auf die Position wirkt"
+      },
+      "summary": {
+        "en": "Every position of an order carried two further links: \"Where is this?\", which fetched the step its process was sitting on, and one into that process instance. Both are gone, at the request of the people this page is for — the status right beside the position's name answers the same question out of the order's own record, one column over and without a press. Withdrawing a position and correcting its details stay; they act on the position rather than look at a process. The route that answered \"where is this\" is unchanged and still available to other callers.",
+        "de": "Jede Position eines Auftrags trug zwei weitere Verweise: „Wo steht das?“, das den Schritt des zugehörigen Prozesses abfragte, und einen in diese Prozessinstanz. Beide sind auf Wunsch der Nutzenden dieser Seite entfallen — der Status unmittelbar neben der Positionsbezeichnung beantwortet dieselbe Frage aus dem Auftragsdatensatz selbst, eine Spalte weiter und ohne Tastendruck. „Position zurückziehen“ und das Korrigieren der Angaben bleiben; sie wirken auf die Position, statt einen Prozess zu betrachten. Die Schnittstelle hinter „Wo steht das?“ ist unverändert und steht anderen Aufrufern weiterhin zur Verfügung."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Self-service portal"
+      ]
+    },
+    {
       "id": "a-decision-service-can-be-folded-away-on-the-canvas",
       "version": "Unreleased",
       "date": null,
@@ -286,85 +340,6 @@
       "tags": [
         "Modeler"
       ]
-    },
-    {
-      "id": "renaming-a-catalogue-or-changing-the-languages-it-is-offered",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Renaming a catalogue works again",
-        "de": "Einen Katalog umbenennen geht wieder"
-      },
-      "summary": {
-        "en": "Renaming a catalogue, or changing the languages it is offered in, failed with “list is not a function”. Both go through the same form on the catalogue screen, and neither reached the server at all — the save threw before it got there. Behind it: the file has a small helper called `list` that splits a comma-separated field, and further up in the same function a page element had been given the same name, which hid the helper. The save then called an element instead of a function. What made it hard to place is that the screen catches what it throws and shows the message, so a page that could not run reported itself as if the server had refused the rename. It is fixed, and three checks now drive the real screen: what a rename sends, that the languages arrive as a proper trimmed list, and that a save which works says nothing went wrong.",
-        "de": "Einen Katalog umbenennen oder seine Sprachen ändern scheiterte mit „list is not a function“. Beides läuft über dasselbe Formular im Katalogbildschirm, und keines erreichte den Server überhaupt — das Speichern brach vorher ab. Dahinter steckte: Die Datei hat eine kleine Hilfsfunktion namens `list`, die ein kommagetrenntes Feld zerlegt, und weiter oben in derselben Funktion trug ein Seitenelement denselben Namen und verdeckte sie. Das Speichern rief damit ein Element statt einer Funktion auf. Schwer einzuordnen war es, weil der Bildschirm den Fehler abfängt und dessen Meldung anzeigt — eine Seite, die nicht laufen konnte, meldete sich also so, als hätte der Server das Umbenennen abgelehnt. Behoben, und drei Prüfungen fahren jetzt den echten Bildschirm: was ein Umbenennen sendet, dass die Sprachen als saubere, beschnittene Liste ankommen, und dass ein gelungenes Speichern nichts meldet."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Katalog",
-        "Konsole"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Catalog and pick a catalogue.",
-          "Change its name in the top form, or edit the comma-separated languages beside it.",
-          "Press Save — it saves, where before it showed “list is not a function”.",
-          "Spaces around a language code are trimmed: “de, fr ,it” is stored as three codes."
-        ],
-        "de": [
-          "„Catalog“ öffnen und einen Katalog wählen.",
-          "Im oberen Formular den Namen ändern oder die kommagetrennten Sprachen daneben bearbeiten.",
-          "„Save“ drücken — es speichert, wo vorher „list is not a function“ erschien.",
-          "Leerzeichen um ein Sprachkürzel werden entfernt: „de, fr ,it“ wird als drei Kürzel gespeichert."
-        ]
-      }
-    },
-    {
-      "id": "the-catalogue-screen-now-says-what-the-portal-is-actually-of",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The catalogue screen now says what the portal is actually offering",
-        "de": "Der Katalogbildschirm sagt jetzt, was das Portal tatsächlich anbietet"
-      },
-      "summary": {
-        "en": "A catalogue and its portal are deliberately two different things: the portal serves a release, a frozen copy taken when somebody published, so that an order cannot change under the person placing it — while every edit a maintainer makes goes to the live catalogue beside it. Until now nothing said which of the two you were looking at, and one case was not merely unstated but impossible to see: a product taken out of a catalogue disappears from the product table at once and the release goes on offering it, so it is gone from every screen its maintainer has and present on the one they do not. The catalogue screen now states the difference above the Publish button — what publishing would add, what the portal is still offering that it would take away, and what has been edited since the release being served — with removals first, because that is the group nothing else can show. When the two agree, it says that too.",
-        "de": "Ein Katalog und sein Portal sind bewusst zwei verschiedene Dinge: Das Portal liefert ein Release aus, eine eingefrorene Kopie vom Zeitpunkt der Veröffentlichung, damit sich eine Bestellung nicht unter der bestellenden Person verändert — während jede Bearbeitung in den daneben liegenden Live-Katalog geht. Bisher sagte nichts, welches von beiden man vor sich hat, und ein Fall war nicht nur unausgesprochen, sondern schlicht nicht sichtbar: Ein aus dem Katalog entferntes Produkt verschwindet sofort aus der Produkttabelle, während das Release es weiter anbietet — es fehlt also auf jedem Bildschirm, den die zuständige Person hat, und steht auf dem einen, den sie nicht hat. Der Katalogbildschirm nennt den Unterschied nun oberhalb der Schaltfläche Publish: was eine Veröffentlichung hinzufügen würde, was das Portal noch anbietet und wegfallen würde, und was seit dem ausgelieferten Release bearbeitet wurde — die Entfernungen zuerst, weil diese Gruppe sonst nirgends zu sehen ist. Stimmen beide überein, wird auch das gesagt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Catalogue",
-        "Self-service portal"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Catalogue from the navigation and pick a catalogue.",
-          "Scroll to the Releases section at the bottom of the page.",
-          "Read the panel above the Publish button: green means the portal is offering this catalogue exactly as it stands.",
-          "If it is amber, the first group lists the products the portal is still offering that are no longer in this catalogue. Publishing is what takes them away."
-        ],
-        "de": [
-          "In der Navigation Katalog öffnen und einen Katalog auswählen.",
-          "Zum Abschnitt Releases am Seitenende blättern.",
-          "Den Bereich oberhalb der Schaltfläche Publish lesen: Grün bedeutet, dass das Portal diesen Katalog genau so anbietet, wie er dasteht.",
-          "Bei Gelb listet die erste Gruppe die Produkte, die das Portal noch anbietet, die aber nicht mehr in diesem Katalog sind. Erst eine Veröffentlichung nimmt sie weg."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the catalogue",
-          "de": "Katalog öffnen"
-        },
-        "route": "#/catalog"
-      }
     }
   ]
 }

@@ -1,0 +1,13 @@
+{
+  "tags": [
+    "Self-service portal"
+  ],
+  "title": {
+    "en": "A position row is down to what acts on the position",
+    "de": "Die Positionszeile zeigt nur noch, was auf die Position wirkt"
+  },
+  "summary": {
+    "en": "Every position of an order carried two further links: \"Where is this?\", which fetched the step its process was sitting on, and one into that process instance. Both are gone, at the request of the people this page is for — the status right beside the position's name answers the same question out of the order's own record, one column over and without a press. Withdrawing a position and correcting its details stay; they act on the position rather than look at a process. The route that answered \"where is this\" is unchanged and still available to other callers.",
+    "de": "Jede Position eines Auftrags trug zwei weitere Verweise: „Wo steht das?“, das den Schritt des zugehörigen Prozesses abfragte, und einen in diese Prozessinstanz. Beide sind auf Wunsch der Nutzenden dieser Seite entfallen — der Status unmittelbar neben der Positionsbezeichnung beantwortet dieselbe Frage aus dem Auftragsdatensatz selbst, eine Spalte weiter und ohne Tastendruck. „Position zurückziehen“ und das Korrigieren der Angaben bleiben; sie wirken auf die Position, statt einen Prozess zu betrachten. Die Schnittstelle hinter „Wo steht das?“ ist unverändert und steht anderen Aufrufern weiterhin zur Verfügung."
+  }
+}
