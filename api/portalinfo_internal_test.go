@@ -64,3 +64,33 @@ func TestThePanelItselfAsksNothingAboutTheLevel(t *testing.T) {
 		t.Error("the panel no longer shows what a product costs")
 	}
 }
+
+// TestEveryViewThatOffersThePanelAlsoDrawsIt.
+//
+// The "i" sets state.info and redraws. Whether anything appears is a second,
+// separate statement — the view has to render the panel — and the basket made the
+// first without the second. The button was there, it responded, and nothing
+// opened: on the one screen where somebody is deciding whether to actually order
+// the thing, the price, the approval rule, the description and the picture were
+// unreachable.
+//
+// Guarded per view rather than per file, because infoPanel appears three times and
+// a search across portal.js would find it however many views had forgotten it.
+func TestEveryViewThatOffersThePanelAlsoDrawsIt(t *testing.T) {
+	src := readWeb(t, "portal.js")
+	for _, view := range []struct{ name, from, to string }{
+		{"the catalogue", "function renderCatalogue(", "\nfunction renderBasket("},
+		{"the basket", "function renderBasket(", "\n// --- What a product needs"},
+		{"what somebody holds", "const row = (id) => {", "\n// The brand mark"},
+	} {
+		body := webRegion(t, src, view.from, view.to)
+		if !strings.Contains(body, "infoButton(") {
+			continue // a view with no button owes no panel
+		}
+		if !strings.Contains(body, "infoPanel(") {
+			t.Errorf("%s draws the info button and never the panel, so pressing it "+
+				"does nothing at all — the control answers and the answer is blank",
+				view.name)
+		}
+	}
+}

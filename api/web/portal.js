@@ -373,20 +373,36 @@ function textOf(texts, fallback) {
   return texts[locale] || texts.de || texts.en || Object.values(texts)[0] || fallback;
 }
 
-// The product's description in the language this page is being read in, or nothing.
+// The product's description, in the language this page is being read in where the
+// catalogue has one and in whatever it does have otherwise.
 //
-// Deliberately without [textOf]'s fall through the other languages. A name in the
-// wrong language still identifies the thing — it is a label, and a reader matches
-// it against what they clicked. A paragraph in a language somebody does not read
-// is not a shorter explanation, it is noise where an explanation was promised.
+// The fall-through was deliberately absent, on the reasoning that publishing
+// refuses a product described in one declared language and not another — so a
+// missing description could only be a state the release already rejects, and
+// falling back would quietly undo the rule.
 //
-// And it should never happen here: the portal reads a *release*, and publishing
-// refuses a product described in one declared language and not another. So a
-// fallback would only ever fire for a state the release rejects, and firing it
-// would quietly undo the rule rather than surface the gap.
+// That reasoning was wrong, and it hid descriptions rather than surfacing gaps.
+// The two language lists are not the same list. Publishing demands a description
+// in every language the *catalogue* declares; this page is read in one of its
+// *own* locales, taken from the browser and narrowed to what it is translated
+// into. A catalogue offered in German and French is complete by the publish rule
+// and had nothing at all to say to a reader whose browser is English: two
+// descriptions stored, neither shown, and no rule anywhere had been broken.
+//
+// So the locale is asked for first and the rest are reached after it. A paragraph
+// in a language somebody does not read is worse than one they do — which is what
+// the order encodes — and better than the blank the strict read gave them.
+//
+// A key that is present and blank is not an answer. That is the shape a
+// half-filled form leaves behind, and taken as one it would end the search before
+// the language that does say something.
 function descriptionOf(item) {
   const d = (item || {}).descriptions;
-  return d && typeof d[locale] === 'string' ? d[locale].trim() : '';
+  if (!d) return '';
+  for (const text of [d[locale], d.de, d.en, ...Object.values(d)]) {
+    if (typeof text === 'string' && text.trim() !== '') return text.trim();
+  }
+  return '';
 }
 
 // The typeface stacks the server ships, mirrored here because the page paints
@@ -1972,7 +1988,23 @@ function renderBasket() {
           'data-configkey': x.id,
           'data-formid': configFormOf(rel, x.id),
         }, el('p', { class: 'note' }, t('cfg.loading'))))))
-      : null);
+      : null,
+    // What the "i" on a basket row opens. The button was drawn here from the
+    // start and the panel was not, so pressing it set state.info, redrew the
+    // page and showed nothing — a control that answers with a blank.
+    //
+    // It matters most on this screen. The basket is where somebody decides
+    // whether to actually order the thing, and the panel is where the price, the
+    // approval rule, the description and the picture are; a row here is a name
+    // and two buttons, and the name is all they had to go on.
+    //
+    // Below the forms rather than above them, because it belongs to a row and the
+    // forms belong to the order: a panel wedged between a row and the questions
+    // that row asks would read as part of the question. render() harvests every
+    // mounted form before it repaints, so opening this does not cost somebody
+    // what they have typed.
+    state.info && by[state.info]
+      ? el('div', { style: 'margin-top:18px' }, infoPanel(rel, by[state.info])) : null);
 }
 
 // --- What a product needs that its name does not say -------------------------

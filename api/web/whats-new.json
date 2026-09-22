@@ -2,6 +2,77 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-product-s-description-was-stored-frozen-into-the-release-a",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A product's description now reaches the people reading it",
+        "de": "Die Produktbeschreibung erreicht jetzt die Lesenden"
+      },
+      "summary": {
+        "en": "The portal asked for a description in the language the page itself is read in — German or English, taken from the browser — and showed nothing at all when the catalogue had no text under that key. Publishing, however, only guarantees a description in every language the catalogue declares, and those are two different lists: a catalogue offered in German and French was complete by that rule and said nothing to a reader whose browser is English. Two descriptions written, neither on screen. The reader's own language is still preferred, so a product described in several still shows the right one; the others are reached only after it. A product's picture is shown beside the description where the catalogue carries one.",
+        "de": "Das Portal verlangte die Beschreibung in der Sprache, in der die Seite selbst gelesen wird — Deutsch oder Englisch, aus dem Browser übernommen — und zeigte gar nichts, wenn der Katalog unter diesem Schlüssel keinen Text hatte. Die Veröffentlichung sichert eine Beschreibung jedoch nur in jeder Sprache zu, die der Katalog deklariert, und das sind zwei verschiedene Listen: Ein auf Deutsch und Französisch angebotener Katalog war nach dieser Regel vollständig und sagte einer Person mit englischem Browser nichts. Zwei Beschreibungen erfasst, keine sichtbar. Die eigene Sprache der lesenden Person wird weiterhin bevorzugt, ein mehrsprachig beschriebenes Produkt zeigt also die richtige; die übrigen kommen erst danach. Das Produktbild wird daneben angezeigt, sofern der Katalog eines führt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Self-service portal",
+        "Catalogue"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the service portal and pick a product in the cascade.",
+          "Press the round \"i\" at the right edge of its row.",
+          "The panel shows the picture, the description, the price and the approval rule.",
+          "Switch the language with the DE/EN buttons in the header: where the catalogue has both, the description follows."
+        ],
+        "de": [
+          "Das Leistungsportal öffnen und in der Kaskade ein Produkt auswählen.",
+          "Das runde „i“ am rechten Rand der Zeile drücken.",
+          "Der Bereich zeigt Bild, Beschreibung, Preis und Genehmigungsregel.",
+          "Die Sprache mit den Schaltflächen DE/EN in der Kopfzeile wechseln: Führt der Katalog beide, folgt die Beschreibung."
+        ]
+      }
+    },
+    {
+      "id": "the-info-button-on-the-basket-did-nothing",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The info button on the basket opens the product again",
+        "de": "Der Info-Knopf im Warenkorb öffnet das Produkt wieder"
+      },
+      "summary": {
+        "en": "Every row in the basket carried the round \"i\", it responded to a press, and nothing opened. The catalogue page and the \"my services\" page both showed the panel; the basket drew the button and never the panel itself. That left the one screen where somebody decides whether to actually place the order with a row that was a name and two buttons — the price, the approval rule, the description and the picture were all out of reach at exactly the moment they matter. The panel now opens below the basket, and anything already typed into a product's configuration form is kept when it does.",
+        "de": "Jede Zeile im Warenkorb trug das runde „i“, es reagierte auf einen Druck, und es öffnete sich nichts. Die Katalogseite und die Seite „Meine Leistungen“ zeigten den Bereich beide; der Warenkorb zeichnete nur den Knopf, nie den Bereich selbst. Damit blieb ausgerechnet auf jenem Bildschirm, auf dem über die Bestellung entschieden wird, eine Zeile aus Name und zwei Schaltflächen übrig — Preis, Genehmigungsregel, Beschreibung und Bild waren genau dann unerreichbar, wenn sie zählen. Der Bereich öffnet sich nun unterhalb des Warenkorbs; bereits eingetippte Angaben in einem Konfigurationsformular bleiben dabei erhalten."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Self-service portal"
+      ],
+      "tutorial": {
+        "en": [
+          "Put a product in the basket in the service portal.",
+          "Open the basket.",
+          "Press the round \"i\" on one of the rows — the panel opens below the columns.",
+          "Press it again to close it, or press it on another row to switch."
+        ],
+        "de": [
+          "Im Leistungsportal ein Produkt in den Warenkorb legen.",
+          "Den Warenkorb öffnen.",
+          "Auf einer Zeile das runde „i“ drücken — der Bereich öffnet sich unterhalb der Spalten.",
+          "Erneut drücken schliesst ihn, ein Druck auf eine andere Zeile wechselt."
+        ]
+      }
+    },
+    {
       "id": "a-decision-service-that-answers-with-nothing-is-refused-rath",
       "version": "Unreleased",
       "date": null,
@@ -313,64 +384,6 @@
           "de": "Entscheidungen öffnen"
         },
         "route": "#/console/decisions"
-      }
-    },
-    {
-      "id": "a-decision-graph-is-drawn-the-way-dmn-draws-one",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A decision graph is drawn the way DMN draws one",
-        "de": "Ein Entscheidungsgraph wird so gezeichnet, wie DMN ihn zeichnet"
-      },
-      "summary": {
-        "en": "In a decision requirements diagram the shape is not decoration — it is how a reader tells one kind of node from another. DMN draws a decision as a plain rectangle, input data as a stadium with fully rounded ends, a business knowledge model as a rectangle with two corners cut off, and a decision service as a rounded rectangle carrying its name in the top right, clear of the decisions it holds. Atlas drew decisions and knowledge models with rounded corners, which made a decision read as an input datum or as a service; and it drew a decision service square-cornered with its name centred over whatever it contained. Both pictures — the graph in the Modeler and the one the decision window puts a case on — now follow the notation, and a collapsed decision service is drawn as one instead of looking expanded. A model opened in Atlas therefore looks like the same model opened anywhere else.",
-        "de": "In einem Decision Requirements Diagram ist die Form keine Dekoration — an ihr erkennt man, um welche Art von Knoten es sich handelt. DMN zeichnet eine Entscheidung als schlichtes Rechteck, Eingabedaten als Stadion mit vollrunden Enden, ein Business Knowledge Model als Rechteck mit zwei abgeschnittenen Ecken und einen Decision Service als abgerundetes Rechteck, dessen Name oben rechts steht, ausserhalb der Entscheidungen, die er umschliesst. Atlas zeichnete Entscheidungen und Knowledge Models mit runden Ecken, wodurch eine Entscheidung wie ein Eingabedatum oder wie ein Service aussah; und den Decision Service mit eckigen Ecken und dem Namen mittig über seinem Inhalt. Beide Darstellungen — der Graph im Modeler und jener, auf den das Entscheidungsfenster einen Fall zeichnet — folgen nun der Notation, und ein eingeklappter Decision Service wird als solcher gezeichnet statt ausgeklappt zu wirken. Ein in Atlas geöffnetes Modell sieht damit aus wie dasselbe Modell in jedem anderen Werkzeug."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Decisions",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open a decision",
-          "de": "Entscheidung öffnen"
-        },
-        "route": "#/modeler/decisions"
-      }
-    },
-    {
-      "id": "a-decision-service-survives-auto-layout",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A decision service survives Auto-layout",
-        "de": "Ein Decision Service übersteht das Auto-Layout"
-      },
-      "summary": {
-        "en": "Atlas draws a DMN model's diagram when it has none, and redraws it when you ask. The generator knew decisions, input data and knowledge models — but not a decision service, the box drawn around part of the graph with a divider line separating what the service returns from what it works out internally. Auto-layout deleted that box, and the modeler, which reads a service's membership back out of where its decisions sit, then concluded the service had no members and wrote that into the model on the next save. What was left was a decision service with no output decision: still deployable, still callable from a business rule task, and returning nothing — no incident, no validation error, only the stored XML to show for it. The generator now draws the box around the decisions the service publishes and encapsulates, with the divider between them, and a model whose service went undrawn is laid out afresh instead of being handed to the modeler half-finished. The modeler treats the box as a real container: it is drawn beneath what it holds rather than over it, and moving it takes its decisions along. A decision the service names as its input boundary stays outside the box, where DMN puts it.",
-        "de": "Atlas zeichnet das Diagramm eines DMN-Modells, wenn keines vorhanden ist, und zeichnet es auf Wunsch neu. Der Generator kannte Entscheidungen, Eingabedaten und Knowledge Models — aber keinen Decision Service, also jene Box um einen Teil des Graphen, deren Trennlinie scheidet, was der Service liefert, von dem, was er intern ermittelt. Das Auto-Layout löschte diese Box, und der Modeler, der die Zugehörigkeit eines Service daraus abliest, wo seine Entscheidungen liegen, schloss daraus auf einen Service ohne Mitglieder und schrieb das beim nächsten Speichern ins Modell. Übrig blieb ein Decision Service ohne Output-Entscheidung: weiterhin deploybar, weiterhin aus einer Business Rule Task aufrufbar — und ohne Ergebnis, ohne Incident und ohne Validierungsfehler, sichtbar allein im gespeicherten XML. Der Generator zeichnet die Box nun um die Entscheidungen, die der Service veröffentlicht und kapselt, mit der Trennlinie dazwischen; ein Modell mit ungezeichnetem Service wird neu gelegt, statt halbfertig an den Modeler zu gehen. Der Modeler behandelt die Box als echten Container: Sie wird unter ihrem Inhalt gezeichnet statt darüber, und wer sie verschiebt, nimmt ihre Entscheidungen mit. Eine Entscheidung, die der Service als Eingabegrenze benennt, bleibt ausserhalb der Box — dort, wo DMN sie vorsieht."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Decisions",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open a decision",
-          "de": "Entscheidung öffnen"
-        },
-        "route": "#/modeler/decisions"
       }
     }
   ]
