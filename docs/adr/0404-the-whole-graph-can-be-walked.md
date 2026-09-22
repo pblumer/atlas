@@ -294,6 +294,48 @@ Two rules on the rendering, both inherited rather than invented:
   the hubs every instance touches, so any grouping that keeps them puts everything in one
   cell. This is the visual return of §1's arithmetic.
 
+#### What the cloud actually costs, and what it does not need (measured, W3)
+
+Two findings from building the aggregation, both of which change what this section can
+promise.
+
+**The cloud needs no graph.** A group-by is not a graph operation. It is one scan of the
+store and a map sized by the number of *cells*, so it needs no ordinal map, no CSR and no
+union-find — none of the 2,448 MB the structure costs at 110 M nodes, and none of §9's
+budget. The consequence corrects the reach this record gives away in its consequences: on an
+installation large enough that §9 refuses the whole-graph *walk*, the whole-graph **cloud is
+still available**. What that installation loses is the walk and the drill-down from a cell to
+its members, which needs either a filtered re-scan or the per-node array below; what it keeps
+is the density itself.
+
+**Of the five dimensions this section calls "already carried", the node carries two.**
+Measured against `model.ElementInstanceValue`:
+
+| Dimension | On the value? | What it costs otherwise |
+|---|---|---|
+| definition | yes — `ProcessDefKey` | free |
+| element | yes — `ElementId` | free |
+| element type | yes — `BpmnElementType`, a refinement of the element | free |
+| worker | no — lives on the job | a join, plus 4 bytes per node to carry the result |
+| incident state | no — lives on the incident | the same |
+| time bucket | no — the value has no timestamp at all | the same |
+
+Four bytes per node is **420 MB at 110 M nodes** — the same budget unit whose doubling this
+section's own membership decision refused, and per dimension. So "a group-by along dimensions
+the nodes already carry" is free along three axes and a structural cost along the other
+three, and the sentence should not be read as though all five were the same price.
+`rungraph.Source` would also have to open up for them: it is one method today.
+
+Two smaller properties the implementation forced, worth the record because each one is a
+wrong answer avoided rather than a preference:
+
+- **An element cell is scoped to its definition.** `ElementId` is an index into the compiled
+  graph, not a global identifier, so element 1 of two processes is two elements. Grouping by
+  the number alone would report a density over a cell that does not exist.
+- **Cell order is imposed, not inherited.** A Go map iterates randomly, and this section
+  chose components over a Louvain partition partly because they are stable across rebuilds.
+  A cloud whose cells reshuffle between rebuilds breaks the same promise.
+
 #### What W0 measured
 
 A dependency-free spike built the structure this record describes at the year-scale size it

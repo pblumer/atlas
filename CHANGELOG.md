@@ -108,6 +108,35 @@ _Changed_ / _Removed_ for each version.
   so unfolding restores the arrangement exactly within a session and lays it out afresh
   after a reload.
 
+- **The run graph can be drawn as a cloud, and the cloud turns out not to need the graph.** [ADR-0404](docs/adr/0404-the-whole-graph-can-be-walked.md) §5 says the cloud is an aggregation rather than a clustering. Building it showed what that buys: a group-by is not a graph operation, so `rungraph.BuildCloud` costs one scan of the store and a map sized by the number of *cells* — no ordinal map, no CSR, no union-find, and none of the 2,448 MB the structure costs at 110 million nodes. An installation large enough that §9 refuses the whole-graph *walk* can still be shown the whole-graph *cloud*. What it loses is the walk and the drill-down from a cell to its members, not the density.
+
+  Every cloud carries the axis it groups by and the log position it is true as of, as fields
+  rather than as documentation, because §5's own rendering rule forbids a picture that cannot
+  say what it is dense in and as of when — and a renderer cannot add either honestly if the
+  number does not carry them.
+
+  **The measurement also corrected the record's premise, which is now the third time a
+  W-item has done that.** §5 calls its five dimensions ones the nodes "already carry":
+  definition, element, worker, incident state, time bucket. The node carries **two** of them
+  — the definition and the element — plus the BPMN element type as a refinement of the
+  second. Worker lives on a job, incident state on an incident, and the value has no
+  timestamp at all, so each of those three is a join plus four bytes per node to carry the
+  result: 420 MB at 110 million nodes, per dimension, and the same budget unit whose doubling
+  the membership decision had just refused. The three free axes are what ships; the other
+  three are a cost for the record to weigh rather than a default.
+
+  Two smaller things the implementation settled, each a wrong answer avoided rather than a
+  preference. An element cell is scoped to its **definition**, because `ElementId` is an
+  index into the compiled graph and not a global identifier, so element 1 of two processes is
+  two elements and grouping by the number alone would report a density over a cell that does
+  not exist. And the cell order is imposed rather than inherited from a Go map's deliberately
+  random iteration, because §5 chose components over a Louvain partition partly for being
+  stable across rebuilds, and a cloud whose cells reshuffle breaks the same promise.
+
+  No HTTP route and no screen: the surface this feeds needs a renderer decision that has not
+  been taken, and the axis question is settled here, in the data, rather than implicitly
+  inside a renderer where it would be most expensive to correct.
+
 - **The run graph says when it is true, and how far the log has drifted from it since.** [ADR-0404](docs/adr/0404-the-whole-graph-can-be-walked.md) §4 asks for a projection seeded from the state store and kept current from the tailer, "starting at the snapshot's position". Nothing could: a built graph carried no statement about *when* it was true. It does now — a source must report its `LastAppliedPosition`, the ordinal map records it, `Graph.Position()` reads it, and a source that cannot state one fails the build rather than publishing a projection that claims "as of 0" and is indistinguishable from one genuinely at genesis.
 
   On top of that position, `rungraph.Follower` reports **drift**: how many element instances
