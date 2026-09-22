@@ -1,0 +1,11 @@
+{
+  "title": {
+    "en": "The editor reads the alternative Input Data shape flag",
+    "de": "Der Editor liest das Merkmal für die alternative Input-Data-Form"
+  },
+  "summary": {
+    "en": "The DMN editor now reads the DMN 1.5 flag asking for Input Data to be drawn as the paper sheet symbol rather than the oval, in both of the places the specification names it. Nothing is drawn differently: the attribute was already passed through a save untouched, it just could not be read.",
+    "de": "Der DMN-Editor liest nun das DMN-1.5-Merkmal, das Input Data statt als Oval als Papierblatt-Symbol zeichnen lässt, an beiden Stellen, die die Spezifikation dafür nennt. Gezeichnet wird deswegen nichts anders: das Attribut wurde beim Speichern schon vorher unverändert durchgereicht, es war nur nicht lesbar."
+  },
+  "hidden": true
+}
