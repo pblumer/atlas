@@ -29,7 +29,8 @@ import (
 //
 // The envelope is already guarded this way: `document`'s fields carry `json` tags and a test
 // pins them. The payload had neither. These two tests close that gap from both ends — every
-// path names a field that really exists, and every path in the source is in the table.
+// path names a field that really exists, and every path in the source is in the table. The
+// reasoning, and why the column names are recorded rather than tagged, is in ADR-0409.
 
 // archiveQueryPath is one field path this server sends to the exported event log, with a
 // value of the type whose documents it selects.
