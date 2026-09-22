@@ -165,6 +165,10 @@ type drg struct {
 	// around what they hold once everything else has a position.
 	services []drgService
 	drawn    map[string]bool
+	// collapsed holds the decision services the diagram draws folded. Their members
+	// are absent from it on purpose, which is the one case a partial diagram is not
+	// residue (fullyDrawn).
+	collapsed map[string]bool
 	// modelNS is the document's own MODEL namespace, kept because the diagram to be
 	// written has to match the DMN version the model is in — see dmndiFor.
 	modelNS string
@@ -180,8 +184,9 @@ type drg struct {
 // membership from geometry, the next save writes that emptiness back into the
 // document — a service can lose its output decision and start returning nothing.
 func (g drg) fullyDrawn() bool {
+	folded := g.foldedAway()
 	for _, n := range g.nodes {
-		if !g.drawn[n.id] {
+		if !g.drawn[n.id] && !folded[n.id] {
 			return false
 		}
 	}
@@ -191,6 +196,34 @@ func (g drg) fullyDrawn() bool {
 		}
 	}
 	return true
+}
+
+// foldedAway is the set of decisions a collapsed decision service has taken out of
+// the picture: its output decisions and the ones it evaluates internally.
+//
+// They are the one kind of missing node that is not residue. DMN draws a collapsed
+// service by leaving its definition out of the view (1.5 §6.2.4) — the
+// specification's own example is two DRDs of one graph, the second of which simply
+// does not contain the decisions — so a diagram missing exactly those is a diagram
+// somebody arranged that way, and laying the model out afresh would unfold what they
+// folded.
+//
+// The service's own shape is still required. A folded service draws a box; a service
+// with no shape at all is the residue this rule exists for.
+func (g drg) foldedAway() map[string]bool {
+	out := map[string]bool{}
+	for _, s := range g.services {
+		if !g.collapsed[s.id] {
+			continue
+		}
+		for _, id := range s.outputs {
+			out[id] = true
+		}
+		for _, id := range s.encapsulated {
+			out[id] = true
+		}
+	}
+	return out
 }
 
 type xmlDefs struct {
@@ -238,6 +271,11 @@ type xmlDiagram struct {
 
 type xmlShape struct {
 	Ref string `xml:"dmnElementRef,attr"`
+	// Collapsed marks a decision service drawn without the details of its definition
+	// (DMN 1.5 §6.2.4, DMNShape.isCollapsed). Read here because it decides whether
+	// the decisions it holds are missing from the diagram or deliberately left out
+	// of it — see fullyDrawn.
+	Collapsed bool `xml:"isCollapsed,attr"`
 }
 
 // parseDRG reads the requirements graph and the set of elements the model's own
@@ -248,7 +286,7 @@ func parseDRG(src []byte) (drg, bool) {
 	if err := xml.Unmarshal(src, &defs); err != nil {
 		return drg{}, false
 	}
-	g := drg{drawn: map[string]bool{}, modelNS: defs.XMLName.Space}
+	g := drg{drawn: map[string]bool{}, collapsed: map[string]bool{}, modelNS: defs.XMLName.Space}
 	for _, in := range defs.InputData {
 		if in.ID != "" {
 			g.nodes = append(g.nodes, drgNode{id: in.ID, isInput: true})
@@ -291,8 +329,12 @@ func parseDRG(src []byte) (drg, bool) {
 	for _, block := range defs.DI {
 		for _, d := range block.Diagrams {
 			for _, sh := range d.Shapes {
-				if sh.Ref != "" {
-					g.drawn[sh.Ref] = true
+				if sh.Ref == "" {
+					continue
+				}
+				g.drawn[sh.Ref] = true
+				if sh.Collapsed {
+					g.collapsed[sh.Ref] = true
 				}
 			}
 		}
