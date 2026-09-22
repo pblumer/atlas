@@ -150,6 +150,23 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A credential handed to another Atlas can be told which projects it may see.** An API token minted with the new `landscape` scope reaches exactly two reads — the derived starmap and its ArchiMate projection — and nothing else: it can neither deploy, read an instance, nor list a person. On top of that it carries a **reach**: the projects whose content it may see. Everything outside is drawn as the restricted placeholder a person with no access already sees, so the picture stays honest about what it is not showing.
+
+  This closes a gap that was accepted in writing and is easy to miss. A machine credential has
+  no account, so it cannot be a member of anything, and the sharing scopes therefore gave it
+  viewer on *everything* — tolerable while one narrow read depended on it, and not tolerable
+  for a whole derived landscape. A reach is the credential saying for itself what a membership
+  cannot say for it.
+
+  Two rules sit at the door rather than at the read. A `landscape` token **must** state a
+  reach, so the wide credential cannot exist unstated; and nobody can grant a reach they do not
+  hold themselves, because a credential is never more privileged than the person who created
+  it — which its roles already honoured and its reach now does too. Credentials issued before
+  this state no reach, keep working unchanged, and are unaffected.
+
+  The reach is shown in the token list beside the scope, because a grant nobody can read
+  afterwards is a grant nobody can audit.
+
 - **A decision service can be folded away on the canvas.** A DRD carrying several
   decision services is unreadable with every decision inside every one of them on
   screen, and DMN has an answer for it: a collapsed service, drawn as a box with its
