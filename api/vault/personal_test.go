@@ -32,7 +32,7 @@ func TestASealedValueOpensBackToItself(t *testing.T) {
 		kind  uint8
 		plain string
 	}{
-		{"vorname", 3, "Ida"},
+		{"vorname", 3, "Ida-Luise-Mustermann"},
 		{"betrag", 2, "1234.50"},
 		{"profil", 4, `{"kuerzel":"ib"}`},
 		{"leer", 3, ""},
@@ -61,16 +61,28 @@ func TestASealedValueOpensBackToItself(t *testing.T) {
 // once. It is deliberately crude — a substring search over the bytes that get written —
 // because that is exactly the question an auditor asks of a backup tape: is the name in
 // there or not.
+//
+// **The name is long on purpose, and the seal is repeated.** The haystack is base64, whose
+// alphabet is 64 symbols, so a short needle collides by chance: with the three-letter name
+// this test used to seal, a random nonce or ciphertext contained it in **34 of 200 000
+// seals — one run in 5 882**, measured. That is a test that reports a plaintext leak that
+// did not happen, which is worse than no test, because the one time it is right nobody
+// believes it. A twenty-character name cannot collide (0 in 200 000 measured, and
+// 64^-20 says why), and sealing repeatedly samples many nonces rather than one.
 func TestTheStoredTextHoldsNoPlaintext(t *testing.T) {
 	v := newTestVault(t)
-	env, err := v.Seal("P-4711", "vorname", 3, "Ida")
-	if err != nil {
-		t.Fatalf("Seal: %v", err)
+	var env Envelope
+	for i := range 500 {
+		var err error
+		env, err = v.Seal("P-4711", "vorname", 3, "Ida-Luise-Mustermann")
+		if err != nil {
+			t.Fatalf("Seal: %v", err)
+		}
+		if strings.Contains(env.Text(), "Ida-Luise-Mustermann") {
+			t.Fatalf("seal %d carries the plaintext: %s", i, env.Text())
+		}
 	}
 	text := env.Text()
-	if strings.Contains(text, "Ida") {
-		t.Errorf("the stored value carries the plaintext: %s", text)
-	}
 	if !json.Valid([]byte(text)) {
 		t.Errorf("the stored value is not valid JSON: %s", text)
 	}
@@ -88,7 +100,7 @@ func TestErasingASubjectMakesTheirValuesUnreadableAndNothingElse(t *testing.T) {
 	if _, err := v.Set("gmail_ops", "s3cr3t"); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	erased, err := v.Seal("P-4711", "vorname", 3, "Ida")
+	erased, err := v.Seal("P-4711", "vorname", 3, "Ida-Luise-Mustermann")
 	if err != nil {
 		t.Fatalf("Seal: %v", err)
 	}
@@ -130,7 +142,7 @@ func TestAnErasedSubjectIsUnreadableFromADifferentProcess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	env, err := first.Seal("P-4711", "vorname", 3, "Ida")
+	env, err := first.Seal("P-4711", "vorname", 3, "Ida-Luise-Mustermann")
 	if err != nil {
 		t.Fatalf("Seal: %v", err)
 	}
@@ -144,7 +156,7 @@ func TestAnErasedSubjectIsUnreadableFromADifferentProcess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New (second): %v", err)
 	}
-	if got, err := second.Open("vorname", parsed); err != nil || got != "Ida" {
+	if got, err := second.Open("vorname", parsed); err != nil || got != "Ida-Luise-Mustermann" {
 		t.Fatalf("a second reader over the same vault could not open it: %q, %v", got, err)
 	}
 	if err := first.Erase("P-4711"); err != nil {
@@ -161,7 +173,7 @@ func TestAnErasedSubjectIsUnreadableFromADifferentProcess(t *testing.T) {
 // token rather than a value belonging to one person and one name.
 func TestASealedValueCannotBeMoved(t *testing.T) {
 	v := newTestVault(t)
-	env, err := v.Seal("P-4711", "vorname", 3, "Ida")
+	env, err := v.Seal("P-4711", "vorname", 3, "Ida-Luise-Mustermann")
 	if err != nil {
 		t.Fatalf("Seal: %v", err)
 	}
@@ -183,7 +195,7 @@ func TestASealedValueCannotBeMoved(t *testing.T) {
 // one thing to destroy however many values, instances and years accumulate.
 func TestOneKeyPerSubjectAcrossValues(t *testing.T) {
 	v := newTestVault(t)
-	a, err := v.Seal("P-4711", "vorname", 3, "Ida")
+	a, err := v.Seal("P-4711", "vorname", 3, "Ida-Luise-Mustermann")
 	if err != nil {
 		t.Fatalf("Seal: %v", err)
 	}
@@ -221,7 +233,7 @@ func TestConcurrentFirstSealsAllOpen(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			name := string(rune('a'+i)) + "var"
-			env, err := v.Seal("P-4711", name, 3, "Ida")
+			env, err := v.Seal("P-4711", name, 3, "Ida-Luise-Mustermann")
 			if err != nil {
 				t.Errorf("Seal %s: %v", name, err)
 				return
@@ -236,7 +248,7 @@ func TestConcurrentFirstSealsAllOpen(t *testing.T) {
 		t.Fatalf("sealed %d of %d values", len(envs), n)
 	}
 	for name, env := range envs {
-		if got, err := v.Open(name, env); err != nil || got != "Ida" {
+		if got, err := v.Open(name, env); err != nil || got != "Ida-Luise-Mustermann" {
 			t.Errorf("%s does not open: %q, %v — two first seals raced and one key won", name, got, err)
 		}
 	}
@@ -250,7 +262,7 @@ func TestADataKeyIsNotAnOperatorSecret(t *testing.T) {
 	if _, err := v.Set("gmail_ops", "s3cr3t"); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	if _, err := v.Seal("P-4711", "vorname", 3, "Ida"); err != nil {
+	if _, err := v.Seal("P-4711", "vorname", 3, "Ida-Luise-Mustermann"); err != nil {
 		t.Fatalf("Seal: %v", err)
 	}
 	metas, err := v.List()
@@ -280,7 +292,7 @@ func TestADataKeyIsNotAnOperatorSecret(t *testing.T) {
 // or an ordinary variable would be treated as enciphered.
 func TestParseEnvelopeIsStrict(t *testing.T) {
 	v := newTestVault(t)
-	env, err := v.Seal("P-4711", "vorname", 3, "Ida")
+	env, err := v.Seal("P-4711", "vorname", 3, "Ida-Luise-Mustermann")
 	if err != nil {
 		t.Fatalf("Seal: %v", err)
 	}
@@ -289,8 +301,8 @@ func TestParseEnvelopeIsStrict(t *testing.T) {
 	}
 	for _, bad := range []string{
 		``,
-		`"Ida"`,
-		`{"vorname":"Ida"}`,
+		`"Ida-Luise-Mustermann"`,
+		`{"vorname":"Ida-Luise-Mustermann"}`,
 		`{"atlas:personal":{}}`,
 		`{"atlas:personal":{"subject":"P-4711","kind":3,"nonce":"","value":""}}`,
 		`{"atlas:personal":{"subject":"","kind":3,"nonce":"AAAA","value":"AAAA"}}`,
@@ -320,7 +332,7 @@ func TestParseEnvelopeIsStrict(t *testing.T) {
 // subject that every instance shares, would each defeat the mechanism quietly.
 func TestSealWithoutASubjectIsRefused(t *testing.T) {
 	v := newTestVault(t)
-	if _, err := v.Seal("", "vorname", 3, "Ida"); err == nil {
+	if _, err := v.Seal("", "vorname", 3, "Ida-Luise-Mustermann"); err == nil {
 		t.Error("Seal accepted an empty data subject")
 	}
 	if err := v.Erase(""); err == nil {
@@ -338,7 +350,7 @@ func TestSealWithoutASubjectIsRefused(t *testing.T) {
 // reader looking in the wrong place.
 func TestACorruptedDataKeyIsNamedNotGuessed(t *testing.T) {
 	v := newTestVault(t)
-	env, err := v.Seal("P-4711", "vorname", 3, "Ida")
+	env, err := v.Seal("P-4711", "vorname", 3, "Ida-Luise-Mustermann")
 	if err != nil {
 		t.Fatalf("Seal: %v", err)
 	}
@@ -386,7 +398,7 @@ func TestADataKeyFromAnotherInstallationIsNamed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	env, err := first.Seal("P-4711", "vorname", 3, "Ida")
+	env, err := first.Seal("P-4711", "vorname", 3, "Ida-Luise-Mustermann")
 	if err != nil {
 		t.Fatalf("Seal: %v", err)
 	}
