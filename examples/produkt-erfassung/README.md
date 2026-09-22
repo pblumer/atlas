@@ -7,28 +7,37 @@ Dieser Prozess macht dasselbe als Ablauf mit Aufgaben und gewinnt damit das, was
 ein Formular nicht hat: eine Prüfung durch eine zweite Ansicht, bevor das Produkt
 bestellbar wird, und eine Spur, wer was wann entschieden hat.
 
-## Dieses Beispiel läuft derzeit nicht
+## Voraussetzungen
 
-Jeder Service-Task hier schreibt über Atlas' **eigene HTTP-API** zurück, und er
-tut es in der Form, die sich als nicht ausführbar erwiesen hat: ein gewöhnlicher
-Service-Task des Job-Typs `rest`, dessen Ziel und Methode in Task-Headern stehen.
+Jeder Service-Task hier schreibt über Atlas' **eigene HTTP-API** zurück, als
+`<atlas:restConnector>`-Task auf dem reservierten Job-Typ `io.atlas.http.rest` —
+denselben, den der mitgelieferte Auftragserfüllungsprozess
+(`api/systemprocesses/auftrag-erfuellung.bpmn`) benutzt. Die Engine bedient ihn
+selbst; wo der Betreiber diese Art ausgelagert hat, bedient sie der mitgelieferte
+`rest`-Worker. **Einzurichten ist dafür nichts.**
 
-Beides trägt nicht. `rest` ist kein reservierter Job-Typ — der heisst
-`io.atlas.http.rest` — und ein geleaster Job führt überhaupt keine Task-Header
-mit sich. Die Tokens parken deshalb ohne zu scheitern: kein Wiederholungsversuch,
-kein Incident, nichts Rotes. Der frühere Rat, dazu unter **Console → Workers**
-einen Worker vom Typ `rest` namens `atlas` einzurichten, lässt sich nicht
-befolgen; diesen Worker-Typ gibt es nicht.
+Zwei Dinge braucht der Ablauf trotzdem:
 
-Die mitgelieferten Systemprozesse (`api/systemprocesses/`) sind inzwischen
-korrigiert: ihre Aufrufe sind echte `<atlas:restConnector>`-Tasks, und die
-Adresse ihres eigenen Servers bekommen sie in der Startvariablen `atlasApiBase`.
-Dieses Beispiel ist es **noch nicht**. Es hat keine solche Startvariable, weil es
-von Hand gestartet wird und nicht vom Auftragsportal — was es braucht, ist eine
-eigene Entscheidung darüber, woher es die Adresse nimmt.
+**Die Adresse dieses Atlas.** Ein Modell kann sie nicht in sich tragen, und dieser
+Ablauf wird von Hand gestartet — er hat also niemanden, der sie mitgäbe. Das
+Startformular `pe-start` fragt sie als einzige Angabe ab und legt sie unter
+`atlasApiBase` ab; jeder Aufruf baut seine URL daraus. Der
+Auftragserfüllungsprozess bekommt dieselbe Variable vom Server, weil der Server
+ihn startet.
 
-Bis dahin ist es als Vorlage zu lesen und nicht als lauffähiges Beispiel. Das ist
-auch der Grund, warum es im Handbuch keinen „Ausführen"-Knopf hat.
+**Ein API-Token mit Katalogpflege-Recht**, hinterlegt unter
+`ATLAS_CONNECTOR_ATLAS_TOKEN` (ADR-0041). Die Modelle nennen nur die Referenz
+`atlas`, nie den Wert. Fehlt das Token, antwortet die API mit 401, der Job
+scheitert und meldet einen Incident — sichtbar, statt stumm zu parken.
+
+### Was hier früher stand
+
+Die Aufrufe waren gewöhnliche Service-Tasks des Job-Typs `rest`, mit Ziel und
+Methode in Task-Headern, und dieses README riet, dafür unter **Console → Workers**
+einen Worker vom Typ `rest` namens `atlas` einzurichten. Nichts davon trug:
+`rest` ist kein reservierter Job-Typ, ein geleaster Job führt überhaupt keine
+Task-Header mit sich, und diesen Worker-Typ gibt es nicht. Die Tokens parkten
+ohne zu scheitern — kein Wiederholungsversuch, kein Incident, nichts Rotes.
 
 Zwei Gruppen kommen vor: `katalogpflege` für die Erfassung und `administration`
 für das Erscheinungsbild.

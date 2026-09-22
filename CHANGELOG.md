@@ -14,6 +14,27 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The product-capture example runs.** It shipped in the shape that could never
+  execute — plain service tasks of a job type nothing serves, with the target and the
+  HTTP method in task headers no worker receives — and its README instructed a setup
+  step that cannot be carried out, because there is no `rest` Worker Type to configure.
+  Its tokens parked without failing, so nothing anywhere said so.
+
+  Its nine calls are `<atlas:restConnector>` tasks now, on the reserved job type the
+  engine serves itself. Nothing to configure for them. Two things the example does
+  need, and both are real: a start form asks for this Atlas's address once, because a
+  hand-started model has nobody to hand it one — the shipped fulfilment process gets
+  the same variable from the server, which starts it — and the operator's API token
+  under `ATLAS_CONNECTOR_ATLAS_TOKEN`, without which the first call answers 401 and
+  raises an incident rather than parking.
+
+  The payloads are one input mapping per JSON key, because a connector task sends its
+  activity-local scope: a single expression targeting `body` would have nested the
+  whole payload one level under that name. The guard that holds those payloads to
+  their shapes — flat edges, trimmed keywords, every field present in a full replace —
+  now assembles the body exactly as the connector does instead of reading one
+  expression.
+
 - **An attribute the editor could not read survived only by being ignored.** DMN 1.5 lets
   an author say that Input Data is to be drawn as the paper sheet symbol rather than the
   backwards compatible oval. The editor's descriptor had that flag typed as an association

@@ -79,6 +79,14 @@
   <bpmn:process id="proc_produkt_erfassung" name="Produkt erfassen" isExecutable="true">
 
     <bpmn:startEvent id="start" name="Erfassung begonnen">
+      <bpmn:documentation>Das Startformular fragt eine einzige Angabe ab: die Adresse dieses Atlas.
+
+Jeder Service-Task hier ruft Atlas' eigene HTTP-API auf, und ein Modell kann die Adresse seiner Installation nicht in sich tragen. Der mitgelieferte Auftragserfüllungsprozess bekommt sie vom Server mitgegeben, weil der Server ihn startet; dieser Prozess wird von Hand gestartet und hat niemanden, der sie mitgäbe.
+
+Voraussetzung beim Betreiber: ein API-Token mit Katalogpflege-Recht, hinterlegt unter ATLAS_CONNECTOR_ATLAS_TOKEN (ADR-0041). Ohne dieses Token antwortet die API mit 401, der Job scheitert und meldet einen Incident — sichtbar, statt stumm zu parken.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:formDefinition formId="pe-start"/>
+      </bpmn:extensionElements>
       <bpmn:outgoing>f_start_kataloge</bpmn:outgoing>
     </bpmn:startEvent>
     <bpmn:sequenceFlow id="f_start_kataloge" sourceRef="start" targetRef="kataloge"/>
@@ -90,15 +98,10 @@ Vor der Maske und nicht in ihr: ein Startformular kann nichts laden, und eine Li
 
 Schreibt: kataloge.</bpmn:documentation>
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="rest"/>
-        <zeebe:taskHeaders>
-          <zeebe:header key="connector" value="atlas"/>
-          <zeebe:header key="method" value="GET"/>
-        </zeebe:taskHeaders>
-        <zeebe:ioMapping>
-          <zeebe:input source="=&#34;/api/v1/catalogs&#34;" target="path"/>
-          <zeebe:output source="=body" target="kataloge"/>
-        </zeebe:ioMapping>
+        <atlas:restConnector method="GET"
+          url="=atlasApiBase + &#34;/api/v1/catalogs&#34;"
+          resultVariable="kataloge"
+          authType="bearer" authSecret="atlas"/>
       </bpmn:extensionElements>
       <bpmn:incoming>f_start_kataloge</bpmn:incoming>
       <bpmn:outgoing>f_kataloge_produkte</bpmn:outgoing>
@@ -110,15 +113,10 @@ Schreibt: kataloge.</bpmn:documentation>
 
 Schreibt: produkte.</bpmn:documentation>
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="rest"/>
-        <zeebe:taskHeaders>
-          <zeebe:header key="connector" value="atlas"/>
-          <zeebe:header key="method" value="GET"/>
-        </zeebe:taskHeaders>
-        <zeebe:ioMapping>
-          <zeebe:input source="=&#34;/api/v1/catalog-products&#34;" target="path"/>
-          <zeebe:output source="=body" target="produkte"/>
-        </zeebe:ioMapping>
+        <atlas:restConnector method="GET"
+          url="=atlasApiBase + &#34;/api/v1/catalog-products&#34;"
+          resultVariable="produkte"
+          authType="bearer" authSecret="atlas"/>
       </bpmn:extensionElements>
       <bpmn:incoming>f_kataloge_produkte</bpmn:incoming>
       <bpmn:outgoing>f_produkte_erfassung</bpmn:outgoing>
@@ -156,15 +154,15 @@ Die Bedingung am Gateway fragt zusätzlich, ob katalogId noch leer ist. Ohne das
 
 Schreibt: katalogId, katalogNeu.</bpmn:documentation>
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="rest"/>
-        <zeebe:taskHeaders>
-          <zeebe:header key="connector" value="atlas"/>
-          <zeebe:header key="method" value="POST"/>
-        </zeebe:taskHeaders>
+        <atlas:restConnector method="POST"
+          url="=atlasApiBase + &#34;/api/v1/catalogs&#34;"
+          resultVariable="angelegt"
+          authType="bearer" authSecret="atlas"/>
         <zeebe:ioMapping>
-          <zeebe:input source="=&#34;/api/v1/catalogs&#34;" target="path"/>
-          <zeebe:input source="={rank: rang, languages: sprachenListe, texts: {de: katalogname}}" target="body"/>
-          <zeebe:output source="=body.id" target="katalogId"/>
+          <zeebe:input source="=rang" target="rank"/>
+          <zeebe:input source="=sprachenListe" target="languages"/>
+          <zeebe:input source="={de: katalogname}" target="texts"/>
+          <zeebe:output source="=angelegt.id" target="katalogId"/>
           <zeebe:output source="=true" target="katalogNeu"/>
         </zeebe:ioMapping>
       </bpmn:extensionElements>
@@ -195,14 +193,24 @@ Schreibt: katalogId, katalogNeu.</bpmn:documentation>
 
 Die Suchbegriffe werden beschnitten und leere Einträge fallen weg: split lässt das Leerzeichen hinter dem Komma stehen, und " M365" wäre ein Begriff, den niemand findet.</bpmn:documentation>
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="rest"/>
-        <zeebe:taskHeaders>
-          <zeebe:header key="connector" value="atlas"/>
-          <zeebe:header key="method" value="POST"/>
-        </zeebe:taskHeaders>
+        <atlas:restConnector method="POST"
+          url="=atlasApiBase + &#34;/api/v1/catalog-products&#34;"
+          authType="bearer" authSecret="atlas"/>
         <zeebe:ioMapping>
-          <zeebe:input source="=&#34;/api/v1/catalog-products&#34;" target="path"/>
-          <zeebe:input source="={id: produktId, homeCatalog: katalogId, state: &#34;draft&#34;, texts: {de: nameDe, fr: nameFr}, descriptions: {de: beschreibungDe, fr: beschreibungFr}, category: kategorie, productGroup: produktgruppe, keywords: if suchbegriffe = null then [] else (for s in split(suchbegriffe, &#34;,&#34;) return replace(s, &#34;^\s+|\s+$&#34;, &#34;&#34;))[item != &#34;&#34;], approval: {kind: genehmigungsart, ref: genehmigungsref}, provisionProcess: provisionProzess, deprovisionProcess: deprovisionProzess, multipleAllowed: mehrfach, price: preis, maxDays: maxTage}" target="body"/>
+          <zeebe:input source="=produktId" target="id"/>
+          <zeebe:input source="=katalogId" target="homeCatalog"/>
+          <zeebe:input source="=&#34;draft&#34;" target="state"/>
+          <zeebe:input source="={de: nameDe, fr: nameFr}" target="texts"/>
+          <zeebe:input source="={de: beschreibungDe, fr: beschreibungFr}" target="descriptions"/>
+          <zeebe:input source="=kategorie" target="category"/>
+          <zeebe:input source="=produktgruppe" target="productGroup"/>
+          <zeebe:input source="=if suchbegriffe = null then [] else (for s in split(suchbegriffe, &#34;,&#34;) return replace(s, &#34;^\s+|\s+$&#34;, &#34;&#34;))[item != &#34;&#34;]" target="keywords"/>
+          <zeebe:input source="={kind: genehmigungsart, ref: genehmigungsref}" target="approval"/>
+          <zeebe:input source="=provisionProzess" target="provisionProcess"/>
+          <zeebe:input source="=deprovisionProzess" target="deprovisionProcess"/>
+          <zeebe:input source="=mehrfach" target="multipleAllowed"/>
+          <zeebe:input source="=preis" target="price"/>
+          <zeebe:input source="=maxTage" target="maxDays"/>
         </zeebe:ioMapping>
       </bpmn:extensionElements>
       <bpmn:incoming>f_steht_entwurf</bpmn:incoming>
@@ -236,14 +244,24 @@ Bewusst dieselbe Gruppe wie die Erfassung: wer ein Vier-Augen-Prinzip will, setz
     <bpmn:serviceTask id="aktiv_setzen" name="Produkt aktiv setzen">
       <bpmn:documentation>POST /api/v1/catalog-products mit state=active. Erst jetzt kann eine Freigabe des Katalogs das Produkt tragen: publish weist jedes Item zurück, dessen Zustand nicht "active" ist.</bpmn:documentation>
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="rest"/>
-        <zeebe:taskHeaders>
-          <zeebe:header key="connector" value="atlas"/>
-          <zeebe:header key="method" value="POST"/>
-        </zeebe:taskHeaders>
+        <atlas:restConnector method="POST"
+          url="=atlasApiBase + &#34;/api/v1/catalog-products&#34;"
+          authType="bearer" authSecret="atlas"/>
         <zeebe:ioMapping>
-          <zeebe:input source="=&#34;/api/v1/catalog-products&#34;" target="path"/>
-          <zeebe:input source="={id: produktId, homeCatalog: katalogId, state: &#34;active&#34;, texts: {de: nameDe, fr: nameFr}, descriptions: {de: beschreibungDe, fr: beschreibungFr}, category: kategorie, productGroup: produktgruppe, keywords: if suchbegriffe = null then [] else (for s in split(suchbegriffe, &#34;,&#34;) return replace(s, &#34;^\s+|\s+$&#34;, &#34;&#34;))[item != &#34;&#34;], approval: {kind: genehmigungsart, ref: genehmigungsref}, provisionProcess: provisionProzess, deprovisionProcess: deprovisionProzess, multipleAllowed: mehrfach, price: preis, maxDays: maxTage}" target="body"/>
+          <zeebe:input source="=produktId" target="id"/>
+          <zeebe:input source="=katalogId" target="homeCatalog"/>
+          <zeebe:input source="=&#34;active&#34;" target="state"/>
+          <zeebe:input source="={de: nameDe, fr: nameFr}" target="texts"/>
+          <zeebe:input source="={de: beschreibungDe, fr: beschreibungFr}" target="descriptions"/>
+          <zeebe:input source="=kategorie" target="category"/>
+          <zeebe:input source="=produktgruppe" target="productGroup"/>
+          <zeebe:input source="=if suchbegriffe = null then [] else (for s in split(suchbegriffe, &#34;,&#34;) return replace(s, &#34;^\s+|\s+$&#34;, &#34;&#34;))[item != &#34;&#34;]" target="keywords"/>
+          <zeebe:input source="={kind: genehmigungsart, ref: genehmigungsref}" target="approval"/>
+          <zeebe:input source="=provisionProzess" target="provisionProcess"/>
+          <zeebe:input source="=deprovisionProzess" target="deprovisionProcess"/>
+          <zeebe:input source="=mehrfach" target="multipleAllowed"/>
+          <zeebe:input source="=preis" target="price"/>
+          <zeebe:input source="=maxTage" target="maxDays"/>
         </zeebe:ioMapping>
       </bpmn:extensionElements>
       <bpmn:incoming>f_freigegeben</bpmn:incoming>
@@ -258,15 +276,10 @@ Der Schritt sieht überflüssig aus und ist der wichtigste im Prozess. Ein PATCH
 
 Schreibt: katalogJetzt.</bpmn:documentation>
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="rest"/>
-        <zeebe:taskHeaders>
-          <zeebe:header key="connector" value="atlas"/>
-          <zeebe:header key="method" value="GET"/>
-        </zeebe:taskHeaders>
-        <zeebe:ioMapping>
-          <zeebe:input source="=&#34;/api/v1/catalogs/&#34; + katalogId" target="path"/>
-          <zeebe:output source="=body" target="katalogJetzt"/>
-        </zeebe:ioMapping>
+        <atlas:restConnector method="GET"
+          url="=atlasApiBase + &#34;/api/v1/catalogs/&#34; + katalogId"
+          resultVariable="katalogJetzt"
+          authType="bearer" authSecret="atlas"/>
       </bpmn:extensionElements>
       <bpmn:incoming>f_aktiv_lesen</bpmn:incoming>
       <bpmn:outgoing>f_lesen_schreiben</bpmn:outgoing>
@@ -282,14 +295,13 @@ concatenate und nicht append: append hängt eine Liste als EIN Element an und er
 
 Hinter der Freigabe und deshalb genau einmal: eine Verifizierung, die mehrfach zurückschickt, kann die Kanten nicht vervielfachen.</bpmn:documentation>
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="rest"/>
-        <zeebe:taskHeaders>
-          <zeebe:header key="connector" value="atlas"/>
-          <zeebe:header key="method" value="PATCH"/>
-        </zeebe:taskHeaders>
+        <atlas:restConnector method="PATCH"
+          url="=atlasApiBase + &#34;/api/v1/catalogs/&#34; + katalogId"
+          authType="bearer" authSecret="atlas"/>
         <zeebe:ioMapping>
-          <zeebe:input source="=&#34;/api/v1/catalogs/&#34; + katalogId" target="path"/>
-          <zeebe:input source="={revision: katalogJetzt.revision, items: distinct values(append(katalogJetzt.items, produktId)), edges: concatenate(katalogJetzt.edges, for t in integraleTeile return {from: produktId, to: t, kind: &#34;composition&#34;}, for t in optionaleTeile return {from: produktId, to: t, kind: &#34;aggregation&#34;})}" target="body"/>
+          <zeebe:input source="=katalogJetzt.revision" target="revision"/>
+          <zeebe:input source="=distinct values(append(katalogJetzt.items, produktId))" target="items"/>
+          <zeebe:input source="=concatenate(katalogJetzt.edges, for t in integraleTeile return {from: produktId, to: t, kind: &#34;composition&#34;}, for t in optionaleTeile return {from: produktId, to: t, kind: &#34;aggregation&#34;})" target="edges"/>
         </zeebe:ioMapping>
       </bpmn:extensionElements>
       <bpmn:incoming>f_lesen_schreiben</bpmn:incoming>
@@ -341,14 +353,12 @@ Das Logo gehört hierher und ist jetzt auch hier. Das gewählte Bild geht beim A
     <bpmn:serviceTask id="theme_setzen" name="Theme setzen">
       <bpmn:documentation>PUT /api/v1/catalogs/{id}/theme.</bpmn:documentation>
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="rest"/>
-        <zeebe:taskHeaders>
-          <zeebe:header key="connector" value="atlas"/>
-          <zeebe:header key="method" value="PUT"/>
-        </zeebe:taskHeaders>
+        <atlas:restConnector method="PUT"
+          url="=atlasApiBase + &#34;/api/v1/catalogs/&#34; + katalogId + &#34;/theme&#34;"
+          authType="bearer" authSecret="atlas"/>
         <zeebe:ioMapping>
-          <zeebe:input source="=&#34;/api/v1/catalogs/&#34; + katalogId + &#34;/theme&#34;" target="path"/>
-          <zeebe:input source="={accent: akzentfarbe, typeface: schriftart}" target="body"/>
+          <zeebe:input source="=akzentfarbe" target="accent"/>
+          <zeebe:input source="=schriftart" target="typeface"/>
         </zeebe:ioMapping>
       </bpmn:extensionElements>
       <bpmn:incoming>f_theme_setzen</bpmn:incoming>
@@ -386,14 +396,9 @@ Das Logo gehört hierher und ist jetzt auch hier. Das gewählte Bild geht beim A
     <bpmn:serviceTask id="release" name="Katalog publizieren">
       <bpmn:documentation>POST /api/v1/catalogs/{id}/releases. Die Freigabe prüft den ganzen Katalog, nicht nur dieses Produkt — fehlt irgendwo ein Prozess, eine Übersetzung oder eine Beschreibung in einer deklarierten Sprache, antwortet sie mit der Liste der Gründe und der Task meldet einen Incident.</bpmn:documentation>
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="rest"/>
-        <zeebe:taskHeaders>
-          <zeebe:header key="connector" value="atlas"/>
-          <zeebe:header key="method" value="POST"/>
-        </zeebe:taskHeaders>
-        <zeebe:ioMapping>
-          <zeebe:input source="=&#34;/api/v1/catalogs/&#34; + katalogId + &#34;/releases&#34;" target="path"/>
-        </zeebe:ioMapping>
+        <atlas:restConnector method="POST"
+          url="=atlasApiBase + &#34;/api/v1/catalogs/&#34; + katalogId + &#34;/releases&#34;"
+          authType="bearer" authSecret="atlas"/>
       </bpmn:extensionElements>
       <bpmn:incoming>f_publizieren</bpmn:incoming>
       <bpmn:outgoing>f_release_ende</bpmn:outgoing>
