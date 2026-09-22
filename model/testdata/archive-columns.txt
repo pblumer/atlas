@@ -1,0 +1,21 @@
+# The column names the exported event log carries for each value type, one line per
+# type, names in ascending order. This file is data on purpose: a repo-wide rename over
+# *.go cannot reach it, so the guard in archiveschema_test.go still fires.
+
+*model.CompensableValue: ElementId, ElementInstanceKey, HandlerNode, ProcessDefKey, ProcessInstanceKey, ScopeKey, Seq
+*model.DataObjectValue: Bool, Kind, Name, ProducerKey, ScopeKey, State, Text
+*model.DecisionEvaluationValue: DecisionId, ElementId, ElementInstanceKey, InputsJSON, OutputsJSON, ProcessDefKey, ProcessInstanceKey, TraceJSON
+*model.ElementInstanceValue: AttachedToKey, BpmnElementType, ElementId, EventGatewayKey, FlowScopeKey, MultiInstance, ParentTokenID, ProcessDefKey, ProcessInstanceKey, SourceFlowId, TokenID
+*model.InboundDeliveryValue: SourceID, SourceSeq
+*model.IncidentValue: ElementId, ElementInstanceKey, JobKey, Message, ProcessInstanceKey, RaisedAt, Reason
+*model.JobValue: Assignee, CandidateGroups, Deadline, ElementInstanceKey, JobType, LeaseEpoch, LeaseExpiresAt, ProcessInstanceKey, Retries, RetryDueDate
+*model.MessageFlowValue: CorrelationKey, MessageName, ReceiverElementId, ReceiverProcessDefKey, ReceiverProcessInstanceKey, SenderProcessInstanceKey
+*model.MessageSubscriptionValue: CorrelationKey, ElementId, ElementInstanceKey, MessageName, ProcessDefKey, ProcessInstanceKey
+*model.OperatorActionValue: Actor, ElementInstanceKey, FromProcessDefKey, JobKey, Kind, ProcessInstanceKey, Reason
+*model.ProcessInstanceValue: CompletedAt, CompletedPosition, CorrelationKey, CreatedAt, ExpiryDueDate, ParentElementInstanceKey, PredecessorInstanceKey, ProcessDefKey, PurgeDueDate, State, SuccessorInstanceKey
+*model.ProcessMigrationValue: FromProcessDefKey, Mapping, ProcessInstanceKey, ToProcessDefKey
+*model.SignalSubscriptionValue: ElementId, ElementInstanceKey, ProcessDefKey, ProcessInstanceKey, SignalName
+*model.TimerValue: DueDate, ElementInstanceKey, JobKey, JobKind, ProcessDefKey, ProcessInstanceKey, Repetitions, TargetElementId
+*model.VariableAuditValue: Actor, Bool, Kind, Name, ProcessInstanceKey, ScopeKey, Text
+*model.VariableIndexValue: Indexed, Name, ProcessInstanceKey
+*model.VariableValue: Bool, Index, Indexed, Kind, Name, ProducerKey, ScopeKey, Text
