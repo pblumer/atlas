@@ -1,6 +1,6 @@
 # ADR-0402: One estate, several nodes — a starmap stitched from subgraphs
 
-- **Status:** Proposed
+- **Status:** Accepted (amended 2026-09-22: the estate view is sequenced behind the credential-reach record, see §1)
 - **Implementation:** Not started
 - **Date:** 2026-09-18
 - **Deciders:** Atlas maintainers
@@ -111,6 +111,49 @@ derived landscape, and which can neither deploy, read an instance, nor list a pe
 And the picture **states whose credential drew each subgraph**, beside the same legend
 that already carries the restricted count. The same discipline: an incompleteness that is
 stated is a fact; one that is not is a discovery.
+
+#### Accepted, and the gate is not what gets built first (2026-09-22)
+
+This record is accepted, and with it the altitude, the budget rule, the fifth peer state and
+the refusal to invent edges. What is **not** built first is §1's operator gate. The
+measurement below found that the alternative it would foreclose is unavailable only because
+of a mechanism that can be changed, and the maintainer chose to change it: the credential's
+own reach is settled in
+ADR-draft-a-peer-credential-carries-the-reach-a-membership-cannot-give-it, and the estate
+view is built after it.
+
+The gate in §1 therefore stands as the *fallback* — what an installation gets if the reach
+record is refused — rather than as the way in.
+
+#### What the mechanism allows, measured before building the gate (2026-09)
+
+The open question above says the operator gate is *likely insufficient* for the reader who
+most needs this view. Before that gate is built, the alternative it would foreclose was
+measured against the code rather than argued about, because "the gate may be wrong" and "the
+better thing is unavailable" are different situations and only the second justifies building
+it anyway.
+
+The fourth way out this section does not name is **one peer credential per administrative
+unit**: if the credential a target stores already reaches only one unit's part of the
+answering node, then a federated read grants exactly the reach an information-protection
+concept intended, and no identity has to cross an installation. It needs no ADR-0373.
+
+It is not expressible today, and the reason is structural rather than missing work:
+
+| | State |
+|---|---|
+| Filtering a landscape by who asks | **exists** — the mesh is derived from the subset a caller may see, with restricted placeholders for the rest (ADR-0211 §3) |
+| Carrying the asking identity across installations | **absent** — ADR-0373 could not settle it, which is why this section starts where it does |
+| A credential that carries *which* subset it may see | **absent, and not a scope away.** `apiScopeAllowed` in `api/apitokenscope.go` maps a flat scope name to a list of route patterns, and `apiScopeMayReach` decides per route. A scope can say *which endpoints*; nothing in the model says *which subjects*. A per-unit credential therefore needs a second dimension on the token, not another word in the scope list. |
+
+So this section's "three ways out, and only one is buildable" is accurate about today's
+mechanism, and the choice it faces is sharper than the open question states: the operator
+gate, a coarse answer that answers nothing, or **a change to what a token can express** —
+which is its own record and its own cost, and is the only one of the three that serves the
+multi-domain installation named in the open question.
+
+Nothing of this section is built: there is no estate altitude, no domain node kind and no
+new scope in the tree. That is the state to decide from, not a gap to close quietly.
 
 ### 2. The budget is per node and cannot be multiplied
 
