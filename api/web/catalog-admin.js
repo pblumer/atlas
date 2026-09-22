@@ -791,7 +791,7 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
         <td>${(r.items || []).length}</td></tr>`).join("")}</tbody></table>`
     : `<p class="muted">Never published. Until it is, the portal shows this catalogue to nobody.</p>`}`;
 
-  wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList,
+  wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, formList,
     mayShare(cat, me, enforced), mayTheme(me, enforced), dir, people);
 }
 
@@ -1652,7 +1652,7 @@ function wireAppearance({ api, toast, view }, id, reload) {
   });
 }
 
-function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, canShare, canTheme, dir, people) {
+function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, formList, canShare, canTheme, dir, people) {
   const id = cat.id;
   const reload = () => { const h = location.hash; location.hash = "#/catalog"; location.hash = h; };
   // patch changes a catalogue with no precondition. That is right for a form whose
@@ -2039,13 +2039,10 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
       });
       try {
         await api("POST", "/api/v1/catalog-products", body);
-        // The picture is its own request, because it is bytes and the product is a
-        // record. It follows the save rather than preceding it, so a product that
-        // was refused never acquires a picture — and a picture that fails to upload
-        // is reported on its own, against a product that is already stored.
-        await savePicture({ api, apiBytes, toast }, pid, f);
         // A new product is offered by the catalogue it was created in: creating one
-        // that nothing offers is the likeliest way to lose work here.
+        // that nothing offers is the likeliest way to lose work here. So it comes
+        // straight after the record and before anything optional — whatever a later
+        // step throws, the product is already where somebody will look for it.
         //
         // This is a second write, and it carries the catalogue's revision like every
         // other list write — so it has its own refusal, reported in its own words.
@@ -2065,6 +2062,18 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
             return;
           }
         }
+        // The picture is its own request, because it is bytes and the product is a
+        // record. It goes last, after the record exists and after the catalogue
+        // offers it: a product that was refused never acquires a picture, and
+        // savePicture reports its own failures rather than raising them.
+        //
+        // That total-ness is not enough on its own, which is how this went wrong
+        // once: the bag below is evaluated HERE, by the caller, before savePicture's
+        // try block is entered. A name the caller cannot resolve throws from this
+        // line, lands in the outer catch, and takes every step after it. Keeping
+        // the step last means the only thing a throw here can still cost is the
+        // picture — one upload, and visibly missing.
+        await savePicture({ api, apiBytes, toast }, pid, f);
         toast("Saved");
         reload();
       } catch (err) {
