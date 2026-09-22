@@ -240,6 +240,23 @@ thing it is supposed to own.
   second deployment during a migration between domains; and whether the
   `domain:` tag should later become a field after all, if a second reserved prefix
   ever appears and the two start to need different handling.
+- **Build the domain edge so it can be drawn.** A cross-domain dependency is the
+  first relationship in Atlas that a landscape could honestly draw across a node
+  boundary, and Panorama is one decision away from it: it already draws a deployment
+  target as a node — the only kind whose state comes from outside the process, and
+  so the only one that can be *unreachable* or *stale* — but derives **no** edge to
+  it, because "a promotion is an act, not a stored relationship" and a line would
+  assert something nobody stated (`api/panorama/mesh.go`, `Target`;
+  [ADR-0211](0211-panorama-derived-landscape-mesh.md)). A declared dependency is
+  exactly the stored relationship a target is not. So whatever holds it — the
+  `domain:` tag and reference record here, the `interfaceRef` resolution in
+  [ADR-0371](0371-participant-binds-a-published-interface.md) — should be persisted
+  as a resolvable pair rather than as free text, so an edge is *derivable* from it
+  later without re-authoring anything. This record does not decide the drawing, and
+  it must not: a picture across a boundary has to distinguish what this node
+  observed from what it was told, the way [ADR-0374](0374-white-box-participant.md)
+  distinguishes a cached contract from a live look inside. The point is only to not
+  foreclose it by storing the relationship in a shape no edge can come out of.
 
 ## Pros and cons of the options
 
@@ -311,3 +328,7 @@ thing it is supposed to own.
   reference record is to the map what a declared dependency is to an export)
 - relates to [ADR-0147](0147-splitting-the-api-server-object.md) (`api/capability`
   is an area service, and everything above is a change inside it)
+- relates to [ADR-0211](0211-panorama-derived-landscape-mesh.md) and
+  [ADR-0374](0374-white-box-participant.md) (the landscape that draws a peer without
+  an edge today, and the rule that a picture across a boundary must not claim to see
+  through it)
