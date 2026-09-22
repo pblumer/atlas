@@ -33,9 +33,10 @@ type xmlService struct {
 	ID      string   `xml:"id,attr"`
 	Name    string   `xml:"name,attr"`
 	Outputs []xmlRef `xml:"outputDecision"`
-	// Encapsulated is read only by the layout generator, which has to know which
-	// compartment of the service box a decision belongs in (layout.go). Describing
-	// a service needs only its name and what it takes, so nothing here reads it.
+	// Encapsulated is read by the layout generator, which has to know which
+	// compartment of the service box a decision belongs in (layout.go), and by
+	// describeServices, which names a service's members so a picker can show a
+	// decision as belonging to one.
 	Encapsulated   []xmlRef `xml:"encapsulatedDecision"`
 	InputDecisions []xmlRef `xml:"inputDecision"`
 	InputData      []xmlRef `xml:"inputData"`
@@ -183,6 +184,14 @@ func describeServices(defs *tdmn.Definitions, src []byte) []DecisionInfo {
 		for _, ref := range append(append([]xmlRef{}, s.InputData...), s.InputDecisions...) {
 			if f, ok := field(ref); ok {
 				info.Inputs = append(info.Inputs, f)
+			}
+		}
+		// The decisions the service is made of, under the names the catalog lists them
+		// by — its output decisions and the ones it evaluates internally, in that order.
+		// An input decision is the caller's boundary and so is not one of them.
+		for _, ref := range append(append([]xmlRef{}, s.Outputs...), s.Encapsulated...) {
+			if n, ok := byID[localHref(ref.Href)]; ok && n.Name != "" {
+				info.Members = append(info.Members, n.Name)
 			}
 		}
 		if len(s.Outputs) == 1 {

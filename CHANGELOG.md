@@ -14,6 +14,23 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A decision service is offered where the author looks for it.** The Modeler's
+  decision picker is built from two lists: what an application's DMN references offer,
+  and — as a fallback — what the engine has deployed. Describing a reference returned
+  only its decisions, never the decision services, so a service could reach the picker
+  only by the second route: with no model handle, and therefore in no application. The
+  one thing a business rule task is meant to call sat under "other decisions", below
+  every decision it is made of.
+
+  A task addresses either with the same one string, so a catalog that carries one has
+  to carry the other. It now does, and the list is cut up the way an author reads it:
+  one group per decision file, this application's files first, and inside a file the
+  published interfaces before the decisions. A decision a service is made of says which
+  one — calling it works and answers correctly, which is exactly why it is worth
+  saying, because it reaches past the interface the service exists to be. An input
+  decision carries no such marker: that is the boundary the caller supplies, and it
+  sits outside the service rather than within it.
+
 - **A decision service that answers with nothing is refused rather than deployed.**
   DMN gives a decision service one or more output decisions: they are what it returns,
   and the whole reason to address a service instead of the decision inside it. Atlas

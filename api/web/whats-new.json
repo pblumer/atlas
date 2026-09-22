@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-decision-service-is-offered-where-the-author-looks-for-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The decision picker lists a decision service where you look for it",
+        "de": "Der Entscheidungs-Picker führt einen Decision Service dort, wo man ihn sucht"
+      },
+      "summary": {
+        "en": "A decision service is the published interface over part of a decision model — the thing a business rule task is meant to call. The picker was built only from the decisions its application's models offer, so a service could get into the list only by having been deployed: with no model file behind it, and so in no application. It ended up under \"other decisions\", below every decision it is made of. Now it is listed with its own model file, and the list is grouped the way you read it: one group per decision file, your application's files first, the services above the decisions inside them. A decision that belongs to a service says so, because calling it directly reaches past the interface the service exists to be.",
+        "de": "Ein Decision Service ist die veröffentlichte Schnittstelle über einen Teil eines Entscheidungsmodells — das, was ein Business Rule Task aufrufen soll. Der Picker wurde nur aus den Entscheidungen der Modelle einer Applikation gebaut; ein Service kam deshalb nur in die Liste, wenn er bereits deployt war: ohne Modelldatei dahinter und damit in keiner Applikation. Er landete unter „andere Entscheidungen\", unterhalb jeder Entscheidung, aus der er besteht. Jetzt steht er bei seiner Modelldatei, und die Liste ist so gegliedert, wie man sie liest: eine Gruppe je Entscheidungsdatei, die Dateien der eigenen Applikation zuerst, die Services über den Entscheidungen darin. Eine Entscheidung, die zu einem Service gehört, sagt das — denn sie direkt aufzurufen greift an der Schnittstelle vorbei, für die es den Service gibt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "DMN"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "a-decision-service-that-answers-with-nothing-is-refused-rath",
       "version": "Unreleased",
       "date": null,
@@ -356,35 +385,6 @@
           "de": "Entscheidungen öffnen"
         },
         "route": "#/console/decisions"
-      }
-    },
-    {
-      "id": "a-decision-graph-is-drawn-the-way-dmn-draws-one",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A decision graph is drawn the way DMN draws one",
-        "de": "Ein Entscheidungsgraph wird so gezeichnet, wie DMN ihn zeichnet"
-      },
-      "summary": {
-        "en": "In a decision requirements diagram the shape is not decoration — it is how a reader tells one kind of node from another. DMN draws a decision as a plain rectangle, input data as a stadium with fully rounded ends, a business knowledge model as a rectangle with two corners cut off, and a decision service as a rounded rectangle carrying its name in the top right, clear of the decisions it holds. Atlas drew decisions and knowledge models with rounded corners, which made a decision read as an input datum or as a service; and it drew a decision service square-cornered with its name centred over whatever it contained. Both pictures — the graph in the Modeler and the one the decision window puts a case on — now follow the notation, and a collapsed decision service is drawn as one instead of looking expanded. A model opened in Atlas therefore looks like the same model opened anywhere else.",
-        "de": "In einem Decision Requirements Diagram ist die Form keine Dekoration — an ihr erkennt man, um welche Art von Knoten es sich handelt. DMN zeichnet eine Entscheidung als schlichtes Rechteck, Eingabedaten als Stadion mit vollrunden Enden, ein Business Knowledge Model als Rechteck mit zwei abgeschnittenen Ecken und einen Decision Service als abgerundetes Rechteck, dessen Name oben rechts steht, ausserhalb der Entscheidungen, die er umschliesst. Atlas zeichnete Entscheidungen und Knowledge Models mit runden Ecken, wodurch eine Entscheidung wie ein Eingabedatum oder wie ein Service aussah; und den Decision Service mit eckigen Ecken und dem Namen mittig über seinem Inhalt. Beide Darstellungen — der Graph im Modeler und jener, auf den das Entscheidungsfenster einen Fall zeichnet — folgen nun der Notation, und ein eingeklappter Decision Service wird als solcher gezeichnet statt ausgeklappt zu wirken. Ein in Atlas geöffnetes Modell sieht damit aus wie dasselbe Modell in jedem anderen Werkzeug."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Decisions",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open a decision",
-          "de": "Entscheidung öffnen"
-        },
-        "route": "#/modeler/decisions"
       }
     }
   ]
