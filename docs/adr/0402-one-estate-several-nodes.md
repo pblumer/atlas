@@ -119,7 +119,7 @@ the refusal to invent edges. What is **not** built first is §1's operator gate.
 measurement below found that the alternative it would foreclose is unavailable only because
 of a mechanism that can be changed, and the maintainer chose to change it: the credential's
 own reach is settled in
-ADR-draft-a-peer-credential-carries-the-reach-a-membership-cannot-give-it, and the estate
+ADR-0410, and the estate
 view is built after it.
 
 The gate in §1 therefore stands as the *fallback* — what an installation gets if the reach
