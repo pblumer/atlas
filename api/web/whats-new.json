@@ -2,6 +2,74 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "saving-a-product-said-apibytes-is-not-defined-and-quietly-le",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Saving a product works again — and a new product is offered right away",
+        "de": "Ein Produkt lässt sich wieder speichern — und wird sofort angeboten"
+      },
+      "summary": {
+        "en": "Pressing Save on a product answered \"apiBytes is not defined\". The message named the picture, and the picture was the least of it: the product record was already written by then, and the step the error skipped was the one that tells the catalogue to offer a new product. So the save ended with the product stored, the catalogue unchanged, and a product nothing offers — which appears on no screen its maintainer has, while the message sent them looking at the image. Saving works again, and the order of the three writes was turned around: the record, then the offering, then the picture. A picture that fails now costs a picture, which is one upload and visibly missing.",
+        "de": "Beim Speichern eines Produktes erschien die Meldung „apiBytes is not defined“. Die Meldung nannte das Bild, und das Bild war das Geringste: der Produktdatensatz war zu diesem Zeitpunkt bereits geschrieben, und übersprungen wurde jener Schritt, der dem Katalog aufträgt, ein neues Produkt anzubieten. Das Speichern endete damit mit einem abgelegten Produkt, einem unveränderten Katalog und einem Produkt, das niemand anbietet — auf keinem Bildschirm der betreuenden Person sichtbar, während die Meldung sie auf das Bild schauen liess. Das Speichern funktioniert wieder, und die Reihenfolge der drei Schreibvorgänge wurde umgestellt: erst der Datensatz, dann das Angebot, dann das Bild. Ein fehlgeschlagenes Bild kostet nun ein Bild — einen Upload, und sichtbar fehlend."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a catalogue under Catalogue and press \"New product\".",
+          "Fill in the id and the name, and choose a picture.",
+          "Press Save — the product is stored and the catalogue offers it.",
+          "Check the product list: the new product is in it."
+        ],
+        "de": [
+          "Unter Katalog einen Katalog öffnen und „Neues Produkt“ drücken.",
+          "Id und Bezeichnung ausfüllen und ein Bild wählen.",
+          "Speichern drücken — das Produkt wird abgelegt und vom Katalog angeboten.",
+          "In der Produktliste nachsehen: das neue Produkt steht darin."
+        ]
+      }
+    },
+    {
+      "id": "the-portal-s-link-into-an-order-s-process-answered-where-nob",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "\"View the process\" answers next to the order it was pressed on",
+        "de": "„Prozess ansehen“ antwortet neben dem Auftrag, bei dem gedrückt wurde"
+      },
+      "summary": {
+        "en": "The link on an order row opens the process fulfilling it. When there is no process to open — none started yet, or none left — it used to say so above the table, out of sight of anybody who pressed a button in a row further down: the page appeared to do nothing, which is how it was reported. The answer is now under the button that asked for it. One of those two cases was not even said: where an instance survives only in the exported event log, the link followed it into a replay view that could only report a failure to load. That case now has words of its own, on the portal, naming the one cause the server is certain of.",
+        "de": "Der Verweis auf einer Auftragszeile öffnet den Prozess, der den Auftrag erfüllt. Gab es keinen zu öffnenden Prozess — noch keiner gestartet oder keiner mehr vorhanden —, stand die Auskunft bisher oberhalb der Tabelle und damit ausserhalb des Blickfelds derjenigen, die weiter unten eine Schaltfläche gedrückt hatten: die Seite schien nichts zu tun, und so wurde es gemeldet. Die Antwort steht nun unter der Schaltfläche, die sie ausgelöst hat. Einer der beiden Fälle wurde überdies gar nicht benannt: liegt eine Instanz nur noch im ausgelagerten Ereignisprotokoll, folgte der Verweis ihr in eine Ansicht, die bloss einen Ladefehler melden konnte. Dieser Fall hat nun eigene Worte im Portal und nennt jene Ursache, derer der Server sicher ist."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Self-service portal"
+      ],
+      "tutorial": {
+        "en": [
+          "Open \"My orders\" in the service portal.",
+          "Press \"View the process\" on an order — the running process opens.",
+          "On an order whose process has finished, the reason appears under the button."
+        ],
+        "de": [
+          "Im Leistungsportal „Meine Aufträge“ öffnen.",
+          "Bei einem Auftrag „Prozess ansehen“ drücken — der laufende Prozess öffnet sich.",
+          "Bei einem Auftrag ohne laufenden Prozess erscheint der Grund unter der Schaltfläche."
+        ]
+      }
+    },
+    {
       "id": "a-folded-decision-service-stays-folded",
       "version": "Unreleased",
       "date": null,
@@ -152,6 +220,27 @@
       }
     },
     {
+      "id": "the-two-links-on-a-portal-order-s-position-rows",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Removed",
+      "title": {
+        "en": "A position row is down to what acts on the position",
+        "de": "Die Positionszeile zeigt nur noch, was auf die Position wirkt"
+      },
+      "summary": {
+        "en": "Every position of an order carried two further links: \"Where is this?\", which fetched the step its process was sitting on, and one into that process instance. Both are gone, at the request of the people this page is for — the status right beside the position's name answers the same question out of the order's own record, one column over and without a press. Withdrawing a position and correcting its details stay; they act on the position rather than look at a process. The route that answered \"where is this\" is unchanged and still available to other callers.",
+        "de": "Jede Position eines Auftrags trug zwei weitere Verweise: „Wo steht das?“, das den Schritt des zugehörigen Prozesses abfragte, und einen in diese Prozessinstanz. Beide sind auf Wunsch der Nutzenden dieser Seite entfallen — der Status unmittelbar neben der Positionsbezeichnung beantwortet dieselbe Frage aus dem Auftragsdatensatz selbst, eine Spalte weiter und ohne Tastendruck. „Position zurückziehen“ und das Korrigieren der Angaben bleiben; sie wirken auf die Position, statt einen Prozess zu betrachten. Die Schnittstelle hinter „Wo steht das?“ ist unverändert und steht anderen Aufrufern weiterhin zur Verfügung."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Self-service portal"
+      ]
+    },
+    {
       "id": "a-decision-service-can-be-folded-away-on-the-canvas",
       "version": "Unreleased",
       "date": null,
@@ -251,128 +340,6 @@
       "tags": [
         "Modeler"
       ]
-    },
-    {
-      "id": "renaming-a-catalogue-or-changing-the-languages-it-is-offered",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Renaming a catalogue works again",
-        "de": "Einen Katalog umbenennen geht wieder"
-      },
-      "summary": {
-        "en": "Renaming a catalogue, or changing the languages it is offered in, failed with “list is not a function”. Both go through the same form on the catalogue screen, and neither reached the server at all — the save threw before it got there. Behind it: the file has a small helper called `list` that splits a comma-separated field, and further up in the same function a page element had been given the same name, which hid the helper. The save then called an element instead of a function. What made it hard to place is that the screen catches what it throws and shows the message, so a page that could not run reported itself as if the server had refused the rename. It is fixed, and three checks now drive the real screen: what a rename sends, that the languages arrive as a proper trimmed list, and that a save which works says nothing went wrong.",
-        "de": "Einen Katalog umbenennen oder seine Sprachen ändern scheiterte mit „list is not a function“. Beides läuft über dasselbe Formular im Katalogbildschirm, und keines erreichte den Server überhaupt — das Speichern brach vorher ab. Dahinter steckte: Die Datei hat eine kleine Hilfsfunktion namens `list`, die ein kommagetrenntes Feld zerlegt, und weiter oben in derselben Funktion trug ein Seitenelement denselben Namen und verdeckte sie. Das Speichern rief damit ein Element statt einer Funktion auf. Schwer einzuordnen war es, weil der Bildschirm den Fehler abfängt und dessen Meldung anzeigt — eine Seite, die nicht laufen konnte, meldete sich also so, als hätte der Server das Umbenennen abgelehnt. Behoben, und drei Prüfungen fahren jetzt den echten Bildschirm: was ein Umbenennen sendet, dass die Sprachen als saubere, beschnittene Liste ankommen, und dass ein gelungenes Speichern nichts meldet."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Katalog",
-        "Konsole"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Catalog and pick a catalogue.",
-          "Change its name in the top form, or edit the comma-separated languages beside it.",
-          "Press Save — it saves, where before it showed “list is not a function”.",
-          "Spaces around a language code are trimmed: “de, fr ,it” is stored as three codes."
-        ],
-        "de": [
-          "„Catalog“ öffnen und einen Katalog wählen.",
-          "Im oberen Formular den Namen ändern oder die kommagetrennten Sprachen daneben bearbeiten.",
-          "„Save“ drücken — es speichert, wo vorher „list is not a function“ erschien.",
-          "Leerzeichen um ein Sprachkürzel werden entfernt: „de, fr ,it“ wird als drei Kürzel gespeichert."
-        ]
-      }
-    },
-    {
-      "id": "the-catalogue-screen-now-says-what-the-portal-is-actually-of",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The catalogue screen now says what the portal is actually offering",
-        "de": "Der Katalogbildschirm sagt jetzt, was das Portal tatsächlich anbietet"
-      },
-      "summary": {
-        "en": "A catalogue and its portal are deliberately two different things: the portal serves a release, a frozen copy taken when somebody published, so that an order cannot change under the person placing it — while every edit a maintainer makes goes to the live catalogue beside it. Until now nothing said which of the two you were looking at, and one case was not merely unstated but impossible to see: a product taken out of a catalogue disappears from the product table at once and the release goes on offering it, so it is gone from every screen its maintainer has and present on the one they do not. The catalogue screen now states the difference above the Publish button — what publishing would add, what the portal is still offering that it would take away, and what has been edited since the release being served — with removals first, because that is the group nothing else can show. When the two agree, it says that too.",
-        "de": "Ein Katalog und sein Portal sind bewusst zwei verschiedene Dinge: Das Portal liefert ein Release aus, eine eingefrorene Kopie vom Zeitpunkt der Veröffentlichung, damit sich eine Bestellung nicht unter der bestellenden Person verändert — während jede Bearbeitung in den daneben liegenden Live-Katalog geht. Bisher sagte nichts, welches von beiden man vor sich hat, und ein Fall war nicht nur unausgesprochen, sondern schlicht nicht sichtbar: Ein aus dem Katalog entferntes Produkt verschwindet sofort aus der Produkttabelle, während das Release es weiter anbietet — es fehlt also auf jedem Bildschirm, den die zuständige Person hat, und steht auf dem einen, den sie nicht hat. Der Katalogbildschirm nennt den Unterschied nun oberhalb der Schaltfläche Publish: was eine Veröffentlichung hinzufügen würde, was das Portal noch anbietet und wegfallen würde, und was seit dem ausgelieferten Release bearbeitet wurde — die Entfernungen zuerst, weil diese Gruppe sonst nirgends zu sehen ist. Stimmen beide überein, wird auch das gesagt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Catalogue",
-        "Self-service portal"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Catalogue from the navigation and pick a catalogue.",
-          "Scroll to the Releases section at the bottom of the page.",
-          "Read the panel above the Publish button: green means the portal is offering this catalogue exactly as it stands.",
-          "If it is amber, the first group lists the products the portal is still offering that are no longer in this catalogue. Publishing is what takes them away."
-        ],
-        "de": [
-          "In der Navigation Katalog öffnen und einen Katalog auswählen.",
-          "Zum Abschnitt Releases am Seitenende blättern.",
-          "Den Bereich oberhalb der Schaltfläche Publish lesen: Grün bedeutet, dass das Portal diesen Katalog genau so anbietet, wie er dasteht.",
-          "Bei Gelb listet die erste Gruppe die Produkte, die das Portal noch anbietet, die aber nicht mehr in diesem Katalog sind. Erst eine Veröffentlichung nimmt sie weg."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the catalogue",
-          "de": "Katalog öffnen"
-        },
-        "route": "#/catalog"
-      }
-    },
-    {
-      "id": "a-product-can-say-what-it-is-and-a-process-can-capture-one",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A product can say what it is, and a process can capture one",
-        "de": "Ein Produkt kann sagen, was es ist — und ein Prozess kann eines erfassen"
-      },
-      "summary": {
-        "en": "Two halves of one gap. A catalogue row was a name and a price, and the one thing somebody browsing needs — the sentence saying what the thing actually is — had no field to live in. A product now carries a description per language, like its name, and the portal shows it. It is optional: most products need no paragraph. But a product that has one must have it in every language the catalogue is published in, or the release says no — otherwise one audience is told what the thing is and the other is shown an empty panel. The other half is a capture process under examples/produkt-erfassung: choose or create a catalogue, enter the product data, say what it is assembled from, set the prices. It saves as a draft, and only a verification — every field once more, still editable — sets it active and asks whether to publish the catalogue. What a console form does not have and this gains: a second look before anything is orderable, and a record of who decided what and when. It writes back through Atlas's own API with a REST connection named atlas, which you set up once under Workers. A logo is picked in the task form and goes straight from the browser to the catalogue when the task is completed — never through the process, because half a megabyte in a token's scope would be rewritten into the log at every step after it. The example's README says what it still leaves out and why: languages beyond German and French, because a static form cannot read the catalogue's language list. Along the way a new check held every task to the form it names and found two shipped connection tests pointing at start forms nobody had written — both now exist.",
-        "de": "Zwei Hälften derselben Lücke. Eine Katalogzeile war ein Name und ein Preis, und das Eine, was jemand beim Blättern braucht — der Satz, der sagt, was die Sache eigentlich ist — hatte kein Feld. Ein Produkt führt jetzt eine Beschreibung je Sprache mit, wie seinen Namen, und das Portal zeigt sie. Sie ist optional: die meisten Produkte brauchen keinen Absatz. Wer aber eine hat, braucht sie in jeder Sprache, in der der Katalog publiziert wird, sonst verweigert die Freigabe — andernfalls erfährt eine Zielgruppe, worum es geht, und die andere sieht ein leeres Feld. Die andere Hälfte ist ein Erfassungsprozess unter examples/produkt-erfassung: Katalog wählen oder anlegen, Produktdaten erfassen, die Zusammenstellung festlegen, Preise setzen. Gespeichert wird als Entwurf, und erst eine Verifizierung — alle Felder noch einmal, noch einmal änderbar — setzt das Produkt aktiv und fragt, ob der Katalog publiziert werden soll. Was ein Konsolenformular nicht hat und dieser Ablauf gewinnt: eine zweite Ansicht, bevor etwas bestellbar ist, und eine Spur, wer was wann entschieden hat. Geschrieben wird über Atlas' eigene API mit einer REST-Verbindung namens atlas, die man einmal unter Workers einrichtet. Ein Logo wählt man im Aufgabenformular; es geht beim Abschliessen direkt aus dem Browser an den Katalog und nie durch den Prozess — ein halbes Megabyte im Token-Umfang würde bei jedem folgenden Schritt erneut ins Log geschrieben. Der README des Beispiels sagt, was es weiterhin weglässt und warum: Sprachen über Deutsch und Französisch hinaus, weil ein statisches Formular die Sprachliste des Katalogs nicht lesen kann. Nebenbei hat eine neue Prüfung jede Aufgabe an das Formular gebunden, das sie nennt, und dabei zwei mitgelieferte Verbindungstests gefunden, die auf nie geschriebene Startformulare zeigten — beide gibt es jetzt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Katalog",
-        "Portal",
-        "Prozesse"
-      ],
-      "tutorial": {
-        "en": [
-          "In the Console, open a catalogue, pick a product and find the new “Description” box — one per language the catalogue declares.",
-          "Write one in German only, then publish the catalogue: the release names the language that is missing one, rather than shipping a half-explained product.",
-          "Fill in the other language and publish again; the portal now shows the paragraph above the price.",
-          "For the process: set up a REST worker named “atlas” under Console › Workers, pointing at this server with a catalogue-maintenance login.",
-          "Install “Beispiel: Produkt erfassen” from the handbook's Beispiele chapter and start it.",
-          "Work the tasks in your inbox: catalogue, product data, assembly, prices — then the verification, which is the one that decides.",
-          "As an administrator, open the “Erscheinungsbild festlegen” task, pick a PNG or SVG and complete it — the image goes straight to the catalogue, and if that fails the task stays open and says why."
-        ],
-        "de": [
-          "In der Konsole einen Katalog öffnen, ein Produkt wählen und das neue Feld „Description“ ansehen — je ein Kasten pro deklarierter Sprache.",
-          "Nur auf Deutsch etwas eintragen und den Katalog publizieren: Die Freigabe nennt die Sprache, in der die Beschreibung fehlt, statt ein halb erklärtes Produkt auszuliefern.",
-          "Die zweite Sprache ergänzen und erneut publizieren; das Portal zeigt den Absatz nun über dem Preis.",
-          "Für den Prozess: unter „Console › Workers“ einen rest-Worker namens „atlas“ einrichten, der auf diesen Server zeigt, mit einem Zugang mit Katalogpflege-Recht.",
-          "Im Handbuch unter „Beispiele“ das Beispiel „Produkt erfassen“ installieren und starten.",
-          "Die Aufgaben im Posteingang abarbeiten: Katalog, Produktdaten, Zusammenstellung, Preise — dann die Verifizierung, die die eigentliche Entscheidung ist.",
-          "Als Administratorin die Aufgabe „Erscheinungsbild festlegen“ öffnen, ein PNG oder SVG wählen und abschliessen — das Bild geht direkt an den Katalog, und schlägt das fehl, bleibt die Aufgabe offen und nennt den Grund."
-        ]
-      }
     }
   ]
 }

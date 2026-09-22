@@ -1,0 +1,27 @@
+{
+  "tags": [
+    "Service catalogue"
+  ],
+  "title": {
+    "en": "Saving a product works again — and a new product is offered right away",
+    "de": "Ein Produkt lässt sich wieder speichern — und wird sofort angeboten"
+  },
+  "summary": {
+    "en": "Pressing Save on a product answered \"apiBytes is not defined\". The message named the picture, and the picture was the least of it: the product record was already written by then, and the step the error skipped was the one that tells the catalogue to offer a new product. So the save ended with the product stored, the catalogue unchanged, and a product nothing offers — which appears on no screen its maintainer has, while the message sent them looking at the image. Saving works again, and the order of the three writes was turned around: the record, then the offering, then the picture. A picture that fails now costs a picture, which is one upload and visibly missing.",
+    "de": "Beim Speichern eines Produktes erschien die Meldung „apiBytes is not defined“. Die Meldung nannte das Bild, und das Bild war das Geringste: der Produktdatensatz war zu diesem Zeitpunkt bereits geschrieben, und übersprungen wurde jener Schritt, der dem Katalog aufträgt, ein neues Produkt anzubieten. Das Speichern endete damit mit einem abgelegten Produkt, einem unveränderten Katalog und einem Produkt, das niemand anbietet — auf keinem Bildschirm der betreuenden Person sichtbar, während die Meldung sie auf das Bild schauen liess. Das Speichern funktioniert wieder, und die Reihenfolge der drei Schreibvorgänge wurde umgestellt: erst der Datensatz, dann das Angebot, dann das Bild. Ein fehlgeschlagenes Bild kostet nun ein Bild — einen Upload, und sichtbar fehlend."
+  },
+  "tutorial": {
+    "en": [
+      "Open a catalogue under Catalogue and press \"New product\".",
+      "Fill in the id and the name, and choose a picture.",
+      "Press Save — the product is stored and the catalogue offers it.",
+      "Check the product list: the new product is in it."
+    ],
+    "de": [
+      "Unter Katalog einen Katalog öffnen und „Neues Produkt“ drücken.",
+      "Id und Bezeichnung ausfüllen und ein Bild wählen.",
+      "Speichern drücken — das Produkt wird abgelegt und vom Katalog angeboten.",
+      "In der Produktliste nachsehen: das neue Produkt steht darin."
+    ]
+  }
+}

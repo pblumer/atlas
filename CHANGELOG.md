@@ -14,6 +14,35 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Saving a product said "apiBytes is not defined" and quietly left the product
+  offered by nothing.** The catalogue screen hands its event handlers a bag of what
+  the shell owns — the API caller, the byte uploader, the toast. The product form's
+  save reached for the byte uploader to put the picture up, and the bag it was
+  called with did not carry it. The name resolved to nothing, and not at load, where
+  review would have caught it, but on the press that reached the line.
+
+  What the message named was the picture. What it cost was the offering: the record
+  was already written, and the step after the picture is the one that tells the
+  catalogue to offer a new product — so the save ended with the product stored, the
+  catalogue unchanged, and a product that is offered by nobody, which is invisible
+  on every screen its maintainer has. The picture step now goes last, after the
+  offering, because it is the step whose failure can be afforded: losing a picture
+  costs one upload and is visibly missing.
+
+- **The portal's link into an order's process answered where nobody was looking.**
+  Pressing "Prozess ansehen" searches for the fulfilment orchestration and opens it.
+  Both ways that search can come back without one — nothing started or nothing left
+  — wrote their answer above the table, so an order further down the page produced a
+  message off-screen and a button that read as broken. The answer is now under the
+  button that asked for it.
+
+  And one of those two was not a message at all. The instance search falls back to
+  the exported event log when this server's own index has nothing, marking what it
+  answers with: those rows describe an instance the server no longer holds. The link
+  followed one like any other, into a replay view that could only say "Could not
+  load this instance's replay." It is now said here, in words that name the cause
+  this server is actually certain of.
+
 - **A folded decision service stays folded.** `EnsureDiagram` lays a model's whole
   graph out afresh whenever its diagram covers only some of the nodes, on the reasoning
   that a partial diagram is the residue of a tool that drew what it could. A collapsed
@@ -87,6 +116,20 @@ _Changed_ / _Removed_ for each version.
   to fix. A model already stored with the fault reads as invalid in the model list and
   cannot be deployed until it is repaired. Work in progress is unaffected: an
   unfinished service belongs in a draft, which is saved without this gate.
+
+### Removed
+
+- **The two links on a portal order's position rows.** A position row offered "Wo
+  steht das?" — the step that position is sitting on — and a link into the
+  position's own process instance. Both are gone at the request of the people the
+  page is for: the status beside the position's name answers the same question out
+  of the order's own record, one column over and without a press. Withdrawing a
+  position and correcting its details stay; they act on the position rather than
+  look at a process.
+
+  `GET /api/v1/portal/orders/{id}/lines/{position}/progress` is unchanged. It is API
+  surface with callers that are not this page, and a screen that stopped drawing a
+  button for a route is not a reason to withdraw the route.
 
 ### Added
 

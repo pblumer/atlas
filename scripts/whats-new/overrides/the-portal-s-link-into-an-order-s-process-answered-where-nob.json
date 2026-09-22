@@ -1,0 +1,25 @@
+{
+  "tags": [
+    "Self-service portal"
+  ],
+  "title": {
+    "en": "\"View the process\" answers next to the order it was pressed on",
+    "de": "„Prozess ansehen“ antwortet neben dem Auftrag, bei dem gedrückt wurde"
+  },
+  "summary": {
+    "en": "The link on an order row opens the process fulfilling it. When there is no process to open — none started yet, or none left — it used to say so above the table, out of sight of anybody who pressed a button in a row further down: the page appeared to do nothing, which is how it was reported. The answer is now under the button that asked for it. One of those two cases was not even said: where an instance survives only in the exported event log, the link followed it into a replay view that could only report a failure to load. That case now has words of its own, on the portal, naming the one cause the server is certain of.",
+    "de": "Der Verweis auf einer Auftragszeile öffnet den Prozess, der den Auftrag erfüllt. Gab es keinen zu öffnenden Prozess — noch keiner gestartet oder keiner mehr vorhanden —, stand die Auskunft bisher oberhalb der Tabelle und damit ausserhalb des Blickfelds derjenigen, die weiter unten eine Schaltfläche gedrückt hatten: die Seite schien nichts zu tun, und so wurde es gemeldet. Die Antwort steht nun unter der Schaltfläche, die sie ausgelöst hat. Einer der beiden Fälle wurde überdies gar nicht benannt: liegt eine Instanz nur noch im ausgelagerten Ereignisprotokoll, folgte der Verweis ihr in eine Ansicht, die bloss einen Ladefehler melden konnte. Dieser Fall hat nun eigene Worte im Portal und nennt jene Ursache, derer der Server sicher ist."
+  },
+  "tutorial": {
+    "en": [
+      "Open \"My orders\" in the service portal.",
+      "Press \"View the process\" on an order — the running process opens.",
+      "On an order whose process has finished, the reason appears under the button."
+    ],
+    "de": [
+      "Im Leistungsportal „Meine Aufträge“ öffnen.",
+      "Bei einem Auftrag „Prozess ansehen“ drücken — der laufende Prozess öffnet sich.",
+      "Bei einem Auftrag ohne laufenden Prozess erscheint der Grund unter der Schaltfläche."
+    ]
+  }
+}

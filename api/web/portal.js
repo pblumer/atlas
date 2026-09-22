@@ -59,13 +59,9 @@ const STRINGS = {
     'status.blocked': 'Blockiert',
     'order.running': 'In Arbeit',
     'proc.open': 'Prozess ansehen',
-    'proc.openLine': 'Prozessschritt',
-    'proc.none': 'Zu dieser Position ist keine laufende Prozessinstanz zu finden: Entweder wurde noch keine gestartet, sie ist bereits beendet, oder die Aufbewahrung hat sie entfernt.',
     'proc.none.order': 'Zu diesem Auftrag ist keine laufende Prozessinstanz zu finden: Entweder wurde noch keine gestartet, sie ist bereits beendet, oder die Aufbewahrung hat sie entfernt.',
-    'proc.where': 'Wo steht das?',
+    'proc.archived': 'Der Prozess zu diesem Auftrag steht nur noch im ausgelagerten Ereignisprotokoll. Dieser Server hat ihn nicht mehr und kann ihn nicht anzeigen.',
     'proc.asking': 'Wird abgefragt …',
-    'proc.standing': 'Aktueller Schritt:',
-    'proc.nothingRunning': 'Zu dieser Position läuft gerade kein Prozess.',
     'order.completed': 'Abgeschlossen',
     'order.partial': 'Teilweise erfüllt',
     'order.unfulfilled': 'Nicht erfüllt',
@@ -218,13 +214,9 @@ const STRINGS = {
     'status.blocked': 'Blocked',
     'order.running': 'In progress',
     'proc.open': 'View the process',
-    'proc.openLine': 'Process step',
-    'proc.none': 'No running process instance was found for this position: either none has started yet, it has already finished, or retention has removed it.',
     'proc.none.order': 'No running process instance was found for this order: either none has started yet, it has already finished, or retention has removed it.',
-    'proc.where': 'Where is this?',
+    'proc.archived': 'This order\'s process is only in the exported event log now. This server no longer holds it and cannot show it.',
     'proc.asking': 'Asking …',
-    'proc.standing': 'Current step:',
-    'proc.nothingRunning': 'Nothing is running for this position right now.',
     'order.completed': 'Completed',
     'order.partial': 'Partly fulfilled',
     'order.unfulfilled': 'Not fulfilled',
@@ -630,15 +622,11 @@ const state = {
   // editing names the position whose details are open for correction, as
   // "<orderId>|<itemId>", empty for none (ADR-0359).
   editing: '',
-  // progress is where each position's process stands, keyed "<orderId>|<position>"
-  // (ADR-0390).
-  //
-  // Per position and not per order, because the order's own orchestration says
-  // "running" and this says which step *this* line is sitting on — which is the
-  // question somebody reading their own order actually has. Empty until asked: the
-  // server finds the instance by walking what is running, and a page of ten orders
-  // would be forty walks to fill a line most readers never read.
-  progress: new Map(),
+  // following is what the process link last found, by order id. Kept per row
+  // because the question was asked from a row: an answer at the top of the page is
+  // off-screen for whoever pressed a button further down, and a button whose
+  // answer nobody sees is a button that did nothing.
+  following: new Map(),
 };
 
 // --- The four levels the mockups draw ---------------------------------------
@@ -2125,37 +2113,27 @@ async function mountConfigForms() {
 // started with the order id too, so a search that took the first hit would open
 // one position's process and call it the order.
 //
-// An instance that is gone is the ordinary late case, not an error: history
-// retention deletes one long before the order it fulfilled is deleted. Said rather
-// than followed, because a link to nothing reads as the console having broken.
-async function followProcess(order, line) {
-  state.error = '';
-  // Two different questions, and they are answered by two different instances.
-  //
-  // Without a line: the order's own fulfilment orchestration, which says the order
-  // is running and nothing about which of four positions is waiting on an approval
-  // and which is being provisioned.
-  //
-  // With one: the process working on *that* position. It is found by the position's
-  // own id and by nothing else, because the search answers with only the variables
-  // that matched the query — a search for the order returns every instance it
-  // started, each carrying `orderId` and nothing else, so there would be nothing
-  // left on the page to tell them apart by. `positionId` is what the fulfilment
-  // model passes for exactly this, and it names one instance
-  // (ADR-0384).
-  //
-  // There is deliberately no fallback to the product id. It matches instances from
-  // every order that ever carried that product, and the answer carries only the
-  // variable that matched, so the order cannot be checked from it — opening one of
-  // those would be the defect the position key exists to prevent, one screen
-  // further out. A position whose instance is not found is said, not approximated.
-  const query = line
-    ? `positionId=${lineKey(line)}`
-    : `orderId=${order.id}`;
+// Whatever it finds out is said beside the row it was pressed from. It used to be
+// said in state.error, which is painted above the table: an order further down the
+// page produced a message off-screen, and the button read as broken — which is how
+// it was reported. The one case that works navigates away, and the two that cannot
+// are the two that have to be visible.
+async function followProcess(order) {
+  state.following.set(order.id, t('proc.asking'));
+  render();
+  const said = (what) => { state.following.set(order.id, what); render(); };
   try {
+    const query = `orderId=${order.id}`;
     const page = await api(`/api/v1/instances/search?q=${encodeURIComponent(query)}`);
     const hits = (page && page.items) || [];
-    const hit = line ? hits[0] : hits.find((i) => i.processId === 'atlas-auftrag-erfuellung');
+    // Archived first, and separately. The search falls back to the exported event
+    // log when this server's own index has nothing, and marks what it answers with:
+    // the instance was hard-deleted by history retention (ADR-0115) and exists only
+    // in the export. Following one reaches a replay view with nothing to replay,
+    // which says "Could not load this instance's replay." — a dead end two screens
+    // from the page that knew better.
+    const live = hits.filter((i) => !i.archived);
+    const hit = live.find((i) => i.processId === 'atlas-auftrag-erfuellung');
     if (!hit) {
       // What is known, and not a cause that was guessed. This said the instance had
       // been removed by retention, which is one of three reasons it is not found and
@@ -2163,67 +2141,21 @@ async function followProcess(order, line) {
       // instance to remove, and that is what somebody reads this message about on the
       // day they ordered. A page that names a cause it cannot know sends whoever
       // reads it to look in the wrong place.
-      state.error = t(line ? 'proc.none' : 'proc.none.order');
-      render();
+      const archived = hits.some((i) => i.archived && i.processId === 'atlas-auftrag-erfuellung');
+      said(t(archived ? 'proc.archived' : 'proc.none.order'));
       return;
     }
     window.location.href = `/index.html#/operations/i/${hit.key}`;
   } catch (e) {
-    state.error = `${t('portal.failed')} ${e.message}`;
-    render();
+    said(`${t('portal.failed')} ${e.message}`);
   }
 }
 
-// --- Where one position stands ----------------------------------------------
-//
-// The other half of the link above, and the half that is not an operator's
-// (ADR-0390). Following the
-// instance means the console, and the console shows the whole engine state of that
-// instance — including variables belonging to somebody else's order where a process
-// holds them. So the orderer is answered by a route of their own, gated on owning
-// the order: which step the position is sitting on, and nothing else.
-
-// askProgress fetches where one position's process is.
-//
-// On a press rather than with the page, for the reason followProcess is: the server
-// finds the instance by walking what is running, and drawing this for every row
-// would pay that walk per position of every order on the page.
-//
-// Pressing again re-asks rather than closing. Where something stands is the one
-// thing on this page that moves while it is open, and a button that toggled a
-// stale answer would show yesterday's step as today's.
-async function askProgress(order, line) {
-  const at = `${order.id}|${lineKey(line)}`;
-  state.error = '';
-  state.progress.set(at, { asking: true });
-  render();
-  try {
-    const got = await api(`/api/v1/portal/orders/${encodeURIComponent(order.id)}`
-      + `/lines/${encodeURIComponent(lineKey(line))}/progress`);
-    state.progress.set(at, { state: got.state, steps: got.steps || [] });
-  } catch (e) {
-    // Nothing kept: a stale answer under a failed ask reads as the answer.
-    state.progress.delete(at);
-    state.error = `${t('portal.failed')} ${e.message}`;
-  }
-  render();
-}
-
-// progressNote is that answer in words, or nothing where it was never asked for.
-//
-// "Nothing is running" is said rather than left blank. It is the ordinary state of
-// most positions for most of an order's life — before the position is reached, and
-// after it is finished — and a button that answered with silence reads as broken.
-function progressNote(order, line) {
-  const got = state.progress.get(`${order.id}|${lineKey(line)}`);
-  if (!got) return null;
-  if (got.asking) return el('span', { class: 'muted' }, ` ${t('proc.asking')}`);
-  if (got.state !== 'active' || !got.steps.length) {
-    return el('span', { class: 'muted' }, ` ${t('proc.nothingRunning')}`);
-  }
-  // Every step, comma-separated: a process that forked is on two at once, and
-  // naming the first would be a coin toss rendered as fact.
-  return el('span', { class: 'step' }, ` ${t('proc.standing')} ${got.steps.join(', ')}`);
+// followNote is what the link last found for this order, or nothing where it was
+// never pressed. It sits under the button, which is what makes the press visible.
+function followNote(order) {
+  const said = state.following.get(order.id);
+  return said ? el('div', { class: 'muted follow-note' }, said) : null;
 }
 
 // lineKey is what one position is called, mirroring the server's own rule
@@ -2441,7 +2373,10 @@ function orderRowBodies() {
           disabled: state.busy,
           onclick: () => followProcess(o),
         }, t('proc.open'))
-        : null),
+        : null,
+      // And what it found, under the button that asked. The one answer that is not
+      // drawn here is the one that navigates away.
+      followNote(o)),
     el('td', {},
       t(deriveStatus(o)),
       el('ul', { class: 'lines' }, (o.lines || []).map((l) => el('li', {},
@@ -2465,27 +2400,11 @@ function orderRowBodies() {
             onclick: () => withdrawLine(o, l),
           }, state.busy ? t('line.withdrawing') : t('line.withdraw'))
           : null,
-        // Where this position stands, to whoever's position it is. No role: the
-        // route behind it is gated on owning the order, which is the same gate
-        // that let this reader see the order at all.
-        el('button', {
-          class: 'linkish',
-          title: t('proc.where'),
-          disabled: state.busy,
-          onclick: () => askProgress(o, l),
-        }, t('proc.where')),
-        progressNote(o, l),
-        // The instance behind it, to whoever may open one. That is an operations
-        // surface — the console shows the whole state of the instance — so it stays
-        // where it was, beside the answer that needs no role.
-        state.mayFollowProcess
-          ? el('button', {
-            class: 'linkish',
-            title: t('proc.openLine'),
-            disabled: state.busy,
-            onclick: () => followProcess(o, l),
-          }, t('proc.openLine'))
-          : null,
+        // No link into a process here. A position row carried two — where the
+        // position stands, and the position's own instance — and neither was read
+        // as useful by the people this page is for: the status beside the name
+        // already answers "what is happening to my laptop" out of the order's own
+        // record. The order's link above is the one that stayed.
         correctable(l)
           ? el('button', {
             class: 'linkish',
