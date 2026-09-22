@@ -1,7 +1,7 @@
 # ADR-0400: An edge that was taken is not an edge that was declared
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-09-18
 - **Deciders:** Atlas maintainers
 - **Open question:** whether a traversal count belongs in the engine's own state at all,
@@ -91,10 +91,18 @@ provenance word for what the number means.
 
 ### The edge gains a traversal fact, not a new store
 
-A derived edge carries `takenCount` and `lastTakenAt`, read from the counter keyed by
-the edge's anchoring `(procDefKey, elementId)`. The read is O(edges) on a graph already
-bounded at 400 nodes, off the run loop like the rest of the starmap's status half, and
-**nothing new is folded**: this is a join between two things Atlas already maintains.
+A derived edge carries a **count** and the **window it was counted over**, read from the
+counter keyed by the edge's anchoring `(procDefKey, elementId)`. The read is O(edges) on a
+graph already bounded at 400 nodes, off the run loop like the rest of the starmap's status
+half, and **nothing new is folded**: this is a join between two things Atlas already
+maintains.
+
+An earlier draft of this sentence said the edge carries `takenCount` and `lastTakenAt`. The
+second half was never obtainable: the counter is a merge counter holding a total, so there is
+no timestamp in it, which this record's own follow-ups state one screen further down. What
+shipped is `taken` and `takenSince` — the count, and the moment the counting started, which
+is the deployed definition's age. A *last* traversal time would be the one genuinely new
+write here, and it is still a follow-up rather than a decision.
 
 ### A fourth word: `taken`
 
@@ -134,6 +142,31 @@ only for the three late-resolution kinds above, and for peers once delivery exis
 ([#986](https://github.com/pblumer/atlas/issues/986),
 [ADR-0372](0372-peer-message-delivery-worker.md)). Everywhere else the axis is
 `declared` with a count, and the legend says which kinds can drift.
+
+### What shipped, and what did not (2026-09-19)
+
+The number and its window are built, end to end, in `9c6d9f0` — a commit whose own message
+names this record and which did not come back here to say so, which is why this section
+exists:
+
+| Part | State |
+|---|---|
+| `Edge.Taken` and `Edge.TakenSince`, summed per identity triple | `api/panorama/mesh.go` — a repeat adds its count to the edge already there rather than producing a second edge |
+| the join off the counter | `api/panoramamesh.go`, the fourth caller of `state.ElementVisitTotals` |
+| nil ≠ zero | kept apart throughout: an unread counter carries no count, never a zero somebody would act on |
+| the three rendering rules | `api/web/panorama-mesh.js` — the window is always stated, an unwalked line is drawn quieter and never recoloured, and nothing is labelled dead |
+| tests | `api/panorama/taken_test.go`, `TestPanoramaMeshCountsWhatActuallyTookTheEdge` |
+| **`taken and not declared`, the drift axis** | **not built** |
+
+The drift axis is the half that is not merely unbuilt but **blocked by this record's own
+driver**, and saying so is more useful than leaving it to be discovered again. Drift means
+traffic to a provider the model does not name, so the evidence has to say *which* target was
+resolved. The counter cannot: it is keyed by `(procDefKey, elementId)` and an element index
+says which task ran, never what it resolved to. Supplying that needs either a counter keyed by
+the resolved target — a new fold, which the *No scan* driver above and ADR-0403's tier rule
+were written to refuse — or a read of the export sink, which is where this record's open
+question already points. Either way it is a decision and not a piece of work, and the legend
+promised for "which kinds can drift" is correctly absent until one is taken.
 
 ### What this explicitly does not do
 
