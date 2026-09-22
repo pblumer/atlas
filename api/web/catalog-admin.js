@@ -572,7 +572,7 @@ const lifecycleFrom = (f) => {
 // The two headings — the category and the product group one level below it — in
 // the one box each that a maintainer types them into.
 //
-// A heading is two things on the record (ADR-draft-translatable-catalogue-headings):
+// A heading is two things on the record (ADR-0412):
 // the string the portal GROUPS
 // by, and a wording per language tag that it SHOWS. One box writes both, and the
 // convention is positional — the wordings in the order the catalogue declares its

@@ -340,7 +340,7 @@ type Item struct {
 	// field is what it would be migrated from.
 	//
 	// # What this string is, now that the heading is translatable
-	// (ADR-draft-translatable-catalogue-headings)
+	// (ADR-0412)
 	//
 	// The third cost ADR-0360 recorded was that a heading has no translation. It has
 	// one now, in [Item.CategoryTexts] below — and this field did not become it. It

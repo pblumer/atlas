@@ -6,7 +6,7 @@ import (
 )
 
 // The two headings, read in the language the portal is read in
-// (ADR-draft-translatable-catalogue-headings).
+// (ADR-0412).
 //
 // ADR-0360 shipped the category and the product group as one string each and
 // recorded "no translation" as a stated cost. A catalogue kept in four languages

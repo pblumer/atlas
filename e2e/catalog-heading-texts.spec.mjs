@@ -1,7 +1,7 @@
 // e2e for the two headings a maintainer types into one box each
 // (api/web/catalog-admin.js, headingList and headingFrom through productBody).
 //
-// ADR-draft-translatable-catalogue-headings. The category and the product group
+// ADR-0412. The category and the product group
 // used to be one string apiece, read
 // the same in every language a catalogue offers — so a catalogue kept in four
 // languages translated every product name and then filed them all under a German

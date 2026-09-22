@@ -1,4 +1,4 @@
-# ADR-DRAFT: A catalogue heading is a key that groups and a wording per language that shows
+# ADR-0412: A catalogue heading is a key that groups and a wording per language that shows
 
 - **Status:** Accepted
 - **Implementation:** Landed

@@ -246,7 +246,7 @@ var productFieldControls = map[string]string{
 	// control called categoryTexts exists, because there deliberately is none. A
 	// heading is a word rather than a sentence, and a maintainer keeping four of
 	// them aligned reads them beside each other
-	// (ADR-draft-translatable-catalogue-headings).
+	// (ADR-0412).
 	"categoryTexts":     `headingList(v.category, v.categoryTexts, langs)`,
 	"productGroupTexts": `headingList(v.productGroup, v.productGroupTexts, langs)`,
 }

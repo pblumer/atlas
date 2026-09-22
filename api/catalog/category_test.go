@@ -9,7 +9,7 @@ import "testing"
 // form id get — that a product claiming to carry one carries something readable.
 //
 // The heading's wording per language, which ADR-0360 did not have and which
-// ADR-draft-translatable-catalogue-headings added beside this string, is checked in
+// ADR-0412 added beside this string, is checked in
 // categorytexts_test.go. This file is about the key.
 
 func grouped(id, category string) Item {

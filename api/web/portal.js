@@ -732,7 +732,7 @@ function categoriesOf(release) {
 // Two fields and not one: the string on the product is the KEY — what everything
 // groups by, what a search hit sets to open the cascade at the right column, what
 // an already published release holds — and the map beside it is how that key is
-// written for a reader (ADR-draft-translatable-catalogue-headings). Where the
+// written for a reader (ADR-0412). Where the
 // catalogue has no translation the key renders, which is every product written
 // before the field existed and every catalogue declaring one language.
 //

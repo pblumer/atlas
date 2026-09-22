@@ -1,6 +1,6 @@
 # ADR-0360: A category is a heading a product writes on itself, not a thing the catalogue owns
 
-- **Status:** Accepted (amended 2026-09-22: the heading is translatable — see ADR-draft-translatable-catalogue-headings)
+- **Status:** Accepted (amended 2026-09-22: the heading is translatable — see ADR-0412)
 - **Implementation:** Landed
 - **Date:** 2026-09-15
 - **Open question:** Whether a heading ever needs to be **addressed** — renamed
@@ -81,7 +81,7 @@ this serves is maintained by people, not by a data governance process.
   other text on a product. A person using the English portal sees `Arbeitsplatz`.
   That is a genuine regression against the rest of the surface and the honest price
   of not having an entity with texts.~~ **Paid off, without the entity**
-  (ADR-draft-translatable-catalogue-headings, 2026-09-22): a product carries a
+  (ADR-0412, 2026-09-22): a product carries a
   wording per language tag beside each heading, and the string this record decided
   on stays as the key everything groups by. The two costs above are untouched and
   still hold.
