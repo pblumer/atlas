@@ -1,4 +1,4 @@
-# ADR-DRAFT: A peer credential carries the reach a membership cannot give it
+# ADR-0410: A peer credential carries the reach a membership cannot give it
 
 - **Status:** Proposed
 - **Implementation:** Not started
