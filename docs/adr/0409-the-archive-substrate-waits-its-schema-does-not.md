@@ -1,4 +1,4 @@
-# ADR-DRAFT: The archive substrate waits, its schema does not
+# ADR-0409: The archive substrate waits, its schema does not
 
 - **Status:** Proposed
 - **Implementation:** Partial
