@@ -258,6 +258,25 @@ thing it is supposed to own.
   second deployment during a migration between domains; and whether the
   `domain:` tag should later become a field after all, if a second reserved prefix
   ever appears and the two start to need different handling.
+- **Put the map read on the freshness contract that already exists.** A live read
+  is a read somebody can leave running: an architecture view on a wall refreshing
+  every half minute, or twenty nodes asking each other, is a load this server
+  inflicts on itself and on every peer. Atlas has already answered that for the
+  peer *descriptor* read and the answer is in constants, not in prose
+  (`api/panoramaremote.go`): an 8-second per-peer deadline, at most 4 peers asked
+  at once, an answer served for 30 seconds before asking again, and a failed
+  refresh reporting the last answer as **stale** for 15 minutes before it becomes
+  **unreachable**. The map read rides that contract rather than inventing a second
+  one, and three things follow that this record does not settle: whether a map
+  answer shares the descriptor's window or earns a longer one of its own — a
+  capability map changes far more slowly than reachability, but a second number is
+  a second thing to keep honest; that **stale must mean the same thing for the map**
+  as it does for the descriptor, so a domain served from a failed refresh is drawn
+  as history rather than as healthy; and whether this path wants the breaker from
+  [ADR-0340](0340-worker-circuit-breaker.md), since bounded concurrency limits one
+  view's burst but nothing yet stops a persistently dead peer from being asked
+  again on every open. Deciding the window with the feature is cheap; retrofitting
+  it after the first domain complains about load is not.
 - **Build the domain edge so it can be drawn.** A cross-domain dependency is the
   first relationship in Atlas that a landscape could honestly draw across a node
   boundary, and Panorama is one decision away from it: it already draws a deployment
@@ -346,6 +365,9 @@ thing it is supposed to own.
   reference record is to the map what a declared dependency is to an export)
 - relates to [ADR-0147](0147-splitting-the-api-server-object.md) (`api/capability`
   is an area service, and everything above is a change inside it)
+- relates to [ADR-0340](0340-worker-circuit-breaker.md) (an outage stops at the
+  worker, not at every token — the posture a peer read that keeps failing should
+  probably adopt)
 - relates to [ADR-0211](0211-panorama-derived-landscape-mesh.md) and
   [ADR-0374](0374-white-box-participant.md) (the landscape that draws a peer without
   an edge today, and the rule that a picture across a boundary must not claim to see
