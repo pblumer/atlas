@@ -91,13 +91,16 @@ func rootVar(t *testing.T, srv *Server, instKey uint64, name string) model.Varia
 // already has it, and so will every copy made from the WAL.
 func TestASubmittedPersonalValueIsStoredEnciphered(t *testing.T) {
 	srv := newServerForErrors(t)
-	_, _, instKey := startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711","vorname":"Ida"}}`)
+	_, _, instKey := startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711","vorname":"Ida-Luise-Mustermann"}}`)
 
 	stored := rootVar(t, srv, instKey, "vorname")
 	if stored.Kind != model.VarJSON || !vault.IsEnciphered(stored.Text) {
 		t.Fatalf("vorname is stored as kind=%d text=%q, which is not an envelope", stored.Kind, stored.Text)
 	}
-	if strings.Contains(stored.Text, "Ida") {
+	// The name is twenty characters for a measured reason, recorded at
+	// vault.TestTheStoredTextHoldsNoPlaintext: this search runs over base64, where a
+	// three-letter needle collides by chance once in 5 882 seals.
+	if strings.Contains(stored.Text, "Ida-Luise-Mustermann") {
 		t.Errorf("the stored value carries the plaintext: %s", stored.Text)
 	}
 	env, _ := vault.ParseEnvelope(stored.Text)
@@ -130,7 +133,7 @@ func TestASubmissionWithNoDataSubjectIsRefused(t *testing.T) {
 		t.Fatalf("decode deploy: %v", err)
 	}
 	path := fmt.Sprintf("/api/v1/processes/%d/instances", deploy.Key)
-	code, body = serveInternal(t, srv, http.MethodPost, path, `{"variables":{"vorname":"Ida"}}`, "application/json")
+	code, body = serveInternal(t, srv, http.MethodPost, path, `{"variables":{"vorname":"Ida-Luise-Mustermann"}}`, "application/json")
 	if code != http.StatusBadRequest {
 		t.Fatalf("a personal value with no data subject was accepted: status=%d body=%s", code, body)
 	}
@@ -149,14 +152,14 @@ func TestASubmissionWithNoDataSubjectIsRefused(t *testing.T) {
 // could not do the one thing ADR-0314 sends it: build the value the target system needs.
 func TestTheWorkerPayloadCarriesPlaintext(t *testing.T) {
 	srv := newServerForErrors(t)
-	_, jobKey, _ := startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711","vorname":"Ida"}}`)
+	_, jobKey, _ := startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711","vorname":"Ida-Luise-Mustermann"}}`)
 
 	jobs := activateProvisionJobs(t, srv)
 	if len(jobs) != 1 {
 		t.Fatalf("activated %d jobs, want 1", len(jobs))
 	}
-	if got := jobs[0].Variables["vorname"]; got != "Ida" {
-		t.Errorf("the worker's payload carries vorname = %#v, want the plaintext %q", got, "Ida")
+	if got := jobs[0].Variables["vorname"]; got != "Ida-Luise-Mustermann" {
+		t.Errorf("the worker's payload carries vorname = %#v, want the plaintext %q", got, "Ida-Luise-Mustermann")
 	}
 	_ = jobKey
 }
@@ -199,7 +202,7 @@ func activateProvisionJobs(t *testing.T, srv *Server) []activatedJob {
 // connector: it covers every connector that exists and every one that will be added.
 func TestEveryConnectorExpressionSeesPlaintext(t *testing.T) {
 	srv := newServerForErrors(t)
-	_, _, instKey := startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711","vorname":"Ida"}}`)
+	_, _, instKey := startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711","vorname":"Ida-Luise-Mustermann"}}`)
 
 	var raw, opened map[string]model.VariableValue
 	var rawErr, openErr error
@@ -214,8 +217,8 @@ func TestEveryConnectorExpressionSeesPlaintext(t *testing.T) {
 		t.Fatal("the unwrapped reader does not yield an envelope, so this test compares nothing")
 	}
 	got := opened["vorname"]
-	if got.Kind != model.VarString || got.Text != "Ida" {
-		t.Errorf("a connector would bind vorname as kind=%d %q, want the plain string %q", got.Kind, got.Text, "Ida")
+	if got.Kind != model.VarString || got.Text != "Ida-Luise-Mustermann" {
+		t.Errorf("a connector would bind vorname as kind=%d %q, want the plain string %q", got.Kind, got.Text, "Ida-Luise-Mustermann")
 	}
 	// And it does not disturb anything else it passes through.
 	if opened["personalnummer"].Text != "P-4711" {
@@ -231,7 +234,7 @@ func TestAWorkerResultIsEncipheredOnTheWayBackIn(t *testing.T) {
 	_, jobKey, instKey := startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711"}}`)
 
 	path := fmt.Sprintf("/api/v1/jobs/%d/complete", jobKey)
-	code, body := serveInternal(t, srv, http.MethodPost, path, `{"reason":"test: worker result","variables":{"vorname":"Ida"}}`, "application/json")
+	code, body := serveInternal(t, srv, http.MethodPost, path, `{"reason":"test: worker result","variables":{"vorname":"Ida-Luise-Mustermann"}}`, "application/json")
 	if code != http.StatusOK {
 		t.Fatalf("complete job: status=%d body=%s", code, body)
 	}
@@ -239,7 +242,10 @@ func TestAWorkerResultIsEncipheredOnTheWayBackIn(t *testing.T) {
 	if !vault.IsEnciphered(stored.Text) {
 		t.Fatalf("a worker's output landed in the clear: kind=%d text=%q", stored.Kind, stored.Text)
 	}
-	if strings.Contains(stored.Text, "Ida") {
+	// The name is twenty characters for a measured reason, recorded at
+	// vault.TestTheStoredTextHoldsNoPlaintext: this search runs over base64, where a
+	// three-letter needle collides by chance once in 5 882 seals.
+	if strings.Contains(stored.Text, "Ida-Luise-Mustermann") {
 		t.Errorf("the stored value carries the plaintext: %s", stored.Text)
 	}
 }
@@ -252,7 +258,7 @@ func TestAnOperatorOverrideIsEncipheredToo(t *testing.T) {
 	_, _, instKey := startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711"}}`)
 
 	path := fmt.Sprintf("/api/v1/instances/%d/variables", instKey)
-	code, body := serveInternal(t, srv, http.MethodPost, path, `{"variables":{"vorname":"Ida"}}`, "application/json")
+	code, body := serveInternal(t, srv, http.MethodPost, path, `{"variables":{"vorname":"Ida-Luise-Mustermann"}}`, "application/json")
 	if code != http.StatusOK {
 		t.Fatalf("set variables: status=%d body=%s", code, body)
 	}
@@ -267,7 +273,7 @@ func TestAnOperatorOverrideIsEncipheredToo(t *testing.T) {
 // anything — in this store and in every copy of it that was ever made.
 func TestErasingASubjectLeavesTheEngineUntouched(t *testing.T) {
 	srv := newServerForErrors(t)
-	_, jobKey, instKey := startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711","vorname":"Ida"}}`)
+	_, jobKey, instKey := startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711","vorname":"Ida-Luise-Mustermann"}}`)
 	before := rootVar(t, srv, instKey, "vorname")
 
 	code, body := serveInternal(t, srv, http.MethodDelete, "/api/v1/personal-data/P-4711", "", "")
@@ -358,7 +364,7 @@ func captureAuditLog(t *testing.T) *auditSink {
 // without it an operator would have destroyed the data and be unable to show it.
 func TestAnErasureLeavesAnAuditLine(t *testing.T) {
 	srv := newServerForErrors(t)
-	startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711","vorname":"Ida"}}`)
+	startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711","vorname":"Ida-Luise-Mustermann"}}`)
 
 	sink := captureAuditLog(t)
 	if code, body := serveInternal(t, srv, http.MethodDelete, "/api/v1/personal-data/P-4711", "", ""); code != http.StatusOK {
@@ -386,7 +392,7 @@ func TestAnErasureLeavesAnAuditLine(t *testing.T) {
 // deliberately keeps readable.
 func TestTheDataSubjectListingNamesWhoIsStillErasable(t *testing.T) {
 	srv := newServerForErrors(t)
-	startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711","vorname":"Ida"}}`)
+	startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711","vorname":"Ida-Luise-Mustermann"}}`)
 
 	code, body := serveInternal(t, srv, http.MethodGet, "/api/v1/personal-data", "", "")
 	if code != http.StatusOK {
@@ -416,7 +422,7 @@ func TestTheDataSubjectListingNamesWhoIsStillErasable(t *testing.T) {
 // the same effect, with no record that it happened and no intent to do it.
 func TestADataKeyCannotBeTouchedThroughTheSecretsAPI(t *testing.T) {
 	srv := newServerForErrors(t)
-	startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711","vorname":"Ida"}}`)
+	startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711","vorname":"Ida-Luise-Mustermann"}}`)
 
 	name := vault.DataKeyName("P-4711")
 	if code, body := serveInternal(t, srv, http.MethodPut, "/api/v1/secrets/"+name, `{"value":"AAAA"}`, "application/json"); code != http.StatusForbidden {
@@ -439,7 +445,7 @@ func TestADataKeyCannotBeTouchedThroughTheSecretsAPI(t *testing.T) {
 	var opened string
 	var openErr error
 	srv.do(func() { opened, openErr = srv.vault.Open("vorname", env) })
-	if openErr != nil || opened != "Ida" {
+	if openErr != nil || opened != "Ida-Luise-Mustermann" {
 		t.Errorf("the data key no longer opens its value: %q, %v", opened, openErr)
 	}
 }
@@ -469,7 +475,7 @@ func mustInstanceOf(t *testing.T, srv *Server) uint64 {
 // read per row.
 func TestAnEncipheredValueIsLabelledNotShown(t *testing.T) {
 	srv := newServerForErrors(t)
-	_, _, instKey := startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711","vorname":"Ida"}}`)
+	_, _, instKey := startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711","vorname":"Ida-Luise-Mustermann"}}`)
 
 	view := toVariableView(ptrOf(rootVar(t, srv, instKey, "vorname")))
 	if view.Kind != "personal" {
@@ -478,7 +484,8 @@ func TestAnEncipheredValueIsLabelledNotShown(t *testing.T) {
 	if !strings.Contains(view.Value, "P-4711") {
 		t.Errorf("the view does not say whose data it is: %q", view.Value)
 	}
-	if strings.Contains(view.Value, "Ida") || strings.Contains(view.Value, "atlas:personal") {
+	// Long name, same measured reason as above: a short one collides with base64 by chance.
+	if strings.Contains(view.Value, "Ida-Luise-Mustermann") || strings.Contains(view.Value, "atlas:personal") {
 		t.Errorf("the view shows the value or the raw envelope: %q", view.Value)
 	}
 }
@@ -550,14 +557,14 @@ func TestTheErasureRoutesAnswerWithoutAVault(t *testing.T) {
 	// Sealing refuses rather than storing the value readable, which is the one thing it
 	// must never do. This path is unreachable through a handler — the deploy above is
 	// refused first — and is the layer under it.
-	vars := []model.VariableValue{{Name: "vorname", Kind: model.VarString, Text: "Ida"}}
+	vars := []model.VariableValue{{Name: "vorname", Kind: model.VarString, Text: "Ida-Luise-Mustermann"}}
 	cp := mustCompilePersonal(t, srv)
 	if err := srv.seal(personalSealing{cp: cp, subject: "P-4711"}, vars); err == nil {
 		t.Error("sealing succeeded with no vault")
 	} else if !strings.Contains(err.Error(), "vault") {
 		t.Errorf("the refusal does not say why: %v", err)
 	}
-	if vars[0].Text != "Ida" || vars[0].Kind != model.VarString {
+	if vars[0].Text != "Ida-Luise-Mustermann" || vars[0].Kind != model.VarString {
 		t.Errorf("a refused seal changed the value anyway: %+v", vars[0])
 	}
 }
@@ -591,13 +598,13 @@ func TestADataSubjectMustBeAnIdentifierNotAValue(t *testing.T) {
 	}
 	path := fmt.Sprintf("/api/v1/processes/%d/instances", deploy.Key)
 	for _, subject := range []string{`true`, `{"nr":4711}`, `["P-4711"]`, `null`} {
-		body := `{"variables":{"personalnummer":` + subject + `,"vorname":"Ida"}}`
+		body := `{"variables":{"personalnummer":` + subject + `,"vorname":"Ida-Luise-Mustermann"}}`
 		if code, resp := serveInternal(t, srv, http.MethodPost, path, body, "application/json"); code != http.StatusBadRequest {
 			t.Errorf("a data subject of %s was accepted: status=%d body=%s", subject, code, resp)
 		}
 	}
 	// A number is an identifier — a personnel number usually is one — so it is accepted.
-	if code, resp := serveInternal(t, srv, http.MethodPost, path, `{"variables":{"personalnummer":4711,"vorname":"Ida"}}`, "application/json"); code != http.StatusOK {
+	if code, resp := serveInternal(t, srv, http.MethodPost, path, `{"variables":{"personalnummer":4711,"vorname":"Ida-Luise-Mustermann"}}`, "application/json"); code != http.StatusOK {
 		t.Errorf("a numeric data subject was refused: status=%d body=%s", code, resp)
 	}
 }
@@ -650,7 +657,7 @@ func TestSealingIsIdempotentAndKeepsTheValuesType(t *testing.T) {
 // report the 404 it was going to report anyway.
 func TestSealingAsksNothingOfAnUnknownInstance(t *testing.T) {
 	srv := newServerForErrors(t)
-	vars := []model.VariableValue{{Name: "vorname", Kind: model.VarString, Text: "Ida"}}
+	vars := []model.VariableValue{{Name: "vorname", Kind: model.VarString, Text: "Ida-Luise-Mustermann"}}
 	if err := srv.encipherScopeVars(999999, vars); err != nil {
 		t.Errorf("encipherScopeVars on an unknown scope: %v", err)
 	}
@@ -660,7 +667,7 @@ func TestSealingAsksNothingOfAnUnknownInstance(t *testing.T) {
 	if err := srv.encipherStartVars(999999, vars); err != nil {
 		t.Errorf("encipherStartVars on an unknown definition: %v", err)
 	}
-	if vars[0].Text != "Ida" {
+	if vars[0].Text != "Ida-Luise-Mustermann" {
 		t.Errorf("a value was sealed for an instance that does not exist: %+v", vars[0])
 	}
 	// No variables is the commonest completion of all, and it must not cost a visit to the
@@ -705,12 +712,12 @@ func TestEveryWriteEndpointFailsClosedWithoutASubject(t *testing.T) {
 		{
 			name: "operator override",
 			path: fmt.Sprintf("/api/v1/instances/%d/variables", instKey),
-			body: `{"variables":{"vorname":"Ida"}}`,
+			body: `{"variables":{"vorname":"Ida-Luise-Mustermann"}}`,
 		},
 		{
 			name: "worker completion",
 			path: fmt.Sprintf("/api/v1/jobs/%d/complete", jobKey),
-			body: `{"reason":"test","variables":{"vorname":"Ida"}}`,
+			body: `{"reason":"test","variables":{"vorname":"Ida-Luise-Mustermann"}}`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -749,7 +756,7 @@ func TestTheVariableAuditLabelsAnEncipheredOverride(t *testing.T) {
 	_, _, instKey := startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711"}}`)
 
 	path := fmt.Sprintf("/api/v1/instances/%d/variables", instKey)
-	if code, body := serveInternal(t, srv, http.MethodPost, path, `{"variables":{"vorname":"Ida"}}`, "application/json"); code != http.StatusOK {
+	if code, body := serveInternal(t, srv, http.MethodPost, path, `{"variables":{"vorname":"Ida-Luise-Mustermann"}}`, "application/json"); code != http.StatusOK {
 		t.Fatalf("set variables: status=%d body=%s", code, body)
 	}
 	code, body := serveInternal(t, srv, http.MethodGet, fmt.Sprintf("/api/v1/instances/%d/variable-audit", instKey), "", "")
@@ -781,7 +788,7 @@ func TestTheVariableAuditLabelsAnEncipheredOverride(t *testing.T) {
 		t.Errorf("kind = %q, want personal", row.Kind)
 	}
 	text, _ := row.Value.(string)
-	if !strings.Contains(text, "P-4711") || strings.Contains(text, "Ida") || strings.Contains(text, "atlas:personal") {
+	if !strings.Contains(text, "P-4711") || strings.Contains(text, "Ida-Luise-Mustermann") || strings.Contains(text, "atlas:personal") {
 		t.Errorf("value = %#v, want a label naming the subject and neither the plaintext nor the envelope", row.Value)
 	}
 }
@@ -801,7 +808,7 @@ func TestASealThatFailsIsReportedNotSwallowed(t *testing.T) {
 			t.Errorf("Set: %v", err)
 		}
 	})
-	vars := []model.VariableValue{{Name: "vorname", Kind: model.VarString, Text: "Ida"}}
+	vars := []model.VariableValue{{Name: "vorname", Kind: model.VarString, Text: "Ida-Luise-Mustermann"}}
 	err := srv.seal(p, vars)
 	if err == nil {
 		t.Fatal("a broken data key let the write through")
@@ -809,7 +816,7 @@ func TestASealThatFailsIsReportedNotSwallowed(t *testing.T) {
 	if !strings.Contains(err.Error(), "32 bytes") {
 		t.Errorf("the error does not name the problem: %v", err)
 	}
-	if vars[0].Text != "Ida" || vars[0].Kind != model.VarString {
+	if vars[0].Text != "Ida-Luise-Mustermann" || vars[0].Kind != model.VarString {
 		t.Errorf("the value was altered by a failed seal: %+v", vars[0])
 	}
 }
@@ -854,7 +861,7 @@ func TestTheTaskFormDoorSealsAndFailsClosed(t *testing.T) {
 	}
 	taskKey, instKey := openUserTask(t, srv)
 	complete := fmt.Sprintf("/api/v1/tasks/%d/complete", taskKey)
-	code, body = serveInternal(t, srv, http.MethodPost, complete, `{"variables":{"vorname":"Ida"}}`, "application/json")
+	code, body = serveInternal(t, srv, http.MethodPost, complete, `{"variables":{"vorname":"Ida-Luise-Mustermann"}}`, "application/json")
 	if code != http.StatusBadRequest {
 		t.Fatalf("a form answer with no data subject: status=%d body=%s, want 400", code, body)
 	}
@@ -867,7 +874,7 @@ func TestTheTaskFormDoorSealsAndFailsClosed(t *testing.T) {
 	if code, body = serveInternal(t, srv, http.MethodPost, setVars, `{"variables":{"personalnummer":"P-4711"}}`, "application/json"); code != http.StatusOK {
 		t.Fatalf("set the data subject: status=%d body=%s", code, body)
 	}
-	if code, body = serveInternal(t, srv, http.MethodPost, complete, `{"variables":{"vorname":"Ida"}}`, "application/json"); code != http.StatusOK {
+	if code, body = serveInternal(t, srv, http.MethodPost, complete, `{"variables":{"vorname":"Ida-Luise-Mustermann"}}`, "application/json"); code != http.StatusOK {
 		t.Fatalf("complete the task: status=%d body=%s", code, body)
 	}
 	if stored := rootVar(t, srv, instKey, "vorname"); !vault.IsEnciphered(stored.Text) {
@@ -937,7 +944,7 @@ func TestThePublicFormDoorSealsAndFailsClosed(t *testing.T) {
 	start := "/public/forms/" + link.Token + "/start"
 
 	// Without a data subject the submission is refused, rather than stored readable.
-	code, body = serveInternal(t, srv, http.MethodPost, start, `{"variables":{"vorname":"Ida"}}`, "application/json")
+	code, body = serveInternal(t, srv, http.MethodPost, start, `{"variables":{"vorname":"Ida-Luise-Mustermann"}}`, "application/json")
 	if code != http.StatusBadRequest {
 		t.Fatalf("a public submission with no data subject: status=%d body=%s, want 400", code, body)
 	}
@@ -947,7 +954,7 @@ func TestThePublicFormDoorSealsAndFailsClosed(t *testing.T) {
 
 	// With one it starts, and the value is an envelope before it ever becomes a command.
 	code, body = serveInternal(t, srv, http.MethodPost, start,
-		`{"variables":{"personalnummer":"P-4711","vorname":"Ida"}}`, "application/json")
+		`{"variables":{"personalnummer":"P-4711","vorname":"Ida-Luise-Mustermann"}}`, "application/json")
 	if code != http.StatusOK {
 		t.Fatalf("public start: status=%d body=%s", code, body)
 	}
@@ -956,7 +963,10 @@ func TestThePublicFormDoorSealsAndFailsClosed(t *testing.T) {
 	if !vault.IsEnciphered(stored.Text) {
 		t.Fatalf("a public form's personal value landed in the clear: kind=%d text=%q", stored.Kind, stored.Text)
 	}
-	if strings.Contains(stored.Text, "Ida") {
+	// The name is twenty characters for a measured reason, recorded at
+	// vault.TestTheStoredTextHoldsNoPlaintext: this search runs over base64, where a
+	// three-letter needle collides by chance once in 5 882 seals.
+	if strings.Contains(stored.Text, "Ida-Luise-Mustermann") {
 		t.Errorf("the stored value carries the plaintext: %s", stored.Text)
 	}
 }
@@ -967,7 +977,7 @@ func TestThePublicFormDoorSealsAndFailsClosed(t *testing.T) {
 // would have the worker provision an account for nobody.
 func TestAJobIsWithheldWhenItsValuesCannotBeOpened(t *testing.T) {
 	srv := newServerForErrors(t)
-	_, jobKey, _ := startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711","vorname":"Ida"}}`)
+	_, jobKey, _ := startPersonalInstance(t, srv, `{"variables":{"personalnummer":"P-4711","vorname":"Ida-Luise-Mustermann"}}`)
 
 	var before, after bool
 	srv.do(func() { _, before = srv.pulledJob(jobKey, "provision") })

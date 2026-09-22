@@ -1,9 +1,9 @@
 dmn-modeler.js is a combined, pre-built bundle (global: window.AtlasDmn) of:
 
   - pblumer/dmn-js@17.10.2
-    commit: a6a78c9bf6168dc8b04711c0a92f28588d067289
+    commit: d48cb1ea4c3970017d5809bf6c2cfa4426a296ab
   - pblumer/dmn-moddle
-    commit: 23697fac646aaa0bc09d9ce3ae90c96769397bc6
+    commit: ac76928df99382c36833d9300fd98acc604dc673
   - dmn-js-properties-panel@3.11.1
   - @bpmn-io/properties-panel@3.48.0
   - camunda-dmn-moddle@1.3.1    (the camunda: DMN moddle descriptor, for versionTag et al.)
@@ -34,6 +34,18 @@ within a session and lays them out afresh after a reload. Alongside it, a
 collapsed service is no longer reclassified from geometry: there is no box to
 read compartments off, and reading anyway rewrote every output decision into an
 encapsulated one, leaving a service that publishes nothing.
+
+The dmn-moddle pin carries one correction of its own. DMN 1.5's
+dmndi:useAlternativeInputDataShape asks for Input Data to be drawn as the paper
+sheet symbol rather than the backwards compatible oval, and the generated
+descriptor typed it as an association to a UML Standard Profile stereotype, an
+artefact of the OMG's own XMI export. moddle therefore looked for a child
+element no document has, warned "unknown attribute", and left the real attribute
+unclaimed — passed through a save untouched, but unreadable. It is a boolean
+attribute now, and declared in both of the places DMN 1.5 names it, because the
+specification does not agree with itself: the normative XSD puts it on
+DMNDiagram and nowhere else, Table 97 lists it among the DMNShape attributes.
+Nothing is drawn differently for it yet.
 
 No Atlas-specific behavior is implemented inside dmn-js or dmn-moddle.
 
@@ -67,12 +79,16 @@ the two lockfiles determine the tree, not the Node that runs them):
     --outfile=$ATLAS/api/web/vendor/dmn/dmn-modeler.js
   cp -r $FORK/packages/dmn-js/dist/assets/. $ATLAS/api/web/vendor/dmn/assets/
 
-`npm run build-distro` ends in a karma smoke test of the built distro, and that
-test cannot start in an environment where the karma binary is not resolvable from
-a subprocess (`spawnSync karma ENOENT`). Its `build` and `distro` steps run
-first and do produce assets/, so the step is worth running and its final failure
-is not one: compare assets/ against what is committed rather than trusting the
-exit code.
+`npm run build-distro` ends in a karma smoke test of the built distro, so it
+needs a browser: set CHROME_BIN. Chromium refuses to start as root without
+`--no-sandbox`, and karma passes no flags of its own, so point CHROME_BIN at a
+one-line wrapper that adds it rather than at the binary. With that, build-distro
+completes outright, smoke test included. It has also been seen failing that same
+last step with `spawnSync karma ENOENT`, in an environment where the binary was
+not resolvable from a subprocess; that cause was never established. Either way
+the `build` and `distro` steps run first and do produce assets/, so the step is
+worth running even when it ends red: compare assets/ against what is committed
+rather than reading the exit code.
 
 Two details of that recipe are load-bearing:
 
@@ -96,4 +112,4 @@ icon font from the pinned fork distro, plus properties-panel.css from
 @bpmn-io/properties-panel@3.48.0.
 
 SHA-256 dmn-modeler.js:
-fdc8962361ef8122fdb5d482e1c5ec573a129cd64f310314d778fc03e27d2480
+b77158825d8b3fc2ca1cc6444ac0b09a85933364f4165a83b1866bd33eca0cc2

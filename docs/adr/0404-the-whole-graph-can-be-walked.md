@@ -336,6 +336,34 @@ wrong answer avoided rather than a preference:
   chose components over a Louvain partition partly because they are stable across rebuilds.
   A cloud whose cells reshuffle between rebuilds breaks the same promise.
 
+#### The renderer this section was waiting for may already be here (measured, W3)
+
+The build order put the cloud surface behind *a renderer beyond SVG*. That dependency was
+written while the cloud was a coarsened community graph over millions of nodes. §5 then
+changed the mechanism to a group-by, and W3 measured what it produces — tens to thousands of
+cells — and nobody went back to the dependency. Measured against the renderer in the tree:
+
+- the budget is `meshMaxNodes = 400` (`api/panoramamesh.go`);
+- above it, `cluster` in `api/panorama/mesh.go` already draws **one node standing for N
+  children, carrying their count and an aggregated severity, with a sentence saying how many
+  were collapsed** — and it counts processes separately from drafts precisely so the number
+  on the picture can be reconciled with the picture, which is the same discipline a density
+  needs.
+
+That is the shape of a cloud cell. Against the three free axes, using this record's own
+reference size of 200 processes rather than a measurement of a real estate:
+
+| Axis | Cells | Against the 400-node budget |
+|---|---|---|
+| element type | a handful of BPMN types | trivially inside |
+| definition | ~200 | inside; no collapse needed |
+| element | 200 × ~15 ≈ 3 000 | outside; needs a collapse to the definition — the same shape `cluster` already implements one level up |
+
+So "needs a renderer beyond SVG" no longer follows from the mechanism §5 chose. What is
+genuinely still owed for the surface is smaller and different: which axis the default view
+draws and how a reader switches, and §7's browser performance test at the budget. Neither is
+a new renderer.
+
 #### What W0 measured
 
 A dependency-free spike built the structure this record describes at the year-scale size it
