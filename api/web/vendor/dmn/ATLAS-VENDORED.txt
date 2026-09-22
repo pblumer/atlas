@@ -1,9 +1,9 @@
 dmn-modeler.js is a combined, pre-built bundle (global: window.AtlasDmn) of:
 
   - pblumer/dmn-js@17.10.2
-    commit: 751ee4d4c9bfaadc4eacafaa043a4abee31bfaca
+    commit: d48cb1ea4c3970017d5809bf6c2cfa4426a296ab
   - pblumer/dmn-moddle
-    commit: 45ea9dca8a044e7102ca68b7b7d66b6af547358c
+    commit: ac76928df99382c36833d9300fd98acc604dc673
   - dmn-js-properties-panel@3.11.1
   - @bpmn-io/properties-panel@3.48.0
   - camunda-dmn-moddle@1.3.1    (the camunda: DMN moddle descriptor, for versionTag et al.)
