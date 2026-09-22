@@ -1,0 +1,10 @@
+{
+  "hidden": true,
+  "tags": [
+    "Operations"
+  ],
+  "summary": {
+    "en": "Hidden on purpose, like the rest of the run-graph machinery. One pass over the projection computes connected components, and asking whether two nodes are in the same one is now a lookup rather than a walk. There is no route and no screen, so there is nothing here for a reader of this list to open.",
+    "de": "Absichtlich verborgen, wie die übrige Run-Graph-Maschinerie. Ein Durchlauf über die Projektion berechnet die Zusammenhangskomponenten; die Frage, ob zwei Knoten in derselben liegen, ist damit eine Nachschlage-Operation und kein Walk mehr. Es gibt keine Route und keine Ansicht, für einen Leser dieser Liste ist also nichts zu öffnen."
+  }
+}

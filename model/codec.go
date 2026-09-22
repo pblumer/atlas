@@ -75,6 +75,17 @@ func ReadRecord(src []byte) (Record, error) {
 	return Record{Header: h, Value: v}, nil
 }
 
+// ReadHeader decodes only the fixed header from the front of src, leaving the
+// payload untouched. A reader that asks *what* a record is rather than what it
+// carries — its position, kind and intent — wants this: ReadHeader allocates
+// nothing, where ReadRecord allocates one value per record for a caller that is
+// about to discard it. Over a log of a hundred million records that difference is
+// the whole cost of the pass.
+func ReadHeader(src []byte) (RecordHeader, error) {
+	h, _, err := readHeader(src)
+	return h, err
+}
+
 func readHeader(src []byte) (RecordHeader, []byte, error) {
 	if len(src) < HeaderSize {
 		return RecordHeader{}, nil, ErrShortBuffer

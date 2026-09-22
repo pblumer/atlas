@@ -31,24 +31,6 @@
       }
     },
     {
-      "id": "the-run-graph-answers-what-is-this-connected-to-as-a-lookup-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The run graph answers \"what is this connected to\" as a lookup, and the measurement renamed the question.",
-        "de": "The run graph answers \"what is this connected to\" as a lookup, and the measurement renamed the question."
-      },
-      "summary": {
-        "en": "ADR-0404 §5's projection gains the half it was missing: one union-find pass over the CSR, and a rungraph.Membership over the labels it produces.",
-        "de": "ADR-0404 §5's projection gains the half it was missing: one union-find pass over the CSR, and a rungraph.Membership over the labels it produces."
-      },
-      "link": {
-        "label": "ADR-0404",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0404-the-whole-graph-can-be-walked.md"
-      }
-    },
-    {
       "id": "personal-data-can-be-erased-a-declared-variable-is-enciphere",
       "version": "Unreleased",
       "date": null,
@@ -370,6 +352,35 @@
       "summary": {
         "en": "In a decision requirements diagram the shape is not decoration — it is how a reader tells one kind of node from another. DMN draws a decision as a plain rectangle, input data as a stadium with fully rounded ends, a business knowledge model as a rectangle with two corners cut off, and a decision service as a rounded rectangle carrying its name in the top right, clear of the decisions it holds. Atlas drew decisions and knowledge models with rounded corners, which made a decision read as an input datum or as a service; and it drew a decision service square-cornered with its name centred over whatever it contained. Both pictures — the graph in the Modeler and the one the decision window puts a case on — now follow the notation, and a collapsed decision service is drawn as one instead of looking expanded. A model opened in Atlas therefore looks like the same model opened anywhere else.",
         "de": "In einem Decision Requirements Diagram ist die Form keine Dekoration — an ihr erkennt man, um welche Art von Knoten es sich handelt. DMN zeichnet eine Entscheidung als schlichtes Rechteck, Eingabedaten als Stadion mit vollrunden Enden, ein Business Knowledge Model als Rechteck mit zwei abgeschnittenen Ecken und einen Decision Service als abgerundetes Rechteck, dessen Name oben rechts steht, ausserhalb der Entscheidungen, die er umschliesst. Atlas zeichnete Entscheidungen und Knowledge Models mit runden Ecken, wodurch eine Entscheidung wie ein Eingabedatum oder wie ein Service aussah; und den Decision Service mit eckigen Ecken und dem Namen mittig über seinem Inhalt. Beide Darstellungen — der Graph im Modeler und jener, auf den das Entscheidungsfenster einen Fall zeichnet — folgen nun der Notation, und ein eingeklappter Decision Service wird als solcher gezeichnet statt ausgeklappt zu wirken. Ein in Atlas geöffnetes Modell sieht damit aus wie dasselbe Modell in jedem anderen Werkzeug."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Decisions",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open a decision",
+          "de": "Entscheidung öffnen"
+        },
+        "route": "#/modeler/decisions"
+      }
+    },
+    {
+      "id": "a-decision-service-survives-auto-layout",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A decision service survives Auto-layout",
+        "de": "Ein Decision Service übersteht das Auto-Layout"
+      },
+      "summary": {
+        "en": "Atlas draws a DMN model's diagram when it has none, and redraws it when you ask. The generator knew decisions, input data and knowledge models — but not a decision service, the box drawn around part of the graph with a divider line separating what the service returns from what it works out internally. Auto-layout deleted that box, and the modeler, which reads a service's membership back out of where its decisions sit, then concluded the service had no members and wrote that into the model on the next save. What was left was a decision service with no output decision: still deployable, still callable from a business rule task, and returning nothing — no incident, no validation error, only the stored XML to show for it. The generator now draws the box around the decisions the service publishes and encapsulates, with the divider between them, and a model whose service went undrawn is laid out afresh instead of being handed to the modeler half-finished. The modeler treats the box as a real container: it is drawn beneath what it holds rather than over it, and moving it takes its decisions along. A decision the service names as its input boundary stays outside the box, where DMN puts it.",
+        "de": "Atlas zeichnet das Diagramm eines DMN-Modells, wenn keines vorhanden ist, und zeichnet es auf Wunsch neu. Der Generator kannte Entscheidungen, Eingabedaten und Knowledge Models — aber keinen Decision Service, also jene Box um einen Teil des Graphen, deren Trennlinie scheidet, was der Service liefert, von dem, was er intern ermittelt. Das Auto-Layout löschte diese Box, und der Modeler, der die Zugehörigkeit eines Service daraus abliest, wo seine Entscheidungen liegen, schloss daraus auf einen Service ohne Mitglieder und schrieb das beim nächsten Speichern ins Modell. Übrig blieb ein Decision Service ohne Output-Entscheidung: weiterhin deploybar, weiterhin aus einer Business Rule Task aufrufbar — und ohne Ergebnis, ohne Incident und ohne Validierungsfehler, sichtbar allein im gespeicherten XML. Der Generator zeichnet die Box nun um die Entscheidungen, die der Service veröffentlicht und kapselt, mit der Trennlinie dazwischen; ein Modell mit ungezeichnetem Service wird neu gelegt, statt halbfertig an den Modeler zu gehen. Der Modeler behandelt die Box als echten Container: Sie wird unter ihrem Inhalt gezeichnet statt darüber, und wer sie verschiebt, nimmt ihre Entscheidungen mit. Eine Entscheidung, die der Service als Eingabegrenze benennt, bleibt ausserhalb der Box — dort, wo DMN sie vorsieht."
       },
       "link": {
         "label": "Changelog",
