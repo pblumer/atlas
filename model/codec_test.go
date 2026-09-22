@@ -397,6 +397,35 @@ func TestReadRecordShortBuffer(t *testing.T) {
 	}
 }
 
+// TestReadHeaderStopsAtTheHeader is the point of having it: the payload is not touched, so a
+// reader that only asks what a record *is* pays a fixed cost and allocates nothing — and it
+// still refuses a buffer too short to hold a header, because a header read from nothing is not
+// a header.
+func TestReadHeaderStopsAtTheHeader(t *testing.T) {
+	r := Record{Header: sampleHeader(), Value: &ElementInstanceValue{ElementId: 1}}
+	buf := AppendRecord(nil, &r)
+
+	// A header decoded from the header bytes alone, with the payload cut away entirely.
+	h, err := ReadHeader(buf[:HeaderSize])
+	if err != nil {
+		t.Fatalf("ReadHeader: %v", err)
+	}
+	if h != r.Header {
+		t.Errorf("header = %+v, want %+v", h, r.Header)
+	}
+	// Same answer over the whole record: the payload changes nothing.
+	if whole, err := ReadHeader(buf); err != nil || whole != h {
+		t.Errorf("ReadHeader(whole) = %+v, %v; want the same header", whole, err)
+	}
+	if _, err := ReadHeader(buf[:HeaderSize-1]); !errors.Is(err, ErrShortBuffer) {
+		t.Errorf("short header: err = %v, want ErrShortBuffer", err)
+	}
+
+	if n := testing.AllocsPerRun(100, func() { _, _ = ReadHeader(buf) }); n != 0 {
+		t.Errorf("ReadHeader allocated %v times per call, want 0", n)
+	}
+}
+
 func TestReadRecordUnknownVersion(t *testing.T) {
 	r := Record{Header: sampleHeader()}
 	buf := AppendRecord(nil, &r)

@@ -63,6 +63,34 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The run graph says when it is true, and how far the log has drifted from it since.** [ADR-0404](docs/adr/0404-the-whole-graph-can-be-walked.md) §4 asks for a projection seeded from the state store and kept current from the tailer, "starting at the snapshot's position". Nothing could: a built graph carried no statement about *when* it was true. It does now — a source must report its `LastAppliedPosition`, the ordinal map records it, `Graph.Position()` reads it, and a source that cannot state one fails the build rather than publishing a projection that claims "as of 0" and is indistinguishable from one genuinely at genesis.
+
+  On top of that position, `rungraph.Follower` reports **drift**: how many element instances
+  have arrived and departed since the seed, read from the durable log and bounded by the
+  caller's durability watermark. `Drift.RebuildDue` turns that into the decision the projection
+  actually needs.
+
+  **It measures rather than mutates, and the structure decided that, not preference.** A
+  completing element instance is *deleted* from state, so the node set shrinks as fast as it
+  grows in any steady-state installation; the CSR is packed and undirected, so one new edge has
+  to be inserted into the middle of both endpoints' adjacency lists inside a 2,448 MB array;
+  and union-find cannot un-merge, so a removed edge costs the whole 7.8-second component pass
+  anyway. An increment that can only add would diverge from reality in the common case. Drift
+  plus a rebuild keeps the projection exactly as of its position, which is the one property
+  every consumer needs.
+
+  Three consequences are worth naming. Drift counts **node changes and not records**, because a
+  busy installation writes far more variables and jobs than element instances and a record
+  count would call for rebuilds nothing needed. The follower **skips the seed's records by
+  position instead of seeking past them** — a `wal.Cursor` cannot be constructed — which also
+  makes it correct under the re-delivery a restart guarantees, since a cursor resumes from
+  genesis by design. And a record more than one position past the seed is reported as a **gap**
+  that means rebuild: positions are one dense sequence, so the records in between are gone and
+  nothing can supply them, which is what §4's "cannot be reconciled" looks like from the
+  inside. The arithmetic is checked against something outside the log — arrivals minus
+  departures must equal the change in the store's own count of live element instances — and the
+  density claim is verified on engine-written state rather than assumed.
+
 - **The run graph answers "what is this connected to" as a lookup, and the measurement renamed the question.** [ADR-0404](docs/adr/0404-the-whole-graph-can-be-walked.md) §5's projection gains the half it was missing: one union-find pass over the CSR, and a `rungraph.Membership` over the labels it produces. `SameComponent` — the query an impact analysis asks a million times — is a binary search and one array read, touching no part of the graph. Enumeration (`Members`, `Size`, `Count`) is one pass over the label array and says so in its own documentation, because the two costs are different and a caller has to know which it is paying.
 
   It is a wrapper rather than an index, and that is a budget decision. §2 sizes *one*

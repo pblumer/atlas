@@ -1,0 +1,10 @@
+{
+  "hidden": true,
+  "tags": [
+    "Operations"
+  ],
+  "summary": {
+    "en": "Hidden on purpose, like the rest of the run-graph machinery. The projection now states the log position it is true as of, and a follower reports how far the log has drifted from it since, so a caller can decide when to rebuild. There is no route and no screen, so there is nothing here for a reader of this list to open.",
+    "de": "Absichtlich verborgen, wie die übrige Run-Graph-Maschinerie. Die Projektion nennt jetzt die Log-Position, zu der sie gilt, und ein Follower meldet, wie weit das Log seither davon abgewichen ist — damit ein Aufrufer entscheiden kann, wann ein Neubau fällig ist. Es gibt keine Route und keine Ansicht, für einen Leser dieser Liste ist also nichts zu öffnen."
+  }
+}
