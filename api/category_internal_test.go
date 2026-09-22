@@ -115,10 +115,27 @@ func TestTheColumnNoLongerSaysTheDataIsMissing(t *testing.T) {
 // decision refused, arriving through the back door — so the sort is the locale's
 // and nothing else.
 func TestAHeadingHasNoOrderingOfItsOwn(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function categoriesOf(", "\n}")
+	src := readWeb(t, "portal.js")
+	// Both columns and both screens collect their headings through one function, so
+	// the ordering is held there. A column sorting for itself is the second
+	// implementation that made the two screens disagree once already.
+	if !strings.Contains(webRegion(t, src, "function categoriesOf(", "\n}"), "headingsOf(") {
+		t.Fatal("the heading column no longer collects through headingsOf; this guard " +
+			"has lost its subject, and the two screens have two orderings again")
+	}
+	body := webRegion(t, src, "function headingsOf(", "\n}")
 	if !strings.Contains(body, "localeCompare") {
 		t.Error("the headings are not sorted by the locale's own rule, so their order " +
 			"is whatever the catalogue happened to store")
+	}
+	// Sorted by what is on the screen and not by what groups. They are the same
+	// string only where the catalogue has not translated the heading: everywhere
+	// else, sorting the keys hands a French reader a column ordered by German
+	// words, in an order nothing on the page explains.
+	if !strings.Contains(body, "a.text.localeCompare(b.text") {
+		t.Error("the headings are sorted by something other than the wording the " +
+			"reader sees, so a translated catalogue orders its column by a string " +
+			"nobody on that page is shown")
 	}
 	for _, rank := range []string{".rank", "categoryRank", "sortOrder"} {
 		if strings.Contains(body, rank) {

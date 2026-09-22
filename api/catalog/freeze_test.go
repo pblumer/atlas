@@ -30,6 +30,10 @@ func everything(id string) Item {
 	it.Eligible = []string{"grp-a"}
 	it.Keywords = []string{"Fernzugriff"}
 	it.Descriptions = map[string]string{"de": "Verschlüsselter Zugang ins Firmennetz."}
+	it.Category = "Arbeitsplatz"
+	it.CategoryTexts = map[string]string{"de": "Arbeitsplatz"}
+	it.ProductGroup = "Netzzugang"
+	it.ProductGroupTexts = map[string]string{"de": "Netzzugang"}
 	return it
 }
 

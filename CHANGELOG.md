@@ -217,6 +217,34 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The portal's two heading columns read in the reader's language.** A catalogue
+  declares its languages and refuses to publish a product named in one of them and not
+  another, so a catalogue kept in German, French, English and Italian translated every
+  product name, every shape and every description — and then filed all of them under
+  two German words. Kategorie and Produktgruppe were the last text on the page that did
+  not reach the reader in their own language, and nothing said so: the German word
+  rendered, and it looked deliberate.
+
+  A product now carries a wording per language beside each heading. The string that was
+  there stays exactly as it was — it is the **key**: what the portal groups by, what a
+  search hit opens the cascade at, what a published release already holds. So nothing
+  was migrated, no release changed meaning, and a product that carries no wording still
+  renders its key in every language, which is every product written before this and
+  every single-language catalogue.
+
+  In the Console both headings are one box each, the wordings in the order the catalogue
+  declares its languages and separated by semicolons: `Arbeitsplatz; Poste de travail;
+  Workplace; Postazione`. One wording means the heading is not translated. What is
+  stored is a map per language tag and never the list, so reordering a catalogue's
+  languages cannot re-label the products already saved.
+
+  Publishing holds the wordings to the rule a description already follows — optional as
+  a whole, all-or-nothing once there is one — and refuses two more states it can prove:
+  a wording with no key to group by, and one key worded two ways by two products, which
+  would make one column head say one of the two with nothing saying a choice was made.
+  The column also sorts by what the reader sees rather than by the key, or a French
+  reader would be handed a column ordered by German words.
+
 - **A report that says which services cannot be fulfilled here.** A catalogue binds a
   product to processes by name. Nothing checks those names when the binding is written,
   nothing checks them when the catalogue is published, and nothing complains when an

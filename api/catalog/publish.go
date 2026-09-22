@@ -246,12 +246,44 @@ func checkCatalogs(in Input, byID map[string]Item, add func(Problem)) {
 		if in.CatalogID != "" && c.ID != in.CatalogID {
 			continue
 		}
+		// One heading is one column head, so the products under it have to agree on
+		// what it says. Keyed by field, key and language; the first product to word
+		// a heading sets it and a later disagreement is named against it. The walk
+		// follows the catalogue's own item list, which is stored data, so the same
+		// input always names the same one of the two.
+		worded := map[[3]string]string{}
+		sayWording := func(id, field, label, key string, texts map[string]string) {
+			if strings.TrimSpace(key) == "" {
+				return
+			}
+			for _, lang := range c.Languages {
+				text := strings.TrimSpace(texts[lang])
+				if text == "" {
+					continue
+				}
+				at := [3]string{field, key, lang}
+				first, seen := worded[at]
+				if !seen {
+					worded[at] = text
+					continue
+				}
+				if first != text {
+					add(Problem{Catalog: c.ID, Item: id, Message: "words the " + label +
+						" " + key + " as " + text + " in " + lang +
+						", where another product in this catalogue words it " + first +
+						"; one heading is one column head, and the portal would show " +
+						"one of the two with nothing saying a choice was made"})
+				}
+			}
+		}
 		for _, id := range c.Items {
 			it, known := byID[id]
 			if !known {
 				add(Problem{Catalog: c.ID, Message: "unknown item " + id})
 				continue
 			}
+			sayWording(id, "category", "category", it.Category, it.CategoryTexts)
+			sayWording(id, "productGroup", "product group", it.ProductGroup, it.ProductGroupTexts)
 			for _, lang := range c.Languages {
 				if it.Texts[lang] == "" {
 					add(Problem{Catalog: c.ID, Item: id,
@@ -269,6 +301,32 @@ func checkCatalogs(in Input, byID map[string]Item, add func(Problem)) {
 					if strings.TrimSpace(it.Descriptions[lang]) == "" {
 						add(Problem{Catalog: c.ID, Item: id,
 							Message: "has a description but none for declared language " + lang})
+					}
+				}
+			}
+			// The two headings follow the description's rule and not the name's:
+			// optional as a whole, all-or-nothing once there is one. Optional,
+			// because a heading with no translations renders its key in every
+			// language — which is every product written before the field existed
+			// and every catalogue declaring one language, and refusing those would
+			// refuse the installed base. All-or-nothing, because a heading
+			// translated into German and not French is a portal where one audience
+			// reads its own column head and the other reads somebody else's, with
+			// nothing saying so: the fallback renders, and it looks deliberate
+			// (ADR-0360).
+			if described(it.CategoryTexts) {
+				for _, lang := range c.Languages {
+					if strings.TrimSpace(it.CategoryTexts[lang]) == "" {
+						add(Problem{Catalog: c.ID, Item: id,
+							Message: "no translated category for declared language " + lang})
+					}
+				}
+			}
+			if described(it.ProductGroupTexts) {
+				for _, lang := range c.Languages {
+					if strings.TrimSpace(it.ProductGroupTexts[lang]) == "" {
+						add(Problem{Catalog: c.ID, Item: id,
+							Message: "no translated product group for declared language " + lang})
 					}
 				}
 			}
@@ -346,6 +404,20 @@ func checkItems(in Input, add func(Problem)) {
 		if it.Category != "" && strings.TrimSpace(it.Category) == "" {
 			add(Problem{Item: it.ID, Message: "names a blank category; leave it out for a " +
 				"product the catalogue groups under nothing"})
+		}
+		// The key is what the portal groups by, so translations without one are
+		// translations of nothing: the product sits in the bucket for products
+		// carrying no heading, under a column head reading "Ohne Kategorie", while
+		// holding the word for one in every language the catalogue declares.
+		// Nothing would be wrong at runtime and the intent would be silently lost,
+		// which is why it is refused here rather than rendered.
+		if described(it.CategoryTexts) && strings.TrimSpace(it.Category) == "" {
+			add(Problem{Item: it.ID, Message: "carries a translated category but no category " +
+				"to group by; the translations would never be read"})
+		}
+		if described(it.ProductGroupTexts) && strings.TrimSpace(it.ProductGroup) == "" {
+			add(Problem{Item: it.ID, Message: "carries a translated product group but no " +
+				"product group to group by; the translations would never be read"})
 		}
 		// A price of nothing but spaces is a product that claims to say what it costs
 		// and says nothing — worse than saying nothing at all, because the portal
@@ -793,6 +865,11 @@ func freeze(items []Item) []Item {
 		// placed against this release must keep saying what was promised, whatever
 		// the catalogue says next week.
 		it.Descriptions = copyTexts(it.Descriptions)
+		// The headings travel for the reason the name does: the portal reads the
+		// release and nothing else, so a translation left behind is a column head
+		// no reader of that language ever sees.
+		it.CategoryTexts = copyTexts(it.CategoryTexts)
+		it.ProductGroupTexts = copyTexts(it.ProductGroupTexts)
 		if len(it.Variants) > 0 {
 			vs := make([]Variant, len(it.Variants))
 			for j, v := range it.Variants {
