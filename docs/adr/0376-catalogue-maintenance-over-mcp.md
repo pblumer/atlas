@@ -101,6 +101,7 @@ adapter interprets no catalogue, resolves no edge and decides no publish.
 | `atlas_save_catalog_product` | `POST /api/v1/catalog-products` |
 | `atlas_publish_catalog` | `POST /api/v1/catalogs/{id}/releases` |
 | `atlas_catalog_releases` | `GET /api/v1/catalogs/{id}/releases` |
+| `atlas_catalog_unpublished` | `GET /api/v1/catalogs/{id}/unpublished` |
 | `atlas_import_catalog_archimate` | `POST /api/v1/catalogs/{id}/import` |
 
 What stays omitted stays omitted for reasons that are about the act and not about

@@ -236,6 +236,13 @@ func TestPortalReadFollowsTheAudience(t *testing.T) {
 	if rec := as(t, s.HandleListReleases, staff, "GET", "", "id", cat.ID); rec.Code != http.StatusOK {
 		t.Errorf("the audience reading releases got %d, want 200", rec.Code)
 	}
+	// Read authority and not the authority to publish, which is the decision worth
+	// pinning. The answer is a set difference between the two reads above, both of
+	// which the audience already has, so requiring more would withhold nothing and
+	// would withhold it from the person who has to ask somebody else to publish.
+	if rec := as(t, s.HandleUnpublished, staff, "GET", "", "id", cat.ID); rec.Code != http.StatusOK {
+		t.Errorf("the audience reading what is unpublished got %d, want 200", rec.Code)
+	}
 }
 
 // TestAnOutsiderIsToldNothing — 404, not 403. A refusal that distinguishes "not

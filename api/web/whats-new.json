@@ -224,6 +224,49 @@
       }
     },
     {
+      "id": "the-catalogue-screen-now-says-what-the-portal-is-actually-of",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The catalogue screen now says what the portal is actually offering",
+        "de": "Der Katalogbildschirm sagt jetzt, was das Portal tatsächlich anbietet"
+      },
+      "summary": {
+        "en": "A catalogue and its portal are deliberately two different things: the portal serves a release, a frozen copy taken when somebody published, so that an order cannot change under the person placing it — while every edit a maintainer makes goes to the live catalogue beside it. Until now nothing said which of the two you were looking at, and one case was not merely unstated but impossible to see: a product taken out of a catalogue disappears from the product table at once and the release goes on offering it, so it is gone from every screen its maintainer has and present on the one they do not. The catalogue screen now states the difference above the Publish button — what publishing would add, what the portal is still offering that it would take away, and what has been edited since the release being served — with removals first, because that is the group nothing else can show. When the two agree, it says that too.",
+        "de": "Ein Katalog und sein Portal sind bewusst zwei verschiedene Dinge: Das Portal liefert ein Release aus, eine eingefrorene Kopie vom Zeitpunkt der Veröffentlichung, damit sich eine Bestellung nicht unter der bestellenden Person verändert — während jede Bearbeitung in den daneben liegenden Live-Katalog geht. Bisher sagte nichts, welches von beiden man vor sich hat, und ein Fall war nicht nur unausgesprochen, sondern schlicht nicht sichtbar: Ein aus dem Katalog entferntes Produkt verschwindet sofort aus der Produkttabelle, während das Release es weiter anbietet — es fehlt also auf jedem Bildschirm, den die zuständige Person hat, und steht auf dem einen, den sie nicht hat. Der Katalogbildschirm nennt den Unterschied nun oberhalb der Schaltfläche Publish: was eine Veröffentlichung hinzufügen würde, was das Portal noch anbietet und wegfallen würde, und was seit dem ausgelieferten Release bearbeitet wurde — die Entfernungen zuerst, weil diese Gruppe sonst nirgends zu sehen ist. Stimmen beide überein, wird auch das gesagt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Catalogue",
+        "Self-service portal"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Catalogue from the navigation and pick a catalogue.",
+          "Scroll to the Releases section at the bottom of the page.",
+          "Read the panel above the Publish button: green means the portal is offering this catalogue exactly as it stands.",
+          "If it is amber, the first group lists the products the portal is still offering that are no longer in this catalogue. Publishing is what takes them away."
+        ],
+        "de": [
+          "In der Navigation Katalog öffnen und einen Katalog auswählen.",
+          "Zum Abschnitt Releases am Seitenende blättern.",
+          "Den Bereich oberhalb der Schaltfläche Publish lesen: Grün bedeutet, dass das Portal diesen Katalog genau so anbietet, wie er dasteht.",
+          "Bei Gelb listet die erste Gruppe die Produkte, die das Portal noch anbietet, die aber nicht mehr in diesem Katalog sind. Erst eine Veröffentlichung nimmt sie weg."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open the catalogue",
+          "de": "Katalog öffnen"
+        },
+        "route": "#/catalog"
+      }
+    },
+    {
       "id": "a-product-can-say-what-it-is-and-a-process-can-capture-one",
       "version": "Unreleased",
       "date": null,
@@ -355,35 +398,6 @@
           "de": "Panorama › Starmap öffnen"
         },
         "route": "#/panorama/starmap"
-      }
-    },
-    {
-      "id": "a-decision-service-can-be-laid-out-and-wired-up",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A decision service can be moved, and wired to the decision that calls it",
-        "de": "Ein Decision Service lässt sich verschieben und mit der Entscheidung verbinden, die ihn aufruft"
-      },
-      "summary": {
-        "en": "Dragging a decision service on the canvas was refused outright, which a diagram holding several of them cannot do without. When it did move, the editor re-decided which of its decisions the service returns and which it only works out internally — and for a decision drawn outside the box, an imported model's may well be, that silently cost the service the interface it publishes. A decision service could also not be connected to anything, although DMN makes one invocable exactly as a knowledge model is. All three are fixed. The shapes follow the specification too: input data is a stadium at any size, a decision service carries a heavier border than a decision, a knowledge model is a rectangle with two corners cut rather than a slanted box, and a knowledge requirement ends in an open arrowhead — the one thing that tells it from an information requirement.",
-        "de": "Einen Decision Service auf der Zeichenfläche zu verschieben wurde schlicht verweigert — und genau darauf kommt es an, sobald ein Diagramm mehrere davon trägt. Bewegte er sich doch, entschied der Editor neu, welche seiner Entscheidungen der Service zurückgibt und welche er nur intern ermittelt; bei einer Entscheidung ausserhalb des Kastens, wie sie in importierten Modellen vorkommt, kostete das den Service still die Schnittstelle, die er veröffentlicht. Verbinden liess sich ein Decision Service ausserdem gar nicht, obwohl DMN ihn genauso aufrufbar macht wie ein Knowledge Model. Alle drei Punkte sind behoben. Auch die Formen folgen nun der Spezifikation: Input Data ist in jeder Grösse ein Stadion, ein Decision Service trägt eine kräftigere Umrandung als eine Entscheidung, ein Knowledge Model ist ein Rechteck mit zwei abgeschnittenen Ecken statt eines schiefen Kastens, und ein Knowledge Requirement endet in einer offenen Pfeilspitze — dem einzigen Merkmal, das es von einem Information Requirement unterscheidet."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Decisions",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the decisions",
-          "de": "Entscheidungen öffnen"
-        },
-        "route": "#/console/decisions"
       }
     }
   ]
