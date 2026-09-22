@@ -77,7 +77,10 @@ func TestThePortalGroupsByTheFieldTheReleaseCarries(t *testing.T) {
 		// a bare search for it also matches a function that only ever reads the
 		// selection. Blind that one out, or the guard passes without a read.
 		body = strings.ReplaceAll(body, "state."+key, "state.<the open heading>")
-		if !strings.Contains(body, "."+key) {
+		// Two spellings are accepted because the two sides legitimately have them:
+		// the column names the field to the function that collects both headings,
+		// and the filter reads it off the product. Renaming the tag fails both.
+		if !strings.Contains(body, "."+key) && !strings.Contains(body, "'"+key+"'") {
 			t.Errorf("the release spells the heading %q and %s never reads it, so "+
 				"every product sits under one heading", key, strings.TrimSuffix(fn, "("))
 		}
