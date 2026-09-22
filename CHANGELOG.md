@@ -14,6 +14,34 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A product's description was stored, frozen into the release and never shown.** The
+  portal asked for it in the language the *page* is read in — German or English, taken
+  from the browser — and treated a missing key as no description at all. But publishing
+  guarantees a description in every language the **catalogue** declares, and those are
+  different lists. A catalogue offered in German and French is complete by that rule and
+  had nothing whatever to say to a reader whose browser is English: two descriptions
+  written, neither on screen, and no rule anywhere broken.
+
+  The reader's own language is still asked for first — that is what makes the choice a
+  choice once more than one exists — and the other languages are reached after it. A
+  paragraph somebody has to translate is worse than one they read and better than the
+  blank they were getting. A key that is present and blank is not taken as an answer,
+  because that is the shape a half-filled form leaves behind and it would end the search
+  before the language that does say something.
+
+  The picture needed no change and is shown beside it, where the catalogue carries one.
+
+- **The info button on the basket did nothing.** Every row there drew it, it responded,
+  and nothing opened: the button sets which product to explain and the *view* has to
+  draw the panel, and the basket made the first statement without the second. The
+  catalogue page and "my services" had both. So on the one screen where somebody decides
+  whether to actually order the thing, the price, the approval rule, the description and
+  the picture were unreachable — a row was a name and two buttons, and the name was all
+  they had.
+
+  Guarded per view rather than per file from now on: `infoPanel` appears three times, so
+  a search across the page would have found it however many views had forgotten it.
+
 - **A decision service that answers with nothing is refused rather than deployed.**
   DMN gives a decision service one or more output decisions: they are what it returns,
   and the whole reason to address a service instead of the decision inside it. Atlas

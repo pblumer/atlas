@@ -1,0 +1,27 @@
+{
+  "tags": [
+    "Self-service portal"
+  ],
+  "title": {
+    "en": "The info button on the basket opens the product again",
+    "de": "Der Info-Knopf im Warenkorb öffnet das Produkt wieder"
+  },
+  "summary": {
+    "en": "Every row in the basket carried the round \"i\", it responded to a press, and nothing opened. The catalogue page and the \"my services\" page both showed the panel; the basket drew the button and never the panel itself. That left the one screen where somebody decides whether to actually place the order with a row that was a name and two buttons — the price, the approval rule, the description and the picture were all out of reach at exactly the moment they matter. The panel now opens below the basket, and anything already typed into a product's configuration form is kept when it does.",
+    "de": "Jede Zeile im Warenkorb trug das runde „i“, es reagierte auf einen Druck, und es öffnete sich nichts. Die Katalogseite und die Seite „Meine Leistungen“ zeigten den Bereich beide; der Warenkorb zeichnete nur den Knopf, nie den Bereich selbst. Damit blieb ausgerechnet auf jenem Bildschirm, auf dem über die Bestellung entschieden wird, eine Zeile aus Name und zwei Schaltflächen übrig — Preis, Genehmigungsregel, Beschreibung und Bild waren genau dann unerreichbar, wenn sie zählen. Der Bereich öffnet sich nun unterhalb des Warenkorbs; bereits eingetippte Angaben in einem Konfigurationsformular bleiben dabei erhalten."
+  },
+  "tutorial": {
+    "en": [
+      "Put a product in the basket in the service portal.",
+      "Open the basket.",
+      "Press the round \"i\" on one of the rows — the panel opens below the columns.",
+      "Press it again to close it, or press it on another row to switch."
+    ],
+    "de": [
+      "Im Leistungsportal ein Produkt in den Warenkorb legen.",
+      "Den Warenkorb öffnen.",
+      "Auf einer Zeile das runde „i“ drücken — der Bereich öffnet sich unterhalb der Spalten.",
+      "Erneut drücken schliesst ihn, ein Druck auf eine andere Zeile wechselt."
+    ]
+  }
+}
