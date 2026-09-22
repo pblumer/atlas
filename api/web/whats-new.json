@@ -2,6 +2,27 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-folded-decision-service-stays-folded",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A folded decision service stays folded",
+        "de": "Ein zugeklappter Decision Service bleibt zugeklappt"
+      },
+      "summary": {
+        "en": "Atlas draws a diagram for a decision model that has none, and lays the whole thing out afresh when a model's diagram covers only part of it — on the reasoning that half a diagram is usually the leftovers of a tool that drew what it could. A folded decision service looks exactly like that from the outside and is the opposite: DMN folds one by leaving its contents out of the picture on purpose. So Atlas was unfolding, on every read, what somebody had just folded — and a fold could never survive being saved. It now recognises the one case: a diagram missing exactly the decisions of a folded service is complete. Anything else missing is still drawn, including a service with no box of its own at all.",
+        "de": "Atlas erzeugt für ein Entscheidungsmodell ohne Diagramm eines und legt das ganze Diagramm neu an, wenn es nur einen Teil des Modells abdeckt — mit der Begründung, ein halbes Diagramm sei meist der Rest eines Werkzeugs, das zeichnete, was es konnte. Ein zugeklappter Decision Service sieht von aussen genauso aus und ist das Gegenteil: DMN klappt ihn zu, indem sein Inhalt absichtlich aus dem Bild bleibt. Atlas klappte also bei jedem Lesen wieder auf, was jemand gerade zugeklappt hatte — und eine Faltung überlebte kein Speichern. Jetzt erkennt Atlas diesen einen Fall: Ein Diagramm, dem genau die Entscheidungen eines zugeklappten Service fehlen, ist vollständig. Alles andere, was fehlt, wird weiterhin gezeichnet, auch ein Service ganz ohne eigenen Kasten."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "DMN"
+      ]
+    },
+    {
       "id": "a-decision-service-is-offered-where-the-author-looks-for-it",
       "version": "Unreleased",
       "date": null,
@@ -128,6 +149,35 @@
           "de": "Entscheidungen öffnen"
         },
         "route": "#/console/decisions"
+      }
+    },
+    {
+      "id": "a-decision-service-can-be-folded-away-on-the-canvas",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Fold a decision service away on the canvas",
+        "de": "Einen Decision Service auf der Fläche zuklappen"
+      },
+      "summary": {
+        "en": "A decision requirement diagram with several decision services on it is hard to read when every decision inside every one of them is on screen. DMN has an answer for that: a collapsed service, drawn as a box with its name and nothing of its definition. The Modeler now offers it on the service's own context pad, both ways, and folding or unfolding is a single step you can undo. What goes away is the picture, not the model — the decisions stay in the graph, stay listed, and their tables stay editable. One limit worth knowing: where the decisions sat is not kept across a save, because DMN offers nowhere to record the position of something a diagram does not show. Unfold in the same session and everything returns where you had it; unfold after reopening the file and the box is arranged afresh.",
+        "de": "Ein Decision Requirement Diagram mit mehreren Decision Services wird unübersichtlich, sobald jede Entscheidung in jedem davon auf dem Bildschirm steht. DMN hat dafür eine Antwort: den zugeklappten Service, gezeichnet als Kasten mit seinem Namen und nichts von seiner Definition. Der Modeler bietet das jetzt am Context Pad des Service an, in beide Richtungen, und Zu- oder Aufklappen ist ein einzelner Schritt, den man rückgängig machen kann. Weg ist das Bild, nicht das Modell — die Entscheidungen bleiben im Graph, bleiben gelistet, und ihre Tabellen bleiben bearbeitbar. Eine Einschränkung, die man kennen sollte: Wo die Entscheidungen lagen, überlebt kein Speichern, denn DMN sieht keinen Ort vor, an dem die Position von etwas festgehalten würde, das ein Diagramm nicht zeigt. Klappt man in derselben Sitzung wieder auf, steht alles dort, wo man es hatte; klappt man nach erneutem Öffnen auf, wird der Kasten neu angeordnet."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "DMN"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
       }
     },
     {
@@ -322,97 +372,6 @@
           "Die Aufgaben im Posteingang abarbeiten: Katalog, Produktdaten, Zusammenstellung, Preise — dann die Verifizierung, die die eigentliche Entscheidung ist.",
           "Als Administratorin die Aufgabe „Erscheinungsbild festlegen“ öffnen, ein PNG oder SVG wählen und abschliessen — das Bild geht direkt an den Katalog, und schlägt das fehl, bleibt die Aufgabe offen und nennt den Grund."
         ]
-      }
-    },
-    {
-      "id": "narrow-the-starmap-to-the-offerings-you-mean",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Narrow the starmap to the offerings you mean",
-        "de": "Die Starmap auf die gemeinten Angebote einschränken"
-      },
-      "summary": {
-        "en": "The element-type filter beside this one answers “which kinds of thing do I want to see”. It cannot answer “show me only what is actually orderable”, because that is not a kind — it is a property of one — and the search cannot answer it either, since a product's state is not a word in its name. The Product Map now carries the two facts your catalogue keeps about an offering that nothing else on the picture has. Product state lists draft, active and withdrawn; Approval lists whether ordering it stops for an approver. Both are boxes and both are on, like the element types above them. Three boxes for the state rather than one “active only” switch, because a draft and a withdrawn product are not the same thing and the difference is usually the point — collapsed into “not active” they become one heap and “what did we retire” cannot be asked at all. Three boxes contain the switch anyway: untick two and keep active. The approval side is a simple yes or no although the rule behind it is not, because you can register your own approval process under any name, and which route an approval takes is a catalogue matter while whether an order stops for a human at all is an estate one. A rule Atlas has never heard of counts as stopping for a human. It only ever removes products: a catalogue has no state and a process has no approver, so nothing else on the picture can be filtered by one, and a process left with nothing attached stays drawn — a deployed process is part of the estate in its own right. Like the element-type filter, the cut happens before the search and the drilldown, so neither reaches through a product you have put down. An exported file names the products that were switched off and says the part you could not otherwise see: a catalogue in that file may offer more than the products shown under it. A saved view remembers the setting.",
-        "de": "Der Elementtyp-Filter daneben beantwortet die Frage „welche Arten von Dingen will ich sehen“. Er beantwortet nicht „zeig mir nur das, was tatsächlich bestellbar ist“, denn das ist keine Art, sondern eine Eigenschaft einer Art — und die Suche beantwortet es ebenso wenig, weil der Zustand eines Produkts kein Wort in seinem Namen ist. Die Product Map führt jetzt die beiden Angaben mit, die Ihr Katalog zu einem Angebot führt und die sonst nichts auf dem Bild hat. „Product state“ führt Entwurf, aktiv und zurückgezogen auf; „Approval“ führt auf, ob eine Bestellung bei einer genehmigenden Person anhält. Beides sind Kästchen, und beide sind gesetzt, wie die Elementtypen darüber. Drei Kästchen für den Zustand statt eines Schalters „nur aktive“, weil ein Entwurf und ein zurückgezogenes Produkt nicht dasselbe sind und der Unterschied meist gerade der Punkt ist: Zu „nicht aktiv“ zusammengefasst werden sie ein Haufen, und „was haben wir zurückgezogen“ lässt sich gar nicht mehr fragen. Die drei Kästchen enthalten den Schalter ohnehin — zwei Haken weg, aktiv stehen lassen. Die Genehmigungsseite ist ein schlichtes Ja oder Nein, obwohl die Regel dahinter es nicht ist: Sie können einen eigenen Genehmigungsprozess unter beliebigem Namen registrieren, und welchen Weg eine Genehmigung nimmt, ist eine Katalogfrage — ob eine Bestellung überhaupt bei einem Menschen anhält, ist eine Frage an die Landschaft. Eine Regel, die Atlas nicht kennt, zählt als Anhalten bei einem Menschen. Entfernt werden ausschliesslich Produkte: Ein Katalog hat keinen Zustand und ein Prozess keine genehmigende Person, also lässt sich sonst nichts auf dem Bild danach filtern. Ein Prozess, an dem nichts mehr hängt, bleibt gezeichnet — ein deployter Prozess gehört der Landschaft aus eigenem Recht an. Wie beim Elementtyp-Filter greift der Schnitt vor Suche und Drilldown, sodass keines von beiden durch ein weggelegtes Produkt hindurchgreift. Eine exportierte Datei nennt die abgeschalteten Produkte und sagt, was man ihr sonst nicht ansieht: Ein Katalog darin bietet unter Umständen mehr an, als die darunter gezeigten Produkte vermuten lassen. Eine gespeicherte Sicht merkt sich die Einstellung."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama",
-        "Catalogue"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Panorama › Starmap and set View to “Product Map”.",
-          "In the right-hand column, under “Element types”, find “Product state” and “Approval”. Each lists one box per value your picture actually holds, all ticked.",
-          "Untick Withdrawn and Draft: what is left are the offerings somebody can order today, with the catalogues and processes untouched.",
-          "Untick “Ordered without approval” as well — now only the products that stop for an approver are drawn.",
-          "Tick them back: the boxes are still there, because the list is built from what the server sent rather than from what survived.",
-          "Press “SVG” with something switched off and read the stamp at the foot of the file — it names what was put down and warns that a catalogue may offer more than is shown.",
-          "Name the arrangement under “Saved views” and press Save; reopening it narrows the picture the same way."
-        ],
-        "de": [
-          "Öffnen Sie „Panorama › Starmap“ und stellen Sie „View“ auf „Product Map“.",
-          "In der rechten Spalte unter „Element types“ finden Sie „Product state“ und „Approval“. Beide führen je ein Kästchen pro Wert auf, den Ihr Bild tatsächlich enthält, alle gesetzt.",
-          "Nehmen Sie die Haken bei „Withdrawn“ und „Draft“ weg: übrig bleibt, was heute bestellbar ist — Kataloge und Prozesse bleiben unberührt.",
-          "Nehmen Sie zusätzlich den Haken bei „Ordered without approval“ weg — nun sind nur noch die Produkte gezeichnet, die bei einer genehmigenden Person anhalten.",
-          "Setzen Sie die Haken wieder: Die Kästchen sind noch da, weil die Liste aus dem stammt, was der Server geliefert hat, und nicht aus dem, was übrig geblieben ist.",
-          "Drücken Sie bei abgeschalteter Auswahl auf „SVG“ und lesen Sie den Stempel am Fuss der Datei — er nennt das Weggelegte und weist darauf hin, dass ein Katalog mehr anbieten kann als gezeigt.",
-          "Benennen Sie die Anordnung unter „Saved views“ und drücken Sie „Save“; beim erneuten Öffnen wird das Bild gleich eingeschränkt."
-        ]
-      }
-    },
-    {
-      "id": "put-a-whole-element-type-down-on-the-starmap",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Put a whole element type down",
-        "de": "Einen ganzen Elementtyp weglegen"
-      },
-      "summary": {
-        "en": "The Product Map draws four kinds of thing at once — your catalogues, the products they offer, the processes those products bind, and a marker wherever nothing is deployed. Somebody who opened it to look at one of those had no way to set the other three aside: the search narrows by name, and “show me just the catalogues” is not a name. The right-hand column now lists every element type on the picture, each with a box, and every box is on. It is for putting part of a picture down rather than for building one up, so a kind nobody has an opinion about stays drawn — including one that turns up later, such as a catalogue somebody shares with you next week. Switching a type off removes it before anything else narrows the picture, which is the part that makes it behave the way you expect: a search keeps a hop of neighbours and a drilldown follows the depth on screen, and neither may reach through something you have put down. So a process that was only there because a product bound it goes with the products, and a line whose other end has gone goes with it. Everything describing the picture follows the picture: the count over the canvas counts what is drawn, the key stops explaining what is not, and switching everything off says so in plain words instead of borrowing the sentence a fruitless search would use. On an ArchiMate projection the boxes are named in ArchiMate's words. An exported file names the types that were switched off, and says the thing a reader of the file could not work out — that what is missing is not only that kind, but everything that was reachable only through it. A saved view remembers the setting, like the search term and the depth beside it.",
-        "de": "Die Product Map zeichnet vier Arten von Dingen gleichzeitig — Ihre Kataloge, die angebotenen Produkte, die Prozesse, die diese Produkte binden, und eine Markierung überall dort, wo nichts deployt ist. Wer sie geöffnet hat, um eines davon anzusehen, konnte die übrigen drei nicht beiseitelegen: Die Suche schränkt über den Namen ein, und „zeig mir nur die Kataloge“ ist kein Name. Die rechte Spalte führt nun jeden Elementtyp auf, den das Bild enthält, je mit einem Kästchen, und jedes Kästchen ist gesetzt. Es dient dazu, einen Teil des Bildes wegzulegen, nicht dazu, eines aufzubauen — ein Typ, zu dem niemand eine Meinung hat, bleibt gezeichnet, auch einer, der später dazukommt, etwa ein Katalog, den jemand nächste Woche für Sie freigibt. Das Abschalten eines Typs entfernt ihn, bevor irgendetwas anderes das Bild einschränkt, und genau das lässt es sich so verhalten, wie man es erwartet: Eine Suche behält einen Nachbarschritt, ein Drilldown folgt der eingestellten Tiefe, und keines von beiden darf durch etwas hindurchgreifen, das Sie weggelegt haben. Ein Prozess, der nur deshalb auf dem Bild war, weil ein Produkt ihn bindet, geht also mit den Produkten, und eine Linie, deren anderes Ende fehlt, geht mit ihr. Alles, was das Bild beschreibt, folgt dem Bild: Die Zählung über der Fläche zählt das Gezeichnete, die Legende erklärt nichts mehr, was nicht da ist, und wenn alles abgeschaltet ist, steht das in Worten da statt im Satz einer erfolglosen Suche. Auf einer ArchiMate-Projektion tragen die Kästchen die Bezeichnungen von ArchiMate. Eine exportierte Datei nennt die abgeschalteten Typen und sagt das, was man der Datei sonst nicht ansieht: Es fehlt nicht nur dieser Typ, sondern auch alles, was nur über ihn erreichbar war. Eine gespeicherte Sicht merkt sich die Einstellung, wie den Suchbegriff und die Tiefe daneben."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama",
-        "Catalogue"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Panorama › Starmap and set View to “Product Map”.",
-          "Look at the right-hand column, under Depth: “Element types” lists one box per kind on the picture, all ticked.",
-          "Untick Product. The products go, and so do the lines that ran to them and the processes that were only there because a product bound them.",
-          "Type a catalogue's name into the search box: the products stay away, rather than coming back as context for the match.",
-          "Tick Product again — the box is still there, because the list is built from what the server sent rather than from what is left on screen.",
-          "Press “SVG” with a type switched off and read the stamp at the foot of the file: it names what is missing.",
-          "Name the arrangement under “Saved views” and press Save; reopening it puts the same types back down."
-        ],
-        "de": [
-          "Öffnen Sie „Panorama › Starmap“ und stellen Sie „View“ auf „Product Map“.",
-          "Sehen Sie in die rechte Spalte unter „Depth“: „Element types“ führt je ein Kästchen pro Typ auf dem Bild auf, alle gesetzt.",
-          "Nehmen Sie den Haken bei „Product“ weg. Die Produkte verschwinden, ebenso die Linien zu ihnen und die Prozesse, die nur wegen eines Produkts dort waren.",
-          "Tippen Sie den Namen eines Katalogs in das Suchfeld: Die Produkte bleiben weg, statt als Umfeld des Treffers zurückzukehren.",
-          "Setzen Sie den Haken wieder — das Kästchen ist noch da, weil die Liste aus dem stammt, was der Server geliefert hat, und nicht aus dem, was auf dem Bildschirm übrig ist.",
-          "Drücken Sie bei abgeschaltetem Typ auf „SVG“ und lesen Sie den Stempel am Fuss der Datei: Er nennt, was fehlt.",
-          "Benennen Sie die Anordnung unter „Saved views“ und speichern Sie sie; beim erneuten Öffnen liegen dieselben Typen wieder weg."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Panorama › Starmap",
-          "de": "Panorama › Starmap öffnen"
-        },
-        "route": "#/panorama/starmap"
       }
     }
   ]

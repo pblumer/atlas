@@ -14,6 +14,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A folded decision service stays folded.** `EnsureDiagram` lays a model's whole
+  graph out afresh whenever its diagram covers only some of the nodes, on the reasoning
+  that a partial diagram is the residue of a tool that drew what it could. A collapsed
+  decision service looks exactly like that from the outside and is the opposite: DMN
+  draws one by leaving its definition out of the view, so a diagram missing exactly its
+  members is a diagram somebody arranged that way. Re-laying it unfolded the fold on
+  every read, which meant a fold could never survive being saved. The exception is
+  narrow — a collapsed service's own members and nothing else; the service still needs
+  its own shape, because one with no box at all is the residue the rule exists for.
+
 - **A decision service is offered where the author looks for it.** The Modeler's
   decision picker is built from two lists: what an application's DMN references offer,
   and — as a fallback — what the engine has deployed. Describing a reference returned
@@ -79,6 +89,24 @@ _Changed_ / _Removed_ for each version.
   unfinished service belongs in a draft, which is saved without this gate.
 
 ### Added
+
+- **A decision service can be folded away on the canvas.** A DRD carrying several
+  decision services is unreadable with every decision inside every one of them on
+  screen, and DMN has an answer for it: a collapsed service, drawn as a box with its
+  name and nothing of its definition (1.5 §6.2.4). The Modeler now offers it on the
+  service's context pad, both ways, as one undoable step.
+
+  A fold takes away depiction, not model. The decisions stay in the graph and stay
+  editable — the view list is built from the graph rather than from the diagram — and
+  what is saved is a diagram without their shapes, with the service marked as
+  collapsed. Neither of the obvious implementations would have done that: deleting the
+  shapes takes the decisions out of the model, and re-creating a requirement on unfold
+  tears it out of the decision that owns it.
+
+  One limit, stated rather than hidden: where the decisions were does not survive a
+  save. DMN offers nowhere to keep the position of something a diagram does not show,
+  so unfolding restores the arrangement exactly within a session and lays it out afresh
+  after a reload.
 
 - **The run graph says when it is true, and how far the log has drifted from it since.** [ADR-0404](docs/adr/0404-the-whole-graph-can-be-walked.md) §4 asks for a projection seeded from the state store and kept current from the tailer, "starting at the snapshot's position". Nothing could: a built graph carried no statement about *when* it was true. It does now — a source must report its `LastAppliedPosition`, the ordinal map records it, `Graph.Position()` reads it, and a source that cannot state one fails the build rather than publishing a projection that claims "as of 0" and is indistinguishable from one genuinely at genesis.
 
