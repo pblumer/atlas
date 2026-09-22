@@ -94,7 +94,7 @@
   </association>
   <dmndi:DMNDI>
     <dmndi:DMNStyle id="style_shared" fontSize="14" fontBold="true" fillColor="#eeeeee" strokeColor="#333333" />
-    <dmndi:DMNDiagram id="dia" name="Main">
+    <dmndi:DMNDiagram id="dia" name="Main" useAlternativeInputDataShape="true">
       <dmndi:Size width="1200" height="800" />
       <dmndi:DMNShape id="sh_amount" dmnElementRef="in_amount" isListedInputData="false" useAlternativeInputDataShape="true">
         <dc:Bounds x="100" y="400" width="125" height="45" />

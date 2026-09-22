@@ -26,16 +26,17 @@ const MODEL = fs.readFileSync(
 // reason and its cost, not to soften the test.
 const KNOWN_LOSSES = [];
 
-// One warning, and it costs no data — which is the reason to hold it rather than the
-// losses alone. useAlternativeInputDataShape is declared on DMNDiagram, as an element,
-// where DMN 1.5 puts it on DMNShape as an attribute. So the import calls it unknown,
-// and yet it survives verbatim, because an attribute nothing claims is written back as
-// it was found. Nothing is lost and nothing reads it either: an input datum an author
-// chose to draw as the paper symbol is still drawn as an oval. A warning with no loss
-// behind it is exactly the kind that gets dismissed, so it is written down instead.
-const KNOWN_WARNINGS = [
-  "unknown attribute <useAlternativeInputDataShape>",
-];
+// Nothing either. The one warning that stood here was
+// useAlternativeInputDataShape: the descriptor typed it as an association to a UML
+// Standard Profile stereotype, an artefact of the OMG's own export rather than
+// anything the schema means, so the import looked for a child element no document has
+// and called the real attribute unknown. It is a boolean attribute now, declared both
+// on DMNDiagram, where the normative XSD puts it, and on DMNShape, where DMN 1.5's own
+// Table 97 puts it — the specification says both, so a reader of either spelling keeps
+// what its author wrote. The value still steers no rendering: an input datum an author
+// chose to draw as the paper symbol is drawn as an oval. What changed is that it is
+// now read rather than merely passed through untouched.
+const KNOWN_WARNINGS = [];
 
 test("the shipped editor gives back the model it was given", async ({ page }) => {
   await page.goto("/harness.html");

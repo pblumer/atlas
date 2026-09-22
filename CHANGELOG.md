@@ -14,6 +14,23 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **An attribute the editor could not read survived only by being ignored.** DMN 1.5 lets
+  an author say that Input Data is to be drawn as the paper sheet symbol rather than the
+  backwards compatible oval. The editor's descriptor had that flag typed as an association
+  to a UML Standard Profile stereotype — an artefact of the OMG's own XMI export rather
+  than anything the schema means. So the editor looked for a child element no document has,
+  called the real attribute unknown, and left it unclaimed. Nothing was lost: an attribute
+  nothing claims is written back as it was found. But nothing could read it either, and a
+  warning with no loss behind it is exactly the kind that gets dismissed.
+
+  It is a boolean attribute now, declared in both of the places DMN 1.5 names it, because
+  the specification does not agree with itself here. The normative XSD carries it on
+  `DMNDiagram` and nowhere else; Table 97 lists it among the `DMNShape` attributes and
+  describes it per shape. Neither reading is a misreading and documents exist both ways, so
+  a reader of either spelling keeps what its author wrote. Nothing on screen changes — an
+  Input Data element is still drawn as an oval — and the round-trip guard that holds the
+  shipped editor to what it loses and what it complains about now records neither.
+
 - **Saving a product said "apiBytes is not defined" and quietly left the product
   offered by nothing.** The catalogue screen hands its event handlers a bag of what
   the shell owns — the API caller, the byte uploader, the toast. The product form's
