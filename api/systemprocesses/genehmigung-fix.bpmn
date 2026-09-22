@@ -17,7 +17,9 @@ Warum die Genehmigung hier liegt und nicht im Provisionierungsprozess: die Regel
 
 Eine Zustimmung braucht keine eigene Meldung an den Auftrag: die Position wird provisioniert, und ihr Ergebnis kommt auf dem gewöhnlichen Weg. Gemeldet wird nur die Ablehnung, weil sie sonst nirgends stünde.
 
-Voraussetzung beim Betreiber: ein REST-Worker namens „atlas“, der auf diese Atlas-Instanz zeigt und ein API-Token mit der Rolle operator trägt.</bpmn:documentation>
+Voraussetzung beim Betreiber: ein API-Token mit der Rolle operator, hinterlegt unter ATLAS_CONNECTOR_ATLAS_TOKEN (ADR-0041). Die Aufrufe gehen an Atlas' eigene API und tragen dieses Token als Bearer; die Adresse kommt aus der Startvariablen atlasApiBase und nicht aus dem Modell, weil sie je Installation verschieden ist.
+
+Kein Worker ist einzurichten. Die Service-Tasks sind REST-Connector-Tasks des reservierten Typs io.atlas.http.rest, den die Engine selbst bedient — und, wo der Betreiber diese Art ausgelagert hat, der mitgelieferte rest-Worker.</bpmn:documentation>
 
     <bpmn:startEvent id="Start" name="Genehmigung nötig">
       <bpmn:documentation>Wird vom Erfüllungsprozess gestartet, sobald die Position an der Reihe ist und ihre Genehmigungsregel diese Art nennt.</bpmn:documentation>
@@ -48,14 +50,12 @@ Das Formular zeigt, worum es geht, und verlangt bei einer Ablehnung eine Begrün
 
 Die Zustimmung selbst wird nicht gemeldet — das Ergebnis der Provisionierung kommt auf dem gewöhnlichen Weg, und eine zweite Meldung wäre eine zweite Wahrheit.</bpmn:documentation>
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="rest" />
-        <zeebe:taskHeaders>
-          <zeebe:header key="connector" value="atlas" />
-          <zeebe:header key="method" value="POST" />
-          <zeebe:header key="path" value="/api/v1/instances" />
-        </zeebe:taskHeaders>
+        <atlas:restConnector method="POST"
+          url="=atlasApiBase + &#34;/api/v1/instances&#34;"
+          authType="bearer" authSecret="atlas" />
         <zeebe:ioMapping>
-          <zeebe:input source="={processId: provisionProcess, variables: {orderId: orderId, itemId: itemId, variantId: variantId, recipient: recipient}}" target="body" />
+          <zeebe:input source="=provisionProcess" target="processId" />
+          <zeebe:input source="={orderId: orderId, itemId: itemId, positionId: positionId, variantId: variantId, recipient: recipient, orderer: orderer, atlasApiBase: atlasApiBase, portalBaseUrl: portalBaseUrl}" target="variables" />
         </zeebe:ioMapping>
       </bpmn:extensionElements>
       <bpmn:incoming>F_Gw_Provisionieren</bpmn:incoming>
@@ -69,14 +69,12 @@ Eine Ablehnung geht bewusst nicht über die gewöhnliche Ergebnismeldung: sie is
 
 Der Genehmiger ist die am Produkt hinterlegte Person: die Aufgabe ging an genau sie, also steht im Nachweis, wer entschieden hat.</bpmn:documentation>
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="rest" />
-        <zeebe:taskHeaders>
-          <zeebe:header key="connector" value="atlas" />
-          <zeebe:header key="method" value="POST" />
-        </zeebe:taskHeaders>
+        <atlas:restConnector method="POST"
+          url="=atlasApiBase + &#34;/api/v1/orders/&#34; + orderId + &#34;/lines/&#34; + itemId + &#34;/decision&#34;"
+          authType="bearer" authSecret="atlas" />
         <zeebe:ioMapping>
-          <zeebe:input source="=&#34;/api/v1/orders/&#34; + orderId + &#34;/lines/&#34; + itemId + &#34;/decision&#34;" target="path" />
-          <zeebe:input source="={by: approvalRef, reason: begruendung}" target="body" />
+          <zeebe:input source="=approvalRef" target="by" />
+          <zeebe:input source="=begruendung" target="reason" />
         </zeebe:ioMapping>
       </bpmn:extensionElements>
       <bpmn:incoming>F_Gw_Ablehnen</bpmn:incoming>
@@ -164,14 +162,11 @@ Wer der Vorgesetzte ist, beantwortet der Aufrufer: eine Verzeichnisabfrage geh&#
 
 Ist die Antwort „stalled&#34;, bleibt die Genehmigung, wo sie ist, und der Umstand ist festgehalten. Er steht dann unter GET /api/v1/approvals/stalled — eine Genehmigung, die niemand weiterreichen kann und auf die niemand schaut, ist genau die Art, wie ein Auftrag ewig wartet.</bpmn:documentation>
       <bpmn:extensionElements>
-        <zeebe:taskDefinition type="rest" />
-        <zeebe:taskHeaders>
-          <zeebe:header key="connector" value="atlas" />
-          <zeebe:header key="method" value="POST" />
-        </zeebe:taskHeaders>
+        <atlas:restConnector method="POST"
+          url="=atlasApiBase + &#34;/api/v1/orders/&#34; + orderId + &#34;/lines/&#34; + itemId + &#34;/escalate&#34;"
+          authType="bearer" authSecret="atlas" />
         <zeebe:ioMapping>
-          <zeebe:input source="=&#34;/api/v1/orders/&#34; + orderId + &#34;/lines/&#34; + itemId + &#34;/escalate&#34;" target="path" />
-          <zeebe:input source="={superior: &#34;&#34;}" target="body" />
+          <zeebe:input source="=&#34;&#34;" target="superior" />
         </zeebe:ioMapping>
       </bpmn:extensionElements>
       <bpmn:incoming>F_Frist_Eskalieren</bpmn:incoming>

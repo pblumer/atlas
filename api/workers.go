@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -43,12 +44,21 @@ type workerStat struct {
 	// the providers it can reach. Empty for a worker that serves only plain job
 	// types, which need no credential of their own.
 	Connectors []string `json:"connectors,omitempty"`
-	FirstSeen  int64    `json:"firstSeen"`
-	LastSeen   int64    `json:"lastSeen"`
-	Leased     int64    `json:"leased"`
-	Pulled     int64    `json:"pulled"`
-	Completed  int64    `json:"completed"`
-	Failed     int64    `json:"failed"`
+	// Serves are the job types this worker has asked for, recorded on every poll
+	// including the ones that came back empty.
+	//
+	// Types above cannot answer that question: it counts what was *leased*, so a
+	// worker that is connected and polling a queue with no work in it looks
+	// exactly like a worker that is not there. That difference is the whole of
+	// "is anybody serving this?", and reading the wrong one reports a healthy
+	// idle queue as unserved (api/processlookup.go).
+	Serves    []string `json:"serves,omitempty"`
+	FirstSeen int64    `json:"firstSeen"`
+	LastSeen  int64    `json:"lastSeen"`
+	Leased    int64    `json:"leased"`
+	Pulled    int64    `json:"pulled"`
+	Completed int64    `json:"completed"`
+	Failed    int64    `json:"failed"`
 }
 
 // workerRegistry accumulates what the workers endpoint reports.
@@ -118,6 +128,23 @@ func (r *workerRegistry) leased(worker, jobType string, n int) {
 	st.Leased += int64(n)
 	st.Types[jobType] += int64(n)
 	r.inFlight[jobType] += int64(n)
+}
+
+// polls records that a worker asked for a job type, whether or not it got one.
+//
+// The subscription rather than the work: an idle poll is the strongest evidence
+// there is that somebody is serving a queue, and it is the only evidence a queue
+// with no work in it can produce.
+func (r *workerRegistry) polls(worker, jobType string) {
+	jobType = strings.TrimSpace(jobType)
+	if jobType == "" {
+		return
+	}
+	st := r.seen(worker)
+	if !slices.Contains(st.Serves, jobType) {
+		st.Serves = append(st.Serves, jobType)
+		slices.Sort(st.Serves)
+	}
 }
 
 // completed records a job a worker finished, and takes it out of flight.

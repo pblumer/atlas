@@ -1,0 +1,13 @@
+{
+  "tags": [
+    "Operations"
+  ],
+  "title": {
+    "en": "Tell a quiet worker from an absent one",
+    "de": "Einen stillen Worker von einem abwesenden unterscheiden"
+  },
+  "summary": {
+    "en": "A worker's row counted the jobs it had been given. A worker that is connected and polling a queue with no work in it therefore looked exactly like a worker that is not running at all — and \"is anybody serving this queue?\" was unanswerable for every quiet queue, which is most of them most of the time. Each poll now records the job type it asked for, whether or not a job came back, and the row shows it beside the counts.",
+    "de": "Die Zeile eines Workers zählte die Aufträge, die er erhalten hatte. Ein verbundener Worker, der eine Warteschlange ohne Arbeit abfragt, sah damit genauso aus wie ein Worker, der gar nicht läuft — und die Frage „bedient das überhaupt jemand?\" war für jede stille Warteschlange unbeantwortbar, also für die meisten die meiste Zeit. Jede Abfrage vermerkt nun den Job-Typ, nach dem gefragt wurde, unabhängig davon, ob ein Auftrag zurückkam, und die Zeile zeigt ihn neben den Zählern."
+  }
+}

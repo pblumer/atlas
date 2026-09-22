@@ -43,6 +43,7 @@ func placing(t *testing.T, groups func(string) ([]string, error)) *Service {
 		groups, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error { return nil },
 		func() string { return "https://atlas.example.ch" },
+		func() string { return "http://atlas.test" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
 }
 

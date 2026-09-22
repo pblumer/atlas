@@ -74,6 +74,7 @@ func ordering(t *testing.T) *Service {
 		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error { return nil },
 		func() string { return "https://atlas.example.ch" },
+		func() string { return "http://atlas.test" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
 }
 
@@ -150,6 +151,7 @@ func TestTwoProductsInOneBasketKeepTheirOwnAnswers(t *testing.T) {
 		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error { return nil },
 		func() string { return "https://atlas.example.ch" },
+		func() string { return "http://atlas.test" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
 
 	rec := do(t, s.HandlePlace, someone("usr_1"), "POST",

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/pblumer/atlas/compiler"
@@ -89,6 +90,13 @@ func (l processLookup) Served(jobType string) bool {
 			return
 		}
 		for _, st := range l.s.workers.byName {
+			// What it asked for, not what it got. A worker polling a queue with no
+			// work in it has leased nothing, and counting only leases would report
+			// every quiet queue on a healthy installation as unserved.
+			if slices.Contains(st.Serves, jobType) {
+				served = true
+				return
+			}
 			if _, pulls := st.Types[jobType]; pulls {
 				served = true
 				return

@@ -6035,6 +6035,9 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 				}
 				jobs = append(jobs, j)
 			}
+			// Every poll, productive or not: this is what says somebody is serving
+			// this queue, and a queue with no work in it can say nothing else.
+			s.workers.polls(body.Worker, body.Type)
 			s.workers.leased(body.Worker, body.Type, len(jobs))
 			// The variables as they stood at lease time are the half an operator
 			// cannot reconstruct later: the instance moves on, and this is what the
