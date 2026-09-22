@@ -1,6 +1,6 @@
 # ADR-0402: One estate, several nodes — a starmap stitched from subgraphs
 
-- **Status:** Proposed
+- **Status:** Accepted (amended 2026-09-22: the estate view is sequenced behind the credential-reach record, see §1)
 - **Implementation:** Not started
 - **Date:** 2026-09-18
 - **Deciders:** Atlas maintainers
@@ -111,6 +111,19 @@ derived landscape, and which can neither deploy, read an instance, nor list a pe
 And the picture **states whose credential drew each subgraph**, beside the same legend
 that already carries the restricted count. The same discipline: an incompleteness that is
 stated is a fact; one that is not is a discovery.
+
+#### Accepted, and the gate is not what gets built first (2026-09-22)
+
+This record is accepted, and with it the altitude, the budget rule, the fifth peer state and
+the refusal to invent edges. What is **not** built first is §1's operator gate. The
+measurement below found that the alternative it would foreclose is unavailable only because
+of a mechanism that can be changed, and the maintainer chose to change it: the credential's
+own reach is settled in
+ADR-draft-a-peer-credential-carries-the-reach-a-membership-cannot-give-it, and the estate
+view is built after it.
+
+The gate in §1 therefore stands as the *fallback* — what an installation gets if the reach
+record is refused — rather than as the way in.
 
 #### What the mechanism allows, measured before building the gate (2026-09)
 
