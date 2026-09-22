@@ -209,6 +209,27 @@ thing it is supposed to own.
   grant. The read discloses what that domain already published, and nothing it did
   not.
 
+  *How far it reaches* is **one hop**. A peer answers for its own domain, out of
+  its own store, and never forwards the question or aggregates an answer on
+  somebody else's behalf. The read is therefore not recursive, and that is a
+  property rather than a limit somebody might later relax: no request causes
+  another request, so no cycle can form between two nodes that each list the other,
+  no hop counter or visited-set is needed to notice one, and the cost of opening a
+  view is exactly the number of peers this node has configured — never that number
+  squared, and never a burst that grows as an outage is retried across an estate.
+  Depth beyond one would also make every node a proxy for a read it has no
+  authority to relay, which is the grant question below arriving through the back
+  door.
+
+  The honest cost is that **the picture is only as wide as the viewer's own peer
+  list**: if this node knows the credit domain and the credit domain knows
+  billing, billing is still not on this node's map. It must not look complete
+  either — a foreign capability whose domain this node cannot reach is *named but
+  not reached from here*, which is a third thing to say beside `unreachable` (a
+  peer configured, asked, and silent) and `Elsewhere` (a peer reached, reporting
+  its own). Saying which of the three is the same discipline `Restricted` and
+  `Checked` already apply: publish the blind spot rather than render around it.
+
   *Under what authority* is the part left open, and it is a real gap rather than a
   formality: reading a peer's map is adjacent to the `observe` grant ADR-0373 names
   and deliberately does not decide. Answering it there and here at once is likely
