@@ -27,7 +27,7 @@ import (
 // That is not an argument against renaming — it is an argument for noticing. This test is the
 // noticing: the wire schema is written down here, and changing it means changing this table,
 // in a diff a reviewer can see. The reasoning is recorded in
-// ADR-draft-the-archive-substrate-waits-its-schema-does-not.
+// ADR-0409.
 //
 // What this is not: a reason to add 122 `json` tags. Tags would pin each name against the Go
 // identifier and would also overturn ADR-0114's explicit choice of an uncurated projection,
