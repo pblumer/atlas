@@ -133,6 +133,30 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A report that says which services cannot be fulfilled here.** A catalogue binds a
+  product to processes by name. Nothing checks those names when the binding is written,
+  nothing checks them when the catalogue is published, and nothing complains when an
+  order reaches one. There are two ways it fails, and the second one hides: a process
+  that was never deployed raises an incident somebody can see, but a deployed process
+  waiting on a job type nothing works raises nothing at all. A parked token is work
+  waiting, not work failed — no retry spent, no incident, nothing red. The order stands
+  at "Wartet", and the first person to notice is whoever is waiting for the laptop.
+
+  `GET /api/v1/catalog-products/fulfilment-report` and `atlas_catalog_fulfilment_report`
+  answer it. They walk the whole path an order takes — the fulfilment orchestration, the
+  approval process where the rule needs one, then provisioning and the return — because
+  any of them stops it, and a check of the product's own binding alone would call an
+  installation healthy while every order on it stood still. That is the case this was
+  written from: fourteen orders held on the orchestration's first service task, every
+  product bound correctly, the approver report clean, nothing red anywhere.
+
+  It reads the newest release of each catalogue you maintain, since that is what can be
+  ordered today, and it reports a problem on the shared orchestration once rather than
+  once per product — that is one fact about the installation, and repeated against ten
+  services it would bury the ten. It is the approver report's sibling and reads beside
+  it: that one asks whether the rule reaches a person, this one whether the work reaches
+  a worker.
+
 - **A decision service can be folded away on the canvas.** A DRD carrying several
   decision services is unreadable with every decision inside every one of them on
   screen, and DMN has an answer for it: a collapsed service, drawn as a box with its

@@ -43,6 +43,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_update_catalog":             "PATCH /api/v1/catalogs/{id}",
 	"atlas_list_catalog_products":      "GET /api/v1/catalog-products",
 	"atlas_catalog_approver_report":    "GET /api/v1/catalog-products/approver-report",
+	"atlas_catalog_fulfilment_report":  "GET /api/v1/catalog-products/fulfilment-report",
 	"atlas_save_catalog_product":       "POST /api/v1/catalog-products",
 	"atlas_publish_catalog":            "POST /api/v1/catalogs/{id}/releases",
 	"atlas_catalog_releases":           "GET /api/v1/catalogs/{id}/releases",

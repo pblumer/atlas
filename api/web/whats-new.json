@@ -241,6 +241,42 @@
       ]
     },
     {
+      "id": "a-report-that-says-which-services-cannot-be-fulfilled-here",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "See which services would leave an order waiting forever",
+        "de": "Sehen, welche Leistungen einen Auftrag ewig warten lassen"
+      },
+      "summary": {
+        "en": "A catalogue binds a product to processes by name, and nothing has ever checked those names — not when the binding is written, not when the catalogue is published, not when an order reaches one. A process that was never deployed at least raises an incident. A deployed process waiting on a job type nothing works raises nothing at all: a parked token is work waiting rather than work failed, so no retry is spent, no incident appears, and no operations view turns red. The order stands at \"Wartet\" and the first person to notice is whoever is waiting for the laptop. The new report says it. It walks the whole path an order takes — the fulfilment orchestration, the approval process where the rule needs one, then provisioning and the return — because any of them stops it, and it reads what your catalogues actually offer today rather than what they say in the editor.",
+        "de": "Ein Katalog bindet ein Produkt über Namen an Prozesse, und diese Namen wurden bisher nirgends geprüft — weder beim Erfassen der Bindung noch beim Publizieren noch wenn ein Auftrag sie erreicht. Ein nie ausgelieferter Prozess erzeugt immerhin einen Incident. Ein ausgelieferter Prozess, der auf einem Job-Typ wartet, den niemand bedient, erzeugt gar nichts: ein geparkter Token ist wartende und keine gescheiterte Arbeit, also wird kein Wiederholungsversuch verbraucht, es erscheint kein Incident, und keine Betriebssicht schlägt an. Der Auftrag steht auf „Wartet\", und bemerkt wird es zuerst von der Person, die auf das Notebook wartet. Der neue Bericht sagt es. Er geht den ganzen Weg ab, den ein Auftrag nimmt — die Auftragserfüllung, den Genehmigungsprozess, sofern die Regel einen verlangt, dann Provisionierung und Rücknahme —, weil jede Station ihn anhalten kann, und er liest, was die Kataloge heute tatsächlich anbieten, nicht was im Editor steht."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue",
+        "Operations"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Catalogue in the console.",
+          "Read the report at GET /api/v1/catalog-products/fulfilment-report, or ask for it over MCP with atlas_catalog_fulfilment_report.",
+          "A row with no product is about the shared orchestration and stops every order alike; fix that one first.",
+          "A row naming a job type means nothing is working that queue — start the worker it needs."
+        ],
+        "de": [
+          "In der Konsole den Katalog öffnen.",
+          "Den Bericht unter GET /api/v1/catalog-products/fulfilment-report lesen oder über MCP mit atlas_catalog_fulfilment_report abrufen.",
+          "Eine Zeile ohne Produkt betrifft die gemeinsame Auftragserfüllung und hält jeden Auftrag gleichermassen auf; diese zuerst beheben.",
+          "Eine Zeile mit einem Job-Typ bedeutet, dass diese Warteschlange niemand bedient — den zugehörigen Worker starten."
+        ]
+      }
+    },
+    {
       "id": "a-decision-service-can-be-folded-away-on-the-canvas",
       "version": "Unreleased",
       "date": null,
@@ -319,27 +355,6 @@
         },
         "route": "#/modeler"
       }
-    },
-    {
-      "id": "the-account-bestellung-example-builds-its-upn-in-the-worker-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The Entra account example no longer builds the UPN in the process",
-        "de": "Das Entra-Konto-Beispiel baut den UPN nicht mehr im Prozess"
-      },
-      "summary": {
-        "en": "The example that orders an Entra account took a first and last name from a public form and built a UPN out of them in the process. Under the new personal-data rule it cannot, so the create-user task builds it instead — and it deploys with no exception to the rule, which is what the record behind the rule could not show against any process that existed. One thing was lost and is worth knowing: a gateway used to check the finished UPN against the test-object pattern before any write, and there is no such process variable now. The boundary is the literal in the task's own expression — visible in the model, but no longer checked while the instance runs.",
-        "de": "Das Beispiel, das ein Entra-Konto bestellt, nahm Vor- und Nachnamen aus einem öffentlichen Formular und baute daraus im Prozess einen UPN. Unter der neuen Personendaten-Regel darf es das nicht, also baut ihn der create-user-Task — und es deployt ohne Ausnahme von der Regel, was die Aufzeichnung dahinter an keinem existierenden Prozess zeigen konnte. Eines ging verloren und sollte man wissen: ein Gateway prüfte den fertigen UPN vor jedem Schreibzugriff gegen das Test-Objekt-Muster, und diese Prozessvariable gibt es nicht mehr. Die Grenze ist das Literal im Ausdruck des Tasks — im Modell sichtbar, aber während des Laufs nicht mehr geprüft."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler"
-      ]
     }
   ]
 }

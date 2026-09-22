@@ -1722,6 +1722,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// The catalogue can now say which approval rules reach nobody. It asks; the
 	// accounts and the groups are the server's, and this is where the two meet.
 	s.catalogs.Approvers = approverLookup{s: s}
+	s.catalogs.Processes = processLookup{s: s}
 	s.orders.Limits = s.budgets()
 	s.capabilities.Limits = s.budgets()
 	s.playground.Limits = s.budgets()
