@@ -371,6 +371,28 @@ func catalogTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_catalog_unpublished",
+			Description: "What publishing this catalogue would change for the people ordering: " +
+				"products it would ADD, products the portal is STILL OFFERING that it would take " +
+				"away, and products EDITED since the release being served. Ask it before and " +
+				"after editing a catalogue. The second group is the one worth the call: a " +
+				"product dropped from a catalogue is gone from every listing at once and the " +
+				"release goes on offering it, so nothing else you can read says it is still on " +
+				"the portal. \"Edited\" is decided on the record's revision and not on a " +
+				"comparison of fields, so a save that changed nothing still counts — the remedy " +
+				"is atlas_publish_catalog, which loses nothing. A product offered here but homed " +
+				"in a catalogue you do not maintain is never reported as edited, because you " +
+				"cannot read it to compare.",
+			InputSchema: catalogIDArg("The catalogue to compare against its newest release."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get(withID(id, "/unpublished")))
+			},
+		},
+		{
 			Name: "atlas_import_catalog_archimate",
 			Description: "Derive catalogue drafts from an ArchiMate Open Exchange model: Products " +
 				"and Business Services become products, compositions become integral parts and " +

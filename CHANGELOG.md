@@ -211,6 +211,44 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The catalogue screen now says what the portal is actually offering.** A catalogue
+  and its portal are two different things on purpose: the portal reads a **release** —
+  a frozen copy taken when somebody published — so an order cannot change under the
+  person placing it, while everything a maintainer edits goes to the live records
+  beside it. Nothing on either screen said so. The catalogue page listed its releases
+  by date and left the reader to work out whether today's catalogue was one of them,
+  which is not a question a date answers.
+
+  One direction of that was not merely unstated but invisible. Take a product out of a
+  catalogue and it leaves the product table at once; the release goes on offering it.
+  It is then absent from every screen its maintainer has and present on the one they
+  do not — which is how a product nobody can find in the catalogue keeps appearing in
+  the portal, and why it looks like a corpse rather than a release doing its job.
+
+  **`GET /api/v1/catalogs/{id}/unpublished`** answers the question directly: what
+  publishing this catalogue would change for the people ordering. Products it would
+  **add**, products the portal is **still offering** that it would take away, and
+  products **edited since** the release being served. The catalogue screen draws it
+  above the Publish button, removals first, because that is the group nothing else
+  can show.
+
+  Three decisions in it. "Edited since" is decided on the record's **revision** and
+  not on a comparison of fields: every writer advances the revision — a test names
+  them all — and a comparison of the fields this package happened to think of would
+  miss the next field added. It therefore reports a little more than a reader might
+  expect, and that is the safe direction, because the remedy is publishing and
+  publishing loses nothing. A removed product is named from the **frozen** copy, not
+  the live record, because the frozen name is the one on the portal and naming it any
+  other way would describe something the reader cannot see. And a product offered here
+  but homed in a catalogue the caller may not maintain is **never** reported as
+  changed (ADR-0315): it is not theirs to compare, and reporting it would ask them to
+  publish away a difference they have no way of seeing.
+
+  The quiet answer is drawn too — "the portal is offering this catalogue exactly as it
+  stands" — because a panel that speaks up only when something is wrong cannot be told
+  apart from one that failed to check. A read that does not answer draws neither
+  sentence, for the same reason.
+
 - **A product can say what it is, and a process can capture one.** Two halves of the
   same gap: the product record had no description, and creating a product meant a
   console form with twenty fields and a hope that somebody looked.
