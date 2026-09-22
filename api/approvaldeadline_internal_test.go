@@ -20,10 +20,16 @@ var (
 	approvalModel = regexp.MustCompile(`^genehmigung-.*\.bpmn$`)
 	boundaryOn    = regexp.MustCompile(`<bpmn:boundaryEvent[^>]*attachedToRef="Genehmigen"[^>]*>`)
 	cancelFalse   = regexp.MustCompile(`cancelActivity="false"`)
-	// Matched where the path is *assigned*, not where it is mentioned: every one
+	// Matched where the address is *assigned*, not where it is mentioned: every one
 	// of these models explains in prose which endpoint records a refusal, and a
 	// check that could not tell the two apart would forbid the explanation.
-	decisionPost = regexp.MustCompile(`/decision&#34;" target="path"`)
+	//
+	// The assignment moved when these calls became REST connector tasks: it was an
+	// input mapping onto `path` and it is the connector's own `url` now. The shape
+	// is what tells it from the prose either way — a FEEL string closing on
+	// /decision immediately before the attribute's own quote is something only a
+	// built request looks like.
+	decisionPost = regexp.MustCompile(`url="=[^"]*/decision&#34;"`)
 	// deadlineFlow names the flows a deadline's token travels along. Anything
 	// reachable only through these is on a deadline branch.
 	deadlineFlow = regexp.MustCompile(`id="(F_Erinnerung_\w+|F_Frist_\w+)"`)
