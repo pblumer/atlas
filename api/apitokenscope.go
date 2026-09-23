@@ -97,6 +97,14 @@ const (
 	// that answers the question — here, one GET.
 	apiScopeStatus = "status"
 
+	// apiScopeLandscape reaches the derived landscape and nothing else: the mesh and
+	// its ArchiMate projection, both read-only. It is ADR-0402 §1's least-privilege
+	// scope for a peer that is asked for its own picture — it can neither deploy,
+	// read an instance, nor list a person — and it is the scope whose credentials
+	// must state a reach (ADR-0410), because the answer it serves is wide enough
+	// that "viewer on everything" would be the escalation §1 set out to avoid.
+	apiScopeLandscape = "landscape"
+
 	// apiScopeReminders reaches one route: what is waiting for one named person
 	// (ADR-0343). It is what a reminder process carries.
 	//
@@ -130,6 +138,12 @@ var apiScopeAllowed = map[string][]string{
 	apiScopeDeploy: {
 		"POST /api/v1/applications/import",
 		"GET /api/v1/applications/{id}/deployments",
+	},
+	// The landscape is one read and its projection of the same picture. Nothing else
+	// belongs here: a peer asked for a starmap is not thereby asked for an instance.
+	apiScopeLandscape: {
+		"GET /api/v1/panorama/mesh",
+		"GET /api/v1/panorama/mesh/archimate",
 	},
 	apiScopeWorker: {
 		"POST /api/v1/jobs/activate",
@@ -214,7 +228,7 @@ const mcpTransportHeader = "X-Atlas-Via-MCP"
 // apiMintableScopes lists the scopes an API token may be minted with. It is not
 // every scope: apiScopeDeploy belongs to a credential with its own store, so
 // nothing here can ask for it.
-var apiMintableScopes = []string{apiScopeFull, apiScopeWorker, apiScopeMetrics, apiScopeStatus, apiScopeDirectory, apiScopeInventory}
+var apiMintableScopes = []string{apiScopeFull, apiScopeWorker, apiScopeMetrics, apiScopeStatus, apiScopeDirectory, apiScopeInventory, apiScopeLandscape}
 
 // apiScopes returns the mintable scopes, sorted, for the error message that names
 // them when a request asks for something else.

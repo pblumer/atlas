@@ -1,4 +1,4 @@
-# ADR-DRAFT: A missing translation is reported, not refused
+# ADR-0414: A missing translation is reported, not refused
 
 - **Status:** Accepted
 - **Implementation:** Landed

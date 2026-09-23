@@ -1,4 +1,4 @@
-# ADR-DRAFT: A language tag is checked where it is written, and nowhere else
+# ADR-0413: A language tag is checked where it is written, and nowhere else
 
 - **Status:** Accepted
 - **Implementation:** Landed

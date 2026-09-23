@@ -75,6 +75,16 @@ type Principal struct {
 	// person: a session is not scoped, it is who you are. The boundary enforces it
 	// in one place; handlers never read it.
 	Scope string
+	// Reach confines a principal authenticated by a machine credential to named
+	// subjects — today the projects it may see (ADR-0410). Scope says *which
+	// routes*; this says *which subjects*, which no scope could express: a machine
+	// principal has no account to own or be a member of anything, so it would
+	// otherwise hold whatever role the sharing scopes give a caller with none.
+	//
+	// It only ever takes away. Empty means the credential states no reach and
+	// nothing is narrowed, which is what keeps every credential already in the field
+	// working; a credential that must state one is refused at minting instead.
+	Reach []string
 }
 
 // ErrNoSuchPrincipal says a name did not resolve to anybody.
