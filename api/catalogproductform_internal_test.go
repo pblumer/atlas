@@ -36,7 +36,7 @@ func TestTheProductFormAsksWhatIsShownBeforeWhatIsAdministered(t *testing.T) {
 		{`langFields("cat", langs,`, "the heading it sits under"},
 		{`name="keywords"`, "what it can be found by"},
 		{`name="price"`, "what it costs"},
-		{`name="variants"`, "the shapes it is ordered in"},
+		{`variantRows(v.variants, langs)`, "the shapes it is ordered in"},
 		{`section("How an order is handled"`, "the heading for what an order does"},
 		{`name="state"`, "whether it is orderable"},
 		{`name="akind"`, "whether it needs approval"},
@@ -227,9 +227,13 @@ var productFieldControls = map[string]string{
 	// helper, so what proves the field is maintainable is that the helper is given
 	// it — the control names themselves are built inside and there is no literal
 	// to search for.
-	"texts":              `langFields("t", langs, v.texts)`,
-	"descriptions":       `langFields("d", langs, v.descriptions`,
-	"variants":           `name="variants"`,
+	"texts":        `langFields("t", langs, v.texts)`,
+	"descriptions": `langFields("d", langs, v.descriptions`,
+	// A grid rather than one control: a shape is a row, and each row has a box
+	// for its id and one per declared language. The control names are built inside
+	// the helper, so what proves the field is maintainable is the helper being
+	// given it.
+	"variants":           `variantRows(v.variants, langs)`,
 	"approval":           `name="akind"`,
 	"provisionProcess":   `procSelect("provisionProcess"`,
 	"deprovisionProcess": `procSelect("deprovisionProcess"`,

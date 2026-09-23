@@ -312,6 +312,28 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
 .langbox input, .langbox textarea { width: 100%; box-sizing: border-box; }
 @media (max-width: 760px) { .langrow { grid-template-columns: 1fr; } }
 
+/* ---------- The shapes a product is ordered in ----------
+   One row per shape: a narrow column for the id that never changes, then one equal
+   column per language. --langs is set inline from the catalogue's own list, like
+   the language row above, so a fifth language grows a fifth column.
+
+   The header row is labels rather than a <table>: the grid is a list of inputs and
+   a table would bring cells that have to be styled back into looking like this.
+
+   Below the breakpoint the columns collapse to one, which stacks id and names —
+   readable, and the only shape that fits a phone. */
+.vargrid { display: grid; gap: 6px; }
+.varrow {
+  display: grid;
+  grid-template-columns: minmax(0, 0.6fr) repeat(var(--langs, 1), minmax(0, 1fr));
+  gap: 6px;
+}
+.varrow input { width: 100%; box-sizing: border-box; }
+.varhead {
+  font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted);
+}
+@media (max-width: 760px) { .varrow { grid-template-columns: 1fr; } }
+
 /* ---------- The product list and the editor beside it ---------- */
 
 /* The catalogue's own page is a working surface and not a page to read, so it drops

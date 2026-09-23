@@ -41,6 +41,15 @@ _Changed_ / _Removed_ for each version.
   screen up — which is the entry above. A row of labelled boxes counts nothing and
   hides nothing, and a catalogue that adds a fifth language grows a fifth box.
 
+  The orderable shapes follow, as a grid: one row per shape, a narrow box for the id
+  that never changes and one box per language beside it. That replaces a textarea
+  with a syntax of its own (`gross = de:Gross | en:Large`) — better than the
+  semicolons, because it *named* each language instead of making it a position to
+  count, and still a syntax somebody had to be taught, in a form where every other
+  text is a box. Clearing the id removes a shape; two blank rows are drawn under the
+  ones that exist, and a button adds more. The cost is named rather than hidden: a
+  textarea can be pasted into and a grid cannot.
+
 - **Saving a product from a catalogue that only offers it no longer takes it away
   from whoever maintains it.** A product is referenced by catalogues and edited
   through exactly one, and the server treats a save naming a different home as a

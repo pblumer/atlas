@@ -1,22 +1,26 @@
 {
-  "tags": ["Service catalogue"],
+  "tags": [
+    "Service catalogue"
+  ],
   "title": {
     "en": "One box per language, side by side",
     "de": "Ein Feld je Sprache, nebeneinander"
   },
   "summary": {
-    "en": "The name, the description, the category and the product group are each asked for once per language the catalogue is kept in, in their own labelled box, side by side. A catalogue kept in four languages shows four boxes; one that adds a fifth grows a fifth. This replaces a single box in which the wordings were separated by semicolons — compact, and a trap: which word was French was something to count out against a list on another screen, and the separator was then applied one screen up, to the catalogue's own language list, which is where the language switch stopped working. For the two headings the row does one thing worth knowing: the first box with anything in it is the value the portal files the product under, and the rest are how that heading is written for a reader. Fill only one and it reads the same in every language.",
-    "de": "Name, Beschreibung, Kategorie und Produktgruppe werden je einmal pro Katalogsprache erfasst, in einem eigenen, beschrifteten Feld, nebeneinander. Ein Katalog in vier Sprachen zeigt vier Felder; kommt eine fünfte dazu, kommt ein fünftes Feld. Das ersetzt ein einzelnes Feld, in dem die Bezeichnungen durch Semikolon getrennt standen — kompakt, und eine Falle: Welches Wort das französische war, musste man gegen eine Liste auf einem anderen Bildschirm abzählen, und das Trennzeichen wurde anschliessend eine Ebene höher angewandt, auf die Sprachliste des Katalogs — dort, wo die Sprachumschaltung aufhörte zu wirken. Bei den beiden Überschriften leistet die Zeile eines, das man wissen sollte: Das erste gefüllte Feld ist der Wert, unter dem das Portal ablegt; die übrigen sind die Bezeichnungen für die Leserin. Wer nur eines füllt, zeigt es in allen Sprachen."
+    "en": "The name, the description, the category and the product group are each asked for once per language the catalogue is kept in, in their own labelled box, side by side. A catalogue kept in four languages shows four boxes; one that adds a fifth grows a fifth. This replaces a single box in which the wordings were separated by semicolons — compact, and a trap: which word was French was something to count out against a list on another screen, and the separator was then applied one screen up, to the catalogue's own language list, which is where the language switch stopped working. For the two headings the row does one thing worth knowing: the first box with anything in it is the value the portal files the product under, and the rest are how that heading is written for a reader. Fill only one and it reads the same in every language. The orderable shapes follow the same shape, as a grid: one row per shape, a narrow box for the id that never changes and one box per language beside it. That replaces a text area with a syntax of its own — better than the semicolons, because it named each language rather than making it a position to count, and still something to be taught in a form where every other text is a box. Clearing the id removes a shape, two blank rows stand under the ones that exist, and a button adds more.",
+    "de": "Name, Beschreibung, Kategorie und Produktgruppe werden je einmal pro Katalogsprache erfasst, in einem eigenen, beschrifteten Feld, nebeneinander. Ein Katalog in vier Sprachen zeigt vier Felder; kommt eine fünfte dazu, kommt ein fünftes Feld. Das ersetzt ein einzelnes Feld, in dem die Bezeichnungen durch Semikolon getrennt standen — kompakt, und eine Falle: Welches Wort das französische war, musste man gegen eine Liste auf einem anderen Bildschirm abzählen, und das Trennzeichen wurde anschliessend eine Ebene höher angewandt, auf die Sprachliste des Katalogs — dort, wo die Sprachumschaltung aufhörte zu wirken. Bei den beiden Überschriften leistet die Zeile eines, das man wissen sollte: Das erste gefüllte Feld ist der Wert, unter dem das Portal ablegt; die übrigen sind die Bezeichnungen für die Leserin. Wer nur eines füllt, zeigt es in allen Sprachen. Die bestellbaren Ausprägungen folgen derselben Form, als Raster: eine Zeile je Ausprägung, ein schmales Feld für die unveränderliche id und daneben ein Feld je Sprache. Das ersetzt ein Textfeld mit eigener Syntax — besser als die Semikolons, weil es jede Sprache benannte, statt sie zur abzuzählenden Position zu machen, und trotzdem etwas, das man lernen musste, in einer Maske, in der jeder andere Text ein Feld ist. Wer die id leert, entfernt eine Ausprägung; unter den vorhandenen stehen zwei leere Zeilen, und eine Schaltfläche fügt weitere hinzu."
   },
   "tutorial": {
     "en": [
       "Open Catalogue in the console and open a product.",
       "Fill the boxes for the languages you have; leave the rest empty.",
+      "For a product with shapes, fill one row per shape: its id, then its name in each language.",
       "Save, publish, and read the portal in each language."
     ],
     "de": [
       "In der Konsole den Katalog öffnen und ein Produkt öffnen.",
       "Die Felder der Sprachen füllen, die vorliegen; die übrigen leer lassen.",
+      "Bei einem Produkt mit Ausprägungen je eine Zeile füllen: die id, dann den Namen in jeder Sprache.",
       "Speichern, publizieren und das Portal in jeder Sprache lesen."
     ]
   }

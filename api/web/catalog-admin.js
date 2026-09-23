@@ -482,65 +482,86 @@ const parseTargets = (raw) => String(raw || "").split("\n")
 // product's name boxes are. A text in a language it does not declare belongs to a
 // catalogue that does, and [parseVariants] carries it through untouched rather than
 // showing it here to be edited by somebody who cannot read it.
-export const variantLines = (variants, langs) =>
-  (variants || []).map((v) => {
-    const texts = v.texts || {};
-    const named = (langs || []).filter((l) => texts[l]);
-    // One declared language needs no tag in front of the name: a catalogue with a
-    // single language would otherwise carry "de:" on every line it has.
-    const names = (langs || []).length <= 1
-      ? (named.length ? texts[named[0]] : "")
-      : named.map((l) => `${l}:${texts[l]}`).join(" | ");
-    return `${v.id || ""} = ${names}`.trimEnd();
-  }).join("\n");
+// The shapes a product is ordered in, as a grid: one row per shape, one column
+// for its id and one for each language the catalogue declares.
+//
+// It replaces a textarea with a syntax of its own — `gross = de:Gross | en:Large`.
+// That syntax was better than the semicolon convention it outlived, because it
+// NAMED each language rather than making it a position to count out. It was still
+// a syntax somebody had to be taught, in a form where every other text is a box,
+// and the two separators it spent (`=` and `|`) were two characters a shape name
+// could not contain.
+//
+// Rows rather than a textarea costs one thing and it is worth naming: a textarea
+// can be pasted into and a grid cannot. What it buys is that a shape is entered
+// the way everything else on this form is, and that the Nth column is the Nth
+// language on every row without anybody checking.
 
-// parseVariants reads that back.
+// variantRows draws the grid. Two blank rows follow the stored ones so the common
+// case — adding a shape to a product that has some — needs no button; the button
+// below the grid is for the rest.
+export function variantRows(variants, langs, blanks) {
+  const ls = (langs || []).length ? langs : [""];
+  const rows = [...(variants || [])];
+  for (let n = 0; n < (blanks === undefined ? 2 : blanks); n += 1) rows.push({ id: "", texts: {} });
+  const head = `<div class="varrow varhead" style="--langs:${ls.length}">
+    <span>Id</span>${ls.map((l) => `<span>${esc(l || "name")}</span>`).join("")}</div>`;
+  return `<div class="vargrid">${head}${rows.map((v, n) => variantRow(v, ls, n)).join("")}</div>`;
+}
+
+// variantRow is one shape. The id carries the row's index in its name, and every
+// name box carries the same index, which is what ties a row together across a
+// FormData that has no notion of rows.
+function variantRow(v, ls, n) {
+  const texts = v.texts || {};
+  return `<div class="varrow" style="--langs:${ls.length}">
+    <input name="var-${n}-id" value="${esc(v.id || "")}" autocomplete="off"
+      spellcheck="false" placeholder="gross">
+    ${ls.map((l) => `<input name="var-${n}-${esc(l)}" value="${esc(texts[l] || "")}"
+      autocomplete="off" placeholder="${esc(l ? "" : "15 Zoll")}">`).join("")}</div>`;
+}
+
+// parseVariants reads the grid back.
 //
-// The declared languages are rebuilt from the line and the rest of the texts are
-// kept: a name removed from a line is removed from the variant, and a name in a
-// language this catalogue does not declare survives a save made here. That is the
-// same rule the product's own texts follow one level up, and it is the reason this
-// takes the stored variants rather than building from the textarea alone.
+// Rows are found by their id boxes rather than counted, so a row appended after
+// the form was drawn is read like any other and a gap in the numbering is
+// harmless. A row with no id is not a shape and is dropped — that is how one is
+// removed, and it is why the blank rows at the bottom cost nothing.
 //
-// A line with no `=` is kept as an id with no name rather than dropped, for the
-// reason parseTargets keeps a line with no colon: a line this form swallowed would
-// be a shape somebody believes they entered. The portal falls back to the id, so
-// the omission is visible rather than silent.
-const parseVariants = (raw, langs, stored) => {
+// The declared languages are rebuilt from the row and the rest of the texts are
+// kept: a name cleared in a box is cleared on the shape, and a name in a language
+// this catalogue does not declare survives a save made here. That is the rule the
+// product's own texts follow one level up, and it is why this takes the stored
+// variants rather than building from the form alone.
+//
+// A row with an id and no name is kept rather than dropped, for the reason
+// parseTargets keeps a line with no colon: a shape this form swallowed would be
+// one somebody believes they entered. The portal falls back to the id, so the
+// omission is visible rather than silent.
+const parseVariants = (f, langs, stored) => {
   const was = {};
   for (const v of stored || []) was[v.id] = v.texts || {};
-  return String(raw || "").split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const at = line.indexOf("=");
-      const id = (at < 0 ? line : line.slice(0, at)).trim();
-      const rest = at < 0 ? "" : line.slice(at + 1).trim();
-      const texts = { ...(was[id] || {}) };
-      const given = {};
-      if ((langs || []).length <= 1) {
-        // The one declared language, or none at all. A catalogue declaring no
-        // language has no name boxes either, so the name lands under an unnamed
-        // language and the portal's own fallback still shows it.
-        if (rest) given[(langs || [])[0] || ""] = rest;
-      } else {
-        for (const part of rest.split("|")) {
-          const pair = part.trim();
-          if (!pair) continue;
-          const colon = pair.indexOf(":");
-          // A part with no language tag in a multilingual catalogue is the first
-          // declared language: it is what somebody types when they mean "the
-          // obvious one", and refusing it would lose the name.
-          const lang = colon < 0 ? langs[0] : pair.slice(0, colon).trim();
-          const name = colon < 0 ? pair : pair.slice(colon + 1).trim();
-          if (name) given[lang] = name;
-        }
-      }
-      for (const l of [...(langs || []), ""]) {
-        if (given[l]) texts[l] = given[l]; else delete texts[l];
-      }
-      return { id, texts };
-    });
+  const ls = (langs || []).length ? langs : [""];
+
+  const indexes = [];
+  for (const key of f.keys()) {
+    const m = /^var-(\d+)-id$/.exec(key);
+    if (m) indexes.push(Number(m[1]));
+  }
+  indexes.sort((a, b) => a - b);
+
+  const out = [];
+  for (const n of indexes) {
+    const id = String(f.get(`var-${n}-id`) || "").trim();
+    if (!id) continue;
+    const texts = { ...(was[id] || {}) };
+    for (const l of ls) {
+      const name = String(f.get(`var-${n}-${l}`) || "").trim();
+      if (name) texts[l] = name; else delete texts[l];
+    }
+    out.push({ id, texts });
+  }
+  return out;
 };
 
 // eligibleField is who may RECEIVE this product, as a picker over the directory
@@ -788,7 +809,7 @@ export function productBody(f, { productID, homeCatalog, langs, stored }) {
     lifecycle: lifecycleFrom(f),
     // Merged over what is stored, so a name in a language this catalogue does not
     // declare survives a save made here — the rule the texts above follow.
-    variants: parseVariants(f.get("variants"), langs, was.variants),
+    variants: parseVariants(f, langs, was.variants),
   };
 }
 
@@ -1513,22 +1534,20 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
       <label class="field inline wide"><input type="checkbox" name="multipleAllowed"
         ${v.multipleAllowed ? "checked" : ""}> May be held more than once
         <span class="muted">— two licences, two mailboxes</span></label>
-      <label class="field wide">Orderable shapes
-        <span class="muted" style="display:block; margin:2px 0 6px">One per line, as
-          <code>id = name</code> &mdash; <code>gross = 15 Zoll</code>. A laptop's size, a
-          licence tier: the same product, ordered in one of several shapes.${langs.length > 1
-    ? ` This catalogue declares ${langs.length} languages, so name each shape per
-          language as <code>gross = ${langs.map((l) => `${esc(l)}:…`).join(" | ")}</code>;
-          a name with no language in front of it is filed under
-          <code>${esc(langs[0])}</code>.` : ""}
-          They are <b>unordered on purpose</b> &mdash; &ldquo;higher&rdquo; is meaningful
-          for a tier and meaningless for Windows against Linux &mdash; so the basket asks
-          the orderer, and <b>refuses to place the order until a shape is chosen</b> for
-          every position that has any. How many may be ticked is not asked here:
-          &ldquo;may be held more than once&rdquo; above already answers it. Leave it empty for a product with one
+      <div class="field wide">Orderable shapes
+        <span class="muted" style="display:block; margin:2px 0 6px">A laptop's size, a
+          licence tier: the same product, ordered in one of several shapes. One row each
+          &mdash; a short id that never changes, then the name ${langs.length > 1
+    ? `in each of this catalogue's ${langs.length} languages` : "somebody reads"}.
+          <b>Clear the id to remove a shape.</b> They are <b>unordered on purpose</b>
+          &mdash; &ldquo;higher&rdquo; is meaningful for a tier and meaningless for
+          Windows against Linux &mdash; so the basket asks the orderer, and <b>refuses to
+          place the order until a shape is chosen</b> for every position that has any.
+          How many may be ticked is not asked here: &ldquo;may be held more than
+          once&rdquo; above already answers it. Leave it empty for a product with one
           shape, which is most of them.</span>
-        <textarea name="variants" rows="3" spellcheck="false"
-          placeholder="gross = 15 Zoll">${esc(variantLines(v.variants, langs))}</textarea></label>
+        ${variantRows(v.variants, langs)}
+        <button type="button" class="ghost add-shape" style="margin-top:6px">Add a shape</button></div>
       <div class="field wide">Picture
         <span class="muted" style="display:block; margin:2px 0 6px">A photograph of the
           thing or the vendor's mark, shown to whoever is choosing — PNG, JPEG or SVG,
@@ -2190,6 +2209,32 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
   }
 
   function wireProductForm() {
+    // One more row of shape boxes. Two blank ones are drawn with the grid, which
+    // covers adding a shape to a product that has some; this is for the rest, and
+    // it appends rather than re-rendering so that nothing already typed is lost.
+    //
+    // The index is taken from the rows that are there rather than counted up in a
+    // variable: the form can be redrawn between presses, and a counter would then
+    // reuse a number and make two rows write one shape.
+    const grid = editor.querySelector(".vargrid");
+    const addShape = editor.querySelector(".add-shape");
+    if (grid && addShape) {
+      addShape.addEventListener("click", () => {
+        const used = [...grid.querySelectorAll('input[name$="-id"]')]
+          .map((i) => Number(/^var-(\d+)-id$/.exec(i.name)[1]));
+        const next = used.length ? Math.max(...used) + 1 : 0;
+        const ls = langs.length ? langs : [""];
+        const row = document.createElement("div");
+        row.className = "varrow";
+        row.style.setProperty("--langs", String(ls.length));
+        row.innerHTML = `<input name="var-${next}-id" autocomplete="off" spellcheck="false"
+          placeholder="gross">${ls.map((l) => `<input name="var-${next}-${esc(l)}"
+          autocomplete="off">`).join("")}`;
+        grid.appendChild(row);
+        row.querySelector("input").focus();
+      });
+    }
+
     editor.querySelector(".product-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const f = new FormData(e.target);
