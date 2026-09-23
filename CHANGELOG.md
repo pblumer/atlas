@@ -30,9 +30,11 @@ _Changed_ / _Removed_ for each version.
   ambiguous — and a maintainer who types `de-DE; en-EN; fr-FR` gets three languages
   instead of one refusal naming a tag they never meant to write.
 
-  What this does not buy: the portal's own words exist in German and English. A
-  catalogue may declare `fr-FR` and its products may carry French; no locale on that
-  page selects it, because there is no French to switch to.
+  What this bought on its own: nothing a reader could see, for the languages the
+  page did not yet speak. A catalogue could declare `fr-FR` and its products carry
+  French, and no locale on that page selected it. The entry below — the portal's own
+  words in French and Italian — is what turned this correction into four working
+  languages rather than two.
 
 - **A catalogue could be saved with a language that is not a language, and every
   product in it then ignored the language switch.** Found in a live installation: a

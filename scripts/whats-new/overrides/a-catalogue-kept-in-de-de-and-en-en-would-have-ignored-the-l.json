@@ -1,25 +1,28 @@
 {
-  "tags": ["Service catalogue", "Portal"],
+  "tags": [
+    "Service catalogue",
+    "Portal"
+  ],
   "title": {
     "en": "Regional languages like de-CH reach the reader they are for",
     "de": "Regionale Sprachen wie de-CH erreichen die Leserin, für die sie gedacht sind"
   },
   "summary": {
-    "en": "A catalogue says which languages it is kept in, and de-DE, en-GB and pt-BR are as correct as de, en and pt. The portal, though, works out a visitor's language from the browser and reduces it to the language alone, because its own words are filed that way. So a catalogue declared in de-DE and en-EN stored every product name under a key the page never asked for: the reader was shown whatever value came first, the same one in both languages, and switching did nothing — with the new check on language entries waving it through, because de-DE really is a language tag. A text is now found by the language of its tag rather than by the whole of it, and where a catalogue carries both de and de-CH the exact one wins, because a catalogue that lists both means both. The console's language box is also read on commas, semicolons and spaces alike: a tag can contain none of them, so whichever one gets typed, the languages come out as meant. One thing this does not do: the portal's own wording exists in German and English. A catalogue may be kept in French and its products may carry French names — nothing on that page will select them, because there is no French to switch to.",
-    "de": "Ein Katalog nennt die Sprachen, in denen er geführt wird, und de-DE, en-GB und pt-BR sind so korrekt wie de, en und pt. Das Portal ermittelt die Sprache einer Besucherin jedoch aus dem Browser und reduziert sie auf die Sprache allein, weil seine eigenen Wörter so abgelegt sind. Ein Katalog in de-DE und en-EN legte damit jeden Produktnamen unter einem Schlüssel ab, nach dem die Seite nie fragte: Gezeigt wurde, was zuerst kam, in beiden Sprachen dasselbe, und das Umschalten bewirkte nichts — wobei die neue Prüfung der Spracheinträge es durchwinkte, denn de-DE ist tatsächlich ein Sprachkürzel. Ein Text wird jetzt über die Sprache seines Kürzels gefunden statt über das ganze Kürzel, und wo ein Katalog sowohl de als auch de-CH führt, gewinnt das genaue — wer beide nennt, meint beide. Das Sprachfeld der Konsole wird ausserdem auf Komma, Semikolon und Leerzeichen gleichermassen gelesen: Ein Kürzel enthält keines davon, also kommen die Sprachen so heraus, wie sie gemeint waren, welches Zeichen auch getippt wird. Eines leistet das nicht: Die Wörter des Portals selbst gibt es auf Deutsch und Englisch. Ein Katalog darf auf Französisch geführt werden und seine Produkte dürfen französische Namen tragen — auswählen wird sie auf dieser Seite nichts, weil es kein Französisch zum Umschalten gibt."
+    "en": "A catalogue says which languages it is kept in, and de-DE, en-GB and pt-BR are as correct as de, en and pt. The portal, though, works out a visitor's language from the browser and reduces it to the language alone, because its own words are filed that way. So a catalogue declared in de-DE and en-EN stored every product name under a key the page never asked for: the reader was shown whatever value came first, the same one in both languages, and switching did nothing — with the new check on language entries waving it through, because de-DE really is a language tag. A text is now found by the language of its tag rather than by the whole of it, and where a catalogue carries both de and de-CH the exact one wins, because a catalogue that lists both means both. The console's language box is also read on commas, semicolons and spaces alike: a tag can contain none of them, so whichever one gets typed, the languages come out as meant. On its own this changed nothing a reader could see in a language the page did not yet speak; the portal's own wording in French and Italian, released alongside it, is what made four languages real.",
+    "de": "Ein Katalog nennt die Sprachen, in denen er geführt wird, und de-DE, en-GB und pt-BR sind so korrekt wie de, en und pt. Das Portal ermittelt die Sprache einer Besucherin jedoch aus dem Browser und reduziert sie auf die Sprache allein, weil seine eigenen Wörter so abgelegt sind. Ein Katalog in de-DE und en-EN legte damit jeden Produktnamen unter einem Schlüssel ab, nach dem die Seite nie fragte: Gezeigt wurde, was zuerst kam, in beiden Sprachen dasselbe, und das Umschalten bewirkte nichts — wobei die neue Prüfung der Spracheinträge es durchwinkte, denn de-DE ist tatsächlich ein Sprachkürzel. Ein Text wird jetzt über die Sprache seines Kürzels gefunden statt über das ganze Kürzel, und wo ein Katalog sowohl de als auch de-CH führt, gewinnt das genaue — wer beide nennt, meint beide. Das Sprachfeld der Konsole wird ausserdem auf Komma, Semikolon und Leerzeichen gleichermassen gelesen: Ein Kürzel enthält keines davon, also kommen die Sprachen so heraus, wie sie gemeint waren, welches Zeichen auch getippt wird. Für sich genommen änderte das nichts, was eine Leserin in einer Sprache sehen konnte, die die Seite noch nicht sprach; erst die Wörter des Portals auf Französisch und Italienisch, gleichzeitig veröffentlicht, machen vier Sprachen wirklich."
   },
   "tutorial": {
     "en": [
       "Open Catalogue in the console and choose a catalogue.",
       "Write the languages however you like: de-DE, en-EN, fr-FR — commas, semicolons or spaces.",
       "Fill the product boxes those languages give you, save and publish.",
-      "Open the portal and switch between German and English."
+      "Open the portal and switch between the languages the catalogue names."
     ],
     "de": [
       "In der Konsole den Katalog öffnen und einen Katalog wählen.",
       "Die Sprachen beliebig schreiben: de-DE, en-EN, fr-FR — mit Komma, Semikolon oder Leerzeichen.",
       "Die Produktfelder füllen, die diese Sprachen ergeben, speichern und publizieren.",
-      "Das Portal öffnen und zwischen Deutsch und Englisch umschalten."
+      "Das Portal öffnen und zwischen den Sprachen umschalten, die der Katalog nennt."
     ]
   }
 }
