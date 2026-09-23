@@ -2,6 +2,94 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-catalogue-could-be-saved-with-a-language-that-is-not-a-lan",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The language switch works again in every catalogue",
+        "de": "Die Sprachumschaltung wirkt wieder in jedem Katalog"
+      },
+      "summary": {
+        "en": "A catalogue says which languages it is kept in, as a list. Until now nothing checked that the entries were language tags, and one installation saved a catalogue whose single language was written \"de; en\" — one entry containing a separator, typed where a comma was expected. Everything after that behaved correctly and the result was total: the product form drew one box labelled \"de; en\", both names were typed into it, and the portal, looking for German and for English, found neither and showed whatever it had. Switching the language did nothing at all, for every product in that catalogue, in both languages, and no screen anywhere said why. It was noticed weeks later, two screens away from where it was caused. A language is now checked as it is typed: de, en, de-CH, zh-Hans. Only as it is typed — a catalogue that already carries a bad entry can still be opened, edited and published, because otherwise the installation with the problem would be the one locked out of fixing it. Nothing is corrected automatically either: \"de; en\" can be read two ways and only the person who typed it knows which, and guessing is what hid the fault in the first place. A language listed twice is refused as well, because it would draw two boxes writing the same thing, where the second quietly wins.",
+        "de": "Ein Katalog nennt die Sprachen, in denen er geführt wird, als Liste. Bisher prüfte nichts, ob die Einträge Sprachkürzel sind, und in einer Installation wurde ein Katalog gespeichert, dessen einzige Sprache «de; en» hiess — ein Eintrag mit einem Trennzeichen, getippt, wo ein Komma erwartet wurde. Alles danach verhielt sich korrekt, und die Wirkung war vollständig: Die Produktmaske zeichnete ein Feld mit der Beschriftung «de; en», beide Namen wurden hineingeschrieben, und das Portal, das nach Deutsch und nach Englisch suchte, fand keines von beiden und zeigte, was es hatte. Die Sprachumschaltung bewirkte nichts, für jedes Produkt dieses Katalogs, in beiden Sprachen, und kein Bildschirm nannte den Grund. Bemerkt wurde es Wochen später, zwei Bildschirme von der Ursache entfernt. Eine Sprache wird jetzt beim Eintippen geprüft: de, en, de-CH, zh-Hans. Nur beim Eintippen — ein Katalog, der bereits einen falschen Eintrag trägt, lässt sich weiterhin öffnen, bearbeiten und publizieren, weil sonst ausgerechnet die betroffene Installation von ihrer eigenen Korrektur ausgesperrt wäre. Automatisch korrigiert wird ebenfalls nichts: «de; en» lässt zwei Lesarten zu, und nur wer es getippt hat, weiss welche; Raten ist genau das, was den Fehler verborgen hat. Eine doppelt genannte Sprache wird ebenfalls abgelehnt, denn sie zeichnete zwei Felder, die dasselbe schreiben, wobei das zweite still gewinnt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue",
+        "Portal"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Catalogue in the console and choose a catalogue.",
+          "Check the language list: one tag per entry, separated by commas.",
+          "Correct anything that is not a tag, save, and publish."
+        ],
+        "de": [
+          "In der Konsole den Katalog öffnen und einen Katalog wählen.",
+          "Die Sprachliste prüfen: ein Kürzel je Eintrag, durch Komma getrennt.",
+          "Was kein Kürzel ist, korrigieren, speichern und publizieren."
+        ]
+      }
+    },
+    {
+      "id": "the-console-asks-for-each-language-in-its-own-box-side-by-si",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "One box per language, side by side",
+        "de": "Ein Feld je Sprache, nebeneinander"
+      },
+      "summary": {
+        "en": "The name, the description, the category and the product group are each asked for once per language the catalogue is kept in, in their own labelled box, side by side. A catalogue kept in four languages shows four boxes; one that adds a fifth grows a fifth. This replaces a single box in which the wordings were separated by semicolons — compact, and a trap: which word was French was something to count out against a list on another screen, and the separator was then applied one screen up, to the catalogue's own language list, which is where the language switch stopped working. For the two headings the row does one thing worth knowing: the first box with anything in it is the value the portal files the product under, and the rest are how that heading is written for a reader. Fill only one and it reads the same in every language.",
+        "de": "Name, Beschreibung, Kategorie und Produktgruppe werden je einmal pro Katalogsprache erfasst, in einem eigenen, beschrifteten Feld, nebeneinander. Ein Katalog in vier Sprachen zeigt vier Felder; kommt eine fünfte dazu, kommt ein fünftes Feld. Das ersetzt ein einzelnes Feld, in dem die Bezeichnungen durch Semikolon getrennt standen — kompakt, und eine Falle: Welches Wort das französische war, musste man gegen eine Liste auf einem anderen Bildschirm abzählen, und das Trennzeichen wurde anschliessend eine Ebene höher angewandt, auf die Sprachliste des Katalogs — dort, wo die Sprachumschaltung aufhörte zu wirken. Bei den beiden Überschriften leistet die Zeile eines, das man wissen sollte: Das erste gefüllte Feld ist der Wert, unter dem das Portal ablegt; die übrigen sind die Bezeichnungen für die Leserin. Wer nur eines füllt, zeigt es in allen Sprachen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Catalogue in the console and open a product.",
+          "Fill the boxes for the languages you have; leave the rest empty.",
+          "Save, publish, and read the portal in each language."
+        ],
+        "de": [
+          "In der Konsole den Katalog öffnen und ein Produkt öffnen.",
+          "Die Felder der Sprachen füllen, die vorliegen; die übrigen leer lassen.",
+          "Speichern, publizieren und das Portal in jeder Sprache lesen."
+        ]
+      }
+    },
+    {
+      "id": "saving-a-product-from-a-catalogue-that-only-offers-it-no-lon",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A product no longer changes hands by being saved",
+        "de": "Ein Produkt wechselt nicht mehr durch blosses Speichern den Besitzer"
+      },
+      "summary": {
+        "en": "The same product can be offered by several catalogues and is maintained by exactly one of them. Moving that responsibility is a real operation and it is checked: whoever does it must be allowed to edit both the catalogue giving it up and the one taking it on. The console was performing that move by accident. The product form sent the catalogue you happened to be looking at as the responsible one, on every save — so opening a product from a catalogue that merely offers it and pressing save took it away from the team that maintains it, with nothing said, after which its language boxes followed the new catalogue instead. You are now asked, and only when there is something to ask: a new product has no home yet, and one already maintained here has nothing to move. Declining keeps it where it is and still saves your changes, because whether to move it and whether to save are two different questions.",
+        "de": "Dasselbe Produkt kann von mehreren Katalogen angeboten und von genau einem gepflegt werden. Diese Zuständigkeit zu verschieben, ist ein echter Vorgang und wird geprüft: Wer es tut, muss sowohl den abgebenden als auch den übernehmenden Katalog bearbeiten dürfen. Die Konsole führte diese Verschiebung versehentlich aus. Die Produktmaske sendete bei jedem Speichern den gerade betrachteten Katalog als den zuständigen — wer also ein Produkt aus einem Katalog öffnete, der es nur anbietet, und speicherte, nahm es dem pflegenden Team weg, ohne Hinweis; danach richteten sich die Sprachfelder nach dem neuen Katalog. Jetzt wird gefragt, und nur dann, wenn es etwas zu fragen gibt: Ein neues Produkt hat noch keinen Heimatkatalog, und ein hier bereits gepflegtes hat nichts zu verschieben. Wer ablehnt, behält die Zuständigkeit und speichert die Änderungen trotzdem — Verschieben und Speichern sind zwei verschiedene Fragen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue"
+      ]
+    },
+    {
       "id": "the-product-capture-example-runs",
       "version": "Unreleased",
       "date": null,
@@ -289,84 +377,6 @@
           "de": "Entscheidungen öffnen"
         },
         "route": "#/console/decisions"
-      }
-    },
-    {
-      "id": "the-two-links-on-a-portal-order-s-position-rows",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Removed",
-      "title": {
-        "en": "A position row is down to what acts on the position",
-        "de": "Die Positionszeile zeigt nur noch, was auf die Position wirkt"
-      },
-      "summary": {
-        "en": "Every position of an order carried two further links: \"Where is this?\", which fetched the step its process was sitting on, and one into that process instance. Both are gone, at the request of the people this page is for — the status right beside the position's name answers the same question out of the order's own record, one column over and without a press. Withdrawing a position and correcting its details stay; they act on the position rather than look at a process. The route that answered \"where is this\" is unchanged and still available to other callers.",
-        "de": "Jede Position eines Auftrags trug zwei weitere Verweise: „Wo steht das?“, das den Schritt des zugehörigen Prozesses abfragte, und einen in diese Prozessinstanz. Beide sind auf Wunsch der Nutzenden dieser Seite entfallen — der Status unmittelbar neben der Positionsbezeichnung beantwortet dieselbe Frage aus dem Auftragsdatensatz selbst, eine Spalte weiter und ohne Tastendruck. „Position zurückziehen“ und das Korrigieren der Angaben bleiben; sie wirken auf die Position, statt einen Prozess zu betrachten. Die Schnittstelle hinter „Wo steht das?“ ist unverändert und steht anderen Aufrufern weiterhin zur Verfügung."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Self-service portal"
-      ]
-    },
-    {
-      "id": "the-workers-view-says-what-a-worker-asks-for-not-only-what-i",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "Tell a quiet worker from an absent one",
-        "de": "Einen stillen Worker von einem abwesenden unterscheiden"
-      },
-      "summary": {
-        "en": "A worker's row counted the jobs it had been given. A worker that is connected and polling a queue with no work in it therefore looked exactly like a worker that is not running at all — and \"is anybody serving this queue?\" was unanswerable for every quiet queue, which is most of them most of the time. Each poll now records the job type it asked for, whether or not a job came back, and the row shows it beside the counts.",
-        "de": "Die Zeile eines Workers zählte die Aufträge, die er erhalten hatte. Ein verbundener Worker, der eine Warteschlange ohne Arbeit abfragt, sah damit genauso aus wie ein Worker, der gar nicht läuft — und die Frage „bedient das überhaupt jemand?\" war für jede stille Warteschlange unbeantwortbar, also für die meisten die meiste Zeit. Jede Abfrage vermerkt nun den Job-Typ, nach dem gefragt wurde, unabhängig davon, ob ein Auftrag zurückkam, und die Zeile zeigt ihn neben den Zählern."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations"
-      ]
-    },
-    {
-      "id": "the-portal-s-two-heading-columns-read-in-the-reader-s-langua",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Kategorie and Produktgruppe in the reader's language",
-        "de": "Kategorie und Produktgruppe in der Sprache der Leserin"
-      },
-      "summary": {
-        "en": "A catalogue says which languages it is kept in, and it refuses to publish a product named in one of them and not another. So a catalogue kept in German, French, English and Italian had every product name, every shape and every description translated — and then filed all of them under two German words. The portal's first two columns, Kategorie and Produktgruppe, were the last text on the page that did not reach a reader in their own language, and nothing pointed it out: the German word simply appeared, and it looked deliberate. A product can now carry each heading once per language. In the console both are a single box, the wordings in the order the catalogue lists its languages and separated by semicolons: Arbeitsplatz; Poste de travail; Workplace; Postazione. Write one wording and it is shown in every language, which is what every product that exists today already does — nothing had to be changed, and no published release reads differently. The first entry stays the one the portal files products under, so a product stays in its category whatever language somebody is reading in, and the column is sorted by the words actually on the screen. Publishing checks two things it can prove: a heading translated into one of the catalogue's languages and not another is refused, because the missing one would quietly fall back to the first; and two products that word the same heading differently are refused too, because one column can only say one of them.",
-        "de": "Ein Katalog nennt die Sprachen, in denen er geführt wird, und verweigert die Publikation eines Produktes, das in einer davon benannt ist und in einer anderen nicht. Ein Katalog in Deutsch, Französisch, Englisch und Italienisch hatte also jeden Produktnamen, jede Ausprägung und jede Beschreibung übersetzt — und alles zusammen unter zwei deutschen Wörtern abgelegt. Die ersten beiden Spalten des Portals, Kategorie und Produktgruppe, waren der letzte Text der Seite, der die Leserin nicht in ihrer Sprache erreichte, und nichts wies darauf hin: Das deutsche Wort erschien einfach, und es sah beabsichtigt aus. Ein Produkt kann jede der beiden Überschriften jetzt einmal pro Sprache führen. In der Konsole ist beides je ein Feld, die Bezeichnungen in der Reihenfolge der Katalogsprachen und durch Semikolon getrennt: Arbeitsplatz; Poste de travail; Workplace; Postazione. Wer nur eine Bezeichnung schreibt, zeigt sie in allen Sprachen — genau das, was jedes heute bestehende Produkt bereits tut; nichts musste umgestellt werden, und kein publiziertes Release liest sich anders. Der erste Eintrag bleibt der Wert, unter dem das Portal ablegt: Ein Produkt bleibt in seiner Kategorie, in welcher Sprache auch gelesen wird, und die Spalte ist nach den Wörtern sortiert, die tatsächlich auf dem Bildschirm stehen. Beim Publizieren wird zweierlei geprüft, weil es beweisbar ist: Eine Überschrift, die in einer Katalogsprache übersetzt ist und in einer anderen nicht, wird abgelehnt — die fehlende fiele still auf die erste zurück; und zwei Produkte, die dieselbe Überschrift unterschiedlich bezeichnen, werden ebenfalls abgelehnt, weil eine Spalte nur eines von beiden sagen kann."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Service catalogue",
-        "Portal"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Catalogue in the console and pick a catalogue kept in more than one language.",
-          "Open a product and find the Category and Product group boxes.",
-          "Write the heading once per language, in the order named above the box, separated by semicolons.",
-          "Save, publish the catalogue, and open the portal in each language."
-        ],
-        "de": [
-          "In der Konsole den Katalog öffnen und einen Katalog wählen, der in mehr als einer Sprache geführt wird.",
-          "Ein Produkt öffnen und die Felder Kategorie und Produktgruppe aufsuchen.",
-          "Die Überschrift einmal pro Sprache schreiben, in der über dem Feld genannten Reihenfolge, durch Semikolon getrennt.",
-          "Speichern, den Katalog publizieren und das Portal in jeder Sprache öffnen."
-        ]
       }
     }
   ]

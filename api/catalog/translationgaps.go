@@ -6,7 +6,8 @@ import (
 )
 
 // TranslationGaps is every place a catalogue is written in one of its declared
-// languages and not another.
+// languages and not another
+// (ADR-draft-a-missing-translation-is-reported-not-refused).
 //
 // It is the half of a rule that used to be a refusal. Publishing demanded a name
 // for every declared language, and a description and a heading wording in all of

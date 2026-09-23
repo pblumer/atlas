@@ -14,6 +14,43 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A catalogue could be saved with a language that is not a language, and every
+  product in it then ignored the language switch.** Found in a live installation: a
+  catalogue was saved with the single language tag `de; en`. The list is read
+  comma-separated and the separator typed was the one the heading fields had just
+  been given. Every layer then behaved correctly and the result was total: the
+  product form drew **one** box labelled `de; en`, both names were typed into it, and
+  the portal — looking up `texts['de']` and `texts['en']` — found neither and fell
+  through to the first value it had. The language switch did nothing at all, for
+  every product in that catalogue, in both languages, with no screen anywhere saying
+  why. It was reported weeks later, two screens away from its cause.
+
+  A language tag is now checked where it is written and nowhere else: `de`, `en`,
+  `de-CH`, `zh-Hans`. Not at publish and not on any read, because the installation
+  that already carries a bad tag has to be able to open the catalogue and correct it
+  — refusing on the way out would lock it out of its own fix. Nothing is normalised
+  either: `de; en` has two readings and only the maintainer knows which, and guessing
+  is the same silent helpfulness that hid the defect. A repeated tag is refused too,
+  for its own reason — two boxes writing one key, where the second silently wins and
+  the first looks ignored.
+
+- **The Console asks for each language in its own box, side by side.** The name, the
+  description and the two headings. It replaces the semicolon-separated single box
+  shipped the day before, which was compact and was a trap: which word was French was
+  a thing to count out against a list on another screen, and the separator leaked one
+  screen up — which is the entry above. A row of labelled boxes counts nothing and
+  hides nothing, and a catalogue that adds a fifth language grows a fifth box.
+
+- **Saving a product from a catalogue that only offers it no longer takes it away
+  from whoever maintains it.** A product is referenced by catalogues and edited
+  through exactly one, and the server treats a save naming a different home as a
+  deliberate move — it checks the caller may edit both sides, and moves it. The
+  Console was walking through that gate by accident: the product form sent the
+  catalogue being *viewed* as the home on every save. So opening a product from a
+  catalogue that merely offers it and pressing save moved it, silently, and from then
+  on its boxes were drawn from the new home's languages. It is asked now, and only
+  where there is something to ask; cancelling keeps the home and still saves the edit.
+
 - **The product-capture example runs.** It shipped in the shape that could never
   execute — plain service tasks of a job type nothing serves, with the target and the
   HTTP method in task headers no worker receives — and its README instructed a setup
@@ -216,6 +253,30 @@ _Changed_ / _Removed_ for each version.
   would call a healthy idle installation broken.
 
 ### Added
+
+- **A catalogue publishes before every translation is done, and says what is still
+  owed.** Publishing refused a product named in one of its catalogue's declared
+  languages and not another, and a description or heading wording missing in any of
+  them once there was one. The argument was that a portal showing one audience a
+  product and the other an empty row is worse than no catalogue — and the premise was
+  false. The portal never shows an empty row: it falls back to the language the
+  catalogue has, because a name somebody cannot read is better than no name. So the
+  refusal protected no reader. What it did was hold a usable catalogue back until the
+  last translation arrived, which meant the readers of the first language waited on
+  the translator of the second, and the workaround was to not declare the second
+  language at all — losing the record that the translations were owed.
+
+  What is refused instead is new and is not that rule made smaller: a product whose
+  name is empty in **every** language. There the fallback has nothing to fall back to
+  and the portal would render the product id.
+
+  The other half is a report, because a gate removed with nothing in its place is how
+  a half-translated catalogue becomes invisible again — it arrives months later as
+  "the French portal reads oddly", found by a reader rather than by a maintainer.
+  `GET /api/v1/catalog-products/translation-gaps`, `atlas_catalog_translation_gaps`
+  over MCP, and a card on the catalogue screen. It reads the catalogues **as they
+  stand** rather than their releases, unlike the two reports beside it: it is a list
+  of work to do, and work to do is about what is being edited.
 
 - **The portal's two heading columns read in the reader's language.** A catalogue
   declares its languages and refuses to publish a product named in one of them and not

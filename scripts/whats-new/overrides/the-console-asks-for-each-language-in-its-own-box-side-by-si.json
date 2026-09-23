@@ -1,0 +1,23 @@
+{
+  "tags": ["Service catalogue"],
+  "title": {
+    "en": "One box per language, side by side",
+    "de": "Ein Feld je Sprache, nebeneinander"
+  },
+  "summary": {
+    "en": "The name, the description, the category and the product group are each asked for once per language the catalogue is kept in, in their own labelled box, side by side. A catalogue kept in four languages shows four boxes; one that adds a fifth grows a fifth. This replaces a single box in which the wordings were separated by semicolons — compact, and a trap: which word was French was something to count out against a list on another screen, and the separator was then applied one screen up, to the catalogue's own language list, which is where the language switch stopped working. For the two headings the row does one thing worth knowing: the first box with anything in it is the value the portal files the product under, and the rest are how that heading is written for a reader. Fill only one and it reads the same in every language.",
+    "de": "Name, Beschreibung, Kategorie und Produktgruppe werden je einmal pro Katalogsprache erfasst, in einem eigenen, beschrifteten Feld, nebeneinander. Ein Katalog in vier Sprachen zeigt vier Felder; kommt eine fünfte dazu, kommt ein fünftes Feld. Das ersetzt ein einzelnes Feld, in dem die Bezeichnungen durch Semikolon getrennt standen — kompakt, und eine Falle: Welches Wort das französische war, musste man gegen eine Liste auf einem anderen Bildschirm abzählen, und das Trennzeichen wurde anschliessend eine Ebene höher angewandt, auf die Sprachliste des Katalogs — dort, wo die Sprachumschaltung aufhörte zu wirken. Bei den beiden Überschriften leistet die Zeile eines, das man wissen sollte: Das erste gefüllte Feld ist der Wert, unter dem das Portal ablegt; die übrigen sind die Bezeichnungen für die Leserin. Wer nur eines füllt, zeigt es in allen Sprachen."
+  },
+  "tutorial": {
+    "en": [
+      "Open Catalogue in the console and open a product.",
+      "Fill the boxes for the languages you have; leave the rest empty.",
+      "Save, publish, and read the portal in each language."
+    ],
+    "de": [
+      "In der Konsole den Katalog öffnen und ein Produkt öffnen.",
+      "Die Felder der Sprachen füllen, die vorliegen; die übrigen leer lassen.",
+      "Speichern, publizieren und das Portal in jeder Sprache lesen."
+    ]
+  }
+}

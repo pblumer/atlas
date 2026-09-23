@@ -1,6 +1,6 @@
 # ADR-0412: A catalogue heading is a key that groups and a wording per language that shows
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-09-23: the entry convention is one box per language, not a semicolon-separated list; the all-or-nothing publish rule is relaxed — see ADR-draft-a-missing-translation-is-reported-not-refused)
 - **Implementation:** Landed
 - **Date:** 2026-09-22
 - **Deciders:** Atlas maintainers
@@ -88,25 +88,35 @@ cost ADR-0360 recorded; this record does not touch it.
 
 ### The entry convention, and why it is the form's and not the model's
 
-The Console asks for both headings in **one box each**, the wordings in the order
-the catalogue declares its languages, separated by semicolons:
+~~The Console asks for both headings in **one box each**, the wordings in the order
+the catalogue declares its languages, separated by semicolons:~~
+`Arbeitsplatz; Poste de travail; Workplace; Postazione`
 
-```
-Arbeitsplatz; Poste de travail; Workplace; Postazione
-```
+**Withdrawn the next day** (amended 2026-09-23). The Console asks for both
+headings as **one box per language, side by side, each labelled with its tag** —
+the same shape the name and the description use. The first box that has anything
+in it is the key; the others are the wordings. One box filled means "this heading
+is not translated" and stores no map at all, which is what makes the row
+round-trip: what it renders, saved unchanged, stores what it read.
 
-The first is the key. A box holding one wording means "this heading is not
-translated" and stores no map at all — which is what makes the box round-trip: what
-it renders, saved unchanged, stores what it read. A stray trailing semicolon is
-therefore harmless rather than a half-translated heading that publishing refuses.
+The semicolon convention was compact and it was a trap, and it cost one live
+catalogue a working language switch. Two faults, and the second is the one that
+did the damage:
 
-**The semicolons are a convention of that one form and nothing else.** What is
-stored is a map per language tag. Had the list itself been stored, the meaning of
-every product would hang on the order of a list kept on the catalogue, and adding a
-fifth language would shift the wordings of every product at once. Stored as a map,
-reordering the catalogue's languages changes what a *newly typed* list means and
-nothing that is already saved — which is a hazard a maintainer can see, in the
-sentence above the box that names the order.
+- **The position-to-language mapping was invisible.** A reader of the box saw
+  three words and a separator; which word was French was a thing to count out
+  against a list kept on another screen.
+- **The separator leaked.** A maintainer applied the convention one screen up, to
+  the catalogue's own language list — which is read *comma*-separated — and
+  created the single language tag `de; en`. Every product in that catalogue then
+  had one box, both names went into it, and the portal's language switch did
+  nothing at all, silently, for weeks. That defect and its fix are
+  ADR-draft-a-language-tag-is-checked-where-it-is-written.
+
+What the two shapes have in common is the part that was right: **what is stored is
+a map per language tag and never a list**. Had the list been stored, the meaning
+of every product would hang on the order of a list kept on the catalogue, and
+adding a fifth language would shift the wordings of every product at once.
 
 ### Consequences
 
@@ -127,15 +137,13 @@ sentence above the box that names the order.
   stable slug survives the maintainer deciding the German was wrong. It also means
   a key nobody reads can be misspelled without anybody noticing, which two spellings
   already could.
-- **Negative / trade-offs accepted:** the entry form is positional, which is the one
-  thing about this a maintainer has to be told rather than shown.
-- **Negative / trade-offs accepted:** a heading containing a semicolon cannot be
-  written in the Console any more. `Hardware; Zubehör` as one heading is now two
-  wordings. It is still storable over REST and MCP, which write the fields
-  directly, so this is a limit of the entry convention and not of the record. A
-  heading is one or two words and a semicolon inside one is rare enough that
-  spending the separator on it would cost the feature; if it turns out not to be,
-  the escape belongs in the form and not in the model.
+- ~~**Negative / trade-offs accepted:** the entry form is positional, which is the
+  one thing about this a maintainer has to be told rather than shown.~~ It was the
+  one thing that had to be told, and telling it was not enough: see the amendment
+  above. A row of labelled boxes has nothing to tell.
+- ~~**Negative / trade-offs accepted:** a heading containing a semicolon cannot be
+  written in the Console any more.~~ Withdrawn with the convention: a box per
+  language carries whatever is typed into it, semicolons included.
 - **Follow-ups / risks to watch:** the headings still have no ordering of their
   own, and this record makes the absence slightly more visible — a catalogue whose
   first column reads in four languages invites somebody to ask why it cannot decide

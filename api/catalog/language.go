@@ -6,7 +6,8 @@ import (
 )
 
 // ValidLanguageTag reports whether s is a language tag this catalogue model will
-// store: a BCP 47 tag, narrowed to the shape a maintainer types.
+// store: a BCP 47 tag, narrowed to the shape a maintainer types
+// (ADR-draft-a-language-tag-is-checked-where-it-is-written).
 //
 // # Why this exists at all
 //

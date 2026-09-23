@@ -643,10 +643,11 @@ const lifecycleFrom = (f) => {
 // anybody editing this.
 //
 // It replaces a convention that packed the wordings into one box separated by
-// semicolons. That convention was compact and it was a trap: the mapping from
-// position to language was invisible, and the separator leaked — a live catalogue
-// was saved with the single language tag `de; en`, because somebody applied the
-// rule they had been taught here to the language list one screen up. Every box
+// semicolons (ADR-0412, amended). That convention was compact and it was a trap:
+// the mapping from position to language was invisible, and the separator leaked —
+// a live catalogue was saved with the single language tag `de; en`, because
+// somebody applied the rule they had been taught here to the language list one
+// screen up (ADR-draft-a-language-tag-is-checked-where-it-is-written). Every box
 // now says which language it is, and nothing has to be counted.
 
 // langFields draws the row. `prefix` is the control name each box carries before
