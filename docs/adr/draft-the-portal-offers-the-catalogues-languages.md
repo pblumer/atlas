@@ -53,7 +53,7 @@ catalogue.
 Chosen option: **"offer the catalogue's languages that the page can render"**.
 
 `offeredLocales()` is the catalogue's declared list, filtered to the tags whose
-language this page has strings for. With no catalogue — the sign-in screen, or a
+language this page has strings for — German, English, French and Italian. With no catalogue — the sign-in screen, or a
 visitor who is nobody's audience — it is the page's own languages, because the
 switch must be reachable there and there is nothing else to go on.
 
@@ -78,15 +78,23 @@ gets German, because there is no English here to give them.
   English. Before, they could read the navigation in English beside German
   products. That is a real loss for them, and it is the half-translated screen
   ADR-0313 forbids: coherence was chosen over the fragment.
-- **Negative / trade-offs accepted:** a catalogue kept in French still shows no FR
-  button, so its French names remain unreachable on this page. The catalogue may
-  carry them, the release freezes them, and nothing displays them. This record
-  does not fix that; it stops the portal from *pretending* otherwise, and names
-  translating the portal as the work that would.
-- **Follow-ups / risks to watch:** the page's own languages are two, and the
-  number of catalogue languages is unbounded. Every language added to the portal
-  widens what every catalogue can offer, with no further change here — which is
-  the shape this was built for, and worth checking the first time it happens.
+- ~~**Negative / trade-offs accepted:** a catalogue kept in French still shows no
+  FR button.~~ **Closed the same day.** The portal's own words were written in
+  French and Italian, so it speaks four: German, English, French, Italian. A
+  catalogue kept in any of them is offered in it, furniture and contents both. The
+  cost this named was real for as long as it existed, and the way out of it was
+  the one the record pointed at — translating the page, not widening what it
+  offers.
+- **Follow-ups / risks to watch:** the page's own languages are four now, and the
+  number of catalogue languages is unbounded. Adding French and Italian took no
+  change to this mechanism at all, which is what it was built for and is now
+  evidence rather than intention. A fifth is 148 strings and nothing else.
+- **Follow-ups / risks to watch:** the French and Italian were written by the
+  author of this change and have not been read by a native speaker of either. They
+  are consistent in register — formal throughout, as the German is — and the terms
+  follow the German source rather than inventing a vocabulary. A review by someone
+  who reads the language daily is worth having before this is put in front of the
+  people it is for.
 
 ## Pros and cons of the options
 

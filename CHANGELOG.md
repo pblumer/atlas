@@ -302,6 +302,19 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The portal speaks French and Italian.** It had German and English, so a catalogue
+  kept in French or Italian carried translations that no reader could ever select: the
+  switch will not offer a language the page cannot render whole, and the page could
+  not render those. All 148 interface strings now exist in four languages, which is
+  what makes `de`, `fr`, `it` and `en` real choices for a catalogue rather than keys
+  in a map.
+
+  Written by the author of this change and **not yet read by a native speaker** of
+  either language. The register is formal throughout, as the German is, and the terms
+  follow the German source rather than inventing a vocabulary — but a review by
+  somebody who reads the language daily is worth having before this reaches the people
+  it is for.
+
 - **The portal's language switch offers the languages the catalogue is kept in.** It
   offered this page's own two, always. So a catalogue kept only in German carried an
   EN button that turned the navigation English and left every product name,

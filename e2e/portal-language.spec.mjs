@@ -171,13 +171,31 @@ test("the switch offers the languages the catalogue is kept in", async ({ page }
 
 test("a language this page cannot render is not offered", async ({ page }) => {
   // ADR-0313: every string the portal renders exists in every locale it offers.
-  // The catalogue may be kept in French; until the furniture is French too, an FR
-  // button would promise a French portal and deliver a half-translated one.
-  await openWith(page, ["de-DE", "en-EN", "fr-FR"]);
+  // The page speaks German, English, French and Italian; a catalogue kept in
+  // Romansh would get no RM button, because the furniture has no Romansh and the
+  // button would promise a page that does not exist.
+  await openWith(page, ["de-DE", "en-EN", "rm-CH"]);
   const shown = await langButtons(page);
   expect(shown, "the two it can render, as the catalogue spells them")
     .toEqual(["DE-DE", "EN-EN"]);
-  expect(shown.join(" "), "and no French").not.toContain("FR");
+  expect(shown.join(" "), "and no Romansh").not.toContain("RM");
+});
+
+test("all four languages the page speaks are offered and render", async ({ page }) => {
+  await openWith(page, ["de", "fr", "it", "en"]);
+  expect(await langButtons(page)).toEqual(["DE", "FR", "IT", "EN"]);
+
+  // Each one renders its own furniture rather than the key or the German. The
+  // navigation is the cheapest thing to check and it is on every screen.
+  for (const [button, word] of [["FR", "Mes prestations"], ["IT", "Le mie prestazioni"],
+    ["DE", "Meine Leistungen"], ["EN", "My services"]]) {
+    await page.getByRole("button", { name: button, exact: true }).click();
+    await page.waitForTimeout(50);
+    const shown = await page.locator("#app").innerText();
+    expect(shown, `the ${button} furniture`).toContain(word);
+    expect(shown, `no untranslated key under ${button}`)
+      .not.toMatch(/\b(nav|portal|basket|find)\.[a-z]/);
+  }
 });
 
 test("the chosen language settles onto one the catalogue is kept in",
