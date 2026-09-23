@@ -615,6 +615,16 @@ type Node struct {
 	// empty when the severity is the node's own. ADR-0211 §4 requires it: a red
 	// parent that cannot say which child is red is not actionable.
 	SeverityFrom string `json:"severityFrom,omitempty"`
+	// Holds is how many nodes a domain's own landscape holds (ADR-0402 §2), and zero on
+	// every other kind. It is what makes the estate's budget legible: a domain standing
+	// for four hundred nodes and one standing for four are the same size on the picture,
+	// and only this says they are not.
+	Holds int `json:"holds,omitempty"`
+	// DrawnBy names the credential whose reach produced a domain's answer (ADR-0402 §1),
+	// and is empty on every other kind and on this runtime's own domain. A federated read
+	// is as wide as the credential that made it, and the picture states that rather than
+	// leaving a reader to discover it.
+	DrawnBy string `json:"drawnBy,omitempty"`
 	// Incidents is how many unresolved incidents the engine holds against this node.
 	// Only a process node can carry one — an incident belongs to a token, and only a
 	// process has tokens — so it is absent everywhere else rather than zero, because
@@ -724,6 +734,10 @@ type Edge struct {
 	// reconciliation, a compensation branch and an error handler are each correctly
 	// zero for months and each load-bearing.
 	Taken *int64 `json:"taken,omitempty"`
+	// Promoted is how many applications an estate join stands for (ADR-0402 §4): one
+	// edge between two domains, and the number of recorded promotions along it. Zero
+	// on every other kind of edge, where it would be a claim about nothing.
+	Promoted int `json:"promoted,omitempty"`
 	// TakenSince is when the counting started, in Unix seconds: the moment the source
 	// definition was deployed, because the counter is keyed by definition key and a
 	// redeploy starts a fresh one. It is the window without which Taken says nothing,
