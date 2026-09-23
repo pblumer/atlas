@@ -6511,3 +6511,48 @@ button.im-problem:hover { background: var(--accent-soft); }
   .drg-split { grid-template-columns: minmax(0, 1fr); }
   .drg-ov { padding: 10px; }
 }
+
+/* The estate altitude (ADR-0402): one node per domain, drawn on its own
+   canvas while the altitude is new. These rules are additive — nothing the Starmap uses is
+   touched — so a defect here cannot reach the shipped landscape. */
+.estate-root { max-width: 1100px; }
+.estate-picture { margin-top: 16px; padding: 8px; display: flex; justify-content: center; }
+/* The picture is square, because a ring is. It is capped rather than stretched: an estate of
+   three domains spread across a wide screen reads as three unrelated things. */
+.estate-canvas { width: 100%; max-width: 560px; height: auto; }
+.estate-node polygon {
+  fill: var(--surface); stroke: var(--accent); stroke-width: 2;
+}
+/* The domain the reader is standing in is the one they can open, and it says so before it is
+   hovered: the ink the console uses for what is yours. */
+.estate-node[data-local="true"] polygon { stroke: var(--accent-hover); stroke-width: 3; }
+.estate-open { cursor: pointer; }
+.estate-node:focus { outline: none; }
+.estate-node:focus polygon { stroke: var(--accent-hover); stroke-width: 4; }
+/* Severity colours the outline and never the fill, the way the Starmap's do: a fill that
+   changed with a finding would make the kind of thing unreadable at a glance. And unknown is
+   neutral rather than a fourth level of badness — a peer on an older build is an ordinary
+   state of affairs (ADR-0211 §4). */
+.estate-node[data-tone="attention"] polygon { stroke: var(--mesh-attention); }
+.estate-node[data-tone="unknown"] polygon { stroke: var(--muted); stroke-dasharray: 6 4; }
+.estate-holds { font: 600 20px/1 system-ui, sans-serif; fill: var(--fg); }
+.estate-name { font: 600 12px/1 system-ui, sans-serif; fill: var(--fg); }
+.estate-badge circle { fill: var(--surface); stroke: var(--muted); }
+.estate-badge text { font: 700 11px/1 system-ui, sans-serif; fill: var(--muted); }
+.estate-edge line { stroke: var(--mesh-ink, var(--muted)); stroke-width: 2; }
+.estate-edge-count { font: 600 11px/1 system-ui, sans-serif; fill: var(--muted); }
+.estate-legend { margin-top: 16px; font-size: 13px; line-height: 1.7; }
+.estate-legend p { margin: 0 0 8px; }
+.estate-rows { margin-top: 16px; overflow-x: auto; }
+.estate-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.estate-table th, .estate-table td {
+  text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.estate-table th { font-weight: 600; color: var(--muted); white-space: nowrap; }
+.estate-table .estate-num { text-align: right; }
+/* The state column carries the same three tones as the picture, in text: colour is never the
+   only channel, and this column is the channel that survives a printout. */
+.estate-table td[data-tone="attention"] { color: var(--mesh-attention); }
+.estate-table td[data-tone="unknown"] { color: var(--muted); }
+.estate-reason, .estate-runtime { font-size: 12px; line-height: 1.5; margin-top: 2px; }

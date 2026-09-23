@@ -678,6 +678,11 @@ const TOPNAV = {
   ],
   panorama: [
     { name: "Starmap", route: "#/panorama/starmap", role: "modeler" },
+    // The altitude above the Starmap (ADR-0402): the estate rather
+    // than one domain of it. Its own entry rather than a subject inside the Starmap while
+    // the altitude is new — the shipped landscape is not touched until this has been read
+    // against a real estate, and folding it in is a change of its own.
+    { name: "Estate", route: "#/panorama/estate", role: "modeler" },
     { name: "Models", route: "#/panorama", role: "modeler" },
   ],
   // The two altitudes of process data, and the reason the UML class diagram was the
@@ -9549,6 +9554,13 @@ async function viewPanoramaStarmap() {
   await mod.mountPanoramaMesh(view, { api, toast });
 }
 
+async function viewPanoramaEstate() {
+  const gen = navGen;
+  const mod = await import("./panorama-estate.js");
+  if (superseded(gen)) return;
+  await mod.mountPanoramaEstate(view, { api, toast });
+}
+
 async function viewPanoramaModel(id) {
   const gen = navGen;
   const mod = await import("./panorama-viewer.js");
@@ -10078,6 +10090,7 @@ async function route() {
     }
     if (path === "#/operations/call-activities") return await viewCallActivities();
     if (path === "#/panorama/starmap") return await viewPanoramaStarmap();
+    if (path === "#/panorama/estate") return await viewPanoramaEstate();
     if (path === "#/panorama") return await viewPanoramaModels();
     const pm = path.match(/^#\/panorama\/models\/(.+)$/);
     if (pm) return await viewPanoramaModel(decodeURIComponent(pm[1]));

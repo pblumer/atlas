@@ -93,15 +93,10 @@ const KIND = {
   //
   // This entry exists so the kind cannot fall through to `KIND.process` and be drawn as
   // a deployment, which is precisely the conflation the split removes. Its colours are
-  // provisional and say so: every other fill here was measured against the canvas and its
-  // neighbours, and nothing has yet drawn one of these to measure it on.
-  //
-  // That is no longer "until a federated read exists" — one does (ADR-0402, and the domain
-  // kind below is what it draws). It is that the federated read is an altitude *above* this
-  // picture rather than this picture with peers merged into it: §2 refuses the merge, because
-  // several domains at this budget is a hairball by arithmetic. So a definition node needs a
-  // picture that puts two servers' deployments side by side, and no picture does. Whoever
-  // first sees one owes it the same treatment the others had.
+  // provisional and say so: every other fill here was measured against the canvas and
+  // its neighbours, and this node cannot appear on any installation until a federated
+  // read exists (ADR-0402 is still Proposed), so there is nothing yet to measure it on.
+  // Whoever first sees one owes it the same treatment the others had.
   definition: { r: 20, grow: 6, shape: "square", fill: "#eef0f6", stroke: "var(--muted)", label: "Definition — one model, several servers" },
   worker: { r: 12, grow: 3.5, shape: "hexagon", fill: "#d9efe1", stroke: "var(--ok)", label: "Worker" },
   decision: { r: 12, grow: 3.5, shape: "triangle", fill: "#dbe6ff", stroke: "var(--accent-hover)", label: "Decision" },
@@ -135,18 +130,6 @@ const KIND = {
   // reason. Both stay far below a finding, where the amber badge is 3.59 and the red
   // 5.44 (ADR-0211 §4). The outline is the canvas's own ink for both: the card already
   // carries the kind, and the stroke is what a severity overrides.
-  // One whole Atlas installation, drawn only on the estate altitude (ADR-0402). It keeps
-  // the deployment target's pentagon deliberately: a domain *is* the thing a target stands
-  // for, seen whole instead of as a place this server can promote to, and giving it a
-  // silhouette of its own would say the two are different kinds of thing. What says which of
-  // them you are looking at is the size — a rank above the application, because a domain
-  // stands for a landscape of them — and the picture it appears on.
-  //
-  // It inherits the target's palette for the same reason rather than introducing a fill that
-  // would need its own contrast measurement: nothing new is claimed, so nothing new has to be
-  // measured. The counts it carries are drawn like a collapsed application's, which is what
-  // it is one altitude up.
-  domain: { r: 34, grow: 10, shape: "pentagon", fill: "var(--surface)", stroke: "var(--accent)", label: "Domain — one Atlas installation and the landscape it holds" },
   catalog: { r: 24, grow: 6, shape: "card", fill: "#e6dff5", stroke: "var(--mesh-ink)", label: "Catalogue — what a group of people may order" },
   product: { r: 13, grow: 4, shape: "tile", fill: "#efe9f8", stroke: "var(--mesh-ink)", label: "Product — a catalogue item and what provisions it" },
 };
@@ -645,27 +628,6 @@ const PRODUCT_MAP = {
   ],
 };
 
-// The estate is the picker's other entry that changes *what is on* the picture, and the
-// only one that changes the *altitude* (ADR-0402 §2): one node per
-// domain — this runtime and every configured deployment target — joined where a promotion
-// recorded a join.
-//
-// Its own picture rather than the landscape with peers added, for the arithmetic §2 gives:
-// eight domains at the measured 400-node budget each is a hairball while every individual
-// picture stays inside its budget. So a domain stands for a whole landscape and says how many
-// nodes it holds, and opening one is a read against that installation rather than a zoom on
-// this one.
-const ESTATE_MAP = {
-  id: "estate", label: "Estate", short: "Estate",
-  projection: false, mappingVersion: 0, types: {}, relations: {}, weigh: "degree",
-  subject: "estate",
-  loss: [
-    "Nothing of a peer's content is here. A domain carries a name, a size, an observation state and a join — never a node of somebody else's landscape, because this server holds none of it. Expanding a domain is a read against that installation, where that reader's own rights are the only ones that can be resolved.",
-    "The sizes are not comparable across domains. Each is as wide as the credential that drew it: your own rights on the domain you are standing in, the stored credential of each peer. A small domain may be a small installation or a narrow credential, and only the credential named on it can tell you which.",
-    "The one line drawn is a promotion somebody recorded, and it says a promotion *happened* — never that the application is still deployed over there, which nothing on this side can know. A message flow somebody drew is not a line here, and neither is what a peer promotes onward: this server does not know it.",
-  ],
-};
-
 // HEATS are the ways of drawing the same landscape with its *sizes* carrying a
 // quantity the engine holds, rather than the structure the layout already draws.
 //
@@ -849,14 +811,14 @@ const HEAT_NOTATIONS = Object.fromEntries(Object.values(HEATS).map((heat) => [he
 // The local entries are held here rather than fetched, by the split this file already
 // keeps: what a node is *called* is the server's table (ADR-0211 §8), and how big it
 // is drawn is this side's business, exactly like NOTATION_SHAPES.
-let notations = { atlas: DERIVED_NOTATION, products: PRODUCT_MAP, estate: ESTATE_MAP, ...HEAT_NOTATIONS };
+let notations = { atlas: DERIVED_NOTATION, products: PRODUCT_MAP, ...HEAT_NOTATIONS };
 
 // useNotations takes what the server serves and adds this side's shapes to it. An
 // entry with no shapes is still usable — every kind falls back to its derived
 // outline — so a notation the server learns about before this file does degrades to
 // a vocabulary change rather than to a blank canvas.
 export function useNotations(served) {
-  const next = { atlas: DERIVED_NOTATION, products: PRODUCT_MAP, estate: ESTATE_MAP, ...HEAT_NOTATIONS };
+  const next = { atlas: DERIVED_NOTATION, products: PRODUCT_MAP, ...HEAT_NOTATIONS };
   for (const notation of Array.isArray(served) ? served : []) {
     // The locally-defined entries win over a served row of the same id. They are
     // rendering decisions rather than vocabularies, and a server that grew a word for
@@ -1211,21 +1173,13 @@ const EDGE_KEY = [
     "this cannot be provisioned before that"],
   // Last, because it is the structure the rest hangs on and the order above puts
   // structure last. It is also the only row here whose line a reader cannot currently
-  // see: a definition is drawn only where several servers hold one model (ADR-0401), and no
-  // picture puts two servers' deployments side by side — the federated read that exists draws
-  // domains one altitude up rather than merging landscapes (ADR-0402 §2). The row exists
-  // anyway, because the alternative is a line on the picture with nothing in the key — and
-  // the dash-dot is provisional for the same reason the definition node's fill is: there is
+  // see: a definition is drawn only where several servers hold one model (ADR-0401),
+  // which needs a federated read that does not exist yet. The row exists anyway,
+  // because the alternative is a line on the picture with nothing in the key — and the
+  // dash-dot is provisional for the same reason the definition node's fill is: there is
   // nothing yet to look at it on.
   ["deploys", "Dash-dot line — deployed here: one model, and a server that holds it",
     "one model, and a server that holds it"],
-  // The estate altitude's only line (ADR-0402 §4), and the only row here that is drawn on a
-  // different picture from all the others. It is a fact rather than a drawing —
-  // `deploymentTarget.Bindings` holds it, written when a promotion succeeded — and it carries
-  // how many applications travelled it, because one join between two domains is one line
-  // however many went along it.
-  ["promotes", "Solid line — promoted to: an application this server promoted to that domain",
-    "an application this server promoted to that domain"],
 ];
 
 // PULSE_BUDGET is how many beating nodes the view will animate at once.
@@ -1247,11 +1201,6 @@ const STATE_TEXT = {
   unreachable: "unreachable",
   stale: "stale",
   unbound: "unbound — nothing observes it",
-  // ADR-0402 §3's fifth case, on the estate altitude: the peer answered and does not serve
-  // the starmap read. Said in words here because folding it into unreachable would send an
-  // operator to look at a network and folding it into stale would imply there was once an
-  // answer — it is a version boundary, and neither.
-  unserved: "answered — does not serve this view",
 };
 
 // LABEL_TIERS decides which names are painted, from how large they will actually
@@ -2658,23 +2607,6 @@ function nodeTitle(node, notation) {
     if (node.reason) parts.push(node.reason);
     return parts.join(" · ");
   }
-  if (node.kind === "domain") {
-    // Said in words rather than left to the shared sentence below, which would reach for a
-    // version this node has not got and would leave out the two facts that decide how the
-    // number on it may be read: which credential drew this domain, and how much of it that
-    // credential did not reach (ADR-0402 §1). A size without those is a
-    // number a reader would compare across domains, which is the one comparison it does not
-    // support.
-    const said = [node.name || node.id];
-    if (node.holds) said.push(`${node.holds} node(s) in its own landscape`);
-    if (node.restricted) said.push(`${node.restricted} outside that credential's reach`);
-    said.push(node.drawnBy
-      ? `drawn with the credential configured for ${node.drawnBy}`
-      : "drawn with your own rights");
-    if (node.state && node.state !== "unbound") said.push(STATE_TEXT[node.state] || node.state);
-    if (node.reason) said.push(node.reason);
-    return said.join(" · ");
-  }
   if (node.kind === "target") {
     // Never its base URL: that is this operator's map of where their infrastructure
     // lives, and a landscape is opened by anybody with modeler access.
@@ -3315,19 +3247,6 @@ function legendHTML(graph, layoutMs, notation, peak = 0, band = null, offersNoth
       drawn for whoever maintains it, and whoever does can share it with you as a
       viewer.</p>`);
   }
-  // The estate's own disclosure (ADR-0402 §1), beside the one below that carries this
-  // reader's own restricted count — and deliberately not merged with it: that one is what
-  // *you* may not see here, this one is what somebody else's credential could not see there.
-  // A picture that added the two would be inventing a number that answers neither question.
-  if (spoken.subject === "estate") {
-    const behind = graph.nodes.reduce((sum, d) => sum + (d.restricted || 0), 0);
-    notes.push(`<p class="mesh-note">Each domain is as wide as the credential that drew it:
-      your own rights on the one you are standing in, and the credential configured for each
-      peer — named on every node.${behind > 0 ? ` <b>${behind}</b> node(s) across the peer
-      domains were outside those credentials' reach.` : ""} A domain's number is what its own
-      landscape holds, so the sizes are not comparable across domains; opening one is a read
-      against that installation, with the rights that exist there.</p>`);
-  }
   if (graph.restricted > 0) {
     notes.push(`<p class="mesh-note"><b>${graph.restricted}</b> node(s) are hidden by your
       access. Their dependencies are drawn, their identities are not — this picture is
@@ -3591,7 +3510,7 @@ function renderGraph(graph, layoutMs, frame,
         `fill="${prov.ghost ? "none" : style.fill}" stroke="${sev.stroke || style.stroke}" ` +
         `stroke-width="${sev.stroke ? 3 : 2.2}" ${style.dashed || prov.ghost ? 'stroke-dasharray="4 3"' : ""}`)}
       <circle class="mesh-pin" r="4" cx="${(-r * 0.72).toFixed(1)}" cy="${(r * 0.72).toFixed(1)}"/>
-      ${n.children || n.holds ? `<text class="mesh-count" text-anchor="middle" dy="4">${n.children || n.holds}</text>` : ""}
+      ${n.children ? `<text class="mesh-count" text-anchor="middle" dy="4">${n.children}</text>` : ""}
       ${badge}
       <g class="mesh-caption" data-room="${(r + 8).toFixed(1)}">
       <text class="mesh-label" text-anchor="middle" dy="${(r + 14).toFixed(1)}"><tspan class="mesh-label-ink">${label}</tspan></text>
@@ -5585,13 +5504,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       if (await loadLandscape(draftsToggle.checked, { subject: want })) {
         subjectLoaded = want;
         // The drafts switch belongs to the landscape: a draft is a diagram nobody
-        // deployed, and neither the product map nor the estate draws diagrams. Disabled
-        // rather than hidden, so a reader who turned it on finds it where they left it — and
-        // set after the load, because the load itself puts the switch back.
-        draftsToggle.disabled = want !== "";
-        // So does the model export: there is no ArchiMate document for an estate, and
-        // handing back the landscape's would be two answers to one question.
-        exportModelBtn.disabled = want === "estate";
+        // deployed, and the product map draws no diagrams. Disabled rather than
+        // hidden, so a reader who turned it on finds it where they left it — and set
+        // after the load, because the load itself puts the switch back.
+        draftsToggle.disabled = want === "products";
         // The arrangement is not carried across: the two pictures share almost no
         // node, so positions kept by id would place a handful of processes where they
         // sat among four hundred other nodes and leave the rest to the layout.
@@ -5604,9 +5520,8 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       // The picker goes back to the picture that is actually on screen: a control
       // naming a view the reader is not looking at is the one lie this view cannot
       // afford.
-      notationPick.value = notationOf(subjectLoaded || "atlas").id;
-      draftsToggle.disabled = subjectLoaded !== "";
-      exportModelBtn.disabled = subjectLoaded === "estate";
+      notationPick.value = notationOf(subjectLoaded === "products" ? "products" : "atlas").id;
+      draftsToggle.disabled = false;
       return;
     }
     paint();
@@ -5634,18 +5549,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     let arrived;
     try {
       // The subject is the server's question and the drafts switch is the landscape's:
-      // a draft is a diagram nobody deployed, and neither the product map nor the estate
-      // draws diagrams at all, so the two are never asked together.
-      //
-      // The estate is a route of its own rather than a third `view=` on the landscape's,
-      // because it is a different altitude rather than a different selection at this one: it
-      // asks every configured peer for its landscape (ADR-0402), which
-      // is a fan-out with its own cost, its own cache and its own failure modes, and folding
-      // it behind a query parameter would put that on the route a reader opens by default.
+      // a draft is a diagram nobody deployed, and the product map draws no diagrams at
+      // all, so the two are never asked together.
       const query = subject === "products" ? "?view=products" : (wantDrafts ? "?drafts=1" : "");
-      arrived = await api("GET", subject === "estate"
-        ? "/api/v1/panorama/estate"
-        : "/api/v1/panorama/mesh" + query);
+      arrived = await api("GET", "/api/v1/panorama/mesh" + query);
     } finally {
       if (!silent) draftsToggle.disabled = false;
     }
@@ -5684,12 +5591,9 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   });
 
   exportModelBtn.addEventListener("click", () => {
-    // The file follows the picture: exporting a product map and getting the landscape
+    // The file follows the picture: exporting a product map and getting the estate
     // would be two answers to one question, and the reader would have no way of
-    // telling which was theirs. The estate has no document at all — the control is
-    // disabled on it — and this refuses a second time rather than trusting that, because a
-    // keyboard can reach a control a repaint left enabled.
-    if (subjectNow() === "estate") return;
+    // telling which was theirs.
     window.location.href = "/api/v1/panorama/mesh/archimate" +
       (subjectNow() === "products" ? "?view=products" : "");
   });

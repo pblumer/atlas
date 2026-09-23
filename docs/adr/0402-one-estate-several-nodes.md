@@ -167,10 +167,38 @@ tree and says so here rather than by being edited away:
 | A credential that carries which subjects it may see | **built** — a token carries a reach, the `landscape` scope must state one, and nobody may grant a reach they do not hold (ADR-0410) |
 | The estate altitude's assembly | **built** — `panorama.DeriveEstate`: one node per domain, one edge per recorded promotion, the fifth peer state, and each domain naming the credential that drew it |
 | The federated read | **built** — every peer's own starmap, over the existing peer channel and cached beside the descriptor, with a version boundary distinguished from a fault and a refused read from a silent server |
-| A route, and a screen | **built** — `GET /api/v1/panorama/estate`, and the Starmap's View picker draws it as an altitude of its own |
+| A route, and a screen | **built** — `GET /api/v1/panorama/estate`, and a Panorama view of its own beside the Starmap |
 
 Nothing of it grants a reach the reader did not have: a federated answer is as wide as the
 credential that fetched it, and every domain on the picture says which credential that was.
+
+#### The picture is built beside the Starmap before it is built into it (2026-09-23)
+
+§5 has the estate as an **extension of the existing altitudes** — the picker is where a reader
+switches altitude, and the landscape's renderer is the one that carries provenance, severity,
+drill-down, saved views and the export. That is still where it ends up, and this section does
+not repeal it.
+
+What changed is the order. The first build put the estate *into* the Starmap as a third
+subject: a new node kind and a new edge kind in its shared tables, a third shape of request in
+its loader, two of its controls made conditional, and two of its guards rewritten. All of it
+worked, and all of it was in the one view an operations team keeps open. The maintainer's
+sequencing decision is the opposite: **the new altitude is drawn on its own first, and folded
+in once it has been read against a real estate.** So the shipped landscape is byte-for-byte
+untouched, a defect in the estate cannot take it along, and the integration is a change that
+can be reviewed as one thing rather than as a side effect of a feature.
+
+What the separate picture does not have, stated rather than discovered: no filter, no saved
+views, no notation projection, no ArchiMate export and no drill-down into anything but the
+local domain's own landscape. Those belong to the renderer it is not using yet, and each is a
+reason the integration is worth making rather than an argument that it is optional. What it
+does have is the altitude's own topology — every edge the record admits runs from this domain
+to a peer (§4), so the layout is a star, which needs no simulation and comes out identically on
+two reads.
+
+The pure geometry the two share is imported rather than copied, so the outline a domain is
+drawn with is stated once. Nothing else crosses: this view holds none of the Starmap's state
+and changes none of it.
 
 #### The gate is not what was built, and this is the posture that was (2026-09-23)
 
