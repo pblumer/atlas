@@ -282,6 +282,39 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The estate: one node per domain, and each one says how wide the credential that drew it
+  was.** The Starmap's View picker gains a third entry above the landscape rather than beside
+  it. It draws this runtime and every configured deployment target as one node each, joined
+  where a promotion recorded a join, and each domain carries how many nodes its own landscape
+  holds — so a domain standing for four hundred and one standing for four are no longer the
+  same mark.
+
+  An altitude above the landscape rather than the landscape with peers merged into it, for
+  the arithmetic [ADR-0402](docs/adr/0402-one-estate-several-nodes.md) §2 gives: eight domains
+  at the measured 400-node budget each is a hairball while every individual picture stays
+  inside its budget. So a domain stands for a landscape and opening one is a read against that
+  installation, where that reader's own rights are the only ones that can be resolved.
+
+  **Who may open it.** The record's own chosen posture was an operator gate — the estate behind
+  the right that configures deployment targets — and its open question then found that the
+  reader who most needs this view is a cross-departmental architect who is not that operator.
+  So the credential's reach was built first, and this takes the posture that made available:
+  the same right that reads the landscape reads the estate, and every domain on the picture is
+  exactly as wide as the credential that drew it. The domain you are standing in is as wide as
+  you are — counted off the landscape you would be served, with the same per-request
+  visibility decision — and a peer is as wide as the credential stored for that target. Both
+  the credential and how much of the domain it could not see are named on every node, and the
+  legend says the sizes are therefore not comparable across domains. Nothing of a peer's
+  content crosses: a domain carries a name, a count, a state and a join, never a node of
+  somebody else's landscape.
+
+  **A peer that does not answer is a shape rather than a gap**, and the picture tells three
+  silences apart. A peer that answered and does not serve a starmap read is a version
+  boundary, drawn neutrally — reading it as unreachable would send an operator to look at a
+  network. One whose landscape was read and cannot be read again is history and says so. One
+  that refused the read with a credential this side controls says which status came back, which
+  is what separates "grant this credential the landscape scope" from "that server is down".
+
 - **A catalogue publishes before every translation is done, and says what is still
   owed.** Publishing refused a product named in one of its catalogue's declared
   languages and not another, and a description or heading wording missing in any of

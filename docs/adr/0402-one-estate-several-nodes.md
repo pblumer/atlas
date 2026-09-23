@@ -1,7 +1,7 @@
 # ADR-0402: One estate, several nodes — a starmap stitched from subgraphs
 
-- **Status:** Accepted (amended 2026-09-22: the estate view is sequenced behind the credential-reach record, see §1)
-- **Implementation:** Partial
+- **Status:** Accepted (amended 2026-09-22: the estate view is sequenced behind the credential-reach record, see §1; amended 2026-09-23: the view is read by the landscape's own right rather than behind §1's operator gate, see §1)
+- **Implementation:** Landed
 - **Date:** 2026-09-18
 - **Deciders:** Atlas maintainers
 - **Open question:** whether an estate view is ever read by somebody who may not see all
@@ -167,11 +167,32 @@ tree and says so here rather than by being edited away:
 | A credential that carries which subjects it may see | **built** — a token carries a reach, the `landscape` scope must state one, and nobody may grant a reach they do not hold (ADR-0410) |
 | The estate altitude's assembly | **built** — `panorama.DeriveEstate`: one node per domain, one edge per recorded promotion, the fifth peer state, and each domain naming the credential that drew it |
 | The federated read | **built** — every peer's own starmap, over the existing peer channel and cached beside the descriptor, with a version boundary distinguished from a fault and a refused read from a silent server |
-| A route, and a screen | **absent.** Nothing here is reachable from the API, so no reader has this view yet |
+| A route, and a screen | **built** — `GET /api/v1/panorama/estate`, and the Starmap's View picker draws it as an altitude of its own |
 
-The gate in §1 is still not built and is still the fallback. Nothing above grants a reach
-the reader did not have: a federated answer is as wide as the credential that fetched it,
-and every domain on the picture says which credential that was.
+Nothing of it grants a reach the reader did not have: a federated answer is as wide as the
+credential that fetched it, and every domain on the picture says which credential that was.
+
+#### The gate is not what was built, and this is the posture that was (2026-09-23)
+
+§1 chose an operator gate and its own open question then found that gate *likely insufficient
+for the customer who most needs this view* — a cross-departmental architect is not the operator
+of each node. With the reach record built, the maintainer decided the posture the measurement
+opened up: **the estate is read by the same right that reads the landscape, and every domain on
+it is exactly as wide as the credential that drew it.** The gate stays written down as the
+fallback an installation gets if the reach mechanism is refused; it is not what the route has.
+
+Three properties carry that decision, and each is a property of code rather than of intent:
+
+| | How |
+|---|---|
+| The local domain is as wide as the reader | It is counted off the landscape this caller would be served — the same derivation, the same per-request visibility decision. An application they may not see is not on their landscape and not in their count. |
+| A peer domain is as wide as the target's credential | Which is what a federated read can be and no wider. The credential is named on the domain, and so is how much of it that credential could not see. |
+| Nothing of a peer's content crosses | A domain carries a name, a count, a state and a join — never a node of somebody else's landscape. Expanding one is a read against *that* installation, where that reader's own rights are the only ones that can be resolved. |
+
+What the posture costs, stated rather than left to be found: a landscape reader who is not an
+operator now learns the peer domains' names, roughly how large each is, and which of them a
+promotion has reached. The names were already visible to such a reader as `target` nodes on the
+landscape itself; the size and the join are what this adds.
 
 ### 2. The budget is per node and cannot be multiplied
 

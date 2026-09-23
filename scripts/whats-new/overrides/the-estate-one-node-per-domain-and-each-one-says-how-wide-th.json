@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Panorama",
+    "Operations"
+  ],
+  "title": {
+    "en": "The estate: every domain on one picture, and what each credential could see",
+    "de": "Das Estate: alle Domänen auf einem Bild, und was jedes Credential sehen konnte"
+  },
+  "summary": {
+    "en": "The Starmap's View picker gains an altitude above the landscape: this runtime and every configured deployment target as one node each, joined where a promotion recorded a join, with the number of nodes each domain's own landscape holds written on it. Eight domains drawn together at the landscape's own size budget would be a hairball, so a domain stands for a landscape instead, and opening one is a read against that installation. It is read by the same right that reads the landscape, and every domain is exactly as wide as the credential that drew it: the domain you are in as wide as you are, a peer as wide as the credential stored for that target. Both the credential and how much of the domain it could not see are named on every node, and the legend says the sizes are therefore not comparable across domains. Nothing of a peer's content crosses — a domain carries a name, a count, a state and a join, never a node of somebody else's landscape. A peer that answered and does not serve this read is drawn as a version boundary rather than as a fault, because reading it as unreachable would send an operator to look at a network.",
+    "de": "Der View-Wähler der Starmap erhält eine Ebene über der Landschaft: diese Installation und jedes konfigurierte Deployment-Ziel als je ein Knoten, verbunden dort, wo eine Promotion eine Verbindung aufgezeichnet hat, mit der Anzahl Knoten, die die jeweilige Landschaft hält, direkt am Knoten. Acht Domänen gemeinsam im Grössenbudget der Landschaft gezeichnet wären ein Knäuel; deshalb steht ein Knoten für eine ganze Landschaft, und wer eine öffnet, liest gegen jene Installation. Geöffnet wird die Ansicht mit demselben Recht, das die Landschaft liest, und jede Domäne ist genau so weit, wie das Credential reichte, das sie gezeichnet hat: die eigene Domäne so weit wie die eigenen Rechte, eine fremde so weit wie das für dieses Ziel gespeicherte Credential. Sowohl das Credential als auch der Teil der Domäne, den es nicht erreichte, stehen an jedem Knoten, und die Legende sagt, dass die Grössen deshalb nicht zwischen Domänen vergleichbar sind. Von den Inhalten einer fremden Installation gelangt nichts herüber — eine Domäne trägt Namen, Anzahl, Zustand und Verbindung, nie einen Knoten aus der Landschaft eines anderen. Eine Gegenstelle, die antwortet und diesen Lesezugriff nicht anbietet, wird als Versionsgrenze gezeichnet und nicht als Störung, denn als «nicht erreichbar» gelesen würde sie einen Betrieb aufs Netzwerk schauen lassen."
+  }
+}
