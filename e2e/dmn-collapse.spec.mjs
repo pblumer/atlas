@@ -177,3 +177,174 @@ test("unfolding in the same session puts the decisions back", async ({ page }) =
   expect(state.saved).not.toContain('isCollapsed="true"');
   expect(state.saved).toContain('dmnElementRef="Decision_Output"');
 });
+
+
+// The shape the first real model had, and the one the model above does not: a
+// requirement that crosses the service boundary. Input data feeding a decision
+// inside the service, and a decision outside feeding one inside it. Both are
+// requirements of the service — DMN derives inputData and inputDecision from
+// exactly these crossings (§10.4) — so a fold has to keep them.
+const CROSSING_MODEL = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20230324/MODEL/"
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20230324/DMNDI/"
+             xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/"
+             xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/"
+             id="Definitions_cross" name="Cross" namespace="http://atlas/dmn/cross">
+  <inputData id="InputData_Amount" name="amount" />
+  <decision id="Decision_Afford" name="Affordability">
+    <informationRequirement id="IR_Amount">
+      <requiredInput href="#InputData_Amount" />
+    </informationRequirement>
+  </decision>
+  <decision id="Decision_Verdict" name="Verdict">
+    <informationRequirement id="IR_Afford">
+      <requiredDecision href="#Decision_Afford" />
+    </informationRequirement>
+    <informationRequirement id="IR_Score">
+      <requiredDecision href="#Decision_Score" />
+    </informationRequirement>
+  </decision>
+  <decision id="Decision_Score" name="Score" />
+  <decisionService id="Service_Credit" name="Credit Service">
+    <outputDecision href="#Decision_Verdict" />
+    <encapsulatedDecision href="#Decision_Afford" />
+  </decisionService>
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram id="DMNDiagram_cross">
+      <dmndi:DMNShape id="Shape_Service_Credit" dmnElementRef="Service_Credit">
+        <dc:Bounds x="100" y="80" width="360" height="300" />
+        <dmndi:DMNDecisionServiceDividerLine>
+          <di:waypoint x="100" y="240" />
+          <di:waypoint x="460" y="240" />
+        </dmndi:DMNDecisionServiceDividerLine>
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="Shape_Verdict" dmnElementRef="Decision_Verdict">
+        <dc:Bounds x="140" y="110" width="120" height="50" />
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="Shape_Afford" dmnElementRef="Decision_Afford">
+        <dc:Bounds x="140" y="270" width="120" height="50" />
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="Shape_Score" dmnElementRef="Decision_Score">
+        <dc:Bounds x="560" y="110" width="120" height="50" />
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="Shape_Amount" dmnElementRef="InputData_Amount">
+        <dc:Bounds x="140" y="440" width="125" height="45" />
+      </dmndi:DMNShape>
+      <dmndi:DMNEdge id="Edge_IR_Amount" dmnElementRef="IR_Amount">
+        <di:waypoint x="202" y="440" />
+        <di:waypoint x="202" y="320" />
+      </dmndi:DMNEdge>
+      <dmndi:DMNEdge id="Edge_IR_Afford" dmnElementRef="IR_Afford">
+        <di:waypoint x="200" y="270" />
+        <di:waypoint x="200" y="160" />
+      </dmndi:DMNEdge>
+      <dmndi:DMNEdge id="Edge_IR_Score" dmnElementRef="IR_Score">
+        <di:waypoint x="560" y="135" />
+        <di:waypoint x="260" y="135" />
+      </dmndi:DMNEdge>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>`;
+
+async function foldCrossing(page) {
+  await page.goto("/harness.html");
+  await page.addScriptTag({ url: "/vendor/dmn/dmn-modeler.js" });
+
+  return page.evaluate(async (xml) => {
+    document.body.innerHTML = '<div id="dmn" style="width:1200px;height:900px"></div>';
+
+    const modeler = new window.AtlasDmn.DmnJS({ container: "#dmn", dmnVersion: "1.5" });
+    await modeler.importXML(xml);
+
+    const viewer = modeler.getActiveViewer();
+    const registry = viewer.get("elementRegistry");
+    const modeling = viewer.get("modeling");
+    const service = registry.get("Service_Credit");
+
+    const endOf = (id, end) => {
+      const connection = registry.get(id);
+
+      return connection && connection[end] ? connection[end].id : null;
+    };
+
+    const geometry = () => {
+      const { x, y, width, height } = service;
+      const divider = service.businessObject.di
+        .get("decisionServiceDividerLine");
+
+      return {
+        x, y, width, height,
+        dividerY: divider && divider.waypoint && divider.waypoint.length
+          ? divider.waypoint[0].y
+          : null,
+      };
+    };
+
+    const before = geometry();
+
+    modeling.collapseDecisionService(service, true);
+
+    const folded = {
+      amountTarget: endOf("IR_Amount", "target"),
+      scoreTarget: endOf("IR_Score", "target"),
+      amountSource: endOf("IR_Amount", "source"),
+      scoreSource: endOf("IR_Score", "source"),
+      internal: !!registry.get("IR_Afford"),
+      geometry: geometry(),
+    };
+
+    const saved = (await modeler.saveXML({ format: true })).xml;
+
+    modeling.collapseDecisionService(service, false);
+
+    const unfolded = {
+      amountTarget: endOf("IR_Amount", "target"),
+      scoreTarget: endOf("IR_Score", "target"),
+      internal: !!registry.get("IR_Afford"),
+      geometry: geometry(),
+    };
+
+    return { before, folded, saved, unfolded };
+  }, CROSSING_MODEL);
+}
+
+test("a folded service keeps what it is given, drawn against the box", async ({ page }) => {
+  const { folded, saved } = await foldCrossing(page);
+
+  // The ends inside the service move to the box: it is the only thing left to draw
+  // them against, and it is what the service is — dropping them left the input data
+  // floating unattached and the box looking like it took nothing and gave nothing.
+  expect(folded.amountTarget).toBe("Service_Credit");
+  expect(folded.scoreTarget).toBe("Service_Credit");
+
+  // The ends that were always outside do not move.
+  expect(folded.amountSource).toBe("InputData_Amount");
+  expect(folded.scoreSource).toBe("Decision_Score");
+
+  // A requirement drawn wholly inside has nothing left to draw between, so it goes.
+  expect(folded.internal).toBe(false);
+
+  // The saved diagram says the same: the crossing edges are still drawn, the
+  // internal one is not, and the requirement itself is untouched either way.
+  expect(saved).toContain('dmnElementRef="IR_Amount"');
+  expect(saved).toContain('dmnElementRef="IR_Score"');
+  expect(saved).not.toContain('dmnElementRef="IR_Afford"');
+  expect(saved).toContain('id="IR_Afford"');
+});
+
+test("unfolding puts the box back, divider and all", async ({ page }) => {
+  const { before, folded, unfolded } = await foldCrossing(page);
+
+  // Folded, the box is the collapsed size.
+  expect(folded.geometry.width).toBe(180);
+  expect(folded.geometry.height).toBe(100);
+
+  // Unfolded, it is the box the author drew — neither its bounds nor its divider can
+  // be recomputed on the way back, because the fold clamped the divider into 180x100.
+  expect(unfolded.geometry).toEqual(before);
+
+  // And the edges are docked back to the decisions that own their requirements.
+  expect(unfolded.amountTarget).toBe("Decision_Afford");
+  expect(unfolded.scoreTarget).toBe("Decision_Verdict");
+  expect(unfolded.internal).toBe(true);
+});
