@@ -112,3 +112,39 @@ test("the choice survives a reload", async ({ page }) => {
   await page.waitForSelector(".cascade, .empty");
   expect(await texts(page)).toContain("Notebook");
 });
+
+test("a catalogue declared with regions is read by a reader without one",
+  async ({ page }) => {
+    // The catalogue says de-DE and en-EN; this page's locale is de or en, because
+    // its own words live in a message catalogue keyed by the language alone. A
+    // lookup for the whole tag finds neither, falls through to the first value the
+    // product has, and shows one word in both languages — which is the defect that
+    // started all of this, reached down a different road.
+    await switchTo(page, "DE");
+    let shown = await texts(page);
+    expect(shown, "the German name under de-DE").toContain("Dockingstation");
+    expect(shown, "and not the English one beside it").not.toContain("Docking cradle");
+
+    await switchTo(page, "EN");
+    shown = await texts(page);
+    expect(shown, "the English name under en-EN").toContain("Docking cradle");
+    expect(shown, "and not the German one").not.toContain("Dockingstation");
+  });
+
+test("a regional heading switches with the rest", async ({ page }) => {
+  // The heading wordings are keyed the same way and reached through the same
+  // function, so they are the cheapest place for the correction to be incomplete.
+  //
+  // A heading no other product in the fixture carries, because a word already on
+  // the screen from somewhere else would make this pass without proving anything
+  // — which is what it did when it was first written.
+  await switchTo(page, "EN");
+  let shown = await texts(page);
+  expect(shown, "the heading under en-EN").toContain("Accessories");
+  expect(shown, "and not the German one beside it").not.toContain("Zubehör");
+
+  await switchTo(page, "DE");
+  shown = await texts(page);
+  expect(shown, "the heading under de-DE").toContain("Zubehör");
+  expect(shown, "and not the English one").not.toContain("Accessories");
+});

@@ -29,7 +29,7 @@
       const CAT = {
         id: "cat_x", rank: 1, languages: ["de", "en"],
         texts: { de: "Produktekatalog", en: "Product catalogue" },
-        items: ["whole", "de-only", "en-only"],
+        items: ["whole", "de-only", "regional", "en-only"],
       };
       const RELEASE = {
         id: "rel_x", catalogId: "cat_x",
@@ -56,6 +56,23 @@
             provisionProcess: "p", deprovisionProcess: "d",
           },
           {
+            id: "regional", homeCatalog: "cat_x", state: "active",
+            // A catalogue declared in de-DE and en-EN rather than de and en. Both
+            // are correct BCP 47 and neither is what the page's locale is: it
+            // narrows a browser's language to its base, because its own words are
+            // keyed that way. Every text here is invisible to a lookup for the
+            // whole tag, which is what this product exists to catch.
+            texts: { "de-DE": "Dockingstation", "en-EN": "Docking cradle" },
+            descriptions: { "de-DE": "Für den Schreibtisch.", "en-EN": "For the desk." },
+            // A heading of its own, and not the one the first product carries: a
+            // wording that is already on the screen from somewhere else cannot
+            // prove anything about this product.
+            category: "Zubehör",
+            categoryTexts: { "de-DE": "Zubehör", "en-EN": "Accessories" },
+            approval: { kind: "none" },
+            provisionProcess: "p", deprovisionProcess: "d",
+          },
+          {
             id: "en-only", homeCatalog: "cat_x", state: "active",
             texts: { en: "Docking station" },
             category: "Arbeitsplatz",
@@ -64,8 +81,8 @@
             provisionProcess: "p", deprovisionProcess: "d",
           },
         ],
-        waves: [["whole", "de-only", "en-only"]],
-        withoutApproval: ["whole", "de-only", "en-only"],
+        waves: [["whole", "de-only", "regional", "en-only"]],
+        withoutApproval: ["whole", "de-only", "regional", "en-only"],
       };
 
       const ROUTES = {

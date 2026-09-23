@@ -357,12 +357,52 @@ function setLocale(next) {
   render();
 }
 
+// baseOf is the language a tag is in: `de-CH` is German, `zh-Hans` is Chinese,
+// and a bare `de` is its own base.
+//
+// The same reduction pickLocale does to the browser's list, and the two have to
+// agree — that is the whole point of it being one function's worth of rule
+// written twice rather than two rules.
+function baseOf(tag) {
+  return String(tag).toLowerCase().split('-')[0];
+}
+
+// pickText is the entry one language selects out of a map keyed by language tags.
+//
+// **By the language and not by the whole tag**, which is the correction. This page
+// narrows a browser's language to its base, because its own words live in a
+// message catalogue keyed that way; a product's texts are keyed by whatever the
+// CATALOGUE declares, and `de-DE`, `en-GB` and `pt-BR` are all correct and all
+// invisible to a lookup for `de`, `en`, `pt`. A catalogue kept in `de-DE; en-EN`
+// would otherwise store every name under a key nothing here ever asks for, fall
+// through to the first value it had, and show one word in both languages — the
+// defect ADR-0413 was written about, arrived at down a different road.
+//
+// The exact tag wins over a regional one. A catalogue carrying both `de` and
+// `de-CH` means the two deliberately, and answering with whichever the release
+// happened to list first would be a coin toss. Between two regionals of the same
+// language it IS the listed order, which is the release's own and therefore
+// stable — worth knowing rather than worth preventing.
+//
+// A key that is present and blank is not an answer, for the reason it is not one
+// in descriptionOf: it is the shape a cleared box leaves behind.
+function pickText(texts, base) {
+  const said = (v) => typeof v === 'string' && v.trim() !== '';
+  if (said(texts[base])) return texts[base];
+  for (const tag of Object.keys(texts)) {
+    if (said(texts[tag]) && baseOf(tag) === base) return texts[tag];
+  }
+  return '';
+}
+
 // textOf reads a catalogue item's name in the current locale, falling back to
 // whatever the catalogue has. A product is named by its catalogue, not by this
 // page, so there is no key to look up and no way to be complete about it.
 function textOf(texts, fallback) {
   if (!texts) return fallback;
-  return texts[locale] || texts.de || texts.en || Object.values(texts)[0] || fallback;
+  return pickText(texts, locale) || pickText(texts, 'de') || pickText(texts, 'en')
+    || Object.values(texts).find((t) => typeof t === 'string' && t.trim() !== '')
+    || fallback;
 }
 
 // The product's description, in the language this page is being read in where the
@@ -391,7 +431,10 @@ function textOf(texts, fallback) {
 function descriptionOf(item) {
   const d = (item || {}).descriptions;
   if (!d) return '';
-  for (const text of [d[locale], d.de, d.en, ...Object.values(d)]) {
+  // Through pickText for each step, so a catalogue kept in `de-DE` is reached by
+  // a reader on `de` — the same correction the name above carries.
+  for (const text of [pickText(d, locale), pickText(d, 'de'), pickText(d, 'en'),
+    ...Object.values(d)]) {
     if (typeof text === 'string' && text.trim() !== '') return text.trim();
   }
   return '';
