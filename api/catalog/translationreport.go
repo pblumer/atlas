@@ -65,7 +65,14 @@ func (s *Service) HandleTranslationGaps(w http.ResponseWriter, r *http.Request) 
 				continue
 			}
 			ids = append(ids, cat.ID)
-			checked += len(cat.Items)
+			// The items the catalogue actually resolved, not the length of its id
+			// list: an id naming no product is Publish's refusal to report, and
+			// counting it here would say more was looked at than was.
+			//
+			// A product offered by two catalogues is counted twice, and that is
+			// right rather than a rounding error: the languages are the
+			// catalogue's, so the same product is two checks with two answers.
+			checked += len(in.Items)
 			gaps = append(gaps, TranslationGaps(in)...)
 		}
 	})
