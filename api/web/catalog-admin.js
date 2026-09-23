@@ -1547,7 +1547,7 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
           once&rdquo; above already answers it. Leave it empty for a product with one
           shape, which is most of them.</span>
         ${variantRows(v.variants, langs)}
-        <button type="button" class="ghost add-shape" style="margin-top:6px">Add a shape</button></div>
+        <button type="button" class="btn ghost" data-add-shape>Add a shape</button></div>
       <div class="field wide">Picture
         <span class="muted" style="display:block; margin:2px 0 6px">A photograph of the
           thing or the vendor's mark, shown to whoever is choosing — PNG, JPEG or SVG,
@@ -2217,7 +2217,7 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
     // variable: the form can be redrawn between presses, and a counter would then
     // reuse a number and make two rows write one shape.
     const grid = editor.querySelector(".vargrid");
-    const addShape = editor.querySelector(".add-shape");
+    const addShape = editor.querySelector("[data-add-shape]");
     if (grid && addShape) {
       addShape.addEventListener("click", () => {
         const used = [...grid.querySelectorAll('input[name$="-id"]')]

@@ -332,6 +332,7 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
 .varhead {
   font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted);
 }
+.vargrid + .btn { margin-top: 6px; }
 @media (max-width: 760px) { .varrow { grid-template-columns: 1fr; } }
 
 /* ---------- The product list and the editor beside it ---------- */
