@@ -14,6 +14,26 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A catalogue kept in `de-DE` and `en-EN` would have ignored the language switch,
+  for the same reason `de; en` did.** The portal narrows a browser's language to its
+  base — `de-CH` becomes `de` — because its own words live in a message catalogue
+  keyed that way. A product's texts are keyed by whatever the *catalogue* declares,
+  and `de-DE`, `en-GB` and `pt-BR` are all correct and all invisible to a lookup for
+  `de`, `en`, `pt`. Every name would have been stored under a key nothing on the page
+  asks for, the reader would have been shown whatever value came first, and the
+  switch would have done nothing — with the new language-tag check waving it through,
+  because `de-DE` **is** a tag. A text is selected by a tag's language now, the exact
+  tag winning over a regional one where a catalogue carries both.
+
+  The Console's language box is also cut on commas, semicolons **and** whitespace. A
+  tag can contain none of the three, so all three are separators and none is
+  ambiguous — and a maintainer who types `de-DE; en-EN; fr-FR` gets three languages
+  instead of one refusal naming a tag they never meant to write.
+
+  What this does not buy: the portal's own words exist in German and English. A
+  catalogue may declare `fr-FR` and its products may carry French; no locale on that
+  page selects it, because there is no French to switch to.
+
 - **A catalogue could be saved with a language that is not a language, and every
   product in it then ignored the language switch.** Found in a live installation: a
   catalogue was saved with the single language tag `de; en`. The list is read

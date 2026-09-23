@@ -1,6 +1,6 @@
 # ADR-0413: A language tag is checked where it is written, and nowhere else
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-09-23: the Console's language box is split on every separator a person types, and a text is selected by a tag's LANGUAGE rather than by the whole tag)
 - **Implementation:** Landed
 - **Date:** 2026-09-23
 - **Deciders:** Atlas maintainers
@@ -125,6 +125,53 @@ that hid the defect in the first place.
 - Bad: it locks the installation that has the defect out of shipping anything
   until it is fixed, and the mistake has already travelled into every product's
   texts by then.
+
+## Amendment, 2026-09-23: the same defect one subtag further in
+
+A maintainer proposed declaring a catalogue in `de-DE; en-EN; fr-FR`. Two things
+were wrong with what would have happened, and the second is this record's own
+fault.
+
+### The language box is cut on what people type
+
+The Console split it on commas alone, so that line became one entry, and the
+check above then refused it — naming a tag nobody had meant to write. A language
+tag can contain neither a comma, a semicolon nor a space, so all three are
+separators and none of them is ambiguous. `languageList` now splits on all three.
+
+This is **not** the normalisation this record refused. That was about a stored
+ENTRY that might be one tag or two, where only its author knew which; this is
+about how a human's single line is cut into entries at all, and that has exactly
+one reading. The API stays strict: it takes a list, and an entry carrying a
+separator is still refused there, because nothing typed it — a caller built it.
+
+### A text is selected by its language, not by its whole tag
+
+Worse, and invisible. The portal narrows a browser's language to its base —
+`de-CH` becomes `de` — because its own words live in a message catalogue keyed
+that way. A product's texts are keyed by whatever the CATALOGUE declares, and
+`de-DE`, `en-GB` and `pt-BR` are all correct BCP 47 and all invisible to a lookup
+for `de`, `en`, `pt`.
+
+So a catalogue declared in `de-DE; en-EN` would have stored every name under a key
+nothing on the page ever asks for, fallen through to the first value it had, and
+shown one word in both languages. That is the symptom this record was written
+about, reached down a different road, and the check this record added would have
+waved it through — because `de-DE` **is** a language tag.
+
+`pickText(texts, base)` selects the exact tag first and then any tag whose base is
+that language. The exact one wins because a catalogue carrying both `de` and
+`de-CH` means the two deliberately; between two regionals of one language it is
+the release's own listed order, which is stable and worth knowing rather than
+worth preventing.
+
+### What this does not buy
+
+The portal's own words exist in German and English. A catalogue may declare
+`fr-FR`, its products may carry French, and no locale on that page will select it
+— there is no French to switch to. The French texts are stored and reachable only
+through the fallback chain. Translating the portal is a separate piece of work,
+and this amendment does not pretend to have done it.
 
 ## Links
 
