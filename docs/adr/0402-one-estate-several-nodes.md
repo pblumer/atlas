@@ -200,6 +200,17 @@ The pure geometry the two share is imported rather than copied, so the outline a
 drawn with is stated once. Nothing else crosses: this view holds none of the Starmap's state
 and changes none of it.
 
+**The integration is a removal as much as an addition.** Two ways into one altitude is the state
+this sequencing creates, and leaving both is how it becomes permanent: the older route is the one
+somebody has bookmarked, and it would be the one with fewer features. So the change that folds the
+estate into the picker also deletes the standalone view and rewrites `#/panorama/estate` to the
+picker's estate subject — the same redirect `#/panorama/landscape` already gets to
+`#/panorama/starmap`, and for the same reason. A reader who saved the link keeps it working, the
+menu entry goes, and there is one altitude with one way in.
+
+Until then this record's own answer to "where is the estate" is: its own view, and that is
+deliberate rather than provisional-by-neglect.
+
 #### The gate is not what was built, and this is the posture that was (2026-09-23)
 
 §1 chose an operator gate and its own open question then found that gate *likely insufficient
@@ -221,6 +232,35 @@ What the posture costs, stated rather than left to be found: a landscape reader 
 operator now learns the peer domains' names, roughly how large each is, and which of them a
 promotion has reached. The names were already visible to such a reader as `target` nodes on the
 landscape itself; the size and the join are what this adds.
+
+#### One target, one credential, and two jobs it cannot both do (open, found 2026-09-23)
+
+Running two installations against each other surfaced a gap this record did not anticipate, in
+the record it depends on rather than in this one.
+
+A deployment target carries **one** credential reference (ADR-0129) and an API token carries
+**one** scope. The estate read needs a credential that reaches the descriptor and the derived
+landscape; a promotion needs one that reaches the import route; and the two sets are disjoint by
+design — a deploy token is deliberately the narrowest thing that can publish, and a landscape
+credential is deliberately unable to deploy. Measured, with the server's own words: a deploy
+token answers `401` at `/api/v1/node` and at `/api/v1/panorama/mesh`, and a landscape credential
+is refused `POST /api/v1/applications/import` with `403`.
+
+So on an installation where targets are configured for promotion — which is what targets are for
+— every peer is drawn on the estate as *unreachable*, and the picture is honest about knowing
+nothing while the operator can see the peer is plainly there.
+
+Three ways out, and the choice is not this record's to make alone:
+
+| | |
+|---|---|
+| A second, optional read credential on the target | Smallest change that works: promoting and being read are two jobs, so two references, both stored by reference as ADR-0129 already requires. Costs a field on the target record and a second row in its dialog. |
+| A token that carries several scopes | Larger: the scope is a single word everywhere it is read, and a set changes `apiScopeMayReach` and every place a scope is displayed or minted. |
+| Widen the deploy token to the two read routes | Refused here: ADR-0129's deploy token is narrow on purpose, and the estate is not a reason to widen the one credential a peer hands out. |
+
+Nothing is built for it. The estate works today with a credential minted for reading, which is
+what the measurement above used, and an installation that wants both needs two targets or the
+first option.
 
 ### 2. The budget is per node and cannot be multiplied
 

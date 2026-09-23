@@ -231,9 +231,9 @@ export async function mountPanoramaEstate(root, { api, toast }) {
           altitude above the landscape: a domain stands for a whole starmap rather than for one
           thing on it.</p>
       </div>
-      <div class="row">
+      <div class="estate-actions">
         <button class="btn neutral" id="estate-refresh">Read again</button>
-        <a class="btn neutral" href="#/panorama/starmap">This domain's starmap →</a>
+        <a class="btn neutral" href="#/panorama/starmap">This starmap →</a>
       </div>
     </div>
     <div id="estate-body"><p class="muted" style="margin-top:16px">Asking every configured

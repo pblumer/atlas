@@ -6516,6 +6516,11 @@ button.im-problem:hover { background: var(--accent-soft); }
    canvas while the altitude is new. These rules are additive — nothing the Starmap uses is
    touched — so a defect here cannot reach the shipped landscape. */
 .estate-root { max-width: 1100px; }
+/* The two controls keep their own line rather than being squeezed by the sentence beside
+   them: a flex header shrinks whichever side it can, and a button that has wrapped into
+   three lines reads as an unfinished screen rather than as a control. */
+.estate-actions { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.estate-actions .btn { white-space: nowrap; }
 .estate-picture { margin-top: 16px; padding: 8px; display: flex; justify-content: center; }
 /* The picture is square, because a ring is. It is capped rather than stretched: an estate of
    three domains spread across a wide screen reads as three unrelated things. */

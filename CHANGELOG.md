@@ -282,6 +282,25 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A credential minted for reading another Atlas can now actually read it.** Two installations
+  pointed at each other found two defects in the credential reach released with the estate, both
+  of which every test passed over.
+
+  A `landscape` credential reaches the peer's node descriptor as well as its starmap. The estate
+  read is two steps — a peer is asked who it is before it is asked for a landscape, because that
+  is the only way to tell a peer one version behind from a peer in trouble — and the scope
+  covered only the second step. With authentication on, which is the default, every peer was
+  drawn as unreachable.
+
+  And a stated reach now **grants** viewer inside itself, not only withholds everything outside
+  it. The reach was checked above the branches that grant, so it narrowed an administrator and a
+  deploy agent correctly; but everything below those branches reads a sharing scope, and a
+  credential has no account to be an owner or a member with. A token minted with a reach over one
+  application therefore saw a landscape of nothing at all — and the estate drew that as a peer
+  holding nothing, so an empty installation and a credential that grants nothing looked the same.
+  Measured after the fix: the same credential reads the one application its reach names, where an
+  administrator on that server reads four.
+
 - **The estate: one node per domain, and each one says how wide the credential that drew it
   was.** A new Panorama view beside the Starmap draws this installation and every configured
   deployment target as one node each, joined where a promotion recorded a join, with the number
