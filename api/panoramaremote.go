@@ -78,7 +78,7 @@ type remoteNodeObservation struct {
 	lastError string
 }
 
-// remoteNodeCache holds the last answer per target.
+// remoteCache holds the last answer per target, for one kind of peer read.
 //
 // It carries its own mutex rather than living on the run loop, because that is the
 // point: these entries are written by goroutines waiting on the network, and
@@ -89,34 +89,40 @@ type remoteNodeObservation struct {
 // It is bounded by the number of configured deployment targets, which is operator
 // configuration rather than user input, and entries for targets that no longer
 // exist are dropped on each collection.
-type remoteNodeCache struct {
+//
+// One kind of read per instance, and never one cache holding both: a descriptor read
+// and a landscape read cost different amounts, answer for different lengths of time,
+// and fail independently (ADR-0402 §3). Sharing an
+// entry would make a refused landscape expire a good descriptor, which is the
+// collapse of two states the whole channel exists to keep apart.
+type remoteCache[T any] struct {
 	mu sync.Mutex
-	by map[string]remoteNodeObservation
+	by map[string]T
 }
 
-func newRemoteNodeCache() *remoteNodeCache {
-	return &remoteNodeCache{by: map[string]remoteNodeObservation{}}
+func newRemoteCache[T any]() *remoteCache[T] {
+	return &remoteCache[T]{by: map[string]T{}}
 }
 
-// get returns the cached observation for a target.
-func (c *remoteNodeCache) get(targetID string) (remoteNodeObservation, bool) {
+// get returns the cached answer for a target.
+func (c *remoteCache[T]) get(targetID string) (T, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	obs, ok := c.by[targetID]
-	return obs, ok
+	answer, ok := c.by[targetID]
+	return answer, ok
 }
 
-// put records an observation.
-func (c *remoteNodeCache) put(targetID string, obs remoteNodeObservation) {
+// put records an answer.
+func (c *remoteCache[T]) put(targetID string, answer T) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.by[targetID] = obs
+	c.by[targetID] = answer
 }
 
 // retain drops entries for targets that are no longer configured, so deleting a
 // target actually forgets it rather than leaving an answer nobody can trace to a
 // row on screen.
-func (c *remoteNodeCache) retain(live map[string]bool) {
+func (c *remoteCache[T]) retain(live map[string]bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for id := range c.by {
@@ -125,6 +131,11 @@ func (c *remoteNodeCache) retain(live map[string]bool) {
 		}
 	}
 }
+
+// remoteNodeCache is the descriptor half: what each peer last said about itself.
+type remoteNodeCache = remoteCache[remoteNodeObservation]
+
+func newRemoteNodeCache() *remoteNodeCache { return newRemoteCache[remoteNodeObservation]() }
 
 // remoteTarget is one peer to ask, with the credential to present. It is built on
 // the run loop, because resolving a credential reads the vault; the asking happens

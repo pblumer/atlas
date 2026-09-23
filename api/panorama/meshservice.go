@@ -80,6 +80,23 @@ func subjectOf(r *http.Request) string {
 	return SubjectLandscape
 }
 
+// Derive is the landscape this caller would be served, handed to something that draws
+// a different picture out of it — today the estate altitude's local domain, which is
+// this server's own landscape counted rather than drawn
+// (ADR-0402 §2).
+//
+// It writes the failure response itself and reports false, exactly as HandleGraph
+// does, because the two must not come to disagree about what a collection that could
+// not run looks like: a shutting-down loop is a 503 and never an empty picture.
+//
+// Deriving the whole landscape to take a number off it is deliberate. The estate says
+// how many nodes a domain holds, and a reader who expands that domain has to find the
+// same number: counting anything cheaper here would be a second derivation, and two
+// derivations of one picture eventually disagree.
+func (m *Mesh) Derive(w http.ResponseWriter, r *http.Request) (Graph, bool) {
+	return m.derive(w, r)
+}
+
 // HandleGraph serves the whole-instance mesh for the calling principal.
 func (m *Mesh) HandleGraph(w http.ResponseWriter, r *http.Request) {
 	graph, ok := m.derive(w, r)

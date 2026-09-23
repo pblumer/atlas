@@ -59,6 +59,11 @@ type EstateDomain struct {
 	// nodes and one standing for four are the same size on this picture, and only this says
 	// they are not.
 	Holds int
+	// Restricted is how many of [EstateDomain.Holds] were placeholders standing in for
+	// what the credential that drew this domain may not see. It is the other half of
+	// [EstateDomain.DrawnBy]: naming the credential says who looked, and this says how
+	// much of the domain that look did not reach.
+	Restricted int
 	// State and Reason are the observation the collector resolved (ADR-0189 §6), including
 	// [StateUnserved].
 	State  string
@@ -113,6 +118,7 @@ func (d EstateDomain) node() Node {
 		Provenance: ProvenanceDerived,
 		RuntimeID:  d.RuntimeID,
 		Holds:      d.Holds,
+		Restricted: d.Restricted,
 		State:      d.State,
 		Severity:   severityOf(d.State),
 		Reason:     d.Reason,
