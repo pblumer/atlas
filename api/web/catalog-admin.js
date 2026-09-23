@@ -128,6 +128,7 @@ function textOf(texts, langs, fallback) {
 export async function viewCatalogs({ api, toast, view, isSuperseded }) {
   let cats = [];
   let report = null;
+  let translation = null;
   // null means the directory could not be read, which is different from an empty
   // one: the first degrades to typed ids, the second says there are no groups yet.
   let dir = null;
@@ -137,6 +138,13 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
     // Which approval rules reach nobody. null is "could not be read", which the
     // card below says out loud rather than rendering as "nothing is wrong".
     report = await api("GET", "/api/v1/catalog-products/approver-report").catch(() => null);
+    // And where a catalogue is written in one of its languages and not another.
+    // Publishing refused that until it was pointed out that the portal falls back
+    // rather than showing a blank — so the refusal held usable catalogues back and
+    // protected nobody. This card is what took its place, and it is the whole
+    // reason removing the refusal is safe: a gap nothing says out loud is a gap
+    // that surfaces months later as "the French portal reads oddly".
+    translation = await api("GET", "/api/v1/catalog-products/translation-gaps").catch(() => null);
   } catch (e) {
     if (isSuperseded()) return;
     throw e;
@@ -187,7 +195,8 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
       </aside>
     </div>
 
-    ${approverCard(report)}`;
+    ${approverCard(report)}
+    ${translationCard(translation)}`;
 
   view.querySelector(".cat-new").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -258,6 +267,62 @@ function approverCard(report) {
       its home catalogue.</p>
     <table class="table">
       <thead><tr><th>Product</th><th>Home</th><th>Kind</th><th>Names</th><th>Why</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+}
+
+// translationCard is what a catalogue still owes its own languages.
+//
+// It exists because a gate was removed. Publishing used to refuse a product named
+// in one declared language and not another; the refusal protected no reader — the
+// portal shows the name the catalogue has rather than a blank — but it did make
+// the gap impossible to ignore. A gap nobody says out loud arrives months later
+// as "the French portal reads oddly", reported by a reader rather than found by a
+// maintainer.
+//
+// Grouped by product and not listed per language, because four rows reading
+// "no name in fr", "no description in fr", "no category in fr", "no product group
+// in fr" are one piece of work: open that product. The three states are the
+// approver card's, for the reason given there.
+function translationCard(report) {
+  if (report === null) {
+    return `<div class="card" style="margin-top:18px; max-width:860px">
+      <h3 style="margin:0 0 6px">Translations</h3>
+      <p class="muted" style="margin:0">This report could not be read, so nothing here says
+        whether any catalogue is missing a translation.</p></div>`;
+  }
+  const gaps = report.gaps || [];
+  const checked = report.checked || 0;
+  // Both counts, because either alone is ambiguous: no gaps across no catalogues
+  // is the answer somebody maintaining nothing gets, and it must not read like a
+  // finished estate.
+  const covered = (report.catalogs || []).length;
+  const over = `${checked} product${checked === 1 ? "" : "s"} in
+    ${covered} catalogue${covered === 1 ? "" : "s"}`;
+  if (!gaps.length) {
+    return `<div class="card" style="margin-top:18px; max-width:860px">
+      <h3 style="margin:0 0 6px">Translations</h3>
+      <p class="muted" style="margin:0">Every product is written in every language its
+        catalogue declares &mdash; ${over} checked.</p></div>`;
+  }
+  // One row per product per catalogue, with what is missing gathered into it.
+  const byProduct = new Map();
+  for (const g of gaps) {
+    const at = `${g.catalog}\u0000${g.item}`;
+    if (!byProduct.has(at)) byProduct.set(at, { catalog: g.catalog, item: g.item, what: [] });
+    byProduct.get(at).what.push(g.message);
+  }
+  const rows = [...byProduct.values()].map((r) => `<tr>
+    <td><code>${esc(r.item)}</code></td>
+    <td><a href="#/catalog/c/${encodeURIComponent(r.catalog)}">${esc(r.catalog)}</a></td>
+    <td>${r.what.map((w) => esc(w)).join("; ")}</td></tr>`).join("");
+  return `<div class="card" style="margin-top:18px; max-width:860px">
+    <h3 style="margin:0 0 6px">Still to translate</h3>
+    <p class="muted" style="max-width:62ch; margin:0 0 10px">${byProduct.size} of ${over}
+      say something in one of their catalogue's languages and not in another. This
+      does <b>not</b> stop a publish: the portal shows the language that exists rather than a
+      blank, which is why it is worth publishing and why nothing else would ever mention it.</p>
+    <table class="table">
+      <thead><tr><th>Product</th><th>Catalogue</th><th>Missing</th></tr></thead>
       <tbody>${rows}</tbody></table></div>`;
 }
 
@@ -2131,8 +2196,33 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
       const pid = String(editing || f.get("id") || "").trim();
       if (!pid) { toast("A product needs an id", "err"); return; }
 
+      // Which catalogue is responsible for this product afterwards.
+      //
+      // A product is referenced by catalogues and edited through exactly one
+      // (ADR-0315), and the server treats a save naming a different home as a
+      // deliberate ADOPTION — it checks that the caller may edit both sides and
+      // moves it. This screen used to send the catalogue being viewed every time,
+      // so opening a product from a catalogue that merely offers it and pressing
+      // save took it away from whoever was responsible for it, silently, and with
+      // the languages of the new home deciding which boxes were drawn from then on.
+      //
+      // So it is asked, and only when there is something to ask: a product with no
+      // home yet is a new one, and a product already at home here has nothing to
+      // move. Cancelling keeps the home rather than abandoning the save, because
+      // the two are different decisions and the maintainer came here to edit.
+      const was = byID[pid] || {};
+      let home = id;
+      if (was.homeCatalog && was.homeCatalog !== id) {
+        home = window.confirm(
+          `This product is maintained in ${was.homeCatalog}, not in this catalogue.\n\n`
+          + "OK moves it here, so this catalogue's editors become responsible for it "
+          + "and its boxes follow this catalogue's languages.\n\n"
+          + "Cancel keeps it where it is and saves your changes anyway.")
+          ? id
+          : was.homeCatalog;
+      }
       const body = productBody(f, {
-        productID: pid, homeCatalog: id, langs, stored: byID[pid] || {},
+        productID: pid, homeCatalog: home, langs, stored: was,
       });
       try {
         await api("POST", "/api/v1/catalog-products", body);
