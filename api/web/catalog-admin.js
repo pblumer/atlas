@@ -668,7 +668,7 @@ const lifecycleFrom = (f) => {
 // the mapping from position to language was invisible, and the separator leaked —
 // a live catalogue was saved with the single language tag `de; en`, because
 // somebody applied the rule they had been taught here to the language list one
-// screen up (ADR-draft-a-language-tag-is-checked-where-it-is-written). Every box
+// screen up (ADR-0413). Every box
 // now says which language it is, and nothing has to be counted.
 
 // langFields draws the row. `prefix` is the control name each box carries before

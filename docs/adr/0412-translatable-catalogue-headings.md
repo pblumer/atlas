@@ -1,6 +1,6 @@
 # ADR-0412: A catalogue heading is a key that groups and a wording per language that shows
 
-- **Status:** Accepted (amended 2026-09-23: the entry convention is one box per language, not a semicolon-separated list; the all-or-nothing publish rule is relaxed — see ADR-draft-a-missing-translation-is-reported-not-refused)
+- **Status:** Accepted (amended 2026-09-23: the entry convention is one box per language, not a semicolon-separated list; the all-or-nothing publish rule is relaxed — see ADR-0414)
 - **Implementation:** Landed
 - **Date:** 2026-09-22
 - **Deciders:** Atlas maintainers
@@ -111,7 +111,7 @@ did the damage:
   created the single language tag `de; en`. Every product in that catalogue then
   had one box, both names went into it, and the portal's language switch did
   nothing at all, silently, for weeks. That defect and its fix are
-  ADR-draft-a-language-tag-is-checked-where-it-is-written.
+  ADR-0413.
 
 What the two shapes have in common is the part that was right: **what is stored is
 a map per language tag and never a list**. Had the list been stored, the meaning

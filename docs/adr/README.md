@@ -498,6 +498,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0410](0410-a-peer-credential-carries-the-reach-a-membership-cannot-give-it.md) | A peer credential carries the reach a membership cannot give it | Accepted | Partial |
 | [0411](0411-system-processes-call-atlas-directly.md) | The shipped system processes call Atlas as REST connector tasks, told their own address | Accepted | Landed |
 | [0412](0412-translatable-catalogue-headings.md) | A catalogue heading is a key that groups and a wording per language that shows | Accepted | Landed |
+| [0413](0413-a-language-tag-is-checked-where-it-is-written.md) | A language tag is checked where it is written, and nowhere else | Accepted | Landed |
+| [0414](0414-a-missing-translation-is-reported-not-refused.md) | A missing translation is reported, not refused | Accepted | Landed |
 
 ## The two states of a record
 
