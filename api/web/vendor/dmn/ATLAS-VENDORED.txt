@@ -1,7 +1,7 @@
 dmn-modeler.js is a combined, pre-built bundle (global: window.AtlasDmn) of:
 
   - pblumer/dmn-js@17.10.2
-    commit: d48cb1ea4c3970017d5809bf6c2cfa4426a296ab
+    commit: 1cd07fe8b62d249f369ad3ed6f046f6233180046
   - pblumer/dmn-moddle
     commit: ac76928df99382c36833d9300fd98acc604dc673
   - dmn-js-properties-panel@3.11.1
@@ -28,9 +28,17 @@ It folds a Decision Service away and back (DMN 1.5 §6.2.4), from the context pa
 and as one undoable step. A fold takes the members' depiction out of the diagram
 and leaves the model alone: the decisions stay in drgElement and stay editable
 through the view list, which is built from the DRG rather than from the diagram.
-Nothing carries where they were across a save — DMN has no place to park the
-bounds of something a diagram does not show — so unfolding restores them exactly
-within a session and lays them out afresh after a reload. Alongside it, a
+Only what is drawn between members goes with them; a requirement that crosses
+the boundary is re-docked to the box, because that is what the service is given
+and what it gives (DMN derives inputData and inputDecision from exactly those
+crossings, §10.4) and the box is the only thing a folded DRD draws. Re-docking
+moves the endpoint on the canvas and nothing else — the requirement still
+belongs to the decision that states it. Nothing carries where any of it was
+across a save, since DMN has no place to park the bounds of something a diagram
+does not show, so within a session unfolding restores it exactly — the members'
+positions, the crossing edges' waypoints, and the service's own bounds and
+divider, neither of which can be recomputed once a fold has clamped the divider
+into a 180x100 box — and after a reload it is laid out afresh. Alongside it, a
 collapsed service is no longer reclassified from geometry: there is no box to
 read compartments off, and reading anyway rewrote every output decision into an
 encapsulated one, leaving a service that publishes nothing.
@@ -112,4 +120,4 @@ icon font from the pinned fork distro, plus properties-panel.css from
 @bpmn-io/properties-panel@3.48.0.
 
 SHA-256 dmn-modeler.js:
-b77158825d8b3fc2ca1cc6444ac0b09a85933364f4165a83b1866bd33eca0cc2
+2299ab6607cf8339be832fe3573154970bc8bcf7954dc3b94cf6ffa2cac9fe6c

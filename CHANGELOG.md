@@ -81,6 +81,25 @@ _Changed_ / _Removed_ for each version.
   now assembles the body exactly as the connector does instead of reading one
   expression.
 
+- **A folded decision service showed neither what it is given nor what it gives.**
+  Folding one took away every arrow that touched a decision inside it, which is right
+  for the arrows drawn between those decisions and wrong for the ones reaching in from
+  outside. The input data a decision inside the service needs, and the decision outside
+  that the service answers to, are requirements of the *service* — DMN derives exactly
+  those from the crossings — and with their arrows gone the input data sat unattached
+  in the corner of the diagram while the folded box looked like it took nothing and
+  gave nothing. Those arrows now end on the box, which is the only thing a reader of a
+  folded diagram can see. Nothing about the model moves: the requirement still belongs
+  to the decision that states it.
+
+  Unfolding did not put the service back either. Its box was recomputed from where its
+  decisions sit plus a margin, and for decisions drawn *inside* a larger box that comes
+  out smaller than the box was — so a service came back cramped, with its name clipped
+  behind a decision. The line dividing its two compartments came back worse than
+  recomputed: folding squeezes it into the small box, and afterwards there is nothing
+  left to work it out from. Both are now noted when the service is folded and restored
+  when it is unfolded, beside the decision positions that already were.
+
 - **An attribute the editor could not read survived only by being ignored.** DMN 1.5 lets
   an author say that Input Data is to be drawn as the paper sheet symbol rather than the
   backwards compatible oval. The editor's descriptor had that flag typed as an association
