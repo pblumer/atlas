@@ -6535,8 +6535,8 @@ button.im-problem:hover { background: var(--accent-soft); }
    state of affairs (ADR-0211 §4). */
 .estate-node[data-tone="attention"] polygon { stroke: var(--mesh-attention); }
 .estate-node[data-tone="unknown"] polygon { stroke: var(--muted); stroke-dasharray: 6 4; }
-.estate-holds { font: 600 20px/1 system-ui, sans-serif; fill: var(--fg); }
-.estate-name { font: 600 12px/1 system-ui, sans-serif; fill: var(--fg); }
+.estate-holds { font: 600 20px/1 system-ui, sans-serif; fill: var(--text); }
+.estate-name { font: 600 12px/1 system-ui, sans-serif; fill: var(--text); }
 .estate-badge circle { fill: var(--surface); stroke: var(--muted); }
 .estate-badge text { font: 700 11px/1 system-ui, sans-serif; fill: var(--muted); }
 .estate-edge line { stroke: var(--mesh-ink, var(--muted)); stroke-width: 2; }
