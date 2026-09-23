@@ -1,4 +1,4 @@
-# ADR-DRAFT: The portal offers the languages its catalogue is kept in
+# ADR-0415: The portal offers the languages its catalogue is kept in
 
 - **Status:** Accepted
 - **Implementation:** Landed

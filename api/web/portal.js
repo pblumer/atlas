@@ -662,7 +662,7 @@ function t(key) {
 }
 
 // offeredLocales is what the language switch offers
-// (ADR-draft-the-portal-offers-the-catalogues-languages).
+// (ADR-0415).
 //
 // **The languages this catalogue is kept in**, rather than the two this page
 // happens to be translated into. A catalogue kept only in German used to show an
