@@ -1,7 +1,7 @@
 # ADR-0410: A peer credential carries the reach a membership cannot give it
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted
+- **Implementation:** Partial
 - **Date:** 2026-09-22
 - **Deciders:** Atlas maintainers
 - **Open question:** what the reach is expressed in. Projects are the unit sharing scopes
@@ -88,6 +88,31 @@ longer exists narrows to nothing rather than widening to everything.
 **It is not row-level security for the whole API.** Its reach is the derived landscape, which
 is the one read ADR-0402 needs. Extending it to every route is a different record with a
 different cost, and claiming it here would be claiming a guarantee nothing enforces.
+
+#### What building it added, and one rule this record had left implicit (2026-09-22)
+
+Built: the stored field, the principal that carries it, the narrowing inside `effectiveRole`,
+and ADR-0402 §1's least-privilege scope (`landscape`, reaching the mesh read and its ArchiMate
+projection and nothing else). Not built: the estate altitude itself, which is ADR-0402's and
+comes next.
+
+Two things the implementation settled, and the first is a rule this record should have stated:
+
+**A minter cannot grant a reach they do not hold.** A credential is never more privileged than
+the person who created it — already true of its roles, which are snapshotted from the minter
+(ADR-0209) — and a reach naming a project the minter cannot view would break that property one
+step removed: mint the token, then read through it. Minting now refuses a reach naming a
+project this server does not have, or one the minter cannot see.
+
+**The narrowing sits above the granting branches, not below them.** `effectiveRole` grants
+Owner to an admin and Viewer to a deploy agent before it looks at ownership or membership, so a
+reach consulted after those branches would narrow nobody who mattered — an admin's landscape
+credential would still reach the whole estate, which is the escalation §1 of ADR-0402 could not
+close. It is consulted first, and it only ever subtracts.
+
+And the fail-closed rule is enforced **at minting** rather than at the read: a `landscape`
+token without a reach is refused. Enforcing it at the read would have revoked every credential
+already in the field, none of which states a reach and none of which serves this read.
 
 ### Why not the others
 

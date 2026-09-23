@@ -56,9 +56,10 @@ func (s *Server) handleCreateAPIToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var payload struct {
-		Name          string `json:"name"`
-		Scope         string `json:"scope"`
-		ExpiresInDays int    `json:"expiresInDays"`
+		Name          string   `json:"name"`
+		Scope         string   `json:"scope"`
+		Reach         []string `json:"reach"`
+		ExpiresInDays int      `json:"expiresInDays"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -73,6 +74,11 @@ func (s *Server) handleCreateAPIToken(w http.ResponseWriter, r *http.Request) {
 	if !validAPIScope(scope) {
 		httpapi.Error(w, http.StatusBadRequest,
 			"scope must be one of: "+strings.Join(apiScopes(), ", "))
+		return
+	}
+	reach, reachErr := s.reachFor(r, scope, payload.Reach)
+	if reachErr != "" {
+		httpapi.Error(w, http.StatusBadRequest, reachErr)
 		return
 	}
 	if payload.ExpiresInDays < 0 {
@@ -105,6 +111,7 @@ func (s *Server) handleCreateAPIToken(w http.ResponseWriter, r *http.Request) {
 		Name:      name,
 		Hash:      hashAPIToken(secret),
 		Scope:     scope,
+		Reach:     reach,
 		CreatedAt: now.Unix(),
 	}
 	if lifetime > 0 {
@@ -172,4 +179,53 @@ func (s *Server) handleRevokeAPIToken(w http.ResponseWriter, r *http.Request) {
 	}
 	audit(r, logging.AuthTokenRevoked, "api token revoked", slog.String("token_id", id))
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// reachFor validates a minted credential's reach and returns the value to store, or a
+// refusal to send back.
+//
+// Two rules, and both are about the door rather than the read (ADR-0410).
+//
+// **A scope whose answer is wide must state a reach.** The landscape read serves a whole
+// derived picture, and a machine principal holding it with no reach would be viewer on
+// everything — the escalation ADR-0402 §1 set out to close. Refusing at minting keeps the
+// fail-closed rule from breaking every credential already in the field, none of which states
+// a reach and none of which serves this read.
+//
+// **A minter cannot grant a reach they do not hold.** This is the rule the record leaves
+// implicit and the code must not: a credential is never more privileged than the person who
+// created it. Its roles are already snapshotted from the minter for that reason (ADR-0209),
+// and a reach naming a project the minter cannot view would be that property broken one step
+// removed — mint the token, then read through it.
+func (s *Server) reachFor(r *http.Request, scope string, asked []string) (reach []string, refusal string) {
+	for _, id := range asked {
+		if id = strings.TrimSpace(id); id != "" {
+			reach = append(reach, id)
+		}
+	}
+	if len(reach) == 0 {
+		if scope == apiScopeLandscape {
+			return nil, "a " + apiScopeLandscape + " token must state the reach it may see: " +
+				`"reach" naming one or more projects`
+		}
+		return nil, ""
+	}
+	var (
+		projs   map[string]project
+		loadErr error
+	)
+	s.do(func() { projs, loadErr = s.projectsByID() })
+	if loadErr != nil {
+		return nil, "read projects: " + loadErr.Error()
+	}
+	for _, id := range reach {
+		p, ok := projs[id]
+		if !ok {
+			return nil, "reach names no project this server has: " + id
+		}
+		if !s.canViewArtifact(r, p.ID, p.OwnerID, projs) {
+			return nil, "reach names a project you cannot see: " + id
+		}
+	}
+	return reach, ""
 }
