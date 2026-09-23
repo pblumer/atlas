@@ -108,7 +108,10 @@ func TestNothingIsCalledABundleAnyMore(t *testing.T) {
 // product and cannot be filled — which reads as a feature that does not work.
 func TestTheGroupIsMaintainableBesideTheCategory(t *testing.T) {
 	src := readWeb(t, "catalog-admin.js")
-	if !strings.Contains(src, `name="productGroup"`) {
+	// A row of boxes, one per language the catalogue declares, filled from the key
+	// and its wordings together. The control names are built inside the helper, so
+	// what is searched for is the helper being given the field.
+	if !strings.Contains(src, `headingBoxes(v.productGroup, v.productGroupTexts, langs)`) {
 		t.Error("the product form has no control for the group, so the column the " +
 			"portal draws can never be filled")
 	}

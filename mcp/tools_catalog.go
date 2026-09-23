@@ -338,6 +338,28 @@ func catalogTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_catalog_translation_gaps",
+			Description: "Where the catalogues you maintain are written in one of their " +
+				"declared languages and not another: the name, the description, the two " +
+				"headings and the name of every shape the product is ordered in, per product " +
+				"and per language. Publishing used to refuse these and " +
+				"does not any more — the portal falls back to the language the catalogue has, " +
+				"so the refusal protected no reader and instead held a usable catalogue back " +
+				"until the last translation arrived. What the refusal did do is make the gap " +
+				"impossible to ignore, and this is that half kept. READ THIS BEFORE TELLING " +
+				"SOMEBODY A CATALOGUE IS FINISHED: a gap here is invisible in the portal, " +
+				"because a reader is shown the language that exists and nothing says it was " +
+				"not the one they asked for. It reads the catalogues AS THEY STAND rather " +
+				"than their releases, unlike the two reports beside it, because it is a list " +
+				"of work to do — computed from the same input a publish is, so it says " +
+				"exactly what the next publish would have to live with. A product named in no " +
+				"language at all is not here: that one is still refused at publish.",
+			InputSchema: noArgs(),
+			Handler: func(c *Client, _ map[string]any) (string, error) {
+				return asText(c.get("/api/v1/catalog-products/translation-gaps"))
+			},
+		},
+		{
 			Name: "atlas_save_catalog_product",
 			Description: "Create or change one product or service. THIS IS A FULL REPLACE: every " +
 				"field you leave out is CLEARED, including translations, variants, keywords, " +

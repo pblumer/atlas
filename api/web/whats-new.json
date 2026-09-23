@@ -2,6 +2,96 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-catalogue-could-be-saved-with-a-language-that-is-not-a-lan",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The language switch works again in every catalogue",
+        "de": "Die Sprachumschaltung wirkt wieder in jedem Katalog"
+      },
+      "summary": {
+        "en": "A catalogue says which languages it is kept in, as a list. Until now nothing checked that the entries were language tags, and one installation saved a catalogue whose single language was written \"de; en\" — one entry containing a separator, typed where a comma was expected. Everything after that behaved correctly and the result was total: the product form drew one box labelled \"de; en\", both names were typed into it, and the portal, looking for German and for English, found neither and showed whatever it had. Switching the language did nothing at all, for every product in that catalogue, in both languages, and no screen anywhere said why. It was noticed weeks later, two screens away from where it was caused. A language is now checked as it is typed: de, en, de-CH, zh-Hans. Only as it is typed — a catalogue that already carries a bad entry can still be opened, edited and published, because otherwise the installation with the problem would be the one locked out of fixing it. Nothing is corrected automatically either: \"de; en\" can be read two ways and only the person who typed it knows which, and guessing is what hid the fault in the first place. A language listed twice is refused as well, because it would draw two boxes writing the same thing, where the second quietly wins.",
+        "de": "Ein Katalog nennt die Sprachen, in denen er geführt wird, als Liste. Bisher prüfte nichts, ob die Einträge Sprachkürzel sind, und in einer Installation wurde ein Katalog gespeichert, dessen einzige Sprache «de; en» hiess — ein Eintrag mit einem Trennzeichen, getippt, wo ein Komma erwartet wurde. Alles danach verhielt sich korrekt, und die Wirkung war vollständig: Die Produktmaske zeichnete ein Feld mit der Beschriftung «de; en», beide Namen wurden hineingeschrieben, und das Portal, das nach Deutsch und nach Englisch suchte, fand keines von beiden und zeigte, was es hatte. Die Sprachumschaltung bewirkte nichts, für jedes Produkt dieses Katalogs, in beiden Sprachen, und kein Bildschirm nannte den Grund. Bemerkt wurde es Wochen später, zwei Bildschirme von der Ursache entfernt. Eine Sprache wird jetzt beim Eintippen geprüft: de, en, de-CH, zh-Hans. Nur beim Eintippen — ein Katalog, der bereits einen falschen Eintrag trägt, lässt sich weiterhin öffnen, bearbeiten und publizieren, weil sonst ausgerechnet die betroffene Installation von ihrer eigenen Korrektur ausgesperrt wäre. Automatisch korrigiert wird ebenfalls nichts: «de; en» lässt zwei Lesarten zu, und nur wer es getippt hat, weiss welche; Raten ist genau das, was den Fehler verborgen hat. Eine doppelt genannte Sprache wird ebenfalls abgelehnt, denn sie zeichnete zwei Felder, die dasselbe schreiben, wobei das zweite still gewinnt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue",
+        "Portal"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Catalogue in the console and choose a catalogue.",
+          "Check the language list: one tag per entry, separated by commas.",
+          "Correct anything that is not a tag, save, and publish."
+        ],
+        "de": [
+          "In der Konsole den Katalog öffnen und einen Katalog wählen.",
+          "Die Sprachliste prüfen: ein Kürzel je Eintrag, durch Komma getrennt.",
+          "Was kein Kürzel ist, korrigieren, speichern und publizieren."
+        ]
+      }
+    },
+    {
+      "id": "the-console-asks-for-each-language-in-its-own-box-side-by-si",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "One box per language, side by side",
+        "de": "Ein Feld je Sprache, nebeneinander"
+      },
+      "summary": {
+        "en": "The name, the description, the category and the product group are each asked for once per language the catalogue is kept in, in their own labelled box, side by side. A catalogue kept in four languages shows four boxes; one that adds a fifth grows a fifth. This replaces a single box in which the wordings were separated by semicolons — compact, and a trap: which word was French was something to count out against a list on another screen, and the separator was then applied one screen up, to the catalogue's own language list, which is where the language switch stopped working. For the two headings the row does one thing worth knowing: the first box with anything in it is the value the portal files the product under, and the rest are how that heading is written for a reader. Fill only one and it reads the same in every language. The orderable shapes follow the same shape, as a grid: one row per shape, a narrow box for the id that never changes and one box per language beside it. That replaces a text area with a syntax of its own — better than the semicolons, because it named each language rather than making it a position to count, and still something to be taught in a form where every other text is a box. Clearing the id removes a shape, two blank rows stand under the ones that exist, and a button adds more.",
+        "de": "Name, Beschreibung, Kategorie und Produktgruppe werden je einmal pro Katalogsprache erfasst, in einem eigenen, beschrifteten Feld, nebeneinander. Ein Katalog in vier Sprachen zeigt vier Felder; kommt eine fünfte dazu, kommt ein fünftes Feld. Das ersetzt ein einzelnes Feld, in dem die Bezeichnungen durch Semikolon getrennt standen — kompakt, und eine Falle: Welches Wort das französische war, musste man gegen eine Liste auf einem anderen Bildschirm abzählen, und das Trennzeichen wurde anschliessend eine Ebene höher angewandt, auf die Sprachliste des Katalogs — dort, wo die Sprachumschaltung aufhörte zu wirken. Bei den beiden Überschriften leistet die Zeile eines, das man wissen sollte: Das erste gefüllte Feld ist der Wert, unter dem das Portal ablegt; die übrigen sind die Bezeichnungen für die Leserin. Wer nur eines füllt, zeigt es in allen Sprachen. Die bestellbaren Ausprägungen folgen derselben Form, als Raster: eine Zeile je Ausprägung, ein schmales Feld für die unveränderliche id und daneben ein Feld je Sprache. Das ersetzt ein Textfeld mit eigener Syntax — besser als die Semikolons, weil es jede Sprache benannte, statt sie zur abzuzählenden Position zu machen, und trotzdem etwas, das man lernen musste, in einer Maske, in der jeder andere Text ein Feld ist. Wer die id leert, entfernt eine Ausprägung; unter den vorhandenen stehen zwei leere Zeilen, und eine Schaltfläche fügt weitere hinzu."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Catalogue in the console and open a product.",
+          "Fill the boxes for the languages you have; leave the rest empty.",
+          "For a product with shapes, fill one row per shape: its id, then its name in each language.",
+          "Save, publish, and read the portal in each language."
+        ],
+        "de": [
+          "In der Konsole den Katalog öffnen und ein Produkt öffnen.",
+          "Die Felder der Sprachen füllen, die vorliegen; die übrigen leer lassen.",
+          "Bei einem Produkt mit Ausprägungen je eine Zeile füllen: die id, dann den Namen in jeder Sprache.",
+          "Speichern, publizieren und das Portal in jeder Sprache lesen."
+        ]
+      }
+    },
+    {
+      "id": "saving-a-product-from-a-catalogue-that-only-offers-it-no-lon",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A product no longer changes hands by being saved",
+        "de": "Ein Produkt wechselt nicht mehr durch blosses Speichern den Besitzer"
+      },
+      "summary": {
+        "en": "The same product can be offered by several catalogues and is maintained by exactly one of them. Moving that responsibility is a real operation and it is checked: whoever does it must be allowed to edit both the catalogue giving it up and the one taking it on. The console was performing that move by accident. The product form sent the catalogue you happened to be looking at as the responsible one, on every save — so opening a product from a catalogue that merely offers it and pressing save took it away from the team that maintains it, with nothing said, after which its language boxes followed the new catalogue instead. You are now asked, and only when there is something to ask: a new product has no home yet, and one already maintained here has nothing to move. Declining keeps it where it is and still saves your changes, because whether to move it and whether to save are two different questions.",
+        "de": "Dasselbe Produkt kann von mehreren Katalogen angeboten und von genau einem gepflegt werden. Diese Zuständigkeit zu verschieben, ist ein echter Vorgang und wird geprüft: Wer es tut, muss sowohl den abgebenden als auch den übernehmenden Katalog bearbeiten dürfen. Die Konsole führte diese Verschiebung versehentlich aus. Die Produktmaske sendete bei jedem Speichern den gerade betrachteten Katalog als den zuständigen — wer also ein Produkt aus einem Katalog öffnete, der es nur anbietet, und speicherte, nahm es dem pflegenden Team weg, ohne Hinweis; danach richteten sich die Sprachfelder nach dem neuen Katalog. Jetzt wird gefragt, und nur dann, wenn es etwas zu fragen gibt: Ein neues Produkt hat noch keinen Heimatkatalog, und ein hier bereits gepflegtes hat nichts zu verschieben. Wer ablehnt, behält die Zuständigkeit und speichert die Änderungen trotzdem — Verschieben und Speichern sind zwei verschiedene Fragen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue"
+      ]
+    },
+    {
       "id": "the-product-capture-example-runs",
       "version": "Unreleased",
       "date": null,
@@ -303,77 +393,6 @@
           "Erneut drücken schliesst ihn, ein Druck auf eine andere Zeile wechselt."
         ]
       }
-    },
-    {
-      "id": "a-decision-service-that-answers-with-nothing-is-refused-rath",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A decision service that answers with nothing is now refused",
-        "de": "Ein Decision Service, der nichts zurückgibt, wird jetzt abgewiesen"
-      },
-      "summary": {
-        "en": "A decision service returns its output decisions — that is what a caller gets, and the reason to address the service instead of the decision inside it. Atlas used to accept one that named none. It compiled, it appeared in the picker, a business rule task called it, and the task completed with the variable it was meant to fill still empty: no error, in the engine or in the log, just a process carrying on past a decision that was never made. Saving or deploying such a model is now refused, and the message names the service rather than the file, so you know which box to fix. A model already stored with the fault shows as invalid in the model list and cannot be deployed until it is repaired. Unfinished work is unaffected — a service you are still building belongs in a draft, which is saved without this check.",
-        "de": "Ein Decision Service gibt seine Output-Entscheidungen zurück — das ist es, was ein Aufrufer erhält, und der Grund, den Service statt die Entscheidung darin anzusprechen. Atlas hat bisher auch einen akzeptiert, der keine benennt. Er kompilierte, erschien in der Auswahl, ein Business-Rule-Task rief ihn auf, und der Task war abgeschlossen, während die Variable, die er füllen sollte, leer blieb: kein Fehler, weder in der Engine noch im Log, nur ein Prozess, der über eine nie getroffene Entscheidung hinweglief. Das Speichern und das Deployen eines solchen Modells wird nun abgewiesen, und die Meldung nennt den Service statt der Datei, damit klar ist, welcher Kasten zu korrigieren ist. Ein bereits gespeichertes Modell mit diesem Fehler wird in der Modellliste als ungültig ausgewiesen und lässt sich erst nach der Korrektur deployen. Unfertiges bleibt unberührt — ein Service, an dem Sie noch bauen, gehört in einen Entwurf, und der wird ohne diese Prüfung gespeichert."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Decisions",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the decisions",
-          "de": "Entscheidungen öffnen"
-        },
-        "route": "#/console/decisions"
-      }
-    },
-    {
-      "id": "the-two-links-on-a-portal-order-s-position-rows",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Removed",
-      "title": {
-        "en": "A position row is down to what acts on the position",
-        "de": "Die Positionszeile zeigt nur noch, was auf die Position wirkt"
-      },
-      "summary": {
-        "en": "Every position of an order carried two further links: \"Where is this?\", which fetched the step its process was sitting on, and one into that process instance. Both are gone, at the request of the people this page is for — the status right beside the position's name answers the same question out of the order's own record, one column over and without a press. Withdrawing a position and correcting its details stay; they act on the position rather than look at a process. The route that answered \"where is this\" is unchanged and still available to other callers.",
-        "de": "Jede Position eines Auftrags trug zwei weitere Verweise: „Wo steht das?“, das den Schritt des zugehörigen Prozesses abfragte, und einen in diese Prozessinstanz. Beide sind auf Wunsch der Nutzenden dieser Seite entfallen — der Status unmittelbar neben der Positionsbezeichnung beantwortet dieselbe Frage aus dem Auftragsdatensatz selbst, eine Spalte weiter und ohne Tastendruck. „Position zurückziehen“ und das Korrigieren der Angaben bleiben; sie wirken auf die Position, statt einen Prozess zu betrachten. Die Schnittstelle hinter „Wo steht das?“ ist unverändert und steht anderen Aufrufern weiterhin zur Verfügung."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Self-service portal"
-      ]
-    },
-    {
-      "id": "the-workers-view-says-what-a-worker-asks-for-not-only-what-i",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "Tell a quiet worker from an absent one",
-        "de": "Einen stillen Worker von einem abwesenden unterscheiden"
-      },
-      "summary": {
-        "en": "A worker's row counted the jobs it had been given. A worker that is connected and polling a queue with no work in it therefore looked exactly like a worker that is not running at all — and \"is anybody serving this queue?\" was unanswerable for every quiet queue, which is most of them most of the time. Each poll now records the job type it asked for, whether or not a job came back, and the row shows it beside the counts.",
-        "de": "Die Zeile eines Workers zählte die Aufträge, die er erhalten hatte. Ein verbundener Worker, der eine Warteschlange ohne Arbeit abfragt, sah damit genauso aus wie ein Worker, der gar nicht läuft — und die Frage „bedient das überhaupt jemand?\" war für jede stille Warteschlange unbeantwortbar, also für die meisten die meiste Zeit. Jede Abfrage vermerkt nun den Job-Typ, nach dem gefragt wurde, unabhängig davon, ob ein Auftrag zurückkam, und die Zeile zeigt ihn neben den Zählern."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations"
-      ]
     }
   ]
 }

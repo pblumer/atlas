@@ -284,52 +284,17 @@ func checkCatalogs(in Input, byID map[string]Item, add func(Problem)) {
 			}
 			sayWording(id, "category", "category", it.Category, it.CategoryTexts)
 			sayWording(id, "productGroup", "product group", it.ProductGroup, it.ProductGroupTexts)
-			for _, lang := range c.Languages {
-				if it.Texts[lang] == "" {
-					add(Problem{Catalog: c.ID, Item: id,
-						Message: "no text for declared language " + lang})
-				}
-			}
-			// A description is optional as a whole and all-or-nothing once there is
-			// one. Not every product needs a paragraph, so an item without any
-			// publishes; an item with one in German and none in French does not,
-			// because that is a portal telling one audience what the thing is and
-			// showing the other an empty panel. The same half-translated catalogue
-			// the name check above refuses, one field further down.
-			if described(it.Descriptions) {
-				for _, lang := range c.Languages {
-					if strings.TrimSpace(it.Descriptions[lang]) == "" {
-						add(Problem{Catalog: c.ID, Item: id,
-							Message: "has a description but none for declared language " + lang})
-					}
-				}
-			}
-			// The two headings follow the description's rule and not the name's:
-			// optional as a whole, all-or-nothing once there is one. Optional,
-			// because a heading with no translations renders its key in every
-			// language — which is every product written before the field existed
-			// and every catalogue declaring one language, and refusing those would
-			// refuse the installed base. All-or-nothing, because a heading
-			// translated into German and not French is a portal where one audience
-			// reads its own column head and the other reads somebody else's, with
-			// nothing saying so: the fallback renders, and it looks deliberate
-			// (ADR-0360).
-			if described(it.CategoryTexts) {
-				for _, lang := range c.Languages {
-					if strings.TrimSpace(it.CategoryTexts[lang]) == "" {
-						add(Problem{Catalog: c.ID, Item: id,
-							Message: "no translated category for declared language " + lang})
-					}
-				}
-			}
-			if described(it.ProductGroupTexts) {
-				for _, lang := range c.Languages {
-					if strings.TrimSpace(it.ProductGroupTexts[lang]) == "" {
-						add(Problem{Catalog: c.ID, Item: id,
-							Message: "no translated product group for declared language " + lang})
-					}
-				}
-			}
+			// What is NOT checked here, and used to be: whether every declared
+			// language has a name, a description and a wording for each heading.
+			// A missing translation stops nobody — the portal falls back to the
+			// language the catalogue does have — so refusing the publish stopped a
+			// maintainer from shipping a catalogue that was already usable, and
+			// stopped the first language's readers on the second language's
+			// translator. It is reported by [TranslationGaps] instead, which is
+			// the half of the old rule worth keeping.
+			//
+			// The floor that stays is in checkItems: a product with no name in any
+			// language has nothing to fall back to.
 		}
 	}
 }
@@ -367,6 +332,16 @@ func checkItems(in Input, add func(Problem)) {
 	for _, it := range items {
 		if it.State != StateActive {
 			add(Problem{Item: it.ID, Message: "state is " + string(it.State) + ", not active"})
+		}
+		// The floor under the translation rule, and not that rule made smaller. A
+		// product missing one translation still has a name and the portal falls
+		// back to it; a product missing all of them has none, and the portal would
+		// show the id — a string nobody chose for a reader, on a row its maintainer
+		// cannot see is wrong from the catalogue screen. Whitespace is not a name,
+		// for the reason it is not a description: it is what a cleared box leaves.
+		if !described(it.Texts) {
+			add(Problem{Item: it.ID, Message: "has no name in any language; " +
+				"the portal would show its id, and there is nothing to fall back to"})
 		}
 		if it.ProvisionProcess == "" {
 			add(Problem{Item: it.ID, Message: "no provision process bound"})

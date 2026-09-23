@@ -1,0 +1,11 @@
+{
+  "tags": ["Service catalogue"],
+  "title": {
+    "en": "A product no longer changes hands by being saved",
+    "de": "Ein Produkt wechselt nicht mehr durch blosses Speichern den Besitzer"
+  },
+  "summary": {
+    "en": "The same product can be offered by several catalogues and is maintained by exactly one of them. Moving that responsibility is a real operation and it is checked: whoever does it must be allowed to edit both the catalogue giving it up and the one taking it on. The console was performing that move by accident. The product form sent the catalogue you happened to be looking at as the responsible one, on every save — so opening a product from a catalogue that merely offers it and pressing save took it away from the team that maintains it, with nothing said, after which its language boxes followed the new catalogue instead. You are now asked, and only when there is something to ask: a new product has no home yet, and one already maintained here has nothing to move. Declining keeps it where it is and still saves your changes, because whether to move it and whether to save are two different questions.",
+    "de": "Dasselbe Produkt kann von mehreren Katalogen angeboten und von genau einem gepflegt werden. Diese Zuständigkeit zu verschieben, ist ein echter Vorgang und wird geprüft: Wer es tut, muss sowohl den abgebenden als auch den übernehmenden Katalog bearbeiten dürfen. Die Konsole führte diese Verschiebung versehentlich aus. Die Produktmaske sendete bei jedem Speichern den gerade betrachteten Katalog als den zuständigen — wer also ein Produkt aus einem Katalog öffnete, der es nur anbietet, und speicherte, nahm es dem pflegenden Team weg, ohne Hinweis; danach richteten sich die Sprachfelder nach dem neuen Katalog. Jetzt wird gefragt, und nur dann, wenn es etwas zu fragen gibt: Ein neues Produkt hat noch keinen Heimatkatalog, und ein hier bereits gepflegtes hat nichts zu verschieben. Wer ablehnt, behält die Zuständigkeit und speichert die Änderungen trotzdem — Verschieben und Speichern sind zwei verschiedene Fragen."
+  }
+}

@@ -84,35 +84,57 @@ func TestAHeadingWithNoTranslationsStillPublishes(t *testing.T) {
 	}
 }
 
-// TestAHalfTranslatedHeadingIsRefused.
+// TestAHalfTranslatedHeadingIsReportedAndNotRefused.
 //
-// The rule the description already follows, in the field one column further left:
-// optional as a whole, all-or-nothing once there is one. A heading translated into
-// German and not French is a portal where one audience reads its own column head
-// and the other reads somebody else's — and nothing would say so, because the
-// fallback renders and looks deliberate.
-func TestAHalfTranslatedHeadingIsRefused(t *testing.T) {
+// The rule the description follows, in the field one column further left, and
+// relaxed with it. A heading worded in German and not French renders the German
+// for the French reader, which is a gap and not a blank — so it is said rather
+// than blocked. The whole of that argument is in translationgaps_test.go.
+func TestAHalfTranslatedHeadingIsReportedAndNotRefused(t *testing.T) {
 	half := translated("laptop")
 	delete(half.CategoryTexts, "fr")
-	problems, _ := twoLanguages(half)
-	contains(t, problems, "no translated category for declared language fr")
+	problems, gaps := twoLanguageProblemsAndGaps(half)
+	if len(problems) != 0 {
+		t.Errorf("a heading worded in one of two declared languages was refused: %+v", problems)
+	}
+	contains(t, gaps, "no category in fr")
 
 	halfGroup := translated("screen")
 	delete(halfGroup.ProductGroupTexts, "fr")
-	problems, _ = twoLanguages(halfGroup)
-	contains(t, problems, "no translated product group for declared language fr")
+	problems, gaps = twoLanguageProblemsAndGaps(halfGroup)
+	if len(problems) != 0 {
+		t.Errorf("a group worded in one of two declared languages was refused: %+v", problems)
+	}
+	contains(t, gaps, "no product group in fr")
 }
 
 // TestABlankTranslationIsNotATranslation.
 //
 // Three spaces render as an empty column head, which is the defect the blank
-// heading check already refuses in the key. A field cleared to whitespace must not
-// count as the translation that satisfies the rule above.
+// heading check refuses in the key. A field cleared to whitespace must not count
+// as the wording that closes the gap — otherwise clearing a box is how a product
+// disappears from the list of what still needs translating.
 func TestABlankTranslationIsNotATranslation(t *testing.T) {
 	blank := translated("laptop")
 	blank.CategoryTexts["fr"] = "   "
-	problems, _ := twoLanguages(blank)
-	contains(t, problems, "no translated category for declared language fr")
+	_, gaps := twoLanguageProblemsAndGaps(blank)
+	contains(t, gaps, "no category in fr")
+}
+
+// twoLanguageProblemsAndGaps publishes against a de/fr catalogue and returns both
+// answers: what refused, and what was noted.
+func twoLanguageProblemsAndGaps(items ...Item) ([]Problem, []Problem) {
+	ids := make([]string, 0, len(items))
+	for _, it := range items {
+		ids = append(ids, it.ID)
+	}
+	in := Input{
+		Catalogs: []Catalog{{ID: "cat", Rank: 1,
+			Languages: []string{"de", "fr"}, Items: ids}},
+		Items: items,
+	}
+	_, problems := Publish(in)
+	return problems, TranslationGaps(in)
 }
 
 // TestATranslationWithoutAHeadingIsRefused.

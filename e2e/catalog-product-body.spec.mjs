@@ -35,7 +35,8 @@ test("the four controls the form did not have reach the body", async ({ page }) 
   const body = await build(page, {
     "t-de": "Notebook",
     keywords: "Laptop, mobiles Gerät , M365",
-    variants: "klein = 13 Zoll\ngross = 15 Zoll",
+    "var-0-id": "klein", "var-0-de": "13 Zoll",
+    "var-1-id": "gross", "var-1-de": "15 Zoll",
     eligible: ["grp_dev"],
     maxDays: "90",
     state: "active",
@@ -60,7 +61,7 @@ test("a control that is rendered can empty its field", async ({ page }) => {
     maxDays: 90,
   };
   const body = await build(page, {
-    "t-de": "Notebook", keywords: "", variants: "", eligible: [], maxDays: "",
+    "t-de": "Notebook", keywords: "", "var-0-id": "", "var-1-id": "", eligible: [], maxDays: "",
   }, stored);
   expect(body.keywords).toEqual([]);
   expect(body.variants).toEqual([]);
@@ -95,7 +96,8 @@ test("a shape keeps the name it carries in a language this catalogue does not de
     // declares, and a name in a language it does not declare belongs to a catalogue
     // that does. Rebuilding the variants from the textarea alone would delete it.
     const stored = { variants: [{ id: "gross", texts: { de: "15 Zoll", fr: "15 pouces" } }] };
-    const body = await build(page, { variants: "gross = 15 Zoll" }, stored, ["de"]);
+    const body = await build(page, { "var-0-id": "gross", "var-0-de": "15 Zoll" },
+      stored, ["de"]);
     expect(body.variants).toEqual([
       { id: "gross", texts: { de: "15 Zoll", fr: "15 pouces" } },
     ]);
@@ -105,40 +107,88 @@ test("a name removed from a declared language is removed from the shape", async 
   // The other direction of the same rule: emptying what is rendered clears it, or a
   // name could be added and never taken away.
   const stored = { variants: [{ id: "gross", texts: { de: "15 Zoll", en: "15 inch" } }] };
-  const body = await build(page, { variants: "gross = de:15 Zoll" }, stored, ["de", "en"]);
+  const body = await build(page,
+    { "var-0-id": "gross", "var-0-de": "15 Zoll", "var-0-en": "" }, stored, ["de", "en"]);
   expect(body.variants).toEqual([{ id: "gross", texts: { de: "15 Zoll" } }]);
 });
 
-test("the shapes round-trip through the textarea", async ({ page }) => {
-  // Rendered, read back, and rendered again: the property that makes editing one
-  // line safe. A round trip that lost a name would lose it on the save of an
-  // unrelated field, which is the failure nobody notices until an order shows an id
-  // where a name belongs.
+test("the shapes round-trip through the grid", async ({ page }) => {
+  // Drawn, read back, and drawn again: the property that makes editing one row
+  // safe. A round trip that lost a name would lose it on the save of an unrelated
+  // field, which is the failure nobody notices until an order shows an id where a
+  // name belongs.
   for (const langs of [["de"], ["de", "en"]]) {
     const variants = langs.length === 1
       ? [{ id: "klein", texts: { de: "13 Zoll" } }, { id: "gross", texts: { de: "15 Zoll" } }]
       : [{ id: "klein", texts: { de: "13 Zoll", en: "13 inch" } },
         { id: "gross", texts: { de: "15 Zoll", en: "15 inch" } }];
 
-    const text = await page.evaluate(([v, l]) => window.lines(v, l), [variants, langs]);
-    const body = await build(page, { variants: text }, { variants }, langs);
+    const grid = await page.evaluate(([v, l]) => window.shapeGrid(v, l, 0), [variants, langs]);
+    // Every name is in the markup, on the row carrying its own id — which is what
+    // the grid has to get right and what a values-only helper could not show.
+    for (const v of variants) {
+      expect(grid, `the id ${v.id} is drawn`).toContain(`value="${v.id}"`);
+      for (const l of langs) {
+        expect(grid, `${v.id} in ${l}`).toContain(`value="${v.texts[l]}"`);
+      }
+    }
+
+    const filled = {};
+    variants.forEach((v, n) => {
+      filled[`var-${n}-id`] = v.id;
+      for (const l of langs) filled[`var-${n}-${l}`] = v.texts[l];
+    });
+    const body = await build(page, filled, { variants }, langs);
     expect(body.variants, `round trip for ${langs.join("+")}`).toEqual(variants);
 
-    const again = await page.evaluate(([v, l]) => window.lines(v, l), [body.variants, langs]);
-    expect(again, `rendering is stable for ${langs.join("+")}`).toBe(text);
+    const again = await page.evaluate(([v, l]) => window.shapeGrid(v, l, 0), [body.variants, langs]);
+    expect(again, `drawing is stable for ${langs.join("+")}`).toBe(grid);
   }
 });
 
-test("a shape line with no name is kept as an id rather than swallowed", async ({ page }) => {
-  // The rule parseTargets follows for a line with no colon: a line this form
-  // swallowed would be a shape somebody believes they entered. The portal falls back
+test("a shape with an id and no name is kept rather than swallowed", async ({ page }) => {
+  // The rule parseTargets follows for a line with no colon: a shape this form
+  // swallowed would be one somebody believes they entered. The portal falls back
   // to the id, so the omission is visible instead of silent.
-  const body = await build(page, { variants: "gross\nklein =" });
+  const body = await build(page, { "var-0-id": "gross", "var-1-id": "klein" });
   expect(body.variants).toEqual([
     { id: "gross", texts: {} },
     { id: "klein", texts: {} },
   ]);
 });
+
+test("a row with no id is not a shape", async ({ page }) => {
+  // How one is removed, and why the blank rows at the bottom of the grid cost
+  // nothing. A name typed beside an empty id is not half a shape — there is
+  // nothing to file it under, and the portal would show a row with no identity.
+  const body = await build(page,
+    { "var-0-id": "gross", "var-0-de": "15 Zoll", "var-1-id": "", "var-1-de": "13 Zoll" },
+    { variants: [{ id: "gross", texts: { de: "15 Zoll" } }] });
+  expect(body.variants).toEqual([{ id: "gross", texts: { de: "15 Zoll" } }]);
+});
+
+test("a row appended after the form was drawn is read like any other",
+  async ({ page }) => {
+    // The grid is drawn with two blank rows and grows by a button, so the rows a
+    // save reads are not the rows the form started with. Read by counting instead
+    // of by name, an appended row would be dropped — silently, on the press that
+    // was meant to add it.
+    await page.evaluate(() => {
+      const form = document.getElementById("f");
+      for (const [n, name] of [["9", "id"], ["9", "de"]]) {
+        const el = document.createElement("input");
+        el.name = `var-${n}-${name}`;
+        form.appendChild(el);
+      }
+    });
+    const body = await build(page,
+      { "var-0-id": "gross", "var-0-de": "15 Zoll", "var-9-id": "klein", "var-9-de": "13 Zoll" },
+      {}, ["de"]);
+    expect(body.variants).toEqual([
+      { id: "gross", texts: { de: "15 Zoll" } },
+      { id: "klein", texts: { de: "13 Zoll" } },
+    ]);
+  });
 
 test("the ceiling reads a whole number of days and nothing else", async ({ page }) => {
   for (const [typed, want] of [["90", 90], ["", 0], ["0", 0], ["90.6", 90], ["-5", 0]]) {
@@ -166,7 +216,7 @@ test("the two headings and the price still reach the body", async ({ page }) => 
   // The fields the form already had, kept under test because the body they are
   // assembled in was moved out of the submit handler to be testable at all.
   const body = await build(page, {
-    "t-de": "Notebook", category: " Arbeitsplatz ", productGroup: " Mobile Geräte ",
+    "t-de": "Notebook", "cat-de": " Arbeitsplatz ", "grp-de": " Mobile Geräte ",
     price: " CHF 1'200.– ", multipleAllowed: true, state: "active",
     akind: "role", "aref-role": "grp_it",
   });
