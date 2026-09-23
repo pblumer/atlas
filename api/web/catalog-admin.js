@@ -569,95 +569,94 @@ const lifecycleFrom = (f) => {
   return from || until ? { from, until } : {};
 };
 
-// The two headings — the category and the product group one level below it — in
-// the one box each that a maintainer types them into.
+// Everything a product says per language, drawn as one box per language.
 //
-// A heading is two things on the record (ADR-0412):
-// the string the portal GROUPS
-// by, and a wording per language tag that it SHOWS. One box writes both, and the
-// convention is positional — the wordings in the order the catalogue declares its
-// languages, separated by semicolons: `Arbeitsplatz; Poste de travail; Workplace`.
+// A catalogue declares the languages it is kept in, and every text on a product
+// is a map keyed by those tags. So the form draws the list: one box per declared
+// language, side by side, each labelled with its tag. Four languages is four
+// boxes in a row, and a catalogue that adds a fifth grows a fifth box without
+// anybody editing this.
 //
-// # Why one box and not one per language
-//
-// The names above get a box per language, and these deliberately do not. A heading
-// is a word rather than a sentence, it is typed once and then picked from the list
-// of ones already in the catalogue, and a maintainer keeping four of them aligned
-// reads them beside each other far more easily than in four boxes. The cost is
-// that the mapping is positional and therefore silent about itself: it is written
-// above the box, and reordering the catalogue's languages afterwards changes what
-// a *newly typed* list means. It changes nothing already stored, because what is
-// stored is a map per language tag and not the list.
+// It replaces a convention that packed the wordings into one box separated by
+// semicolons. That convention was compact and it was a trap: the mapping from
+// position to language was invisible, and the separator leaked — a live catalogue
+// was saved with the single language tag `de; en`, because somebody applied the
+// rule they had been taught here to the language list one screen up. Every box
+// now says which language it is, and nothing has to be counted.
 
-// headingHint is the sentence above the box, and it says a different thing for a
-// catalogue that has one language than for a catalogue that has four.
-//
-// A single-language catalogue has nothing to separate, and telling its maintainer
-// about semicolons would invite one — which would key the heading on the first
-// word and store the rest as a wording nothing reads.
-function headingHint(langs) {
+// langFields draws the row. `prefix` is the control name each box carries before
+// its tag, which is what productBody reads them back by.
+function langFields(prefix, langs, values, opts) {
+  const { rows, placeholder, listID } = opts || {};
   const ls = langs || [];
-  if (ls.length < 2) {
-    return "A heading and nothing else: no entity behind it.";
-  }
-  return `A heading and nothing else: no entity behind it. This catalogue is kept in
-    ${ls.length} languages, so write the heading once per language in the order
-    <b>${ls.map((l) => esc(l)).join(" &rsaquo; ")}</b>, separated by
-    <b>semicolons</b>. The first is what the portal groups by; the rest are what it
-    shows. Write one wording and it is shown in every language.`;
+  return `<div class="langrow" style="--langs:${ls.length}">${ls.map((l) => `
+    <label class="langbox"><span class="langtag">${esc(l)}</span>
+      ${rows
+    ? `<textarea name="${esc(prefix)}-${esc(l)}" rows="${rows}"
+        placeholder="${esc(placeholder || "")}">${esc((values || {})[l] || "")}</textarea>`
+    : `<input name="${esc(prefix)}-${esc(l)}" value="${esc((values || {})[l] || "")}"
+        autocomplete="off" placeholder="${esc(placeholder || "")}"
+        ${listID ? `list="${esc(listID)}-${esc(l)}"` : ""}>`}
+    </label>`).join("")}</div>`;
 }
 
-// headingPlaceholder shows the shape rather than describing it: as many of the
-// example wordings as the catalogue has languages, joined the way the box wants.
-function headingPlaceholder(langs, examples) {
-  const n = Math.max(1, Math.min((langs || []).length || 1, examples.length));
-  return examples.slice(0, n).join("; ");
-}
-
-// knownHeadings is the pick list: every heading already in this catalogue, offered
-// whole so that choosing one reproduces every wording and not just the key.
+// headingBoxes is what the two heading rows are filled with.
 //
-// Keyed by the key and first product wins, because a key worded two ways is a
-// state publishing refuses — one column head cannot say two things — and offering
-// both here would be the Console helping somebody into it.
-function knownHeadings(items, field, langs) {
-  const seen = new Map();
+// A heading is two things on the record: the string everything GROUPS by, and a
+// wording per language that is SHOWN. Where there are wordings the boxes hold
+// them. Where there are none — every product written before the wordings existed,
+// and every heading somebody simply never translated — the key goes in the first
+// declared language's box and the rest stand empty, because the key is what every
+// language renders. That is what makes the row round-trip: what it shows, saved
+// unchanged, stores what it read.
+export function headingBoxes(key, texts, langs) {
+  if ((langs || []).some((l) => (texts || {})[l])) return texts || {};
+  const first = (langs || [])[0];
+  return first && key ? { [first]: key } : {};
+}
+
+// headingFrom reads one heading row back into the key and the wordings.
+//
+// The key is the first box that has anything in it, in the order the catalogue
+// declares its languages — so a maintainer who fills only the second box still
+// gets a heading rather than a wording with nothing to group by, which publishing
+// refuses.
+//
+// Wordings are stored only when more than one box is filled. One box is "this
+// heading is not translated": the key renders in every language, which is what a
+// single-language catalogue wants and what the whole installed base carries.
+// Written for the declared languages only and merged over what is stored, so a
+// wording belonging to a catalogue next door survives a save made here — the rule
+// the names and the descriptions follow.
+export function headingFrom(f, prefix, langs, was) {
+  const texts = { ...(was || {}) };
+  const filled = [];
+  for (const l of langs || []) {
+    const val = String(f.get(`${prefix}-${l}`) || "").trim();
+    if (val) { texts[l] = val; filled.push(val); } else { delete texts[l]; }
+  }
+  if (filled.length < 2) {
+    for (const l of langs || []) delete texts[l];
+  }
+  return { key: filled[0] || "", texts };
+}
+
+// knownHeadingsIn is the pick list for one box: every wording already used for
+// this heading in THIS language, plus the keys of headings nobody has worded yet.
+//
+// Per language, because a German box offering French wordings is a list somebody
+// has to read past. The keys are in it because a heading with no wordings is
+// still a heading to reuse, and typing a second spelling of one is how a category
+// becomes two.
+function knownHeadingsIn(items, field, lang, first) {
+  const out = new Set();
   for (const i of items) {
     const key = (i[field] || "").trim();
-    if (!key || seen.has(key)) continue;
-    seen.set(key, headingList(key, i[`${field}Texts`], langs));
+    const worded = (i[`${field}Texts`] || {})[lang];
+    if (worded) out.add(worded);
+    else if (key && first) out.add(key);
   }
-  return [...seen.values()].sort();
-}
-
-// headingList renders the stored heading back into the box.
-//
-// The key alone where there are no wordings, which is every product written before
-// the field existed and every single-language catalogue. That is what makes the
-// box round-trip: what it renders, saved unchanged, stores what it read.
-export function headingList(key, texts, langs) {
-  const parts = (langs || []).map((l) => (texts || {})[l] || "");
-  return parts.some(Boolean) ? parts.join("; ") : String(key || "");
-}
-
-// headingFrom reads one box back into the key and the wordings.
-//
-// Wordings for the declared languages only, merged over what is stored: a wording
-// in a language a catalogue next door declares belongs to that catalogue and
-// survives a save made here — the rule the names and the descriptions follow.
-export function headingFrom(raw, langs, was) {
-  const parts = String(raw || "").split(";").map((s) => s.trim());
-  // One wording is "this heading is not translated": the key renders in every
-  // language. It is what a single-language catalogue wants, and it makes a stray
-  // trailing semicolon harmless rather than the half-translated heading that
-  // publishing refuses.
-  const translated = parts.filter(Boolean).length > 1;
-  const texts = { ...(was || {}) };
-  (langs || []).forEach((l, i) => {
-    const val = translated ? parts[i] || "" : "";
-    if (val) texts[l] = val; else delete texts[l];
-  });
-  return { key: parts[0] || "", texts };
+  return [...out].sort();
 }
 
 // productBody is what saving the product form posts.
@@ -702,11 +701,9 @@ export function productBody(f, { productID, homeCatalog, langs, stored }) {
     const val = String(f.get(`d-${l}`) || "").trim();
     if (val) descriptions[l] = val; else delete descriptions[l];
   }
-  // The two headings are one box each, holding the wordings this catalogue's
-  // languages want, separated by semicolons and in the order the catalogue
-  // declares them.
-  const cg = headingFrom(f.get("category"), langs, was.categoryTexts);
-  const pg = headingFrom(f.get("productGroup"), langs, was.productGroupTexts);
+  // The two headings, each read back from its own row of per-language boxes.
+  const cg = headingFrom(f, "cat", langs, was.categoryTexts);
+  const pg = headingFrom(f, "grp", langs, was.productGroupTexts);
   return {
     ...was,
     id: productID, homeCatalog, state: f.get("state"), texts, descriptions,
@@ -1380,50 +1377,51 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
       <label class="field">Id${it ? "" : " (short, stable, never renamed)"}
         <input name="id" value="${esc(v.id || "")}" ${it ? "readonly" : "required"} autocomplete="off"
           placeholder="laptop"></label>
-      ${langs.map((l) => `<label class="field">Name (${esc(l)})<input name="t-${esc(l)}"
-        value="${esc((v.texts || {})[l] || "")}" autocomplete="off"></label>`).join("")}
+      <label class="field wide">Name
+        <span class="muted" style="display:block; margin:2px 0 6px">One box per language
+          this catalogue is kept in. A product named in one of them and not another
+          still publishes &mdash; the portal shows the name it has rather than a blank
+          &mdash; and the catalogue screen lists what is still untranslated.</span>
+        ${langFields("t", langs, v.texts)}</label>
       <label class="field wide">Description
         <span class="muted" style="display:block; margin:2px 0 6px">What the thing
           <i>is</i>, for somebody who read the name and is still not sure. Optional:
-          most products do not need one. <b>Write it in every language or in
-          none</b> &mdash; a release refuses a product described to one audience and
-          not another, because the second audience gets an empty panel rather than a
-          shorter one.</span>
-        ${langs.map((l) => `<textarea name="d-${esc(l)}" rows="3" class="wide"
-          placeholder="${esc(l)}">${esc((v.descriptions || {})[l] || "")}</textarea>`).join("")}</label>
+          most products do not need one. Written in one language and not another it
+          still publishes, and the reader of the other language is shown the one that
+          exists rather than an empty panel.</span>
+        ${langFields("d", langs, v.descriptions, { rows: 3 })}</label>
       ${partOfNote(it, cat, items, langs)}
       <label class="field wide">Category
         <span class="muted" style="display:block; margin:2px 0 6px">The heading the
           portal groups this product under &mdash; <code>Arbeitsplatz</code>,
-          <code>Kommunikation</code>. ${headingHint(langs)} It has no ordering of its own
-          (the portal sorts alphabetically, by what the reader sees) and two spellings
-          are two headings. Leave it empty and the product sits under the portal's
-          heading for those that carry none. <b>Read off the products nothing
-          contains</b>: the portal reaches a part through the product that carries it,
-          so a heading written on a part is never read there.</span>
-        <input name="category" value="${esc(headingList(v.category, v.categoryTexts, langs))}"
-          autocomplete="off" list="known-categories"
-          placeholder="${esc(headingPlaceholder(langs, ["Arbeitsplatz", "Poste de travail", "Workplace", "Postazione"]))}">
-        <datalist id="known-categories">${
-  knownHeadings(items, "category", langs)
-    .map((c) => `<option value="${esc(c)}"></option>`).join("")}</datalist></label>
+          <code>Kommunikation</code>. One box per language, like the name above.
+          <b>The first box that has anything in it is what the portal groups by</b>;
+          the others are how that heading is worded for a reader. Fill only one and it
+          reads the same in every language. It has no ordering of its own (the portal
+          sorts alphabetically, by what the reader sees) and two spellings are two
+          headings. Leave the row empty and the product sits under the portal's heading
+          for those that carry none. <b>Read off the products nothing contains</b>: the
+          portal reaches a part through the product that carries it, so a heading
+          written on a part is never read there.</span>
+        ${langFields("cat", langs, headingBoxes(v.category, v.categoryTexts, langs),
+    { placeholder: "Arbeitsplatz", listID: "known-categories" })}
+        ${langs.map((l, n) => `<datalist id="known-categories-${esc(l)}">${
+  knownHeadingsIn(items, "category", l, n === 0)
+    .map((c) => `<option value="${esc(c)}"></option>`).join("")}</datalist>`).join("")}</label>
       <label class="field wide">Product group
         <span class="muted" style="display:block; margin:2px 0 6px">One level below the
           category, and the portal reads the two as a chain: <b>Kategorie &rsaquo;
           Produktgruppe &rsaquo; Produkt &rsaquo; Services</b>. It is written exactly like
           the heading above and carries the same costs &mdash; no ordering of its own,
-          two spellings are two groups. The group has no record and
-          therefore no category of its own: the chain is assembled from the products that
-          carry both, so a group whose products sit in two categories appears under both.
-          Leave it empty and the product sits under the portal's group for those that
-          carry none. Read off the same products the heading above is.</span>
-        <input name="productGroup"
-          value="${esc(headingList(v.productGroup, v.productGroupTexts, langs))}"
-          autocomplete="off" list="known-groups"
-          placeholder="${esc(headingPlaceholder(langs, ["Mobile Geräte", "Appareils mobiles", "Mobile devices", "Dispositivi mobili"]))}">
-        <datalist id="known-groups">${
-  knownHeadings(items, "productGroup", langs)
-    .map((g) => `<option value="${esc(g)}"></option>`).join("")}</datalist></label>
+          two spellings are two groups. The group has no record and therefore no category
+          of its own: the chain is assembled from the products that carry both, so a
+          group whose products sit in two categories appears under both. Read off the
+          same products the heading above is.</span>
+        ${langFields("grp", langs, headingBoxes(v.productGroup, v.productGroupTexts, langs),
+    { placeholder: "Mobile Geräte", listID: "known-groups" })}
+        ${langs.map((l, n) => `<datalist id="known-groups-${esc(l)}">${
+  knownHeadingsIn(items, "productGroup", l, n === 0)
+    .map((g) => `<option value="${esc(g)}"></option>`).join("")}</datalist>`).join("")}</label>
       <label class="field wide">Search terms
         <span class="muted" style="display:block; margin:2px 0 6px">Words somebody might
           search for that are <b>not</b> the product's name &mdash; synonyms, the vendor's

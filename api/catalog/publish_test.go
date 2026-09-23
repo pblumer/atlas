@@ -224,15 +224,22 @@ func TestBothProcessesAreRequired(t *testing.T) {
 	contains(t, problems, "provision")
 }
 
-// TestEveryDeclaredLanguageIsTranslated: a customer must not meet a product in a
-// language the catalogue promised and does not have.
-func TestEveryDeclaredLanguageIsTranslated(t *testing.T) {
+// TestEveryDeclaredLanguageIsReportedAndNotRefused.
+//
+// This used to refuse, on the reasoning that a customer must not meet a product
+// in a language the catalogue promised and does not have. They never did: the
+// portal falls back to the language the catalogue has, so what the refusal
+// actually stopped was a usable catalogue going live. It is reported instead —
+// see translationgaps_test.go for the whole of that argument.
+func TestEveryDeclaredLanguageIsReportedAndNotRefused(t *testing.T) {
 	in := Input{
 		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de", "fr"}, Items: []string{"a"}}},
 		Items:    []Item{item("a")}, // has "de" only
 	}
-	_, problems := Publish(in)
-	contains(t, problems, "fr")
+	if _, problems := Publish(in); len(problems) != 0 {
+		t.Errorf("a product named in one of two declared languages was refused: %+v", problems)
+	}
+	contains(t, TranslationGaps(in), "no name in fr")
 }
 
 // TestRankTieIsRefused: ranks resolve which catalogue a user sees, so a tie is a
@@ -337,13 +344,18 @@ func TestPublishReportsEveryProblemAtOnce(t *testing.T) {
 	broken := item("a")
 	broken.ProvisionProcess = ""
 	broken.DeprovisionProcess = ""
+	// Three refusals of three different kinds, so the test cannot pass on one
+	// check reported twice. The third used to be the missing French text; that is
+	// a gap now and not a refusal, so it is a blank category instead — still a
+	// refusal, and still nothing to do with the two above it.
+	broken.Category = "   "
 	in := Input{
 		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de", "fr"}, Items: []string{"a"}}},
 		Items:    []Item{broken},
 	}
 	_, problems := Publish(in)
 	if len(problems) < 3 {
-		t.Fatalf("want at least 3 problems (provision, deprovision, fr), got %v", problems)
+		t.Fatalf("want at least 3 problems (provision, deprovision, blank category), got %v", problems)
 	}
 }
 
@@ -798,20 +810,28 @@ func TestAProductNeedsNoDescriptionAtAll(t *testing.T) {
 	}
 }
 
-func TestADescriptionInOneLanguageIsNotACatalogueInTwo(t *testing.T) {
+// TestADescriptionInOneLanguageIsReportedAndNotRefused.
+//
+// The name's rule, one field down, and relaxed with it: the portal falls back to
+// the description it has rather than showing an empty panel, so the half is worth
+// publishing and worth saying. See translationgaps_test.go.
+func TestADescriptionInOneLanguageIsReportedAndNotRefused(t *testing.T) {
 	it := bilingual("vpn")
 	it.Descriptions = map[string]string{"de": "Verschlüsselter Zugang ins Firmennetz."}
 
-	_, problems := Publish(Input{
+	in := Input{
 		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de", "fr"}, Items: []string{"vpn"}}},
 		Items:    []Item{it},
-	})
-
-	contains(t, problems, "none for declared language fr")
+	}
+	if _, problems := Publish(in); len(problems) != 0 {
+		t.Errorf("a product described in one of two declared languages was refused: %+v", problems)
+	}
+	gaps := TranslationGaps(in)
+	contains(t, gaps, "no description in fr")
 	// And not a complaint about the language it does have.
-	for _, p := range problems {
-		if strings.Contains(p.Message, "declared language de") {
-			t.Errorf("the language that has a description was faulted: %+v", p)
+	for _, g := range gaps {
+		if strings.HasSuffix(g.Message, " de") {
+			t.Errorf("the language that has a description was faulted: %+v", g)
 		}
 	}
 }

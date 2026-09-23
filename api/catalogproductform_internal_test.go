@@ -32,8 +32,8 @@ func TestTheProductFormAsksWhatIsShownBeforeWhatIsAdministered(t *testing.T) {
 	order := []struct{ frag, what string }{
 		{`section("What the catalogue shows"`, "the heading for what a reader meets"},
 		{`name="id"`, "the id"},
-		{`name="t-${esc(l)}"`, "the name per language"},
-		{`name="category"`, "the heading it sits under"},
+		{`langFields("t", langs, v.texts)`, "the name per language"},
+		{`langFields("cat", langs,`, "the heading it sits under"},
 		{`name="keywords"`, "what it can be found by"},
 		{`name="price"`, "what it costs"},
 		{`name="variants"`, "the shapes it is ordered in"},
@@ -190,7 +190,7 @@ func TestTheFormSaysWhereTheTwoHeadingsAreRead(t *testing.T) {
 		t.Error("the note renders a control of its own; it exists to say where the " +
 			"fields are read, and the fields stay the ones above")
 	}
-	for _, field := range []string{`name="category"`, `name="productGroup"`} {
+	for _, field := range []string{`langFields("cat", langs,`, `langFields("grp", langs,`} {
 		if !strings.Contains(form, field) {
 			t.Errorf("the form no longer offers %s at all; a product that is a part "+
 				"here may be offered on its own elsewhere, and the heading is read there", field)
@@ -222,11 +222,13 @@ func TestTheFormSaysWhereTheTwoHeadingsAreRead(t *testing.T) {
 var productFieldControls = map[string]string{
 	"id":    `name="id"`,
 	"state": `name="state"`,
-	"texts": "name=\"t-${esc(l)}\"",
-	// A box per language, like the name above it and for the same reason: the
-	// field is a map per language tag, so one control could only ever maintain
-	// one of its entries.
-	"descriptions":       "name=\"d-${esc(l)}\"",
+	// One box per language, because the field is a map per language tag: one
+	// control could only ever maintain one of its entries. The row is drawn by a
+	// helper, so what proves the field is maintainable is that the helper is given
+	// it — the control names themselves are built inside and there is no literal
+	// to search for.
+	"texts":              `langFields("t", langs, v.texts)`,
+	"descriptions":       `langFields("d", langs, v.descriptions`,
 	"variants":           `name="variants"`,
 	"approval":           `name="akind"`,
 	"provisionProcess":   `procSelect("provisionProcess"`,
@@ -239,16 +241,15 @@ var productFieldControls = map[string]string{
 	"keywords":           `name="keywords"`,
 	"configForm":         `name="configForm"`,
 	"price":              `name="price"`,
-	"category":           `name="category"`,
-	"productGroup":       `name="productGroup"`,
-	// One box maintains the key and the wordings together, so the proof is that
-	// the box is filled from the wordings and read back into them — not that a
-	// control called categoryTexts exists, because there deliberately is none. A
-	// heading is a word rather than a sentence, and a maintainer keeping four of
-	// them aligned reads them beside each other
-	// (ADR-0412).
-	"categoryTexts":     `headingList(v.category, v.categoryTexts, langs)`,
-	"productGroupTexts": `headingList(v.productGroup, v.productGroupTexts, langs)`,
+	// The two headings are one row of per-language boxes each, and that row
+	// maintains the key and the wordings together — the first box that has
+	// anything in it is the key. So both the key and its wordings are proved by
+	// the same fragment: the helper that fills the row from them. There is
+	// deliberately no control called categoryTexts (ADR-0412, as amended).
+	"category":          `headingBoxes(v.category, v.categoryTexts, langs)`,
+	"categoryTexts":     `headingBoxes(v.category, v.categoryTexts, langs)`,
+	"productGroup":      `headingBoxes(v.productGroup, v.productGroupTexts, langs)`,
+	"productGroupTexts": `headingBoxes(v.productGroup, v.productGroupTexts, langs)`,
 }
 
 // productFieldsWithNoControl are the fields the form deliberately does not ask for,

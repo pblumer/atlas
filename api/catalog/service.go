@@ -209,6 +209,12 @@ func (s *Service) HandleCreateCatalog(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// Refused here and never on the way out: an installation already carrying a
+	// tag that is not one has to be able to open the catalogue and correct it.
+	if why := LanguageListProblem(in.Languages); why != "" {
+		httpapi.Error(w, http.StatusBadRequest, why)
+		return
+	}
 	id, err := newID("cat")
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "mint id: "+err.Error())
@@ -289,6 +295,17 @@ func (s *Service) HandleUpdateCatalog(w http.ResponseWriter, r *http.Request) {
 	if err := decodeBody(r, &in); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
+	}
+
+	// Before the authority check and before the loop, because it is a statement
+	// about the request and needs nothing that is stored. This is the way the live
+	// bad tag was actually written: the catalogue existed first and the language
+	// was added later.
+	if in.Languages != nil {
+		if why := LanguageListProblem(in.Languages); why != "" {
+			httpapi.Error(w, http.StatusBadRequest, why)
+			return
+		}
 	}
 
 	p := httpapi.PrincipalFrom(r.Context())

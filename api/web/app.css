@@ -291,6 +291,27 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
 }
 @media (max-width: 760px) { .product-form { grid-template-columns: 1fr; } }
 
+/* ---------- One box per language, side by side ----------
+   Every text a product carries is a map keyed by the catalogue's declared language
+   tags, so the form draws the list rather than a fixed pair: --langs is set inline
+   from that list's length, and a catalogue that adds a fifth language grows a fifth
+   column without anybody editing this rule.
+
+   minmax(0, 1fr) and not 1fr: a grid track's default minimum is its content, so a
+   long untranslated name in one box would push the others out of the card instead
+   of wrapping inside its own.
+
+   Below the breakpoint they stack, because four boxes across a phone are four boxes
+   nobody can type in. */
+.langrow { display: grid; grid-template-columns: repeat(var(--langs, 1), minmax(0, 1fr)); gap: 10px; }
+.langbox { display: block; min-width: 0; }
+.langbox > .langtag {
+  display: block; margin: 0 0 3px;
+  font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted);
+}
+.langbox input, .langbox textarea { width: 100%; box-sizing: border-box; }
+@media (max-width: 760px) { .langrow { grid-template-columns: 1fr; } }
+
 /* ---------- The product list and the editor beside it ---------- */
 
 /* The catalogue's own page is a working surface and not a page to read, so it drops

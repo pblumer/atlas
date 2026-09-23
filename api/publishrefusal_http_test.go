@@ -9,7 +9,7 @@ import (
 // A refused publish has to arrive as its reasons.
 //
 // Publishing is the moment a catalogue is proved: both graphs acyclic, every
-// binding resolved, a text for every declared language, ranks unique. The server
+// binding resolved, every product named and bound, ranks unique. The server
 // answers 422 with **every** problem at once, each naming the catalogue or item it
 // belongs to, and the authoring screen's own opening comment says that list is
 // what it renders, because "the problems are the work, and hiding them behind
@@ -37,8 +37,14 @@ func TestARefusedPublishAnswersItsProblemsAndNoErrorKey(t *testing.T) {
 		t.Fatal("admin login failed")
 	}
 
-	// A catalogue offering two languages, and one product that has a text for only
-	// one of them. One problem, named, of the kind somebody actually hits.
+	// A catalogue and one product with no process to revoke it. One problem,
+	// named, of the kind somebody actually hits.
+	//
+	// It used to be a product with a text for only one of two declared languages.
+	// That publishes now — the portal falls back to the name the catalogue has, so
+	// the missing translation is reported rather than refused — and this test is
+	// about the SHAPE of a refusal, not about which rule produced it. So it is a
+	// rule that still refuses, and the subject is unchanged.
 	code, body := cReq(t, admin, ts, "POST", "/api/v1/catalogs",
 		`{"rank":1,"languages":["de","en"],"texts":{"de":"Katalog","en":"Catalogue"}}`)
 	if code != http.StatusCreated {
@@ -51,8 +57,8 @@ func TestARefusedPublishAnswersItsProblemsAndNoErrorKey(t *testing.T) {
 		t.Fatalf("decode catalogue: %v (%s)", err, body)
 	}
 	product := `{"id":"laptop","homeCatalog":"` + cat.ID + `","state":"active",` +
-		`"texts":{"de":"Notebook"},"approval":{"kind":"none"},` +
-		`"provisionProcess":"prov","deprovisionProcess":"deprov"}`
+		`"texts":{"de":"Notebook","en":"Notebook"},"approval":{"kind":"none"},` +
+		`"provisionProcess":"prov"}`
 	if code, b := cReq(t, admin, ts, "POST", "/api/v1/catalog-products", product); code != http.StatusOK {
 		t.Fatalf("save product: %d (%s)", code, b)
 	}
@@ -63,7 +69,7 @@ func TestARefusedPublishAnswersItsProblemsAndNoErrorKey(t *testing.T) {
 
 	code, body = cReq(t, admin, ts, "POST", "/api/v1/catalogs/"+cat.ID+"/releases", "")
 	if code != http.StatusUnprocessableEntity {
-		t.Fatalf("publishing a product with no text for a declared language = %d, "+
+		t.Fatalf("publishing a product with no deprovision process = %d, "+
 			"want 422 (%s)", code, body)
 	}
 

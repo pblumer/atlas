@@ -166,7 +166,7 @@ test("the two headings and the price still reach the body", async ({ page }) => 
   // The fields the form already had, kept under test because the body they are
   // assembled in was moved out of the submit handler to be testable at all.
   const body = await build(page, {
-    "t-de": "Notebook", category: " Arbeitsplatz ", productGroup: " Mobile Geräte ",
+    "t-de": "Notebook", "cat-de": " Arbeitsplatz ", "grp-de": " Mobile Geräte ",
     price: " CHF 1'200.– ", multipleAllowed: true, state: "active",
     akind: "role", "aref-role": "grp_it",
   });
