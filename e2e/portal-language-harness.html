@@ -26,8 +26,13 @@
       // carry them now, and what a reader of the other language is shown is the
       // property under test.
       window.__unmatched = [];
+      // ?langs=… lets a test say which languages the catalogue is kept in, because
+      // that is now what the switch offers and it cannot be exercised from one
+      // fixture. Everything else about the catalogue stays put.
+      const LANGS = (new URLSearchParams(location.search).get("langs") || "de,en")
+        .split(",").filter(Boolean);
       const CAT = {
-        id: "cat_x", rank: 1, languages: ["de", "en"],
+        id: "cat_x", rank: 1, languages: LANGS,
         texts: { de: "Produktekatalog", en: "Product catalogue" },
         items: ["whole", "de-only", "regional", "en-only"],
       };

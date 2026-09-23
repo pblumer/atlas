@@ -100,3 +100,66 @@ func TestTheLanguageListIsSplitOnWhatPeopleType(t *testing.T) {
 			"may carry a semicolon, so splitting it invents a term")
 	}
 }
+
+// The switch offers the languages the catalogue is kept in.
+//
+// It used to offer this page's own two, always. A catalogue kept only in German
+// therefore carried an EN button that turned the furniture English and left every
+// product name German — a half-translated screen offered by the page itself,
+// which is the state ADR-0267 refuses to reach by guessing and ADR-0313 sets the
+// condition against.
+//
+// Narrowed to what this page can render, and that narrowing IS ADR-0313 applied:
+// a catalogue may be kept in French, and until the furniture is French too an FR
+// button would promise a French portal and deliver a half-translated one.
+
+// TestTheSwitchIsBuiltFromTheCatalogueAndNotFromThePage.
+func TestTheSwitchIsBuiltFromTheCatalogueAndNotFromThePage(t *testing.T) {
+	src := readWeb(t, "portal.js")
+	body := webRegion(t, src, "function offeredLocales(", "\n}")
+
+	if !strings.Contains(body, "state.catalog") {
+		t.Error("the switch does not read the catalogue, so it offers the same two " +
+			"languages whatever the catalogue is actually kept in")
+	}
+	// The condition ADR-0313 sets: a language is offered only where every string
+	// this page renders exists in it.
+	if !strings.Contains(body, "STRINGS[baseOf(l)]") {
+		t.Error("a language the page has no strings for can be offered, so a visitor " +
+			"can land on the half-translated screen ADR-0313 exists to prevent")
+	}
+	// And the sign-in screen still has a switch: it is drawn before there is a
+	// catalogue, and a German-speaking visitor meeting an English form is what the
+	// whole message catalogue exists to avoid.
+	if !strings.Contains(body, "Object.keys(STRINGS)") {
+		t.Error("there is no fallback for the case with no catalogue, so the switch " +
+			"disappears from the sign-in screen")
+	}
+}
+
+// TestTheChoiceIsSettledOntoALanguageTheCatalogueHas.
+//
+// The choice is made before the catalogue is read — from the address, from this
+// browser, or from the visitor's own list — so it is a language and not yet one
+// of this catalogue's tags. Left unsettled, a reader on `en` meeting a catalogue
+// kept in `en-EN` reads neither: the switch shows nothing as chosen and the texts
+// fall through.
+func TestTheChoiceIsSettledOntoALanguageTheCatalogueHas(t *testing.T) {
+	src := readWeb(t, "portal.js")
+	body := webRegion(t, src, "function settleLocale(", "\n}")
+
+	if !strings.Contains(body, "baseOf(l) === baseOf(locale)") {
+		t.Error("the choice is not carried onto the same language in another tag, so " +
+			"a reader on en meeting a catalogue kept in en-EN gets its first language")
+	}
+	// Called once the catalogue is known and before anything is drawn.
+	load := webRegion(t, src, "async function load(", "\n}")
+	if !strings.Contains(load, "settleLocale();") {
+		t.Error("the choice is never settled, so the switch cannot show the language " +
+			"the page is actually being read in")
+	}
+	if strings.Index(load, "settleLocale();") < strings.Index(load, "state.catalog = await") {
+		t.Error("the choice is settled before the catalogue is read, against a list " +
+			"that is not there yet")
+	}
+}

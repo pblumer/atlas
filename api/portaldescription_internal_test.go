@@ -42,7 +42,10 @@ func TestADescriptionIsShownEvenWhereTheCatalogueDoesNotSpeakThePagesLanguage(t 
 // what "in der entsprechenden Sprache" means once more than one exists.
 func TestTheReadersOwnLanguageIsPreferredOverTheRest(t *testing.T) {
 	body := webRegion(t, readWeb(t, "portal.js"), "function descriptionOf(", "\n}")
-	at := strings.Index(body, "[locale]")
+	// Through pickText, which selects by the tag's LANGUAGE rather than by the
+	// whole tag — a catalogue kept in de-DE is German to a reader on de, and a
+	// lookup for the whole tag would find nothing (ADR-0413, as amended).
+	at := strings.Index(body, "pickText(d, locale)")
 	if at < 0 {
 		t.Fatal("descriptionOf does not read the page's locale at all, so a reader " +
 			"gets whichever language the catalogue happens to list first")

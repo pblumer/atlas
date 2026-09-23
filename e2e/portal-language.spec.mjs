@@ -24,6 +24,14 @@ test.beforeEach(async ({ page }) => {
   page._errors = errors;
 });
 
+// openWith reloads the harness against a catalogue kept in the given languages.
+const openWith = async (page, langs) => {
+  await page.goto(`/portal-language-harness.html?langs=${encodeURIComponent(langs.join(","))}`);
+  await page.waitForSelector(".cascade, .empty", { timeout: 10000 });
+};
+
+const langButtons = (page) => page.locator(".langs button").allTextContents();
+
 test.afterEach(async ({ page }) => {
   expect(page._errors, "no uncaught page errors").toEqual([]);
   // A route the page reads and the fixture does not serve would make every
@@ -147,4 +155,57 @@ test("a regional heading switches with the rest", async ({ page }) => {
   shown = await texts(page);
   expect(shown, "the heading under de-DE").toContain("Zubehör");
   expect(shown, "and not the English one").not.toContain("Accessories");
+});
+
+test("the switch offers the languages the catalogue is kept in", async ({ page }) => {
+  // Not the two this page happens to be translated into. A catalogue kept only in
+  // German showed an EN button that turned the furniture English and left every
+  // product name German — a half-translated screen offered by the page itself.
+  await openWith(page, ["de"]);
+  expect(await langButtons(page),
+    "a catalogue kept in one language needs no switch").toEqual([]);
+
+  await openWith(page, ["de", "en"]);
+  expect(await langButtons(page)).toEqual(["DE", "EN"]);
+});
+
+test("a language this page cannot render is not offered", async ({ page }) => {
+  // ADR-0313: every string the portal renders exists in every locale it offers.
+  // The catalogue may be kept in French; until the furniture is French too, an FR
+  // button would promise a French portal and deliver a half-translated one.
+  await openWith(page, ["de-DE", "en-EN", "fr-FR"]);
+  const shown = await langButtons(page);
+  expect(shown, "the two it can render, as the catalogue spells them")
+    .toEqual(["DE-DE", "EN-EN"]);
+  expect(shown.join(" "), "and no French").not.toContain("FR");
+});
+
+test("the chosen language settles onto one the catalogue is kept in",
+  async ({ page }) => {
+    // The choice is made before the catalogue is read, so it is a language and not
+    // yet one of this catalogue's tags. A reader on English meeting a catalogue
+    // kept in en-EN should be reading it, not falling through to whatever came
+    // first — and the switch has to show it as chosen.
+    await openWith(page, ["de-DE", "en-EN"]);
+    await page.getByRole("button", { name: "EN-EN", exact: true }).click();
+    await page.waitForTimeout(50);
+
+    expect(await page.locator(".langs button.on").innerText()).toBe("EN-EN");
+    expect(await page.locator("#app").innerText()).toContain("Docking cradle");
+  });
+
+test("the page's own words stay readable in a regional locale", async ({ page }) => {
+  // A locale of de-DE has no message catalogue of its own; the German one is what
+  // it renders. Read the wrong way this shows raw keys like `nav.catalog` across
+  // the whole page, which is why it is worth a test of its own.
+  await openWith(page, ["de-DE", "en-EN"]);
+  // The language is stated rather than assumed: this harness runs in a browser
+  // whose own list is English, so the choice settles on en-EN and a test that
+  // expected German would be testing the settling, not the rendering.
+  await page.getByRole("button", { name: "DE-DE", exact: true }).click();
+  await page.waitForTimeout(50);
+
+  const shown = await page.locator("#app").innerText();
+  expect(shown, "no untranslated key is rendered").not.toMatch(/\b(nav|portal|basket)\.[a-z]/);
+  expect(shown, "the German furniture under a de-DE locale").toContain("Meine Aufträge");
 });

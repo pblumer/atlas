@@ -348,7 +348,53 @@ let locale = pickLocale();
 // only happen if the completeness test was removed, and looking broken in review
 // is better than guessing at a language nobody chose.
 function t(key) {
-  return (STRINGS[locale] && STRINGS[locale][key]) || key;
+  // By the tag and then by its language, so a locale of `de-CH` renders the German
+  // catalogue. offeredLocales only ever hands out a tag whose language this page
+  // has strings for, so this never falls past the second step — which is what
+  // keeps ADR-0313's condition true: every string exists in every locale offered.
+  const own = STRINGS[locale] || STRINGS[baseOf(locale)] || {};
+  return own[key] || key;
+}
+
+// offeredLocales is what the language switch offers
+// (ADR-draft-the-portal-offers-the-catalogues-languages).
+//
+// **The languages this catalogue is kept in**, rather than the two this page
+// happens to be translated into. A catalogue kept only in German used to show an
+// EN button that turned the furniture English and left every product name German
+// — a half-translated screen offered by the page itself, which is the thing
+// ADR-0267 refuses to do by guessing and ADR-0313 sets the condition for.
+//
+// Narrowed to the languages this page can render, and that narrowing is the whole
+// of ADR-0313 applied here: a catalogue may be kept in French, and until the
+// furniture is French too, offering an FR button would land somebody on exactly
+// the half-translated screen that record forbids. The French product names are
+// stored and reachable through the fallback; what is not offered is a button that
+// promises a French portal.
+//
+// Before there is a catalogue — the sign-in screen, or a visitor who is nobody's
+// audience — it is this page's own languages, because the switch has to be
+// reachable before the sign-in and there is nothing else to go on.
+function offeredLocales() {
+  const kept = ((state.catalog || {}).languages || []).filter((l) => STRINGS[baseOf(l)]);
+  return kept.length ? kept : Object.keys(STRINGS);
+}
+
+// settleLocale moves the chosen language onto one the catalogue is actually kept
+// in, once that is known.
+//
+// The choice is made before the catalogue is read — from the address, from this
+// browser, or from the visitor's own list — so it is a language and not yet one
+// of this catalogue's tags. A reader who chose English meets a catalogue kept in
+// `en-EN` and should be reading it, not falling through to whatever came first.
+//
+// Same language first, then the catalogue's own first language. It never widens a
+// choice: a reader who chose English and meets a German-only catalogue gets
+// German, because there is no English here to give them.
+function settleLocale() {
+  const offered = offeredLocales();
+  if (offered.includes(locale)) return;
+  locale = offered.find((l) => baseOf(l) === baseOf(locale)) || offered[0];
 }
 
 function setLocale(next) {
@@ -1006,6 +1052,11 @@ async function load() {
     state.catalog = null;
   }
   applyTheme(state.catalog);
+  // The catalogue decides which languages there are to choose between, so the
+  // choice is settled onto one of them the moment it is known — before anything
+  // is drawn, or the first paint would be in a language the switch cannot show as
+  // chosen.
+  settleLocale();
   if (state.catalog) {
     const releases = await api(`/api/v1/catalogs/${state.catalog.id}/releases`);
     state.release = releases && releases.length ? releases[0] : null;
@@ -3061,10 +3112,15 @@ function render() {
         // without this the only way out is the browser's back button, and a visitor
         // who arrived by link has no back to press.
         el('a', { class: 'backlink', href: '/index.html' }, '\u2190 ', t('portal.back')),
-        el('div', { class: 'langs' }, Object.keys(STRINGS).map((l) => el('button', {
-          class: l === locale ? 'lang on' : 'lang',
-          onclick: () => setLocale(l),
-        }, l.toUpperCase()))))),
+        // One button per language this catalogue is kept in, and none at all where
+        // there is only one: a switch with a single position is a control that
+        // says something can be changed and then cannot.
+        el('div', { class: 'langs' }, offeredLocales().length > 1
+          ? offeredLocales().map((l) => el('button', {
+            class: l === locale ? 'lang on' : 'lang',
+            onclick: () => setLocale(l),
+          }, l.toUpperCase()))
+          : null))),
     // The header stands on the sign-in screen too — the mark says who is asking,
     // and the language switch has to be reachable before the sign-in, not after
     // it: a German-speaking visitor meeting an English form is the case this

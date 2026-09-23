@@ -302,6 +302,26 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The portal's language switch offers the languages the catalogue is kept in.** It
+  offered this page's own two, always. So a catalogue kept only in German carried an
+  EN button that turned the navigation English and left every product name,
+  description and heading German — a half-translated screen the portal offered
+  itself, which is the state it refuses to reach by guessing at the browser. And a
+  catalogue kept in a third language had no button for it at all.
+
+  The switch is now the catalogue's declared languages, narrowed to the ones this
+  page can actually render, and it is not drawn at all where that leaves one: a
+  control with a single position says something can be changed and then cannot. The
+  choice a visitor arrives with — from the address, from this browser, from their own
+  list — settles onto one of the catalogue's tags once it is known, preferring the
+  same language in another tag before falling back to the catalogue's first.
+
+  The narrowing is the cost and it is deliberate: a catalogue may be kept in French,
+  and until the portal's own words are French too, an FR button would promise a
+  French page and deliver half of one. A reader whose browser is English, meeting a
+  German-only catalogue, now gets a German page rather than English navigation beside
+  German products.
+
 - **A catalogue publishes before every translation is done, and says what is still
   owed.** Publishing refused a product named in one of its catalogue's declared
   languages and not another, and a description or heading wording missing in any of
