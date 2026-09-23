@@ -247,7 +247,12 @@ func checkCatalogs(in Input, byID map[string]Item, add func(Problem)) {
 			continue
 		}
 		// One heading is one column head, so the products under it have to agree on
-		// what it says. Keyed by field, key and language; the first product to word
+		// what it says. This is what ADR-0412 bought by keeping the key a string
+		// beside the wordings: grouping cannot split per language, so the only way
+		// two products under one key can disagree is in what they SAY, and that is
+		// provable here rather than at the reader (invariant I5).
+		//
+		// Keyed by field, key and language; the first product to word
 		// a heading sets it and a later disagreement is named against it. The walk
 		// follows the catalogue's own item list, which is stored data, so the same
 		// input always names the same one of the two.
