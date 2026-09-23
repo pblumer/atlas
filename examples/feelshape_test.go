@@ -41,9 +41,16 @@ type feelDefs struct {
 	} `xml:"process"`
 }
 
-// inputExpr reads one service task's ioMapping input out of a model, so the test
-// evaluates what ships rather than a copy of it that can drift.
-func inputExpr(t *testing.T, path, taskID, target string) string {
+// bodyInputs reads one service task's ioMapping inputs out of a model, so the
+// test evaluates what ships rather than a copy of it that can drift.
+//
+// All of them, in order, because the mappings *are* the request body: a REST
+// connector task sends its activity-local scope (ADR-0174), one JSON key per
+// mapping. This used to read a single input targeting "body", from the days these
+// were plain service tasks whose whole payload was one expression — a shape that
+// could never be sent, because the scope would have nested it one level deep
+// under "body".
+func bodyInputs(t *testing.T, path, taskID string) [][2]string {
 	t.Helper()
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -57,14 +64,17 @@ func inputExpr(t *testing.T, path, taskID, target string) string {
 		if st.ID != taskID {
 			continue
 		}
+		out := make([][2]string, 0, len(st.ExtensionElements.IoMapping.Inputs))
 		for _, in := range st.ExtensionElements.IoMapping.Inputs {
-			if in.Target == target {
-				return in.Source
-			}
+			out = append(out, [2]string{in.Target, in.Source})
 		}
+		if len(out) == 0 {
+			t.Fatalf("%s: service task %q maps no inputs, so it sends an empty body", path, taskID)
+		}
+		return out
 	}
-	t.Fatalf("%s has no service task %q with an input targeting %q", path, taskID, target)
-	return ""
+	t.Fatalf("%s has no service task %q", path, taskID)
+	return nil
 }
 
 func TestTheCaptureProcessBuildsTheShapesTheCatalogueExpects(t *testing.T) {
@@ -111,8 +121,19 @@ func TestTheCaptureProcessBuildsTheShapesTheCatalogueExpects(t *testing.T) {
 		return goValue(t, got)
 	}
 
+	// The request body as the connector assembles it: every input mapping
+	// evaluated, keyed by what it targets.
+	bodyOf := func(task string) map[string]any {
+		t.Helper()
+		out := map[string]any{}
+		for _, in := range bodyInputs(t, model, task) {
+			out[in[0]] = eval(in[1])
+		}
+		return out
+	}
+
 	t.Run("die Kanten sind eine flache Liste", func(t *testing.T) {
-		body := eval(inputExpr(t, model, "katalog_schreiben", "body")).(map[string]any)
+		body := bodyOf("katalog_schreiben")
 		edges, ok := body["edges"].([]any)
 		if !ok {
 			t.Fatalf("edges is %T, not a list", body["edges"])
@@ -155,7 +176,7 @@ func TestTheCaptureProcessBuildsTheShapesTheCatalogueExpects(t *testing.T) {
 	})
 
 	t.Run("die Suchbegriffe sind beschnitten und ohne Leereintraege", func(t *testing.T) {
-		body := eval(inputExpr(t, model, "entwurf_sichern", "body")).(map[string]any)
+		body := bodyOf("entwurf_sichern")
 		got, _ := body["keywords"].([]any)
 		want := []any{"Laptop", "mobiles Gerät", "M365"}
 		if len(got) != len(want) {
@@ -173,7 +194,7 @@ func TestTheCaptureProcessBuildsTheShapesTheCatalogueExpects(t *testing.T) {
 		// this step deletes. Both bodies are checked, because the second one is
 		// written from the first by hand and that is exactly how one drifts.
 		for _, task := range []string{"entwurf_sichern", "aktiv_setzen"} {
-			body := eval(inputExpr(t, model, task, "body")).(map[string]any)
+			body := bodyOf(task)
 			for _, key := range []string{
 				"id", "homeCatalog", "state", "texts", "descriptions", "category",
 				"productGroup", "keywords", "approval", "provisionProcess",
@@ -192,8 +213,8 @@ func TestTheCaptureProcessBuildsTheShapesTheCatalogueExpects(t *testing.T) {
 				t.Errorf("%s loses a description: %#v", task, descs)
 			}
 		}
-		draft := eval(inputExpr(t, model, "entwurf_sichern", "body")).(map[string]any)
-		active := eval(inputExpr(t, model, "aktiv_setzen", "body")).(map[string]any)
+		draft := bodyOf("entwurf_sichern")
+		active := bodyOf("aktiv_setzen")
 		if draft["state"] != "draft" || active["state"] != "active" {
 			t.Errorf("the two saves do not carry the two states: %v and %v", draft["state"], active["state"])
 		}

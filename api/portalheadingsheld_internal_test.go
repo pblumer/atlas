@@ -35,9 +35,10 @@ func TestWhatSomebodyHoldsIsFiledUnderTheHeadingTheyOrderedItUnder(t *testing.T)
 	// columns do it. A heading for nothing is a heading nobody can use, and the two
 	// screens disagreeing about where the bucket sits is the smaller version of the
 	// disagreement this whole guard is about.
-	if !strings.Contains(body, "localeCompare") {
-		t.Error("the headings are not sorted by the locale's own rule, so the two " +
-			"screens order the same strings differently")
+	if !strings.Contains(body, "headingsOf(") {
+		t.Error("this column collects its headings itself instead of going through " +
+			"headingsOf, which is where the sorting and the bucket live; a second " +
+			"implementation is how the two screens came to disagree the first time")
 	}
 
 	// And the view takes that answer rather than keeping its own reading beside it.

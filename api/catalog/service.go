@@ -54,6 +54,12 @@ type Service struct {
 	// reference unresolvable reports the whole catalogue as broken, and every one
 	// resolvable reports a clean estate nobody checked.
 	Approvers ApproverLookup
+
+	// Processes answers what is deployed and what is worked, for the report in
+	// fulfilmentreport.go. Settable for Approvers' reason and nil for Approvers'
+	// reason: the deployments and the workers belong to the server, and a Service
+	// built without them refuses the report rather than guessing at it.
+	Processes ProcessLookup
 }
 
 // New builds the service. Every dependency is an explicit argument (ADR-0147).

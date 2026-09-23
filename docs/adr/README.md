@@ -496,6 +496,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0408](0408-portal-shows-no-process-links-per-position.md) | The portal's order rows carry one link into a process, not three | Accepted | Landed |
 | [0409](0409-the-archive-substrate-waits-its-schema-does-not.md) | The archive substrate waits, its schema does not | Proposed | Partial |
 | [0410](0410-a-peer-credential-carries-the-reach-a-membership-cannot-give-it.md) | A peer credential carries the reach a membership cannot give it | Accepted | Partial |
+| [0411](0411-system-processes-call-atlas-directly.md) | The shipped system processes call Atlas as REST connector tasks, told their own address | Accepted | Landed |
+| [0412](0412-translatable-catalogue-headings.md) | A catalogue heading is a key that groups and a wording per language that shows | Accepted | Landed |
 
 ## The two states of a record
 

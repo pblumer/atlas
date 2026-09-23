@@ -569,6 +569,97 @@ const lifecycleFrom = (f) => {
   return from || until ? { from, until } : {};
 };
 
+// The two headings — the category and the product group one level below it — in
+// the one box each that a maintainer types them into.
+//
+// A heading is two things on the record (ADR-0412):
+// the string the portal GROUPS
+// by, and a wording per language tag that it SHOWS. One box writes both, and the
+// convention is positional — the wordings in the order the catalogue declares its
+// languages, separated by semicolons: `Arbeitsplatz; Poste de travail; Workplace`.
+//
+// # Why one box and not one per language
+//
+// The names above get a box per language, and these deliberately do not. A heading
+// is a word rather than a sentence, it is typed once and then picked from the list
+// of ones already in the catalogue, and a maintainer keeping four of them aligned
+// reads them beside each other far more easily than in four boxes. The cost is
+// that the mapping is positional and therefore silent about itself: it is written
+// above the box, and reordering the catalogue's languages afterwards changes what
+// a *newly typed* list means. It changes nothing already stored, because what is
+// stored is a map per language tag and not the list.
+
+// headingHint is the sentence above the box, and it says a different thing for a
+// catalogue that has one language than for a catalogue that has four.
+//
+// A single-language catalogue has nothing to separate, and telling its maintainer
+// about semicolons would invite one — which would key the heading on the first
+// word and store the rest as a wording nothing reads.
+function headingHint(langs) {
+  const ls = langs || [];
+  if (ls.length < 2) {
+    return "A heading and nothing else: no entity behind it.";
+  }
+  return `A heading and nothing else: no entity behind it. This catalogue is kept in
+    ${ls.length} languages, so write the heading once per language in the order
+    <b>${ls.map((l) => esc(l)).join(" &rsaquo; ")}</b>, separated by
+    <b>semicolons</b>. The first is what the portal groups by; the rest are what it
+    shows. Write one wording and it is shown in every language.`;
+}
+
+// headingPlaceholder shows the shape rather than describing it: as many of the
+// example wordings as the catalogue has languages, joined the way the box wants.
+function headingPlaceholder(langs, examples) {
+  const n = Math.max(1, Math.min((langs || []).length || 1, examples.length));
+  return examples.slice(0, n).join("; ");
+}
+
+// knownHeadings is the pick list: every heading already in this catalogue, offered
+// whole so that choosing one reproduces every wording and not just the key.
+//
+// Keyed by the key and first product wins, because a key worded two ways is a
+// state publishing refuses — one column head cannot say two things — and offering
+// both here would be the Console helping somebody into it.
+function knownHeadings(items, field, langs) {
+  const seen = new Map();
+  for (const i of items) {
+    const key = (i[field] || "").trim();
+    if (!key || seen.has(key)) continue;
+    seen.set(key, headingList(key, i[`${field}Texts`], langs));
+  }
+  return [...seen.values()].sort();
+}
+
+// headingList renders the stored heading back into the box.
+//
+// The key alone where there are no wordings, which is every product written before
+// the field existed and every single-language catalogue. That is what makes the
+// box round-trip: what it renders, saved unchanged, stores what it read.
+export function headingList(key, texts, langs) {
+  const parts = (langs || []).map((l) => (texts || {})[l] || "");
+  return parts.some(Boolean) ? parts.join("; ") : String(key || "");
+}
+
+// headingFrom reads one box back into the key and the wordings.
+//
+// Wordings for the declared languages only, merged over what is stored: a wording
+// in a language a catalogue next door declares belongs to that catalogue and
+// survives a save made here — the rule the names and the descriptions follow.
+export function headingFrom(raw, langs, was) {
+  const parts = String(raw || "").split(";").map((s) => s.trim());
+  // One wording is "this heading is not translated": the key renders in every
+  // language. It is what a single-language catalogue wants, and it makes a stray
+  // trailing semicolon harmless rather than the half-translated heading that
+  // publishing refuses.
+  const translated = parts.filter(Boolean).length > 1;
+  const texts = { ...(was || {}) };
+  (langs || []).forEach((l, i) => {
+    const val = translated ? parts[i] || "" : "";
+    if (val) texts[l] = val; else delete texts[l];
+  });
+  return { key: parts[0] || "", texts };
+}
+
 // productBody is what saving the product form posts.
 //
 // A function and not a block inside the submit handler, for the reason
@@ -611,12 +702,17 @@ export function productBody(f, { productID, homeCatalog, langs, stored }) {
     const val = String(f.get(`d-${l}`) || "").trim();
     if (val) descriptions[l] = val; else delete descriptions[l];
   }
+  // The two headings are one box each, holding the wordings this catalogue's
+  // languages want, separated by semicolons and in the order the catalogue
+  // declares them.
+  const cg = headingFrom(f.get("category"), langs, was.categoryTexts);
+  const pg = headingFrom(f.get("productGroup"), langs, was.productGroupTexts);
   return {
     ...was,
     id: productID, homeCatalog, state: f.get("state"), texts, descriptions,
     approval: approvalFrom(f),
-    category: String(f.get("category") || "").trim(),
-    productGroup: String(f.get("productGroup") || "").trim(),
+    category: cg.key, categoryTexts: cg.texts,
+    productGroup: pg.key, productGroupTexts: pg.texts,
     price: String(f.get("price") || "").trim(),
     configForm: f.get("configForm") || "",
     provisionProcess: f.get("provisionProcess") || "",
@@ -1299,31 +1395,34 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
       <label class="field wide">Category
         <span class="muted" style="display:block; margin:2px 0 6px">The heading the
           portal groups this product under &mdash; <code>Arbeitsplatz</code>,
-          <code>Kommunikation</code>. A heading and nothing else: it has no ordering of
-          its own (the portal sorts alphabetically), no translation, and two spellings
+          <code>Kommunikation</code>. ${headingHint(langs)} It has no ordering of its own
+          (the portal sorts alphabetically, by what the reader sees) and two spellings
           are two headings. Leave it empty and the product sits under the portal's
           heading for those that carry none. <b>Read off the products nothing
           contains</b>: the portal reaches a part through the product that carries it,
           so a heading written on a part is never read there.</span>
-        <input name="category" value="${esc(v.category || "")}" autocomplete="off"
-          list="known-categories" placeholder="Arbeitsplatz">
+        <input name="category" value="${esc(headingList(v.category, v.categoryTexts, langs))}"
+          autocomplete="off" list="known-categories"
+          placeholder="${esc(headingPlaceholder(langs, ["Arbeitsplatz", "Poste de travail", "Workplace", "Postazione"]))}">
         <datalist id="known-categories">${
-  [...new Set(items.map((i) => (i.category || "").trim()).filter(Boolean))].sort()
+  knownHeadings(items, "category", langs)
     .map((c) => `<option value="${esc(c)}"></option>`).join("")}</datalist></label>
       <label class="field wide">Product group
         <span class="muted" style="display:block; margin:2px 0 6px">One level below the
           category, and the portal reads the two as a chain: <b>Kategorie &rsaquo;
-          Produktgruppe &rsaquo; Produkt &rsaquo; Services</b>. A string like the heading
-          above, with the same costs &mdash; no ordering of its own, no translation, two
-          spellings are two groups. The group has no record and therefore no category of
-          its own: the chain is assembled from the products that carry both, so a group
-          whose products sit in two categories appears under both. Leave it empty and the
-          product sits under the portal's group for those that carry none. Read off the
-          same products the heading above is.</span>
-        <input name="productGroup" value="${esc(v.productGroup || "")}" autocomplete="off"
-          list="known-groups" placeholder="Mobile Geräte">
+          Produktgruppe &rsaquo; Produkt &rsaquo; Services</b>. It is written exactly like
+          the heading above and carries the same costs &mdash; no ordering of its own,
+          two spellings are two groups. The group has no record and
+          therefore no category of its own: the chain is assembled from the products that
+          carry both, so a group whose products sit in two categories appears under both.
+          Leave it empty and the product sits under the portal's group for those that
+          carry none. Read off the same products the heading above is.</span>
+        <input name="productGroup"
+          value="${esc(headingList(v.productGroup, v.productGroupTexts, langs))}"
+          autocomplete="off" list="known-groups"
+          placeholder="${esc(headingPlaceholder(langs, ["Mobile Geräte", "Appareils mobiles", "Mobile devices", "Dispositivi mobili"]))}">
         <datalist id="known-groups">${
-  [...new Set(items.map((i) => (i.productGroup || "").trim()).filter(Boolean))].sort()
+  knownHeadings(items, "productGroup", langs)
     .map((g) => `<option value="${esc(g)}"></option>`).join("")}</datalist></label>
       <label class="field wide">Search terms
         <span class="muted" style="display:block; margin:2px 0 6px">Words somebody might

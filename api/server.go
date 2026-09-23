@@ -750,6 +750,18 @@ type Server struct {
 	// empty means derive them from the request (ADR-0200).
 	externalURL string
 
+	// selfURL is how this process reaches its own HTTP server — the address its
+	// supervised workers are told to work for (cmd/atlas: internalURL), which is a
+	// loopback origin and, where this server terminates TLS, a plaintext loopback
+	// port nothing outside the process can use.
+	//
+	// The shipped system processes need it: they do their work by calling Atlas's
+	// own API, and a model cannot carry an installation's address. externalURL is
+	// the wrong value for that — it is set only when an operator states one, and a
+	// request built on an empty base fails silently, which is the defect the
+	// fulfilment report exists to surface.
+	selfURL string
+
 	// oidc is the identity provider people may sign in with, when an operator
 	// configured one (WithOIDC, ADR-0210). Nil is the
 	// default and means the local password is the only way in: the routes are not
@@ -1578,6 +1590,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		// reach would put an internal address in a mail to somebody who cannot
 		// resolve it.
 		func() string { return s.externalURL },
+		func() string { return s.selfURL },
 		// The inventory. A right the portal granted is engine state, not order
 		// state, because it outlives the order: the instance that produced it is
 		// eligible for retention deletion long before the right ends, and a record
@@ -1722,6 +1735,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// The catalogue can now say which approval rules reach nobody. It asks; the
 	// accounts and the groups are the server's, and this is where the two meet.
 	s.catalogs.Approvers = approverLookup{s: s}
+	s.catalogs.Processes = processLookup{s: s}
 	s.orders.Limits = s.budgets()
 	s.capabilities.Limits = s.budgets()
 	s.playground.Limits = s.budgets()
@@ -2551,6 +2565,18 @@ func (s *Server) processLookup(defKey uint64) *compiler.CompiledProcess {
 // running in the engine, which is the one outcome this flag exists to prevent.
 func WithOffloadedConnectorKinds(kinds []string) Option {
 	return func(s *Server) { s.offloadedKinds = kinds }
+}
+
+// WithSelfURL tells the server how it reaches its own HTTP API, so the shipped
+// system processes can call it.
+//
+// An Option, so it comes from the process's own command line and from nowhere
+// else: a request must not be able to point the engine's own orchestration at
+// another server. Empty is a real state — a Server built by a test that never
+// runs the fulfilment loop has none — and the models then build a request on an
+// empty base, which fails the call rather than sending it somewhere else.
+func WithSelfURL(url string) Option {
+	return func(s *Server) { s.selfURL = strings.TrimRight(strings.TrimSpace(url), "/") }
 }
 
 // WithSupervisedWorkers asks the server to run these workers itself: one child

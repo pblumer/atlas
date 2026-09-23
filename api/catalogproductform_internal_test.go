@@ -241,6 +241,14 @@ var productFieldControls = map[string]string{
 	"price":              `name="price"`,
 	"category":           `name="category"`,
 	"productGroup":       `name="productGroup"`,
+	// One box maintains the key and the wordings together, so the proof is that
+	// the box is filled from the wordings and read back into them — not that a
+	// control called categoryTexts exists, because there deliberately is none. A
+	// heading is a word rather than a sentence, and a maintainer keeping four of
+	// them aligned reads them beside each other
+	// (ADR-0412).
+	"categoryTexts":     `headingList(v.category, v.categoryTexts, langs)`,
+	"productGroupTexts": `headingList(v.productGroup, v.productGroupTexts, langs)`,
 }
 
 // productFieldsWithNoControl are the fields the form deliberately does not ask for,

@@ -169,16 +169,28 @@ func catalogItemProps() map[string]any {
 			"adds these up. It is frozen into the release and copied onto the order line, so an " +
 			"approver's figure stays the figure they decided on."),
 		"category": stringProp("The heading the portal groups it under — \"Arbeitsplatz\", " +
-			"\"Kommunikation\". A heading and nothing else: no ordering, no translation, no entity " +
-			"behind it, and two spellings are two categories. Reuse a heading already in the " +
-			"catalogue rather than inventing a second spelling of it. It is read off the products " +
-			"NOTHING CONTAINS: on a product that is a part of another one the portal never reads " +
-			"it, so set it on the offering and not on the services behind it."),
+			"\"Kommunikation\". THE KEY AND NOT THE WORDING: the portal groups by this value and " +
+			"renders `categoryTexts` beside it, so two spellings are two categories. Reuse a " +
+			"heading already in the catalogue rather than inventing a second spelling of it. A " +
+			"heading and nothing else: no ordering and no entity behind it. It is read off the " +
+			"products NOTHING CONTAINS: on a product that is a part of another one the portal " +
+			"never reads it, so set it on the offering and not on the services behind it."),
+		"categoryTexts": objectProp("The heading per language tag, where `category` above is what " +
+			"the portal groups by: {\"de\": \"Arbeitsplatz\", \"fr\": \"Poste de travail\"}. " +
+			"Leave it out and the key renders in every language, which is the ordinary state for " +
+			"a catalogue declaring one. Optional as a whole and ALL-OR-NOTHING once there is one: " +
+			"publishing refuses a heading translated into one declared language and not another, " +
+			"because the fallback renders and one audience silently reads somebody else's column " +
+			"head. Translations without a `category` are refused too — nothing would read them."),
 		"productGroup": stringProp("The group one level below the heading: the portal's cascade " +
-			"reads Kategorie > Produktgruppe > Produkt > Services. A string with the same costs as " +
-			"`category` above and read off the same products — the group has no record and " +
-			"therefore no category of its own, so the chain is assembled per product and a group " +
-			"whose products sit in two categories appears under both."),
+			"reads Kategorie > Produktgruppe > Produkt > Services. The key, exactly as `category` " +
+			"above is, with `productGroupTexts` for the wording, and read off the same products — " +
+			"the group has no record and therefore no category of its own, so the chain is " +
+			"assembled per product and a group whose products sit in two categories appears " +
+			"under both."),
+		"productGroupTexts": objectProp("The product group per language tag, exactly as " +
+			"`categoryTexts` is the heading's — same key-and-wording split, same all-or-nothing " +
+			"rule at publication. See that property."),
 		"createdAt": integerProp("When the product was first stored. Send back what you read: the " +
 			"write is a replace, so omitting it resets the creation date to now."),
 		"revision": integerProp("THE REVISION YOU READ, as a precondition. When set, the write is " +
@@ -277,7 +289,8 @@ func catalogTools() []Tool {
 			Name: "atlas_list_catalog_products",
 			Description: "List the products and services whose home catalogue you maintain, with " +
 				"every field: texts, state, approval rule, process bindings, targets, eligibility, " +
-				"price, category, product group, keywords, and the `revision` each is on. READ THIS " +
+				"price, the two headings and their wording per language, keywords, and the " +
+				"`revision` each is on. READ THIS " +
 				"BEFORE EVERY CHANGE — atlas_save_catalog_product replaces the whole record, so " +
 				"this is where the fields you are not changing come from.",
 			InputSchema: noArgs(),
@@ -299,6 +312,29 @@ func catalogTools() []Tool {
 			InputSchema: noArgs(),
 			Handler: func(c *Client, _ map[string]any) (string, error) {
 				return asText(c.get("/api/v1/catalog-products/approver-report"))
+			},
+		},
+		{
+			Name: "atlas_catalog_fulfilment_report",
+			Description: "Which of the services you offer cannot be fulfilled on this " +
+				"installation. A catalogue binds a product to processes by name, and nothing " +
+				"checks those names — not when the binding is written, not when the catalogue " +
+				"is published, not when an order reaches one. Two ways it fails: the process " +
+				"was never deployed, or it is deployed and waits on a job type nothing works. " +
+				"THE SECOND RAISES NO INCIDENT AT ALL: a parked token is work waiting, not " +
+				"work failed, so no retry is spent, nothing turns red, and the order simply " +
+				"stands at waiting. This is the only place it is said. It walks the whole path " +
+				"an order takes — the fulfilment orchestration, the approval process where the " +
+				"rule needs one, then provisioning and the return — because any of them stops " +
+				"it, and it reads the newest release of each catalogue you maintain, since " +
+				"that is what can be ordered today. A problem on the shared orchestration is " +
+				"reported once and names no product: it is one fact about the installation and " +
+				"stops every order alike. Run it beside atlas_catalog_approver_report, which " +
+				"asks the other half — that one whether the rule reaches a person, this one " +
+				"whether the work reaches a worker.",
+			InputSchema: noArgs(),
+			Handler: func(c *Client, _ map[string]any) (string, error) {
+				return asText(c.get("/api/v1/catalog-products/fulfilment-report"))
 			},
 		},
 		{

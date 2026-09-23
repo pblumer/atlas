@@ -109,6 +109,7 @@ func TestEveryGatedOrderHandlerRefusesAnOutsider(t *testing.T) {
 				inAnyGroup, mayOrderForAnyone,
 				func(message, orderID string, vars map[string]string) error { return nil },
 				func() string { return "https://atlas.example.ch" },
+				func() string { return "http://atlas.test" },
 				ignoreGrant, ignoreRevoke, holdsNothing)
 			theirs := decode[Order](t, do(t, insider.HandlePlace, someone("usr_in"), "POST",
 				`{"releaseId":"rel_1","items":["account"]}`))
@@ -120,6 +121,7 @@ func TestEveryGatedOrderHandlerRefusesAnOutsider(t *testing.T) {
 				inAnyGroup, mayOrderForAnyone,
 				func(message, orderID string, vars map[string]string) error { return nil },
 				func() string { return "https://atlas.example.ch" },
+				func() string { return "http://atlas.test" },
 				ignoreGrant, ignoreRevoke, holdsNothing)
 
 			h := reflect.ValueOf(s).MethodByName(g.name).

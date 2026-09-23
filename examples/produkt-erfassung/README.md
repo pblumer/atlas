@@ -7,21 +7,37 @@ Dieser Prozess macht dasselbe als Ablauf mit Aufgaben und gewinnt damit das, was
 ein Formular nicht hat: eine Prüfung durch eine zweite Ansicht, bevor das Produkt
 bestellbar wird, und eine Spur, wer was wann entschieden hat.
 
-## Voraussetzung: die Verbindung `atlas`
+## Voraussetzungen
 
-Jeder Service-Task schreibt über Atlas' **eigene HTTP-API** zurück — mit dem
-`rest`-Connector und einer Verbindung namens `atlas`. Das ist derselbe Weg, den
-der mitgelieferte Auftragserfüllungsprozess
-(`api/systemprocesses/auftrag-erfuellung.bpmn`) geht.
+Jeder Service-Task hier schreibt über Atlas' **eigene HTTP-API** zurück, als
+`<atlas:restConnector>`-Task auf dem reservierten Job-Typ `io.atlas.http.rest` —
+denselben, den der mitgelieferte Auftragserfüllungsprozess
+(`api/systemprocesses/auftrag-erfuellung.bpmn`) benutzt. Die Engine bedient ihn
+selbst; wo der Betreiber diese Art ausgelagert hat, bedient sie der mitgelieferte
+`rest`-Worker. **Einzurichten ist dafür nichts.**
 
-Diese Verbindung wird unter **Console → Workers** eingerichtet: ein Worker vom
-Typ `rest` mit dem Namen `atlas`, dessen Basis-URL auf diesen Server zeigt und
-dessen Credential ein Zugang mit Katalogpflege-Recht ist.
+Zwei Dinge braucht der Ablauf trotzdem:
 
-**Ohne sie parken die Service-Tasks.** Sie scheitern nicht und sie verlieren
-nichts — sie warten, bis die Verbindung da ist, und laufen dann weiter. Das ist
-der Grund, warum dieses Beispiel im Handbuch keinen „Ausführen"-Knopf hat: er
-würde im ersten Schritt einen Token parken und nichts zeigen.
+**Die Adresse dieses Atlas.** Ein Modell kann sie nicht in sich tragen, und dieser
+Ablauf wird von Hand gestartet — er hat also niemanden, der sie mitgäbe. Das
+Startformular `pe-start` fragt sie als einzige Angabe ab und legt sie unter
+`atlasApiBase` ab; jeder Aufruf baut seine URL daraus. Der
+Auftragserfüllungsprozess bekommt dieselbe Variable vom Server, weil der Server
+ihn startet.
+
+**Ein API-Token mit Katalogpflege-Recht**, hinterlegt unter
+`ATLAS_CONNECTOR_ATLAS_TOKEN` (ADR-0041). Die Modelle nennen nur die Referenz
+`atlas`, nie den Wert. Fehlt das Token, antwortet die API mit 401, der Job
+scheitert und meldet einen Incident — sichtbar, statt stumm zu parken.
+
+### Was hier früher stand
+
+Die Aufrufe waren gewöhnliche Service-Tasks des Job-Typs `rest`, mit Ziel und
+Methode in Task-Headern, und dieses README riet, dafür unter **Console → Workers**
+einen Worker vom Typ `rest` namens `atlas` einzurichten. Nichts davon trug:
+`rest` ist kein reservierter Job-Typ, ein geleaster Job führt überhaupt keine
+Task-Header mit sich, und diesen Worker-Typ gibt es nicht. Die Tokens parkten
+ohne zu scheitern — kein Wiederholungsversuch, kein Incident, nichts Rotes.
 
 Zwei Gruppen kommen vor: `katalogpflege` für die Erfassung und `administration`
 für das Erscheinungsbild.
