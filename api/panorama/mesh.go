@@ -673,11 +673,23 @@ type Node struct {
 // binding catalog already applies — a deployment target is org-wide infrastructure
 // with no sharing scope of its own.
 //
-// No edges are derived to it, and that absence is deliberate rather than pending. A
-// promotion is an act, not a stored relationship: this server does not record which
-// of its applications is running over there, so any line drawn from one to a target
-// would be an assertion nobody made. What it does know is that the peer exists and
-// whether it answers, and that is exactly what is drawn.
+// No edges are derived to it, and that absence is deliberate rather than pending —
+// but not for the reason this comment used to give. It said a promotion is an act and
+// not a stored relationship, and that this server does not record which of its
+// applications is running over there. It does: `deploymentTarget.Bindings` maps a
+// local application id to the id the same application has on that target, written on
+// the first successful promotion (`api/promote.go`, ADR-0129 option C1) and read back
+// on every later one.
+//
+// What that map is, precisely, is the record of **a promotion that happened** — not
+// evidence that the application is still deployed there, which nothing local can
+// know. So the join is a fact and the current state is not, which is why the join
+// belongs to the estate altitude that draws exactly that
+// (ADR-0402 §4: the only
+// estate-wide edges that are facts are the application joins a promotion recorded)
+// rather than to this picture, where a line between an application and a target would
+// read as "runs there now". What L0 knows about a target is that the peer exists and
+// whether it answers, and that is what is drawn.
 type Target struct {
 	ID   string
 	Name string
