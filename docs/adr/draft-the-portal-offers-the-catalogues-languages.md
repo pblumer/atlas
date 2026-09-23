@@ -89,6 +89,16 @@ gets German, because there is no English here to give them.
   number of catalogue languages is unbounded. Adding French and Italian took no
   change to this mechanism at all, which is what it was built for and is now
   evidence rather than intention. A fifth is 148 strings and nothing else.
+- **Negative / trade-offs accepted:** this is the ORDERER's surface. An approval
+  is an ordinary user task and is decided in the Console's inbox (ADR-0394), whose
+  message catalogue is German and English (ADR-0267). So a catalogue kept in four
+  languages is ordered from in four and approved in two: somebody ordering in
+  French has their approval read in German, which is that catalogue's default.
+  Extending the inbox to French and Italian is 81 strings and was **considered and
+  declined** by the maintainer when this landed. It is not an oversight and it is
+  not free to change one's mind about later — ADR-0267's reason stands, that a
+  translated Tasks app inside an English Console is a half-translated screen, and
+  German already pays that price deliberately.
 - **Follow-ups / risks to watch:** the French and Italian were written by the
   author of this change and have not been read by a native speaker of either. They
   are consistent in register — formal throughout, as the German is — and the terms
