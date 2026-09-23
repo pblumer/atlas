@@ -323,6 +323,311 @@ const STRINGS = {
     'signin.register': 'No account yet?',
     'signin.registerLink': 'Register',
   },
+  // Français, pour les catalogues tenus en français. Vouvoiement partout, comme
+  // dans l’allemand : le portail s’adresse à une personne qui commande pour son
+  // travail, pas à un compte.
+  fr: {
+    'portal.title': 'Portail des prestations',
+    'portal.catalog': 'Catalogue',
+    'portal.orders': 'Mes commandes',
+    'portal.none': 'Aucun catalogue ne vous est attribué.',
+    'portal.none.hint': 'Adressez-vous au service qui a créé votre accès.',
+    'portal.empty': 'Ce catalogue ne propose actuellement rien.',
+    'portal.includes': 'Inclus',
+    'portal.options': 'Également disponible',
+    'portal.order': 'Commander',
+    'portal.ordering': 'Commande en cours …',
+    'portal.noOrders': 'Vous n’avez encore rien commandé.',
+    'portal.placed': 'Commandé le',
+    'portal.approval': 'Approbation nécessaire',
+    'portal.back': 'Retour à Atlas',
+    'portal.held': 'Vous avez déjà',
+    'portal.held.since': 'depuis',
+    'portal.blockedBy': 'En attente de',
+    'portal.reason': 'Motif',
+    'portal.retry': 'Réessayer',
+    'portal.failed': 'Cela n’a pas fonctionné.',
+    'portal.cancel': 'Annuler',
+    'portal.cancelling': 'Annulation en cours …',
+    'order.cancelled': 'Annulée',
+    'status.cancelled': 'Annulée',
+    'portal.return': 'Restituer',
+    'portal.returning': 'Restitution en cours …',
+    'status.returning': 'Restitution en cours',
+    'status.returned': 'Restituée',
+    'portal.return.sure': 'Restituer réellement cette prestation ? L’accès sera retiré.',
+    'status.returnFailed': 'Échec de la restitution',
+    'status.pending': 'En attente',
+    'status.running': 'En cours',
+    'status.done': 'Terminé',
+    'status.skipped': 'Déjà attribué',
+    'status.failed': 'Incident',
+    'status.rejected': 'Refusé',
+    'status.abandoned': 'Abandonné',
+    'status.blocked': 'Bloqué',
+    'order.running': 'En traitement',
+    'proc.open': 'Voir le processus',
+    'proc.none.order': 'Aucune instance de processus en cours ne correspond à cette commande : soit aucune n’a encore été lancée, soit elle est déjà terminée, soit la conservation l’a supprimée.',
+    'proc.archived': 'Le processus de cette commande ne figure plus que dans le journal d’événements externalisé. Ce serveur ne le possède plus et ne peut pas l’afficher.',
+    'proc.asking': 'Interrogation en cours …',
+    'order.completed': 'Terminée',
+    'order.partial': 'Partiellement exécutée',
+    'order.unfulfilled': 'Non exécutée',
+    'nav.catalog': 'Catalogue',
+    'nav.orders': 'Mes commandes',
+    'nav.services': 'Mes prestations',
+    'nav.help': 'Aide',
+    'col.category': 'Catégorie',
+    'col.group': 'Groupe de produits',
+    'group.all': 'Tous les groupes',
+    'group.none': 'Sans groupe',
+    'col.offering': 'Prestation',
+    'col.options': 'En option',
+    'col.service': 'Service',
+    'act.back': '< retour',
+    'act.discard': 'Supprimer la commande',
+    'act.toBasket': 'Ajouter au panier >',
+    'act.place': 'commander >',
+    'act.cancelLines': 'Résilier la ou les prestations',
+    'act.changeLine': 'Modifier la prestation',
+    'basket.title': 'Panier',
+    'basket.empty': 'Le panier est vide.',
+    'basket.count': 'Dans le panier',
+    'for.order': 'Commander pour :',
+    'for.approve': 'Approuver pour :',
+    'for.search': 'Rechercher une personne',
+    'for.self': 'moi-même',
+    'for.hits': 'personnes',
+    'for.none': 'Personne de ce nom. Un identifiant, un nom d’utilisateur ou une adresse électronique fonctionne aussi.',
+    'for.clear': 'Commander à nouveau pour moi-même',
+    'cfg.title': 'Informations sur cette prestation',
+    'cfg.loading': 'Chargement du formulaire …',
+    'cfg.failed': 'Ce formulaire ne peut pas être chargé. La commande reste possible ; les informations manqueront.',
+    'cfg.invalid': 'Certaines informations sont incomplètes. Veuillez les corriger avant de commander.',
+    'line.withdraw': 'Retirer cette position',
+    'line.withdrawing': 'Retrait en cours …',
+    'line.details': 'Modifier les informations',
+    'line.save': 'Enregistrer les informations',
+    'line.saving': 'Enregistrement en cours …',
+    'line.close': 'Annuler',
+    'line.amended': 'Corrigé',
+    'line.amendedFrom': 'auparavant',
+    'info.price': 'Coût',
+    'price.none': 'Le catalogue n’indique aucun coût.',
+    'cat.none': 'Sans catégorie',
+    'noid.title': 'Commander exige une identité.',
+    'noid.hint': 'Une commande appartient à quelqu’un. Sans connexion, il n’y a personne à qui elle appartienne ni personne à informer. Le catalogue est ici pour être consulté ; pour commander, démarrez le serveur avec --auth.',
+    'cat.all': 'Toutes',
+    'tbl.company': 'Organisation',
+    'tbl.person': 'Personne',
+    'tbl.placed': 'commandé',
+    'tbl.order': 'Commande',
+    'tbl.status': 'Statut',
+    'tbl.searchCompany': 'Rechercher une organisation',
+    'tbl.searchPerson': 'Rechercher une personne',
+    'tbl.searchDate': 'Date',
+    'tbl.searchOrder': 'Rechercher une commande',
+    'tbl.searchStatus': 'Rechercher un statut',
+    'tbl.noMatch': 'Aucune commande ne correspond à la recherche.',
+    'note.noCompany': 'La colonne Organisation reste vide : une commande ne porte aujourd’hui aucune organisation. Elle indique seulement qui commande et qui reçoit.',
+    'note.included': 'Toujours inclus — ne peut pas être désélectionné.',
+    'window.later': 'Commandable à partir du',
+    'window.over': 'Plus commandable depuis le',
+    'window.until': 'Commandable jusqu’au',
+    'variant.label': 'Variante',
+    'variant.many': 'Plusieurs variantes sont possibles — chaque case cochée est une position distincte.',
+    'variant.one': 'Choisissez exactement une variante.',
+    'variant.missing': 'Choisissez une variante pour chaque position avant de commander.',
+    'info.title': 'Informations sur le service',
+    'info.id': 'Identifiant',
+    'info.approval': 'Approbation',
+    'info.none': 'aucune',
+    'info.repeatable': 'Peut être détenu plusieurs fois',
+    'info.includes': 'Toujours inclus',
+    'info.options': 'En option',
+    'info.yes': 'oui',
+    'info.no': 'non',
+    'services.none': 'Vous ne détenez actuellement aucune prestation.',
+    'fav.mark': 'Ajouter aux favoris',
+    'fav.clear': 'Retirer des favoris',
+    'fav.only': 'Favoris uniquement',
+    'fav.none': 'Vous n’avez rien mis en favori.',
+    'fav.unresolved': 'Favoris que ce catalogue ne propose pas',
+    'fav.full': 'Cela dépasse le nombre de favoris qu’un compte peut garder. Retirez-en un avant d’en ajouter un autre.',
+    'find.label': 'Rechercher une prestation',
+    'find.hint': 'Nom, abréviation ou usage prévu',
+    'find.none': 'Aucune prestation ne correspond à la recherche.',
+    'find.hits': 'résultats',
+    'find.clear': 'Réinitialiser la recherche',
+    'find.where': 'dans',
+    'signin.title': 'Veuillez vous connecter',
+    'signin.hint': 'Ce portail vous montre le catalogue qui vous est attribué ainsi que vos propres commandes. Pour cela, il doit savoir qui vous êtes.',
+    'signin.user': 'Nom d’utilisateur',
+    'signin.password': 'Mot de passe',
+    'signin.submit': 'Se connecter',
+    'signin.busy': 'Connexion en cours …',
+    'signin.wrong': 'Ce nom d’utilisateur ou ce mot de passe n’est pas correct.',
+    'signin.throttled': 'Trop de tentatives — le mot de passe n’a même pas été vérifié. Patientez quelques minutes, puis réessayez.',
+    'signin.failed': 'La connexion n’a pas pu aboutir. Réessayez ou adressez-vous au service qui a créé votre accès.',
+    'signin.expired': 'Votre session a expiré. Veuillez vous reconnecter.',
+    'signin.sso': 'Se connecter avec',
+    'signin.ssoFailed': 'La connexion via votre fournisseur d’identité n’a pas fonctionné. Réessayez ou adressez-vous au service qui a créé votre accès.',
+    'signin.or': 'ou avec un nom d’utilisateur et un mot de passe',
+    'signin.register': 'Pas encore de compte ?',
+    'signin.registerLink': 'S’inscrire',
+  },
+  // Italiano, per i cataloghi tenuti in italiano. Forma di cortesia ovunque, come
+  // nelle altre lingue.
+  it: {
+    'portal.title': 'Portale delle prestazioni',
+    'portal.catalog': 'Catalogo',
+    'portal.orders': 'I miei ordini',
+    'portal.none': 'Non le è assegnato alcun catalogo.',
+    'portal.none.hint': 'Si rivolga al servizio che ha creato il suo accesso.',
+    'portal.empty': 'Questo catalogo al momento non offre nulla.',
+    'portal.includes': 'Incluso',
+    'portal.options': 'Disponibile anche',
+    'portal.order': 'Ordinare',
+    'portal.ordering': 'Ordine in corso …',
+    'portal.noOrders': 'Non ha ancora ordinato nulla.',
+    'portal.placed': 'Ordinato il',
+    'portal.approval': 'Richiede approvazione',
+    'portal.back': 'Ritorno ad Atlas',
+    'portal.held': 'Dispone già di',
+    'portal.held.since': 'dal',
+    'portal.blockedBy': 'In attesa di',
+    'portal.reason': 'Motivo',
+    'portal.retry': 'Riprovare',
+    'portal.failed': 'Non ha funzionato.',
+    'portal.cancel': 'Annullare',
+    'portal.cancelling': 'Annullamento in corso …',
+    'order.cancelled': 'Annullato',
+    'status.cancelled': 'Annullato',
+    'portal.return': 'Restituire',
+    'portal.returning': 'Restituzione in corso …',
+    'status.returning': 'Restituzione in corso',
+    'status.returned': 'Restituito',
+    'portal.return.sure': 'Restituire davvero questa prestazione? L’accesso verrà revocato.',
+    'status.returnFailed': 'Restituzione non riuscita',
+    'status.pending': 'In attesa',
+    'status.running': 'In corso',
+    'status.done': 'Concluso',
+    'status.skipped': 'Già disponibile',
+    'status.failed': 'Guasto',
+    'status.rejected': 'Rifiutato',
+    'status.abandoned': 'Abbandonato',
+    'status.blocked': 'Bloccato',
+    'order.running': 'In lavorazione',
+    'proc.open': 'Visualizzare il processo',
+    'proc.none.order': 'Per questo ordine non risulta alcuna istanza di processo in corso: o non ne è ancora stata avviata una, o è già terminata, oppure la conservazione l’ha rimossa.',
+    'proc.archived': 'Il processo di questo ordine si trova ormai solo nel registro eventi esternalizzato. Questo server non lo possiede più e non può mostrarlo.',
+    'proc.asking': 'Interrogazione in corso …',
+    'order.completed': 'Concluso',
+    'order.partial': 'Parzialmente evaso',
+    'order.unfulfilled': 'Non evaso',
+    'nav.catalog': 'Catalogo',
+    'nav.orders': 'I miei ordini',
+    'nav.services': 'Le mie prestazioni',
+    'nav.help': 'Aiuto',
+    'col.category': 'Categoria',
+    'col.group': 'Gruppo di prodotti',
+    'group.all': 'Tutti i gruppi',
+    'group.none': 'Senza gruppo',
+    'col.offering': 'Prestazione',
+    'col.options': 'Opzionale',
+    'col.service': 'Servizio',
+    'act.back': '< indietro',
+    'act.discard': 'Eliminare l’ordine',
+    'act.toBasket': 'Aggiungere al carrello >',
+    'act.place': 'ordinare >',
+    'act.cancelLines': 'Disdire la o le prestazioni',
+    'act.changeLine': 'Modificare la prestazione',
+    'basket.title': 'Carrello',
+    'basket.empty': 'Il carrello è vuoto.',
+    'basket.count': 'Nel carrello',
+    'for.order': 'Ordinare per:',
+    'for.approve': 'Approvare per:',
+    'for.search': 'Cercare una persona',
+    'for.self': 'me stesso',
+    'for.hits': 'persone',
+    'for.none': 'Nessuno con questo nome. Funziona anche un identificativo, un nome utente o un indirizzo di posta elettronica.',
+    'for.clear': 'Ordinare di nuovo per me stesso',
+    'cfg.title': 'Indicazioni su questa prestazione',
+    'cfg.loading': 'Caricamento del modulo …',
+    'cfg.failed': 'Questo modulo non può essere caricato. È comunque possibile ordinare; le indicazioni mancheranno.',
+    'cfg.invalid': 'Alcune indicazioni non sono complete. La preghiamo di correggerle prima di ordinare.',
+    'line.withdraw': 'Ritirare questa posizione',
+    'line.withdrawing': 'Ritiro in corso …',
+    'line.details': 'Modificare le indicazioni',
+    'line.save': 'Salvare le indicazioni',
+    'line.saving': 'Salvataggio in corso …',
+    'line.close': 'Annullare',
+    'line.amended': 'Corretto',
+    'line.amendedFrom': 'prima',
+    'info.price': 'Costo',
+    'price.none': 'Il catalogo non indica alcun costo.',
+    'cat.none': 'Senza categoria',
+    'noid.title': 'Per ordinare occorre essere qualcuno.',
+    'noid.hint': 'Un ordine appartiene a qualcuno. Senza accesso non c’è nessuno a cui appartenga né nessuno da informare. Il catalogo è qui per essere consultato; per ordinare, avviare il server con --auth.',
+    'cat.all': 'Tutte',
+    'tbl.company': 'Organizzazione',
+    'tbl.person': 'Persona',
+    'tbl.placed': 'ordinato',
+    'tbl.order': 'Ordine',
+    'tbl.status': 'Stato',
+    'tbl.searchCompany': 'Cercare un’organizzazione',
+    'tbl.searchPerson': 'Cercare una persona',
+    'tbl.searchDate': 'Data',
+    'tbl.searchOrder': 'Cercare un ordine',
+    'tbl.searchStatus': 'Cercare uno stato',
+    'tbl.noMatch': 'Nessun ordine corrisponde alla ricerca.',
+    'note.noCompany': 'La colonna Organizzazione resta vuota: oggi un ordine non porta alcuna organizzazione. Indica soltanto chi ordina e chi riceve.',
+    'note.included': 'Sempre incluso — non deselezionabile.',
+    'window.later': 'Ordinabile dal',
+    'window.over': 'Non più ordinabile dal',
+    'window.until': 'Ordinabile fino al',
+    'variant.label': 'Variante',
+    'variant.many': 'Sono possibili più varianti — ogni casella selezionata è una posizione a sé.',
+    'variant.one': 'Scegliere esattamente una variante.',
+    'variant.missing': 'Scegliere una variante per ogni posizione prima di ordinare.',
+    'info.title': 'Indicazioni sul servizio',
+    'info.id': 'Identificativo',
+    'info.approval': 'Approvazione',
+    'info.none': 'nessuna',
+    'info.repeatable': 'Può essere detenuto più volte',
+    'info.includes': 'Sempre incluso',
+    'info.options': 'Opzionale',
+    'info.yes': 'sì',
+    'info.no': 'no',
+    'services.none': 'Al momento non detiene alcuna prestazione.',
+    'fav.mark': 'Aggiungere ai preferiti',
+    'fav.clear': 'Rimuovere dai preferiti',
+    'fav.only': 'Solo preferiti',
+    'fav.none': 'Non ha contrassegnato nulla come preferito.',
+    'fav.unresolved': 'Preferiti che questo catalogo non offre',
+    'fav.full': 'Sono più preferiti di quanti un conto possa conservarne. Ne rimuova uno prima di aggiungerne un altro.',
+    'find.label': 'Cercare una prestazione',
+    'find.hint': 'Nome, abbreviazione o a che cosa le serve',
+    'find.none': 'Nessuna prestazione corrisponde alla ricerca.',
+    'find.hits': 'risultati',
+    'find.clear': 'Azzerare la ricerca',
+    'find.where': 'in',
+    'signin.title': 'Si prega di accedere',
+    'signin.hint': 'Questo portale le mostra il catalogo che le è assegnato e i suoi ordini. Per farlo deve sapere chi è lei.',
+    'signin.user': 'Nome utente',
+    'signin.password': 'Password',
+    'signin.submit': 'Accedere',
+    'signin.busy': 'Accesso in corso …',
+    'signin.wrong': 'Il nome utente o la password non sono corretti.',
+    'signin.throttled': 'Troppi tentativi — la password non è stata nemmeno verificata. Attenda alcuni minuti e riprovi.',
+    'signin.failed': 'L’accesso non è andato a buon fine. Riprovi oppure si rivolga al servizio che ha creato il suo accesso.',
+    'signin.expired': 'La sua sessione è scaduta. Si prega di accedere di nuovo.',
+    'signin.sso': 'Accedere con',
+    'signin.ssoFailed': 'L’accesso tramite il suo fornitore di identità non ha funzionato. Riprovi oppure si rivolga al servizio che ha creato il suo accesso.',
+    'signin.or': 'oppure con nome utente e password',
+    'signin.register': 'Non ha ancora un conto?',
+    'signin.registerLink': 'Registrarsi',
+  },
 };
 
 // The locale, from the browser and narrowed to what the page offers.
@@ -348,7 +653,53 @@ let locale = pickLocale();
 // only happen if the completeness test was removed, and looking broken in review
 // is better than guessing at a language nobody chose.
 function t(key) {
-  return (STRINGS[locale] && STRINGS[locale][key]) || key;
+  // By the tag and then by its language, so a locale of `de-CH` renders the German
+  // catalogue. offeredLocales only ever hands out a tag whose language this page
+  // has strings for, so this never falls past the second step — which is what
+  // keeps ADR-0313's condition true: every string exists in every locale offered.
+  const own = STRINGS[locale] || STRINGS[baseOf(locale)] || {};
+  return own[key] || key;
+}
+
+// offeredLocales is what the language switch offers
+// (ADR-draft-the-portal-offers-the-catalogues-languages).
+//
+// **The languages this catalogue is kept in**, rather than the two this page
+// happens to be translated into. A catalogue kept only in German used to show an
+// EN button that turned the furniture English and left every product name German
+// — a half-translated screen offered by the page itself, which is the thing
+// ADR-0267 refuses to do by guessing and ADR-0313 sets the condition for.
+//
+// Narrowed to the languages this page can render, and that narrowing is the whole
+// of ADR-0313 applied here: a catalogue may be kept in French, and until the
+// furniture is French too, offering an FR button would land somebody on exactly
+// the half-translated screen that record forbids. The French product names are
+// stored and reachable through the fallback; what is not offered is a button that
+// promises a French portal.
+//
+// Before there is a catalogue — the sign-in screen, or a visitor who is nobody's
+// audience — it is this page's own languages, because the switch has to be
+// reachable before the sign-in and there is nothing else to go on.
+function offeredLocales() {
+  const kept = ((state.catalog || {}).languages || []).filter((l) => STRINGS[baseOf(l)]);
+  return kept.length ? kept : Object.keys(STRINGS);
+}
+
+// settleLocale moves the chosen language onto one the catalogue is actually kept
+// in, once that is known.
+//
+// The choice is made before the catalogue is read — from the address, from this
+// browser, or from the visitor's own list — so it is a language and not yet one
+// of this catalogue's tags. A reader who chose English meets a catalogue kept in
+// `en-EN` and should be reading it, not falling through to whatever came first.
+//
+// Same language first, then the catalogue's own first language. It never widens a
+// choice: a reader who chose English and meets a German-only catalogue gets
+// German, because there is no English here to give them.
+function settleLocale() {
+  const offered = offeredLocales();
+  if (offered.includes(locale)) return;
+  locale = offered.find((l) => baseOf(l) === baseOf(locale)) || offered[0];
 }
 
 function setLocale(next) {
@@ -357,12 +708,52 @@ function setLocale(next) {
   render();
 }
 
+// baseOf is the language a tag is in: `de-CH` is German, `zh-Hans` is Chinese,
+// and a bare `de` is its own base.
+//
+// The same reduction pickLocale does to the browser's list, and the two have to
+// agree — that is the whole point of it being one function's worth of rule
+// written twice rather than two rules.
+function baseOf(tag) {
+  return String(tag).toLowerCase().split('-')[0];
+}
+
+// pickText is the entry one language selects out of a map keyed by language tags.
+//
+// **By the language and not by the whole tag**, which is the correction. This page
+// narrows a browser's language to its base, because its own words live in a
+// message catalogue keyed that way; a product's texts are keyed by whatever the
+// CATALOGUE declares, and `de-DE`, `en-GB` and `pt-BR` are all correct and all
+// invisible to a lookup for `de`, `en`, `pt`. A catalogue kept in `de-DE; en-EN`
+// would otherwise store every name under a key nothing here ever asks for, fall
+// through to the first value it had, and show one word in both languages — the
+// defect ADR-0413 was written about, arrived at down a different road.
+//
+// The exact tag wins over a regional one. A catalogue carrying both `de` and
+// `de-CH` means the two deliberately, and answering with whichever the release
+// happened to list first would be a coin toss. Between two regionals of the same
+// language it IS the listed order, which is the release's own and therefore
+// stable — worth knowing rather than worth preventing.
+//
+// A key that is present and blank is not an answer, for the reason it is not one
+// in descriptionOf: it is the shape a cleared box leaves behind.
+function pickText(texts, base) {
+  const said = (v) => typeof v === 'string' && v.trim() !== '';
+  if (said(texts[base])) return texts[base];
+  for (const tag of Object.keys(texts)) {
+    if (said(texts[tag]) && baseOf(tag) === base) return texts[tag];
+  }
+  return '';
+}
+
 // textOf reads a catalogue item's name in the current locale, falling back to
 // whatever the catalogue has. A product is named by its catalogue, not by this
 // page, so there is no key to look up and no way to be complete about it.
 function textOf(texts, fallback) {
   if (!texts) return fallback;
-  return texts[locale] || texts.de || texts.en || Object.values(texts)[0] || fallback;
+  return pickText(texts, locale) || pickText(texts, 'de') || pickText(texts, 'en')
+    || Object.values(texts).find((t) => typeof t === 'string' && t.trim() !== '')
+    || fallback;
 }
 
 // The product's description, in the language this page is being read in where the
@@ -391,7 +782,10 @@ function textOf(texts, fallback) {
 function descriptionOf(item) {
   const d = (item || {}).descriptions;
   if (!d) return '';
-  for (const text of [d[locale], d.de, d.en, ...Object.values(d)]) {
+  // Through pickText for each step, so a catalogue kept in `de-DE` is reached by
+  // a reader on `de` — the same correction the name above carries.
+  for (const text of [pickText(d, locale), pickText(d, 'de'), pickText(d, 'en'),
+    ...Object.values(d)]) {
     if (typeof text === 'string' && text.trim() !== '') return text.trim();
   }
   return '';
@@ -963,6 +1357,11 @@ async function load() {
     state.catalog = null;
   }
   applyTheme(state.catalog);
+  // The catalogue decides which languages there are to choose between, so the
+  // choice is settled onto one of them the moment it is known — before anything
+  // is drawn, or the first paint would be in a language the switch cannot show as
+  // chosen.
+  settleLocale();
   if (state.catalog) {
     const releases = await api(`/api/v1/catalogs/${state.catalog.id}/releases`);
     state.release = releases && releases.length ? releases[0] : null;
@@ -3018,10 +3417,15 @@ function render() {
         // without this the only way out is the browser's back button, and a visitor
         // who arrived by link has no back to press.
         el('a', { class: 'backlink', href: '/index.html' }, '\u2190 ', t('portal.back')),
-        el('div', { class: 'langs' }, Object.keys(STRINGS).map((l) => el('button', {
-          class: l === locale ? 'lang on' : 'lang',
-          onclick: () => setLocale(l),
-        }, l.toUpperCase()))))),
+        // One button per language this catalogue is kept in, and none at all where
+        // there is only one: a switch with a single position is a control that
+        // says something can be changed and then cannot.
+        el('div', { class: 'langs' }, offeredLocales().length > 1
+          ? offeredLocales().map((l) => el('button', {
+            class: l === locale ? 'lang on' : 'lang',
+            onclick: () => setLocale(l),
+          }, l.toUpperCase()))
+          : null))),
     // The header stands on the sign-in screen too — the mark says who is asking,
     // and the language switch has to be reachable before the sign-in, not after
     // it: a German-speaking visitor meeting an English form is the case this

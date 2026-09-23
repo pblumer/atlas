@@ -34,6 +34,10 @@ const TASKS = [
     key: 104, processInstanceKey: 9004, processDefKey: 3, processId: "kunden-genehmigung",
     elementId: "Pruefen", name: "Freigabe prüfen", formId: "eigene-freigabe", priority: 50,
   },
+  {
+    key: 105, processInstanceKey: 9005, processDefKey: 1, processId: "atlas-genehmigung-fix",
+    elementId: "Genehmigen", name: "Genehmigen", formId: "genehmigung", priority: 50,
+  },
 ];
 
 const APPROVALS = [
@@ -54,6 +58,16 @@ const APPROVALS = [
     // form asks or what completing it means.
     task: TASKS[3], orderId: "ord_0815", itemId: "laptop", positionId: "laptop",
     recipient: "usr_rosa", orderer: "usr_max", texts: { en: "Laptop" },
+  },
+  {
+    // A catalogue kept in de-DE and en-EN rather than de and en. Both are correct
+    // BCP 47 and neither is what a reader's language is, because a language is a
+    // language: matched whole, every lookup here answers nothing and the row falls
+    // through to whatever the release listed first.
+    task: TASKS[4], orderId: "ord_2200", itemId: "dock", positionId: "dock",
+    recipient: "usr_rosa", orderer: "usr_max",
+    texts: { "de-DE": "Dockingstation", "en-EN": "Docking cradle" },
+    catalogId: "cat_reg", catalogTexts: { "de-DE": "Arbeitsplatz", "en-EN": "Workplace" },
   },
 ];
 
@@ -271,5 +285,26 @@ test("a link naming the product resolves where the order carries one of it", asy
   await expect(page.locator(".tasks-detail-head h1")).toBeVisible();
   await expect(page.locator(".tasks-item.selected")).toHaveCount(1);
   await expect(page.locator(".tasks-item.selected")).toHaveAttribute("data-key", "102");
+  expect(page.__errors).toEqual([]);
+});
+
+test("a product named in de-DE reaches a reader whose language is en", async ({ page }) => {
+  // The correction the portal carries, at a second surface reading the same maps.
+  // A catalogue declares the tags its texts are keyed by, and de-DE and en-EN are
+  // as correct as de and en; a reader's language is a language. Matched whole, this
+  // row named the product in whichever language the release listed first — with
+  // nothing on the screen saying it was not the one asked for.
+  await bootTasks(page);
+
+  const row = page.locator('.tasks-item[data-key="105"] .tasks-item-appr');
+  await expect(row, "the English name, under en-EN").toContainText("Docking cradle");
+  await expect(row, "and not the German one").not.toContainText("Dockingstation");
+
+  // The catalogue's own name is a second map read the same way, and it is rendered
+  // in the detail pane rather than on the row.
+  await select(page, 105);
+  const block = page.locator(".tasks-approval");
+  await expect(block, "the catalogue, likewise").toContainText("Workplace");
+  await expect(block, "and not its German name").not.toContainText("Arbeitsplatz");
   expect(page.__errors).toEqual([]);
 });

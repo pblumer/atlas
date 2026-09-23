@@ -8245,13 +8245,40 @@ async function viewTasks(preselectKey) {
   // `genehmigt = null`, which is not true, which is a rejection with no reason.
   const decidedHere = (t) => !!t && state.approvals.has(t.key) && t.formId === APPROVAL_FORM;
 
+  // inLanguage is the entry one language selects out of a map keyed by language
+  // tags — **by the language and not by the whole tag**.
+  //
+  // A catalogue declares the tags its texts are keyed by, and `de-DE`, `fr-CH` and
+  // `pt-BR` are as correct as `de`, `fr` and `pt`. A reader's language is a
+  // language: `navigator.language` narrowed to its first subtag, because that is
+  // what the two lists below are written in. Matching whole tags, a catalogue kept
+  // in de-DE and fr-FR answers every lookup with nothing and the row falls through
+  // to whichever text the release happened to list first — the product named in a
+  // language the approver did not ask for, with nothing saying so.
+  //
+  // The same correction the portal carries (ADR-0413, as amended). It is here
+  // separately because this is a second surface reading the same maps, and the
+  // first fix did not reach it.
+  function inLanguage(texts, base) {
+    if (texts[base]) return texts[base];
+    for (const tag of Object.keys(texts)) {
+      if (texts[tag] && String(tag).toLowerCase().split("-")[0] === base) return texts[tag];
+    }
+    return "";
+  }
+
+  // readerLanguages is what this reader has a chance with, best first: their own,
+  // then the two the Console itself is written in.
+  const readerLanguages = () => [(navigator.language || "en").slice(0, 2), "en", "de"];
+
   // approvalName is the product as the catalogue wrote it, in a language this reader
   // has a chance with, falling back to the id. The Console is English and a catalogue
   // need not be, so "the first text there is" beats showing an id.
   function approvalName(a) {
     const texts = a.texts || {};
-    for (const tag of [(navigator.language || "en").slice(0, 2), "en", "de"]) {
-      if (texts[tag]) return texts[tag];
+    for (const base of readerLanguages()) {
+      const said = inLanguage(texts, base);
+      if (said) return said;
     }
     const first = Object.values(texts).find((v) => v);
     return first || a.itemId || "—";
@@ -8262,8 +8289,9 @@ async function viewTasks(preselectKey) {
   // case the row is simply left out.
   function approvalCatalogue(a) {
     const texts = a.catalogTexts || {};
-    for (const tag of [(navigator.language || "en").slice(0, 2), "en", "de"]) {
-      if (texts[tag]) return texts[tag];
+    for (const base of readerLanguages()) {
+      const said = inLanguage(texts, base);
+      if (said) return said;
     }
     return Object.values(texts).find((v) => v) || "";
   }

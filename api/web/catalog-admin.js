@@ -201,7 +201,7 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
   view.querySelector(".cat-new").addEventListener("submit", async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
-    const langs = list(f.get("languages"));
+    const langs = languageList(f.get("languages"));
     if (!langs.length) { toast("A catalogue needs at least one language", "err"); return; }
     // The name is stored under the first language: a catalogue with a name in no
     // language it offers would fail to publish, and asking for the pair here is
@@ -220,6 +220,20 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
 }
 
 const list = (s) => String(s || "").split(",").map((x) => x.trim()).filter(Boolean);
+
+// languageList cuts the language box into tags.
+//
+// On a comma, a semicolon or any run of whitespace. A language tag can contain
+// none of the three, so all three are separators and none of them is ambiguous —
+// and a maintainer who reaches for the wrong one gets the languages they meant
+// instead of one refusal naming a tag they never intended to write.
+//
+// This is NOT the normalisation ADR-0413 refused. That was about a stored ENTRY
+// that might be one tag or two, where only its author knew which; this is about
+// how a human's single line is cut into entries at all, and that has one reading.
+// The API stays strict: it takes a list, and an entry carrying a separator is
+// still refused there, because nothing typed it — a caller built it.
+const languageList = (s) => String(s || "").split(/[,;\s]+/).filter(Boolean);
 
 // approverCard is the standing list of approval rules that reach nobody.
 //
@@ -1998,7 +2012,7 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
     }
     try {
       await patch({
-        texts, languages: list(f.get("languages")), rank: Number(f.get("rank")),
+        texts, languages: languageList(f.get("languages")), rank: Number(f.get("rank")),
         groups: audienceFrom(f),
       });
       toast("Saved");

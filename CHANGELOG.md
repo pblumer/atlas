@@ -14,6 +14,28 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A catalogue kept in `de-DE` and `en-EN` would have ignored the language switch,
+  for the same reason `de; en` did.** The portal narrows a browser's language to its
+  base — `de-CH` becomes `de` — because its own words live in a message catalogue
+  keyed that way. A product's texts are keyed by whatever the *catalogue* declares,
+  and `de-DE`, `en-GB` and `pt-BR` are all correct and all invisible to a lookup for
+  `de`, `en`, `pt`. Every name would have been stored under a key nothing on the page
+  asks for, the reader would have been shown whatever value came first, and the
+  switch would have done nothing — with the new language-tag check waving it through,
+  because `de-DE` **is** a tag. A text is selected by a tag's language now, the exact
+  tag winning over a regional one where a catalogue carries both.
+
+  The Console's language box is also cut on commas, semicolons **and** whitespace. A
+  tag can contain none of the three, so all three are separators and none is
+  ambiguous — and a maintainer who types `de-DE; en-EN; fr-FR` gets three languages
+  instead of one refusal naming a tag they never meant to write.
+
+  What this bought on its own: nothing a reader could see, for the languages the
+  page did not yet speak. A catalogue could declare `fr-FR` and its products carry
+  French, and no locale on that page selected it. The entry below — the portal's own
+  words in French and Italian — is what turned this correction into four working
+  languages rather than two.
+
 - **A catalogue could be saved with a language that is not a language, and every
   product in it then ignored the language switch.** Found in a live installation: a
   catalogue was saved with the single language tag `de; en`. The list is read
@@ -281,6 +303,39 @@ _Changed_ / _Removed_ for each version.
   would call a healthy idle installation broken.
 
 ### Added
+
+- **The portal speaks French and Italian.** It had German and English, so a catalogue
+  kept in French or Italian carried translations that no reader could ever select: the
+  switch will not offer a language the page cannot render whole, and the page could
+  not render those. All 148 interface strings now exist in four languages, which is
+  what makes `de`, `fr`, `it` and `en` real choices for a catalogue rather than keys
+  in a map.
+
+  Written by the author of this change and **not yet read by a native speaker** of
+  either language. The register is formal throughout, as the German is, and the terms
+  follow the German source rather than inventing a vocabulary — but a review by
+  somebody who reads the language daily is worth having before this reaches the people
+  it is for.
+
+- **The portal's language switch offers the languages the catalogue is kept in.** It
+  offered this page's own two, always. So a catalogue kept only in German carried an
+  EN button that turned the navigation English and left every product name,
+  description and heading German — a half-translated screen the portal offered
+  itself, which is the state it refuses to reach by guessing at the browser. And a
+  catalogue kept in a third language had no button for it at all.
+
+  The switch is now the catalogue's declared languages, narrowed to the ones this
+  page can actually render, and it is not drawn at all where that leaves one: a
+  control with a single position says something can be changed and then cannot. The
+  choice a visitor arrives with — from the address, from this browser, from their own
+  list — settles onto one of the catalogue's tags once it is known, preferring the
+  same language in another tag before falling back to the catalogue's first.
+
+  The narrowing is the cost and it is deliberate: a catalogue may be kept in French,
+  and until the portal's own words are French too, an FR button would promise a
+  French page and deliver half of one. A reader whose browser is English, meeting a
+  German-only catalogue, now gets a German page rather than English navigation beside
+  German products.
 
 - **The estate: one node per domain, and each one says how wide the credential that drew it
   was.** A new Panorama view beside the Starmap draws this installation and every configured

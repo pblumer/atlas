@@ -2,6 +2,42 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-catalogue-kept-in-de-de-and-en-en-would-have-ignored-the-l",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Regional languages like de-CH reach the reader they are for",
+        "de": "Regionale Sprachen wie de-CH erreichen die Leserin, für die sie gedacht sind"
+      },
+      "summary": {
+        "en": "A catalogue says which languages it is kept in, and de-DE, en-GB and pt-BR are as correct as de, en and pt. The portal, though, works out a visitor's language from the browser and reduces it to the language alone, because its own words are filed that way. So a catalogue declared in de-DE and en-EN stored every product name under a key the page never asked for: the reader was shown whatever value came first, the same one in both languages, and switching did nothing — with the new check on language entries waving it through, because de-DE really is a language tag. A text is now found by the language of its tag rather than by the whole of it, and where a catalogue carries both de and de-CH the exact one wins, because a catalogue that lists both means both. The console's language box is also read on commas, semicolons and spaces alike: a tag can contain none of them, so whichever one gets typed, the languages come out as meant. On its own this changed nothing a reader could see in a language the page did not yet speak; the portal's own wording in French and Italian, released alongside it, is what made four languages real.",
+        "de": "Ein Katalog nennt die Sprachen, in denen er geführt wird, und de-DE, en-GB und pt-BR sind so korrekt wie de, en und pt. Das Portal ermittelt die Sprache einer Besucherin jedoch aus dem Browser und reduziert sie auf die Sprache allein, weil seine eigenen Wörter so abgelegt sind. Ein Katalog in de-DE und en-EN legte damit jeden Produktnamen unter einem Schlüssel ab, nach dem die Seite nie fragte: Gezeigt wurde, was zuerst kam, in beiden Sprachen dasselbe, und das Umschalten bewirkte nichts — wobei die neue Prüfung der Spracheinträge es durchwinkte, denn de-DE ist tatsächlich ein Sprachkürzel. Ein Text wird jetzt über die Sprache seines Kürzels gefunden statt über das ganze Kürzel, und wo ein Katalog sowohl de als auch de-CH führt, gewinnt das genaue — wer beide nennt, meint beide. Das Sprachfeld der Konsole wird ausserdem auf Komma, Semikolon und Leerzeichen gleichermassen gelesen: Ein Kürzel enthält keines davon, also kommen die Sprachen so heraus, wie sie gemeint waren, welches Zeichen auch getippt wird. Für sich genommen änderte das nichts, was eine Leserin in einer Sprache sehen konnte, die die Seite noch nicht sprach; erst die Wörter des Portals auf Französisch und Italienisch, gleichzeitig veröffentlicht, machen vier Sprachen wirklich."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue",
+        "Portal"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Catalogue in the console and choose a catalogue.",
+          "Write the languages however you like: de-DE, en-EN, fr-FR — commas, semicolons or spaces.",
+          "Fill the product boxes those languages give you, save and publish.",
+          "Open the portal and switch between the languages the catalogue names."
+        ],
+        "de": [
+          "In der Konsole den Katalog öffnen und einen Katalog wählen.",
+          "Die Sprachen beliebig schreiben: de-DE, en-EN, fr-FR — mit Komma, Semikolon oder Leerzeichen.",
+          "Die Produktfelder füllen, die diese Sprachen ergeben, speichern und publizieren.",
+          "Das Portal öffnen und zwischen den Sprachen umschalten, die der Katalog nennt."
+        ]
+      }
+    },
+    {
       "id": "a-catalogue-could-be-saved-with-a-language-that-is-not-a-lan",
       "version": "Unreleased",
       "date": null,
@@ -356,41 +392,6 @@
           "Das runde „i“ am rechten Rand der Zeile drücken.",
           "Der Bereich zeigt Bild, Beschreibung, Preis und Genehmigungsregel.",
           "Die Sprache mit den Schaltflächen DE/EN in der Kopfzeile wechseln: Führt der Katalog beide, folgt die Beschreibung."
-        ]
-      }
-    },
-    {
-      "id": "the-info-button-on-the-basket-did-nothing",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The info button on the basket opens the product again",
-        "de": "Der Info-Knopf im Warenkorb öffnet das Produkt wieder"
-      },
-      "summary": {
-        "en": "Every row in the basket carried the round \"i\", it responded to a press, and nothing opened. The catalogue page and the \"my services\" page both showed the panel; the basket drew the button and never the panel itself. That left the one screen where somebody decides whether to actually place the order with a row that was a name and two buttons — the price, the approval rule, the description and the picture were all out of reach at exactly the moment they matter. The panel now opens below the basket, and anything already typed into a product's configuration form is kept when it does.",
-        "de": "Jede Zeile im Warenkorb trug das runde „i“, es reagierte auf einen Druck, und es öffnete sich nichts. Die Katalogseite und die Seite „Meine Leistungen“ zeigten den Bereich beide; der Warenkorb zeichnete nur den Knopf, nie den Bereich selbst. Damit blieb ausgerechnet auf jenem Bildschirm, auf dem über die Bestellung entschieden wird, eine Zeile aus Name und zwei Schaltflächen übrig — Preis, Genehmigungsregel, Beschreibung und Bild waren genau dann unerreichbar, wenn sie zählen. Der Bereich öffnet sich nun unterhalb des Warenkorbs; bereits eingetippte Angaben in einem Konfigurationsformular bleiben dabei erhalten."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Self-service portal"
-      ],
-      "tutorial": {
-        "en": [
-          "Put a product in the basket in the service portal.",
-          "Open the basket.",
-          "Press the round \"i\" on one of the rows — the panel opens below the columns.",
-          "Press it again to close it, or press it on another row to switch."
-        ],
-        "de": [
-          "Im Leistungsportal ein Produkt in den Warenkorb legen.",
-          "Den Warenkorb öffnen.",
-          "Auf einer Zeile das runde „i“ drücken — der Bereich öffnet sich unterhalb der Spalten.",
-          "Erneut drücken schliesst ihn, ein Druck auf eine andere Zeile wechselt."
         ]
       }
     }
