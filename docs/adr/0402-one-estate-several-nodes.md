@@ -1,7 +1,7 @@
 # ADR-0402: One estate, several nodes — a starmap stitched from subgraphs
 
 - **Status:** Accepted (amended 2026-09-22: the estate view is sequenced behind the credential-reach record, see §1)
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-09-18
 - **Deciders:** Atlas maintainers
 - **Open question:** whether an estate view is ever read by somebody who may not see all
@@ -152,8 +152,26 @@ gate, a coarse answer that answers nothing, or **a change to what a token can ex
 which is its own record and its own cost, and is the only one of the three that serves the
 multi-domain installation named in the open question.
 
-Nothing of this section is built: there is no estate altitude, no domain node kind and no
-new scope in the tree. That is the state to decide from, not a gap to close quietly.
+Nothing of this section was built when it was written: there was no estate altitude, no
+domain node kind and no new scope in the tree. That was the state the decision was taken
+from, and it is recorded here rather than rewritten, because a record that quietly updates
+the facts it decided from stops being evidence of anything.
+
+#### What is in the tree since (2026-09-23)
+
+The measurement's third option was taken, so the sentence above no longer describes the
+tree and says so here rather than by being edited away:
+
+| | State |
+|---|---|
+| A credential that carries which subjects it may see | **built** — a token carries a reach, the `landscape` scope must state one, and nobody may grant a reach they do not hold (ADR-0410) |
+| The estate altitude's assembly | **built** — `panorama.DeriveEstate`: one node per domain, one edge per recorded promotion, the fifth peer state, and each domain naming the credential that drew it |
+| The federated read | **built** — every peer's own starmap, over the existing peer channel and cached beside the descriptor, with a version boundary distinguished from a fault and a refused read from a silent server |
+| A route, and a screen | **absent.** Nothing here is reachable from the API, so no reader has this view yet |
+
+The gate in §1 is still not built and is still the fallback. Nothing above grants a reach
+the reader did not have: a federated answer is as wide as the credential that fetched it,
+and every domain on the picture says which credential that was.
 
 ### 2. The budget is per node and cannot be multiplied
 

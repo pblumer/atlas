@@ -113,6 +113,29 @@ func TestAnUnreachablePeerIsAShapeNotAGap(t *testing.T) {
 	}
 }
 
+// TestADomainSaysHowMuchItsCredentialCouldNotSee is the other half of §1's disclosure.
+// DrawnBy names who looked; this says how much of the domain that look did not reach — and
+// the two counts must not be confused, because [Graph.Restricted] is what *this* reader may
+// not see in this picture while a domain's own is what somebody else's credential could not
+// see in somebody else's (ADR-0410).
+func TestADomainSaysHowMuchItsCredentialCouldNotSee(t *testing.T) {
+	local, peers := oneEstate()
+	peers[0].Restricted = 9
+	g := DeriveEstate(local, peers)
+
+	if got := estateNode(t, g, domainNodeID("tgt-test")).Restricted; got != 9 {
+		t.Errorf("the domain reports %d restricted, want the 9 its own answer carried", got)
+	}
+	if g.Restricted != 0 {
+		t.Errorf("the estate picture reports %d restricted of its own; a domain's count is "+
+			"not the reader's", g.Restricted)
+	}
+	if got := estateNode(t, g, domainNodeID("local")).Restricted; got != 0 {
+		t.Errorf("this runtime reports %d restricted, want none: nothing was withheld from "+
+			"the estate assembly, and what the reader may not see is the landscape's own count", got)
+	}
+}
+
 // TestEachDomainSaysWhoseCredentialDrewIt is §1's disclosure requirement: *"the picture states
 // whose credential drew each subgraph"*. An incompleteness that is stated is a fact; one that
 // is not is a discovery.
