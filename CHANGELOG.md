@@ -278,6 +278,15 @@ _Changed_ / _Removed_ for each version.
   stand** rather than their releases, unlike the two reports beside it: it is a list
   of work to do, and work to do is about what is being edited.
 
+  It covers the name, the description, the two headings and **the name of every shape
+  a product is ordered in**. The shapes are not a cosmetic gap like the rest: the
+  portal draws them in the basket, where an orderer has to *choose* one, so a German
+  word in an English basket is the moment somebody picks. A shape named in no
+  language at all is reported as its own finding rather than once per declared
+  language — it needs naming, not translating — and reported rather than refused,
+  because a shape's id is very often the word itself (`black`, `large`) and falling
+  back to it frequently reads fine.
+
 - **The portal's two heading columns read in the reader's language.** A catalogue
   declares its languages and refuses to publish a product named in one of them and not
   another, so a catalogue kept in German, French, English and Italian translated every

@@ -205,3 +205,80 @@ func TestAContradictionStillRefuses(t *testing.T) {
 	problems, _ = twoLanguageGaps(one, two)
 	contains(t, problems, "words the category")
 }
+
+// The shapes a product is ordered in, held to the same rule as the product.
+//
+// They were left out of the first cut of this report and named in its record as
+// an open risk: a variant's texts are a map per language like everything else,
+// publishing never checked them, and a catalogue whose products were translated
+// and whose shapes were not was a state nothing mentioned. The portal draws the
+// shapes in the basket, where an orderer has to choose one — so a German word in
+// an English basket is not a cosmetic gap, it is the moment somebody picks.
+
+// TestAShapeNamedInOneLanguageIsAGapLikeAnythingElse.
+func TestAShapeNamedInOneLanguageIsAGapLikeAnythingElse(t *testing.T) {
+	half := bilingual("laptop")
+	half.Variants = []Variant{
+		{ID: "big", Texts: map[string]string{"de": "Gross", "fr": "Grand"}},
+		{ID: "small", Texts: map[string]string{"de": "Klein"}},
+	}
+
+	problems, gaps := twoLanguageGaps(half)
+	if len(problems) != 0 {
+		t.Fatalf("a half-named shape was refused: %+v", problems)
+	}
+	g := gapAbout(t, gaps, "no name for the shape small in fr")
+	if g.Item != "laptop" || g.Catalog != "cat" {
+		t.Errorf("the gap names item %q of catalogue %q; a maintainer has to be able "+
+			"to open the thing it is about", g.Item, g.Catalog)
+	}
+	// And nothing about the shape that is named in both.
+	for _, got := range gaps {
+		if strings.Contains(got.Message, "big") {
+			t.Errorf("the shape that is translated was reported: %+v", got)
+		}
+	}
+}
+
+// TestAShapeNamedNowhereIsReportedOnceAndNotPerLanguage.
+//
+// Its own finding rather than one gap per declared language, because it is a
+// different piece of work: this shape needs naming, not translating, and saying
+// so four times for a four-language catalogue would bury the shapes that are
+// merely half-translated.
+//
+// Reported and not refused, unlike a product named nowhere. A product's id is
+// minted for a catalogue and means nothing to a reader; a shape's is often the
+// word itself — "black", "silver", "large" — so the portal falling back to it is
+// frequently adequate, and refusing the publish would stop catalogues that read
+// perfectly well.
+func TestAShapeNamedNowhereIsReportedOnceAndNotPerLanguage(t *testing.T) {
+	bare := bilingual("laptop")
+	bare.Variants = []Variant{{ID: "black"}}
+
+	problems, gaps := twoLanguageGaps(bare)
+	if len(problems) != 0 {
+		t.Fatalf("a shape carrying no name was refused: %+v", problems)
+	}
+	gapAbout(t, gaps, "the shape black is named in no language")
+
+	n := 0
+	for _, g := range gaps {
+		if strings.Contains(g.Message, "black") {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("the unnamed shape is reported %d times; it is one piece of work and "+
+			"a four-language catalogue would list it four times", n)
+	}
+}
+
+// TestAProductWithNoShapesHasNoShapeGaps is the ordinary case: most products come
+// in one shape and carry no variants at all.
+func TestAProductWithNoShapesHasNoShapeGaps(t *testing.T) {
+	plain := bilingual("laptop")
+	if _, gaps := twoLanguageGaps(plain); len(gaps) != 0 {
+		t.Errorf("a product with no shapes was reported as having shape gaps: %+v", gaps)
+	}
+}

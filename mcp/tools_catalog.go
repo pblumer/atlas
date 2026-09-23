@@ -340,8 +340,9 @@ func catalogTools() []Tool {
 		{
 			Name: "atlas_catalog_translation_gaps",
 			Description: "Where the catalogues you maintain are written in one of their " +
-				"declared languages and not another: the name, the description and the two " +
-				"headings, per product and per language. Publishing used to refuse these and " +
+				"declared languages and not another: the name, the description, the two " +
+				"headings and the name of every shape the product is ordered in, per product " +
+				"and per language. Publishing used to refuse these and " +
 				"does not any more — the portal falls back to the language the catalogue has, " +
 				"so the refusal protected no reader and instead held a usable catalogue back " +
 				"until the last translation arrived. What the refusal did do is make the gap " +

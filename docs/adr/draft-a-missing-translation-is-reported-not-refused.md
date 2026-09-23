@@ -108,11 +108,15 @@ French and no statement at all about the one that does not.
   complete in every declared language is gone, and some installation somewhere was
   relying on it without knowing. The report is the replacement, and it is a weaker
   thing: it has to be looked at.
-- **Follow-ups / risks to watch:** variant names are not covered. A variant is a
-  map per language like everything else, and publishing never checked it, so this
-  changes nothing about it — but a catalogue whose products are translated and
-  whose shapes are not is now a state somebody can reach and the report will not
-  mention. Adding it is a change to `gapsOf` and nothing else.
+- **Follow-ups / risks to watch:** ~~variant names are not covered.~~ **Closed the
+  same day**: the shapes a product is ordered in are reported too, and they are
+  not a cosmetic gap like the others — the portal draws them in the basket, where
+  an orderer has to *choose* one, so a German word in an English basket is the
+  moment somebody picks. A shape named in **no** language is reported as its own
+  finding rather than once per declared language, because it needs naming and not
+  translating; it is reported and not refused, unlike a product named nowhere,
+  because a shape's id is very often the word itself (`black`, `large`) and the
+  portal falling back to it is frequently adequate.
 
 ## Pros and cons of the options
 

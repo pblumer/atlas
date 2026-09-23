@@ -30,9 +30,10 @@ import (
 // # What counts as a gap
 //
 // A field is a gap where the product says it in at least one language and not in
-// this one. A product nobody described has no description gap, a product carrying
-// no heading has no heading gap, and a heading carrying its key and no wordings
-// has none either — the key renders in every language, which is what carrying no
+// this one — the name, the description, the two headings, and the name of every
+// shape it is ordered in. A product nobody described has no description gap, a
+// product carrying no heading has no heading gap, and a heading carrying its key
+// and no wordings has none either — the key renders in every language, which is what carrying no
 // wording means, and which is every product written before the wordings existed.
 // Reporting those would name the whole installed base on the first screen
 // somebody opens.
@@ -75,6 +76,10 @@ func TranslationGaps(in Input) []Problem {
 			for _, lang := range c.Languages {
 				out = append(out, gapsOf(c.ID, it, lang)...)
 			}
+			// The shapes a product is ordered in, once for the product rather than
+			// once per language, because one of the two things this reports is not
+			// a per-language statement at all — see unnamedShapes.
+			out = append(out, unnamedShapes(c.ID, it)...)
 		}
 	}
 	return out
@@ -106,6 +111,43 @@ func gapsOf(catalog string, it Item, lang string) []Problem {
 	}
 	if strings.TrimSpace(it.ProductGroup) != "" && missing(it.ProductGroupTexts) {
 		say("product group")
+	}
+	// The shapes it is ordered in. Not a cosmetic gap like the others: the portal
+	// draws these in the basket, where an orderer has to CHOOSE one, so a German
+	// word in an English basket is the moment somebody picks.
+	//
+	// Named per shape, because "no name for the shape small in fr" is a thing to
+	// go and fix and "this product has a shape gap" is not.
+	for _, v := range it.Variants {
+		if missing(v.Texts) {
+			say("name for the shape " + v.ID)
+		}
+	}
+	return out
+}
+
+// unnamedShapes is the shape carrying no name in any language.
+//
+// Its own finding rather than a gap per declared language, because it is a
+// different piece of work: the shape needs naming, not translating, and saying so
+// four times for a four-language catalogue would bury the shapes that are merely
+// half-translated. That is also why it is computed once for the product instead
+// of inside [gapsOf], which is called per language.
+//
+// Reported and not refused, unlike a product named nowhere. A product's id is
+// minted for a catalogue and means nothing to a reader; a shape's is very often
+// the word itself — "black", "silver", "large" — so the portal falling back to it
+// is frequently adequate, and refusing the publish would stop catalogues that
+// read perfectly well.
+func unnamedShapes(catalog string, it Item) []Problem {
+	var out []Problem
+	for _, v := range it.Variants {
+		if described(v.Texts) {
+			continue
+		}
+		out = append(out, Problem{Catalog: catalog, Item: it.ID,
+			Message: "the shape " + v.ID + " is named in no language; the portal " +
+				"shows its id, which reads as a name only by accident"})
 	}
 	return out
 }
