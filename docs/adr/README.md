@@ -487,7 +487,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0399](0399-portal-carries-its-own-sign-in.md) | The service portal carries its own sign-in | Accepted | Landed |
 | [0400](0400-an-edge-that-was-taken-is-not-an-edge-that-was-declared.md) | An edge that was taken is not an edge that was declared | Accepted | Partial |
 | [0401](0401-graph-identity-across-several-logs.md) | What a node is called when there is more than one log | Accepted | Partial |
-| [0402](0402-one-estate-several-nodes.md) | One estate, several nodes — a starmap stitched from subgraphs | Accepted (amended) | Not started |
+| [0402](0402-one-estate-several-nodes.md) | One estate, several nodes — a starmap stitched from subgraphs | Accepted (amended) | Landed |
 | [0403](0403-the-estate-graph-is-derived-from-the-log.md) | The estate graph is derived from the log, never the log from the graph | Accepted | Not started |
 | [0404](0404-the-whole-graph-can-be-walked.md) | The whole graph can be walked, in a projection with a stated scope | Accepted | Partial |
 | [0405](0405-a-decision-is-shown-rather-than-described.md) | A decision is shown, not described | Accepted | Landed |

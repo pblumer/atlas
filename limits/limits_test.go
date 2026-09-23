@@ -39,6 +39,10 @@ func TestDefaultsAreTheNumbersTheCodeAlreadyHad(t *testing.T) {
 		// come from and why one budget could not serve both.
 		{"Variable", l.Variable, 1 << 20},
 		{"Collection", l.Collection, 16 << 20},
+		// PeerLandscape is new for the same reason and pinned for a sharper one: it
+		// is four times a measurement (ADR-0402), so a
+		// number that drifts away from it silently stops being four times anything.
+		{"PeerLandscape", l.PeerLandscape, 1 << 20},
 	} {
 		if tc.got != tc.want {
 			t.Errorf("%s = %d, want %d", tc.name, tc.got, tc.want)

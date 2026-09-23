@@ -378,6 +378,15 @@ type Server struct {
 	// own mutex thereafter.
 	remoteNodes *remoteNodeCache
 
+	// remoteLandscapes is what peer Atlas servers last said about their own derived
+	// landscapes (ADR-0402, the estate altitude). A
+	// second cache rather than a second field on the first one, because the two reads
+	// cost different amounts and fail independently: a starmap this server's credential
+	// may not read must not expire a descriptor that answered, or the estate would
+	// report a healthy peer as gone. Same lifetime rules as remoteNodes otherwise —
+	// set once before Handler is mounted, mutated under its own mutex.
+	remoteLandscapes *remoteLandscapeCache
+
 	// panoramaMesh is Panorama's derived landscape altitude (ADR-0211): a graph
 	// computed from this server's own resources, never stored. Separate from the
 	// model library above because declared intent and derived fact must not share
@@ -1395,17 +1404,18 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// built from it rather than owning it.
 	quit := make(chan struct{})
 	s := &Server{
-		proc:        proc,
-		store:       store,
-		dataDir:     dataDir,
-		limits:      limits.Default(), // WithLimits overrides; there is no "no budget"
-		remoteNodes: newRemoteNodeCache(),
-		quit:        quit,
-		runLoop:     runloop.New(quit),
-		deployments: map[uint64]*deployment{},
-		nextKey:     1,
-		versions:    map[string]int32{},
-		deploys:     ds,
+		proc:             proc,
+		store:            store,
+		dataDir:          dataDir,
+		limits:           limits.Default(), // WithLimits overrides; there is no "no budget"
+		remoteNodes:      newRemoteNodeCache(),
+		remoteLandscapes: newRemoteLandscapeCache(),
+		quit:             quit,
+		runLoop:          runloop.New(quit),
+		deployments:      map[uint64]*deployment{},
+		nextKey:          1,
+		versions:         map[string]int32{},
+		deploys:          ds,
 
 		// Its own group: gofmt aligns a literal's contiguous run, and folding these
 		// into the one above would rewrite every line of it for no change in meaning.

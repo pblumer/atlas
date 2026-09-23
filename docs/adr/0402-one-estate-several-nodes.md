@@ -1,7 +1,7 @@
 # ADR-0402: One estate, several nodes — a starmap stitched from subgraphs
 
-- **Status:** Accepted (amended 2026-09-22: the estate view is sequenced behind the credential-reach record, see §1)
-- **Implementation:** Not started
+- **Status:** Accepted (amended 2026-09-22: the estate view is sequenced behind the credential-reach record, see §1; amended 2026-09-23: the view is read by the landscape's own right rather than behind §1's operator gate, see §1)
+- **Implementation:** Landed
 - **Date:** 2026-09-18
 - **Deciders:** Atlas maintainers
 - **Open question:** whether an estate view is ever read by somebody who may not see all
@@ -152,8 +152,75 @@ gate, a coarse answer that answers nothing, or **a change to what a token can ex
 which is its own record and its own cost, and is the only one of the three that serves the
 multi-domain installation named in the open question.
 
-Nothing of this section is built: there is no estate altitude, no domain node kind and no
-new scope in the tree. That is the state to decide from, not a gap to close quietly.
+Nothing of this section was built when it was written: there was no estate altitude, no
+domain node kind and no new scope in the tree. That was the state the decision was taken
+from, and it is recorded here rather than rewritten, because a record that quietly updates
+the facts it decided from stops being evidence of anything.
+
+#### What is in the tree since (2026-09-23)
+
+The measurement's third option was taken, so the sentence above no longer describes the
+tree and says so here rather than by being edited away:
+
+| | State |
+|---|---|
+| A credential that carries which subjects it may see | **built** — a token carries a reach, the `landscape` scope must state one, and nobody may grant a reach they do not hold (ADR-0410) |
+| The estate altitude's assembly | **built** — `panorama.DeriveEstate`: one node per domain, one edge per recorded promotion, the fifth peer state, and each domain naming the credential that drew it |
+| The federated read | **built** — every peer's own starmap, over the existing peer channel and cached beside the descriptor, with a version boundary distinguished from a fault and a refused read from a silent server |
+| A route, and a screen | **built** — `GET /api/v1/panorama/estate`, and a Panorama view of its own beside the Starmap |
+
+Nothing of it grants a reach the reader did not have: a federated answer is as wide as the
+credential that fetched it, and every domain on the picture says which credential that was.
+
+#### The picture is built beside the Starmap before it is built into it (2026-09-23)
+
+§5 has the estate as an **extension of the existing altitudes** — the picker is where a reader
+switches altitude, and the landscape's renderer is the one that carries provenance, severity,
+drill-down, saved views and the export. That is still where it ends up, and this section does
+not repeal it.
+
+What changed is the order. The first build put the estate *into* the Starmap as a third
+subject: a new node kind and a new edge kind in its shared tables, a third shape of request in
+its loader, two of its controls made conditional, and two of its guards rewritten. All of it
+worked, and all of it was in the one view an operations team keeps open. The maintainer's
+sequencing decision is the opposite: **the new altitude is drawn on its own first, and folded
+in once it has been read against a real estate.** So the shipped landscape is byte-for-byte
+untouched, a defect in the estate cannot take it along, and the integration is a change that
+can be reviewed as one thing rather than as a side effect of a feature.
+
+What the separate picture does not have, stated rather than discovered: no filter, no saved
+views, no notation projection, no ArchiMate export and no drill-down into anything but the
+local domain's own landscape. Those belong to the renderer it is not using yet, and each is a
+reason the integration is worth making rather than an argument that it is optional. What it
+does have is the altitude's own topology — every edge the record admits runs from this domain
+to a peer (§4), so the layout is a star, which needs no simulation and comes out identically on
+two reads.
+
+The pure geometry the two share is imported rather than copied, so the outline a domain is
+drawn with is stated once. Nothing else crosses: this view holds none of the Starmap's state
+and changes none of it.
+
+#### The gate is not what was built, and this is the posture that was (2026-09-23)
+
+§1 chose an operator gate and its own open question then found that gate *likely insufficient
+for the customer who most needs this view* — a cross-departmental architect is not the operator
+of each node. With the reach record built, the maintainer decided the posture the measurement
+opened up: **the estate is read by the same right that reads the landscape, and every domain on
+it is exactly as wide as the credential that drew it.** The gate stays written down as the
+fallback an installation gets if the reach mechanism is refused; it is not what the route has.
+
+Three properties carry that decision, and each is a property of code rather than of intent:
+
+| | How |
+|---|---|
+| The local domain is as wide as the reader | It is counted off the landscape this caller would be served — the same derivation, the same per-request visibility decision. An application they may not see is not on their landscape and not in their count. |
+| A peer domain is as wide as the target's credential | Which is what a federated read can be and no wider. The credential is named on the domain, and so is how much of it that credential could not see. |
+| Nothing of a peer's content crosses | A domain carries a name, a count, a state and a join — never a node of somebody else's landscape. Expanding one is a read against *that* installation, where that reader's own rights are the only ones that can be resolved. |
+
+What the posture costs, stated rather than left to be found: a landscape reader who is not an
+operator now learns the peer domains' names, roughly how large each is, and which of them a
+promotion has reached. The names were already visible to such a reader as `target` nodes on the
+landscape itself; the size and the join are what this adds.
 
 ### 2. The budget is per node and cannot be multiplied
 

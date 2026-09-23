@@ -87,6 +87,14 @@ type nodeDescriptor struct {
 	Features []string `json:"features"`
 }
 
+// featurePanoramaMesh is the feature id a peer advertises when it serves the derived
+// landscape read. It is named rather than spelled twice because a federated estate
+// read decides ADR-0402 §3's fifth
+// state — *the peer answered, and does not serve this view* — by looking for exactly
+// this id in a peer's descriptor, and an id that drifted between the advertisement
+// and the check would report every peer as a version boundary.
+const featurePanoramaMesh = "panorama.mesh"
+
 // nodeFeatures maps each advertised feature id to the route that proves it. The
 // ids are deliberately coarse — a correlator asks "can I read observations here",
 // not "which query parameters does this build accept" — and named for what they
@@ -98,7 +106,7 @@ var nodeFeatures = map[string]string{
 	"observations.runtime":   "GET /api/v1/processes/{key}/runtime",
 	"applications.releases":  "GET /api/v1/applications/{id}/releases",
 	"panorama.models":        "GET /api/v1/panorama/models",
-	"panorama.mesh":          "GET /api/v1/panorama/mesh",
+	featurePanoramaMesh:      "GET /api/v1/panorama/mesh",
 	"panorama.bindings":      "GET /api/v1/panorama/models/{id}/bindings",
 	"panorama.c4":            "GET /api/v1/panorama/models/{id}/c4",
 }

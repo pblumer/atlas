@@ -430,6 +430,14 @@ var mcpOmittedRoutes = map[string]string{
 	// edge kinds across several slices, and an MCP tool is a public contract that
 	// would pin that shape before it settles. Revisit once the slice is complete.
 	"GET /api/v1/panorama/mesh": "landscape mesh payload is still gaining node kinds across P2.5; exposing it now would freeze a shape that is about to change",
+	// The estate altitude (ADR-0402) is the same payload one altitude up, so it is held
+	// back for the same reason and one of its own. Its shape is the mesh's, which is
+	// still moving; and a domain on it carries how wide the credential that drew it was
+	// (ADR-0410), which an agent tool would have to
+	// explain on every answer or invite exactly the misreading the disclosure exists to
+	// prevent — that a small domain is a small installation rather than a narrow
+	// credential.
+	"GET /api/v1/panorama/estate": "estate payload is the mesh's shape, still moving; and a domain's counts are as wide as the credential that drew it, which an MCP answer cannot state as the picture's legend does",
 	// The notation mapping and the ArchiMate document generated from it are omitted
 	// for the two reasons already given above rather than a third: the document is
 	// derived from the mesh payload, whose shape is still moving, and both are at

@@ -625,6 +625,17 @@ type Node struct {
 	// is as wide as the credential that made it, and the picture states that rather than
 	// leaving a reader to discover it.
 	DrawnBy string `json:"drawnBy,omitempty"`
+	// Restricted is how many of a domain's [Holds] nodes stood in as placeholders for
+	// resources the credential that drew it may not see. Set on a domain node only,
+	// and read against that node rather than against the picture: [Graph.Restricted]
+	// counts what *this* reader may not see in *this* graph, and this counts what
+	// somebody else's credential could not see in somebody else's.
+	//
+	// Keeping the two apart is the whole point of ADR-0402 §1's disclosure rule. A
+	// federated subgraph is as wide as the credential that fetched it (ADR-0410), so a
+	// domain whose reach covered half of it has to say so beside the count — an
+	// incompleteness that is stated is a fact, one that is not is a discovery.
+	Restricted int `json:"restricted,omitempty"`
 	// Incidents is how many unresolved incidents the engine holds against this node.
 	// Only a process node can carry one — an incident belongs to a token, and only a
 	// process has tokens — so it is absent everywhere else rather than zero, because

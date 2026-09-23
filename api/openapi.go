@@ -653,6 +653,22 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/panorama/mesh", s.panoramaMesh.HandleGraph, apiOp{
 			summary: "Derive the landscape mesh from this server's resources with severity, filtered for the caller (ADR-0211). Pass drafts=1 to include saved-but-not-deployed diagrams, which are left out by default so the size budget is spent on what this server actually runs. Pass view=products for the product map instead: the service catalogue, what each product is assembled from, and the processes that provision it — the two are separate pictures because a catalogue on the landscape would spend the size budget of everybody reading the estate", tag: "Panorama", role: RoleModeler,
 			resp: jsonBody("Derived landscape graph", tObject())}},
+		// The estate altitude (ADR-0402): one node per domain — this
+		// runtime and every deployment target — joined where a promotion recorded a
+		// join. An altitude *above* the landscape rather than the landscape repeated,
+		// because eight domains at the mesh's measured node budget is a hairball by
+		// arithmetic while every individual picture stays inside its budget.
+		//
+		// Read by the same right that reads the landscape, and every domain on it is as
+		// wide as the credential that drew it: the local one as wide as the caller, a
+		// peer as wide as the target's stored credential, with both the credential and
+		// what it could not see stated on the domain (ADR-0410). It is deliberately not
+		// in the `landscape` API scope: that scope exists so a peer can be handed the
+		// narrowest credential that answers a starmap read, and an estate of estates is
+		// a recursion this altitude refuses.
+		{"GET", "/api/v1/panorama/estate", s.handlePanoramaEstate, apiOp{
+			summary: "Derive the estate: one node per domain — this runtime and every configured deployment target — joined where a promotion recorded a join (ADR-0402). Each domain carries how many landscape nodes it holds, how many of those its credential could not see, and which credential drew it; a peer that answered and does not serve a starmap read is reported as a version boundary rather than as a fault", tag: "Panorama", role: RoleModeler,
+			resp: jsonBody("Derived estate graph", tObject())}},
 		// The vocabularies the landscape can be drawn in, with each one's mapping and
 		// what it drops (ADR-0211 §8). Served rather than duplicated in the browser:
 		// the picture's labels, its image export's stamp and the ArchiMate document
