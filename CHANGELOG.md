@@ -14,6 +14,20 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The portal's process link asked a search that did not come back.** Pressing
+  "View the process" on an order wrote "Wird abgefragt …" under it, and nothing else
+  happened, ever. The link looked the instance up with a search that named no
+  process definition, and such a search reads every instance on the server and every
+  variable of each. On an installation of any size it does not answer in any time a
+  reader waits, and the page had no bound on how long it would wait for it.
+
+  The lookup now names the fulfilment process's definitions, newest version first,
+  and each search reads that definition's own index — the fulfilment instances,
+  which are one per order. An order placed before the last redeploy is still found,
+  under the version it started on. And the lookup gives up after twenty seconds
+  and says so beside the order, rather than leaving "Asking …" standing as if an
+  answer were on its way.
+
 - **The basket said what was ordered and not what belonged to what.** It drew three
   columns — offering, service, optional — each a flat list stacked on its own. A
   row's height in one column had nothing to do with its height in the next, so with

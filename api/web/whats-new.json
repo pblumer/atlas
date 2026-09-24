@@ -2,6 +2,40 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "the-portal-s-process-link-asked-a-search-that-did-not-come-b",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "\"View the process\" in the portal opens the instance again",
+        "de": "„Prozess ansehen“ im Portal öffnet die Instanz wieder"
+      },
+      "summary": {
+        "en": "Pressing \"View the process\" on an order wrote \"Asking …\" under it and nothing else happened. The link searched every instance on the server for the order, and on a larger installation that search did not come back. It now asks the fulfilment process's own versions, newest first, which reads one instance per order and answers at once; an order placed before the last redeploy is still found. If the server does not answer within twenty seconds, the portal says so beside the order instead of waiting for ever.",
+        "de": "Beim Drücken von „Prozess ansehen“ auf einem Auftrag erschien darunter „Wird abgefragt …“, und sonst geschah nichts. Der Link durchsuchte alle Instanzen auf dem Server nach dem Auftrag, und auf einer grösseren Installation kam diese Suche nicht zurück. Jetzt fragt er die Versionen des Erfüllungsprozesses ab, die neueste zuerst; das liest eine Instanz je Auftrag und antwortet sofort. Ein Auftrag, der vor dem letzten Deployment des Prozesses aufgegeben wurde, wird weiterhin gefunden. Antwortet der Server nicht innert zwanzig Sekunden, sagt das Portal dies neben dem Auftrag, statt endlos zu warten."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue",
+        "Portal"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the portal as an operator and go to \"My orders\".",
+          "Press \"View the process\" on an order.",
+          "The instance fulfilling that order opens in Operations."
+        ],
+        "de": [
+          "Das Portal als Operator öffnen und «Meine Aufträge» wählen.",
+          "Bei einem Auftrag „Prozess ansehen“ drücken.",
+          "Die Instanz, die diesen Auftrag erfüllt, öffnet sich in Operations."
+        ]
+      }
+    },
+    {
       "id": "the-basket-said-what-was-ordered-and-not-what-belonged-to-wh",
       "version": "Unreleased",
       "date": null,
@@ -371,27 +405,6 @@
           "Bei einem Auftrag ohne laufenden Prozess erscheint der Grund unter der Schaltfläche."
         ]
       }
-    },
-    {
-      "id": "a-folded-decision-service-stays-folded",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A folded decision service stays folded",
-        "de": "Ein zugeklappter Decision Service bleibt zugeklappt"
-      },
-      "summary": {
-        "en": "Atlas draws a diagram for a decision model that has none, and lays the whole thing out afresh when a model's diagram covers only part of it — on the reasoning that half a diagram is usually the leftovers of a tool that drew what it could. A folded decision service looks exactly like that from the outside and is the opposite: DMN folds one by leaving its contents out of the picture on purpose. So Atlas was unfolding, on every read, what somebody had just folded — and a fold could never survive being saved. It now recognises the one case: a diagram missing exactly the decisions of a folded service is complete. Anything else missing is still drawn, including a service with no box of its own at all.",
-        "de": "Atlas erzeugt für ein Entscheidungsmodell ohne Diagramm eines und legt das ganze Diagramm neu an, wenn es nur einen Teil des Modells abdeckt — mit der Begründung, ein halbes Diagramm sei meist der Rest eines Werkzeugs, das zeichnete, was es konnte. Ein zugeklappter Decision Service sieht von aussen genauso aus und ist das Gegenteil: DMN klappt ihn zu, indem sein Inhalt absichtlich aus dem Bild bleibt. Atlas klappte also bei jedem Lesen wieder auf, was jemand gerade zugeklappt hatte — und eine Faltung überlebte kein Speichern. Jetzt erkennt Atlas diesen einen Fall: Ein Diagramm, dem genau die Entscheidungen eines zugeklappten Service fehlen, ist vollständig. Alles andere, was fehlt, wird weiterhin gezeichnet, auch ein Service ganz ohne eigenen Kasten."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "DMN"
-      ]
     }
   ]
 }

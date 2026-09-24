@@ -62,6 +62,7 @@ const STRINGS = {
     'proc.none.order': 'Zu diesem Auftrag ist keine laufende Prozessinstanz zu finden: Entweder wurde noch keine gestartet, sie ist bereits beendet, oder die Aufbewahrung hat sie entfernt.',
     'proc.archived': 'Der Prozess zu diesem Auftrag steht nur noch im ausgelagerten Ereignisprotokoll. Dieser Server hat ihn nicht mehr und kann ihn nicht anzeigen.',
     'proc.asking': 'Wird abgefragt …',
+    'proc.slow': 'Der Server hat auf die Suche nach dem Prozess nicht rechtzeitig geantwortet. Der Auftrag selbst ist davon nicht betroffen; bitte später erneut versuchen.',
     'order.completed': 'Abgeschlossen',
     'order.partial': 'Teilweise erfüllt',
     'order.unfulfilled': 'Nicht erfüllt',
@@ -217,6 +218,7 @@ const STRINGS = {
     'proc.none.order': 'No running process instance was found for this order: either none has started yet, it has already finished, or retention has removed it.',
     'proc.archived': 'This order\'s process is only in the exported event log now. This server no longer holds it and cannot show it.',
     'proc.asking': 'Asking …',
+    'proc.slow': 'The server did not answer the search for the process in time. The order itself is not affected; please try again later.',
     'order.completed': 'Completed',
     'order.partial': 'Partly fulfilled',
     'order.unfulfilled': 'Not fulfilled',
@@ -370,6 +372,7 @@ const STRINGS = {
     'proc.none.order': 'Aucune instance de processus en cours ne correspond à cette commande : soit aucune n’a encore été lancée, soit elle est déjà terminée, soit la conservation l’a supprimée.',
     'proc.archived': 'Le processus de cette commande ne figure plus que dans le journal d’événements externalisé. Ce serveur ne le possède plus et ne peut pas l’afficher.',
     'proc.asking': 'Interrogation en cours …',
+    'proc.slow': 'Le serveur n’a pas répondu à temps à la recherche du processus. La commande elle-même n’est pas concernée ; veuillez réessayer plus tard.',
     'order.completed': 'Terminée',
     'order.partial': 'Partiellement exécutée',
     'order.unfulfilled': 'Non exécutée',
@@ -522,6 +525,7 @@ const STRINGS = {
     'proc.none.order': 'Per questo ordine non risulta alcuna istanza di processo in corso: o non ne è ancora stata avviata una, o è già terminata, oppure la conservazione l’ha rimossa.',
     'proc.archived': 'Il processo di questo ordine si trova ormai solo nel registro eventi esternalizzato. Questo server non lo possiede più e non può mostrarlo.',
     'proc.asking': 'Interrogazione in corso …',
+    'proc.slow': 'Il server non ha risposto in tempo alla ricerca del processo. L’ordine stesso non ne è interessato; riprovare più tardi.',
     'order.completed': 'Concluso',
     'order.partial': 'Parzialmente evaso',
     'order.unfulfilled': 'Non evaso',
@@ -2567,6 +2571,12 @@ async function mountConfigForms() {
 // deriveStatus mirrors the server's own rule rather than asking for it: an order
 // carries its lines, and its standing is computed from them so the two cannot
 // disagree. Doing it here keeps that property — a stored status could.
+
+// FOLLOW_TIMEOUT_MS is how long the process link waits for the server before it
+// says so. Long enough for a slow scoped search on a busy engine, short enough
+// that nobody reads the note as a page about to arrive.
+const FOLLOW_TIMEOUT_MS = 20000;
+
 // followProcess opens the instance fulfilling one order.
 //
 // Looked up when the link is pressed rather than resolved for every row: finding
@@ -2582,22 +2592,45 @@ async function mountConfigForms() {
 // page produced a message off-screen, and the button read as broken — which is how
 // it was reported. The one case that works navigates away, and the two that cannot
 // are the two that have to be visible.
+//
+// And narrowed by definition, not only filtered by name afterwards. A search that
+// names no definition reads every instance on the server and every variable of
+// each, and on an installation of any size that does not come back: the note said
+// "Wird abgefragt …" and stayed, which is how it was reported. Named, the search
+// reads that definition's own index — the instances of the fulfilment process,
+// which is one per order. Every deployed version is asked, newest first, because an
+// order placed before the last redeploy is worked by the version it started on.
+//
+// And bounded in time. A lookup that never answers is the one outcome that must not
+// look like "still asking": the reader waits for a page that is not coming.
 async function followProcess(order) {
   state.following.set(order.id, t('proc.asking'));
   render();
   const said = (what) => { state.following.set(order.id, what); render(); };
+  const giveUp = new AbortController();
+  const timer = setTimeout(() => giveUp.abort(), FOLLOW_TIMEOUT_MS);
   try {
+    const defs = await api('/api/v1/processes', { signal: giveUp.signal });
+    const versions = (defs || [])
+      .filter((d) => d.processId === 'atlas-auftrag-erfuellung')
+      .sort((a, b) => b.version - a.version);
     const query = `orderId=${order.id}`;
-    const page = await api(`/api/v1/instances/search?q=${encodeURIComponent(query)}`);
-    const hits = (page && page.items) || [];
-    // Archived first, and separately. The search falls back to the exported event
-    // log when this server's own index has nothing, and marks what it answers with:
-    // the instance was hard-deleted by history retention (ADR-0115) and exists only
-    // in the export. Following one reaches a replay view with nothing to replay,
-    // which says "Could not load this instance's replay." — a dead end two screens
-    // from the page that knew better.
-    const live = hits.filter((i) => !i.archived);
-    const hit = live.find((i) => i.processId === 'atlas-auftrag-erfuellung');
+    const hits = [];
+    let hit = null;
+    for (const d of versions) {
+      const page = await api(`/api/v1/instances/search?process=${d.key}` +
+        `&q=${encodeURIComponent(query)}`, { signal: giveUp.signal });
+      const found = (page && page.items) || [];
+      hits.push(...found);
+      // Archived first, and separately. The search falls back to the exported event
+      // log when this server's own index has nothing, and marks what it answers with:
+      // the instance was hard-deleted by history retention (ADR-0115) and exists only
+      // in the export. Following one reaches a replay view with nothing to replay,
+      // which says "Could not load this instance's replay." — a dead end two screens
+      // from the page that knew better.
+      hit = found.find((i) => !i.archived && i.processId === 'atlas-auftrag-erfuellung');
+      if (hit) break;
+    }
     if (!hit) {
       // What is known, and not a cause that was guessed. This said the instance had
       // been removed by retention, which is one of three reasons it is not found and
@@ -2611,7 +2644,9 @@ async function followProcess(order) {
     }
     window.location.href = `/index.html#/operations/i/${hit.key}`;
   } catch (e) {
-    said(`${t('portal.failed')} ${e.message}`);
+    said(giveUp.signal.aborted ? t('proc.slow') : `${t('portal.failed')} ${e.message}`);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
