@@ -1,0 +1,18 @@
+{
+  "tags": ["Modeler", "Decisions"],
+  "title": {
+    "en": "A decision model is now listed under its own name",
+    "de": "Ein Entscheidungsmodell steht jetzt unter seinem eigenen Namen"
+  },
+  "summary": {
+    "en": "A DMN file is one artifact — Atlas stores it under one handle, lists it as one row and publishes it as one thing — and it may hold several decisions. The Explorer nevertheless labelled it with whichever decision came first inside it, so a model called \"Credit check\" whose first decision is \"Credit rating\" appeared as \"Credit rating\" while the editor's own header said \"Credit check\", and reordering the decisions renamed the artifact. Every save of an untouched model quietly rewrote that row, too. The listing and the editor now read the same name, the one the model gives itself. Rows written before this keep the name they have; they correct themselves the next time the model is saved from the editor.",
+    "de": "Eine DMN-Datei ist ein Artefakt — Atlas speichert sie unter einem Handle, listet sie als eine Zeile und veröffentlicht sie als eine Einheit — und sie kann mehrere Entscheidungen enthalten. Der Explorer beschriftete sie dennoch mit derjenigen Entscheidung, die in der Datei zuerst stand: Ein Modell namens \"Kreditprüfung\", dessen erste Entscheidung \"Bonität\" heisst, erschien als \"Bonität\", während der Editor im Kopf \"Kreditprüfung\" anzeigte; ein Umsortieren der Entscheidungen benannte das Artefakt um. Zudem schrieb jedes Speichern eines unveränderten Modells diese Zeile still um. Liste und Editor lesen nun denselben Namen, nämlich den, den das Modell sich selbst gibt. Zuvor gespeicherte Zeilen behalten ihren Namen und korrigieren sich beim nächsten Speichern aus dem Editor."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}
