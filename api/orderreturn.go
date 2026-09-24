@@ -137,6 +137,13 @@ func (s *Server) startReturn(process, orderID, ref string, o order.Order) error 
 	if !found {
 		return fmt.Errorf("no deployed process with id %s", process)
 	}
-	s.do(func() { s.proc.CreateInstance(key, vars...) })
-	return s.drive()
+	var instKey uint64
+	s.do(func() { s.proc.CreateInstanceReporting(key, &instKey, vars...) })
+	if err := s.drive(); err != nil {
+		return err
+	}
+	// The return is a process working this position like any other, and its tasks
+	// belong beside it in the shop (ADR-draft-the-shop-shows-an-orders-open-tasks).
+	s.notePositionInstance(vars, instKey, process)
+	return nil
 }

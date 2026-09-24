@@ -203,6 +203,7 @@ var mcpOmittedRoutes = map[string]string{
 	// Ordering, for the same reason. An order is also somebody's own: the handler
 	// confines reads to the orders you placed or are the recipient of, and a tool
 	// acting as a server identity would have no such person to be.
+	"GET /api/v1/shop/tasks":   "one person's view of their own orders and the tasks they hold in them, drawn beside those orders in the shop; an agent is nobody's orderer, and the task tools already reach any task by key",
 	"GET /api/v1/shop/catalog": "which catalogue is *yours*, answered from the caller's own groups; an agent acting as a server identity has none",
 	// The inventory. Same shape as the catalogue above — it answers about the
 	// caller — with one more reason on top: a list of somebody's access is exactly

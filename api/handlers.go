@@ -573,8 +573,11 @@ type statsResp struct {
 // callers start the same definition at once. Closing that is
 // ADR-0335.
 type createInstanceResp struct {
-	DefinitionKey uint64    `json:"definitionKey"`
-	Stats         statsResp `json:"stats"`
+	DefinitionKey uint64 `json:"definitionKey"`
+	// InstanceKey is the instance this start created. Absent where the start
+	// created none — a call answered before anything was minted.
+	InstanceKey uint64    `json:"instanceKey,omitempty"`
+	Stats       statsResp `json:"stats"`
 }
 
 type cancelInstanceResp struct {

@@ -288,6 +288,15 @@ var (
 	InboundWatchMinuteOverflowed = newEvent("inbound_watch.minute_overflowed")
 )
 
+// Orders (ADR-draft-the-shop-shows-an-orders-open-tasks).
+var (
+	// OrderInstanceUnrecorded: an instance started to work an order position could not
+	// be noted on the order. The instance runs; what is lost is the shop's view of its
+	// open tasks, so this is a warning and not a failed start — failing the start would
+	// make the caller retry and start the work twice.
+	OrderInstanceUnrecorded = newEvent("order.instance_unrecorded")
+)
+
 // History retention (ADR-0115/0144) and the OpenSearch exporter (ADR-0114).
 var (
 	RetentionEnabled   = newEvent("retention.enabled")

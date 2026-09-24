@@ -381,6 +381,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An order in the shop says whom each position waits for, and whoever holds the task answers it there.** An order's row said "Wartet" and not on whom: a line manager's
+  approval, a group in IT and a process nobody has modelled yet all read the same.
+  Under each position the shop now lists the open tasks of the processes working it
+  and whom each waits for — for an approval by the rule the line is approved under
+  (a named person, a group, the line manager). Whoever may work a task opens its own
+  form in the row, prefilled, and completes it there. The orderer and the recipient
+  see their orders' tasks; whoever holds a task of somebody else's order — the line
+  manager who has to approve it — sees that order too, marked as one to handle.
+
+  Found without searching. Every API start of a process now answers with the
+  `instanceKey` it created, and a start whose variables name an order and a position
+  is recorded on that position (`instances`); the shop reads the tasks of exactly
+  those instances through `GET /api/v1/shop/tasks`. Orders placed before this carry
+  no recorded instances and show no tasks.
+
 - **The portal speaks French and Italian.** It had German and English, so a catalogue
   kept in French or Italian carried translations that no reader could ever select: the
   switch will not offer a language the page cannot render whole, and the page could

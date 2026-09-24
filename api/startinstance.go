@@ -98,6 +98,8 @@ func (s *Server) startInstance(w http.ResponseWriter, key uint64, startVars []mo
 		statErr     error
 		stats       statsResp
 		driveNeeded bool
+		instKey     uint64
+		processID   string
 	)
 	s.do(func() {
 		d, ok := s.deployments[key]
@@ -111,7 +113,10 @@ func (s *Server) startInstance(w http.ResponseWriter, key uint64, startVars []mo
 			notExec = true
 			return
 		}
-		s.proc.CreateInstance(key, startVars...)
+		processID = d.ProcessID
+		// Reporting, so the answer can name the instance it started and an order
+		// position can be told which instance works it (ADR-draft-the-shop-shows-an-orders-open-tasks).
+		s.proc.CreateInstanceReporting(key, &instKey, startVars...)
 		driveNeeded = true
 	})
 	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
@@ -133,6 +138,7 @@ func (s *Server) startInstance(w http.ResponseWriter, key uint64, startVars []mo
 	case statErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
 	default:
-		httpapi.JSON(w, http.StatusOK, createInstanceResp{DefinitionKey: key, Stats: stats})
+		s.notePositionInstance(startVars, instKey, processID)
+		httpapi.JSON(w, http.StatusOK, createInstanceResp{DefinitionKey: key, InstanceKey: instKey, Stats: stats})
 	}
 }

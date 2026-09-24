@@ -63,6 +63,20 @@ const STRINGS = {
     'proc.archived': 'Der Prozess zu diesem Auftrag steht nur noch im ausgelagerten Ereignisprotokoll. Dieser Server hat ihn nicht mehr und kann ihn nicht anzeigen.',
     'proc.asking': 'Wird abgefragt …',
     'proc.slow': 'Der Server hat auf die Suche nach dem Prozess nicht rechtzeitig geantwortet. Der Auftrag selbst ist davon nicht betroffen; bitte später erneut versuchen.',
+    'task.by.fixed': 'Genehmigung durch',
+    'task.by.role': 'Genehmigung durch die Gruppe',
+    'task.by.superior': 'Genehmigung durch die vorgesetzte Person',
+    'task.waits.person': 'wartet auf',
+    'task.waits.group': 'wartet auf die Gruppe',
+    'task.open': 'von allen übernehmbar',
+    'task.due': 'fällig am',
+    'task.work': 'Erledigen',
+    'task.complete': 'Abschliessen',
+    'task.completing': 'Wird abgeschlossen …',
+    'task.noForm': 'Diese Aufgabe fragt nichts ab. Abschliessen meldet sie als erledigt.',
+    'task.formFailed': 'Das Formular dieser Aufgabe konnte nicht geladen werden.',
+    'task.truncated': 'Nicht alle offenen Aufgaben konnten gelesen werden. Aufträge, in denen Sie eine Aufgabe halten, fehlen hier möglicherweise.',
+    'task.held': 'zur Bearbeitung',
     'order.completed': 'Abgeschlossen',
     'order.partial': 'Teilweise erfüllt',
     'order.unfulfilled': 'Nicht erfüllt',
@@ -219,6 +233,20 @@ const STRINGS = {
     'proc.archived': 'This order\'s process is only in the exported event log now. This server no longer holds it and cannot show it.',
     'proc.asking': 'Asking …',
     'proc.slow': 'The server did not answer the search for the process in time. The order itself is not affected; please try again later.',
+    'task.by.fixed': 'Approval by',
+    'task.by.role': 'Approval by the group',
+    'task.by.superior': 'Approval by the line manager',
+    'task.waits.person': 'waiting for',
+    'task.waits.group': 'waiting for the group',
+    'task.open': 'open to anyone',
+    'task.due': 'due',
+    'task.work': 'Work on it',
+    'task.complete': 'Complete',
+    'task.completing': 'Completing …',
+    'task.noForm': 'This task asks for nothing. Completing it reports it as done.',
+    'task.formFailed': 'The form of this task could not be loaded.',
+    'task.truncated': 'Not every open task could be read. Orders in which you hold a task may be missing here.',
+    'task.held': 'for you to handle',
     'order.completed': 'Completed',
     'order.partial': 'Partly fulfilled',
     'order.unfulfilled': 'Not fulfilled',
@@ -373,6 +401,20 @@ const STRINGS = {
     'proc.archived': 'Le processus de cette commande ne figure plus que dans le journal d’événements externalisé. Ce serveur ne le possède plus et ne peut pas l’afficher.',
     'proc.asking': 'Interrogation en cours …',
     'proc.slow': 'Le serveur n’a pas répondu à temps à la recherche du processus. La commande elle-même n’est pas concernée ; veuillez réessayer plus tard.',
+    'task.by.fixed': 'Approbation par',
+    'task.by.role': 'Approbation par le groupe',
+    'task.by.superior': 'Approbation par le supérieur hiérarchique',
+    'task.waits.person': 'en attente de',
+    'task.waits.group': 'en attente du groupe',
+    'task.open': 'ouverte à tous',
+    'task.due': 'échéance',
+    'task.work': 'Traiter',
+    'task.complete': 'Terminer',
+    'task.completing': 'Fin en cours …',
+    'task.noForm': 'Cette tâche ne demande rien. La terminer la signale comme accomplie.',
+    'task.formFailed': 'Le formulaire de cette tâche n’a pas pu être chargé.',
+    'task.truncated': 'Toutes les tâches ouvertes n’ont pas pu être lues. Des commandes dans lesquelles vous détenez une tâche peuvent manquer ici.',
+    'task.held': 'à traiter',
     'order.completed': 'Terminée',
     'order.partial': 'Partiellement exécutée',
     'order.unfulfilled': 'Non exécutée',
@@ -526,6 +568,20 @@ const STRINGS = {
     'proc.archived': 'Il processo di questo ordine si trova ormai solo nel registro eventi esternalizzato. Questo server non lo possiede più e non può mostrarlo.',
     'proc.asking': 'Interrogazione in corso …',
     'proc.slow': 'Il server non ha risposto in tempo alla ricerca del processo. L’ordine stesso non ne è interessato; riprovare più tardi.',
+    'task.by.fixed': 'Approvazione di',
+    'task.by.role': 'Approvazione del gruppo',
+    'task.by.superior': 'Approvazione del superiore',
+    'task.waits.person': 'in attesa di',
+    'task.waits.group': 'in attesa del gruppo',
+    'task.open': 'aperta a tutti',
+    'task.due': 'scadenza',
+    'task.work': 'Gestire',
+    'task.complete': 'Completare',
+    'task.completing': 'Completamento in corso …',
+    'task.noForm': 'Questa attività non chiede nulla. Completarla la segnala come svolta.',
+    'task.formFailed': 'Non è stato possibile caricare il modulo di questa attività.',
+    'task.truncated': 'Non è stato possibile leggere tutte le attività aperte. Gli ordini in cui lei detiene un’attività potrebbero mancare qui.',
+    'task.held': 'da gestire',
     'order.completed': 'Concluso',
     'order.partial': 'Parzialmente evaso',
     'order.unfulfilled': 'Non evaso',
@@ -850,6 +906,12 @@ function paintFromCache() {
 }
 
 const state = {
+  // tasks are the open tasks of the orders on this page (ADR-draft-the-shop-shows-an-orders-open-tasks); taskOpen is
+  // the one whose form is open, and taskError what answering it last said.
+  tasks: [],
+  tasksTruncated: false,
+  taskOpen: '',
+  taskError: '',
   catalog: null,
   release: null,
   orders: [],
@@ -1371,6 +1433,7 @@ async function load() {
     state.release = releases && releases.length ? releases[0] : null;
   }
   state.orders = await api('/api/v1/orders');
+  await loadTasks();
   // What one person holds, and what they have marked. Both are facts about an
   // account, and with enforcement off there is no account — the server says so
   // rather than inventing an empty answer, which is right of the server and must
@@ -2851,9 +2914,12 @@ function orderRowBodies() {
     el('td', { class: 'muted' }, ''),
     el('td', {}, personName(o.recipient)),
     el('td', {}, new Date(o.createdAt / 1e6).toLocaleDateString(locale)),
-    el('td', {}, o.id),
+    el('td', {}, o.id,
+      // An order in front of somebody because they hold one of its tasks, not
+      // because it is theirs. Said, so nobody mistakes it for one they placed.
+      o.held ? el('div', { class: 'muted' }, t('task.held')) : null),
     el('td', {},
-      cancellable(o)
+      !o.held && cancellable(o)
         ? el('button', {
           class: 'sq',
           'aria-label': t('portal.cancel'),
@@ -2885,14 +2951,14 @@ function orderRowBodies() {
           ? el('span', { class: 'muted' }, ` (${t('portal.blockedBy')}: ${l.blockedBy.join(', ')})`) : null,
         l.reason ? el('span', { class: 'muted' }, ` (${t('portal.reason')}: ${l.reason})`) : null,
         amendedNote(l),
-        returnable(o, l)
+        !o.held && returnable(o, l)
           ? el('button', {
             class: 'linkish',
             disabled: state.busy,
             onclick: () => giveBack(o, l),
           }, state.busy ? t('portal.returning') : t('portal.return'))
           : null,
-        withdrawable(l)
+        !o.held && withdrawable(l)
           ? el('button', {
             class: 'linkish',
             disabled: state.busy,
@@ -2904,7 +2970,7 @@ function orderRowBodies() {
         // as useful by the people this page is for: the status beside the name
         // already answers "what is happening to my laptop" out of the order's own
         // record. The order's link above is the one that stayed.
-        correctable(l)
+        !o.held && correctable(l)
           ? el('button', {
             class: 'linkish',
             disabled: state.busy,
@@ -2916,7 +2982,161 @@ function orderRowBodies() {
             },
           }, t('line.details'))
           : null,
-        detailsPanel(o, l)))))));
+        detailsPanel(o, l),
+        taskList(o, l)))))));
+}
+
+// --- The open tasks of a position (ADR-draft-the-shop-shows-an-orders-open-tasks) --------------------------------
+//
+// "Wartet" says a position is not done; it does not say on whom. Under each
+// position stands every open task of the processes working it, whom it waits for,
+// and — for whoever holds it — the task's own form, answered here rather than in a
+// second window.
+//
+// The server decides all three: which tasks there are (from the instances the
+// order records on the position, never from a search), whom they wait for (by the
+// approval rule where the task is an approval, which is how an orderer knows it),
+// and whether this reader may answer (the task route's own gate). The page draws.
+
+// loadTasks reads the tasks, and the orders the reader holds a task in, which are
+// listed beside the reader's own. A failure leaves the orders as they were: a
+// missing task list is a list missing, not an order missing.
+async function loadTasks() {
+  state.tasks = [];
+  state.tasksTruncated = false;
+  try {
+    const got = await api('/api/v1/shop/tasks');
+    state.tasks = (got && got.tasks) || [];
+    state.tasksTruncated = !!(got && got.truncated);
+    const own = new Set(state.orders.map((o) => o.id));
+    for (const o of (got && got.orders) || []) {
+      if (!own.has(o.id)) state.orders.push({ ...o, held: true });
+    }
+    state.orders.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  } catch { /* no task list; the orders still stand */ }
+}
+
+// tasksOf are the open tasks of one position.
+function tasksOf(order, line) {
+  const key = lineKey(line);
+  return (state.tasks || []).filter((x) => x.orderId === order.id && x.positionId === key);
+}
+
+// holderText is whom a task waits for, as the reader knows it.
+function holderText(task) {
+  const h = task.holder || {};
+  const by = {
+    fixed: 'task.by.fixed', role: 'task.by.role', superior: 'task.by.superior',
+    person: 'task.waits.person', group: 'task.waits.group',
+  }[h.kind];
+  if (!by) return t('task.open');
+  return h.name ? `${t(by)} ${h.name}` : t(by);
+}
+
+// taskFormKey is where a task's answers are kept between redraws, beside the
+// basket's: the same mounting and the same harvesting serve both.
+const taskFormKey = (task) => `task:${task.key}`;
+
+function taskList(order, line) {
+  const list = tasksOf(order, line);
+  if (!list.length) return null;
+  return el('ul', { class: 'tasks' }, list.map((task) => el('li', { 'data-task': String(task.key) },
+    el('span', { class: 'task-name' }, task.name),
+    ' \u00b7 ', el('span', { class: 'task-holder' }, holderText(task)),
+    task.dueDate
+      ? el('span', { class: 'muted' },
+        ` \u00b7 ${t('task.due')} ${new Date(task.dueDate).toLocaleDateString(locale)}`)
+      : null,
+    task.mayWork
+      ? el('button', {
+        class: 'linkish', disabled: state.busy,
+        onclick: () => toggleTask(task),
+      }, state.taskOpen === String(task.key) ? t('line.close') : t('task.work'))
+      : null,
+    taskPanel(task))));
+}
+
+// toggleTask opens a task's form, seeded with what the task already holds, or
+// closes it. Seeded because a form that opened empty would answer a question with
+// nothing the process had already filled in.
+async function toggleTask(task) {
+  harvest();
+  const key = taskFormKey(task);
+  if (state.taskOpen === String(task.key)) {
+    state.taskOpen = '';
+    delete state.config[key];
+    render();
+    return;
+  }
+  state.taskOpen = String(task.key);
+  state.taskError = '';
+  if (task.formId && !state.config[key]) {
+    try {
+      const scope = task.elementInstanceKey || task.processInstanceKey;
+      state.config[key] = (await api(`/api/v1/instances/${scope}/variables`)) || {};
+    } catch {
+      state.config[key] = {};
+    }
+  }
+  render();
+}
+
+function taskPanel(task) {
+  if (state.taskOpen !== String(task.key)) return null;
+  const key = taskFormKey(task);
+  return el('div', { class: 'card cfg', style: 'margin-top:8px' },
+    state.taskError ? el('p', { class: 'error' }, state.taskError) : null,
+    task.formId
+      ? el('div', { 'data-configkey': key, 'data-formid': task.formId },
+        el('p', { class: 'note' }, t('cfg.loading')))
+      : el('p', { class: 'note' }, t('task.noForm')),
+    el('div', { class: 'row', style: 'margin-top:10px' },
+      el('button', {
+        class: 'primary', disabled: state.busy,
+        onclick: () => completeTask(task),
+      }, state.busy ? t('task.completing') : t('task.complete'))));
+}
+
+// completeTask answers a task with what its form holds. The form checks itself
+// first, as the Tasks app's does: a required field left empty is the reader's to
+// fill in, not the server's to refuse.
+async function completeTask(task) {
+  const key = taskFormKey(task);
+  let data = {};
+  const form = mounted.get(key);
+  if (form) {
+    let result;
+    try { result = form.submit(); } catch { result = { data: {}, errors: {} }; }
+    if (result.errors && Object.keys(result.errors).length) {
+      state.taskError = t('cfg.invalid');
+      render();
+      return;
+    }
+    data = result.data || {};
+  } else if (task.formId) {
+    state.taskError = t('task.formFailed');
+    render();
+    return;
+  }
+  state.busy = true;
+  state.taskError = '';
+  render();
+  try {
+    await api(`/api/v1/tasks/${task.key}/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ variables: data }),
+    });
+    state.taskOpen = '';
+    delete state.config[key];
+    mounted.delete(key);
+    await load();
+  } catch (e) {
+    state.taskError = `${t('portal.failed')} ${e.message}`;
+  } finally {
+    state.busy = false;
+    render();
+  }
 }
 
 // --- Changing one position ---------------------------------------------------
@@ -3058,6 +3278,7 @@ function renderOrders() {
             el('th', {}, ''),
             el('th', {}, t('tbl.status')))),
         orderRowsNode)),
+    state.tasksTruncated ? el('p', { class: 'note' }, t('task.truncated')) : null,
     el('p', { class: 'note' }, t('note.noCompany')));
 }
 
