@@ -8422,7 +8422,7 @@ async function viewTasks(preselectKey) {
     destroyProc();
     const t = state.tasks.find((x) => x.key === state.selected);
     // A narrow screen shows the list or the task, not both side by side
-    // (ADR-draft-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen); the grid says which.
+    // (ADR-0417); the grid says which.
     const grid = detailEl.closest(".tasks");
     if (grid) grid.classList.toggle("has-selection", !!t);
     if (!t) {

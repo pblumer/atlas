@@ -196,7 +196,7 @@ export async function viewRecertification({ api, toast, view, isSuperseded }) {
         // nothing has been decided, because that is what will be recorded.
         : `<span class="muted">unanswered</span>`;
       // Each cell names itself, because a narrow screen hides the column heads and
-      // shows a row as a card (ADR-draft-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen).
+      // shows a row as a card (ADR-0417).
       return `<tr>
         <td data-label="Person" style="font-family:ui-monospace,monospace">${esc(r.principal)}</td>
         <td data-label="Product" style="font-family:ui-monospace,monospace">${esc(r.itemId)}${

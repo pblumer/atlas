@@ -15,8 +15,8 @@
         "de": "Unter 860 px Breite ist jede Ansicht des Shops einspaltig. Der Katalog zeigt die Spalte, bei der man gerade ist; eine Leiste darüber führt zurück und nennt den bisherigen Weg. Der Warenkorb zeigt jedes Angebot mit seinen Services und Optionen darunter. «Meine Aufträge» ist eine Liste von Karten, mit den Aufgaben jeder Position und dem Formular zu ihrer Erledigung in der Breite der Karte. Die Schaltflächen sind gross genug für den Finger. Auf breiten Bildschirmen bleibt die bisherige Darstellung."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0417",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0417-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md"
       },
       "tags": [
         "Shop"
@@ -48,8 +48,8 @@
         "de": "Unter 860 px Breite zeigen Posteingang und «Start» entweder die Liste oder die geöffnete Aufgabe, nicht beides; eine Aufgabe öffnet sich mit einer Schaltfläche zurück zur Liste. Die Ordner werden zu einer Reihe von Chips, und die Felder einer Aufgabe zeigen die Beschriftung über dem Wert. Eine Zeile der Rezertifizierung ist eine Karte mit den beiden Antworten darunter. Die obere Leiste behält ihre Symbole im Bild und lässt stattdessen die Ansichtsnamen seitlich scrollen. Zwischen 861 px und 1180 px behält der Posteingang seine drei Bereiche in schmaleren Breiten."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0417",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0417-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md"
       },
       "tags": [
         "Tasks"

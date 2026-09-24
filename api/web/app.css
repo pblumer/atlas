@@ -6558,7 +6558,7 @@ button.im-problem:hover { background: var(--accent-soft); }
 .estate-reason, .estate-runtime { font-size: 12px; line-height: 1.5; margin-top: 2px; }
 
 /* ---------- Tasks and the top bar on a narrow screen ----------
-   (ADR-draft-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen) The shop's breakpoint,
+   (ADR-0417) The shop's breakpoint,
    860px, so a phone reads the shop and the inbox the same way: one column.
 
    The back button is the narrow screen's way from a task to the list, and a wide

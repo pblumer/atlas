@@ -22,7 +22,7 @@ _Changed_ / _Removed_ for each version.
   size. A wide screen keeps its layout. Before this, a phone showed about one and a
   half of the catalogue's four columns, and an order's tasks sat past the right edge
   of the screen
-  ([ADR-draft-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen](docs/adr/draft-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md)).
+  ([ADR-0417](docs/adr/0417-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md)).
 
 - **Tasks works on a phone.** Below the same 860px the inbox and Start show the list
   or the open task, not both, and a task opens with a button back to the list. The
@@ -31,7 +31,7 @@ _Changed_ / _Removed_ for each version.
   icons on screen and scrolls the view names instead. Between 861px and 1180px the
   inbox keeps its three panes at narrower widths. Before this, a phone showed the
   folders and part of the list, and the task itself was past the right edge
-  ([ADR-draft-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen](docs/adr/draft-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md)).
+  ([ADR-0417](docs/adr/0417-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md)).
 
 - **A decision service's name can be moved out of the way, and the fold switch is
   in the box.** DMN requires the name inside the shape and says nothing about where,

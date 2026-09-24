@@ -1,4 +1,4 @@
-# ADR-DRAFT: The shop and Tasks are one column wide on a narrow screen
+# ADR-0417: The shop and Tasks are one column wide on a narrow screen
 
 - **Status:** Accepted
 - **Implementation:** Landed

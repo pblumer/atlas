@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 // The Console's inbox, Start and Access review on a narrow screen
-// (ADR-draft-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen). Below 860px the inbox
+// (ADR-0417). Below 860px the inbox
 // shows the list or the task, never both, and nothing sits past the screen's right
 // edge except inside a box that scrolls on its own (the view names in the top bar,
 // the folder chips). A wide screen keeps its three panes; the other tasks specs
