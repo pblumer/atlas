@@ -143,7 +143,7 @@ func (s *Server) startReturn(process, orderID, ref string, o order.Order) error 
 		return err
 	}
 	// The return is a process working this position like any other, and its tasks
-	// belong beside it in the shop (ADR-draft-the-shop-shows-an-orders-open-tasks).
+	// belong beside it in the shop (ADR-0416).
 	s.notePositionInstance(vars, instKey, process)
 	return nil
 }

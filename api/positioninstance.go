@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/model"
 )
 
-// Which instances work an order's position (ADR-draft-the-shop-shows-an-orders-open-tasks).
+// Which instances work an order's position (ADR-0416).
 //
 // Every process that works a position is started through this server with the
 // two variables that name it — `orderId` and `positionId` — whoever starts it:

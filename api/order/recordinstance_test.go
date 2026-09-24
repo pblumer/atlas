@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// Recording which instances work a position (ADR-draft-the-shop-shows-an-orders-open-tasks).
+// Recording which instances work a position (ADR-0416).
 
 func twoPositionOrder() Order {
 	return Order{ID: "ord_1", Orderer: "usr_1", Recipient: "usr_1", Lines: []Line{

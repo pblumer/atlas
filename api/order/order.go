@@ -284,7 +284,7 @@ type Line struct {
 	DecidedAt  int64  `json:"decidedAt,omitempty"`
 	Reason     string `json:"reason,omitempty"`
 	// Instances are the process instances started to work this position, oldest
-	// first: its approval, its provisioning, and later its return (ADR-draft-the-shop-shows-an-orders-open-tasks).
+	// first: its approval, its provisioning, and later its return (ADR-0416).
 	//
 	// Recorded by the server at the moment it starts one, because that is the only
 	// moment the link is certain. Found afterwards it would be a search over every

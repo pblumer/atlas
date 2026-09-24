@@ -13,7 +13,7 @@ import (
 	"github.com/pblumer/atlas/state"
 )
 
-// The open tasks of an order, in the shop (ADR-draft-the-shop-shows-an-orders-open-tasks).
+// The open tasks of an order, in the shop (ADR-0416).
 //
 // "Wartet" says a position is not done. It does not say on whom: a line manager,
 // a group in IT, a process nobody has modelled yet. That is what the shop's orders

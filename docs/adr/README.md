@@ -501,6 +501,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0413](0413-a-language-tag-is-checked-where-it-is-written.md) | A language tag is checked where it is written, and nowhere else | Accepted | Landed |
 | [0414](0414-a-missing-translation-is-reported-not-refused.md) | A missing translation is reported, not refused | Accepted | Landed |
 | [0415](0415-the-portal-offers-the-catalogues-languages.md) | The portal offers the languages its catalogue is kept in | Accepted | Landed |
+| [0416](0416-the-shop-shows-an-orders-open-tasks.md) | The shop shows an order's open tasks, and the order records the instances that work it | Accepted | Landed |
 
 ## The two states of a record
 

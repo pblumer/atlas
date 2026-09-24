@@ -288,7 +288,7 @@ var (
 	InboundWatchMinuteOverflowed = newEvent("inbound_watch.minute_overflowed")
 )
 
-// Orders (ADR-draft-the-shop-shows-an-orders-open-tasks).
+// Orders (ADR-0416).
 var (
 	// OrderInstanceUnrecorded: an instance started to work an order position could not
 	// be noted on the order. The instance runs; what is lost is the shop's view of its

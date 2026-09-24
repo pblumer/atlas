@@ -906,7 +906,7 @@ function paintFromCache() {
 }
 
 const state = {
-  // tasks are the open tasks of the orders on this page (ADR-draft-the-shop-shows-an-orders-open-tasks); taskOpen is
+  // tasks are the open tasks of the orders on this page (ADR-0416); taskOpen is
   // the one whose form is open, and taskError what answering it last said.
   tasks: [],
   tasksTruncated: false,
@@ -2986,7 +2986,7 @@ function orderRowBodies() {
         taskList(o, l)))))));
 }
 
-// --- The open tasks of a position (ADR-draft-the-shop-shows-an-orders-open-tasks) --------------------------------
+// --- The open tasks of a position (ADR-0416) --------------------------------
 //
 // "Wartet" says a position is not done; it does not say on whom. Under each
 // position stands every open task of the processes working it, whom it waits for,

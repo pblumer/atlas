@@ -10,7 +10,7 @@ import (
 	"github.com/pblumer/atlas/api"
 )
 
-// The open tasks of an order, in the shop (ADR-draft-the-shop-shows-an-orders-open-tasks).
+// The open tasks of an order, in the shop (ADR-0416).
 //
 // The fixture is the case the feature was asked for: alice's order carries a VPN
 // that bob has to approve, and a laptop that needs nobody. The approval is started

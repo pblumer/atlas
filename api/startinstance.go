@@ -115,7 +115,7 @@ func (s *Server) startInstance(w http.ResponseWriter, key uint64, startVars []mo
 		}
 		processID = d.ProcessID
 		// Reporting, so the answer can name the instance it started and an order
-		// position can be told which instance works it (ADR-draft-the-shop-shows-an-orders-open-tasks).
+		// position can be told which instance works it (ADR-0416).
 		s.proc.CreateInstanceReporting(key, &instKey, startVars...)
 		driveNeeded = true
 	})

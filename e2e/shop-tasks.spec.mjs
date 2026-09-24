@@ -1,5 +1,5 @@
 // e2e for the open tasks under an order's positions in the shop (api/web/shop.js,
-// ADR-draft-the-shop-shows-an-orders-open-tasks), against a fixture.
+// ADR-0416), against a fixture.
 //
 // What was asked for: an order's row says "Wartet" and not on whom. Under each
 // position the shop now shows its open tasks and whom each waits for, and whoever

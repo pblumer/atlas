@@ -1,4 +1,4 @@
-# ADR-DRAFT: The shop shows an order's open tasks, and the order records the instances that work it
+# ADR-0416: The shop shows an order's open tasks, and the order records the instances that work it
 
 - **Status:** Accepted
 - **Implementation:** Landed
