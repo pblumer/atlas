@@ -31,6 +31,28 @@
       }
     },
     {
+      "id": "withdrawing-an-order-stops-the-processes-already-working-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Cancelling an order stops the processes already working it",
+        "de": "Stornieren beendet die Prozesse, die bereits am Auftrag arbeiten"
+      },
+      "summary": {
+        "en": "When an order or one of its positions was cancelled, only a waiting approval was stopped. A position still reads pending while its provisioning runs, so it could be cancelled mid-provisioning, and the provisioning's open step stayed in somebody's inbox and in the shop, beneath a line that said Cancelled. Cancelling now stops every still-running process recorded on the cancelled position. What such a process already did in a target system is not undone.",
+        "de": "Beim Stornieren eines Auftrags oder einer Position wurde bisher nur eine wartende Genehmigung beendet. Eine Position gilt aber als ausstehend, solange ihre Provisionierung läuft, und liess sich deshalb mitten in der Provisionierung stornieren; deren offener Schritt blieb im Posteingang und im Shop stehen, unter einer Zeile mit dem Status Storniert. Stornieren beendet jetzt jeden noch laufenden Prozess, der an der stornierten Position vermerkt ist. Was ein solcher Prozess in einem Zielsystem bereits ausgeführt hat, wird nicht rückgängig gemacht."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Shop",
+        "Orders"
+      ]
+    },
+    {
       "id": "a-task-a-model-assigns-to-the-person-who-ordered-is-now-thei",
       "version": "Unreleased",
       "date": null,
@@ -338,48 +360,6 @@
           "Den Prozess starten und im Startformular die Adresse dieses Atlas eintragen.",
           "Der erste Schritt liest die Kataloge, und die Erfassungsmaske öffnet sich mit gefüllten Listen."
         ]
-      }
-    },
-    {
-      "id": "a-folded-decision-service-showed-neither-what-it-is-given-no",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A folded decision service keeps its arrows",
-        "de": "Ein zugeklappter Decision Service behält seine Pfeile"
-      },
-      "summary": {
-        "en": "Folding a decision service used to take away the arrows reaching in from outside, leaving the input data sitting unattached beside it. They now end on the folded box, which is what the service is given and what it gives. Unfolding puts the box back exactly as it was, size and dividing line included.",
-        "de": "Beim Zuklappen eines Decision Service verschwanden bisher die Pfeile, die von aussen hineinreichten; die Input-Daten standen danach unverbunden daneben. Sie enden jetzt am zugeklappten Kasten — das ist, was der Service bekommt und was er liefert. Das Aufklappen stellt den Kasten wieder genau so her, wie er war, samt Grösse und Trennlinie."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a decision model that has a decision service.",
-          "Select the service and choose the fold entry on its context pad.",
-          "The box shrinks and keeps every arrow reaching in from outside.",
-          "Choose the same entry again to unfold it."
-        ],
-        "de": [
-          "Ein Entscheidungsmodell mit einem Decision Service öffnen.",
-          "Den Service auswählen und im Kontextmenü den Eintrag zum Zuklappen wählen.",
-          "Der Kasten wird klein und behält jeden Pfeil, der von aussen hineinreicht.",
-          "Denselben Eintrag erneut wählen, um wieder aufzuklappen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]

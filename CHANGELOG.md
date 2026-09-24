@@ -35,6 +35,15 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Withdrawing an order stops the processes already working it.** A cancelled
+  position's approval was cancelled with it, and nothing else. But a position reads
+  pending until its provisioning reports, so it can be withdrawn while that process
+  is running — and its step stayed open under the cancelled order, in somebody's
+  inbox and in the shop ("enter the address for the new account" beneath a line that
+  says Cancelled). Withdrawing an order, or one position of it, now cancels every
+  still-running instance the order recorded on that position. Cancelling stops the
+  work; what the process already did in a target system is not undone.
+
 - **A task a model assigns to the person who ordered is now theirs to answer.** A
   model assigns a task with an expression, and the variable it has for a person is
   usually an id: an order carries its orderer and its recipient as principal ids
