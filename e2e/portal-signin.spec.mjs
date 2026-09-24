@@ -1,5 +1,5 @@
 // The service portal when a sign-in is required and nobody has one yet
-// (api/web/portal.js).
+// (api/web/shop.js).
 //
 // The case behind it, reported from a running server: an instance started with
 // --auth, a visitor who opens the portal directly without a session. Every route
@@ -10,7 +10,7 @@
 // with nothing saying a sign-in was needed and nothing offering one.
 //
 // The portal boots itself against the real assets here, with only the API stubbed,
-// so these drive the shipped portal.js rather than a copy of its logic.
+// so these drive the shipped shop.js rather than a copy of its logic.
 import { test, expect } from "@playwright/test";
 
 const json = (body, status = 200) => ({
@@ -38,7 +38,7 @@ const RELEASE = {
 // everything named after it wins.
 async function stub(page, { me, providers = [], registration = { enabled: false }, signedIn = false }) {
   await page.route("**/api/v1/**", (route) => route.fulfill(json({})));
-  await page.route("**/api/v1/portal/catalog", (route) =>
+  await page.route("**/api/v1/shop/catalog", (route) =>
     route.fulfill(signedIn ? json(CATALOG) : REFUSED));
   await page.route("**/api/v1/catalogs/*/releases", (route) =>
     route.fulfill(signedIn ? json([RELEASE]) : REFUSED));
@@ -46,7 +46,7 @@ async function stub(page, { me, providers = [], registration = { enabled: false 
     route.fulfill(signedIn ? json([]) : REFUSED));
   await page.route("**/api/v1/inventory", (route) =>
     route.fulfill(signedIn ? json({ items: [] }) : REFUSED));
-  await page.route("**/api/v1/portal/favourites", (route) =>
+  await page.route("**/api/v1/shop/favourites", (route) =>
     route.fulfill(signedIn ? json({ itemIds: [] }) : REFUSED));
   await page.route("**/api/v1/principals", (route) =>
     route.fulfill(signedIn ? json([]) : REFUSED));
@@ -70,7 +70,7 @@ test.afterEach(async ({ page }) => {
 
 test("a portal that requires a sign-in asks for one", async ({ page }) => {
   await stub(page, { me: REFUSED });
-  await page.goto("/portal.html?lang=en");
+  await page.goto("/shop.html?lang=en");
 
   await expect(signin(page)).toBeVisible();
   await expect(signin(page)).toContainText("Please sign in");
@@ -92,7 +92,7 @@ test("a portal that requires a sign-in asks for one", async ({ page }) => {
 
 test("the refusal is not reported as a broken portal", async ({ page }) => {
   await stub(page, { me: REFUSED });
-  await page.goto("/portal.html?lang=en");
+  await page.goto("/shop.html?lang=en");
   await expect(signin(page)).toBeVisible();
 
   // The two sentences the page used to show for this: the generic failure with an
@@ -104,7 +104,7 @@ test("the refusal is not reported as a broken portal", async ({ page }) => {
 
 test("the sign-in says which installation is asking", async ({ page }) => {
   await stub(page, { me: REFUSED });
-  await page.goto("/portal.html?lang=en");
+  await page.goto("/shop.html?lang=en");
   await expect(signin(page)).toBeVisible();
   // The instance's own mark, from the endpoint that is public exactly so a screen
   // shown before any session can read it.
@@ -116,14 +116,14 @@ test("an identity provider is offered where one is configured", async ({ page })
     me: REFUSED,
     providers: [{ name: "Entra ID", start: "/api/v1/auth/sso/entra/start" }],
   });
-  await page.goto("/portal.html?lang=en");
+  await page.goto("/shop.html?lang=en");
 
   const provider = page.locator(".signin .provider");
   await expect(provider).toHaveText("Sign in with Entra ID");
   // The page it must come back to travels with it. Without that the callback's
   // default applies and a portal visitor is signed in on the Console.
   await expect(provider).toHaveAttribute(
-    "href", "/api/v1/auth/sso/entra/start?returnTo=%2Fportal.html");
+    "href", "/api/v1/auth/sso/entra/start?returnTo=%2Fshop.html");
   // The password form stands beside it: an installation may federate one login and
   // still keep local accounts.
   await expect(page.locator('.signin input[name="password"]')).toBeVisible();
@@ -131,7 +131,7 @@ test("an identity provider is offered where one is configured", async ({ page })
 
 test("no provider configured leaves the password form alone", async ({ page }) => {
   await stub(page, { me: REFUSED });
-  await page.goto("/portal.html?lang=en");
+  await page.goto("/shop.html?lang=en");
   await expect(signin(page)).toBeVisible();
   await expect(page.locator(".signin .provider")).toHaveCount(0);
 });
@@ -139,14 +139,14 @@ test("no provider configured leaves the password form alone", async ({ page }) =
 test("signing in loads the catalogue and stays on the portal", async ({ page }) => {
   let session = false;
   await page.route("**/api/v1/**", (route) => route.fulfill(json({})));
-  await page.route("**/api/v1/portal/catalog", (route) =>
+  await page.route("**/api/v1/shop/catalog", (route) =>
     route.fulfill(session ? json(CATALOG) : REFUSED));
   await page.route("**/api/v1/catalogs/*/releases", (route) =>
     route.fulfill(session ? json([RELEASE]) : REFUSED));
   await page.route("**/api/v1/orders", (route) => route.fulfill(session ? json([]) : REFUSED));
   await page.route("**/api/v1/inventory", (route) =>
     route.fulfill(session ? json({ items: [] }) : REFUSED));
-  await page.route("**/api/v1/portal/favourites", (route) =>
+  await page.route("**/api/v1/shop/favourites", (route) =>
     route.fulfill(session ? json({ itemIds: [] }) : REFUSED));
   await page.route("**/api/v1/principals", (route) => route.fulfill(session ? json([]) : REFUSED));
   await page.route("**/api/v1/auth/providers", (route) => route.fulfill(json([])));
@@ -161,7 +161,7 @@ test("signing in loads the catalogue and stays on the portal", async ({ page }) 
       ? json({ authEnabled: true, user: { id: "u1", username: "ada", displayName: "Ada", roles: ["user"] } })
       : REFUSED));
 
-  await page.goto("/portal.html?lang=en");
+  await page.goto("/shop.html?lang=en");
   await expect(signin(page)).toBeVisible();
 
   await page.locator('.signin input[name="username"]').fill("ada");
@@ -174,14 +174,14 @@ test("signing in loads the catalogue and stays on the portal", async ({ page }) 
   await expect(signin(page)).toHaveCount(0);
   await expect(page.locator("nav.nav")).toBeVisible();
   await expect(page.locator("header h1")).toHaveText("Demo catalogue");
-  expect(new URL(page.url()).pathname).toBe("/portal.html");
+  expect(new URL(page.url()).pathname).toBe("/shop.html");
 });
 
 test("a wrong password is named as one", async ({ page }) => {
   await stub(page, { me: REFUSED });
   await page.route("**/api/v1/auth/login", (route) =>
     route.fulfill(json({ error: "invalid credentials" }, 401)));
-  await page.goto("/portal.html?lang=en");
+  await page.goto("/shop.html?lang=en");
 
   await page.locator('.signin input[name="username"]').fill("ada");
   await page.locator('.signin input[name="password"]').fill("wrong");
@@ -194,7 +194,7 @@ test("a failed attempt keeps the name that was typed", async ({ page }) => {
   await stub(page, { me: REFUSED });
   await page.route("**/api/v1/auth/login", (route) =>
     route.fulfill(json({ error: "invalid credentials" }, 401)));
-  await page.goto("/portal.html?lang=en");
+  await page.goto("/shop.html?lang=en");
 
   await page.locator('.signin input[name="username"]').fill("ada");
   await page.locator('.signin input[name="password"]').fill("wrong");
@@ -212,7 +212,7 @@ test("the throttle is not reported as a wrong password", async ({ page }) => {
   await stub(page, { me: REFUSED });
   await page.route("**/api/v1/auth/login", (route) =>
     route.fulfill(json({ error: "too many attempts" }, 429)));
-  await page.goto("/portal.html?lang=en");
+  await page.goto("/shop.html?lang=en");
 
   await page.locator('.signin input[name="username"]').fill("ada");
   await page.locator('.signin input[name="password"]').fill("correct horse");
@@ -227,7 +227,7 @@ test("the throttle is not reported as a wrong password", async ({ page }) => {
 
 test("the language switch works before the sign-in, not only after it", async ({ page }) => {
   await stub(page, { me: REFUSED });
-  await page.goto("/portal.html?lang=en");
+  await page.goto("/shop.html?lang=en");
   await expect(signin(page)).toContainText("Please sign in");
 
   await page.locator(".langs button", { hasText: "DE" }).click();
@@ -236,7 +236,7 @@ test("the language switch works before the sign-in, not only after it", async ({
 
 test("a portal that enforces no sign-in is unchanged", async ({ page }) => {
   await stub(page, { me: json({ authEnabled: false, user: null }), signedIn: true });
-  await page.goto("/portal.html?lang=en");
+  await page.goto("/shop.html?lang=en");
 
   // Single-user mode: the catalogue is readable and an order is not, which is the
   // page's existing answer and not this screen's business.
@@ -251,7 +251,7 @@ test("a server that cannot answer is not read as nobody being signed in", async 
   // its customers a login form that cannot possibly work — while the catalogue
   // behind it is answering perfectly well.
   await stub(page, { me: json({ error: "boom" }, 500), signedIn: true });
-  await page.goto("/portal.html?lang=en");
+  await page.goto("/shop.html?lang=en");
 
   await expect(signin(page)).toHaveCount(0);
   await expect(page.locator("nav.nav")).toBeVisible();
@@ -263,10 +263,10 @@ test("a session that runs out while the page is open asks again", async ({ page 
   // orders are read. That is the same refusal one step later, and reporting it as
   // a failure is the original defect with a different trigger.
   await stub(page, { me: json({ authEnabled: true, user: { id: "u1", username: "ada", roles: ["user"] } }) });
-  await page.route("**/api/v1/portal/catalog", (route) => route.fulfill(json(CATALOG)));
+  await page.route("**/api/v1/shop/catalog", (route) => route.fulfill(json(CATALOG)));
   await page.route("**/api/v1/catalogs/*/releases", (route) => route.fulfill(json([RELEASE])));
   await page.route("**/api/v1/orders", (route) => route.fulfill(REFUSED));
-  await page.goto("/portal.html?lang=en");
+  await page.goto("/shop.html?lang=en");
 
   await expect(signin(page)).toBeVisible();
   await expect(signin(page)).toContainText("session has run out");
@@ -275,6 +275,6 @@ test("a session that runs out while the page is open asks again", async ({ page 
   // And the catalogue that was resolved for the session that ended is let go.
   // A sign-in drawn over it would ask who you are under somebody's catalogue name
   // and brand — the page saying two things at once.
-  await expect(page.locator("header h1")).toHaveText("Service portal");
+  await expect(page.locator("header h1")).toHaveText("Shop");
   await expect(page.locator("header img.mark")).toHaveAttribute("src", "/api/v1/settings/logo");
 });

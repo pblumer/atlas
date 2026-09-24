@@ -11,9 +11,9 @@ import (
 //
 // It is the half of a rule that used to be a refusal. Publishing demanded a name
 // for every declared language, and a description and a heading wording in all of
-// them once there was one in any, on the argument that a portal showing one
+// them once there was one in any, on the argument that a shop showing one
 // audience a product and the other an empty row is worse than no catalogue at
-// all. The argument was sound and the premise was not: the portal never shows an
+// all. The argument was sound and the premise was not: the shop never shows an
 // empty row, it falls back to whatever language the catalogue does have, because
 // a name in the wrong language is better than no name. So the refusal was not
 // protecting a reader — it was holding a usable catalogue back until the last
@@ -112,7 +112,7 @@ func gapsOf(catalog string, it Item, lang string) []Problem {
 	if strings.TrimSpace(it.ProductGroup) != "" && missing(it.ProductGroupTexts) {
 		say("product group")
 	}
-	// The shapes it is ordered in. Not a cosmetic gap like the others: the portal
+	// The shapes it is ordered in. Not a cosmetic gap like the others: the shop
 	// draws these in the basket, where an orderer has to CHOOSE one, so a German
 	// word in an English basket is the moment somebody picks.
 	//
@@ -136,7 +136,7 @@ func gapsOf(catalog string, it Item, lang string) []Problem {
 //
 // Reported and not refused, unlike a product named nowhere. A product's id is
 // minted for a catalogue and means nothing to a reader; a shape's is very often
-// the word itself — "black", "silver", "large" — so the portal falling back to it
+// the word itself — "black", "silver", "large" — so the shop falling back to it
 // is frequently adequate, and refusing the publish would stop catalogues that
 // read perfectly well.
 func unnamedShapes(catalog string, it Item) []Problem {
@@ -146,7 +146,7 @@ func unnamedShapes(catalog string, it Item) []Problem {
 			continue
 		}
 		out = append(out, Problem{Catalog: catalog, Item: it.ID,
-			Message: "the shape " + v.ID + " is named in no language; the portal " +
+			Message: "the shape " + v.ID + " is named in no language; the shop " +
 				"shows its id, which reads as a name only by accident"})
 	}
 	return out

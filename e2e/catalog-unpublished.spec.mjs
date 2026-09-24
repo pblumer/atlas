@@ -43,7 +43,7 @@ test("a product the portal still offers is named, though no other screen has it"
   await expect(card).toContainText("rel_7");
 
   const removed = card.locator(".portal-removed");
-  await expect(removed).toContainText("Still offered on the portal (1)");
+  await expect(removed).toContainText("Still offered in the shop (1)");
   await expect(removed).toContainText("Benutzerkonto intern");
   await expect(removed).toContainText("2027-benutzeraccount-intern");
 
@@ -59,7 +59,7 @@ test("a catalogue the portal is serving as it stands says so rather than staying
 
   const card = page.locator(".portal-current");
   await expect(card).toBeVisible();
-  await expect(card).toContainText("The portal is offering this catalogue exactly as it stands");
+  await expect(card).toContainText("The shop is offering this catalogue exactly as it stands");
   await expect(card).toContainText("rel_7");
   await expect(page.locator(".portal-behind")).toHaveCount(0);
 });
@@ -92,7 +92,7 @@ test("an addition that will not become orderable carries its state, and an edit 
   });
 
   const added = page.locator(".portal-added");
-  await expect(added).toContainText("Not on the portal yet (2)");
+  await expect(added).toContainText("Not in the shop yet (2)");
   // One pill and not two: publishing an active product does put it in front of
   // people, and marking that row as well would be noise on the ordinary case.
   await expect(added.locator(".pill.warn")).toHaveCount(1);

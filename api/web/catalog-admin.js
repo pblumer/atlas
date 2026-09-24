@@ -1,6 +1,6 @@
 // Filling a catalogue, as a screen rather than as a sequence of curl calls.
 //
-// The portal's three models landed with an API and no authoring surface: catalogues,
+// The shop's three models landed with an API and no authoring surface: catalogues,
 // products, the edges between them and the release that freezes all of it were
 // reachable only by somebody willing to hand-write JSON. That is an answer for
 // whoever wrote the API. The product manager's actual question is "how do I put a
@@ -139,11 +139,11 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
     // card below says out loud rather than rendering as "nothing is wrong".
     report = await api("GET", "/api/v1/catalog-products/approver-report").catch(() => null);
     // And where a catalogue is written in one of its languages and not another.
-    // Publishing refused that until it was pointed out that the portal falls back
+    // Publishing refused that until it was pointed out that the shop falls back
     // rather than showing a blank — so the refusal held usable catalogues back and
     // protected nobody. This card is what took its place, and it is the whole
     // reason removing the refusal is safe: a gap nothing says out loud is a gap
-    // that surfaces months later as "the French portal reads oddly".
+    // that surfaces months later as "the French shop reads oddly".
     translation = await api("GET", "/api/v1/catalog-products/translation-gaps").catch(() => null);
   } catch (e) {
     if (isSuperseded()) return;
@@ -288,9 +288,9 @@ function approverCard(report) {
 //
 // It exists because a gate was removed. Publishing used to refuse a product named
 // in one declared language and not another; the refusal protected no reader — the
-// portal shows the name the catalogue has rather than a blank — but it did make
+// shop shows the name the catalogue has rather than a blank — but it did make
 // the gap impossible to ignore. A gap nobody says out loud arrives months later
-// as "the French portal reads oddly", reported by a reader rather than found by a
+// as "the French shop reads oddly", reported by a reader rather than found by a
 // maintainer.
 //
 // Grouped by product and not listed per language, because four rows reading
@@ -333,7 +333,7 @@ function translationCard(report) {
     <h3 style="margin:0 0 6px">Still to translate</h3>
     <p class="muted" style="max-width:62ch; margin:0 0 10px">${byProduct.size} of ${over}
       say something in one of their catalogue's languages and not in another. This
-      does <b>not</b> stop a publish: the portal shows the language that exists rather than a
+      does <b>not</b> stop a publish: the shop shows the language that exists rather than a
       blank, which is why it is worth publishing and why nothing else would ever mention it.</p>
     <table class="table">
       <thead><tr><th>Product</th><th>Catalogue</th><th>Missing</th></tr></thead>
@@ -550,7 +550,7 @@ function variantRow(v, ls, n) {
 //
 // A row with an id and no name is kept rather than dropped, for the reason
 // parseTargets keeps a line with no colon: a shape this form swallowed would be
-// one somebody believes they entered. The portal falls back to the id, so the
+// one somebody believes they entered. The shop falls back to the id, so the
 // omission is visible rather than silent.
 const parseVariants = (f, langs, stored) => {
   const was = {};
@@ -866,7 +866,7 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
       api("GET", "/api/v1/users/assignable").catch(() => null),
       // What publishing would change for the people ordering. .catch(() => null)
       // and deliberately not an empty answer: null is "not known" and draws
-      // nothing, where an empty difference is drawn as "the portal is serving this
+      // nothing, where an empty difference is drawn as "the shop is serving this
       // as it stands" — a claim a read that failed is in no position to make.
       api("GET", `/api/v1/catalogs/${encodeURIComponent(id)}/unpublished`).catch(() => null),
     ]);
@@ -922,7 +922,7 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
         ${audienceField(dir, cat.groups)}
         <p class="muted" style="margin:0 0 10px">${(cat.groups || []).length
     ? "Everybody in these groups reaches this catalogue, unless a higher-ranked one reaches them first."
-    : "<b>No group named, so nobody reaches this catalogue</b> — the portal will tell them no catalogue is assigned to them."}</p>
+    : "<b>No group named, so nobody reaches this catalogue</b> — the shop will tell them no catalogue is assigned to them."}</p>
         <button class="btn" type="submit">Save</button>
       </form>
       </div>
@@ -984,7 +984,7 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
       <thead><tr><th>Release</th><th>Published</th><th>Products</th></tr></thead>
       <tbody>${releases.map((r) => `<tr><td>${esc(r.id)}</td><td>${fmtTime(r.createdAt)}</td>
         <td>${(r.items || []).length}</td></tr>`).join("")}</tbody></table>`
-    : `<p class="muted">Never published. Until it is, the portal shows this catalogue to nobody.</p>`}`;
+    : `<p class="muted">Never published. Until it is, the shop shows this catalogue to nobody.</p>`}`;
 
   wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, formList,
     mayShare(cat, me, enforced), mayTheme(me, enforced), dir, people);
@@ -992,19 +992,19 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
 
 // ---------- What publishing would change ----------
 //
-// The portal serves a release — a frozen copy — and every screen above serves the
+// The shop serves a release — a frozen copy — and every screen above serves the
 // live catalogue. Both are right, and between one publish and the next they say
 // different things with nothing on either saying so.
 //
 // One direction of that is invisible rather than merely unstated. Take a product
-// out of a catalogue and it leaves this screen at once; the portal goes on
+// out of a catalogue and it leaves this screen at once; the shop goes on
 // offering it from the release. It is then absent from every screen its
 // maintainer has and present on the one they do not, so the case most worth
 // knowing about is the only one nothing could show. The release table underneath
 // listed dates and left the reader to work out whether today's catalogue is one
 // of them, which is not a question a date answers.
 //
-// The quiet case is drawn too, and for the same reason: "the portal is offering
+// The quiet case is drawn too, and for the same reason: "the shop is offering
 // this exactly as it stands" is an answer somebody needs, and a panel that speaks
 // up only when something is wrong cannot be told apart from one that failed to
 // check.
@@ -1015,11 +1015,11 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
 function unpublishedCard(diff, langs) {
   // Not known — an older server, or a read that failed. Nothing is drawn: silence
   // reads as "no answer here", where either sentence below would be a claim about
-  // the portal that this page cannot support.
+  // the shop that this page cannot support.
   if (!diff) return "";
   // Never published is already said under the release table, and in that state
   // every offered product counts as added — a list nobody needs to read to learn
-  // that the portal shows this catalogue to nobody at all.
+  // that the shop shows this catalogue to nobody at all.
   if (!diff.released) return "";
 
   const against = `<span class="muted">against ${esc(diff.releaseId)}, published
@@ -1028,7 +1028,7 @@ function unpublishedCard(diff, langs) {
   if (!added.length && !removed.length && !changed.length) {
     return `<div class="card portal-current" style="margin:12px 0">
       <div class="row"><span class="pill ok">Nothing to publish</span>
-      The portal is offering this catalogue exactly as it stands.</div>
+      The shop is offering this catalogue exactly as it stands.</div>
       <p class="muted" style="margin:6px 0 0">${against}</p></div>`;
   }
 
@@ -1051,13 +1051,13 @@ function unpublishedCard(diff, langs) {
   // Removed first, because it is the one the reader cannot find anywhere else.
   return `<div class="card portal-behind" style="margin:12px 0; border-color:#b26b00">
     <div class="row"><span class="pill warn">Unpublished changes</span>${against}</div>
-    ${block(removed, "removed", "Still offered on the portal", `Not in this catalogue any more.
+    ${block(removed, "removed", "Still offered in the shop", `Not in this catalogue any more.
       The release goes on offering them, and this is the only screen that says so —
       publishing is what takes them away from the people ordering.`, false)}
-    ${block(added, "added", "Not on the portal yet", `Offered here and absent from the release.
+    ${block(added, "added", "Not in the shop yet", `Offered here and absent from the release.
       Publishing puts them in front of the people ordering; one that is still in draft
       or withdrawn is published along with the rest and stays unorderable.`, true)}
-    ${block(changed, "changed", "Edited since the release", `Offered in both. The portal is showing
+    ${block(changed, "changed", "Edited since the release", `Offered in both. The shop is showing
       the name, description, price or state the product had when it was published.`, false)}
   </div>`;
 }
@@ -1230,7 +1230,7 @@ function edgeForm(offered, byID, langs) {
 // --- How a catalogue looks ---------------------------------------------------
 //
 // A catalogue's appearance is per catalogue and has been since it was built: the
-// portal and the approval page paint themselves from it, and the API has carried
+// shop and the approval page paint themselves from it, and the API has carried
 // it all along. No screen offered it. So the one thing that makes a catalogue
 // somebody *else's* — their colour, their typeface, their mark at the top — was
 // reachable only by whoever was willing to write JSON by hand, which is the exact
@@ -1243,7 +1243,7 @@ function edgeForm(offered, byID, langs) {
 
 // TYPEFACES are the stacks the binary ships, spelled as the server spells them
 // (api/catalog/theme.go). A list and not a URL: a web font would reach a third
-// party on every portal page load, carrying the visitor's address there.
+// party on every shop page load, carrying the visitor's address there.
 const TYPEFACES = [
   { id: "system", name: "System", what: "whatever the reader's device uses" },
   { id: "humanist", name: "Humanist", what: "Segoe UI, Candara, Optima" },
@@ -1273,7 +1273,7 @@ function appearanceCard(cat, me, enforced) {
   }
 
   return `<h3 style="margin:0 0 10px">How this catalogue looks</h3>
-    <p class="muted" style="max-width:62ch">The portal and the approval page paint
+    <p class="muted" style="max-width:62ch">The shop and the approval page paint
       themselves from this, so a customer sees their own brand rather than yours. Leave
       both empty and the catalogue wears the instance's appearance. Setting it is an
       administrator's; an editor may change what the catalogue offers and not whose it
@@ -1302,7 +1302,7 @@ function appearanceCard(cat, me, enforced) {
 
     <div class="card" style="margin:0 0 18px; max-width:640px">
       <h4 style="margin:0 0 10px">Brand mark</h4>
-      <p class="muted">Shown at the top of the portal for whoever reaches this catalogue.
+      <p class="muted">Shown at the top of the shop for whoever reaches this catalogue.
         Without one it falls back to the instance's. PNG or SVG.</p>
       <p><img class="cat-logo" src="${esc(logoURL)}" alt=""
         style="max-height:64px; max-width:240px" hidden></p>
@@ -1414,7 +1414,7 @@ async function savePicture({ api, apiBytes, toast }, pid, f) {
 // partOfNote says which products in THIS catalogue carry this one, because that is
 // what decides whether the two headings below are read at all.
 //
-// The portal's cascade reads Kategorie › Produktgruppe › Produkt › Services. The
+// The shop's cascade reads Kategorie › Produktgruppe › Produkt › Services. The
 // two upper columns are collected from the products nothing contains and the two
 // lower ones from the containment graph, so a product that is a part is reached
 // through the product carrying it and its own heading is never read. The form
@@ -1445,7 +1445,7 @@ function partOfNote(it, cat, items, langs) {
       + ` and <b>${wholes[wholes.length - 1]}</b>`;
   const one = wholes.length === 1;
   return `<p class="form-sec-hint">In this catalogue ${carriers} ${one ? "carries" : "carry"}
-    this product, so the portal offers it as a <b>Service</b> behind
+    this product, so the shop offers it as a <b>Service</b> behind
     ${one ? "it" : "them"} and not as a Marktleistung of its own. The two headings below
     are read off the products nothing contains, so a requester reaches this product under
     ${one ? `${wholes[0]}&rsquo;s` : "the carrying product&rsquo;s"} heading and not under
@@ -1482,7 +1482,7 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
       <label class="field wide">Name
         <span class="muted" style="display:block; margin:2px 0 6px">One box per language
           this catalogue is kept in. A product named in one of them and not another
-          still publishes &mdash; the portal shows the name it has rather than a blank
+          still publishes &mdash; the shop shows the name it has rather than a blank
           &mdash; and the catalogue screen lists what is still untranslated.</span>
         ${langFields("t", langs, v.texts)}</label>
       <label class="field wide">Description
@@ -1495,15 +1495,15 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
       ${partOfNote(it, cat, items, langs)}
       <label class="field wide">Category
         <span class="muted" style="display:block; margin:2px 0 6px">The heading the
-          portal groups this product under &mdash; <code>Arbeitsplatz</code>,
+          shop groups this product under &mdash; <code>Arbeitsplatz</code>,
           <code>Kommunikation</code>. One box per language, like the name above.
-          <b>The first box that has anything in it is what the portal groups by</b>;
+          <b>The first box that has anything in it is what the shop groups by</b>;
           the others are how that heading is worded for a reader. Fill only one and it
-          reads the same in every language. It has no ordering of its own (the portal
+          reads the same in every language. It has no ordering of its own (the shop
           sorts alphabetically, by what the reader sees) and two spellings are two
-          headings. Leave the row empty and the product sits under the portal's heading
+          headings. Leave the row empty and the product sits under the shop's heading
           for those that carry none. <b>Read off the products nothing contains</b>: the
-          portal reaches a part through the product that carries it, so a heading
+          shop reaches a part through the product that carries it, so a heading
           written on a part is never read there.</span>
         ${langFields("cat", langs, headingBoxes(v.category, v.categoryTexts, langs),
     { placeholder: "Arbeitsplatz", listID: "known-categories" })}
@@ -1512,7 +1512,7 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
     .map((c) => `<option value="${esc(c)}"></option>`).join("")}</datalist>`).join("")}</label>
       <label class="field wide">Product group
         <span class="muted" style="display:block; margin:2px 0 6px">One level below the
-          category, and the portal reads the two as a chain: <b>Kategorie &rsaquo;
+          category, and the shop reads the two as a chain: <b>Kategorie &rsaquo;
           Produktgruppe &rsaquo; Produkt &rsaquo; Services</b>. It is written exactly like
           the heading above and carries the same costs &mdash; no ordering of its own,
           two spellings are two groups. The group has no record and therefore no category
@@ -1528,7 +1528,7 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
         <span class="muted" style="display:block; margin:2px 0 6px">Words somebody might
           search for that are <b>not</b> the product's name &mdash; synonyms, the vendor's
           own term, the abbreviation everybody uses, the thing it replaced. Comma
-          separated. The portal searches the id, every name the product carries and these;
+          separated. The shop searches the id, every name the product carries and these;
           the story this serves is finding a service <i>when the exact name is not
           known</i>, which is the person a search over names alone cannot help. One flat
           list and <b>not one per language</b>: a synonym list is for finding, and a
@@ -1587,9 +1587,9 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
           empty on the right is &ldquo;until somebody withdraws it&rdquo;, and empty on both
           is the ordinary product. The window is what lets a catalogue be
           <b>published ahead of the date it opens</b> &mdash; the product is visible,
-          and the portal will not put it in a basket before the first day or after the
+          and the shop will not put it in a basket before the first day or after the
           last. An order outside it is <b>refused by the server</b>, not only hidden by
-          the portal. Dates are the server's own (UTC), so a window that matters to the
+          the shop. Dates are the server's own (UTC), so a window that matters to the
           hour is not what this field is for.</span>
         <div class="row">
           <label>from <input name="orderableFrom" type="date"

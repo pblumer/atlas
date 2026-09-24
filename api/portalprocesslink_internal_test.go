@@ -20,7 +20,7 @@ import (
 
 // TestTheProcessLinkIsOfferedToWhoMayFollowIt.
 func TestTheProcessLinkIsOfferedToWhoMayFollowIt(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	rows := webRegion(t, src, "function orderRowBodies(", "\n}")
 	if !strings.Contains(rows, "state.mayFollowProcess") {
 		t.Error("the row offers the process link to everybody, or to nobody, without " +
@@ -41,7 +41,7 @@ func TestTheProcessLinkIsOfferedToWhoMayFollowIt(t *testing.T) {
 // every provisioning sub-process is started with the order id too, so a search
 // that took the first hit would open one position's process and call it the order.
 func TestTheInstanceIsFoundByTheOrderItIsFor(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "async function followProcess(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "async function followProcess(", "\n}")
 	if !strings.Contains(body, "/api/v1/instances/search") {
 		t.Error("nothing looks the instance up, so the link cannot know where to go")
 	}
@@ -63,7 +63,7 @@ func TestTheInstanceIsFoundByTheOrderItIsFor(t *testing.T) {
 // order whose process is gone is the ordinary late case rather than an error. A
 // link that navigated to nothing would look like the console had broken.
 func TestAnInstanceThatIsGoneIsSaidRatherThanFollowed(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "async function followProcess(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "async function followProcess(", "\n}")
 	if !strings.Contains(body, "proc.none") {
 		t.Error("an order whose instance no longer exists follows a link to nowhere " +
 			"instead of being told that the process has been cleaned up")
@@ -81,7 +81,7 @@ func TestAnInstanceThatIsGoneIsSaidRatherThanFollowed(t *testing.T) {
 // A page that names a cause it cannot know sends whoever reads it to look in the
 // wrong place, and "retention removed it" reads as "it is gone for good".
 func TestAMissingInstanceIsNotBlamedOnRetention(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	locales := []struct{ name, from, to string }{
 		{"de", "  de: {", "\n  },"},
 		{"en", "  en: {", "\n  },"},

@@ -24,7 +24,7 @@ import (
 
 // TestATextIsFoundByTheLanguageAndNotByTheWholeTag.
 func TestATextIsFoundByTheLanguageAndNotByTheWholeTag(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 
 	body := webRegion(t, src, "function pickText(", "\n}")
 	if !strings.Contains(body, "baseOf(tag) === base") {
@@ -53,7 +53,7 @@ func TestATextIsFoundByTheLanguageAndNotByTheWholeTag(t *testing.T) {
 // TestTheBaseOfATagIsTheLanguage: `de-CH` is German, `zh-Hans` is Chinese, and a
 // bare `de` is its own base. Held here because the whole fix above rests on it.
 func TestTheBaseOfATagIsTheLanguage(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function baseOf(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function baseOf(", "\n}")
 	if !strings.Contains(body, "toLowerCase()") || !strings.Contains(body, "split('-')[0]") {
 		t.Error("baseOf no longer takes the primary subtag, lowercased — which is " +
 			"what pickLocale does to the browser's own list, and the two have to agree")
@@ -115,7 +115,7 @@ func TestTheLanguageListIsSplitOnWhatPeopleType(t *testing.T) {
 
 // TestTheSwitchIsBuiltFromTheCatalogueAndNotFromThePage.
 func TestTheSwitchIsBuiltFromTheCatalogueAndNotFromThePage(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	body := webRegion(t, src, "function offeredLocales(", "\n}")
 
 	if !strings.Contains(body, "state.catalog") {
@@ -145,7 +145,7 @@ func TestTheSwitchIsBuiltFromTheCatalogueAndNotFromThePage(t *testing.T) {
 // kept in `en-EN` reads neither: the switch shows nothing as chosen and the texts
 // fall through.
 func TestTheChoiceIsSettledOntoALanguageTheCatalogueHas(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	body := webRegion(t, src, "function settleLocale(", "\n}")
 
 	if !strings.Contains(body, "baseOf(l) === baseOf(locale)") {

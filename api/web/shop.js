@@ -1,4 +1,4 @@
-// The self-service portal (ADR-0312).
+// The self-service shop (ADR-0312).
 //
 // A module, so it can reuse theme.js's palette derivation rather than repeat it.
 // That reuse is the point: --accent-ink decides whether a button's label is
@@ -19,7 +19,7 @@ import { applyAccent } from './theme.js';
 
 const STRINGS = {
   de: {
-    'portal.title': 'Leistungsportal',
+    'portal.title': 'Shop',
     'portal.catalog': 'Katalog',
     'portal.orders': 'Meine Bestellungen',
     'portal.none': 'Ihnen ist kein Katalog zugeordnet.',
@@ -155,11 +155,11 @@ const STRINGS = {
     'find.hits': 'Treffer',
     'find.clear': 'Suche zurücksetzen',
     'find.where': 'in',
-    // The sign-in, for a portal that enforces one. Every string here is read by
+    // The sign-in, for a shop that enforces one. Every string here is read by
     // somebody who is not an operator and has no server log to consult, so each
     // one names what to do next rather than what went wrong.
     'signin.title': 'Bitte melden Sie sich an',
-    'signin.hint': 'Dieses Portal zeigt Ihnen den Katalog, der Ihnen zugeordnet ist, und Ihre eigenen Aufträge. Dazu muss es wissen, wer Sie sind.',
+    'signin.hint': 'Dieser Shop zeigt Ihnen den Katalog, der Ihnen zugeordnet ist, und Ihre eigenen Aufträge. Dazu muss er wissen, wer Sie sind.',
     'signin.user': 'Benutzername',
     'signin.password': 'Passwort',
     'signin.submit': 'Anmelden',
@@ -175,7 +175,7 @@ const STRINGS = {
     'signin.registerLink': 'Registrieren',
   },
   en: {
-    'portal.title': 'Service portal',
+    'portal.title': 'Shop',
     'portal.catalog': 'Catalogue',
     'portal.orders': 'My orders',
     'portal.none': 'No catalogue is assigned to you.',
@@ -310,7 +310,7 @@ const STRINGS = {
     'find.clear': 'Clear search',
     'find.where': 'in',
     'signin.title': 'Please sign in',
-    'signin.hint': 'This portal shows you the catalogue assigned to you, and your own orders. To do that it has to know who you are.',
+    'signin.hint': 'This shop shows you the catalogue assigned to you, and your own orders. To do that it has to know who you are.',
     'signin.user': 'Username',
     'signin.password': 'Password',
     'signin.submit': 'Sign in',
@@ -326,10 +326,10 @@ const STRINGS = {
     'signin.registerLink': 'Register',
   },
   // Français, pour les catalogues tenus en français. Vouvoiement partout, comme
-  // dans l’allemand : le portail s’adresse à une personne qui commande pour son
+  // dans l’allemand : le shop s’adresse à une personne qui commande pour son
   // travail, pas à un compte.
   fr: {
-    'portal.title': 'Portail des prestations',
+    'portal.title': 'Shop',
     'portal.catalog': 'Catalogue',
     'portal.orders': 'Mes commandes',
     'portal.none': 'Aucun catalogue ne vous est attribué.',
@@ -464,7 +464,7 @@ const STRINGS = {
     'find.clear': 'Réinitialiser la recherche',
     'find.where': 'dans',
     'signin.title': 'Veuillez vous connecter',
-    'signin.hint': 'Ce portail vous montre le catalogue qui vous est attribué ainsi que vos propres commandes. Pour cela, il doit savoir qui vous êtes.',
+    'signin.hint': 'Ce shop vous montre le catalogue qui vous est attribué ainsi que vos propres commandes. Pour cela, il doit savoir qui vous êtes.',
     'signin.user': 'Nom d’utilisateur',
     'signin.password': 'Mot de passe',
     'signin.submit': 'Se connecter',
@@ -482,7 +482,7 @@ const STRINGS = {
   // Italiano, per i cataloghi tenuti in italiano. Forma di cortesia ovunque, come
   // nelle altre lingue.
   it: {
-    'portal.title': 'Portale delle prestazioni',
+    'portal.title': 'Shop',
     'portal.catalog': 'Catalogo',
     'portal.orders': 'I miei ordini',
     'portal.none': 'Non le è assegnato alcun catalogo.',
@@ -617,7 +617,7 @@ const STRINGS = {
     'find.clear': 'Azzerare la ricerca',
     'find.where': 'in',
     'signin.title': 'Si prega di accedere',
-    'signin.hint': 'Questo portale le mostra il catalogo che le è assegnato e i suoi ordini. Per farlo deve sapere chi è lei.',
+    'signin.hint': 'Questo shop le mostra il catalogo che le è assegnato e i suoi ordini. Per farlo deve sapere chi è lei.',
     'signin.user': 'Nome utente',
     'signin.password': 'Password',
     'signin.submit': 'Accedere',
@@ -679,7 +679,7 @@ function t(key) {
 // furniture is French too, offering an FR button would land somebody on exactly
 // the half-translated screen that record forbids. The French product names are
 // stored and reachable through the fallback; what is not offered is a button that
-// promises a French portal.
+// promises a French shop.
 //
 // Before there is a catalogue — the sign-in screen, or a visitor who is nobody's
 // audience — it is this page's own languages, because the switch has to be
@@ -1172,7 +1172,7 @@ function headingsOf(items, field) {
 }
 
 // inCategory reports whether a top-level product belongs under the heading now
-// selected. null is every heading, which is what the portal opens on.
+// selected. null is every heading, which is what the shop opens on.
 // groupsOf is every product group named by the products under the heading now
 // open, and the bucket for the ones that name none.
 //
@@ -1192,7 +1192,7 @@ function groupsOf(release) {
 }
 
 // inGroup reports whether a product belongs under the group now selected. null is
-// every group, which is what the portal opens on.
+// every group, which is what the shop opens on.
 function inGroup(item) {
   if (state.group === null) return true;
   return (item.productGroup || '').trim() === state.group;
@@ -1285,7 +1285,7 @@ async function api(path, options) {
 // behind.
 //
 // A 401 here is the defect this answers. With enforcement on and no session every
-// route the portal reads is refused: the catalogue read was swallowed and drawn as
+// route the shop reads is refused: the catalogue read was swallowed and drawn as
 // "no catalogue is assigned to you", which is a statement about entitlement and
 // not about authentication, and the orders read was not swallowed at all — so what
 // a visitor got was an error line with an HTTP status in it, no catalogue, and
@@ -1354,7 +1354,7 @@ async function load() {
     return;
   }
   try {
-    state.catalog = await api('/api/v1/portal/catalog');
+    state.catalog = await api('/api/v1/shop/catalog');
   } catch {
     // 404 here is the ordinary "you are the audience for nothing" answer, not a
     // failure: the page says so rather than showing an error.
@@ -1383,7 +1383,7 @@ async function load() {
     state.held = new Map(((inv && inv.items) || []).map((i) => [i.itemId, i.since]));
   } catch { /* nobody holds anything when there is nobody */ }
   try {
-    const favs = await api('/api/v1/portal/favourites');
+    const favs = await api('/api/v1/shop/favourites');
     state.favourites = new Set((favs && favs.itemIds) || []);
   } catch { /* and nobody has marked anything */ }
   // The directory, for the columns that show who an order is for. Any
@@ -1422,7 +1422,7 @@ function loadWhoIAm() {
   state.meID = '';
   state.people = [];
   const me = state.me;
-  // Nothing was readable. Offer less rather than guess more: the ordinary portal
+  // Nothing was readable. Offer less rather than guess more: the ordinary shop
   // still works, ordering for somebody else simply is not offered.
   if (!me) return;
   const user = (me && me.user) || {};
@@ -1458,7 +1458,7 @@ function loadWhoIAm() {
   state.people = state.principals.filter((e) => e.type === 'user');
 }
 
-// signIn posts the password form and, on success, loads the portal the visitor
+// signIn posts the password form and, on success, loads the shop the visitor
 // asked for.
 //
 // It stays here. The Console's sign-in lands on the Console, which is the wrong
@@ -1499,7 +1499,7 @@ async function signIn(username, password) {
 // once five have been wrong. Reported as a credential failure it is how somebody
 // spends a quarter of an hour hunting a password that is already correct. It
 // matters more here than on the Console: an operator can read the server log, and
-// the person this page is for can only telephone the desk this portal exists to
+// the person this page is for can only telephone the desk this shop exists to
 // save. Saying so leaks nothing, because the throttle counts attempts against
 // names that do not exist too.
 //
@@ -1761,7 +1761,7 @@ function cell(opts) {
 // hiding it would remove the one thing somebody wants to know, which is when.
 
 // windowOf reads an item's window, tolerating a release published before the
-// portal read the field.
+// shop read the field.
 function windowOf(item) {
   const w = (item || {}).lifecycle || {};
   return { from: Number(w.from) || 0, until: Number(w.until) || 0 };
@@ -1769,7 +1769,7 @@ function windowOf(item) {
 
 // orderableNow reports whether this moment is inside the item's window. Both sides
 // are inclusive and zero is unbounded, exactly as the server reads them — two
-// readings of one rule that disagreed would be a portal offering what the order is
+// readings of one rule that disagreed would be a shop offering what the order is
 // refused for, which is the failure this pairing exists to prevent.
 function orderableNow(item, at) {
   const w = windowOf(item);
@@ -1947,7 +1947,7 @@ async function star(id) {
   if (marked) state.favourites.delete(id); else state.favourites.add(id);
   render();
   try {
-    const out = await api(`/api/v1/portal/favourites/${encodeURIComponent(id)}`,
+    const out = await api(`/api/v1/shop/favourites/${encodeURIComponent(id)}`,
       { method: marked ? 'DELETE' : 'PUT' });
     state.favourites = new Set((out && out.itemIds) || []);
   } catch (e) {
@@ -3140,7 +3140,7 @@ function ownerAmong(release, roots) {
 // contains, so a service two edges down has never had a heading of its own to
 // carry. Read directly from what a person holds, this column showed "Ohne
 // Kategorie" for every service they have while the catalogue showed real headings
-// for the same things — the two sides of the portal disagreeing about one field,
+// for the same things — the two sides of the shop disagreeing about one field,
 // which is exactly what ADR-0360 promised they would not do.
 //
 // So each held id is resolved to the product it belongs to and the heading is read
@@ -3560,7 +3560,7 @@ document.addEventListener('DOMContentLoaded', () => {
   paintFromCache();
   render();
   load().catch((e) => {
-    // A refusal is not a broken portal. The page is one people leave open, so the
+    // A refusal is not a broken shop. The page is one people leave open, so the
     // session behind it runs out while it stands there, and the next load is the
     // same 401 the gate exists for — reported as a failure it is the original
     // defect one step later, with an HTTP status where the sign-in should be.

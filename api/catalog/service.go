@@ -177,7 +177,7 @@ func decodeBody(r *http.Request, into any) error {
 
 // HandleListCatalogs lists the catalogues the caller maintains, lowest rank
 // first. It is the maintenance sight, not the portal one: being the audience for
-// a catalogue puts nothing in this list, and GET /portal/catalog answers that
+// a catalogue puts nothing in this list, and GET /shop/catalog answers that
 // question instead. A customer must not learn from a listing which other
 // customers exist.
 func (s *Service) HandleListCatalogs(w http.ResponseWriter, r *http.Request) {

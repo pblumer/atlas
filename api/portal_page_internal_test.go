@@ -119,20 +119,20 @@ func assertCatalogueIsComplete(t *testing.T, page string, got map[string][]strin
 }
 
 func TestPortalCatalogueIsComplete(t *testing.T) {
-	assertCatalogueIsComplete(t, "portal.js", stringsCatalogue(t, "portal.js"))
+	assertCatalogueIsComplete(t, "shop.js", stringsCatalogue(t, "shop.js"))
 }
 
 // TestPortalRendersNoUntranslatedText: the boundary ADR-0267 draws holds here
 // too. Interface words live in the catalogue, not in the markup, or a translated
 // page would still have German headings in it.
 func TestPortalRendersNoUntranslatedText(t *testing.T) {
-	page := readWeb(t, "portal.html")
+	page := readWeb(t, "shop.html")
 	body := page[strings.Index(page, "<body>"):]
 
 	// The page's only text node is the one the script replaces.
 	for _, word := range []string{"Katalog", "Bestellung", "Catalogue", "Order"} {
 		if strings.Contains(body, ">"+word) {
-			t.Errorf("portal.html renders %q directly; interface words belong in the "+
+			t.Errorf("shop.html renders %q directly; interface words belong in the "+
 				"message catalogue, where every locale has them", word)
 		}
 	}
@@ -143,14 +143,14 @@ func TestPortalRendersNoUntranslatedText(t *testing.T) {
 // reason: theme.js writes the accent onto the root and the page has to have
 // somewhere to write.
 func TestPortalDeclaresTheBrandTokens(t *testing.T) {
-	page := readWeb(t, "portal.html")
+	page := readWeb(t, "shop.html")
 	for _, token := range []string{"--accent:", "--accent-hover:", "--accent-soft:", "--accent-ink:"} {
 		if !strings.Contains(page, token) {
-			t.Errorf("portal.html does not declare %s, so theme.js has nothing to override", token)
+			t.Errorf("shop.html does not declare %s, so theme.js has nothing to override", token)
 		}
 	}
-	if !strings.Contains(page, `type="module" src="/portal.js"`) {
-		t.Error("portal.html does not load portal.js as a module, so its import of " +
+	if !strings.Contains(page, `type="module" src="/shop.js"`) {
+		t.Error("shop.html does not load shop.js as a module, so its import of " +
 			"theme.js's palette derivation cannot resolve and the page would show the " +
 			"stock blue whatever brand was set")
 	}
@@ -161,9 +161,9 @@ func TestPortalDeclaresTheBrandTokens(t *testing.T) {
 // readable on a brand colour, and a second implementation of that is a second
 // place for it to be wrong (ADR-0263).
 func TestPortalDerivesNoPaletteOfItsOwn(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	if !strings.Contains(src, `from './theme.js'`) {
-		t.Fatal("portal.js does not import theme.js — if it now derives the palette " +
+		t.Fatal("shop.js does not import theme.js — if it now derives the palette " +
 			"itself, that derivation exists twice")
 	}
 	// Naming a derived token in a comment is how the rule is explained; assigning
@@ -173,7 +173,7 @@ func TestPortalDerivesNoPaletteOfItsOwn(t *testing.T) {
 			`setProperty("` + token, `setProperty('` + token, token + `:`,
 		} {
 			if strings.Contains(src, form) {
-				t.Errorf("portal.js assigns %s, which theme.js derives. Setting it here "+
+				t.Errorf("shop.js assigns %s, which theme.js derives. Setting it here "+
 					"means computing it here.", token)
 			}
 		}
@@ -184,10 +184,10 @@ func TestPortalDerivesNoPaletteOfItsOwn(t *testing.T) {
 // refuses a name that is not one, and a catalogue naming a face the page has no
 // stack for would silently render in the default one.
 func TestPortalTypefacesMatchTheServer(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	for name := range catalog.Typefaces {
 		if !strings.Contains(src, name+":") {
-			t.Errorf("the server offers the typeface %q and portal.js has no stack for it", name)
+			t.Errorf("the server offers the typeface %q and shop.js has no stack for it", name)
 		}
 	}
 }
@@ -203,20 +203,20 @@ func TestPortalTypefacesMatchTheServer(t *testing.T) {
 // nothing, and a future edit that "fixes the empty box" by importing the glyph
 // fails here instead of shipping.
 func TestPortalMarkCascadeStopsAtTheOperator(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 
 	if !strings.Contains(src, "/logo`") {
-		t.Error("portal.js asks for no catalogue mark, so a catalogue's own logo is never shown")
+		t.Error("shop.js asks for no catalogue mark, so a catalogue's own logo is never shown")
 	}
 	if !strings.Contains(src, "/api/v1/settings/logo") {
-		t.Error("portal.js does not fall back to the operator's mark")
+		t.Error("shop.js does not fall back to the operator's mark")
 	}
 	// Matched as code and not as a mention: the comment above renderMark names
 	// logo.js as the thing it is deliberately *not* importing, and a check that
 	// could not tell the two apart would forbid explaining the decision.
 	for _, forbidden := range []string{"BUILTIN_MARK", "'./logo.js'", `"./logo.js"`} {
 		if strings.Contains(src, forbidden) {
-			t.Errorf("portal.js reaches for %s: the portal is a customer-facing page and "+
+			t.Errorf("shop.js reaches for %s: the portal is a customer-facing page and "+
 				"the engine's own glyph does not belong on it", forbidden)
 		}
 	}
@@ -224,7 +224,7 @@ func TestPortalMarkCascadeStopsAtTheOperator(t *testing.T) {
 	// the page must never put those bytes into the document.
 	for _, forbidden := range []string{"innerHTML", "insertAdjacentHTML"} {
 		if strings.Contains(src, forbidden) {
-			t.Errorf("portal.js uses %s; a mark is rendered through an <img> and never "+
+			t.Errorf("shop.js uses %s; a mark is rendered through an <img> and never "+
 				"inlined, or an uploaded SVG's script runs in the page", forbidden)
 		}
 	}
@@ -242,7 +242,7 @@ func TestPageBuildersDropAnUnsetAttribute(t *testing.T) {
 	// is gone, and its half of this guard with it — what it protected is protected
 	// where the decision moved, by the end-to-end cases that press the buttons
 	// (e2e/tasks-approval.spec.mjs).
-	for _, page := range []string{"portal.js"} {
+	for _, page := range []string{"shop.js"} {
 		src := readWeb(t, page)
 		i := strings.Index(src, "function el(tag, attrs")
 		if i < 0 {
@@ -276,7 +276,7 @@ func TestPortalNamesEveryStatusTheServerCanProduce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the order model: %v", err)
 	}
-	catalogue := stringsCatalogue(t, "portal.js")
+	catalogue := stringsCatalogue(t, "shop.js")
 	if len(catalogue) == 0 {
 		t.Fatal("the portal declares no locales")
 	}
@@ -325,9 +325,9 @@ func TestPortalNamesEveryStatusTheServerCanProduce(t *testing.T) {
 // the inventory route, and this says so in the one form that cannot be satisfied
 // by a comment: the fetch itself.
 func TestThePortalMarksWhatIsAlreadyHeldFromTheInventory(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	if !strings.Contains(src, `api('/api/v1/inventory')`) {
-		t.Fatal("portal.js does not read /api/v1/inventory. If the catalogue's " +
+		t.Fatal("shop.js does not read /api/v1/inventory. If the catalogue's " +
 			"already-held marking is derived from the orders on the page instead, it " +
 			"stops marking the day retention deletes the order that granted the right")
 	}
@@ -335,7 +335,7 @@ func TestThePortalMarksWhatIsAlreadyHeldFromTheInventory(t *testing.T) {
 	// that may be held twice is orderable again, and marking it would train people
 	// to ignore the mark.
 	if !strings.Contains(src, "multipleAllowed") {
-		t.Error("portal.js marks held items without consulting multipleAllowed, so a " +
+		t.Error("shop.js marks held items without consulting multipleAllowed, so a " +
 			"second licence looks like a mistake")
 	}
 }
@@ -365,7 +365,7 @@ func TestBothPortalSurfacesAreReachableFromTheMenu(t *testing.T) {
 	}
 	apps := src[start : start+end]
 
-	if !strings.Contains(apps, `route: "portal.html"`) {
+	if !strings.Contains(apps, `route: "shop.html"`) {
 		t.Error("no menu entry leads to the service portal. The page is served and " +
 			"works; without an entry it is reachable only by somebody who already " +
 			"knows the URL, which is every employee except the one who built it")
@@ -377,7 +377,7 @@ func TestBothPortalSurfacesAreReachableFromTheMenu(t *testing.T) {
 	// field whenever the drawer learns something new about it — `separate` was the
 	// first — and pinning the whole line makes every such addition fail here with a
 	// message about the role gate, which is not what changed.
-	if !strings.Contains(apps, `{ id: "portal", name: "Portal", route: "portal.html", on: true, role: "user"`) {
+	if !strings.Contains(apps, `{ id: "portal", name: "Shop", route: "shop.html", on: true, role: "user"`) {
 		t.Error("the portal entry is not in the expected shape; check its role gate — " +
 			"an ordinary employee must see it")
 	}
@@ -415,7 +415,7 @@ func TestBothPortalSurfacesLeadBackToAtlas(t *testing.T) {
 	// other — is why the pair is written out here rather than the survivor being
 	// silently inlined.
 	for _, page := range []struct{ src, key string }{
-		{"portal.js", "portal.back"},
+		{"shop.js", "portal.back"},
 	} {
 		src := readWeb(t, page.src)
 		if !strings.Contains(src, `href: '/index.html'`) {

@@ -8,7 +8,7 @@
                   xmlns:atlas="http://atlas/schema/1.0"
                   id="Definitions_atlas-genehmigung-vorgesetzter"
                   targetNamespace="http://bpmn.io/schema/bpmn">
-  <bpmn:process id="atlas-genehmigung-vorgesetzter" name="Portal: Genehmigung (Linienvorgesetzter)" isExecutable="true">
+  <bpmn:process id="atlas-genehmigung-vorgesetzter" name="Shop: Genehmigung (Linienvorgesetzter)" isExecutable="true">
     <bpmn:documentation>Holt die Genehmigung für eine Auftragsposition ein und entscheidet, was danach geschieht: bei Zustimmung wird der Provisionierungsprozess der Position gestartet, bei Ablehnung die Entscheidung mit Urheber und Begründung an den Auftrag gemeldet.
 
 Startvariablen: orderId, itemId, provisionProcess, approvalRef, recipient, orderer, variantId.
@@ -121,18 +121,18 @@ Der Genehmiger ist der Vorgesetzte, den der erste Schritt gelesen hat: die Aufga
 
 Die Adressatin ist der Linienvorgesetzte, den die Verzeichnisabfrage davor gelesen hat — dieselbe Person, an die auch die Aufgabe geht.
 
-Der Empf&#228;nger ist eine Referenz und keine Adresse: der Server schl&#228;gt sie beim Versand im Konto nach. So steht in keiner Prozessvariablen und in keinem Auftrag eine Mailadresse — dieselbe Regel, nach der das Portal Personen nur &#252;ber ihre Kennung f&#252;hrt.
+Der Empf&#228;nger ist eine Referenz und keine Adresse: der Server schl&#228;gt sie beim Versand im Konto nach. So steht in keiner Prozessvariablen und in keinem Auftrag eine Mailadresse — dieselbe Regel, nach der der Shop Personen nur &#252;ber ihre Kennung f&#252;hrt.
 
 Der Link nennt Auftrag und Leistung und nicht die Aufgabe: einen Aufgabenschl&#252;ssel gibt es noch nicht, wenn diese Nachricht geschrieben wird, und er &#228;ndert sich, wenn die Aufgabe neu zugewiesen wird. Auftrag und Leistung bleiben.
 
-Ist portalBaseUrl leer — der Betreiber hat keine externe Adresse gesetzt —, nennt die Nachricht das Portal statt einen Link, den niemand aufrufen kann.
+Ist portalBaseUrl leer — der Betreiber hat keine externe Adresse gesetzt —, nennt die Nachricht den Posteingang statt einen Link, den niemand aufrufen kann.
 
 Voraussetzung beim Betreiber: ein Mail-Worker namens &#8222;mail&#8220;.</bpmn:documentation>
       <bpmn:extensionElements>
         <atlas:mailConnector connector="mail"
           to="=vorgesetzter"
           subject="=&#34;Genehmigung n&#246;tig: &#34; + itemId"
-          body="=&#34;Guten Tag\n\nEine Bestellung wartet auf Ihre Genehmigung.\n\nLeistung: &#34; + itemId + &#34;\nAuftrag: &#34; + orderId + &#34;\n\n&#34; + (if portalBaseUrl = null or portalBaseUrl = &#34;&#34; then &#34;Sie finden sie in Ihrem Posteingang (Tasks) dieser Atlas-Instanz.&#34; else portalBaseUrl + &#34;/index.html#/tasks?order=&#34; + orderId + &#34;&amp;item=&#34; + itemId) + &#34;\n\nFreundliche Gr&#252;sse\nIhr Leistungsportal&#34;" />
+          body="=&#34;Guten Tag\n\nEine Bestellung wartet auf Ihre Genehmigung.\n\nLeistung: &#34; + itemId + &#34;\nAuftrag: &#34; + orderId + &#34;\n\n&#34; + (if portalBaseUrl = null or portalBaseUrl = &#34;&#34; then &#34;Sie finden sie in Ihrem Posteingang (Tasks) dieser Atlas-Instanz.&#34; else portalBaseUrl + &#34;/index.html#/tasks?order=&#34; + orderId + &#34;&amp;item=&#34; + itemId) + &#34;\n\nFreundliche Gr&#252;sse\nIhr Shop&#34;" />
       </bpmn:extensionElements>
       <bpmn:incoming>F_Split_Mail</bpmn:incoming>
       <bpmn:outgoing>F_Mail_Ende</bpmn:outgoing>
@@ -158,7 +158,7 @@ Eine unbeachtete Genehmigung ist die leisere H&#228;lfte des Problems: ein h&#22
         <atlas:mailConnector connector="mail"
           to="=vorgesetzter"
           subject="=&#34;Erinnerung: Genehmigung n&#246;tig f&#252;r &#34; + itemId"
-          body="=&#34;Guten Tag\n\nEine Bestellung wartet weiterhin auf Ihre Genehmigung.\n\nLeistung: &#34; + itemId + &#34;\nAuftrag: &#34; + orderId + &#34;\n\n&#34; + (if portalBaseUrl = null or portalBaseUrl = &#34;&#34; then &#34;Sie finden sie in Ihrem Posteingang (Tasks) dieser Atlas-Instanz.&#34; else portalBaseUrl + &#34;/index.html#/tasks?order=&#34; + orderId + &#34;&amp;item=&#34; + itemId) + &#34;\n\nFreundliche Gr&#252;sse\nIhr Leistungsportal&#34;" />
+          body="=&#34;Guten Tag\n\nEine Bestellung wartet weiterhin auf Ihre Genehmigung.\n\nLeistung: &#34; + itemId + &#34;\nAuftrag: &#34; + orderId + &#34;\n\n&#34; + (if portalBaseUrl = null or portalBaseUrl = &#34;&#34; then &#34;Sie finden sie in Ihrem Posteingang (Tasks) dieser Atlas-Instanz.&#34; else portalBaseUrl + &#34;/index.html#/tasks?order=&#34; + orderId + &#34;&amp;item=&#34; + itemId) + &#34;\n\nFreundliche Gr&#252;sse\nIhr Shop&#34;" />
       </bpmn:extensionElements>
       <bpmn:incoming>F_Erinnerung_Mail</bpmn:incoming>
       <bpmn:outgoing>F_Erinnerung_Ende</bpmn:outgoing>

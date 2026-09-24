@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Leistungsportal</title>
+<title>Shop</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='52' fill='%23000'/%3E%3Cpath fill='%23fff' fill-rule='evenodd' d='M128 26 244 214 12 214ZM128 172 178 214 78 214ZM111 72H145V99H172V133H145V160H111V133H84V99H111Z'/%3E%3C/svg%3E" />
 <style>
   /* The same token set app.css and the public form declare. What is written here
-     is the instance's brand — the operator's — and portal.js overwrites the accent
+     is the instance's brand — the operator's — and shop.js overwrites the accent
      trio and the typeface on the root once the visitor's catalogue answers, so a
      catalogue with a face of its own shows it and one without falls back to this.
 
@@ -231,7 +231,7 @@
   .cfg h3 { margin:0 0 10px; font-size:15px; }
   .note { color:var(--muted); font-size:12px; margin:10px 0 0; }
 
-  /* --- The sign-in, for a portal that enforces one. ---
+  /* --- The sign-in, for a shop that enforces one. ---
      Narrow and centred, like every sign-in: the form is the only thing on the
      page, and a field stretched across 1400px reads as a page that lost its
      layout. Every colour is a token declared above — the operator's brand, since
@@ -262,8 +262,8 @@
 </head>
 <body>
   <div id="app"></div>
-  <!-- A module: portal.js imports theme.js's palette derivation rather than
+  <!-- A module: shop.js imports theme.js's palette derivation rather than
        carrying a second copy of it. -->
-  <script type="module" src="/portal.js"></script>
+  <script type="module" src="/shop.js"></script>
 </body>
 </html>

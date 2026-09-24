@@ -1,4 +1,4 @@
-// e2e for the portal's "View the process" link (api/web/portal.js followProcess),
+// e2e for the portal's "View the process" link (api/web/shop.js followProcess),
 // against a fixture.
 //
 // What was reported: pressing the link on an order wrote "Wird abgefragt …" under
@@ -11,7 +11,7 @@
 // never answers, and one that names a definition answers at once. So the first test
 // fails against the old lookup by hanging, which is what the reader saw.
 //
-// It loads the REAL portal.html with only the network replaced, as the basket test
+// It loads the REAL shop.html with only the network replaced, as the basket test
 // does, so what is exercised is the page as shipped.
 import { test, expect } from "@playwright/test";
 
@@ -44,11 +44,11 @@ function installFixture() {
   const ROUTES = {
     "/api/v1/auth/me": { user: { id: "usr_1", username: "anja", displayName: "Anja",
       roles: ["operator"] } },
-    "/api/v1/portal/catalog": CAT,
+    "/api/v1/shop/catalog": CAT,
     "/api/v1/catalogs/cat_f/releases": [],
     "/api/v1/orders": [ORDER],
     "/api/v1/inventory": { items: [] },
-    "/api/v1/portal/favourites": { itemIds: [] },
+    "/api/v1/shop/favourites": { itemIds: [] },
     "/api/v1/principals": [{ id: "usr_1", name: "Anja" }],
     "/api/v1/processes": PROCESSES,
   };
@@ -97,7 +97,7 @@ test.afterEach(async ({ page }) => {
 });
 
 const open = async (page) => {
-  await page.goto("/portal.html");
+  await page.goto("/shop.html");
   await page.getByRole("button", { name: "My orders" }).click();
   await expect(page.getByText("ord_follow")).toBeVisible({ timeout: 10000 });
 };
@@ -137,7 +137,7 @@ test("an instance that exists only in the archive is said, not followed", async 
   await open(page);
   await link(page).click();
   await expect(page.locator(".follow-note")).toContainText("exported event log");
-  expect(page.url()).toContain("/portal.html");
+  expect(page.url()).toContain("/shop.html");
 });
 
 test("a search that never answers is said after a while, not waited on for ever",

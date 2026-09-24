@@ -18,8 +18,8 @@
     </bpmn:extensionElements>
   </bpmn:message>
 
-  <bpmn:process id="atlas-auftrag-erfuellung" name="Portal: Auftrag erfüllen" isExecutable="true">
-    <bpmn:documentation>Arbeitet einen Portal-Auftrag ab: fragt, welche Positionen jetzt starten dürfen, startet deren Provisionierungsprozesse und wartet, bis eine Position ein Ergebnis gemeldet hat.
+  <bpmn:process id="atlas-auftrag-erfuellung" name="Shop: Auftrag erfüllen" isExecutable="true">
+    <bpmn:documentation>Arbeitet einen Shop-Auftrag ab: fragt, welche Positionen jetzt starten dürfen, startet deren Provisionierungsprozesse und wartet, bis eine Position ein Ergebnis gemeldet hat.
 
 Der Auftrag trägt alles, was hier gebraucht wird — die Wellen, die Vorbedingungen und je Position den Prozess, an den sie gebunden ist. Deshalb wird der Katalog nie gelesen: was bestellt wurde, kann sich nicht ändern, während der Auftrag läuft.
 

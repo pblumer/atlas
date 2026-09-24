@@ -1,13 +1,13 @@
 // The questions a recertification campaign asks, and the two answers
 // (ADR-0341).
 //
-// # Why this is in Tasks and not in Operations or the portal
+// # Why this is in Tasks and not in Operations or the shop
 //
 // The reconciliation screen is the operator's: a finding is repair. This is not.
 // It asks a line manager whether somebody on their team still needs something, and
 // a line manager is an ordinary user who has never opened Operations.
 //
-// Nor is it one of the two portal pages. Those carry the *catalogue's* brand and
+// Nor is it one of the two shop pages. Those carry the *catalogue's* brand and
 // are written for people outside the tooling — somebody ordering a laptop. The
 // audience here is internal and it is exactly the Tasks audience: work addressed to
 // you, waiting for a decision. It is a second kind of inbox, so it sits beside the

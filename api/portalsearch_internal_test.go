@@ -53,9 +53,9 @@ func TestThePortalSearchesTheFieldTheReleaseCarries(t *testing.T) {
 		return ok && len(list) == 1 && list[0] == marker
 	})
 
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	if !strings.Contains(src, "item."+key) {
-		t.Errorf("the release spells a product's search words %q and portal.js never "+
+		t.Errorf("the release spells a product's search words %q and shop.js never "+
 			"reads item.%s, so the search sees names only — which answers for exactly "+
 			"the person who did not need to search", key, key)
 	}
@@ -69,10 +69,10 @@ func TestThePortalSearchesTheFieldTheReleaseCarries(t *testing.T) {
 // behind a language setting — the failure the language record calls landing
 // somebody on a half-translated screen, with the half being the answer.
 func TestThePortalSearchesEveryLanguageTheCatalogueCarries(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	start := strings.Index(src, "function searchable(")
 	if start < 0 {
-		t.Fatal("portal.js has no searchable(); if the search moved, this test now " +
+		t.Fatal("shop.js has no searchable(); if the search moved, this test now " +
 			"passes vacuously and says so instead")
 	}
 	end := strings.Index(src[start:], "\n}")
@@ -99,10 +99,10 @@ func TestThePortalSearchesEveryLanguageTheCatalogueCarries(t *testing.T) {
 // programmatically and immediate to anybody who types, which is why it is pinned
 // here rather than left to be noticed.
 func TestTypingDoesNotRebuildTheFieldBeingTypedInto(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	start := strings.Index(src, "type: 'search', id: 'find'")
 	if start < 0 {
-		t.Fatal("portal.js has no search field with id 'find'; if it moved, this test " +
+		t.Fatal("shop.js has no search field with id 'find'; if it moved, this test " +
 			"now checks nothing and says so instead")
 	}
 	end := strings.Index(src[start:], "}),")

@@ -348,6 +348,29 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The portal is called the shop — at a new address and under a new API path.**
+  **Breaking** for anything that called the page's API directly. The page where
+  people browse their catalogue and order is now the *Shop*: in the menu, in its
+  title, in the handbook, in the Console's catalogue screens, in the API and MCP
+  descriptions, and in the mails the shipped approval processes send ("Ihr Shop").
+
+  - The page moved from `/portal.html` to `/shop.html`. The old address answers
+    with a permanent redirect, query kept, because it sits in bookmarks and mails a
+    rename cannot reach.
+  - The five routes the page reads moved from `/api/v1/portal/…` to
+    `/api/v1/shop/…` (`catalog`, `favourites`, `favourites/{itemId}` for PUT and
+    DELETE, `orders/{id}/lines/{position}/progress`). The old paths are not kept:
+    the page was their only reader.
+  - The shipped system processes are named `Shop: …` instead of `Portal: …`, so
+    they deploy as a new version on the next start. Running instances finish on
+    the version they started on.
+
+  Deliberately unchanged, because renaming them would break what is already
+  deployed or stored rather than what anybody reads: the process variable
+  `portalBaseUrl` every approval model builds its links from, the stored language
+  and theme a browser remembers for the page, and the decision records written
+  under the old name.
+
 - **The Workers view says what a worker asks for, not only what it has been given.**
   Each worker's `types` counts the jobs it has *leased*, so a worker that is connected
   and polling a queue with no work in it looked exactly like a worker that is not
