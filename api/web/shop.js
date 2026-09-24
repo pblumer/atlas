@@ -3077,6 +3077,15 @@ async function toggleTask(task) {
     } catch {
       state.config[key] = {};
     }
+    // And the order's people by name, for the form to say for whom. They are not
+    // form fields, so answering never writes a name into the process: the order and
+    // the process keep ids (ADR-0314), and a name is only for the reader.
+    const order = state.orders.find((o) => o.id === task.orderId);
+    if (order) {
+      const vars = state.config[key];
+      if (vars.recipientName == null) vars.recipientName = personName(order.recipient);
+      if (vars.ordererName == null) vars.ordererName = personName(order.orderer);
+    }
   }
   render();
 }

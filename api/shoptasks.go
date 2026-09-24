@@ -305,6 +305,19 @@ func (s *Server) personName(username string) string {
 	return username
 }
 
+// principalName is a principal id as a person reads it: the account's display
+// name, its username where it has none, and the id itself where no account
+// answers — an id is still who, which a blank is not.
+func (s *Server) principalName(id string) string {
+	if id == "" || s.users == nil {
+		return id
+	}
+	if u, ok, err := s.users.Get(id); err == nil && ok {
+		return firstNonEmpty(u.DisplayName, firstNonEmpty(u.Username, id))
+	}
+	return id
+}
+
 // groupNames is a candidate-group list as a person reads it. A model may name a
 // group by its id or by its name; an id is resolved to the name, a name is kept.
 func (s *Server) groupNames(candidateGroups string) string {

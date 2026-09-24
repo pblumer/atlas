@@ -390,6 +390,11 @@ _Changed_ / _Removed_ for each version.
   see their orders' tasks; whoever holds a task of somebody else's order — the line
   manager who has to approve it — sees that order too, marked as one to handle.
 
+  And for whom, by name. An approval said "For usr_7f3a…", in Tasks and in the
+  heading of the shipped approval form, which asked the approver to know a key.
+  Both now name the recipient and the orderer; the order and the process still keep
+  ids, and the name is resolved when the approval is read.
+
   Found without searching. Every API start of a process now answers with the
   `instanceKey` it created, and a start whose variables name an order and a position
   is recorded on that position (`instances`); the shop reads the tasks of exactly

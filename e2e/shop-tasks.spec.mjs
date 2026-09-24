@@ -11,15 +11,12 @@
 //
 // It loads the REAL shop.html with only the network replaced.
 import { test, expect } from "@playwright/test";
+import { readFileSync } from "node:fs";
 
-const FORM = {
-  components: [
-    { type: "checkbox", key: "genehmigt", label: "Genehmigen", id: "genehmigt" },
-    { type: "textarea", key: "begruendung", label: "Begründung", id: "begruendung" },
-  ],
-  type: "default",
-  id: "genehmigung",
-};
+// The approval form Atlas ships, read from the source it is seeded from — the test
+// is about that form's heading saying for whom, so a stand-in would prove nothing.
+const FORM = JSON.parse(readFileSync(
+  new URL("../api/systemprocesses/form-genehmigung.json", import.meta.url), "utf8"));
 
 function installFixture(form) {
   window.__unmatched = [];
@@ -124,6 +121,10 @@ test("the holder answers the task on its own form, in the row", async ({ page })
   await taskRow(page, 22).getByRole("button", { name: "Work on it" }).click();
   const panel = taskRow(page, 22).locator(".cfg");
   await expect(panel.getByLabel("Genehmigen")).toBeVisible({ timeout: 10000 });
+  // For whom, by name — the order's recipient is usr_2, and "Bestellt für usr_2"
+  // asks the approver to know a key.
+  await expect(panel).toContainText("Bestellt für Carla");
+  await expect(panel).not.toContainText("usr_2");
   await panel.getByLabel("Genehmigen").check();
   await panel.getByLabel("Begründung").fill("passt");
   await panel.getByRole("button", { name: "Complete" }).click();

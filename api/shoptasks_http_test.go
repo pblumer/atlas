@@ -56,7 +56,8 @@ func anOrderBobApproves(t *testing.T) (ts *httptest.Server, admin, alice, bob *h
 		`{"username":"bob","password":"password1","displayName":"Bob Muster"}`); code != http.StatusCreated {
 		t.Fatalf("create bob: %d (%s)", code, b)
 	}
-	code, body := cReq(t, admin, ts, "POST", "/api/v1/users", `{"username":"alice","password":"password1"}`)
+	code, body := cReq(t, admin, ts, "POST", "/api/v1/users",
+		`{"username":"alice","password":"password1","displayName":"Alice Beispiel"}`)
 	if code != http.StatusCreated {
 		t.Fatalf("create alice: %d (%s)", code, body)
 	}
@@ -247,4 +248,32 @@ func TestSomebodyWithNoPartInAnOrderSeesNothingOfIt(t *testing.T) {
 func TestAProcessNamingNoOrderStartsAsBefore(t *testing.T) {
 	ts, admin, _, _, _ := anOrderBobApproves(t)
 	startApproval(t, ts, admin, "ord_nobody", "vpn", "bob")
+}
+
+// TestAnApprovalNamesWhomItIsFor: the approval an approver reads says for whom by
+// name. The order and the process keep the id (ADR-0314); the name is resolved
+// when the approval is read.
+func TestAnApprovalNamesWhomItIsFor(t *testing.T) {
+	ts, admin, _, bob, ord := anOrderBobApproves(t)
+	startApproval(t, ts, admin, ord, "vpn", "bob")
+
+	code, b := cReq(t, bob, ts, "GET", "/api/v1/approvals", "")
+	if code != http.StatusOK {
+		t.Fatalf("GET /api/v1/approvals = %d (%s)", code, b)
+	}
+	var page struct {
+		Items []struct {
+			Recipient     string `json:"recipient"`
+			RecipientName string `json:"recipientName"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(b, &page); err != nil || len(page.Items) != 1 {
+		t.Fatalf("approvals = %s (%v)", b, err)
+	}
+	if got := page.Items[0].RecipientName; got != "Alice Beispiel" {
+		t.Errorf("recipientName = %q, want the recipient's display name", got)
+	}
+	if page.Items[0].Recipient == "" || page.Items[0].Recipient == "Alice Beispiel" {
+		t.Errorf("recipient = %q, want the id kept beside the name", page.Items[0].Recipient)
+	}
 }
