@@ -56,6 +56,33 @@ _Changed_ / _Removed_ for each version.
   the same set. The shop names such an assignee by display name rather than by id.
   The "Assigned to me" folder still matches usernames only.
 
+- **Moving a decision service hid the arrows crossing it, and left its name behind.**
+  The box around a decision service is a background — arrows are meant to cross its
+  border — and a newly drawn one already went behind what was there. Moving one did
+  not: the library underneath moves a shape by taking it out of the diagram and
+  putting it back, and putting it back with nothing said about where means at the
+  end, which is on top. A stored file therefore drew correctly right up to the moment
+  you nudged the box, at which point the arrow crossing its border disappeared
+  underneath it.
+
+  The name had the matching problem. Where you put it is recorded in diagram
+  coordinates, which is the right place for it and is also why it stopped being true
+  the moment the box moved: nothing kept the two in step, so dragging the box left
+  the name standing where it was. The further the box travelled, the further outside
+  it the name sat — and DMN says the name is displayed *inside* the shape. Resizing
+  had the mirror image: the name stayed put while the box shrank past it.
+
+  It took the tool strip with it, which looked like a third, unrelated fault and was
+  this one: the strip is placed from the element's *drawn* extent, and a name drawn
+  outside the box stretches that extent to cover both, so the strip opened beside the
+  stray name rather than beside the service.
+
+  The name now keeps its place in the box: a move carries it along, a resize carries
+  it with whichever corner you dragged and pulls it back inside only when it no
+  longer fits, and one undo takes the whole gesture back. Folding remembers where the
+  name was, for the same reason it already remembers the dividing line, and gives it
+  back when you unfold — even if you dragged the folded box across the canvas first.
+
 - **A decision service drawn around an existing arrow hid it.** The box around a
   decision service is a background: DMN encloses the decisions it names with it, and
   arrows are meant to cross its border — which only reads as a diagram if the border
