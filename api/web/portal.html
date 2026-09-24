@@ -134,6 +134,11 @@
   .cascade { display:grid; grid-template-columns:repeat(4, minmax(220px, 1fr));
              gap:12px; overflow-x:auto; }
   .col { min-width:0; }
+  /* The basket's lines, one per offering. The grid makes each line as tall as its
+     tallest cell, which is what keeps one offering's services from sliding beside
+     the next; the rule under each line is what tells two offerings apart. */
+  .basket-groups .grp { border-bottom:2px solid var(--border); }
+  .basket-groups .grp .cell:last-child { border-bottom:0; }
   .colhead { font-size:12px; text-transform:uppercase; letter-spacing:.04em;
              color:var(--muted); font-weight:600; padding:0 0 6px; border-bottom:1px solid var(--border); }
   .cell { display:flex; align-items:flex-start; gap:6px; padding:6px 0;

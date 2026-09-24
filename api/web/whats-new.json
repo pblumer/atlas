@@ -2,6 +2,40 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "the-basket-said-what-was-ordered-and-not-what-belonged-to-wh",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The basket shows which service belongs to which offering",
+        "de": "Der Warenkorb zeigt, welcher Service zu welcher Marktleistung gehört"
+      },
+      "summary": {
+        "en": "The basket drew three columns — offering, service, optional — each a list stacked on its own, so a row in one column had nothing to do with the row beside it. With two offerings in the basket, a laptop's hardware could sit beside a monitor and the laptop's sleeve on the monitor's line. Now every offering is one line: its services and its options are the cells of that line, the next offering starts below the previous one's last service, and a rule under each line tells two offerings apart. A part two products share lands under whichever of them is in the basket.",
+        "de": "Der Warenkorb zeichnete drei Spalten — Marktleistung, Service, Optional — jede eine Liste für sich, sodass eine Zeile in der einen Spalte nichts mit der Zeile daneben zu tun hatte. Lagen zwei Marktleistungen im Korb, konnte die Hardware eines Laptops neben einem Monitor stehen und die Laptophülle auf der Zeile des Monitors. Jetzt ist jede Marktleistung eine Zeile: ihre Services und ihre Optionen sind die Zellen dieser Zeile, die nächste Marktleistung beginnt unterhalb des letzten Services der vorigen, und eine Linie unter jeder Zeile trennt zwei Marktleistungen. Ein Teil, das zwei Produkte gemeinsam haben, steht unter demjenigen, das im Korb liegt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue",
+        "Portal"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the portal and add two offerings to the basket, one of them with services and options.",
+          "Open the basket.",
+          "Each offering is one line, with its services and options beside it."
+        ],
+        "de": [
+          "Das Portal öffnen und zwei Marktleistungen in den Warenkorb legen, eine davon mit Services und Optionen.",
+          "Den Warenkorb öffnen.",
+          "Jede Marktleistung ist eine Zeile, ihre Services und Optionen stehen daneben."
+        ]
+      }
+    },
+    {
       "id": "a-catalogue-kept-in-de-de-and-en-en-would-have-ignored-the-l",
       "version": "Unreleased",
       "date": null,
@@ -357,42 +391,6 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-product-s-description-was-stored-frozen-into-the-release-a",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A product's description now reaches the people reading it",
-        "de": "Die Produktbeschreibung erreicht jetzt die Lesenden"
-      },
-      "summary": {
-        "en": "The portal asked for a description in the language the page itself is read in — German or English, taken from the browser — and showed nothing at all when the catalogue had no text under that key. Publishing, however, only guarantees a description in every language the catalogue declares, and those are two different lists: a catalogue offered in German and French was complete by that rule and said nothing to a reader whose browser is English. Two descriptions written, neither on screen. The reader's own language is still preferred, so a product described in several still shows the right one; the others are reached only after it. A product's picture is shown beside the description where the catalogue carries one.",
-        "de": "Das Portal verlangte die Beschreibung in der Sprache, in der die Seite selbst gelesen wird — Deutsch oder Englisch, aus dem Browser übernommen — und zeigte gar nichts, wenn der Katalog unter diesem Schlüssel keinen Text hatte. Die Veröffentlichung sichert eine Beschreibung jedoch nur in jeder Sprache zu, die der Katalog deklariert, und das sind zwei verschiedene Listen: Ein auf Deutsch und Französisch angebotener Katalog war nach dieser Regel vollständig und sagte einer Person mit englischem Browser nichts. Zwei Beschreibungen erfasst, keine sichtbar. Die eigene Sprache der lesenden Person wird weiterhin bevorzugt, ein mehrsprachig beschriebenes Produkt zeigt also die richtige; die übrigen kommen erst danach. Das Produktbild wird daneben angezeigt, sofern der Katalog eines führt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Self-service portal",
-        "Catalogue"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the service portal and pick a product in the cascade.",
-          "Press the round \"i\" at the right edge of its row.",
-          "The panel shows the picture, the description, the price and the approval rule.",
-          "Switch the language with the DE/EN buttons in the header: where the catalogue has both, the description follows."
-        ],
-        "de": [
-          "Das Leistungsportal öffnen und in der Kaskade ein Produkt auswählen.",
-          "Das runde „i“ am rechten Rand der Zeile drücken.",
-          "Der Bereich zeigt Bild, Beschreibung, Preis und Genehmigungsregel.",
-          "Die Sprache mit den Schaltflächen DE/EN in der Kopfzeile wechseln: Führt der Katalog beide, folgt die Beschreibung."
-        ]
       }
     }
   ]
