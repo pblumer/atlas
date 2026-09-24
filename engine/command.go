@@ -86,6 +86,19 @@ type Command struct {
 	// now+LeaseFor into the job's LeaseExpiresAt, so a replay lands on the same instant
 	// (invariant I6).
 	LeaseFor int64
+	// Created, when set, is where an instance-creation command reports the key the
+	// new instance was given. The key is minted while the command is processed, so a
+	// caller that needs it — the API start, which records which instance works an
+	// order's position — cannot know it before, and nothing afterwards could tell its
+	// instance from one another caller started in the same batch.
+	//
+	// Written on the processor goroutine during RunUntilIdle and read by the caller
+	// only after that returned without error, so it is read once the instance is
+	// durable (invariant I2) and the loop's rendezvous orders the two. nil on every
+	// other command; it rides only on the non-hot-path creation intent, and a
+	// pointer the caller owns allocates nothing here (invariant I1). Commands are
+	// never replayed (I6), so recovery never writes through it.
+	Created *uint64
 }
 
 // sideEffect is work to run after the batch's fsync (invariant I2). It is a

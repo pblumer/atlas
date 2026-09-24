@@ -436,6 +436,20 @@ func (p *Processor) CreateInstance(defKey uint64, startVars ...model.VariableVal
 	})
 }
 
+// CreateInstanceReporting is [Processor.CreateInstance] for a caller that needs
+// the new instance's key: it is written to *created when the command is processed,
+// and left untouched when no instance was created. Read it only after RunUntilIdle
+// returned without error.
+func (p *Processor) CreateInstanceReporting(defKey uint64, created *uint64, startVars ...model.VariableValue) {
+	p.queue = append(p.queue, Command{
+		ValueType: model.VTProcessInstance,
+		Intent:    model.IntentActivating,
+		Value:     inflightValue{process: model.ProcessInstanceValue{ProcessDefKey: defKey}},
+		StartVars: startVars,
+		Created:   created,
+	})
+}
+
 // CompleteJob enqueues completion of a job by a worker, optionally carrying the
 // output variables the worker produced (e.g. a business rule task's decision
 // result). The outputs are written into the job's process instance scope when the

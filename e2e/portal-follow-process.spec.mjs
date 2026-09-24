@@ -47,6 +47,7 @@ function installFixture() {
     "/api/v1/shop/catalog": CAT,
     "/api/v1/catalogs/cat_f/releases": [],
     "/api/v1/orders": [ORDER],
+    "/api/v1/shop/tasks": { tasks: [], orders: [], truncated: false },
     "/api/v1/inventory": { items: [] },
     "/api/v1/shop/favourites": { itemIds: [] },
     "/api/v1/principals": [{ id: "usr_1", name: "Anja" }],

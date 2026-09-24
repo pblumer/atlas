@@ -1120,6 +1120,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/shop/orders/{id}/lines/{position}/progress", s.handleLineProgress, apiOp{
 			summary: "Where one of your own positions stands: the steps the process working on it is sitting on right now, by the names its model gives them. Gated on owning the order rather than on a role — somebody else's order answers 404, because whether it exists is not something this confirms — and it carries no process variable, because the caller already knows their own order and this says where, not what. A position nothing is running for answers state \"none\"", tag: "Order", role: RoleUser,
 			resp: jsonBody("Where the position's process stands", tObject())}},
+		{"GET", "/api/v1/shop/tasks", s.handleShopTasks, apiOp{
+			summary: "The open tasks of your orders, and of the orders you hold a task in (ADR-draft-the-shop-shows-an-orders-open-tasks): for each, the order and position it works, its name and form, whom it waits for — for an approval, by the rule the line is approved under (fixed, role, superior) — and whether you may answer it. Your own orders' tasks are read from the instances each position records, so their cost is your orders and not the server; the orders you hold a task in are found by walking the open tasks, bounded like the approval list, and `truncated` says when that bound bit. Those orders are returned under `orders`, without the answers given on the products' forms", tag: "Order", role: RoleUser,
+			resp: jsonBody("Tasks, held orders, and whether the walk was cut short", tObject())}},
 
 		// The two calls an orchestrator makes to drive an order: what may start,
 		// and what came back. Operator work rather than the orderer's — nobody

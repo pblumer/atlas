@@ -882,6 +882,7 @@ Event names an operator is most likely to alert on:
 | `wal_compaction.inert` | WARN | `--compact-wal` without `--checkpoint-interval` — it is doing nothing |
 | `exporter.tick_failed` | WARN | An OpenSearch export tick failed; lag grows until it recovers |
 | `retention.purged` | INFO | Finished instances were hard-deleted, with how many |
+| `order.instance_unrecorded` | WARN | An instance working an order position started but could not be noted on the order; the shop shows no tasks for that position |
 | `script_worker.binary_missing` | WARN | A script language is enabled but its interpreter is absent; those tasks park |
 | `auth.admin_seeded` | WARN | The bootstrap administrator was created with a generated password |
 | `auth.disabled` | WARN | The server was started with `--auth=false` and requires no login for anything |

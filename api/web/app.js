@@ -8091,6 +8091,19 @@ async function viewTasks(preselectKey) {
     state.formVars = null;
   }
 
+  // withPeopleNamed hands a form the people of an approval by name, beside their
+  // ids, for display: the shipped approval form's heading says for whom, and an id
+  // there is a key the approver would have to look up. The names are not form
+  // fields, so completing the form never writes them into the process — the order
+  // and the process keep ids (ADR-0314).
+  function withPeopleNamed(data, approval) {
+    if (!approval) return data;
+    const out = { ...data };
+    if (approval.recipientName && out.recipientName == null) out.recipientName = approval.recipientName;
+    if (approval.ordererName && out.ordererName == null) out.ordererName = approval.ordererName;
+    return out;
+  }
+
   // mountForm loads the vendored form-js viewer, the task's bound form schema,
   // and the instance's current variables, then renders the form prefilled — a
   // field whose key matches a variable shows its value (ADR-0028). Guards against
@@ -8112,7 +8125,7 @@ async function viewTasks(preselectKey) {
       if (state.selected !== t.key) return; // selection moved on; drop this mount
       host.innerHTML = "";
       const form = new Form({ container: host });
-      await form.importSchema(def.schema, data || {});
+      await form.importSchema(def.schema, withPeopleNamed(data || {}, state.approvals.get(t.key)));
       if (state.selected !== t.key) { try { form.destroy(); } catch { /* noop */ } return; }
       state.mountedForm = form;
       // The variables the form was filled from, kept beside it. Completing the task
@@ -8338,8 +8351,8 @@ async function viewTasks(preselectKey) {
         ${row("Product", `${esc(approvalName(a))} <span class="chip">${esc(a.itemId)}</span>`)}
         ${row("Variant", a.variantId ? esc(a.variantId) : "")}
         ${row("Cost", a.price ? esc(a.price) : "")}
-        ${row("For", esc(a.recipient))}
-        ${row("Ordered by", esc(a.orderer))}
+        ${row("For", esc(a.recipientName || a.recipient))}
+        ${row("Ordered by", esc(a.ordererName || a.orderer))}
         ${row("Order", `<span class="chip">${esc(a.orderId)}</span>`)}
         ${row("Catalogue", esc(approvalCatalogue(a)))}
       </div>
@@ -8650,6 +8663,10 @@ async function viewTasks(preselectKey) {
             orderId: a.orderId || "", itemId: a.itemId || "",
             positionId: a.positionId || "", variantId: a.variantId || "",
             recipient: a.recipient || "", orderer: a.orderer || "",
+            // The two people by name, as the server resolved them when it read the
+            // approval. The ids stay beside them: the form of the task may still
+            // read one, and a name is only for the reader.
+            recipientName: a.recipientName || "", ordererName: a.ordererName || "",
             price: a.price || "", texts: a.texts || {},
             // Which customer's catalogue this order came from. The page this replaced
             // said it in the catalogue's own colours; the Console is Atlas's own

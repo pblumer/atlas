@@ -44,6 +44,7 @@ const APPROVALS = [
   {
     task: TASKS[0], orderId: "ord_4711", itemId: "phone", positionId: "phone#black",
     variantId: "black", recipient: "usr_rosa", orderer: "usr_max",
+    recipientName: "Rosa Meier", ordererName: "Max Muster",
     price: "CHF 1'200.–", texts: { de: "Apple iPhone 18 Pro", en: "Apple iPhone 18 Pro" },
     catalogId: "cat_mobil", catalogTexts: { de: "Mobile Geräte", en: "Mobile devices" },
   },
@@ -114,11 +115,22 @@ test("an approval says what it decides, in names rather than ids", async ({ page
   await expect(block).toContainText("Apple iPhone 18 Pro");
   await expect(block).toContainText("CHF 1'200.–");
   await expect(block).toContainText("ord_4711");
-  await expect(block).toContainText("usr_rosa");
+  // For whom, by name: the order keeps the id, the server resolves it when the
+  // approval is read. "For usr_rosa" asks the approver to know a key.
+  await expect(block).toContainText("Rosa Meier");
+  await expect(block).toContainText("Max Muster");
+  await expect(block).not.toContainText("usr_rosa");
   // Which customer's catalogue this is. The page this replaced said it in that
   // catalogue's colours; the Console wears nobody's brand, so it says it in words —
   // an approver deciding for two customers needs to know which one they are in.
   await expect(block).toContainText("Mobile devices");
+  expect(page.__errors).toEqual([]);
+});
+
+test("an approval whose people the server could not name still says who, by id", async ({ page }) => {
+  await bootTasks(page);
+  await select(page, 102);
+  await expect(page.locator(".tasks-approval")).toContainText("usr_rosa");
   expect(page.__errors).toEqual([]);
 });
 
