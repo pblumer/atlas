@@ -994,7 +994,7 @@ const state = {
   // string because it names a product, and "no product chosen" is not one.
   group: null,
   offering: '',
-  // step is which of the cascade's four columns a narrow screen shows (ADR-draft-the-shop-is-one-column-wide-on-a-narrow-screen).
+  // step is which of the cascade's four columns a narrow screen shows (ADR-draft-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen).
   // A wide one shows all four and never reads it: the columns side by side are the
   // point of the screen there. A phone cannot hold four columns, so it shows one
   // and moves right as somebody chooses — which is the order a cascade is read in
@@ -2302,7 +2302,7 @@ function renderCatalogue() {
     catalogueBodyNode);
 }
 
-// stepper is the cascade's way back on a narrow screen (ADR-draft-the-shop-is-one-column-wide-on-a-narrow-screen), where one
+// stepper is the cascade's way back on a narrow screen (ADR-draft-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen), where one
 // column shows at a time: a back button and the path chosen so far. A wide screen
 // hides it — every column is on screen there, and a back button would go
 // somewhere already in view.
@@ -2506,7 +2506,7 @@ function renderBasket() {
     el('div', { class: 'colhead' }, t('col.options')),
     // The labels on the second and fourth cells are for a narrow screen, where the
     // four cells of a line stack under each other and the names at the top no
-    // longer stand above them (ADR-draft-the-shop-is-one-column-wide-on-a-narrow-screen). A wide screen does not draw them.
+    // longer stand above them (ADR-draft-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen). A wide screen does not draw them.
     groups.flatMap((g) => [
       el('div', { class: 'col grp grp-first' }, g.root ? row(g.root) : null),
       el('div', { class: 'col grp', 'data-label': t('col.service') }, g.services.map(row)),
@@ -3483,7 +3483,7 @@ function renderServices() {
 
   return el('div', {},
     // No data-step: nothing in these columns is chosen, so a narrow screen stacks
-    // them rather than stepping through them (ADR-draft-the-shop-is-one-column-wide-on-a-narrow-screen).
+    // them rather than stepping through them (ADR-draft-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen).
     el('div', { class: 'cascade' },
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.category')),

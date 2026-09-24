@@ -1,4 +1,4 @@
-// e2e for the shop on a narrow screen (api/web/shop.html, ADR-draft-the-shop-is-one-column-wide-on-a-narrow-screen), against the
+// e2e for the shop on a narrow screen (api/web/shop.html, ADR-draft-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen), against the
 // same fixtures the basket and the task specs use.
 //
 // What was asked for: the shop usable on a phone. At 390px the four-column

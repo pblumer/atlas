@@ -1151,6 +1151,13 @@ function setChrome(appId, route) {
     `class="${t.route === route ? "active" : ""}">${t.name}` +
     (t.badge ? `<span class="nav-badge" data-badge="${t.badge}" hidden></span>` : "") + `</a>`
   ).join("");
+  // On a narrow screen the view names scroll sideways within the bar, and the one
+  // open may be past its edge; bring it into view so the bar says where one is.
+  const current = topnav.querySelector("a.active");
+  if (current && topnav.scrollWidth > topnav.clientWidth) {
+    const bar = topnav.getBoundingClientRect(), link = current.getBoundingClientRect();
+    topnav.scrollLeft += link.left - bar.left - (bar.width - link.width) / 2;
+  }
   syncIncidentBadge(appId); // the nav says how many tokens are stuck, before anything is opened
   document.querySelectorAll("#drawer-apps a").forEach((a) =>
     a.classList.toggle("active", a.dataset.app === appId));
@@ -8414,6 +8421,10 @@ async function viewTasks(preselectKey) {
     destroyForm();
     destroyProc();
     const t = state.tasks.find((x) => x.key === state.selected);
+    // A narrow screen shows the list or the task, not both side by side
+    // (ADR-draft-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen); the grid says which.
+    const grid = detailEl.closest(".tasks");
+    if (grid) grid.classList.toggle("has-selection", !!t);
     if (!t) {
       detailEl.innerHTML = `<div class="tasks-detail-empty muted">Select a task to see its details.</div>`;
       return;
@@ -8476,6 +8487,7 @@ async function viewTasks(preselectKey) {
       ? `<div class="tasks-doc"><h2>What to do</h2><div class="md">${renderMarkdown(t.documentation)}</div></div>`
       : "";
     detailEl.innerHTML = `
+      <button class="btn ghost small tasks-back" id="task-back">\u2039 Back to the list</button>
       <header class="tasks-detail-head">
         <h1>${esc(taskTitle(t))}</h1>
         <div class="tasks-detail-actions">
@@ -8508,6 +8520,11 @@ async function viewTasks(preselectKey) {
       const b = document.getElementById(id);
       if (b) b.addEventListener("click", () => decideApproval(t, approved));
     }
+    document.getElementById("task-back").addEventListener("click", () => {
+      state.selected = null;
+      renderList();
+      renderDetail();
+    });
     document.getElementById("task-claim").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
       btn.disabled = true;
@@ -8883,11 +8900,14 @@ async function viewStartProcess() {
   function renderDetail() {
     destroyForm();
     const p = state.procs.find((x) => x.key === state.selected);
+    const grid = detailEl.closest(".tasks");
+    if (grid) grid.classList.toggle("has-selection", !!p);
     if (!p) {
       detailEl.innerHTML = `<div class="tasks-detail-empty muted">Select a process to start it via its form.</div>`;
       return;
     }
     detailEl.innerHTML = `
+      <button class="btn ghost small tasks-back" id="start-back">\u2039 Back to the list</button>
       <header class="tasks-detail-head">
         <h1>${esc(p.name || p.processId)}</h1>
         <button class="btn" id="start-go" title="Start a new instance with the form values above">Start process</button>
@@ -8899,6 +8919,11 @@ async function viewStartProcess() {
       <div class="tasks-form" id="start-form"><p class="muted">Loading form&hellip;</p></div>
       <div class="tasks-publish" id="start-publish"></div>`;
     renderPublish(p);
+    detailEl.querySelector("#start-back").addEventListener("click", () => {
+      state.selected = null;
+      renderList();
+      renderDetail();
+    });
     detailEl.querySelector("#start-go").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
       let variables = {};
@@ -10126,10 +10151,16 @@ async function route() {
     if (path === "#/operations/sql-mock") return await viewSQLMockJournal();
     if (path === "#/operations/decisions") return await viewDecisions();
     if (path === "#/tasks/recertification") {
+      // Taken before the import, as the routes above take it: the closure is read
+      // after the view's first await, and without it that read threw.
+      const gen = navGen;
       const { viewRecertification } = await import("./recertification.js");
       return await viewRecertification({ api, toast, view, isSuperseded: () => superseded(gen) });
     }
     if (path === "#/operations/reconciliation") {
+      // Taken before the import, as the routes above take it: the closure is read
+      // after the view's first await, and without it that read threw.
+      const gen = navGen;
       const { viewReconciliation } = await import("./reconciliation.js");
       return await viewReconciliation({ api, toast, view, isSuperseded: () => superseded(gen) });
     }

@@ -22,7 +22,16 @@ _Changed_ / _Removed_ for each version.
   size. A wide screen keeps its layout. Before this, a phone showed about one and a
   half of the catalogue's four columns, and an order's tasks sat past the right edge
   of the screen
-  ([ADR-draft-the-shop-is-one-column-wide-on-a-narrow-screen](docs/adr/draft-the-shop-is-one-column-wide-on-a-narrow-screen.md)).
+  ([ADR-draft-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen](docs/adr/draft-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md)).
+
+- **Tasks works on a phone.** Below the same 860px the inbox and Start show the list
+  or the open task, not both, and a task opens with a button back to the list. The
+  folders become a row of chips, and a task's fields put their label above the value.
+  An access review row is a card with its two answers under it. The top bar keeps its
+  icons on screen and scrolls the view names instead. Between 861px and 1180px the
+  inbox keeps its three panes at narrower widths. Before this, a phone showed the
+  folders and part of the list, and the task itself was past the right edge
+  ([ADR-draft-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen](docs/adr/draft-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md)).
 
 - **A decision service's name can be moved out of the way, and the fold switch is
   in the box.** DMN requires the name inside the shape and says nothing about where,
@@ -44,6 +53,12 @@ _Changed_ / _Removed_ for each version.
   own, and where a reader looks for it.
 
 ### Fixed
+
+- **Access review and Reconciliation open again.** Both pages showed an error card,
+  "gen is not defined", instead of their rows. The router handed each a check
+  for whether a later navigation had replaced it, over a value neither route had
+  set, and the page's first use of that check threw. Both routes now set it, as the
+  routes beside them already did.
 
 - **A task's checkbox in the shop is a checkbox again.** A task answered inside an
   order row drew its checkbox as wide as the table cell, with the label pushed off the

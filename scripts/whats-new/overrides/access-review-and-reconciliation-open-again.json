@@ -1,0 +1,11 @@
+{
+  "tags": ["Tasks", "Operations"],
+  "title": {
+    "en": "Access review and Reconciliation open again",
+    "de": "Rezertifizierung und Abgleich öffnen wieder"
+  },
+  "summary": {
+    "en": "Both pages showed an error card, \"gen is not defined\", instead of their rows. The router handed each a check for whether a later navigation had replaced it, over a value neither route had set, and the page's first use of that check threw. Both routes now set it, as the routes beside them already did.",
+    "de": "Beide Seiten zeigten eine Fehlerkarte, «gen is not defined», statt ihrer Zeilen. Der Router übergab jeder eine Prüfung, ob eine spätere Navigation sie abgelöst hatte, über einen Wert, den keine der beiden Routen gesetzt hatte; der erste Aufruf dieser Prüfung schlug fehl. Beide Routen setzen den Wert jetzt, wie es die benachbarten Routen bereits taten."
+  }
+}

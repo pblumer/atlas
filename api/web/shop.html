@@ -136,7 +136,7 @@
      collapse: a decomposition read at four levels is the point of the screen, and
      a narrow window should move it, not fold it — down to the narrow-screen
      breakpoint, below which one column shows at a time
-     (ADR-draft-the-shop-is-one-column-wide-on-a-narrow-screen). */
+     (ADR-draft-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen). */
   .cascade { display:grid; grid-template-columns:repeat(4, minmax(220px, 1fr));
              gap:12px; overflow-x:auto; }
   .col { min-width:0; }
@@ -268,7 +268,7 @@
 
   @media (max-width:520px) { .cards { grid-template-columns:1fr; } }
 
-  /* --- A narrow screen (ADR-draft-the-shop-is-one-column-wide-on-a-narrow-screen). ---
+  /* --- A narrow screen (ADR-draft-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen). ---
      One breakpoint for the whole page, so a phone and a small tablet read the
      shop the same way: below it every view is one column wide. 860px and not
      900: the four-column cascade needs about 920px to show its columns at their

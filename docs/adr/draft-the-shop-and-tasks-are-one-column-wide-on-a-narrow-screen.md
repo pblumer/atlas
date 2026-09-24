@@ -1,4 +1,4 @@
-# ADR-DRAFT: The shop is one column wide on a narrow screen
+# ADR-DRAFT: The shop and Tasks are one column wide on a narrow screen
 
 - **Status:** Accepted
 - **Implementation:** Landed
@@ -25,10 +25,26 @@ width of a common phone:
   are all in the last column, which sat past the right edge of the screen. The task form
   was laid out about 780px wide.
 
-The shop is where people order and where they answer the tasks of their orders. The second
-is exactly what somebody does away from a desk: approving an order, entering the address
-for a new account. The question is how every view should read on a narrow screen, without
-changing how it reads on a wide one.
+The Console's Tasks app is where the same tasks are answered by those who are not the
+orderer: an approver, an administrator setting a leaving date. Measured at 390px:
+
+- **The inbox** is three panes side by side: folders (232px), the list (360px, resizable)
+  and the open task. Together they are wider than the phone, so the task was off screen.
+- **Start** is the same grid with two panes, the startable processes and the form of the
+  one chosen.
+- **Access review** is a six-column table whose answer buttons are in the last column.
+- **The top bar** holds the view names between the app's name and its icons; on a phone
+  it pushed the icons past the edge.
+
+Measuring also found that Access review did not open at all, on any screen. The router
+passed it, and the operators' Reconciliation, a closure over a navigation generation that
+neither route had taken, so the view's first check after loading threw
+`gen is not defined`.
+
+The shop is where people order and where they answer the tasks of their orders; Tasks is
+where everybody else answers theirs. Both are exactly what somebody does away from a desk:
+approving an order, entering the address for a new account. The question is how every view
+of both should read on a narrow screen, without changing how it reads on a wide one.
 
 ## Decision drivers
 
@@ -78,6 +94,27 @@ Chosen option: **2**.
 - **Touch targets grow.** The 24px squares (−, +, ×, i, ☆) were sized for a pointer. Below
   the breakpoint they are 40px, and rows grow with them.
 
+The Console's Tasks app follows the same breakpoint and the same rule:
+
+- **The inbox and Start show the list or the task, never both.** The grid carries
+  `has-selection` while a task or a process is open. Below the breakpoint that class hides
+  the folders and the list; without it the task pane is hidden. The task opens with a
+  "Back to the list" button, which a wide screen hides, because the list is beside it.
+- **The folders become a row of chips** above the list, scrolling sideways within
+  themselves. A task's fields put their label above the value instead of in a 150px column
+  beside it, and its actions wrap under its name.
+- **Between 861px and 1180px the three panes stay**, at 180px, 300px and the rest. The list's
+  resizer writes its widths inline, and a width dragged on a desktop is not a width for a
+  tablet, so this range overrides it.
+- **An access review row is a card**, each cell named by its label, with "Still needed" and
+  "Withdraw…" under it at 40px. The table enhancer's filter row goes with the column heads;
+  the campaign and "only rows I can answer" stay above the cards.
+- **The top bar gives up the organisation's name**, and the view names scroll sideways
+  within the bar, the open one brought into view. The icons stay on screen.
+
+The router's two routes now take the generation before loading the view, as the three routes
+above them already did.
+
 The work also found a defect that is not specific to phones. The table's field rule,
 `.table input { width:100% }`, also matched the inputs of a task form opened inside an order
 row. It stretched the form's checkbox to the cell's width and pushed its label off the end,
@@ -85,7 +122,7 @@ on every screen. The rule now covers the filter row only.
 
 ### Consequences
 
-- **Positive:** every view of the shop can be used at 390px, with nothing past the edge and
+- **Positive:** every view of the shop, and the inbox, Start and Access review, can be used at 390px, with nothing past the edge and
   no view that works only by scrolling sideways. The task form, the reason to use the shop
   away from a desk, is laid out at the phone's width.
 - **Negative / trade-offs accepted:** on a narrow screen the catalogue shows one level at a
@@ -93,8 +130,10 @@ on every screen. The rule now covers the filter row only.
   A small tablet in portrait gets the phone layout, although four narrow columns might just
   fit.
 - **Follow-ups / risks to watch:** real-device behaviour, which is the open question above.
-  The Console's other surfaces (Tasks, Operations, the modeller) are not covered by this
-  record and are still desktop surfaces.
+  The Console's other surfaces (Operations, the modeller, Catalogue, Panorama) are not covered
+  by this record and are still desktop surfaces; the top bar they share is.
+  A task's form is drawn by the form viewer, whose own layout is not restyled; a form laid
+  out in several columns has not been measured at 390px.
 
 ## Pros and cons of the options
 
@@ -119,4 +158,4 @@ on every screen. The rule now covers the filter row only.
 ## Links
 
 - relates to [ADR-0312](0312-portal-catalogue-order-inventory.md) (the shop), [ADR-0383](0383-portal-level-names.md) (the cascade's levels), [ADR-0416](0416-the-shop-shows-an-orders-open-tasks.md) (tasks under an order's positions)
-- tests: `e2e/shop-responsive.spec.mjs`
+- tests: `e2e/shop-responsive.spec.mjs`, `e2e/tasks-responsive.spec.mjs`, `e2e/route-superseded.spec.mjs`

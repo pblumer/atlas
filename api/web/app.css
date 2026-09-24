@@ -6556,3 +6556,88 @@ button.im-problem:hover { background: var(--accent-soft); }
 .estate-table td[data-tone="attention"] { color: var(--mesh-attention); }
 .estate-table td[data-tone="unknown"] { color: var(--muted); }
 .estate-reason, .estate-runtime { font-size: 12px; line-height: 1.5; margin-top: 2px; }
+
+/* ---------- Tasks and the top bar on a narrow screen ----------
+   (ADR-draft-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen) The shop's breakpoint,
+   860px, so a phone reads the shop and the inbox the same way: one column.
+
+   The back button is the narrow screen's way from a task to the list, and a wide
+   screen has the list beside the task, so it is hidden there. */
+.tasks-back { display: none; }
+
+/* A tablet: the three panes still fit, but not at their desktop widths. The list
+   keeps a width somebody can scan; the task takes the rest. !important because the
+   list's resizer writes the column widths inline — a width dragged on a desktop
+   is not a width for this screen. */
+@media (max-width: 1180px) and (min-width: 861px) {
+  .tasks { grid-template-columns: 180px 300px 1fr !important; }
+  .tasks-detail { padding: 16px; }
+  .tasks-field { grid-template-columns: 120px 1fr; }
+}
+
+@media (max-width: 860px) {
+  /* The top bar: the view names scroll sideways within it rather than pushing
+     the icons off the screen, and the organisation's name, which the page does
+     not need to be used, gives its place up. */
+  .topbar { gap: 2px; padding: 0 6px; }
+  .topbar .org, .topbar .divider { display: none; }
+  .topnav { flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .topnav::-webkit-scrollbar { display: none; }
+  .topnav a { padding: 0 8px; white-space: nowrap; }
+  .topbar .spacer { display: none; }
+  .icon-btn { width: 36px; height: 36px; flex: 0 0 auto; }
+  main { padding: 12px; }
+
+  /* The inbox and Start: the list, or the task — never both. The grid carries
+     has-selection while something is open. */
+  .tasks, #start-grid { grid-template-columns: 1fr !important; min-height: 0; }
+  /* A grid item is as wide as its content by default, and a row of chips that
+     never wraps is wide: without this the chips widened the whole pane past the
+     screen instead of scrolling inside it. */
+  .tasks > * { min-width: 0; }
+  .tasks-col-resizer { display: none; }
+  .tasks.has-selection > .tasks-folders,
+  .tasks.has-selection > .tasks-list-pane { display: none; }
+  .tasks:not(.has-selection) > .tasks-detail { display: none; }
+  .tasks-back { display: inline-flex; margin: 0 0 12px; }
+
+  /* The folders become one row of chips above the list. */
+  .tasks-folders { padding: 10px; gap: 8px; }
+  .tasks-folders nav { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; gap: 6px; }
+  .tasks-folder { flex: 0 0 auto; white-space: nowrap; }
+  .tasks-list { max-height: none; }
+  .tasks-item { padding: 12px; }
+
+  /* The task: its actions under its name, and each field's label above its value
+     rather than in a 150px column beside it. */
+  .tasks-detail { padding: 14px; }
+  .tasks-detail-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  .tasks-detail-head h1 { font-size: 18px; overflow-wrap: anywhere; }
+  .tasks-detail-actions { flex-wrap: wrap; flex-shrink: 1; }
+  .tasks-fields { max-width: none; }
+  .tasks-field, .tasks-approval .tasks-field { grid-template-columns: 1fr; gap: 2px; }
+  .appr-buttons { flex-wrap: wrap; }
+  .tasks-detail-tabs { overflow-x: auto; }
+  .tasks-detail-tabs button { white-space: nowrap; }
+
+  /* Access review: a row is a card, each cell named by its data-label, the answer
+     buttons under it at a size a thumb finds. The column heads, and the filter row
+     the table enhancer puts under them, go with the columns they stood above. */
+  .rct-filters { flex-wrap: wrap; gap: 8px; }
+  .rct-filters .field.inline { margin: 0 !important; }
+  .rct-table thead { display: none; }
+  .rct-table, .rct-table tbody, .rct-table tr, .rct-table td { display: block; width: 100%; }
+  .rct-table tr { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .rct-table td { border: 0; padding: 3px 0; overflow-wrap: anywhere; }
+  /* The label is set in the cell's left margin rather than as a grid column, so a
+     cell's own content — a pill and the order beside it — keeps flowing as text. */
+  .rct-table td[data-label] { position: relative; padding-left: 132px; }
+  .rct-table td[data-label]::before {
+    content: attr(data-label); position: absolute; left: 0; top: 4px; width: 124px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    color: var(--muted); font-size: 12px;
+  }
+  .rct-table td.row-actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 8px; }
+  .rct-table td.row-actions:empty { display: none; }
+  .rct-table td.row-actions .btn { min-height: 40px; }
+}
