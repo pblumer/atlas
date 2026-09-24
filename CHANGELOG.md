@@ -14,6 +14,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The shop works on a phone.** Below 860px every view of the shop is one column
+  wide. The catalogue shows the column you have reached, and a stepper above it goes
+  back and names the path so far. The basket stacks each offering over its own
+  services and options. My orders is a list of cards, with each position's tasks,
+  and the form to answer one, at the card's width. The buttons grow to a fingertip's
+  size. A wide screen keeps its layout. Before this, a phone showed about one and a
+  half of the catalogue's four columns, and an order's tasks sat past the right edge
+  of the screen
+  ([ADR-draft-the-shop-is-one-column-wide-on-a-narrow-screen](docs/adr/draft-the-shop-is-one-column-wide-on-a-narrow-screen.md)).
+
 - **A decision service's name can be moved out of the way, and the fold switch is
   in the box.** DMN requires the name inside the shape and says nothing about where,
   and its own figures disagree: one draws it centred at the top, three at the top
@@ -34,6 +44,11 @@ _Changed_ / _Removed_ for each version.
   own, and where a reader looks for it.
 
 ### Fixed
+
+- **A task's checkbox in the shop is a checkbox again.** A task answered inside an
+  order row drew its checkbox as wide as the table cell, with the label pushed off the
+  end. The orders table's field rule reached the task form's inputs too; it now styles
+  the filter row only.
 
 - **Withdrawing an order stops the processes already working it.** A cancelled
   position's approval was cancelled with it, and nothing else. But a position reads

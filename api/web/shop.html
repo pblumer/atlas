@@ -134,7 +134,9 @@
 
   /* The four-column cascade. Equal columns that scroll sideways rather than
      collapse: a decomposition read at four levels is the point of the screen, and
-     a narrow window should move it, not fold it. */
+     a narrow window should move it, not fold it — down to the narrow-screen
+     breakpoint, below which one column shows at a time
+     (ADR-draft-the-shop-is-one-column-wide-on-a-narrow-screen). */
   .cascade { display:grid; grid-template-columns:repeat(4, minmax(220px, 1fr));
              gap:12px; overflow-x:auto; }
   .col { min-width:0; }
@@ -206,7 +208,10 @@
   .table thead th { font-size:12px; text-transform:uppercase; letter-spacing:.04em;
                     color:var(--muted); font-weight:600; }
   .table .filters td { border-bottom:0; padding-bottom:0; }
-  .table input { width:100%; font:inherit; font-size:13px; padding:5px 8px;
+  /* The filter row's fields only. A bare `.table input` also reached the inputs
+     of a task's form opened inside a row, and stretched its checkbox to the
+     cell's width with the label pushed off the end. */
+  .table .filters input { width:100%; font:inherit; font-size:13px; padding:5px 8px;
                  border:1px solid var(--border-strong); border-radius:6px;
                  background:var(--surface); color:var(--text); }
   .tablewrap { overflow-x:auto; }
@@ -262,6 +267,80 @@
   .signin .or { text-align:center; margin:0 0 4px; }
 
   @media (max-width:520px) { .cards { grid-template-columns:1fr; } }
+
+  /* --- A narrow screen (ADR-draft-the-shop-is-one-column-wide-on-a-narrow-screen). ---
+     One breakpoint for the whole page, so a phone and a small tablet read the
+     shop the same way: below it every view is one column wide. 860px and not
+     900: the four-column cascade needs about 920px to show its columns at their
+     minimum width, and the browser tests' default window is 900px wide — so the
+     wide layout keeps the width those tests measure it at. The stepper is hidden
+     on a wide screen and shown here. */
+  .stepper { display:none; }
+  @media (max-width:860px) {
+    #app { padding:16px 12px 72px; }
+    h2 { margin:22px 0 10px; }
+
+    /* The catalogue: one column at a time, the one state.step names, with the
+       stepper above it to go back. A column shown alone takes the width. */
+    .stepper { display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+               margin:0 0 10px; font-size:14px; }
+    .stepper .step-back { margin-top:0; }
+    .step-path { min-width:0; overflow-wrap:break-word; }
+    .cascade { grid-template-columns:1fr; overflow-x:visible; }
+    .cascade[data-step] > .col { display:none; }
+    .cascade[data-step="0"] > .col:nth-child(1),
+    .cascade[data-step="1"] > .col:nth-child(2),
+    .cascade[data-step="2"] > .col:nth-child(3),
+    .cascade[data-step="3"] > .col:nth-child(4) { display:block; }
+    /* Columns nothing is chosen in (what somebody holds) simply stack; the gap
+       between them says where one list ends. */
+    .cascade:not([data-step]):not(.basket-groups) { row-gap:18px; }
+
+    /* The basket: each offering a block, its services and options indented under
+       it with their own label, because the names at the top of the grid no longer
+       stand above them. */
+    .basket-groups > .colhead { display:none; }
+    .basket-groups .grp { border-bottom:0; }
+    .basket-groups .grp:empty { display:none; }
+    .basket-groups .grp-first { border-top:2px solid var(--border); margin-top:6px; }
+    .basket-groups .grp[data-label] { padding-left:22px; }
+    .basket-groups .grp[data-label]::before { content:attr(data-label); display:block;
+      font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
+      font-weight:600; padding:6px 0 2px; }
+
+    /* My orders: the table becomes a list of cards. Each cell says what it is,
+       because the column heads are gone; the filters sit two to a row above. */
+    .tablewrap { overflow-x:visible; }
+    .table.orders, .table.orders tbody, .table.orders tr, .table.orders td { display:block; width:100%; }
+    .table.orders thead { display:block; }
+    .table.orders thead tr:not(.filters) { display:none; }
+    .table.orders .filters { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:12px; }
+    .table.orders .filters td { padding:0; }
+    .table.orders .filters td:empty { display:none; }
+    .table.orders tbody tr { background:var(--surface); border:1px solid var(--border);
+                             border-radius:10px; padding:10px 12px; margin:0 0 12px; }
+    .table.orders tbody td { border-bottom:0; padding:3px 0; }
+    .table.orders tbody td:empty { display:none; }
+    .table.orders tbody td[data-label]::before { content:attr(data-label); display:block;
+      font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
+      font-weight:600; }
+    .lines .tasks { margin-left:8px; }
+    /* A form opened in a row takes the card's width, not 640px of it. */
+    .cfg { max-width:100%; }
+    .follow-note { max-width:none; }
+
+    /* Touch: a fingertip needs about 40px; the 24px squares were drawn for a
+       pointer. The row grows with them rather than crowding them. */
+    .sq { width:40px; height:40px; font-size:15px; border-radius:8px; }
+    .help, .avatar { width:40px; height:40px; }
+    .cell { padding:8px 0; gap:8px; align-items:center; }
+    .cell .label { font-size:15px; }
+    .lang { padding:6px 12px; font-size:13px; }
+    button.linkish { padding:8px 0 8px 8px; }
+    .forwhomfield { flex:1 1 200px; min-width:0; }
+    .forwhom input { min-width:0; width:100%; }
+    .people { min-width:0; right:0; }
+  }
 </style>
 </head>
 <body>

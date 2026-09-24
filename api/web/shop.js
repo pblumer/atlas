@@ -77,6 +77,8 @@ const STRINGS = {
     'task.formFailed': 'Das Formular dieser Aufgabe konnte nicht geladen werden.',
     'task.truncated': 'Nicht alle offenen Aufgaben konnten gelesen werden. Aufträge, in denen Sie eine Aufgabe halten, fehlen hier möglicherweise.',
     'task.held': 'zur Bearbeitung',
+    'step.back': 'Zurück',
+    'step.to': 'Weiter zu',
     'order.completed': 'Abgeschlossen',
     'order.partial': 'Teilweise erfüllt',
     'order.unfulfilled': 'Nicht erfüllt',
@@ -247,6 +249,8 @@ const STRINGS = {
     'task.formFailed': 'The form of this task could not be loaded.',
     'task.truncated': 'Not every open task could be read. Orders in which you hold a task may be missing here.',
     'task.held': 'for you to handle',
+    'step.back': 'Back',
+    'step.to': 'On to',
     'order.completed': 'Completed',
     'order.partial': 'Partly fulfilled',
     'order.unfulfilled': 'Not fulfilled',
@@ -415,6 +419,8 @@ const STRINGS = {
     'task.formFailed': 'Le formulaire de cette tâche n’a pas pu être chargé.',
     'task.truncated': 'Toutes les tâches ouvertes n’ont pas pu être lues. Des commandes dans lesquelles vous détenez une tâche peuvent manquer ici.',
     'task.held': 'à traiter',
+    'step.back': 'Retour',
+    'step.to': 'Vers',
     'order.completed': 'Terminée',
     'order.partial': 'Partiellement exécutée',
     'order.unfulfilled': 'Non exécutée',
@@ -582,6 +588,8 @@ const STRINGS = {
     'task.formFailed': 'Non è stato possibile caricare il modulo di questa attività.',
     'task.truncated': 'Non è stato possibile leggere tutte le attività aperte. Gli ordini in cui lei detiene un’attività potrebbero mancare qui.',
     'task.held': 'da gestire',
+    'step.back': 'Indietro',
+    'step.to': 'Verso',
     'order.completed': 'Concluso',
     'order.partial': 'Parzialmente evaso',
     'order.unfulfilled': 'Non evaso',
@@ -986,6 +994,12 @@ const state = {
   // string because it names a product, and "no product chosen" is not one.
   group: null,
   offering: '',
+  // step is which of the cascade's four columns a narrow screen shows (ADR-draft-the-shop-is-one-column-wide-on-a-narrow-screen).
+  // A wide one shows all four and never reads it: the columns side by side are the
+  // point of the screen there. A phone cannot hold four columns, so it shows one
+  // and moves right as somebody chooses — which is the order a cascade is read in
+  // anyway. Choosing in a column advances it; the stepper's back button retreats.
+  step: 0,
   // basket is every item id chosen so far, across products. It is the whole
   // reason this is a two-step order now: the previous page ordered the moment a
   // card's button was pressed, so two bundles were two orders, two approvals and
@@ -2124,6 +2138,7 @@ function renderSearch(rel, by) {
             state.group = (item.productGroup || '').trim();
             state.offering = root;
             state.info = it.id;
+            state.step = 3;
             render();
           },
           lead: starButton(it.id),
@@ -2183,7 +2198,7 @@ function renderCatalogue() {
     cell({
       text: t('cat.all'),
       open: state.category === null,
-      onOpen: () => { state.category = null; clearBelow(0); render(); },
+      onOpen: () => { state.category = null; clearBelow(0); state.step = 1; render(); },
     }),
     headings.map((h) => cell({
       text: h.text || t('cat.none'),
@@ -2191,6 +2206,7 @@ function renderCatalogue() {
       onOpen: () => {
         state.category = state.category === h.key ? null : h.key;
         clearBelow(0);
+        state.step = 1;
         render();
       },
     })));
@@ -2205,7 +2221,7 @@ function renderCatalogue() {
     cell({
       text: t('group.all'),
       open: state.group === null,
-      onOpen: () => { state.group = null; clearBelow(1); render(); },
+      onOpen: () => { state.group = null; clearBelow(1); state.step = 2; render(); },
     }),
     groups.map((g) => cell({
       text: g.text || t('group.none'),
@@ -2213,6 +2229,7 @@ function renderCatalogue() {
       onOpen: () => {
         state.group = state.group === g.key ? null : g.key;
         clearBelow(1);
+        state.step = 2;
         render();
       },
     })));
@@ -2228,6 +2245,9 @@ function renderCatalogue() {
       onOpen: () => {
         state.offering = state.offering === o.id ? '' : o.id;
         state.info = '';
+        // Only a product chosen has services to show; taking the choice back
+        // leaves a narrow screen on the products it was picked from.
+        state.step = state.offering ? 3 : 2;
         render();
       },
       trail: [starButton(o.id), toggle(rel, o.id, o.integral), infoButton(o.id)],
@@ -2253,7 +2273,9 @@ function renderCatalogue() {
   // for the same reason.
   const body = () => (state.query.trim() !== ''
     ? [renderSearch(rel, by)]
-    : [el('div', { class: 'cascade' }, category, groupCol, offeringCol, serviceCol),
+    : [stepper(name, headings, groups),
+      el('div', { class: 'cascade', 'data-step': String(state.step) },
+        category, groupCol, offeringCol, serviceCol),
       state.info && by[state.info]
         ? el('div', { style: 'margin-top:16px' }, infoPanel(rel, by[state.info])) : null]);
   catalogueBody = body;
@@ -2278,6 +2300,36 @@ function renderCatalogue() {
       unresolved
         ? el('span', { class: 'muted' }, `${t('fav.unresolved')}: ${unresolved}`) : null),
     catalogueBodyNode);
+}
+
+// stepper is the cascade's way back on a narrow screen (ADR-draft-the-shop-is-one-column-wide-on-a-narrow-screen), where one
+// column shows at a time: a back button and the path chosen so far. A wide screen
+// hides it — every column is on screen there, and a back button would go
+// somewhere already in view.
+function stepper(name, headings, groups) {
+  const cols = [t('col.category'), t('col.group'), t('col.offering'), t('col.service')];
+  // The words the columns show, not the keys they select by: a heading's key is
+  // its first language's wording and the reader may be reading another.
+  const said = (list, key, all, none) => {
+    if (key === null) return all;
+    const found = list.find((x) => x.key === key);
+    return (found && found.text) || key || none;
+  };
+  const path = [
+    state.step > 0 ? said(headings, state.category, t('cat.all'), t('cat.none')) : null,
+    state.step > 1 ? said(groups, state.group, t('group.all'), t('group.none')) : null,
+    state.step > 2 && state.offering ? name(state.offering) : null,
+  ].filter(Boolean);
+  return el('div', { class: 'stepper' },
+    state.step > 0
+      ? el('button', {
+        class: 'secondary step-back',
+        onclick: () => { state.step = Math.max(0, state.step - 1); render(); },
+      }, `\u2039 ${t('step.back')}`)
+      : null,
+    el('span', { class: 'step-path' },
+      path.length ? el('span', { class: 'muted' }, `${path.join(' \u203a ')} \u203a `) : null,
+      el('strong', {}, cols[state.step] || cols[0])));
 }
 
 // What a keystroke redraws, and the node it redraws into. Both are reset by every
@@ -2452,11 +2504,14 @@ function renderBasket() {
     el('div', { class: 'colhead' }, t('col.service')),
     el('div', {}),
     el('div', { class: 'colhead' }, t('col.options')),
+    // The labels on the second and fourth cells are for a narrow screen, where the
+    // four cells of a line stack under each other and the names at the top no
+    // longer stand above them (ADR-draft-the-shop-is-one-column-wide-on-a-narrow-screen). A wide screen does not draw them.
     groups.flatMap((g) => [
-      el('div', { class: 'col grp' }, g.root ? row(g.root) : null),
-      el('div', { class: 'col grp' }, g.services.map(row)),
+      el('div', { class: 'col grp grp-first' }, g.root ? row(g.root) : null),
+      el('div', { class: 'col grp', 'data-label': t('col.service') }, g.services.map(row)),
       el('div', { class: 'col grp' }),
-      el('div', { class: 'col grp' }, g.offers.map(offerCell)),
+      el('div', { class: 'col grp', 'data-label': t('col.options') }, g.offers.map(offerCell)),
     ]));
 
   // The forms below the basket rather than beside each row: a form is taller than a
@@ -2911,10 +2966,10 @@ function orderRowBodies() {
     // Organisation: rendered because the layout has the column, empty because an
     // order carries no organisation. The note under the table says so once,
     // rather than each row implying the data went missing.
-    el('td', { class: 'muted' }, ''),
-    el('td', {}, personName(o.recipient)),
-    el('td', {}, new Date(o.createdAt / 1e6).toLocaleDateString(locale)),
-    el('td', {}, o.id,
+    el('td', { class: 'muted org' }),
+    el('td', { 'data-label': t('tbl.person') }, personName(o.recipient)),
+    el('td', { 'data-label': t('tbl.placed') }, new Date(o.createdAt / 1e6).toLocaleDateString(locale)),
+    el('td', { 'data-label': t('tbl.order') }, o.id,
       // An order in front of somebody because they hold one of its tasks, not
       // because it is theirs. Said, so nobody mistakes it for one they placed.
       o.held ? el('div', { class: 'muted' }, t('task.held')) : null),
@@ -2942,7 +2997,7 @@ function orderRowBodies() {
       // And what it found, under the button that asked. The one answer that is not
       // drawn here is the one that navigates away.
       followNote(o)),
-    el('td', {},
+    el('td', { 'data-label': t('tbl.status') },
       t(deriveStatus(o)),
       el('ul', { class: 'lines' }, (o.lines || []).map((l) => el('li', {},
         el('span', { class: `dot ${l.status}` }),
@@ -3270,7 +3325,7 @@ function renderOrders() {
   orderRowsNode = el('tbody', {}, orderRowBodies());
   return el('div', {},
     el('div', { class: 'tablewrap' },
-      el('table', { class: 'table' },
+      el('table', { class: 'table orders' },
         el('thead', {},
           el('tr', { class: 'filters' },
             filterCell('company', t('tbl.searchCompany')),
@@ -3427,6 +3482,8 @@ function renderServices() {
   const at = (level) => ids.filter((id) => levelOf(rel, id) === level);
 
   return el('div', {},
+    // No data-step: nothing in these columns is chosen, so a narrow screen stacks
+    // them rather than stepping through them (ADR-draft-the-shop-is-one-column-wide-on-a-narrow-screen).
     el('div', { class: 'cascade' },
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.category')),
