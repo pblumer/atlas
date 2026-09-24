@@ -31,6 +31,28 @@
       }
     },
     {
+      "id": "a-task-a-model-assigns-to-the-person-who-ordered-is-now-thei",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A task assigned to the orderer can be answered by the orderer",
+        "de": "Eine dem Besteller zugewiesene Aufgabe kann der Besteller erledigen"
+      },
+      "summary": {
+        "en": "A model assigns a task with an expression, and the variable it has for a person is usually an id: an order carries its orderer and its recipient as principal ids (usr_…). A task assigned assignee=\"=orderer\" was created and listed under the order in the shop, but refused to the orderer, because the check compared the assignee with the username alone; only operators and administrators could answer it. The check now accepts the username or the principal id, as the mail directory already did when it decides whom a notification reaches. The shop shows such an assignee by display name. The \"Assigned to me\" folder still matches usernames only.",
+        "de": "Ein Modell weist eine Aufgabe über einen Ausdruck zu, und die Variable, die es für eine Person hat, ist meist eine Kennung: ein Auftrag führt Besteller und Empfänger als Prinzipal-Kennungen (usr_…). Eine mit assignee=\"=orderer\" zugewiesene Aufgabe wurde angelegt und im Shop unter dem Auftrag angezeigt, dem Besteller aber verweigert, weil die Prüfung die Zuweisung nur mit dem Benutzernamen verglich; erledigen konnten sie nur Operatoren und Administratoren. Die Prüfung akzeptiert jetzt den Benutzernamen oder die Prinzipal-Kennung, wie es das Mail-Verzeichnis bei der Frage, wen eine Benachrichtigung erreicht, bereits tat. Der Shop zeigt eine solche Zuweisung mit dem Anzeigenamen. Der Ordner «Mir zugewiesen» vergleicht weiterhin nur Benutzernamen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Tasks",
+        "Shop"
+      ]
+    },
+    {
       "id": "a-decision-service-lost-its-decisions-three-different-ways-a",
       "version": "Unreleased",
       "date": null,
@@ -358,42 +380,6 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "the-shipped-fulfilment-and-approval-processes-could-never-ru",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Orders are actually worked now — the shipped processes could never run",
-        "de": "Aufträge werden jetzt wirklich bearbeitet — die mitgelieferten Prozesse konnten nie laufen"
-      },
-      "summary": {
-        "en": "The fulfilment orchestration and the three approval processes do all their work by calling Atlas's own API, and those calls were authored in a shape that cannot be executed: a job type nothing serves, with the target and the HTTP method placed in task headers that never reach a worker at all. The documented fix — configure a worker of type \"rest\" named \"atlas\" — could not be carried out either, because there is no such worker type. And the failure was silent by construction: parked work is waiting, not failed, so no retry was spent, no incident appeared, and nothing turned red. One installation had fourteen orders standing at \"Waiting\" for weeks with nothing anywhere to say why. The calls are real REST connector tasks now, running on the job type the engine already serves, and they are told this server's own address when the order starts. Nothing to configure. One step remains and it is a real one: an API token with the operator role, read from ATLAS_CONNECTOR_ATLAS_TOKEN — and a missing token now fails the call visibly instead of parking it.",
-        "de": "Die Auftragserfüllung und die drei Genehmigungsprozesse erledigen ihre ganze Arbeit über Aufrufe an Atlas' eigene API, und diese Aufrufe waren in einer Form hinterlegt, die sich nicht ausführen lässt: ein Job-Typ, den niemand bedient, mit Zieladresse und HTTP-Methode in Task-Headern, die einen Worker überhaupt nie erreichen. Auch der dokumentierte Ausweg — einen Worker vom Typ „rest\" namens „atlas\" einrichten — liess sich nicht befolgen, denn diesen Worker-Typ gibt es nicht. Und der Fehler war bauartbedingt stumm: geparkte Arbeit wartet, sie scheitert nicht, also wurde kein Wiederholungsversuch verbraucht, es erschien kein Incident, und nichts wurde rot. Auf einer Installation standen vierzehn Aufträge wochenlang auf „Wartet\", ohne dass irgendetwas den Grund nannte. Die Aufrufe sind nun echte REST-Connector-Tasks auf jenem Job-Typ, den die Engine ohnehin bedient, und sie erfahren beim Start des Auftrags die Adresse ihres eigenen Servers. Einzurichten ist nichts. Ein Schritt bleibt, und er ist real: ein API-Token mit der Rolle operator, gelesen aus ATLAS_CONNECTOR_ATLAS_TOKEN — ein fehlendes Token lässt den Aufruf jetzt sichtbar scheitern, statt ihn zu parken."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Self-service portal",
-        "Processes"
-      ],
-      "tutorial": {
-        "en": [
-          "Mint an API token with the operator role under Console → API tokens.",
-          "Set ATLAS_CONNECTOR_ATLAS_TOKEN to its secret in the server's environment and restart.",
-          "Place an order in the service portal.",
-          "Under Operations → Instances the fulfilment process moves past its first step; an order needing approval appears in the approver's task list."
-        ],
-        "de": [
-          "Unter Konsole → API-Tokens ein Token mit der Rolle operator erzeugen.",
-          "ATLAS_CONNECTOR_ATLAS_TOKEN in der Serverumgebung auf dessen Geheimnis setzen und neu starten.",
-          "Im Leistungsportal eine Bestellung aufgeben.",
-          "Unter Betrieb → Instanzen läuft die Auftragserfüllung über ihren ersten Schritt hinaus; ein genehmigungspflichtiger Auftrag erscheint im Postkorb der genehmigenden Person."
-        ]
       }
     }
   ]

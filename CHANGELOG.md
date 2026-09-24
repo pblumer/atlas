@@ -35,6 +35,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A task a model assigns to the person who ordered is now theirs to answer.** A
+  model assigns a task with an expression, and the variable it has for a person is
+  usually an id: an order carries its orderer and its recipient as principal ids
+  (`usr_…`). A task assigned `assignee="=orderer"` was created, listed under the order in the
+  shop — and refused to the orderer, because the check compared the assignee with
+  the username alone. Only operators and administrators could answer it. The check
+  now accepts either spelling, the username or the principal id, which is what the
+  mail directory already accepted when it decides whom a notification reaches: the
+  people a mail about a task reaches and the people who may act on it have to be
+  the same set. The shop names such an assignee by display name rather than by id.
+  The "Assigned to me" folder still matches usernames only.
+
 - **A decision service lost its decisions — three different ways — and a requirement
   drawn from one required nothing.** The box around a decision service is drawn as a
   container, which is what paints it beneath what it holds and what carries its
