@@ -253,6 +253,25 @@ function firstDecisionName(xml) {
   }
 }
 
+// modelName reads the name the model gives itself — the <definitions name>, which
+// is the file. That is the artifact: Atlas stores it under one handle, lists it as
+// one row and publishes it as one thing, and it may hold several decisions. Every
+// other path already names a model this way (the upload and the import both take
+// `modelName` off the server's read), and the editor's own header card shows it.
+// Only this one took the first decision's name instead, so the Explorer disagreed
+// with the editor about what the same file was called.
+function modelName(xml) {
+  try {
+    const doc = new DOMParser().parseFromString(xml, "application/xml");
+    const defs = doc.documentElement;
+    // Trimmed, so a name that is only whitespace falls through to the decision
+    // below rather than being sent as one — which is what the server does with it.
+    return ((defs && defs.getAttribute("name")) || "").trim();
+  } catch {
+    return "";
+  }
+}
+
 // firstDecisionId reads the decision *id* out of the DMN XML — the runtime
 // identity, which is what a business rule task binds to and what a deployment is
 // versioned by (ADR-0319). The name is what people read; the id is what the engine
@@ -912,10 +931,15 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   // every reference, every picker and the next Publish resolve — and clears the
   // draft, because a draft exists only while it differs from the model.
 
-  // currentXml is what dmn-js has now, plus the decision name read back out of it.
+  // currentXml is what dmn-js has now, plus the name read back out of it.
   async function currentXml() {
     const out = await modeler.saveXML({ format: true });
-    return { xml: out.xml, name: firstDecisionName(out.xml) || DEFAULT_DECISION_NAME };
+    // The model's own name, then a decision's while it has none: a model being
+    // drafted may not have been named yet, and something beats nothing in a listing.
+    return {
+      xml: out.xml,
+      name: modelName(out.xml) || firstDecisionName(out.xml) || DEFAULT_DECISION_NAME,
+    };
   }
 
   // busy runs one save at a time and reports it on the status line, so a second

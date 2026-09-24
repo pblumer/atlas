@@ -85,8 +85,8 @@ func TestADraftKeepsWorkThatDoesNotCompile(t *testing.T) {
 		t.Errorf("draft id = %q, want the %q prefix: a decision not in the model has no reference to be keyed by",
 			saved.ID, dmnDraftIDPrefix)
 	}
-	if saved.Name != "Bad" {
-		t.Errorf("draft name = %q, want the decision's own name read out of the XML", saved.Name)
+	if saved.Name != "broken" {
+		t.Errorf("draft name = %q, want the model's own name read out of the XML — the artifact is the file, not the decision inside it", saved.Name)
 	}
 	if saved.RefID != "" {
 		t.Errorf("draft refId = %q, want empty: this decision is not in the model", saved.RefID)
@@ -373,24 +373,45 @@ func TestADraftSurvivesARestart(t *testing.T) {
 	}
 }
 
-// decisionIdentity is what names a draft in the listing. It reads attributes, never
-// compiles, because the models it is asked about are the ones that do not.
-func TestDecisionIdentityReadsWhatItCan(t *testing.T) {
+// dmnModelName is what names a draft in the listing. The artifact is the file, so
+// the name is the file's — the <definitions name> — and not whichever decision the
+// model happens to list first: a model may hold several, and naming it after one of
+// them makes the Explorer disagree with the editor's own header and renames the
+// artifact when somebody reorders the model.
+//
+// It reads attributes, never compiles, because the models it is asked about are the
+// ones that do not.
+func TestDmnModelNameReadsWhatItCan(t *testing.T) {
 	cases := []struct {
 		name string
 		xml  string
 		want string
 	}{
-		{"the decision's name", validDMNModel, "Dish"},
-		{"a model that does not compile", brokenDMNModel, "Bad"},
-		{"no decision yet, so the model's name", `<definitions name="Draft"></definitions>`, "Draft"},
-		{"an unnamed decision falls back to its id", `<definitions name="M"><decision id="D_1"/></definitions>`, "D_1"},
+		{"the model's own name, not its first decision's", validDMNModel, "dish"},
+		{"a model that does not compile", brokenDMNModel, "broken"},
+		{"a model naming itself, with no decision yet", `<definitions name="Draft"></definitions>`, "Draft"},
+		{
+			"several decisions change nothing: the file is the artifact",
+			`<definitions name="MyTest"><decision id="d1" name="Decision 1"/><decision id="d2" name="Decision 2"/></definitions>`,
+			"MyTest",
+		},
+		{
+			"an unnamed model falls back to a decision's name",
+			`<definitions><decision id="d1" name="Decision 1"/></definitions>`,
+			"Decision 1",
+		},
+		{
+			"and then to that decision's id",
+			`<definitions><decision id="D_1"/></definitions>`,
+			"D_1",
+		},
+		{"nothing to read", `<definitions></definitions>`, ""},
 		{"not XML at all", "{}", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := decisionIdentity([]byte(tc.xml)); got != tc.want {
-				t.Errorf("decisionIdentity = %q, want %q", got, tc.want)
+			if got := dmnModelName([]byte(tc.xml)); got != tc.want {
+				t.Errorf("dmnModelName = %q, want %q", got, tc.want)
 			}
 		})
 	}
