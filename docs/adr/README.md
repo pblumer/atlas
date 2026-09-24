@@ -502,6 +502,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0414](0414-a-missing-translation-is-reported-not-refused.md) | A missing translation is reported, not refused | Accepted | Landed |
 | [0415](0415-the-portal-offers-the-catalogues-languages.md) | The portal offers the languages its catalogue is kept in | Accepted | Landed |
 | [0416](0416-the-shop-shows-an-orders-open-tasks.md) | The shop shows an order's open tasks, and the order records the instances that work it | Accepted | Landed |
+| [0417](0417-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md) | The shop and Tasks are one column wide on a narrow screen | Accepted | Landed |
 
 ## The two states of a record
 

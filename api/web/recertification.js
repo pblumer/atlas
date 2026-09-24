@@ -94,7 +94,7 @@ export async function viewRecertification({ api, toast, view, isSuperseded }) {
     no way to answer several at once: an attestation is worth exactly the reading
     behind it. A row you leave alone stays <i>unanswered</i> and is never recorded as
     certified.</p>
-    <div class="row" style="margin:0 0 10px">
+    <div class="row rct-filters" style="margin:0 0 10px">
       <label class="field inline" style="margin:0">Campaign
         <select id="rct-campaign" style="margin-left:6px"></select></label>
       <label class="field inline" style="margin:0 0 0 14px">
@@ -102,7 +102,7 @@ export async function viewRecertification({ api, toast, view, isSuperseded }) {
     </div>
     <div id="rct-summary" class="muted" style="margin:0 0 10px"></div>
     <div class="card" style="padding:0">
-      <table data-dt-key="recertification">
+      <table class="rct-table" data-dt-key="recertification">
         <thead><tr>
           <th>Person</th><th>Product</th><th>Where it came from</th>
           <th>Held for</th><th>Decision</th><th></th>
@@ -195,15 +195,17 @@ export async function viewRecertification({ api, toast, view, isSuperseded }) {
         // Not "pending", not "open", and no spinner: the word has to say that
         // nothing has been decided, because that is what will be recorded.
         : `<span class="muted">unanswered</span>`;
+      // Each cell names itself, because a narrow screen hides the column heads and
+      // shows a row as a card (ADR-0417).
       return `<tr>
-        <td style="font-family:ui-monospace,monospace">${esc(r.principal)}</td>
-        <td style="font-family:ui-monospace,monospace">${esc(r.itemId)}${
+        <td data-label="Person" style="font-family:ui-monospace,monospace">${esc(r.principal)}</td>
+        <td data-label="Product" style="font-family:ui-monospace,monospace">${esc(r.itemId)}${
           r.variantId ? ` <span class="muted">${esc(r.variantId)}</span>` : ""}${disputePill(r)}${endsPill(r)}</td>
-        <td>${originPill(r.origin)}${
+        <td data-label="Where it came from">${originPill(r.origin)}${
           r.orderId ? ` <span class="muted" style="font-size:12px">${esc(r.orderId)}</span>` : ""}</td>
-        <td data-sort="${r.since || 0}" title="Held since ${esc(fmtWhen(Math.floor((r.since || 0) / 1e9)))}">${
+        <td data-label="Held for" data-sort="${r.since || 0}" title="Held since ${esc(fmtWhen(Math.floor((r.since || 0) / 1e9)))}">${
           esc(heldSince(r.since))}</td>
-        <td>${answer}</td>
+        <td data-label="Decision">${answer}</td>
         <td class="row-actions">${acts}</td>
       </tr>`;
     }).join("");

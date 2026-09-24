@@ -14,6 +14,25 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The shop works on a phone.** Below 860px every view of the shop is one column
+  wide. The catalogue shows the column you have reached, and a stepper above it goes
+  back and names the path so far. The basket stacks each offering over its own
+  services and options. My orders is a list of cards, with each position's tasks,
+  and the form to answer one, at the card's width. The buttons grow to a fingertip's
+  size. A wide screen keeps its layout. Before this, a phone showed about one and a
+  half of the catalogue's four columns, and an order's tasks sat past the right edge
+  of the screen
+  ([ADR-0417](docs/adr/0417-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md)).
+
+- **Tasks works on a phone.** Below the same 860px the inbox and Start show the list
+  or the open task, not both, and a task opens with a button back to the list. The
+  folders become a row of chips, and a task's fields put their label above the value.
+  An access review row is a card with its two answers under it. The top bar keeps its
+  icons on screen and scrolls the view names instead. Between 861px and 1180px the
+  inbox keeps its three panes at narrower widths. Before this, a phone showed the
+  folders and part of the list, and the task itself was past the right edge
+  ([ADR-0417](docs/adr/0417-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md)).
+
 - **A decision service's name can be moved out of the way, and the fold switch is
   in the box.** DMN requires the name inside the shape and says nothing about where,
   and its own figures disagree: one draws it centred at the top, three at the top
@@ -61,6 +80,38 @@ _Changed_ / _Removed_ for each version.
   therefore holds for gestures nobody thought of, including ones added later. A
   newly drawn service still starts at the very back, behind any service already
   there, so that two overlapping boxes do not hide each other's decisions.
+
+- **Access review and Reconciliation open again.** Both pages showed an error card,
+  "gen is not defined", instead of their rows. The router handed each a check
+  for whether a later navigation had replaced it, over a value neither route had
+  set, and the page's first use of that check threw. Both routes now set it, as the
+  routes beside them already did.
+
+- **A task's checkbox in the shop is a checkbox again.** A task answered inside an
+  order row drew its checkbox as wide as the table cell, with the label pushed off the
+  end. The orders table's field rule reached the task form's inputs too; it now styles
+  the filter row only.
+
+- **Withdrawing an order stops the processes already working it.** A cancelled
+  position's approval was cancelled with it, and nothing else. But a position reads
+  pending until its provisioning reports, so it can be withdrawn while that process
+  is running — and its step stayed open under the cancelled order, in somebody's
+  inbox and in the shop ("enter the address for the new account" beneath a line that
+  says Cancelled). Withdrawing an order, or one position of it, now cancels every
+  still-running instance the order recorded on that position. Cancelling stops the
+  work; what the process already did in a target system is not undone.
+
+- **A task a model assigns to the person who ordered is now theirs to answer.** A
+  model assigns a task with an expression, and the variable it has for a person is
+  usually an id: an order carries its orderer and its recipient as principal ids
+  (`usr_…`). A task assigned `assignee="=orderer"` was created, listed under the order in the
+  shop — and refused to the orderer, because the check compared the assignee with
+  the username alone. Only operators and administrators could answer it. The check
+  now accepts either spelling, the username or the principal id, which is what the
+  mail directory already accepted when it decides whom a notification reaches: the
+  people a mail about a task reaches and the people who may act on it have to be
+  the same set. The shop names such an assignee by display name rather than by id.
+  The "Assigned to me" folder still matches usernames only.
 
 - **Moving a decision service hid the arrows crossing it, and left its name behind.**
   The box around a decision service is a background — arrows are meant to cross its

@@ -294,15 +294,16 @@ func (s *Server) mayWorkShopTask(p *httpapi.Principal, tr taskResp) bool {
 	return s.holdsTask(p, tr.Assignee, tr.CandidateGroups)
 }
 
-// personName is a username as a person reads it: the display name where the
-// account has one, the username where it has not.
-func (s *Server) personName(username string) string {
+// personName is an assignee as a person reads it: the display name where the
+// account has one, the username where it has not. An assignee may be a principal
+// id as well as a username ([Server.holdsTask]), and an id is resolved the same way.
+func (s *Server) personName(assignee string) string {
 	if s.users != nil {
-		if u, ok, err := s.users.byUsername(username); err == nil && ok && u.DisplayName != "" {
-			return u.DisplayName
+		if u, ok, err := s.users.byUsername(assignee); err == nil && ok {
+			return firstNonEmpty(u.DisplayName, assignee)
 		}
 	}
-	return username
+	return s.principalName(assignee)
 }
 
 // principalName is a principal id as a person reads it: the account's display
