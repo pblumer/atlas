@@ -56,6 +56,20 @@ _Changed_ / _Removed_ for each version.
   the same set. The shop names such an assignee by display name rather than by id.
   The "Assigned to me" folder still matches usernames only.
 
+- **A decision service drawn around an existing arrow hid it.** The box around a
+  decision service is a background: DMN encloses the decisions it names with it, and
+  arrows are meant to cross its border — which only reads as a diagram if the border
+  is behind them. The library underneath draws in the order things were added, so a
+  box drawn *after* an arrow was drawn on top of it, and the arrow simply vanished
+  inside the box with nothing on the canvas to say where it had gone.
+
+  Opening a stored file was never affected, because a stored file is read in an order
+  that puts every decision service first. Only drawing one by hand was — which is the
+  case where it is hardest to tell whether the editor lost the arrow or you did.
+
+  A newly drawn decision service now goes behind what is already there. What it holds
+  stays in front of it, because its decisions belong to it.
+
 - **A decision service lost its decisions — three different ways — and a requirement
   drawn from one required nothing.** The box around a decision service is drawn as a
   container, which is what paints it beneath what it holds and what carries its

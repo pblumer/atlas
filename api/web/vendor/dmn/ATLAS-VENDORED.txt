@@ -1,7 +1,7 @@
 dmn-modeler.js is a combined, pre-built bundle (global: window.AtlasDmn) of:
 
   - pblumer/dmn-js@17.10.2
-    commit: f618000f53f0875f21fb2673f6e587b9f8a56b79
+    commit: 06df65d4d91096d1ebc5a3c7b65fd52d3049cfaa
   - pblumer/dmn-moddle
     commit: ac76928df99382c36833d9300fd98acc604dc673
   - dmn-js-properties-panel@3.11.1
@@ -60,6 +60,17 @@ undone. And deleting the service deleted its decisions, their logic and the
 requirements between them out of the DRG. Each member now keeps the parent it
 was folded out of, the record travels with the box, and the members leave it
 before it goes.
+
+A Decision Service drawn by hand is drawn behind what it encloses. The box is a
+background — §6.2.5 has it enclosing the decisions it names, and the paragraph
+under Figure 6-9 has requirements crossing its border, which only reads as a
+diagram if the border is behind them. diagram-js paints in document order and
+appends what is added last, so an author who drew the requirement first and the
+box afterwards got a box laid over that requirement and an arrow that simply
+disappeared inside it. Importing was never affected, because DrdImporter adds
+every Decision Service before the rest of the DRG; only drawing one by hand was.
+A new service now goes to the front of its siblings, which is the back of the
+picture, and its own members stay above it because they are its children.
 
 A requirement drawn from a Decision Service now says what it requires. The
 requirement table gives "Decision Service to Decision" and "Decision Service to
@@ -158,4 +169,4 @@ icon font from the pinned fork distro, plus properties-panel.css from
 @bpmn-io/properties-panel@3.48.0.
 
 SHA-256 dmn-modeler.js:
-4596d50143ad495c6ae2c2ccaab75fe82ac7911f511a4efb0604eda0b8f78514
+754436f7309d25a6cbbcdcfd251ee738a7b378f06c2aa4e0f3bedaeaeacc8c79

@@ -243,6 +243,54 @@ test("a folded service takes its decisions with it when it is dragged",
 });
 
 
+test("a service drawn after a requirement goes behind it, not over it",
+  async ({ page }) => {
+
+    const state = await run(page, async (viewer) => {
+      const registry = viewer.get("elementRegistry");
+
+      // querySelectorAll answers in document order, which is paint order: later is
+      // on top. A shape drawn inside another's group counts as over it, which is
+      // what a member of a decision service is.
+      const paintsOver = (a, b) => {
+        const drawn = Array.from(
+          viewer.get("canvas")._svg.querySelectorAll(".djs-element"));
+
+        return drawn.indexOf(registry.getGraphics(a)) >
+          drawn.indexOf(registry.getGraphics(b));
+      };
+
+      // the author draws the box afterwards, which is the order a diagram is
+      // usually built in
+      const service = viewer.get("elementFactory").createShape({
+        type: "dmn:DecisionService" });
+
+      viewer.get("modeling").createShape(
+        service, { x: 700, y: 400, width: 300, height: 240 },
+        viewer.get("canvas").getRootElement());
+
+      viewer.get("modeling").moveShape(
+        registry.get("Decision_Outside"), { x: 0, y: 0 }, service);
+
+      return {
+        overRequirement: paintsOver(service.id, "IR_Output"),
+        overDecision: paintsOver(service.id, "Decision_Output"),
+        underItsMember: paintsOver("Decision_Outside", service.id),
+      };
+    });
+
+    // The box is a background: §6.2.5 encloses the decisions it names and Figure 6-9
+    // has requirements crossing its border, which only reads as a diagram if the
+    // border is behind them. Drawn last, it used to be painted last, and the arrow
+    // simply disappeared inside it.
+    expect(state.overRequirement).toBe(false);
+    expect(state.overDecision).toBe(false);
+
+    // and what it does hold is still drawn in it
+    expect(state.underItsMember).toBe(true);
+  });
+
+
 test("deleting a service leaves the decisions it was drawn around", async ({ page }) => {
 
   const state = await run(page, async (viewer, modeler) => {
