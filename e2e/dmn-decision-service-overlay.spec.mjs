@@ -388,3 +388,140 @@ test("the name can be moved, and comes back as a DMNLabel", async ({ page }) => 
   expect(state.saved).toMatch(
     /<dc:Bounds height="18" width="90" x="300" y="182" \/>/);
 });
+
+
+test("a service dragged over a requirement still lets it through",
+  async ({ page }) => {
+
+    const state = await run(page, async (viewer) => {
+      const registry = viewer.get("elementRegistry");
+      const modeling = viewer.get("modeling");
+
+      const paintsOver = (a, b) => {
+        const drawn = Array.from(
+          viewer.get("canvas")._svg.querySelectorAll(".djs-element"));
+
+        return drawn.indexOf(registry.getGraphics(a)) >
+          drawn.indexOf(registry.getGraphics(b));
+      };
+
+      // A requirement that crosses the border: its source is outside the box and
+      // its target is a member, so it belongs to the root and the box can cover it.
+      // The requirement wholly inside the service cannot be covered — it is drawn
+      // in the box's own group — which is why this one has to be drawn first.
+      modeling.connect(
+        registry.get("Decision_Outside"),
+        registry.get("Decision_Encapsulated"),
+        { type: "dmn:InformationRequirement" },
+      );
+
+      const service = registry.get("Service_Approval");
+
+      const before = paintsOver(service.id, "Decision_Outside");
+
+      modeling.moveShape(service, { x: 20, y: 0 });
+
+      return {
+        before,
+        after: paintsOver(service.id, "Decision_Outside"),
+        crossing: service.parent.children
+          .filter((child) => child.waypoints).map((child) => child.id),
+      };
+    });
+
+    // diagram-js moves a shape by taking it out of its parent's children and putting
+    // it back, and putting it back with no index asked for means at the end. A
+    // stored diagram therefore drew correctly right up to the moment the author
+    // nudged the box, at which point the arrow crossing its border disappeared
+    // underneath it.
+    expect(state.before).toBe(false);
+    expect(state.after).toBe(false);
+
+    // the negative control: there is a crossing connection at root level for the box
+    // to have covered
+    expect(state.crossing.length).toBeGreaterThan(0);
+  });
+
+
+test("the name stays in the box when the box is moved and resized",
+  async ({ page }) => {
+
+    const state = await run(page, async (viewer) => {
+      const registry = viewer.get("elementRegistry");
+      const modeling = viewer.get("modeling");
+      const service = registry.get("Service_Approval");
+
+      const label = () => {
+        const bounds = service.businessObject.di.get("label").get("bounds");
+
+        return {
+          x: bounds.x, y: bounds.y,
+          width: bounds.width, height: bounds.height,
+        };
+      };
+
+      // where the renderer draws the name: the group is already at the shape's
+      // origin, so this translation is what puts the text outside the box
+      const drawnAt = () => {
+        const drawn = registry.getGraphics(service)
+          .querySelector(".djs-label");
+
+        return drawn && drawn.getAttribute("transform");
+      };
+
+      // the box is at 100,80 and 300x240, so 60 across and 15 down from its corner
+      modeling.updateDecisionServiceLabelBounds(service, {
+        x: 160, y: 95, width: 80, height: 20,
+      });
+
+      modeling.moveShape(service, { x: 150, y: 60 });
+
+      const moved = { label: label(), drawnAt: drawnAt() };
+
+      modeling.resizeShape(service, {
+        x: 250, y: 140, width: 120, height: 100,
+      });
+
+      const box = {
+        x: service.x, y: service.y,
+        width: service.width, height: service.height,
+      };
+
+      // and what diagram-js places the context pad from: the element's rendered
+      // bounding box, which a name drawn outside the box swells to cover both
+      const rendered = registry.getGraphics(service).getBoundingClientRect();
+
+      return {
+        moved,
+        resized: { label: label(), box },
+        rendered: {
+          width: Math.round(rendered.width),
+          height: Math.round(rendered.height),
+        },
+      };
+    });
+
+    expect(state.shipped.labelCommand,
+      "the shipped bundle can move a decision service's name — if not, it was built "
+      + "from a commit before it, whatever ATLAS-VENDORED.txt says").toBe(true);
+
+    // DMNDI records a DMNLabel's bounds in diagram coordinates, and nothing kept
+    // them in step with the shape: the name stayed put while the box travelled, and
+    // was drawn further outside it with every drag.
+    expect(state.moved.label).toEqual({ x: 310, y: 155, width: 80, height: 20 });
+    expect(state.moved.drawnAt).toBe("translate(60,15)");
+
+    // and a box that shrinks past the name pulls it back in rather than leaving it
+    // outside
+    const { label, box } = state.resized;
+
+    expect(label.x).toBeGreaterThanOrEqual(box.x);
+    expect(label.x + label.width).toBeLessThanOrEqual(box.x + box.width);
+    expect(label.y).toBeGreaterThanOrEqual(box.y);
+    expect(label.y + label.height).toBeLessThanOrEqual(box.y + box.height);
+
+    // which is also what puts the context pad back beside the service: diagram-js
+    // reads the element's drawn box, not its bounds, so a stray name moved the pad
+    // with it
+    expect(state.rendered).toEqual({ width: box.width, height: box.height });
+  });
