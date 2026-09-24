@@ -12,7 +12,57 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **A decision service's name can be moved out of the way, and the fold switch is
+  in the box.** DMN requires the name inside the shape and says nothing about where,
+  and its own figures disagree: one draws it centred at the top, three at the top
+  left. Whichever corner an editor picks is wrong for some diagram — the name lands
+  on a decision, or on an arrow crossing the border. So it starts at the top left
+  and a grab handle over it drags it anywhere inside the box, above the dividing
+  line, where DMN puts the name alongside the decisions the service publishes.
+
+  Where you put it is written to the place DMN keeps it, the shape's label bounds,
+  so it survives a save and means the same thing to another tool. Nothing is written
+  until you move it. Those bounds were already read and already ignored as a
+  position, so a file that arrived with the name placed drew it in the corner
+  anyway; now it is drawn where it says.
+
+  Folding a decision service away moved off the context menu and into the box: a
+  plus at the bottom edge while the definition is folded away, a minus while it is
+  shown, in the same place either way — where a collapsed sub-process carries its
+  own, and where a reader looks for it.
+
 ### Fixed
+
+- **A decision service lost its decisions — three different ways — and a requirement
+  drawn from one required nothing.** The box around a decision service is drawn as a
+  container, which is what paints it beneath what it holds and what carries its
+  decisions when you move it. The library underneath reads a container as an owner,
+  and DMN says the opposite: *"decision services are defined as overlays and
+  therefore do not encapsulate the decisions within them"* (DMN 1.5 §6.2.5). Three
+  places took the owner reading literally.
+
+  Folding a service and unfolding it again handed its decisions back to the diagram
+  instead of to the box. The box was then a rectangle standing behind them rather
+  than one holding them, and the next drag moved it and left every decision where it
+  was — which is what a reader reported, and what the screenshots showed. Dragging a
+  *folded* service took nothing with it, because a folded service holds nothing on
+  the canvas: its decisions, the edges between them and the size and divider it is
+  restored to are parked in a record. Unfolding put all of it back where it was
+  folded, so the drag was silently undone. And deleting a service deleted its
+  decisions, their logic and the requirements between them out of the model: a
+  four-decision file came back holding two.
+
+  Separately, the two ways a decision service is invoked — by a decision, and by a
+  business knowledge model — were drawable and produced nothing. The reference was
+  written under a property name nobody declared, so the knowledge requirement was
+  saved without a target and required nothing at all.
+
+  Each decision now keeps the box it was folded out of, a folded service takes its
+  record along and gives it back where you dropped it, deleting a service leaves
+  every decision where it was drawn, and a requirement drawn from a service names
+  it.
 
 - **A decision was listed under the name of whichever decision happened to come
   first in its file, not under the name of the file.** A DMN model is one artifact:

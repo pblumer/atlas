@@ -1,0 +1,18 @@
+{
+  "tags": ["Modeler", "Decisions"],
+  "title": {
+    "en": "Move a decision service's name, and fold it from the box",
+    "de": "Namen eines Decision Service verschieben, Einklappen direkt in der Box"
+  },
+  "summary": {
+    "en": "DMN requires a decision service's name inside the shape and says nothing about where — and its own figures disagree, one drawing it centred at the top and three at the top left. Whichever corner an editor picks is wrong for some diagram: the name lands on a decision, or on an arrow crossing the border. So it starts at the top left, and a grab handle over it drags it anywhere inside the box, above the dividing line — where DMN puts the name, alongside the decisions the service publishes. Where you put it is stored as the shape's label bounds, DMN's own place for it, so it survives a save and means the same thing to another tool; nothing is written until you move it. Folding the service away has moved too: from the context menu into the box, as a plus at the bottom edge while the definition is hidden and a minus while it is shown, in the same place either way.",
+    "de": "DMN verlangt den Namen eines Decision Service innerhalb der Form und sagt nichts darüber, wo — und die eigenen Abbildungen widersprechen sich: eine zeichnet ihn oben mittig, drei oben links. Welche Ecke ein Editor auch wählt, für irgendein Diagramm ist sie falsch: Der Name landet auf einer Decision oder auf einem Pfeil, der den Rand kreuzt. Er beginnt deshalb oben links, und ein Griff über dem Namen zieht ihn an jede Stelle innerhalb der Box, oberhalb der Trennlinie — dorthin, wo DMN den Namen zusammen mit den veröffentlichten Decisions verortet. Die gewählte Stelle wird als Label-Bounds der Form gespeichert, also dort, wo DMN sie vorsieht; sie übersteht das Speichern und bedeutet für ein anderes Werkzeug dasselbe. Geschrieben wird erst, wenn Sie den Namen bewegen. Auch das Einklappen ist umgezogen: vom Kontextmenü in die Box, als Plus am unteren Rand bei verborgener Definition und als Minus bei sichtbarer — beides an derselben Stelle."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

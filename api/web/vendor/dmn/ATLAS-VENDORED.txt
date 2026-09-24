@@ -1,7 +1,7 @@
 dmn-modeler.js is a combined, pre-built bundle (global: window.AtlasDmn) of:
 
   - pblumer/dmn-js@17.10.2
-    commit: 1cd07fe8b62d249f369ad3ed6f046f6233180046
+    commit: f618000f53f0875f21fb2673f6e587b9f8a56b79
   - pblumer/dmn-moddle
     commit: ac76928df99382c36833d9300fd98acc604dc673
   - dmn-js-properties-panel@3.11.1
@@ -24,8 +24,11 @@ its DMNDI label gives it rather than its own name. The fork holds all of that
 against a notation table of its own, one row per element and per requirement,
 read off the drawn geometry.
 
-It folds a Decision Service away and back (DMN 1.5 §6.2.4), from the context pad
-and as one undoable step. A fold takes the members' depiction out of the diagram
+It folds a Decision Service away and back (DMN 1.5 §6.2.4), from a switch drawn
+inside the box at its bottom edge — a plus while the definition is folded away, a
+minus while it is drawn, laid over the marker the renderer paints on a folded
+service, the way a collapsed sub-process carries its own — and as one undoable
+step. A fold takes the members' depiction out of the diagram
 and leaves the model alone: the decisions stay in drgElement and stay editable
 through the view list, which is built from the DRG rather than from the diagram.
 Only what is drawn between members goes with them; a requirement that crosses
@@ -42,6 +45,41 @@ into a 180x100 box — and after a reload it is laid out afresh. Alongside it, a
 collapsed service is no longer reclassified from geometry: there is no box to
 read compartments off, and reading anyway rewrote every output decision into an
 encapsulated one, leaving a service that publishes nothing.
+
+A Decision Service is drawn as a container, so the box paints beneath what it
+holds and carries its members when it is moved. diagram-js reads containment as
+ownership and DMN does not — "decision services are defined as overlays and
+therefore do not encapsulate the decisions within them" (§6.2.5, under Figure
+6-9) — and three places took the container reading literally. Unfolding handed
+the members to the root, which left a container with no children: the next drag
+moved the box and every decision stayed where it was. A folded service took
+nothing with it, because its decisions, the edges between them and the bounds
+and divider it is restored to live in a record rather than on the canvas, so
+unfolding put all of it back where it was folded and the drag was silently
+undone. And deleting the service deleted its decisions, their logic and the
+requirements between them out of the DRG. Each member now keeps the parent it
+was folded out of, the record travels with the box, and the members leave it
+before it goes.
+
+A requirement drawn from a Decision Service now says what it requires. The
+requirement table gives "Decision Service to Decision" and "Decision Service to
+Business Knowledge Model" a row each, expanded and collapsed; both were
+drawable, and both produced a KnowledgeRequirement with no requiredKnowledge at
+all, because the reference name was derived from a list of source types that has
+no Decision Service in it. A Decision Service is an Invocable, which is what
+KnowledgeRequirement#requiredKnowledge is typed to, so it and a Business
+Knowledge Model are one case.
+
+The name of a Decision Service can be moved. §6.2.5 requires it inside the shape
+and says nothing about where, and the figures disagree — 6-6 draws it centred at
+the top, 6-7, 6-8 and 6-9 at the top left — so the default is the top left and a
+grab handle drags it anywhere inside the box, above the divider, since the upper
+part holds the output decisions and the Name. A drag writes the DMNShape's
+DMNLabel bounds, which is DMN's own place for it: a DMNLabel is a di:Shape, so it
+has Bounds, and §6.2.5 already gives that label the last word over the name.
+Those bounds were read before and ignored as a position — the text layout takes a
+box's size and lays the name out from the group's origin, never reading its x and
+y, so every DMNLabel drew its name in the top left at the label's width.
 
 The dmn-moddle pin carries one correction of its own. DMN 1.5's
 dmndi:useAlternativeInputDataShape asks for Input Data to be drawn as the paper
@@ -91,12 +129,12 @@ the two lockfiles determine the tree, not the Node that runs them):
 needs a browser: set CHROME_BIN. Chromium refuses to start as root without
 `--no-sandbox`, and karma passes no flags of its own, so point CHROME_BIN at a
 one-line wrapper that adds it rather than at the binary. With that, build-distro
-completes outright, smoke test included. It has also been seen failing that same
-last step with `spawnSync karma ENOENT`, in an environment where the binary was
-not resolvable from a subprocess; that cause was never established. Either way
-the `build` and `distro` steps run first and do produce assets/, so the step is
-worth running even when it ends red: compare assets/ against what is committed
-rather than reading the exit code.
+completes outright, smoke test included — it did for this bundle. It has also
+been seen failing that same last step with `spawnSync karma ENOENT`, in an
+environment where the binary was not resolvable from a subprocess; that cause was
+never established. Either way the `build` and `distro` steps run first and do
+produce assets/, so the step is worth running even when it ends red: compare
+assets/ against what is committed rather than reading the exit code.
 
 Two details of that recipe are load-bearing:
 
@@ -120,4 +158,4 @@ icon font from the pinned fork distro, plus properties-panel.css from
 @bpmn-io/properties-panel@3.48.0.
 
 SHA-256 dmn-modeler.js:
-2299ab6607cf8339be832fe3573154970bc8bcf7954dc3b94cf6ffa2cac9fe6c
+4596d50143ad495c6ae2c2ccaab75fe82ac7911f511a4efb0604eda0b8f78514
