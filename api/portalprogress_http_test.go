@@ -111,7 +111,7 @@ func progressOf(t *testing.T, c *http.Client, ts *httptest.Server, orderID, posi
 	// and an unescaped one would be a fragment: the server would never see the
 	// variant half at all (ADR-0384).
 	code, body := cReq(t, c, ts, "GET",
-		"/api/v1/portal/orders/"+orderID+"/lines/"+url.PathEscape(position)+"/progress", "")
+		"/api/v1/shop/orders/"+orderID+"/lines/"+url.PathEscape(position)+"/progress", "")
 	var out progressResp
 	if code == http.StatusOK {
 		if err := json.Unmarshal(body, &out); err != nil {

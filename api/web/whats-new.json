@@ -60,6 +60,74 @@
       }
     },
     {
+      "id": "the-portal-s-process-link-asked-a-search-that-did-not-come-b",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "\"View the process\" in the portal opens the instance again",
+        "de": "„Prozess ansehen“ im Portal öffnet die Instanz wieder"
+      },
+      "summary": {
+        "en": "Pressing \"View the process\" on an order wrote \"Asking …\" under it and nothing else happened. The link searched every instance on the server for the order, and on a larger installation that search did not come back. It now asks the fulfilment process's own versions, newest first, which reads one instance per order and answers at once; an order placed before the last redeploy is still found. If the server does not answer within twenty seconds, the portal says so beside the order instead of waiting for ever.",
+        "de": "Beim Drücken von „Prozess ansehen“ auf einem Auftrag erschien darunter „Wird abgefragt …“, und sonst geschah nichts. Der Link durchsuchte alle Instanzen auf dem Server nach dem Auftrag, und auf einer grösseren Installation kam diese Suche nicht zurück. Jetzt fragt er die Versionen des Erfüllungsprozesses ab, die neueste zuerst; das liest eine Instanz je Auftrag und antwortet sofort. Ein Auftrag, der vor dem letzten Deployment des Prozesses aufgegeben wurde, wird weiterhin gefunden. Antwortet der Server nicht innert zwanzig Sekunden, sagt das Portal dies neben dem Auftrag, statt endlos zu warten."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue",
+        "Shop"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the portal as an operator and go to \"My orders\".",
+          "Press \"View the process\" on an order.",
+          "The instance fulfilling that order opens in Operations."
+        ],
+        "de": [
+          "Das Portal als Operator öffnen und «Meine Aufträge» wählen.",
+          "Bei einem Auftrag „Prozess ansehen“ drücken.",
+          "Die Instanz, die diesen Auftrag erfüllt, öffnet sich in Operations."
+        ]
+      }
+    },
+    {
+      "id": "the-basket-said-what-was-ordered-and-not-what-belonged-to-wh",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The basket shows which service belongs to which offering",
+        "de": "Der Warenkorb zeigt, welcher Service zu welcher Marktleistung gehört"
+      },
+      "summary": {
+        "en": "The basket drew three columns — offering, service, optional — each a list stacked on its own, so a row in one column had nothing to do with the row beside it. With two offerings in the basket, a laptop's hardware could sit beside a monitor and the laptop's sleeve on the monitor's line. Now every offering is one line: its services and its options are the cells of that line, the next offering starts below the previous one's last service, and a rule under each line tells two offerings apart. A part two products share lands under whichever of them is in the basket.",
+        "de": "Der Warenkorb zeichnete drei Spalten — Marktleistung, Service, Optional — jede eine Liste für sich, sodass eine Zeile in der einen Spalte nichts mit der Zeile daneben zu tun hatte. Lagen zwei Marktleistungen im Korb, konnte die Hardware eines Laptops neben einem Monitor stehen und die Laptophülle auf der Zeile des Monitors. Jetzt ist jede Marktleistung eine Zeile: ihre Services und ihre Optionen sind die Zellen dieser Zeile, die nächste Marktleistung beginnt unterhalb des letzten Services der vorigen, und eine Linie unter jeder Zeile trennt zwei Marktleistungen. Ein Teil, das zwei Produkte gemeinsam haben, steht unter demjenigen, das im Korb liegt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue",
+        "Shop"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the portal and add two offerings to the basket, one of them with services and options.",
+          "Open the basket.",
+          "Each offering is one line, with its services and options beside it."
+        ],
+        "de": [
+          "Das Portal öffnen und zwei Marktleistungen in den Warenkorb legen, eine davon mit Services und Optionen.",
+          "Den Warenkorb öffnen.",
+          "Jede Marktleistung ist eine Zeile, ihre Services und Optionen stehen daneben."
+        ]
+      }
+    },
+    {
       "id": "a-decision-was-listed-under-the-name-of-whichever-decision-h",
       "version": "Unreleased",
       "date": null,
@@ -107,7 +175,7 @@
       },
       "tags": [
         "Service catalogue",
-        "Portal"
+        "Shop"
       ],
       "tutorial": {
         "en": [
@@ -143,7 +211,7 @@
       },
       "tags": [
         "Service catalogue",
-        "Portal"
+        "Shop"
       ],
       "tutorial": {
         "en": [
@@ -325,74 +393,6 @@
           "ATLAS_CONNECTOR_ATLAS_TOKEN in der Serverumgebung auf dessen Geheimnis setzen und neu starten.",
           "Im Leistungsportal eine Bestellung aufgeben.",
           "Unter Betrieb → Instanzen läuft die Auftragserfüllung über ihren ersten Schritt hinaus; ein genehmigungspflichtiger Auftrag erscheint im Postkorb der genehmigenden Person."
-        ]
-      }
-    },
-    {
-      "id": "saving-a-product-said-apibytes-is-not-defined-and-quietly-le",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Saving a product works again — and a new product is offered right away",
-        "de": "Ein Produkt lässt sich wieder speichern — und wird sofort angeboten"
-      },
-      "summary": {
-        "en": "Pressing Save on a product answered \"apiBytes is not defined\". The message named the picture, and the picture was the least of it: the product record was already written by then, and the step the error skipped was the one that tells the catalogue to offer a new product. So the save ended with the product stored, the catalogue unchanged, and a product nothing offers — which appears on no screen its maintainer has, while the message sent them looking at the image. Saving works again, and the order of the three writes was turned around: the record, then the offering, then the picture. A picture that fails now costs a picture, which is one upload and visibly missing.",
-        "de": "Beim Speichern eines Produktes erschien die Meldung „apiBytes is not defined“. Die Meldung nannte das Bild, und das Bild war das Geringste: der Produktdatensatz war zu diesem Zeitpunkt bereits geschrieben, und übersprungen wurde jener Schritt, der dem Katalog aufträgt, ein neues Produkt anzubieten. Das Speichern endete damit mit einem abgelegten Produkt, einem unveränderten Katalog und einem Produkt, das niemand anbietet — auf keinem Bildschirm der betreuenden Person sichtbar, während die Meldung sie auf das Bild schauen liess. Das Speichern funktioniert wieder, und die Reihenfolge der drei Schreibvorgänge wurde umgestellt: erst der Datensatz, dann das Angebot, dann das Bild. Ein fehlgeschlagenes Bild kostet nun ein Bild — einen Upload, und sichtbar fehlend."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Service catalogue"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a catalogue under Catalogue and press \"New product\".",
-          "Fill in the id and the name, and choose a picture.",
-          "Press Save — the product is stored and the catalogue offers it.",
-          "Check the product list: the new product is in it."
-        ],
-        "de": [
-          "Unter Katalog einen Katalog öffnen und „Neues Produkt“ drücken.",
-          "Id und Bezeichnung ausfüllen und ein Bild wählen.",
-          "Speichern drücken — das Produkt wird abgelegt und vom Katalog angeboten.",
-          "In der Produktliste nachsehen: das neue Produkt steht darin."
-        ]
-      }
-    },
-    {
-      "id": "the-portal-s-link-into-an-order-s-process-answered-where-nob",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "\"View the process\" answers next to the order it was pressed on",
-        "de": "„Prozess ansehen“ antwortet neben dem Auftrag, bei dem gedrückt wurde"
-      },
-      "summary": {
-        "en": "The link on an order row opens the process fulfilling it. When there is no process to open — none started yet, or none left — it used to say so above the table, out of sight of anybody who pressed a button in a row further down: the page appeared to do nothing, which is how it was reported. The answer is now under the button that asked for it. One of those two cases was not even said: where an instance survives only in the exported event log, the link followed it into a replay view that could only report a failure to load. That case now has words of its own, on the portal, naming the one cause the server is certain of.",
-        "de": "Der Verweis auf einer Auftragszeile öffnet den Prozess, der den Auftrag erfüllt. Gab es keinen zu öffnenden Prozess — noch keiner gestartet oder keiner mehr vorhanden —, stand die Auskunft bisher oberhalb der Tabelle und damit ausserhalb des Blickfelds derjenigen, die weiter unten eine Schaltfläche gedrückt hatten: die Seite schien nichts zu tun, und so wurde es gemeldet. Die Antwort steht nun unter der Schaltfläche, die sie ausgelöst hat. Einer der beiden Fälle wurde überdies gar nicht benannt: liegt eine Instanz nur noch im ausgelagerten Ereignisprotokoll, folgte der Verweis ihr in eine Ansicht, die bloss einen Ladefehler melden konnte. Dieser Fall hat nun eigene Worte im Portal und nennt jene Ursache, derer der Server sicher ist."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Self-service portal"
-      ],
-      "tutorial": {
-        "en": [
-          "Open \"My orders\" in the service portal.",
-          "Press \"View the process\" on an order — the running process opens.",
-          "On an order whose process has finished, the reason appears under the button."
-        ],
-        "de": [
-          "Im Leistungsportal „Meine Aufträge“ öffnen.",
-          "Bei einem Auftrag „Prozess ansehen“ drücken — der laufende Prozess öffnet sich.",
-          "Bei einem Auftrag ohne laufenden Prozess erscheint der Grund unter der Schaltfläche."
         ]
       }
     }

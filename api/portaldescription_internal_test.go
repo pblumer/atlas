@@ -11,7 +11,7 @@ import (
 // reader's language was required to be a key on the product, and a missing key
 // meant no description at all — not a shorter one, none. That was written
 // deliberately, on a reading of the publish rule that does not hold, and the
-// note in portal.js said so in as many words.
+// note in shop.js said so in as many words.
 //
 // The two language lists are not the same list. Publishing demands a description
 // in every language the CATALOGUE declares (api/catalog/publish.go). The portal
@@ -25,7 +25,7 @@ import (
 // The defect this file exists for. A strict lookup is one `[locale]` with nothing
 // after it, and the giveaway is the function reaching no other value.
 func TestADescriptionIsShownEvenWhereTheCatalogueDoesNotSpeakThePagesLanguage(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function descriptionOf(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function descriptionOf(", "\n}")
 	if !strings.Contains(body, "Object.values(") {
 		t.Error("descriptionOf reaches only the keys it names, so a catalogue that " +
 			"declares neither of this page's locales shows no description at all — " +
@@ -41,7 +41,7 @@ func TestADescriptionIsShownEvenWhereTheCatalogueDoesNotSpeakThePagesLanguage(t 
 // do, so the locale is asked for before anything else — which is the whole of
 // what "in der entsprechenden Sprache" means once more than one exists.
 func TestTheReadersOwnLanguageIsPreferredOverTheRest(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function descriptionOf(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function descriptionOf(", "\n}")
 	// Through pickText, which selects by the tag's LANGUAGE rather than by the
 	// whole tag — a catalogue kept in de-DE is German to a reader on de, and a
 	// lookup for the whole tag would find nothing (ADR-0413, as amended).
@@ -66,7 +66,7 @@ func TestTheReadersOwnLanguageIsPreferredOverTheRest(t *testing.T) {
 // reached — so the reader gets an empty paragraph where the panel promised an
 // explanation, which reads as something that failed to load.
 func TestAnEmptyDescriptionIsNotADescription(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function descriptionOf(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function descriptionOf(", "\n}")
 	if !strings.Contains(body, "trim()") {
 		t.Error("descriptionOf does not measure a candidate before returning it, so a " +
 			"blank string in the reader's language hides the one that is written")
@@ -84,7 +84,7 @@ func TestAnEmptyDescriptionIsNotADescription(t *testing.T) {
 // one left in its place is a gap that reads as something that failed to load
 // rather than as a product nobody described.
 func TestThePanelActuallyDrawsTheDescriptionAndThePicture(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function infoPanel(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function infoPanel(", "\n}")
 	if !strings.Contains(body, "descriptionOf(item)") {
 		t.Error("the panel no longer shows what the product is, so a description " +
 			"somebody wrote is stored, frozen into the release and never read")

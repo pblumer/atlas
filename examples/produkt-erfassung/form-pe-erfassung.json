@@ -145,7 +145,7 @@
           "key": "kategorie",
           "type": "textfield",
           "label": "Kategorie",
-          "description": "Die Überschrift, unter der das Portal gruppiert. Zwei Schreibweisen sind zwei Überschriften."
+          "description": "Die Überschrift, unter der der Shop gruppiert. Zwei Schreibweisen sind zwei Überschriften."
         },
         {
           "key": "produktgruppe",

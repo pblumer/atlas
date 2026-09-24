@@ -64,6 +64,41 @@ _Changed_ / _Removed_ for each version.
   every decision where it was drawn, and a requirement drawn from a service names
   it.
 
+- **The portal's process link asked a search that did not come back.** Pressing
+  "View the process" on an order wrote "Wird abgefragt …" under it, and nothing else
+  happened, ever. The link looked the instance up with a search that named no
+  process definition, and such a search reads every instance on the server and every
+  variable of each. On an installation of any size it does not answer in any time a
+  reader waits, and the page had no bound on how long it would wait for it.
+
+  The lookup now names the fulfilment process's definitions, newest version first,
+  and each search reads that definition's own index — the fulfilment instances,
+  which are one per order. An order placed before the last redeploy is still found,
+  under the version it started on. And the lookup gives up after twenty seconds
+  and says so beside the order, rather than leaving "Asking …" standing as if an
+  answer were on its way.
+
+- **The basket said what was ordered and not what belonged to what.** It drew three
+  columns — offering, service, optional — each a flat list stacked on its own. A
+  row's height in one column had nothing to do with its height in the next, so with
+  two offerings in the basket a service sat beside whichever offering happened to
+  share its line: a laptop's hardware beside a monitor, the laptop's sleeve on the
+  monitor's line. The relation the reader needed was the one thing three independent
+  lists cannot draw.
+
+  Every offering is now one line of the grid, and its services and options are the
+  cells of that line. The grid makes a line as tall as its tallest cell, so the next
+  offering starts below the previous one's last service rather than beside its
+  third, and a rule under each line tells two offerings apart. The column names
+  stay once, at the top.
+
+  Which offering a row belongs to is read off the same containment the level is,
+  up through what includes it and what offers it. A part two products share — one
+  case for two phones — lands under whichever of them is in this basket, not under
+  the first one the release happens to list. A taken option whose offering is not in
+  the basket keeps a line of its own rather than disappearing, because a position
+  nobody can see is one nobody can take out.
+
 - **A decision was listed under the name of whichever decision happened to come
   first in its file, not under the name of the file.** A DMN model is one artifact:
   Atlas stores it under one handle, lists it as one row, publishes it as one thing —
@@ -362,6 +397,29 @@ _Changed_ / _Removed_ for each version.
   button for a route is not a reason to withdraw the route.
 
 ### Changed
+
+- **The portal is called the shop — at a new address and under a new API path.**
+  **Breaking** for anything that called the page's API directly. The page where
+  people browse their catalogue and order is now the *Shop*: in the menu, in its
+  title, in the handbook, in the Console's catalogue screens, in the API and MCP
+  descriptions, and in the mails the shipped approval processes send ("Ihr Shop").
+
+  - The page moved from `/portal.html` to `/shop.html`. The old address answers
+    with a permanent redirect, query kept, because it sits in bookmarks and mails a
+    rename cannot reach.
+  - The five routes the page reads moved from `/api/v1/portal/…` to
+    `/api/v1/shop/…` (`catalog`, `favourites`, `favourites/{itemId}` for PUT and
+    DELETE, `orders/{id}/lines/{position}/progress`). The old paths are not kept:
+    the page was their only reader.
+  - The shipped system processes are named `Shop: …` instead of `Portal: …`, so
+    they deploy as a new version on the next start. Running instances finish on
+    the version they started on.
+
+  Deliberately unchanged, because renaming them would break what is already
+  deployed or stored rather than what anybody reads: the process variable
+  `portalBaseUrl` every approval model builds its links from, the stored language
+  and theme a browser remembers for the page, and the decision records written
+  under the old name.
 
 - **The Workers view says what a worker asks for, not only what it has been given.**
   Each worker's `types` counts the jobs it has *leased*, so a worker that is connected

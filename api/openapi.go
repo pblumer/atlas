@@ -927,14 +927,14 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/public-links/{token}", s.handleRevokePublicLink, apiOp{
 			summary: "Revoke a public start link", tag: "Forms", role: RoleModeler, resp: jsonBody("Revoked token", tObject())}},
 
-		// The self-service portal's catalogue
+		// The self-service shop's catalogue
 		// (ADR-0312). Publishing is where the work
 		// happens: a release proves the graphs acyclic, resolves every process
 		// binding, checks the translations and the ranks, and computes the wave
 		// schedule an order follows — so ordering never interprets a graph, and a
 		// modelling error surfaces for whoever published it rather than as an
 		// incident for whoever orders at 23:00. Reading a catalogue is open to any
-		// signed-in identity because a portal user browses one; changing it needs
+		// signed-in identity because a shop user browses one; changing it needs
 		// the role that maintains them.
 		{"GET", "/api/v1/catalogs", s.catalogs.HandleListCatalogs, apiOp{
 			summary: "Every product catalogue, lowest rank first", tag: "Catalogue", role: roleAny,
@@ -965,19 +965,19 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Releases", tArray())}},
 		{"GET", "/api/v1/catalogs/{id}/unpublished", s.catalogs.HandleUnpublished, apiOp{
 			summary: "What publishing this catalogue would change for the people ordering: " +
-				"products it would add, products the portal is still offering that it would " +
+				"products it would add, products the shop is still offering that it would " +
 				"take away, and products edited since the release it is serving",
 			tag: "Catalogue", role: roleAny,
 			resp: jsonBody("The difference between the newest release and the catalogue", tObject())}},
-		{"GET", "/api/v1/portal/favourites", s.handleListFavourites, apiOp{
+		{"GET", "/api/v1/shop/favourites", s.handleListFavourites, apiOp{
 			summary: "The products you have marked to find again. Always your own — there is no way to ask about anybody else, because nothing needs to see what another person bookmarked. A favourite stores a product id and nothing else: it says \"show me this again\", never \"I may have this\", so a catalogue reassignment or a withdrawn product leaves the mark alone and simply resolves to less",
 			tag:     "Catalogue", role: RoleUser,
 			resp: jsonBody("Your marked products", tObject())}},
-		{"PUT", "/api/v1/portal/favourites/{itemId}", s.handleSetFavourite, apiOp{
+		{"PUT", "/api/v1/shop/favourites/{itemId}", s.handleSetFavourite, apiOp{
 			summary: "Mark one product. Marking what is already marked writes nothing and answers the list, so a star pressed twice does not churn the store",
 			tag:     "Catalogue", role: RoleUser,
 			resp: jsonBody("Your marked products", tObject())}},
-		{"DELETE", "/api/v1/portal/favourites/{itemId}", s.handleClearFavourite, apiOp{
+		{"DELETE", "/api/v1/shop/favourites/{itemId}", s.handleClearFavourite, apiOp{
 			summary: "Unmark one product. Clearing what is not marked is the state the caller asked for rather than an error",
 			tag:     "Catalogue", role: RoleUser,
 			resp: jsonBody("Your marked products", tObject())}},
@@ -992,7 +992,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Which offered services cannot be fulfilled here. A catalogue binds a product to processes by name; nothing checks those names when the binding is written, when the catalogue is published, or when an order reaches one. Two ways it fails: the process was never deployed, or it is deployed and waits on a job type nothing works — and the second raises no incident at all, because a parked token is work waiting rather than work failed. The approver report's sibling, one stage further along: that one asks whether the rule reaches a person, this one whether the work reaches a worker. It walks the whole path an order takes — the fulfilment orchestration, the approval process where the rule needs one, then provisioning and the return — because any of them stops it, and reads the newest release of each catalogue you maintain, since that is what can be ordered today. A problem on the shared orchestration is reported once and carries no product: it is one fact about the installation and stops every order alike. 503 when this server cannot say what is deployed or worked",
 			tag:     "Catalogue", role: RoleProductManager, resp: jsonBody("The fulfilment report", tObject())}},
 		{"GET", "/api/v1/catalog-products/translation-gaps", s.catalogs.HandleTranslationGaps, apiOp{
-			summary: "Where a catalogue is written in one of its declared languages and not another: the name, the description, the two headings and the name of every shape the product is ordered in, per product and per language. The shapes are not a cosmetic gap like the rest — the portal draws them in the basket, where an orderer has to choose one. Publishing used to refuse these and does not any more — the portal falls back to the language the catalogue has, so the refusal protected no reader and instead held a usable catalogue back until the last translation arrived. What the refusal did do is make the gap impossible to ignore, and this is that half kept: a gate removed with nothing in its place is how a half-translated catalogue becomes invisible again. Read off the catalogues you maintain AS THEY STAND rather than off their releases, unlike the two reports beside it, because it is a list of work to do and work to do is about what is being edited — computed from the same input a publish is, so it says exactly what the next publish would have to live with. A product that says something in no language at all is not here: that one is still refused at publish, because the portal would show its id and there is nothing to fall back to",
+			summary: "Where a catalogue is written in one of its declared languages and not another: the name, the description, the two headings and the name of every shape the product is ordered in, per product and per language. The shapes are not a cosmetic gap like the rest — the shop draws them in the basket, where an orderer has to choose one. Publishing used to refuse these and does not any more — the shop falls back to the language the catalogue has, so the refusal protected no reader and instead held a usable catalogue back until the last translation arrived. What the refusal did do is make the gap impossible to ignore, and this is that half kept: a gate removed with nothing in its place is how a half-translated catalogue becomes invisible again. Read off the catalogues you maintain AS THEY STAND rather than off their releases, unlike the two reports beside it, because it is a list of work to do and work to do is about what is being edited — computed from the same input a publish is, so it says exactly what the next publish would have to live with. A product that says something in no language at all is not here: that one is still refused at publish, because the shop would show its id and there is nothing to fall back to",
 			tag:     "Catalogue", role: RoleProductManager, resp: jsonBody("The translation report", tObject())}},
 		{"GET", "/api/v1/catalog-products/{id}/usage", s.handleProductUsage, apiOp{
 			summary: "Where one product is used, read backwards out of the same edges the release froze: which catalogues offer it, which wholes carry it and whether integrally or optionally, what it needs, **what needs it**, what it may never be held with, and how many people hold it by origin. The reverse question is the one a maintainer cannot ask anywhere else — a product manager about to retire a service, rebind its provisioning or move it between catalogues has no other way to find out what they are about to break. Merged across catalogues, because a service does not belong to one: the same product carried by two catalogues is one thing somebody is about to change. Holders are counted and never listed — a list of the people holding one service is the inventory filtered to the interesting part",
@@ -1006,9 +1006,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Store a product's picture from the raw request body (image/png, image/jpeg or image/svg+xml). Set by whoever maintains the product's home catalogue: a picture is part of how the product is offered, and somebody who may not rename it may not re-illustrate it. The bytes are validated as the type they claim and served back under a sandbox policy. Not frozen into a release — a better photograph of the same laptop is not a different laptop", tag: "Catalogue", role: RoleProductManager, status: http.StatusNoContent,
 			req: &bodySpec{mediaType: "image/png", desc: "The picture (PNG, JPEG or SVG)", schema: map[string]any{"type": "string", "format": "binary"}}}},
 		{"DELETE", "/api/v1/catalog-products/{id}/picture", s.catalogs.HandleDeletePicture, apiOp{
-			summary: "Remove a product's picture, so the portal falls back to showing none. Same gate as setting one", tag: "Catalogue", role: RoleProductManager, status: http.StatusNoContent}},
+			summary: "Remove a product's picture, so the shop falls back to showing none. Same gate as setting one", tag: "Catalogue", role: RoleProductManager, status: http.StatusNoContent}},
 		{"POST", "/api/v1/catalog-products", s.catalogs.HandleSaveItem, apiOp{
-			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule, the processes that provision and deprovision it, the groups eligible to receive it, and the `keywords` somebody might search for that are not its name — synonyms, the vendor's term, the abbreviation everybody uses. Keywords are one flat list rather than one per language, because a synonym list is for finding and a searcher's language is not the catalogue's. `configForm` names an Atlas form the orderer fills in for this product — a cost centre, a site — whose answers travel with the order line. `price` is what it costs, written as the catalogue wants it read and never computed: it is displayed, frozen into the release and copied onto the order line, so an approver's figure stays the figure they decided on. `category` is the heading the portal groups it under and `productGroup` the group one level below it — headings and nothing else, with no ordering and no entity behind them. Both are **keys**: the portal groups by them and renders `categoryTexts` and `productGroupTexts`, each a heading per language tag, where the catalogue has them. Leave the texts out and the key renders in every language. They are optional as a whole and all-or-nothing once present: publishing refuses a heading translated into one declared language and not another. The write is a full **replace**, so a field left out is a field cleared: read the product first, change what you mean to change, and send the whole record back. Optionally state the `revision` you read — the write is then refused with 409 unless the stored product is still on it, which is what makes a read-modify-write safe against a second maintainer. Omitting it replaces unconditionally", tag: "Catalogue", role: RoleProductManager,
+			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule, the processes that provision and deprovision it, the groups eligible to receive it, and the `keywords` somebody might search for that are not its name — synonyms, the vendor's term, the abbreviation everybody uses. Keywords are one flat list rather than one per language, because a synonym list is for finding and a searcher's language is not the catalogue's. `configForm` names an Atlas form the orderer fills in for this product — a cost centre, a site — whose answers travel with the order line. `price` is what it costs, written as the catalogue wants it read and never computed: it is displayed, frozen into the release and copied onto the order line, so an approver's figure stays the figure they decided on. `category` is the heading the shop groups it under and `productGroup` the group one level below it — headings and nothing else, with no ordering and no entity behind them. Both are **keys**: the shop groups by them and renders `categoryTexts` and `productGroupTexts`, each a heading per language tag, where the catalogue has them. Leave the texts out and the key renders in every language. They are optional as a whole and all-or-nothing once present: publishing refuses a heading translated into one declared language and not another. The write is a full **replace**, so a field left out is a field cleared: read the product first, change what you mean to change, and send the whole record back. Optionally state the `revision` you read — the write is then refused with 409 unless the stored product is still on it, which is what makes a read-modify-write safe against a second maintainer. Omitting it replaces unconditionally", tag: "Catalogue", role: RoleProductManager,
 			req: jsonBody("Product", schemaObj(map[string]any{
 				"id": tString(), "homeCatalog": tString(), "state": tString(),
 				"texts": tObject(), "lifecycle": tObject(), "variants": tArray(),
@@ -1035,7 +1035,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Upload a catalogue's brand mark — raw PNG or SVG body, max 512 KiB. Administration, like the appearance it belongs to", tag: "Catalogue", role: RoleAdmin, status: http.StatusNoContent,
 			req: &bodySpec{mediaType: "image/png", desc: "PNG or SVG bytes (Content-Type sets the format)", schema: map[string]any{"type": "string", "format": "binary"}}}},
 		{"DELETE", "/api/v1/catalogs/{id}/logo", s.catalogs.HandleDeleteLogo, apiOp{
-			summary: "Remove a catalogue's brand mark, so the portal falls back to the operator's", tag: "Catalogue", role: RoleAdmin, status: http.StatusNoContent}},
+			summary: "Remove a catalogue's brand mark, so the shop falls back to the operator's", tag: "Catalogue", role: RoleAdmin, status: http.StatusNoContent}},
 		{"POST", "/api/v1/catalogs/{id}/import", s.catalogs.HandleImport, apiOp{
 			summary: "Derive catalogue drafts from an ArchiMate model: Products and Business Services become products, compositions become integral parts and aggregations optional ones. Nothing becomes orderable, and a product already stored is left as it is", tag: "Catalogue", role: RoleProductManager,
 			req:  jsonBody("An ArchiMate Open Exchange document", tObject()),
@@ -1092,10 +1092,10 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/inventory", s.handleInventory, apiOp{
 			summary: "What you hold today: every entitlement recorded against you, newest first, with where the knowledge came from (ordered, adopted or legacy) and the order that granted it. An administrator may ask about somebody else with ?principal=. Read from the inventory and never from orders — an order is deleted by retention long before the access it granted ends", tag: "Catalogue", role: RoleUser,
 			resp: jsonBody("One principal's inventory", tObject())}},
-		{"GET", "/api/v1/portal/catalog", s.catalogs.HandleMyCatalog, apiOp{
+		{"GET", "/api/v1/shop/catalog", s.catalogs.HandleMyCatalog, apiOp{
 			summary: "The catalogue assigned to you: the highest-ranked one your groups reach (404 when none is)", tag: "Catalogue", role: RoleUser,
 			resp: jsonBody("Your catalogue", tObject())}},
-		// Portal orders (ADR-0312). An order names
+		// Shop orders (ADR-0312). An order names
 		// exactly one release and carries the schedule that release computed, so
 		// fulfilment reads one record and never recomputes a graph — and what was
 		// ordered cannot change because somebody edited a product while an approval
@@ -1117,7 +1117,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"POST", "/api/v1/orders/fulfilment/repair", s.handleRepairFulfilment, apiOp{
 			summary: "End the fulfilment orchestrations that cannot do their work — one that names no order builds every request from nothing — and start one again for every open order left without one. Idempotent: an installation with nothing broken is answered with two empty lists. ?dryRun=true reports what it would do and changes nothing, which is what to run first", tag: "Order", role: RoleOperator,
 			resp: jsonBody("What was ended and what was started again", tObject())}},
-		{"GET", "/api/v1/portal/orders/{id}/lines/{position}/progress", s.handleLineProgress, apiOp{
+		{"GET", "/api/v1/shop/orders/{id}/lines/{position}/progress", s.handleLineProgress, apiOp{
 			summary: "Where one of your own positions stands: the steps the process working on it is sitting on right now, by the names its model gives them. Gated on owning the order rather than on a role — somebody else's order answers 404, because whether it exists is not something this confirms — and it carries no process variable, because the caller already knows their own order and this says where, not what. A position nothing is running for answers state \"none\"", tag: "Order", role: RoleUser,
 			resp: jsonBody("Where the position's process stands", tObject())}},
 
@@ -1800,7 +1800,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Who holds a forbidden pair, oldest combination first", tObject())}},
 
 		{"GET", "/api/v1/pending-work", s.handlePendingWork, apiOp{
-			summary: "What is waiting for you across the portal: open approvals addressed to you, and recertification rows you still owe. `?principal=` asks about somebody else and is the **operator's** — a portal where any user can enumerate any other user's pending work has turned an inbox into an organisation chart with workloads attached. Nothing is listed that the person cannot act on right now: not a row in a closed campaign, not one somebody already decided. It counts as well as lists, because the first decision a reminder makes is whether to send at all. Atlas does not send: `examples/erinnerung.bpmn` does, with the mail task that already exists",
+			summary: "What is waiting for you across Atlas: open approvals addressed to you, and recertification rows you still owe. `?principal=` asks about somebody else and is the **operator's** — a portal where any user can enumerate any other user's pending work has turned an inbox into an organisation chart with workloads attached. Nothing is listed that the person cannot act on right now: not a row in a closed campaign, not one somebody already decided. It counts as well as lists, because the first decision a reminder makes is whether to send at all. Atlas does not send: `examples/erinnerung.bpmn` does, with the mail task that already exists",
 			tag:     "Order", role: RoleUser,
 			resp: jsonBody("The items waiting, oldest first, and the counts", tObject())}},
 

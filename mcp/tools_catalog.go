@@ -5,7 +5,7 @@ import (
 	"net/url"
 )
 
-// The portal catalogue tools: what a product manager maintains
+// The shop catalogue tools: what a product manager maintains
 // (ADR-0312, ADR-0315) — the products and services on offer, the catalogues that
 // offer them, and the release that freezes a version of both so an order has
 // something immutable to name.
@@ -30,7 +30,7 @@ import (
 // on the ordinary save, so there is no tool to look for and not find.
 //
 // **Nothing is orderable until it is published.** Editing a catalogue changes
-// what the *next* release will contain and changes nothing the portal shows.
+// what the *next* release will contain and changes nothing the shop shows.
 //
 // # Who may call them
 //
@@ -168,21 +168,21 @@ func catalogItemProps() map[string]any {
 			"\"49.– / Monat\", \"im Grundpaket enthalten\". DISPLAYED AND NEVER COMPUTED — nothing " +
 			"adds these up. It is frozen into the release and copied onto the order line, so an " +
 			"approver's figure stays the figure they decided on."),
-		"category": stringProp("The heading the portal groups it under — \"Arbeitsplatz\", " +
-			"\"Kommunikation\". THE KEY AND NOT THE WORDING: the portal groups by this value and " +
+		"category": stringProp("The heading the shop groups it under — \"Arbeitsplatz\", " +
+			"\"Kommunikation\". THE KEY AND NOT THE WORDING: the shop groups by this value and " +
 			"renders `categoryTexts` beside it, so two spellings are two categories. Reuse a " +
 			"heading already in the catalogue rather than inventing a second spelling of it. A " +
 			"heading and nothing else: no ordering and no entity behind it. It is read off the " +
-			"products NOTHING CONTAINS: on a product that is a part of another one the portal " +
+			"products NOTHING CONTAINS: on a product that is a part of another one the shop " +
 			"never reads it, so set it on the offering and not on the services behind it."),
 		"categoryTexts": objectProp("The heading per language tag, where `category` above is what " +
-			"the portal groups by: {\"de\": \"Arbeitsplatz\", \"fr\": \"Poste de travail\"}. " +
+			"the shop groups by: {\"de\": \"Arbeitsplatz\", \"fr\": \"Poste de travail\"}. " +
 			"Leave it out and the key renders in every language, which is the ordinary state for " +
 			"a catalogue declaring one. Optional as a whole and ALL-OR-NOTHING once there is one: " +
 			"publishing refuses a heading translated into one declared language and not another, " +
 			"because the fallback renders and one audience silently reads somebody else's column " +
 			"head. Translations without a `category` are refused too — nothing would read them."),
-		"productGroup": stringProp("The group one level below the heading: the portal's cascade " +
+		"productGroup": stringProp("The group one level below the heading: the shop's cascade " +
 			"reads Kategorie > Produktgruppe > Produkt > Services. The key, exactly as `category` " +
 			"above is, with `productGroupTexts` for the wording, and read off the same products — " +
 			"the group has no record and therefore no category of its own, so the chain is " +
@@ -221,7 +221,7 @@ func catalogTools() []Tool {
 		{
 			Name: "atlas_list_catalogs",
 			Description: "List the product catalogues you maintain, lowest rank first. This is the " +
-				"MAINTENANCE list and not the portal one: being the audience for a catalogue puts " +
+				"MAINTENANCE list and not the shop one: being the audience for a catalogue puts " +
 				"nothing in it, so a customer never learns which other customers exist. Read this " +
 				"before changing anything — a catalogue's id is what every other catalogue tool names.",
 			InputSchema: noArgs(),
@@ -268,7 +268,7 @@ func catalogTools() []Tool {
 				"but each one you do send REPLACES that field whole — sending `items` with one id " +
 				"drops every other product the catalogue offered. Read it with atlas_get_catalog " +
 				"first, send the full list back, and pass the `revision` it answered with — the " +
-				"write is then refused rather than erasing a change somebody made in between. Changing it changes nothing the portal shows " +
+				"write is then refused rather than erasing a change somebody made in between. Changing it changes nothing the shop shows " +
 				"until you publish. Requires editor on the catalogue; only its owner may change " +
 				"`members`.",
 			InputSchema: func() map[string]any {
@@ -343,11 +343,11 @@ func catalogTools() []Tool {
 				"declared languages and not another: the name, the description, the two " +
 				"headings and the name of every shape the product is ordered in, per product " +
 				"and per language. Publishing used to refuse these and " +
-				"does not any more — the portal falls back to the language the catalogue has, " +
+				"does not any more — the shop falls back to the language the catalogue has, " +
 				"so the refusal protected no reader and instead held a usable catalogue back " +
 				"until the last translation arrived. What the refusal did do is make the gap " +
 				"impossible to ignore, and this is that half kept. READ THIS BEFORE TELLING " +
-				"SOMEBODY A CATALOGUE IS FINISHED: a gap here is invisible in the portal, " +
+				"SOMEBODY A CATALOGUE IS FINISHED: a gap here is invisible in the shop, " +
 				"because a reader is shown the language that exists and nothing says it was " +
 				"not the one they asked for. It reads the catalogues AS THEY STAND rather " +
 				"than their releases, unlike the two reports beside it, because it is a list " +
@@ -393,7 +393,7 @@ func catalogTools() []Tool {
 		{
 			Name: "atlas_publish_catalog",
 			Description: "Publish a catalogue: validate it and freeze a release, which is the " +
-				"immutable thing an order names. Until a catalogue has one, the portal shows it to " +
+				"immutable thing an order names. Until a catalogue has one, the shop shows it to " +
 				"nobody; after one, editing the catalogue changes the NEXT release and not what is " +
 				"being ordered today. A refused publish WRITES NOTHING and answers with every " +
 				"problem at once (422) — each naming the catalogue or the product it belongs to — " +
@@ -417,7 +417,7 @@ func catalogTools() []Tool {
 			Description: "List a catalogue's releases, newest first. A release is frozen: it " +
 				"carries the products, edges, approval rules, ceilings and prices as they stood " +
 				"when it was published, which is what lets an order placed last month stay " +
-				"answerable after this month's edits. Read this to see what the portal is actually " +
+				"answerable after this month's edits. Read this to see what the shop is actually " +
 				"offering, as opposed to what the catalogue currently says.",
 			InputSchema: catalogIDArg("The catalogue whose releases to list."),
 			Handler: func(c *Client, args map[string]any) (string, error) {
@@ -431,12 +431,12 @@ func catalogTools() []Tool {
 		{
 			Name: "atlas_catalog_unpublished",
 			Description: "What publishing this catalogue would change for the people ordering: " +
-				"products it would ADD, products the portal is STILL OFFERING that it would take " +
+				"products it would ADD, products the shop is STILL OFFERING that it would take " +
 				"away, and products EDITED since the release being served. Ask it before and " +
 				"after editing a catalogue. The second group is the one worth the call: a " +
 				"product dropped from a catalogue is gone from every listing at once and the " +
 				"release goes on offering it, so nothing else you can read says it is still on " +
-				"the portal. \"Edited\" is decided on the record's revision and not on a " +
+				"the shop. \"Edited\" is decided on the record's revision and not on a " +
 				"comparison of fields, so a save that changed nothing still counts — the remedy " +
 				"is atlas_publish_catalog, which loses nothing. A product offered here but homed " +
 				"in a catalogue you do not maintain is never reported as edited, because you " +

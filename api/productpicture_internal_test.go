@@ -50,7 +50,7 @@ func TestThePictureIsReadByTheAudienceAndWrittenByTheMaintainer(t *testing.T) {
 // which is the page telling somebody that something went wrong with a product where
 // nothing did.
 func TestAProductWithNoPictureLeavesNoHole(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function productPicture(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function productPicture(", "\n}")
 	if !strings.Contains(body, "onerror") || !strings.Contains(body, "remove()") {
 		t.Error("a product with no picture leaves a broken image on the page, which " +
 			"reads as a fault where the ordinary answer is simply 'none'")
@@ -61,7 +61,7 @@ func TestAProductWithNoPictureLeavesNoHole(t *testing.T) {
 	}
 	// And the panel actually shows it. A renderer nothing calls is a feature that
 	// passes every test and appears nowhere.
-	if !strings.Contains(webRegion(t, readWeb(t, "portal.js"),
+	if !strings.Contains(webRegion(t, readWeb(t, "shop.js"),
 		"function infoPanel(", "\n}"), "productPicture(") {
 		t.Error("the product panel never renders the picture, so a catalogue with " +
 			"pictures shows none of them")

@@ -24,7 +24,7 @@ import (
 // portalSource is the recipient field's half of the page.
 func portalSource(t *testing.T) string {
 	t.Helper()
-	return readWeb(t, "portal.js")
+	return readWeb(t, "shop.js")
 }
 
 // TestThePortalOffersTheRecipientFieldOnlyToRolesTheServerAccepts.
@@ -41,7 +41,7 @@ func TestThePortalOffersTheRecipientFieldOnlyToRolesTheServerAccepts(t *testing.
 
 	start := strings.Index(src, "function renderForWhom(")
 	if start < 0 {
-		t.Fatal("portal.js has no renderForWhom(); if the recipient field moved, this " +
+		t.Fatal("shop.js has no renderForWhom(); if the recipient field moved, this " +
 			"test now passes vacuously and says so instead")
 	}
 	end := strings.Index(src[start:], "\n}")
@@ -56,7 +56,7 @@ func TestThePortalOffersTheRecipientFieldOnlyToRolesTheServerAccepts(t *testing.
 	for _, role := range []string{RoleOperator, RoleAdmin} {
 		if !strings.Contains(src, "'"+role+"'") {
 			t.Errorf("the server lets the %q role order in somebody else's name and "+
-				"portal.js never names it, so the page and the gate disagree about who "+
+				"shop.js never names it, so the page and the gate disagree about who "+
 				"the field is for", role)
 		}
 	}
@@ -71,7 +71,7 @@ func TestThePortalOffersTheRecipientFieldOnlyToRolesTheServerAccepts(t *testing.
 func TestTheRecipientPickerOffersNoGroups(t *testing.T) {
 	src := portalSource(t)
 	if !strings.Contains(src, "e.type === '"+PrincipalTypeUser+"'") {
-		t.Errorf("portal.js does not narrow the principals directory to %q entries. "+
+		t.Errorf("shop.js does not narrow the principals directory to %q entries. "+
 			"The same list carries groups, and a group cannot receive an order",
 			PrincipalTypeUser)
 	}
@@ -84,7 +84,7 @@ func TestTypingARecipientDoesNotRebuildTheFieldBeingTypedInto(t *testing.T) {
 	src := portalSource(t)
 	start := strings.Index(src, "id: 'forwhom'")
 	if start < 0 {
-		t.Fatal("portal.js has no field with id 'forwhom'; if it moved, this test now " +
+		t.Fatal("shop.js has no field with id 'forwhom'; if it moved, this test now " +
 			"checks nothing and says so instead")
 	}
 	end := strings.Index(src[start:], "\n      }),")

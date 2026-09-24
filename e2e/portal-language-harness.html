@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <title>Atlas portal language e2e harness</title>
-    <!-- Drives the REAL api/web/portal.js against a catalogue fixture.
+    <!-- Drives the REAL api/web/shop.js against a catalogue fixture.
 
          The portal mounts itself on DOMContentLoaded and reads seven routes, so
          it cannot be imported and called the way the Console's productBody can.
@@ -92,11 +92,11 @@
 
       const ROUTES = {
         "/api/v1/auth/me": { id: "usr_1", username: "anja", name: "Anja" },
-        "/api/v1/portal/catalog": CAT,
+        "/api/v1/shop/catalog": CAT,
         "/api/v1/catalogs/cat_x/releases": [RELEASE],
         "/api/v1/orders": [],
         "/api/v1/inventory": { items: [] },
-        "/api/v1/portal/favourites": { itemIds: [] },
+        "/api/v1/shop/favourites": { itemIds: [] },
         "/api/v1/principals": [{ id: "usr_1", name: "Anja" }],
       };
 
@@ -114,6 +114,6 @@
         return Promise.resolve(new Response("not in this fixture", { status: 404 }));
       };
     </script>
-    <script type="module" src="/portal.js"></script>
+    <script type="module" src="/shop.js"></script>
   </body>
 </html>

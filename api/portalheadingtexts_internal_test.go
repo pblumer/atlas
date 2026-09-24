@@ -21,7 +21,7 @@ import (
 
 // TestAHeadingIsGroupedByItsKeyAndShownByItsWording.
 func TestAHeadingIsGroupedByItsKeyAndShownByItsWording(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	body := webRegion(t, src, "function headingsOf(", "\n}")
 
 	// Collected under the key. The map is keyed by it and the entries carry the
@@ -55,7 +55,7 @@ func TestAHeadingIsGroupedByItsKeyAndShownByItsWording(t *testing.T) {
 // single-language catalogue. A reader with no fallback would meet an empty column
 // head for all of them — the whole catalogue filed under a blank.
 func TestAnUntranslatedHeadingStillReads(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function headingOf(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function headingOf(", "\n}")
 	if !strings.Contains(body, "textOf(") {
 		t.Error("the heading is not read through textOf, so it reaches a reader by a " +
 			"rule of its own rather than the one every other text on this page " +
@@ -82,7 +82,7 @@ func TestAnUntranslatedHeadingStillReads(t *testing.T) {
 // against the key, so the cascade would show nothing under a heading the reader
 // just clicked.
 func TestTheSelectionIsTheKeyEverywhereItIsSet(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	hit := webRegion(t, src, "function renderSearch(", "\n}")
 	for _, want := range []string{
 		"state.category = (item.category || '').trim();",

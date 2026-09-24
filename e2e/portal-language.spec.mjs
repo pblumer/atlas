@@ -1,4 +1,4 @@
-// e2e for the portal's language switch (api/web/portal.js, against a fixture).
+// e2e for the portal's language switch (api/web/shop.js, against a fixture).
 //
 // What was reported from a live installation: "switching the language does not
 // translate the products". It was true, and the cause was two screens away — the
