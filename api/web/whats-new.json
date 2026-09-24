@@ -2,6 +2,72 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "the-shop-works-on-a-phone",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The shop works on a phone",
+        "de": "Der Shop funktioniert auf dem Handy"
+      },
+      "summary": {
+        "en": "Below 860px every view of the shop is one column wide. The catalogue shows the column you have reached, and a stepper above it goes back and names the path so far. The basket stacks each offering over its own services and options. My orders is a list of cards, with each position's tasks, and the form to answer one, at the card's width. The buttons grow to a fingertip's size. A wide screen keeps its layout.",
+        "de": "Unter 860 px Breite ist jede Ansicht des Shops einspaltig. Der Katalog zeigt die Spalte, bei der man gerade ist; eine Leiste darüber führt zurück und nennt den bisherigen Weg. Der Warenkorb zeigt jedes Angebot mit seinen Services und Optionen darunter. «Meine Aufträge» ist eine Liste von Karten, mit den Aufgaben jeder Position und dem Formular zu ihrer Erledigung in der Breite der Karte. Die Schaltflächen sind gross genug für den Finger. Auf breiten Bildschirmen bleibt die bisherige Darstellung."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Shop"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the shop on a phone, or narrow the browser window below 860px.",
+          "In the catalogue, choose a category, a group and a product; use Back to return.",
+          "Under My orders, open a task with Work on it and answer it in the card."
+        ],
+        "de": [
+          "Den Shop auf dem Handy öffnen oder das Browserfenster schmaler als 860 px machen.",
+          "Im Katalog eine Kategorie, eine Gruppe und ein Produkt wählen; mit «Zurück» geht es zurück.",
+          "Unter «Meine Aufträge» eine Aufgabe mit «Erledigen» öffnen und in der Karte erledigen."
+        ]
+      }
+    },
+    {
+      "id": "tasks-works-on-a-phone",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Tasks works on a phone",
+        "de": "Tasks funktioniert auf dem Handy"
+      },
+      "summary": {
+        "en": "Below 860px the inbox and Start show the list or the open task, not both, and a task opens with a button back to the list. The folders become a row of chips, and a task's fields put their label above the value. An access review row is a card with its two answers under it. The top bar keeps its icons on screen and scrolls the view names instead. Between 861px and 1180px the inbox keeps its three panes at narrower widths.",
+        "de": "Unter 860 px Breite zeigen Posteingang und «Start» entweder die Liste oder die geöffnete Aufgabe, nicht beides; eine Aufgabe öffnet sich mit einer Schaltfläche zurück zur Liste. Die Ordner werden zu einer Reihe von Chips, und die Felder einer Aufgabe zeigen die Beschriftung über dem Wert. Eine Zeile der Rezertifizierung ist eine Karte mit den beiden Antworten darunter. Die obere Leiste behält ihre Symbole im Bild und lässt stattdessen die Ansichtsnamen seitlich scrollen. Zwischen 861 px und 1180 px behält der Posteingang seine drei Bereiche in schmaleren Breiten."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Tasks"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Tasks on a phone, or narrow the browser window below 860px.",
+          "Open a task from the list; use Back to the list to return.",
+          "Under Access review, answer a row with Still needed or Withdraw… in its card."
+        ],
+        "de": [
+          "Tasks auf dem Handy öffnen oder das Browserfenster schmaler als 860 px machen.",
+          "Eine Aufgabe in der Liste öffnen; mit «Back to the list» geht es zurück.",
+          "Unter «Access review» eine Zeile in ihrer Karte mit «Still needed» oder «Withdraw…» beantworten."
+        ]
+      }
+    },
+    {
       "id": "a-decision-service-s-name-can-be-moved-out-of-the-way-and-th",
       "version": "Unreleased",
       "date": null,
@@ -29,6 +95,49 @@
         },
         "route": "#/modeler"
       }
+    },
+    {
+      "id": "access-review-and-reconciliation-open-again",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Access review and Reconciliation open again",
+        "de": "Rezertifizierung und Abgleich öffnen wieder"
+      },
+      "summary": {
+        "en": "Both pages showed an error card, \"gen is not defined\", instead of their rows. The router handed each a check for whether a later navigation had replaced it, over a value neither route had set, and the page's first use of that check threw. Both routes now set it, as the routes beside them already did.",
+        "de": "Beide Seiten zeigten eine Fehlerkarte, «gen is not defined», statt ihrer Zeilen. Der Router übergab jeder eine Prüfung, ob eine spätere Navigation sie abgelöst hatte, über einen Wert, den keine der beiden Routen gesetzt hatte; der erste Aufruf dieser Prüfung schlug fehl. Beide Routen setzen den Wert jetzt, wie es die benachbarten Routen bereits taten."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Tasks",
+        "Operations"
+      ]
+    },
+    {
+      "id": "a-task-s-checkbox-in-the-shop-is-a-checkbox-again",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A task's checkbox in the shop is a checkbox again",
+        "de": "Die Checkbox einer Aufgabe im Shop ist wieder eine Checkbox"
+      },
+      "summary": {
+        "en": "A task answered inside an order row in the shop drew its checkbox as wide as the table cell, with the label pushed off the end. The orders table's field rule reached the task form's inputs too; it now styles the filter row only.",
+        "de": "Wurde eine Aufgabe in einer Auftragszeile im Shop erledigt, war ihre Checkbox so breit wie die Tabellenzelle, und die Beschriftung rutschte über den Rand. Die Regel für die Filterfelder der Auftragstabelle griff auch auf die Felder des Formulars; sie gilt jetzt nur noch für die Filterzeile."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Shop"
+      ]
     },
     {
       "id": "withdrawing-an-order-stops-the-processes-already-working-it",
@@ -226,140 +335,6 @@
           "Das Portal öffnen und zwei Marktleistungen in den Warenkorb legen, eine davon mit Services und Optionen.",
           "Den Warenkorb öffnen.",
           "Jede Marktleistung ist eine Zeile, ihre Services und Optionen stehen daneben."
-        ]
-      }
-    },
-    {
-      "id": "a-decision-was-listed-under-the-name-of-whichever-decision-h",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A decision model is now listed under its own name",
-        "de": "Ein Entscheidungsmodell steht jetzt unter seinem eigenen Namen"
-      },
-      "summary": {
-        "en": "A DMN file is one artifact — Atlas stores it under one handle, lists it as one row and publishes it as one thing — and it may hold several decisions. The Explorer nevertheless labelled it with whichever decision came first inside it, so a model called \"Credit check\" whose first decision is \"Credit rating\" appeared as \"Credit rating\" while the editor's own header said \"Credit check\", and reordering the decisions renamed the artifact. Every save of an untouched model quietly rewrote that row, too. The listing and the editor now read the same name, the one the model gives itself. Rows written before this keep the name they have; they correct themselves the next time the model is saved from the editor.",
-        "de": "Eine DMN-Datei ist ein Artefakt — Atlas speichert sie unter einem Handle, listet sie als eine Zeile und veröffentlicht sie als eine Einheit — und sie kann mehrere Entscheidungen enthalten. Der Explorer beschriftete sie dennoch mit derjenigen Entscheidung, die in der Datei zuerst stand: Ein Modell namens \"Kreditprüfung\", dessen erste Entscheidung \"Bonität\" heisst, erschien als \"Bonität\", während der Editor im Kopf \"Kreditprüfung\" anzeigte; ein Umsortieren der Entscheidungen benannte das Artefakt um. Zudem schrieb jedes Speichern eines unveränderten Modells diese Zeile still um. Liste und Editor lesen nun denselben Namen, nämlich den, den das Modell sich selbst gibt. Zuvor gespeicherte Zeilen behalten ihren Namen und korrigieren sich beim nächsten Speichern aus dem Editor."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-catalogue-kept-in-de-de-and-en-en-would-have-ignored-the-l",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Regional languages like de-CH reach the reader they are for",
-        "de": "Regionale Sprachen wie de-CH erreichen die Leserin, für die sie gedacht sind"
-      },
-      "summary": {
-        "en": "A catalogue says which languages it is kept in, and de-DE, en-GB and pt-BR are as correct as de, en and pt. The portal, though, works out a visitor's language from the browser and reduces it to the language alone, because its own words are filed that way. So a catalogue declared in de-DE and en-EN stored every product name under a key the page never asked for: the reader was shown whatever value came first, the same one in both languages, and switching did nothing — with the new check on language entries waving it through, because de-DE really is a language tag. A text is now found by the language of its tag rather than by the whole of it, and where a catalogue carries both de and de-CH the exact one wins, because a catalogue that lists both means both. The console's language box is also read on commas, semicolons and spaces alike: a tag can contain none of them, so whichever one gets typed, the languages come out as meant. On its own this changed nothing a reader could see in a language the page did not yet speak; the portal's own wording in French and Italian, released alongside it, is what made four languages real.",
-        "de": "Ein Katalog nennt die Sprachen, in denen er geführt wird, und de-DE, en-GB und pt-BR sind so korrekt wie de, en und pt. Das Portal ermittelt die Sprache einer Besucherin jedoch aus dem Browser und reduziert sie auf die Sprache allein, weil seine eigenen Wörter so abgelegt sind. Ein Katalog in de-DE und en-EN legte damit jeden Produktnamen unter einem Schlüssel ab, nach dem die Seite nie fragte: Gezeigt wurde, was zuerst kam, in beiden Sprachen dasselbe, und das Umschalten bewirkte nichts — wobei die neue Prüfung der Spracheinträge es durchwinkte, denn de-DE ist tatsächlich ein Sprachkürzel. Ein Text wird jetzt über die Sprache seines Kürzels gefunden statt über das ganze Kürzel, und wo ein Katalog sowohl de als auch de-CH führt, gewinnt das genaue — wer beide nennt, meint beide. Das Sprachfeld der Konsole wird ausserdem auf Komma, Semikolon und Leerzeichen gleichermassen gelesen: Ein Kürzel enthält keines davon, also kommen die Sprachen so heraus, wie sie gemeint waren, welches Zeichen auch getippt wird. Für sich genommen änderte das nichts, was eine Leserin in einer Sprache sehen konnte, die die Seite noch nicht sprach; erst die Wörter des Portals auf Französisch und Italienisch, gleichzeitig veröffentlicht, machen vier Sprachen wirklich."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Service catalogue",
-        "Shop"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Catalogue in the console and choose a catalogue.",
-          "Write the languages however you like: de-DE, en-EN, fr-FR — commas, semicolons or spaces.",
-          "Fill the product boxes those languages give you, save and publish.",
-          "Open the portal and switch between the languages the catalogue names."
-        ],
-        "de": [
-          "In der Konsole den Katalog öffnen und einen Katalog wählen.",
-          "Die Sprachen beliebig schreiben: de-DE, en-EN, fr-FR — mit Komma, Semikolon oder Leerzeichen.",
-          "Die Produktfelder füllen, die diese Sprachen ergeben, speichern und publizieren.",
-          "Das Portal öffnen und zwischen den Sprachen umschalten, die der Katalog nennt."
-        ]
-      }
-    },
-    {
-      "id": "a-catalogue-could-be-saved-with-a-language-that-is-not-a-lan",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The language switch works again in every catalogue",
-        "de": "Die Sprachumschaltung wirkt wieder in jedem Katalog"
-      },
-      "summary": {
-        "en": "A catalogue says which languages it is kept in, as a list. Until now nothing checked that the entries were language tags, and one installation saved a catalogue whose single language was written \"de; en\" — one entry containing a separator, typed where a comma was expected. Everything after that behaved correctly and the result was total: the product form drew one box labelled \"de; en\", both names were typed into it, and the portal, looking for German and for English, found neither and showed whatever it had. Switching the language did nothing at all, for every product in that catalogue, in both languages, and no screen anywhere said why. It was noticed weeks later, two screens away from where it was caused. A language is now checked as it is typed: de, en, de-CH, zh-Hans. Only as it is typed — a catalogue that already carries a bad entry can still be opened, edited and published, because otherwise the installation with the problem would be the one locked out of fixing it. Nothing is corrected automatically either: \"de; en\" can be read two ways and only the person who typed it knows which, and guessing is what hid the fault in the first place. A language listed twice is refused as well, because it would draw two boxes writing the same thing, where the second quietly wins.",
-        "de": "Ein Katalog nennt die Sprachen, in denen er geführt wird, als Liste. Bisher prüfte nichts, ob die Einträge Sprachkürzel sind, und in einer Installation wurde ein Katalog gespeichert, dessen einzige Sprache «de; en» hiess — ein Eintrag mit einem Trennzeichen, getippt, wo ein Komma erwartet wurde. Alles danach verhielt sich korrekt, und die Wirkung war vollständig: Die Produktmaske zeichnete ein Feld mit der Beschriftung «de; en», beide Namen wurden hineingeschrieben, und das Portal, das nach Deutsch und nach Englisch suchte, fand keines von beiden und zeigte, was es hatte. Die Sprachumschaltung bewirkte nichts, für jedes Produkt dieses Katalogs, in beiden Sprachen, und kein Bildschirm nannte den Grund. Bemerkt wurde es Wochen später, zwei Bildschirme von der Ursache entfernt. Eine Sprache wird jetzt beim Eintippen geprüft: de, en, de-CH, zh-Hans. Nur beim Eintippen — ein Katalog, der bereits einen falschen Eintrag trägt, lässt sich weiterhin öffnen, bearbeiten und publizieren, weil sonst ausgerechnet die betroffene Installation von ihrer eigenen Korrektur ausgesperrt wäre. Automatisch korrigiert wird ebenfalls nichts: «de; en» lässt zwei Lesarten zu, und nur wer es getippt hat, weiss welche; Raten ist genau das, was den Fehler verborgen hat. Eine doppelt genannte Sprache wird ebenfalls abgelehnt, denn sie zeichnete zwei Felder, die dasselbe schreiben, wobei das zweite still gewinnt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Service catalogue",
-        "Shop"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Catalogue in the console and choose a catalogue.",
-          "Check the language list: one tag per entry, separated by commas.",
-          "Correct anything that is not a tag, save, and publish."
-        ],
-        "de": [
-          "In der Konsole den Katalog öffnen und einen Katalog wählen.",
-          "Die Sprachliste prüfen: ein Kürzel je Eintrag, durch Komma getrennt.",
-          "Was kein Kürzel ist, korrigieren, speichern und publizieren."
-        ]
-      }
-    },
-    {
-      "id": "the-console-asks-for-each-language-in-its-own-box-side-by-si",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "One box per language, side by side",
-        "de": "Ein Feld je Sprache, nebeneinander"
-      },
-      "summary": {
-        "en": "The name, the description, the category and the product group are each asked for once per language the catalogue is kept in, in their own labelled box, side by side. A catalogue kept in four languages shows four boxes; one that adds a fifth grows a fifth. This replaces a single box in which the wordings were separated by semicolons — compact, and a trap: which word was French was something to count out against a list on another screen, and the separator was then applied one screen up, to the catalogue's own language list, which is where the language switch stopped working. For the two headings the row does one thing worth knowing: the first box with anything in it is the value the portal files the product under, and the rest are how that heading is written for a reader. Fill only one and it reads the same in every language. The orderable shapes follow the same shape, as a grid: one row per shape, a narrow box for the id that never changes and one box per language beside it. That replaces a text area with a syntax of its own — better than the semicolons, because it named each language rather than making it a position to count, and still something to be taught in a form where every other text is a box. Clearing the id removes a shape, two blank rows stand under the ones that exist, and a button adds more.",
-        "de": "Name, Beschreibung, Kategorie und Produktgruppe werden je einmal pro Katalogsprache erfasst, in einem eigenen, beschrifteten Feld, nebeneinander. Ein Katalog in vier Sprachen zeigt vier Felder; kommt eine fünfte dazu, kommt ein fünftes Feld. Das ersetzt ein einzelnes Feld, in dem die Bezeichnungen durch Semikolon getrennt standen — kompakt, und eine Falle: Welches Wort das französische war, musste man gegen eine Liste auf einem anderen Bildschirm abzählen, und das Trennzeichen wurde anschliessend eine Ebene höher angewandt, auf die Sprachliste des Katalogs — dort, wo die Sprachumschaltung aufhörte zu wirken. Bei den beiden Überschriften leistet die Zeile eines, das man wissen sollte: Das erste gefüllte Feld ist der Wert, unter dem das Portal ablegt; die übrigen sind die Bezeichnungen für die Leserin. Wer nur eines füllt, zeigt es in allen Sprachen. Die bestellbaren Ausprägungen folgen derselben Form, als Raster: eine Zeile je Ausprägung, ein schmales Feld für die unveränderliche id und daneben ein Feld je Sprache. Das ersetzt ein Textfeld mit eigener Syntax — besser als die Semikolons, weil es jede Sprache benannte, statt sie zur abzuzählenden Position zu machen, und trotzdem etwas, das man lernen musste, in einer Maske, in der jeder andere Text ein Feld ist. Wer die id leert, entfernt eine Ausprägung; unter den vorhandenen stehen zwei leere Zeilen, und eine Schaltfläche fügt weitere hinzu."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Service catalogue"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Catalogue in the console and open a product.",
-          "Fill the boxes for the languages you have; leave the rest empty.",
-          "For a product with shapes, fill one row per shape: its id, then its name in each language.",
-          "Save, publish, and read the portal in each language."
-        ],
-        "de": [
-          "In der Konsole den Katalog öffnen und ein Produkt öffnen.",
-          "Die Felder der Sprachen füllen, die vorliegen; die übrigen leer lassen.",
-          "Bei einem Produkt mit Ausprägungen je eine Zeile füllen: die id, dann den Namen in jeder Sprache.",
-          "Speichern, publizieren und das Portal in jeder Sprache lesen."
         ]
       }
     }
