@@ -60,11 +60,11 @@ const MODEL = `<?xml version="1.0" encoding="UTF-8"?>
 
 // run opens the model in the shipped bundle and hands `body` the live viewer, so each
 // test says what it does to the service rather than sharing one scripted sequence.
-async function run(page, body) {
+async function run(page, body, extra) {
   await page.goto("/harness.html");
   await page.addScriptTag({ url: "/vendor/dmn/dmn-modeler.js" });
 
-  return page.evaluate(async ({ xml, source }) => {
+  return page.evaluate(async ({ xml, source, extra }) => {
     document.body.innerHTML =
       '<div id="dmn" style="width:1200px;height:700px"></div>';
 
@@ -84,11 +84,12 @@ async function run(page, body) {
     };
 
     // eslint-disable-next-line no-new-func
-    const result = await new Function("viewer", "modeler", "return (" + source + ")(viewer, modeler);")(
-      viewer, modeler);
+    const result = await new Function(
+      "viewer", "modeler", "extra",
+      "return (" + source + ")(viewer, modeler, extra);")(viewer, modeler, extra);
 
     return { shipped, ...result };
-  }, { xml: MODEL, source: body.toString() });
+  }, { xml: MODEL, source: body.toString(), extra: extra || null });
 }
 
 test("a service folded and unfolded is still a box that holds its decisions",
@@ -159,6 +160,87 @@ test("a folded service takes its decisions with it when it is dragged",
     expect(state.dividerY).toBe(400);
     expect(state.output).toEqual({ x: 420, y: 300 });
   });
+
+
+// Every way of moving a shape, not just the drag. A decision service is a container
+// in diagram-js terms, and the three defects above are what happens when something
+// reads that containment differently from the rest. The keyboard move and the align
+// and distribute actions all go through modeling.moveElements — the same path the
+// drag takes — which is why they work; this is here so that stays true, and so that
+// a future change to any of those paths is caught here rather than by a reader whose
+// box arrived empty.
+//
+// Each case carries its own negative control: the decision drawn *outside* the box
+// must not move. Without it "the members travelled" would also pass if everything on
+// the canvas had travelled, or if the numbers were simply what they always were.
+[
+  {
+    what: "moved with the keyboard",
+    // eight presses, so the distance is unmistakable against a one-pixel step
+    act: (viewer) => {
+      viewer.get("selection").select(
+        viewer.get("elementRegistry").get("Service_Approval"));
+
+      for (let i = 0; i < 8; i++) {
+        viewer.get("editorActions").trigger("moveSelection", {
+          direction: "right", accelerated: false,
+        });
+      }
+    },
+    delta: 8,
+  },
+  {
+    what: "aligned with another element",
+    // right, so it is the service that moves: the box ends at 400 and
+    // Decision_Outside at 640, so aligning their right edges carries it 240 across
+    act: (viewer) => {
+      const registry = viewer.get("elementRegistry");
+
+      viewer.get("selection").select([
+        registry.get("Service_Approval"), registry.get("Decision_Outside"),
+      ]);
+      viewer.get("editorActions").trigger("alignElements", { type: "right" });
+    },
+    delta: 240,
+  },
+].forEach(({ what, act, delta }) => {
+
+  test("a service carries its decisions when it is " + what, async ({ page }) => {
+
+    const state = await run(page, async (viewer, modeler, { act }) => {
+      const registry = viewer.get("elementRegistry");
+      const at = () => ({
+        service: registry.get("Service_Approval").x,
+        output: registry.get("Decision_Output").x,
+        encapsulated: registry.get("Decision_Encapsulated").x,
+        outside: registry.get("Decision_Outside").x,
+      });
+
+      const before = at();
+
+      // eslint-disable-next-line no-new-func
+      new Function("viewer", "return (" + act + ")(viewer);")(viewer);
+
+      return { before, after: at() };
+    }, { act: act.toString() });
+
+    // What the action did, so a case that silently stopped moving the box is not
+    // read as a case that carried its decisions perfectly.
+    expect(state.after.service).toBe(state.before.service + delta);
+
+    // and what this file is here for: whatever the box travelled, its decisions
+    // travelled with it — stated as the same distance rather than as a coordinate,
+    // because the distance is the property and the coordinate is arithmetic.
+    const travelled = state.after.service - state.before.service;
+
+    expect(state.after.output - state.before.output).toBe(travelled);
+    expect(state.after.encapsulated - state.before.encapsulated).toBe(travelled);
+
+    // the negative control: what the box was not drawn around stays where it is
+    expect(state.after.outside).toBe(state.before.outside);
+  });
+
+});
 
 
 test("deleting a service leaves the decisions it was drawn around", async ({ page }) => {
