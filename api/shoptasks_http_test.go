@@ -277,3 +277,14 @@ func TestAnApprovalNamesWhomItIsFor(t *testing.T) {
 		t.Errorf("recipient = %q, want the id kept beside the name", page.Items[0].Recipient)
 	}
 }
+
+// TestAStartNamingAPositionTheOrderLacksStillStarts: the order is found and the
+// position is not. The instance runs; failing the start would make the caller
+// retry and start the work twice, so the record is what is given up, with a warning.
+func TestAStartNamingAPositionTheOrderLacksStillStarts(t *testing.T) {
+	ts, admin, alice, _, ord := anOrderBobApproves(t)
+	startApproval(t, ts, admin, ord, "tablet", "bob")
+	if got := shopTasks(t, alice, ts); len(got.Tasks) != 0 {
+		t.Errorf("tasks = %+v, want none: nothing was recorded for a position the order lacks", got.Tasks)
+	}
+}
