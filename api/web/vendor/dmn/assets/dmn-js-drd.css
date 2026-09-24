@@ -174,3 +174,31 @@
   background-color: currentcolor;
   mask: var(--dmn-icon-decision-service) no-repeat center / contain;
 }
+
+/*
+ * The grips on the corners of that handle, for dragging the name box wider or
+ * narrower. Shown with the handle rather than always, for the same reason: a box
+ * drawn around every name at all times reads as a second element.
+ */
+.djs-decision-service-label-grip {
+  fill: white;
+  stroke: var(--color-blue-205-100-50);
+  stroke-width: 1px;
+  opacity: 0;
+}
+
+.djs-decision-service-label-grip:hover,
+.djs-decision-service-label-grip.djs-dragging,
+.djs-decision-service-label-handle:hover ~ .djs-decision-service-label-grip {
+  opacity: 1;
+}
+
+.djs-decision-service-label-grip[data-corner="nw"],
+.djs-decision-service-label-grip[data-corner="se"] {
+  cursor: nwse-resize;
+}
+
+.djs-decision-service-label-grip[data-corner="ne"],
+.djs-decision-service-label-grip[data-corner="sw"] {
+  cursor: nesw-resize;
+}

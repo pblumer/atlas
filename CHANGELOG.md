@@ -52,7 +52,34 @@ _Changed_ / _Removed_ for each version.
   shown, in the same place either way — where a collapsed sub-process carries its
   own, and where a reader looks for it.
 
+### Added
+
+- **A decision service's name box can be resized, and its name is never cut in half.**
+  Moving the name was half the answer: where it goes decides what it collides with,
+  and how wide it is decides whether it reads at all. A grip on each corner of the
+  selected name now drags its box wider, narrower, taller or shorter, holding the
+  opposite corner still; the result stays inside the service and above the dividing
+  line, and is written to the same place DMN keeps the name's position, so it
+  survives a save.
+
+  Underneath was a defect the size made visible. Dragging a name once came back with
+  the word broken across two lines — "MyServic" over "e" — because the box was
+  measured to the text's own width and the layout wants a hair more than that before
+  it calls a line a fit. The box is rounded up now, and never narrower than the
+  name's longest word, so a name that wraps wraps between words. There is no size at
+  which a word is cut in half.
+
 ### Fixed
+
+- **A decision service's border no longer ends up over the arrows crossing it,
+  whatever you did to it.** This was fixed twice before, once for drawing a service
+  and once for moving one, and reported a third time. Each fix was a rule about one
+  gesture, and there are more gestures than anyone can list — so the third report was
+  answered differently. The rule is now asserted where the drawing order is actually
+  decided, on every change, rather than at each gesture that might disturb it. It
+  therefore holds for gestures nobody thought of, including ones added later. A
+  newly drawn service still starts at the very back, behind any service already
+  there, so that two overlapping boxes do not hide each other's decisions.
 
 - **Access review and Reconciliation open again.** Both pages showed an error card,
   "gen is not defined", instead of their rows. The router handed each a check

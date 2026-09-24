@@ -97,6 +97,64 @@
       }
     },
     {
+      "id": "a-decision-service-s-name-box-can-be-resized-and-its-name-is",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The name of a decision service has a size you can set",
+        "de": "Der Name eines Decision Service hat eine Grösse, die Sie festlegen"
+      },
+      "summary": {
+        "en": "Moving the name was half the answer: where it goes decides what it collides with, and how wide it is decides whether it reads at all. A grip on each corner of the selected name now drags its box wider, narrower, taller or shorter, holding the opposite corner still. The box stays inside the service and above the dividing line, and the size is written to the same place DMN keeps the name's position, so it survives a save and means the same thing to another tool. Underneath was a fault the size made visible: dragging a name once brought it back with the word broken across two lines — \"MyServic\" over \"e\" — because the box was measured to the text's own width and the layout wants a hair more than that before it calls a line a fit. The box is rounded up now, and never narrower than the name's longest word, so a name that wraps wraps between words. There is no size at which a word is cut in half.",
+        "de": "Das Verschieben des Namens war die halbe Antwort: Wohin er geht, entscheidet, womit er kollidiert; wie breit er ist, entscheidet, ob er überhaupt lesbar ist. An jeder Ecke des ausgewählten Namens sitzt jetzt ein Griff, der seinen Kasten breiter, schmaler, höher oder niedriger zieht, während die gegenüberliegende Ecke stehen bleibt. Der Kasten bleibt innerhalb des Service und oberhalb der Trennlinie, und die Grösse wird dorthin geschrieben, wo DMN auch die Position des Namens führt — sie übersteht damit ein Speichern und bedeutet für ein anderes Werkzeug dasselbe. Darunter lag ein Fehler, den die Grösse sichtbar machte: Ein einmal verschobener Name kam mit einem über zwei Zeilen zerschnittenen Wort zurück — «MyServic» über «e» — weil der Kasten auf die Breite des Textes selbst gemessen wurde und das Layout eine Spur mehr verlangt, bevor es eine Zeile als passend ansieht. Der Kasten wird jetzt aufgerundet und ist nie schmaler als das längste Wort des Namens. Ein Name, der umbricht, bricht damit zwischen Wörtern um; es gibt keine Grösse, bei der ein Wort zerschnitten wird."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-decision-service-s-border-no-longer-ends-up-over-the-arrow",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A decision service's border stays behind the arrows crossing it",
+        "de": "Der Rand eines Decision Service bleibt hinter den Pfeilen, die ihn kreuzen"
+      },
+      "summary": {
+        "en": "This was fixed twice before — once for drawing a decision service, once for moving one — and reported a third time. Each fix was a rule about one gesture, and there are more gestures than anyone can list: every one that is missed is a diagram with an arrow hidden under a box, found by whoever drew it. The third report was answered differently. The rule is now asserted where the drawing order is actually decided, on every change, instead of at each gesture that might disturb it, so it holds for gestures nobody thought of — including ones added later. Nothing can ask for a decision service to be drawn on top any more, because there is no diagram in which that is what the notation means. A newly drawn service still starts at the very back, behind any service already there, so two overlapping boxes do not hide each other's decisions.",
+        "de": "Das war bereits zweimal korrigiert — einmal für das Zeichnen eines Decision Service, einmal für das Verschieben — und wurde ein drittes Mal gemeldet. Jede Korrektur war eine Regel für eine Geste, und es gibt mehr Gesten, als sich aufzählen lassen: Jede übersehene ist ein Diagramm mit einem Pfeil, der unter einem Kasten verschwindet, gefunden von dem, der es gezeichnet hat. Die dritte Meldung wurde anders beantwortet. Die Regel wird jetzt dort durchgesetzt, wo die Zeichenreihenfolge tatsächlich entschieden wird — bei jeder Änderung —, statt bei jeder Geste, die sie stören könnte. Sie gilt damit auch für Gesten, an die niemand gedacht hat, einschliesslich später hinzugekommener. Ein Decision Service kann nicht mehr nach vorn geholt werden, weil es kein Diagramm gibt, in dem das der Bedeutung der Notation entspräche. Ein neu gezeichneter Service beginnt weiterhin ganz hinten, hinter einem bereits vorhandenen, damit zwei überlappende Kästen nicht gegenseitig ihre Decisions verdecken."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "access-review-and-reconciliation-open-again",
       "version": "Unreleased",
       "date": null,
@@ -268,74 +326,6 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "the-portal-s-process-link-asked-a-search-that-did-not-come-b",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "\"View the process\" in the portal opens the instance again",
-        "de": "„Prozess ansehen“ im Portal öffnet die Instanz wieder"
-      },
-      "summary": {
-        "en": "Pressing \"View the process\" on an order wrote \"Asking …\" under it and nothing else happened. The link searched every instance on the server for the order, and on a larger installation that search did not come back. It now asks the fulfilment process's own versions, newest first, which reads one instance per order and answers at once; an order placed before the last redeploy is still found. If the server does not answer within twenty seconds, the portal says so beside the order instead of waiting for ever.",
-        "de": "Beim Drücken von „Prozess ansehen“ auf einem Auftrag erschien darunter „Wird abgefragt …“, und sonst geschah nichts. Der Link durchsuchte alle Instanzen auf dem Server nach dem Auftrag, und auf einer grösseren Installation kam diese Suche nicht zurück. Jetzt fragt er die Versionen des Erfüllungsprozesses ab, die neueste zuerst; das liest eine Instanz je Auftrag und antwortet sofort. Ein Auftrag, der vor dem letzten Deployment des Prozesses aufgegeben wurde, wird weiterhin gefunden. Antwortet der Server nicht innert zwanzig Sekunden, sagt das Portal dies neben dem Auftrag, statt endlos zu warten."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Service catalogue",
-        "Shop"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the portal as an operator and go to \"My orders\".",
-          "Press \"View the process\" on an order.",
-          "The instance fulfilling that order opens in Operations."
-        ],
-        "de": [
-          "Das Portal als Operator öffnen und «Meine Aufträge» wählen.",
-          "Bei einem Auftrag „Prozess ansehen“ drücken.",
-          "Die Instanz, die diesen Auftrag erfüllt, öffnet sich in Operations."
-        ]
-      }
-    },
-    {
-      "id": "the-basket-said-what-was-ordered-and-not-what-belonged-to-wh",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The basket shows which service belongs to which offering",
-        "de": "Der Warenkorb zeigt, welcher Service zu welcher Marktleistung gehört"
-      },
-      "summary": {
-        "en": "The basket drew three columns — offering, service, optional — each a list stacked on its own, so a row in one column had nothing to do with the row beside it. With two offerings in the basket, a laptop's hardware could sit beside a monitor and the laptop's sleeve on the monitor's line. Now every offering is one line: its services and its options are the cells of that line, the next offering starts below the previous one's last service, and a rule under each line tells two offerings apart. A part two products share lands under whichever of them is in the basket.",
-        "de": "Der Warenkorb zeichnete drei Spalten — Marktleistung, Service, Optional — jede eine Liste für sich, sodass eine Zeile in der einen Spalte nichts mit der Zeile daneben zu tun hatte. Lagen zwei Marktleistungen im Korb, konnte die Hardware eines Laptops neben einem Monitor stehen und die Laptophülle auf der Zeile des Monitors. Jetzt ist jede Marktleistung eine Zeile: ihre Services und ihre Optionen sind die Zellen dieser Zeile, die nächste Marktleistung beginnt unterhalb des letzten Services der vorigen, und eine Linie unter jeder Zeile trennt zwei Marktleistungen. Ein Teil, das zwei Produkte gemeinsam haben, steht unter demjenigen, das im Korb liegt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Service catalogue",
-        "Shop"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the portal and add two offerings to the basket, one of them with services and options.",
-          "Open the basket.",
-          "Each offering is one line, with its services and options beside it."
-        ],
-        "de": [
-          "Das Portal öffnen und zwei Marktleistungen in den Warenkorb legen, eine davon mit Services und Optionen.",
-          "Den Warenkorb öffnen.",
-          "Jede Marktleistung ist eine Zeile, ihre Services und Optionen stehen daneben."
-        ]
       }
     }
   ]

@@ -1,0 +1,18 @@
+{
+  "tags": ["Modeler", "Decisions"],
+  "title": {
+    "en": "The name of a decision service has a size you can set",
+    "de": "Der Name eines Decision Service hat eine Grösse, die Sie festlegen"
+  },
+  "summary": {
+    "en": "Moving the name was half the answer: where it goes decides what it collides with, and how wide it is decides whether it reads at all. A grip on each corner of the selected name now drags its box wider, narrower, taller or shorter, holding the opposite corner still. The box stays inside the service and above the dividing line, and the size is written to the same place DMN keeps the name's position, so it survives a save and means the same thing to another tool. Underneath was a fault the size made visible: dragging a name once brought it back with the word broken across two lines — \"MyServic\" over \"e\" — because the box was measured to the text's own width and the layout wants a hair more than that before it calls a line a fit. The box is rounded up now, and never narrower than the name's longest word, so a name that wraps wraps between words. There is no size at which a word is cut in half.",
+    "de": "Das Verschieben des Namens war die halbe Antwort: Wohin er geht, entscheidet, womit er kollidiert; wie breit er ist, entscheidet, ob er überhaupt lesbar ist. An jeder Ecke des ausgewählten Namens sitzt jetzt ein Griff, der seinen Kasten breiter, schmaler, höher oder niedriger zieht, während die gegenüberliegende Ecke stehen bleibt. Der Kasten bleibt innerhalb des Service und oberhalb der Trennlinie, und die Grösse wird dorthin geschrieben, wo DMN auch die Position des Namens führt — sie übersteht damit ein Speichern und bedeutet für ein anderes Werkzeug dasselbe. Darunter lag ein Fehler, den die Grösse sichtbar machte: Ein einmal verschobener Name kam mit einem über zwei Zeilen zerschnittenen Wort zurück — «MyServic» über «e» — weil der Kasten auf die Breite des Textes selbst gemessen wurde und das Layout eine Spur mehr verlangt, bevor es eine Zeile als passend ansieht. Der Kasten wird jetzt aufgerundet und ist nie schmaler als das längste Wort des Namens. Ein Name, der umbricht, bricht damit zwischen Wörtern um; es gibt keine Grösse, bei der ein Wort zerschnitten wird."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

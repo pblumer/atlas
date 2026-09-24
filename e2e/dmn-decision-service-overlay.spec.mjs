@@ -81,6 +81,14 @@ async function run(page, body, extra) {
     const shipped = {
       labelCommand: typeof viewer.get("modeling")
         .updateDecisionServiceLabelBounds === "function",
+      labelResize: (() => {
+        try {
+          return typeof viewer.get("decisionServiceLabelResize").activate
+            === "function";
+        } catch (e) {
+          return false;
+        }
+      })(),
     };
 
     // eslint-disable-next-line no-new-func
@@ -524,4 +532,146 @@ test("the name stays in the box when the box is moved and resized",
     // reads the element's drawn box, not its bounds, so a stray name moved the pad
     // with it
     expect(state.rendered).toEqual({ width: box.width, height: box.height });
+  });
+
+
+test("a service never paints over what crosses it, whatever was done to it",
+  async ({ page }) => {
+
+    const state = await run(page, async (viewer) => {
+      const registry = viewer.get("elementRegistry");
+      const modeling = viewer.get("modeling");
+      const service = registry.get("Service_Approval");
+
+      // a requirement whose source is outside the box and whose target is a member,
+      // so it belongs to the root and the box is able to cover it
+      const crossing = modeling.connect(
+        registry.get("Decision_Outside"),
+        registry.get("Decision_Encapsulated"),
+        { type: "dmn:InformationRequirement" },
+      );
+
+      const covers = () => {
+        const drawn = Array.from(
+          viewer.get("canvas")._svg.querySelectorAll(".djs-element"));
+
+        return drawn.indexOf(registry.getGraphics(service)) >
+          drawn.indexOf(registry.getGraphics(crossing));
+      };
+
+      const seen = { drawn: covers() };
+
+      modeling.moveShape(service, { x: 20, y: 0 });
+      seen.moved = covers();
+
+      modeling.resizeShape(service,
+        { x: service.x, y: service.y, width: 360, height: 280 });
+      seen.resized = covers();
+
+      modeling.moveShape(registry.get("Decision_Outside"), { x: -30, y: 10 });
+      seen.outsideMoved = covers();
+
+      modeling.moveShape(registry.get("Decision_Output"), { x: 5, y: 0 });
+      seen.memberMoved = covers();
+
+      modeling.updateProperties(service, { name: "Renamed Service" });
+      seen.renamed = covers();
+
+      modeling.collapseDecisionService(service, true);
+      modeling.collapseDecisionService(service, false);
+      seen.folded = covers();
+
+      viewer.get("commandStack").undo();
+      seen.undone = covers();
+
+      return seen;
+    });
+
+    // The box is a background, and which gesture put it in front is not something a
+    // reader can tell — so the rule is not a list of gestures any more. It is
+    // asserted where the drawing order is decided, on every change, which is why
+    // this reads as a table rather than as one case.
+    const { shipped, ...gestures } = state;
+
+    expect(gestures).toEqual({
+      drawn: false,
+      moved: false,
+      resized: false,
+      outsideMoved: false,
+      memberMoved: false,
+      renamed: false,
+      folded: false,
+      undone: false,
+    });
+  });
+
+
+test("the name is not cut in half, and its box can be resized",
+  async ({ page }) => {
+
+    const state = await run(page, async (viewer) => {
+      const registry = viewer.get("elementRegistry");
+      const modeling = viewer.get("modeling");
+      const service = registry.get("Service_Approval");
+
+      const lines = () => Array.from(
+        registry.getGraphics(service)
+          .querySelector(".djs-label").querySelectorAll("tspan"))
+        .map((tspan) => tspan.textContent);
+
+      // one word, so there is nothing to break on but the word itself
+      modeling.updateProperties(service, { name: "MyService" });
+
+      const drawn = lines();
+
+      // exactly what a drag commits: the box the renderer just laid the name out in
+      const grabbed = viewer.get("decisionServiceLabelMoveHandle")
+        .getLabelBounds(service);
+
+      modeling.updateDecisionServiceLabelBounds(service, grabbed);
+
+      const stored = service.businessObject.di.get("label").get("bounds");
+
+      const moved = lines();
+
+      // and a box narrower than the name still breaks only between words
+      modeling.updateProperties(service, { name: "Approval Service" });
+      modeling.updateDecisionServiceLabelBounds(service,
+        { x: 110, y: 90, width: 1, height: 1 });
+
+      viewer.get("selection").select(service);
+
+      const grips = Array.from(
+        viewer.get("canvas").getLayer("resizers")
+          .querySelectorAll(".djs-decision-service-label-grip"))
+        .map((grip) => grip.getAttribute("data-corner")).sort();
+
+      return {
+        drawn,
+        moved,
+        grabbedWidth: grabbed.width,
+        storedWidth: stored.width,
+        narrowed: lines(),
+        grips,
+      };
+    });
+
+    expect(state.shipped.labelCommand,
+      "the shipped bundle can move a decision service's name").toBe(true);
+    expect(state.shipped.labelResize,
+      "the shipped bundle can resize the name's box — if not, it was built from a "
+      + "commit before it, whatever ATLAS-VENDORED.txt says").toBe(true);
+
+    // diagram-js fits a line while width < Math.round(maxWidth), so a box measured
+    // to the text's own width is a pixel short of holding it, and shortening falls
+    // through to a cut mid-word when there is no space to break on.
+    expect(state.drawn).toEqual([ "MyService" ]);
+    expect(state.moved).toEqual([ "MyService" ]);
+    expect(state.storedWidth).toBeGreaterThan(state.grabbedWidth);
+
+    // narrower than the whole name, so it wraps — on the space, not inside a word
+    expect(state.narrowed).toEqual([ "Approval", "Service" ]);
+
+    // and the author can take hold of any corner of it
+    expect(state.grips).toEqual([ "ne", "nw", "se", "sw" ]);
   });
