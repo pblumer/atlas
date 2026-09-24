@@ -177,33 +177,33 @@ var mcpOmittedRoutes = map[string]string{
 	// see mcpToolRoutes and ADR-0376. What stays
 	// out of the tool surface is what a product manager does not do: the instance's
 	// appearance, and the ordering side, which is somebody's own.
-	"PUT /api/v1/catalogs/{id}/theme":                          "an instance's appearance is an operator's choice, not an agent's",
-	"POST /api/v1/instances":                                   "atlas_create_instance starts one by definition key, which is what an agent holding a process listing has; the by-id route exists for a model that knows an id and must not pin a version",
-	"GET /api/v1/approvals/stalled":                            "an operations list still settling with the portal around it; a tool is a public contract",
-	"POST /api/v1/orders/{id}/cancel":                          "withdrawing an order records the person who did it, and an agent is not one; it is also the one order act whose author a reader will care about years later",
-	"POST /api/v1/orders/{id}/lines/{item}/cancel":             "the same act as withdrawing the whole order, aimed at one position: it records the person who did it, and an agent is not one",
-	"POST /api/v1/orders/{id}/lines/{item}/details":            "correcting what somebody said when they ordered is theirs to correct; on a position already held it is kept as an amendment naming who made it, and an agent is not a who",
-	"POST /api/v1/orders/{id}/lines/{item}/return":             "revoking an access somebody is using is the one order act with a blast radius outside Atlas; it is the orderer's to ask for, not an agent's",
-	"POST /api/v1/orders/fulfilment/repair":                    "a repair that ends running processes and starts others; it is an operator looking at their own installation and deciding, and the dry run exists so that a person reads the list first",
-	"GET /api/v1/portal/orders/{id}/lines/{position}/progress": "gated on owning the order and on nothing else, so the answer depends on who is asking; an agent is nobody's orderer, and the instance surface it would otherwise need is already a tool",
-	"POST /api/v1/orders/{id}/lines/{item}/escalate":           "moving an approval is a deadline's act or a person's, and an agent is neither; the decision it leads to is one nobody should be able to nudge from a tool",
-	"POST /api/v1/orders/{id}/lines/{item}/reassign":           "same: an intervention records the person who made it, and an agent is not one",
-	"POST /api/v1/approvals/decide":                            "a decision is a person's, and this one is several at once: the surface exists to let one person say once what they would otherwise have typed twelve times. An agent deciding twelve approvals in one call is the failure this route's shape is built to make legible, not a use for it",
-	"GET /api/v1/approvals":                                    "answers one signed-in person's own approvals from their session; an agent holds no tasks, so the tool would always be empty",
-	"GET /api/v1/approvals/{key}/logo":                         "a brand mark is bytes for a browser; an agent has no use for the image",
-	"GET /api/v1/users/{id}/avatar":                            "a picture of a person is bytes for a browser; an agent has no use for the image",
-	"PUT /api/v1/users/{id}/avatar":                            "how a colleague appears to everybody else is a person's to choose, and an agent is not one; the bytes it would upload came from somewhere no record would name",
-	"DELETE /api/v1/users/{id}/avatar":                         "same: taking a face away changes how somebody appears as much as putting one there",
-	"GET /api/v1/catalogs/{id}/logo":                           "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
-	"PUT /api/v1/catalogs/{id}/logo":                           "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
-	"DELETE /api/v1/catalogs/{id}/logo":                        "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
-	"GET /api/v1/catalog-products/{id}/picture":                "a product's picture is bytes for a browser, same as a brand mark; an agent reads the product record instead",
-	"PUT /api/v1/catalog-products/{id}/picture":                "a product's picture is bytes for a browser, same as a brand mark; an agent has no image to upload",
-	"DELETE /api/v1/catalog-products/{id}/picture":             "a product's picture is bytes for a browser, same as a brand mark; removing one is a maintainer's decision about how the catalogue looks",
+	"PUT /api/v1/catalogs/{id}/theme":                        "an instance's appearance is an operator's choice, not an agent's",
+	"POST /api/v1/instances":                                 "atlas_create_instance starts one by definition key, which is what an agent holding a process listing has; the by-id route exists for a model that knows an id and must not pin a version",
+	"GET /api/v1/approvals/stalled":                          "an operations list still settling with the portal around it; a tool is a public contract",
+	"POST /api/v1/orders/{id}/cancel":                        "withdrawing an order records the person who did it, and an agent is not one; it is also the one order act whose author a reader will care about years later",
+	"POST /api/v1/orders/{id}/lines/{item}/cancel":           "the same act as withdrawing the whole order, aimed at one position: it records the person who did it, and an agent is not one",
+	"POST /api/v1/orders/{id}/lines/{item}/details":          "correcting what somebody said when they ordered is theirs to correct; on a position already held it is kept as an amendment naming who made it, and an agent is not a who",
+	"POST /api/v1/orders/{id}/lines/{item}/return":           "revoking an access somebody is using is the one order act with a blast radius outside Atlas; it is the orderer's to ask for, not an agent's",
+	"POST /api/v1/orders/fulfilment/repair":                  "a repair that ends running processes and starts others; it is an operator looking at their own installation and deciding, and the dry run exists so that a person reads the list first",
+	"GET /api/v1/shop/orders/{id}/lines/{position}/progress": "gated on owning the order and on nothing else, so the answer depends on who is asking; an agent is nobody's orderer, and the instance surface it would otherwise need is already a tool",
+	"POST /api/v1/orders/{id}/lines/{item}/escalate":         "moving an approval is a deadline's act or a person's, and an agent is neither; the decision it leads to is one nobody should be able to nudge from a tool",
+	"POST /api/v1/orders/{id}/lines/{item}/reassign":         "same: an intervention records the person who made it, and an agent is not one",
+	"POST /api/v1/approvals/decide":                          "a decision is a person's, and this one is several at once: the surface exists to let one person say once what they would otherwise have typed twelve times. An agent deciding twelve approvals in one call is the failure this route's shape is built to make legible, not a use for it",
+	"GET /api/v1/approvals":                                  "answers one signed-in person's own approvals from their session; an agent holds no tasks, so the tool would always be empty",
+	"GET /api/v1/approvals/{key}/logo":                       "a brand mark is bytes for a browser; an agent has no use for the image",
+	"GET /api/v1/users/{id}/avatar":                          "a picture of a person is bytes for a browser; an agent has no use for the image",
+	"PUT /api/v1/users/{id}/avatar":                          "how a colleague appears to everybody else is a person's to choose, and an agent is not one; the bytes it would upload came from somewhere no record would name",
+	"DELETE /api/v1/users/{id}/avatar":                       "same: taking a face away changes how somebody appears as much as putting one there",
+	"GET /api/v1/catalogs/{id}/logo":                         "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
+	"PUT /api/v1/catalogs/{id}/logo":                         "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
+	"DELETE /api/v1/catalogs/{id}/logo":                      "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
+	"GET /api/v1/catalog-products/{id}/picture":              "a product's picture is bytes for a browser, same as a brand mark; an agent reads the product record instead",
+	"PUT /api/v1/catalog-products/{id}/picture":              "a product's picture is bytes for a browser, same as a brand mark; an agent has no image to upload",
+	"DELETE /api/v1/catalog-products/{id}/picture":           "a product's picture is bytes for a browser, same as a brand mark; removing one is a maintainer's decision about how the catalogue looks",
 	// Ordering, for the same reason. An order is also somebody's own: the handler
 	// confines reads to the orders you placed or are the recipient of, and a tool
 	// acting as a server identity would have no such person to be.
-	"GET /api/v1/portal/catalog": "which catalogue is *yours*, answered from the caller's own groups; an agent acting as a server identity has none",
+	"GET /api/v1/shop/catalog": "which catalogue is *yours*, answered from the caller's own groups; an agent acting as a server identity has none",
 	// The inventory. Same shape as the catalogue above — it answers about the
 	// caller — with one more reason on top: a list of somebody's access is exactly
 	// the read that should need a person behind it, and an agent acting as a server
@@ -613,9 +613,9 @@ var mcpOmittedRoutes = map[string]string{
 	// — so a tool here would buy nothing on the read side, and on the write side it
 	// would let a robot set a preference into somebody's portal that they did not
 	// choose and have no obvious way to attribute.
-	"GET /api/v1/portal/favourites":             "a bookmark list is a navigation aid for a person at a screen, which an assistant does not need",
-	"PUT /api/v1/portal/favourites/{itemId}":    "marking somebody's portal on their behalf sets a preference they did not choose and cannot easily attribute",
-	"DELETE /api/v1/portal/favourites/{itemId}": "as above, and unmarking is the half somebody would notice only by missing it",
+	"GET /api/v1/shop/favourites":             "a bookmark list is a navigation aid for a person at a screen, which an assistant does not need",
+	"PUT /api/v1/shop/favourites/{itemId}":    "marking somebody's portal on their behalf sets a preference they did not choose and cannot easily attribute",
+	"DELETE /api/v1/shop/favourites/{itemId}": "as above, and unmarking is the half somebody would notice only by missing it",
 
 	// Access history (ADR-0346). Omitted, and the reason is
 	// not the inventory's.

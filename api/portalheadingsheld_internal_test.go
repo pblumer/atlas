@@ -23,7 +23,7 @@ import (
 // The fix is one rule read in one place, so the guard is that the column goes
 // through it and resolves the offering first.
 func TestWhatSomebodyHoldsIsFiledUnderTheHeadingTheyOrderedItUnder(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 
 	body := webRegion(t, src, "function headingsHeld(", "\n}")
 	if !strings.Contains(body, "rootOf(") {

@@ -41,9 +41,9 @@ func TestThePortalAsksForTheFieldTheReleaseCarries(t *testing.T) {
 		t.Fatalf("no field in %s carries the marker; the fixture has gone stale", raw)
 	}
 
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	if !strings.Contains(src, "it."+key) {
-		t.Errorf("the release spells a product's form %q and portal.js never reads "+
+		t.Errorf("the release spells a product's form %q and shop.js never reads "+
 			"it.%s, so a product that asks for a cost centre is ordered without one "+
 			"and nobody is told", key, key)
 	}
@@ -56,13 +56,13 @@ func TestThePortalAsksForTheFieldTheReleaseCarries(t *testing.T) {
 // of those rules would be wrong the first time somebody edits a form. The portal
 // therefore uses the same runtime the Tasks app and the incident repair use.
 func TestTheBasketRendersTheFormWithAtlasOwnRuntime(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	if !strings.Contains(src, "./formviewer.js") {
-		t.Error("portal.js does not load the shared form runtime. Rendering the fields " +
+		t.Error("shop.js does not load the shared form runtime. Rendering the fields " +
 			"itself would be a second copy of every rule a form states about itself")
 	}
 	if !strings.Contains(src, "form.submit()") {
-		t.Error("portal.js never asks the form whether it is valid, so an incomplete " +
+		t.Error("shop.js never asks the form whether it is valid, so an incomplete " +
 			"form is sent and the refusal arrives after the order was attempted")
 	}
 	// And what is typed survives a redraw. The basket is rebuilt whenever anything

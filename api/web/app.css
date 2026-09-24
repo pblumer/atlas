@@ -208,7 +208,7 @@ b { font-weight: 600; }
 #drawer-apps a:hover { background: var(--bg); text-decoration: none; }
 #drawer-apps a.active { background: var(--accent-soft); color: var(--accent); }
 #drawer-apps a .soon { margin-left: auto; font-size: 11px; color: var(--muted); font-weight: 500; }
-/* The two portal surfaces are pages of their own and open in their own window, so
+/* The two shop surfaces are pages of their own and open in their own window, so
    the drawer says so before the click rather than after it: an entry that silently
    opens a second window is the same surprise whichever way it is resolved. It is a
    ::after on the attribute that already carries the fact, so nothing has to keep a

@@ -97,8 +97,8 @@ func TestTheReturnPageIsAnAllowlist(t *testing.T) {
 		"https://evil.example/steal",
 		"//evil.example/steal",
 		"/index.html\n/evil",
-		"/../portal.html",
-		"/portal.html?next=https://evil.example",
+		"/../shop.html",
+		"/shop.html?next=https://evil.example",
 		"javascript:alert(1)",
 		"",
 		"/some/other/page",
@@ -194,7 +194,7 @@ func TestTheStartRecordsWhereToReturnInTheBrowser(t *testing.T) {
 // TestThePortalStartsItsFederatedLoginWithItsOwnPage. The server half is useless
 // unless the portal asks for it, and the Console must keep asking for nothing.
 func TestThePortalStartsItsFederatedLoginWithItsOwnPage(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function renderSignIn(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function renderSignIn(", "\n}")
 	// The value and not the word: "returnTo" is in the comment that explains this,
 	// so a guard looking for the word passes over a link that stopped carrying it.
 	if !strings.Contains(body, "returnTo=${encodeURIComponent(location.pathname)}") {

@@ -93,7 +93,7 @@ type Release struct {
 	// never recomputes it.
 	//
 	// A flat sequence was the first shape and could not carry the failure
-	// behaviour the portal requires: a failing line must stop only the lines that
+	// behaviour the shop requires: a failing line must stop only the lines that
 	// depend on it, and a list has already discarded the reason each item sits
 	// where it does. Waves keep it — a failure stops its own successors, and the
 	// rest of its wave and every independent branch continue.
@@ -276,7 +276,7 @@ func checkCatalogs(in Input, byID map[string]Item, add func(Problem)) {
 					add(Problem{Catalog: c.ID, Item: id, Message: "words the " + label +
 						" " + key + " as " + text + " in " + lang +
 						", where another product in this catalogue words it " + first +
-						"; one heading is one column head, and the portal would show " +
+						"; one heading is one column head, and the shop would show " +
 						"one of the two with nothing saying a choice was made"})
 				}
 			}
@@ -291,7 +291,7 @@ func checkCatalogs(in Input, byID map[string]Item, add func(Problem)) {
 			sayWording(id, "productGroup", "product group", it.ProductGroup, it.ProductGroupTexts)
 			// What is NOT checked here, and used to be: whether every declared
 			// language has a name, a description and a wording for each heading.
-			// A missing translation stops nobody — the portal falls back to the
+			// A missing translation stops nobody — the shop falls back to the
 			// language the catalogue does have — so refusing the publish stopped a
 			// maintainer from shipping a catalogue that was already usable, and
 			// stopped the first language's readers on the second language's
@@ -339,14 +339,14 @@ func checkItems(in Input, add func(Problem)) {
 			add(Problem{Item: it.ID, Message: "state is " + string(it.State) + ", not active"})
 		}
 		// The floor under the translation rule, and not that rule made smaller. A
-		// product missing one translation still has a name and the portal falls
-		// back to it; a product missing all of them has none, and the portal would
+		// product missing one translation still has a name and the shop falls
+		// back to it; a product missing all of them has none, and the shop would
 		// show the id — a string nobody chose for a reader, on a row its maintainer
 		// cannot see is wrong from the catalogue screen. Whitespace is not a name,
 		// for the reason it is not a description: it is what a cleared box leaves.
 		if !described(it.Texts) {
 			add(Problem{Item: it.ID, Message: "has no name in any language; " +
-				"the portal would show its id, and there is nothing to fall back to"})
+				"the shop would show its id, and there is nothing to fall back to"})
 		}
 		if it.ProvisionProcess == "" {
 			add(Problem{Item: it.ID, Message: "no provision process bound"})
@@ -378,14 +378,14 @@ func checkItems(in Input, add func(Problem)) {
 			}
 		}
 		// A category of nothing but spaces is a heading nobody can read and nobody
-		// can group by: the portal would render an empty column head, and a second
+		// can group by: the shop would render an empty column head, and a second
 		// product with a different number of spaces would sit under a different one
 		// (ADR-0360).
 		if it.Category != "" && strings.TrimSpace(it.Category) == "" {
 			add(Problem{Item: it.ID, Message: "names a blank category; leave it out for a " +
 				"product the catalogue groups under nothing"})
 		}
-		// The key is what the portal groups by, so translations without one are
+		// The key is what the shop groups by, so translations without one are
 		// translations of nothing: the product sits in the bucket for products
 		// carrying no heading, under a column head reading "Ohne Kategorie", while
 		// holding the word for one in every language the catalogue declares.
@@ -400,7 +400,7 @@ func checkItems(in Input, add func(Problem)) {
 				"product group to group by; the translations would never be read"})
 		}
 		// A price of nothing but spaces is a product that claims to say what it costs
-		// and says nothing — worse than saying nothing at all, because the portal
+		// and says nothing — worse than saying nothing at all, because the shop
 		// renders an empty field where a figure belongs
 		// (ADR-0361).
 		if it.Price != "" && strings.TrimSpace(it.Price) == "" {
@@ -408,7 +408,7 @@ func checkItems(in Input, add func(Problem)) {
 				"product the catalogue says nothing about the cost of"})
 		}
 		// A form id of nothing but spaces is a product that asks a question nobody
-		// can answer: the portal would look for a form under a name no form has, and
+		// can answer: the shop would look for a form under a name no form has, and
 		// the orderer would be stopped by a blank that cannot be filled in
 		// (ADR-0358).
 		if it.ConfigForm != "" && strings.TrimSpace(it.ConfigForm) == "" {
@@ -845,7 +845,7 @@ func freeze(items []Item) []Item {
 		// placed against this release must keep saying what was promised, whatever
 		// the catalogue says next week.
 		it.Descriptions = copyTexts(it.Descriptions)
-		// The headings travel for the reason the name does: the portal reads the
+		// The headings travel for the reason the name does: the shop reads the
 		// release and nothing else, so a translation left behind is a column head
 		// no reader of that language ever sees.
 		it.CategoryTexts = copyTexts(it.CategoryTexts)

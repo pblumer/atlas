@@ -1,4 +1,4 @@
-// The self-service portal (ADR-0312).
+// The self-service shop (ADR-0312).
 //
 // A module, so it can reuse theme.js's palette derivation rather than repeat it.
 // That reuse is the point: --accent-ink decides whether a button's label is
@@ -19,7 +19,7 @@ import { applyAccent } from './theme.js';
 
 const STRINGS = {
   de: {
-    'portal.title': 'Leistungsportal',
+    'portal.title': 'Shop',
     'portal.catalog': 'Katalog',
     'portal.orders': 'Meine Bestellungen',
     'portal.none': 'Ihnen ist kein Katalog zugeordnet.',
@@ -62,6 +62,7 @@ const STRINGS = {
     'proc.none.order': 'Zu diesem Auftrag ist keine laufende Prozessinstanz zu finden: Entweder wurde noch keine gestartet, sie ist bereits beendet, oder die Aufbewahrung hat sie entfernt.',
     'proc.archived': 'Der Prozess zu diesem Auftrag steht nur noch im ausgelagerten Ereignisprotokoll. Dieser Server hat ihn nicht mehr und kann ihn nicht anzeigen.',
     'proc.asking': 'Wird abgefragt …',
+    'proc.slow': 'Der Server hat auf die Suche nach dem Prozess nicht rechtzeitig geantwortet. Der Auftrag selbst ist davon nicht betroffen; bitte später erneut versuchen.',
     'order.completed': 'Abgeschlossen',
     'order.partial': 'Teilweise erfüllt',
     'order.unfulfilled': 'Nicht erfüllt',
@@ -154,11 +155,11 @@ const STRINGS = {
     'find.hits': 'Treffer',
     'find.clear': 'Suche zurücksetzen',
     'find.where': 'in',
-    // The sign-in, for a portal that enforces one. Every string here is read by
+    // The sign-in, for a shop that enforces one. Every string here is read by
     // somebody who is not an operator and has no server log to consult, so each
     // one names what to do next rather than what went wrong.
     'signin.title': 'Bitte melden Sie sich an',
-    'signin.hint': 'Dieses Portal zeigt Ihnen den Katalog, der Ihnen zugeordnet ist, und Ihre eigenen Aufträge. Dazu muss es wissen, wer Sie sind.',
+    'signin.hint': 'Dieser Shop zeigt Ihnen den Katalog, der Ihnen zugeordnet ist, und Ihre eigenen Aufträge. Dazu muss er wissen, wer Sie sind.',
     'signin.user': 'Benutzername',
     'signin.password': 'Passwort',
     'signin.submit': 'Anmelden',
@@ -174,7 +175,7 @@ const STRINGS = {
     'signin.registerLink': 'Registrieren',
   },
   en: {
-    'portal.title': 'Service portal',
+    'portal.title': 'Shop',
     'portal.catalog': 'Catalogue',
     'portal.orders': 'My orders',
     'portal.none': 'No catalogue is assigned to you.',
@@ -217,6 +218,7 @@ const STRINGS = {
     'proc.none.order': 'No running process instance was found for this order: either none has started yet, it has already finished, or retention has removed it.',
     'proc.archived': 'This order\'s process is only in the exported event log now. This server no longer holds it and cannot show it.',
     'proc.asking': 'Asking …',
+    'proc.slow': 'The server did not answer the search for the process in time. The order itself is not affected; please try again later.',
     'order.completed': 'Completed',
     'order.partial': 'Partly fulfilled',
     'order.unfulfilled': 'Not fulfilled',
@@ -308,7 +310,7 @@ const STRINGS = {
     'find.clear': 'Clear search',
     'find.where': 'in',
     'signin.title': 'Please sign in',
-    'signin.hint': 'This portal shows you the catalogue assigned to you, and your own orders. To do that it has to know who you are.',
+    'signin.hint': 'This shop shows you the catalogue assigned to you, and your own orders. To do that it has to know who you are.',
     'signin.user': 'Username',
     'signin.password': 'Password',
     'signin.submit': 'Sign in',
@@ -324,10 +326,10 @@ const STRINGS = {
     'signin.registerLink': 'Register',
   },
   // Français, pour les catalogues tenus en français. Vouvoiement partout, comme
-  // dans l’allemand : le portail s’adresse à une personne qui commande pour son
+  // dans l’allemand : le shop s’adresse à une personne qui commande pour son
   // travail, pas à un compte.
   fr: {
-    'portal.title': 'Portail des prestations',
+    'portal.title': 'Shop',
     'portal.catalog': 'Catalogue',
     'portal.orders': 'Mes commandes',
     'portal.none': 'Aucun catalogue ne vous est attribué.',
@@ -370,6 +372,7 @@ const STRINGS = {
     'proc.none.order': 'Aucune instance de processus en cours ne correspond à cette commande : soit aucune n’a encore été lancée, soit elle est déjà terminée, soit la conservation l’a supprimée.',
     'proc.archived': 'Le processus de cette commande ne figure plus que dans le journal d’événements externalisé. Ce serveur ne le possède plus et ne peut pas l’afficher.',
     'proc.asking': 'Interrogation en cours …',
+    'proc.slow': 'Le serveur n’a pas répondu à temps à la recherche du processus. La commande elle-même n’est pas concernée ; veuillez réessayer plus tard.',
     'order.completed': 'Terminée',
     'order.partial': 'Partiellement exécutée',
     'order.unfulfilled': 'Non exécutée',
@@ -461,7 +464,7 @@ const STRINGS = {
     'find.clear': 'Réinitialiser la recherche',
     'find.where': 'dans',
     'signin.title': 'Veuillez vous connecter',
-    'signin.hint': 'Ce portail vous montre le catalogue qui vous est attribué ainsi que vos propres commandes. Pour cela, il doit savoir qui vous êtes.',
+    'signin.hint': 'Ce shop vous montre le catalogue qui vous est attribué ainsi que vos propres commandes. Pour cela, il doit savoir qui vous êtes.',
     'signin.user': 'Nom d’utilisateur',
     'signin.password': 'Mot de passe',
     'signin.submit': 'Se connecter',
@@ -479,7 +482,7 @@ const STRINGS = {
   // Italiano, per i cataloghi tenuti in italiano. Forma di cortesia ovunque, come
   // nelle altre lingue.
   it: {
-    'portal.title': 'Portale delle prestazioni',
+    'portal.title': 'Shop',
     'portal.catalog': 'Catalogo',
     'portal.orders': 'I miei ordini',
     'portal.none': 'Non le è assegnato alcun catalogo.',
@@ -522,6 +525,7 @@ const STRINGS = {
     'proc.none.order': 'Per questo ordine non risulta alcuna istanza di processo in corso: o non ne è ancora stata avviata una, o è già terminata, oppure la conservazione l’ha rimossa.',
     'proc.archived': 'Il processo di questo ordine si trova ormai solo nel registro eventi esternalizzato. Questo server non lo possiede più e non può mostrarlo.',
     'proc.asking': 'Interrogazione in corso …',
+    'proc.slow': 'Il server non ha risposto in tempo alla ricerca del processo. L’ordine stesso non ne è interessato; riprovare più tardi.',
     'order.completed': 'Concluso',
     'order.partial': 'Parzialmente evaso',
     'order.unfulfilled': 'Non evaso',
@@ -613,7 +617,7 @@ const STRINGS = {
     'find.clear': 'Azzerare la ricerca',
     'find.where': 'in',
     'signin.title': 'Si prega di accedere',
-    'signin.hint': 'Questo portale le mostra il catalogo che le è assegnato e i suoi ordini. Per farlo deve sapere chi è lei.',
+    'signin.hint': 'Questo shop le mostra il catalogo che le è assegnato e i suoi ordini. Per farlo deve sapere chi è lei.',
     'signin.user': 'Nome utente',
     'signin.password': 'Password',
     'signin.submit': 'Accedere',
@@ -675,7 +679,7 @@ function t(key) {
 // furniture is French too, offering an FR button would land somebody on exactly
 // the half-translated screen that record forbids. The French product names are
 // stored and reachable through the fallback; what is not offered is a button that
-// promises a French portal.
+// promises a French shop.
 //
 // Before there is a catalogue — the sign-in screen, or a visitor who is nobody's
 // audience — it is this page's own languages, because the switch has to be
@@ -1168,7 +1172,7 @@ function headingsOf(items, field) {
 }
 
 // inCategory reports whether a top-level product belongs under the heading now
-// selected. null is every heading, which is what the portal opens on.
+// selected. null is every heading, which is what the shop opens on.
 // groupsOf is every product group named by the products under the heading now
 // open, and the bucket for the ones that name none.
 //
@@ -1188,7 +1192,7 @@ function groupsOf(release) {
 }
 
 // inGroup reports whether a product belongs under the group now selected. null is
-// every group, which is what the portal opens on.
+// every group, which is what the shop opens on.
 function inGroup(item) {
   if (state.group === null) return true;
   return (item.productGroup || '').trim() === state.group;
@@ -1281,7 +1285,7 @@ async function api(path, options) {
 // behind.
 //
 // A 401 here is the defect this answers. With enforcement on and no session every
-// route the portal reads is refused: the catalogue read was swallowed and drawn as
+// route the shop reads is refused: the catalogue read was swallowed and drawn as
 // "no catalogue is assigned to you", which is a statement about entitlement and
 // not about authentication, and the orders read was not swallowed at all — so what
 // a visitor got was an error line with an HTTP status in it, no catalogue, and
@@ -1350,7 +1354,7 @@ async function load() {
     return;
   }
   try {
-    state.catalog = await api('/api/v1/portal/catalog');
+    state.catalog = await api('/api/v1/shop/catalog');
   } catch {
     // 404 here is the ordinary "you are the audience for nothing" answer, not a
     // failure: the page says so rather than showing an error.
@@ -1379,7 +1383,7 @@ async function load() {
     state.held = new Map(((inv && inv.items) || []).map((i) => [i.itemId, i.since]));
   } catch { /* nobody holds anything when there is nobody */ }
   try {
-    const favs = await api('/api/v1/portal/favourites');
+    const favs = await api('/api/v1/shop/favourites');
     state.favourites = new Set((favs && favs.itemIds) || []);
   } catch { /* and nobody has marked anything */ }
   // The directory, for the columns that show who an order is for. Any
@@ -1418,7 +1422,7 @@ function loadWhoIAm() {
   state.meID = '';
   state.people = [];
   const me = state.me;
-  // Nothing was readable. Offer less rather than guess more: the ordinary portal
+  // Nothing was readable. Offer less rather than guess more: the ordinary shop
   // still works, ordering for somebody else simply is not offered.
   if (!me) return;
   const user = (me && me.user) || {};
@@ -1454,7 +1458,7 @@ function loadWhoIAm() {
   state.people = state.principals.filter((e) => e.type === 'user');
 }
 
-// signIn posts the password form and, on success, loads the portal the visitor
+// signIn posts the password form and, on success, loads the shop the visitor
 // asked for.
 //
 // It stays here. The Console's sign-in lands on the Console, which is the wrong
@@ -1495,7 +1499,7 @@ async function signIn(username, password) {
 // once five have been wrong. Reported as a credential failure it is how somebody
 // spends a quarter of an hour hunting a password that is already correct. It
 // matters more here than on the Console: an operator can read the server log, and
-// the person this page is for can only telephone the desk this portal exists to
+// the person this page is for can only telephone the desk this shop exists to
 // save. Saying so leaks nothing, because the throttle counts attempts against
 // names that do not exist too.
 //
@@ -1757,7 +1761,7 @@ function cell(opts) {
 // hiding it would remove the one thing somebody wants to know, which is when.
 
 // windowOf reads an item's window, tolerating a release published before the
-// portal read the field.
+// shop read the field.
 function windowOf(item) {
   const w = (item || {}).lifecycle || {};
   return { from: Number(w.from) || 0, until: Number(w.until) || 0 };
@@ -1765,7 +1769,7 @@ function windowOf(item) {
 
 // orderableNow reports whether this moment is inside the item's window. Both sides
 // are inclusive and zero is unbounded, exactly as the server reads them — two
-// readings of one rule that disagreed would be a portal offering what the order is
+// readings of one rule that disagreed would be a shop offering what the order is
 // refused for, which is the failure this pairing exists to prevent.
 function orderableNow(item, at) {
   const w = windowOf(item);
@@ -1943,7 +1947,7 @@ async function star(id) {
   if (marked) state.favourites.delete(id); else state.favourites.add(id);
   render();
   try {
-    const out = await api(`/api/v1/portal/favourites/${encodeURIComponent(id)}`,
+    const out = await api(`/api/v1/shop/favourites/${encodeURIComponent(id)}`,
       { method: marked ? 'DELETE' : 'PUT' });
     state.favourites = new Set((out && out.itemIds) || []);
   } catch (e) {
@@ -2567,6 +2571,12 @@ async function mountConfigForms() {
 // deriveStatus mirrors the server's own rule rather than asking for it: an order
 // carries its lines, and its standing is computed from them so the two cannot
 // disagree. Doing it here keeps that property — a stored status could.
+
+// FOLLOW_TIMEOUT_MS is how long the process link waits for the server before it
+// says so. Long enough for a slow scoped search on a busy engine, short enough
+// that nobody reads the note as a page about to arrive.
+const FOLLOW_TIMEOUT_MS = 20000;
+
 // followProcess opens the instance fulfilling one order.
 //
 // Looked up when the link is pressed rather than resolved for every row: finding
@@ -2582,22 +2592,45 @@ async function mountConfigForms() {
 // page produced a message off-screen, and the button read as broken — which is how
 // it was reported. The one case that works navigates away, and the two that cannot
 // are the two that have to be visible.
+//
+// And narrowed by definition, not only filtered by name afterwards. A search that
+// names no definition reads every instance on the server and every variable of
+// each, and on an installation of any size that does not come back: the note said
+// "Wird abgefragt …" and stayed, which is how it was reported. Named, the search
+// reads that definition's own index — the instances of the fulfilment process,
+// which is one per order. Every deployed version is asked, newest first, because an
+// order placed before the last redeploy is worked by the version it started on.
+//
+// And bounded in time. A lookup that never answers is the one outcome that must not
+// look like "still asking": the reader waits for a page that is not coming.
 async function followProcess(order) {
   state.following.set(order.id, t('proc.asking'));
   render();
   const said = (what) => { state.following.set(order.id, what); render(); };
+  const giveUp = new AbortController();
+  const timer = setTimeout(() => giveUp.abort(), FOLLOW_TIMEOUT_MS);
   try {
+    const defs = await api('/api/v1/processes', { signal: giveUp.signal });
+    const versions = (defs || [])
+      .filter((d) => d.processId === 'atlas-auftrag-erfuellung')
+      .sort((a, b) => b.version - a.version);
     const query = `orderId=${order.id}`;
-    const page = await api(`/api/v1/instances/search?q=${encodeURIComponent(query)}`);
-    const hits = (page && page.items) || [];
-    // Archived first, and separately. The search falls back to the exported event
-    // log when this server's own index has nothing, and marks what it answers with:
-    // the instance was hard-deleted by history retention (ADR-0115) and exists only
-    // in the export. Following one reaches a replay view with nothing to replay,
-    // which says "Could not load this instance's replay." — a dead end two screens
-    // from the page that knew better.
-    const live = hits.filter((i) => !i.archived);
-    const hit = live.find((i) => i.processId === 'atlas-auftrag-erfuellung');
+    const hits = [];
+    let hit = null;
+    for (const d of versions) {
+      const page = await api(`/api/v1/instances/search?process=${d.key}` +
+        `&q=${encodeURIComponent(query)}`, { signal: giveUp.signal });
+      const found = (page && page.items) || [];
+      hits.push(...found);
+      // Archived first, and separately. The search falls back to the exported event
+      // log when this server's own index has nothing, and marks what it answers with:
+      // the instance was hard-deleted by history retention (ADR-0115) and exists only
+      // in the export. Following one reaches a replay view with nothing to replay,
+      // which says "Could not load this instance's replay." — a dead end two screens
+      // from the page that knew better.
+      hit = found.find((i) => !i.archived && i.processId === 'atlas-auftrag-erfuellung');
+      if (hit) break;
+    }
     if (!hit) {
       // What is known, and not a cause that was guessed. This said the instance had
       // been removed by retention, which is one of three reasons it is not found and
@@ -2611,7 +2644,9 @@ async function followProcess(order) {
     }
     window.location.href = `/index.html#/operations/i/${hit.key}`;
   } catch (e) {
-    said(`${t('portal.failed')} ${e.message}`);
+    said(giveUp.signal.aborted ? t('proc.slow') : `${t('portal.failed')} ${e.message}`);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -3105,7 +3140,7 @@ function ownerAmong(release, roots) {
 // contains, so a service two edges down has never had a heading of its own to
 // carry. Read directly from what a person holds, this column showed "Ohne
 // Kategorie" for every service they have while the catalogue showed real headings
-// for the same things — the two sides of the portal disagreeing about one field,
+// for the same things — the two sides of the shop disagreeing about one field,
 // which is exactly what ADR-0360 promised they would not do.
 //
 // So each held id is resolved to the product it belongs to and the heading is read
@@ -3525,7 +3560,7 @@ document.addEventListener('DOMContentLoaded', () => {
   paintFromCache();
   render();
   load().catch((e) => {
-    // A refusal is not a broken portal. The page is one people leave open, so the
+    // A refusal is not a broken shop. The page is one people leave open, so the
     // session behind it runs out while it stands there, and the next load is the
     // same 401 the gate exists for — reported as a failure it is the original
     // defect one step later, with an HTTP status where the sign-in should be.

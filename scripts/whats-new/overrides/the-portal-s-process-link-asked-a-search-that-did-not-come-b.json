@@ -1,0 +1,23 @@
+{
+  "tags": ["Service catalogue", "Shop"],
+  "title": {
+    "en": "\"View the process\" in the portal opens the instance again",
+    "de": "„Prozess ansehen“ im Portal öffnet die Instanz wieder"
+  },
+  "summary": {
+    "en": "Pressing \"View the process\" on an order wrote \"Asking …\" under it and nothing else happened. The link searched every instance on the server for the order, and on a larger installation that search did not come back. It now asks the fulfilment process's own versions, newest first, which reads one instance per order and answers at once; an order placed before the last redeploy is still found. If the server does not answer within twenty seconds, the portal says so beside the order instead of waiting for ever.",
+    "de": "Beim Drücken von „Prozess ansehen“ auf einem Auftrag erschien darunter „Wird abgefragt …“, und sonst geschah nichts. Der Link durchsuchte alle Instanzen auf dem Server nach dem Auftrag, und auf einer grösseren Installation kam diese Suche nicht zurück. Jetzt fragt er die Versionen des Erfüllungsprozesses ab, die neueste zuerst; das liest eine Instanz je Auftrag und antwortet sofort. Ein Auftrag, der vor dem letzten Deployment des Prozesses aufgegeben wurde, wird weiterhin gefunden. Antwortet der Server nicht innert zwanzig Sekunden, sagt das Portal dies neben dem Auftrag, statt endlos zu warten."
+  },
+  "tutorial": {
+    "en": [
+      "Open the portal as an operator and go to \"My orders\".",
+      "Press \"View the process\" on an order.",
+      "The instance fulfilling that order opens in Operations."
+    ],
+    "de": [
+      "Das Portal als Operator öffnen und «Meine Aufträge» wählen.",
+      "Bei einem Auftrag „Prozess ansehen“ drücken.",
+      "Die Instanz, die diesen Auftrag erfüllt, öffnet sich in Operations."
+    ]
+  }
+}

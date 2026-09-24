@@ -1,4 +1,4 @@
-// e2e for the portal's basket layout (api/web/portal.js, against a fixture).
+// e2e for the portal's basket layout (api/web/shop.js, against a fixture).
 //
 // What was reported: with two offerings in the basket, nothing said which service
 // and which option belonged to which of them. The basket drew three columns, each a
@@ -10,9 +10,9 @@
 // the rendered boxes rather than the markup. A test that looked for a wrapping
 // element would pass against a page that wrapped and still misaligned.
 //
-// And so it loads the REAL portal.html, with only the network replaced. The grid
+// And so it loads the REAL shop.html, with only the network replaced. The grid
 // that makes a line is declared in that page's own stylesheet, not in app.css: a
-// harness page that borrowed portal.js and not portal.html drew every cell at the
+// harness page that borrowed shop.js and not shop.html drew every cell at the
 // left edge, one under the other, and no alignment could be measured in it at all.
 import { test, expect } from "@playwright/test";
 
@@ -54,11 +54,11 @@ function installFixture() {
     // A user with an id, because ordering needs somebody to be: without one the
     // page draws every "+" disabled and nothing reaches the basket.
     "/api/v1/auth/me": { user: { id: "usr_1", username: "anja", displayName: "Anja", roles: [] } },
-    "/api/v1/portal/catalog": CAT,
+    "/api/v1/shop/catalog": CAT,
     "/api/v1/catalogs/cat_b/releases": [RELEASE],
     "/api/v1/orders": [],
     "/api/v1/inventory": { items: [] },
-    "/api/v1/portal/favourites": { itemIds: [] },
+    "/api/v1/shop/favourites": { itemIds: [] },
     "/api/v1/principals": [{ id: "usr_1", name: "Anja" }],
   };
   window.fetch = (input) => {
@@ -80,7 +80,7 @@ test.beforeEach(async ({ page }) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.addInitScript(installFixture);
-  await page.goto("/portal.html");
+  await page.goto("/shop.html");
   await page.waitForSelector(".cascade", { timeout: 10000 });
   page._errors = errors;
 });

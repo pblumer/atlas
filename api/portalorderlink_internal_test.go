@@ -26,7 +26,7 @@ import (
 // table and is right for a load that failed, which is about the whole page; a
 // lookup started from one row is about that row.
 func TestTheAnswerAppearsWhereTheButtonWasPressed(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	body := webRegion(t, src, "async function followProcess(", "\n}")
 	if strings.Contains(body, "state.error =") {
 		t.Error("the lookup reports into state.error, which is painted above the " +
@@ -52,7 +52,7 @@ func TestTheAnswerAppearsWhereTheButtonWasPressed(t *testing.T) {
 // that answers "Could not load this instance's replay." — which is what a reader
 // calls a link that does not work.
 func TestAnInstanceThisServerNoLongerHoldsIsNotFollowed(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "async function followProcess(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "async function followProcess(", "\n}")
 	// The hit that is navigated to has to be drawn from rows the flag excluded, not
 	// merely from a function that mentions it: naming the flag in a comment is what
 	// this guard first accepted, and the link stayed broken.
@@ -78,10 +78,10 @@ func TestAnInstanceThisServerNoLongerHoldsIsNotFollowed(t *testing.T) {
 // This reverses "Every position carries its own way into the process working on it"
 // and "Tell the orderer where their own position stands", whose guards this file
 // replaces. The routes behind them are untouched — GET
-// /api/v1/portal/orders/{id}/lines/{position}/progress and the instance search are
+// /api/v1/shop/orders/{id}/lines/{position}/progress and the instance search are
 // API surface and have callers that are not this page.
 func TestThePositionRowsOfferNoProcessLinks(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	rows := webRegion(t, src, "function orderRowBodies(", "\n}")
 	for _, gone := range []struct{ frag, what string }{
 		{"proc.where", `the per-position "where does this stand" link`},
@@ -111,7 +111,7 @@ func TestThePositionRowsOfferNoProcessLinks(t *testing.T) {
 // A message catalogue that keeps words nothing renders is a catalogue somebody
 // translates twice and reads as still in use.
 func TestTheStringsOfTheDeletedLinksAreGoneToo(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	for _, key := range []string{"'proc.where'", "'proc.openLine'", "'proc.standing'", "'proc.nothingRunning'"} {
 		if strings.Contains(src, key) {
 			t.Errorf("%s is still in the message catalogue, and nothing renders it", key)

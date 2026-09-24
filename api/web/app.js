@@ -594,7 +594,7 @@ async function deployDemo() {
 // below.
 //
 // `separate: true` marks an entry that is a page of its own rather than a view of
-// this application, and it opens in its own window. The two portal surfaces are
+// this application, and it opens in its own window. The two shop surfaces are
 // the only ones: they carry the catalogue's brand instead of the console's, they
 // are written for people who never open the modeller, and they load their own
 // message catalogue — so routing to one is leaving Atlas's shell, not moving inside
@@ -609,10 +609,10 @@ const APPS = [
   { id: "console", name: "Console", route: "#/console", on: true, role: "any" },
   { id: "modeler", name: "Modeler", route: "#/modeler", on: true, role: "modeler" },
   { id: "tasks", name: "Tasks", route: "#/tasks", on: true, role: "user" },
-  // The service portal is a page of its own, not a view of this app, so its route
+  // The shop is a page of its own, not a view of this app, so its route
   // is a path and not a hash — written without a leading slash, because a route in
   // this table is what the handbook appends to the site root (href="/" + route),
-  // and "//portal.html" would be a protocol-relative URL to a host of that name.
+  // and "//shop.html" would be a protocol-relative URL to a host of that name.
   // It is written for people who never open the modeler
   // — ordering a laptop and seeing where the order stands — and it carries the
   // brand of the catalogue the visitor belongs to rather than this console's.
@@ -620,7 +620,7 @@ const APPS = [
   // Without this line the page existed and nothing led to it: it was built, served
   // and reachable only by somebody who already knew the URL. Held by
   // TestBothPortalSurfacesAreReachableFromTheMenu.
-  { id: "portal", name: "Portal", route: "portal.html", on: true, role: "user", separate: true },
+  { id: "portal", name: "Shop", route: "shop.html", on: true, role: "user", separate: true },
   // Where a catalogue is filled. Gated at productmanager (ADR-0315): maintaining a
   // catalogue means choosing from processes already deployed, never deploying one,
   // so it is deliberately not the modeller's role — deploy is code execution.
@@ -671,7 +671,7 @@ const TOPNAV = {
     // (ADR-0341). Not Operations, where reconciliation
     // sits: a finding is repair and the operator's, while this asks a line manager
     // whether somebody on their team still needs something — and a line manager has
-    // never opened Operations. Not one of the two portal pages either: those carry
+    // never opened Operations. Not one of the two shop pages either: those carry
     // the catalogue's brand and are written for people outside the tooling.
     { name: "Access review", route: "#/tasks/recertification", role: "user" },
     { name: "Start", route: "#/tasks/start", role: "operator" },
@@ -1745,7 +1745,7 @@ const GRANTABLE_ROLES = [
   { id: "modeler", name: "Modeller", what: "author drafts, forms and decisions — and deploy them" },
   { id: "operator", name: "Operator", what: "start, cancel and repair instances; read runtime data" },
   { id: "user", name: "User", what: "work on tasks and read what they are given" },
-  { id: "productmanager", name: "Product manager", what: "maintain the portal's catalogues and products, and publish releases" },
+  { id: "productmanager", name: "Product manager", what: "maintain the shop's catalogues and products, and publish releases" },
 ];
 
 function userForm(u) {
@@ -1783,7 +1783,7 @@ function avatarField(u) {
   return `<div class="avatar-field" data-uid="${esc(u.id)}" style="border-top:1px solid var(--border); margin-top:14px; padding-top:12px">
     <b>Picture</b>
     <p class="muted" style="margin:2px 0 8px">Shown beside this person's name wherever Atlas names
-      them — a task list, an approval, the portal's recipient picker. PNG or JPEG.
+      them — a task list, an approval, the shop's recipient picker. PNG or JPEG.
       ${u.avatarSource === "entra"
     ? "This one came from the directory; uploading here replaces it, and the mirror will not put it back."
     : ""}</p>
@@ -2389,7 +2389,7 @@ async function viewConsoleOrg() {
           Every route names the role that reaches it: <span class="chip">admin</span> for this page and the
           rest of the instance's configuration, <span class="chip">modeler</span> to deploy and to author,
           <span class="chip">operator</span> to run what is deployed, <span class="chip">user</span> for a
-          person's own task list, <span class="chip">productmanager</span> to maintain the portal's
+          person's own task list, <span class="chip">productmanager</span> to maintain the shop's
           catalogues without administering the instance.${showPresence ? ` <b>Presence</b> is who is signed in this minute, and only
           administrators see it: <b>online</b> means somebody did something in the last five minutes,
           <b>idle</b> that a session is open but untouched, <b>offline</b> that no browser is reporting.
@@ -8256,7 +8256,7 @@ async function viewTasks(preselectKey) {
   // to whichever text the release happened to list first — the product named in a
   // language the approver did not ask for, with nothing saying so.
   //
-  // The same correction the portal carries (ADR-0413, as amended). It is here
+  // The same correction the shop carries (ADR-0413, as amended). It is here
   // separately because this is a second surface reading the same maps, and the
   // first fix did not reach it.
   function inLanguage(texts, base) {

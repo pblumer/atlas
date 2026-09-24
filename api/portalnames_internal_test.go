@@ -20,7 +20,7 @@ import (
 
 // TestTheOrdersTableResolvesWhoAnOrderIsFor.
 func TestTheOrdersTableResolvesWhoAnOrderIsFor(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	rows := webRegion(t, src, "function orderRowBodies(", "\n}")
 	if strings.Contains(rows, "o.recipient || ''") {
 		t.Error("the table prints the principal id of whoever the order is for, which " +
@@ -49,7 +49,7 @@ func TestTheOrdersTableResolvesWhoAnOrderIsFor(t *testing.T) {
 // see is the shape that caused it — two readers of one field — so it pins the two
 // apart, and the load reads the directory once for both.
 func TestTheDirectoryAndThePickerAreNotTheSameField(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	load := webRegion(t, src, "async function load(", "\n}")
 	if strings.Contains(load, "state.people") {
 		t.Error("the load writes the recipient picker's field, which loadWhoIAm " +
@@ -73,7 +73,7 @@ func TestTheDirectoryAndThePickerAreNotTheSameField(t *testing.T) {
 // left of them. Showing nothing would make the column look broken; showing the id
 // is the honest answer to "we no longer know the name".
 func TestAnUnknownPrincipalStillShowsSomething(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function personName(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function personName(", "\n}")
 	if !strings.Contains(body, "|| id") {
 		t.Error("a principal the directory does not know renders as nothing, so the " +
 			"column reads as broken rather than as unresolved")
@@ -85,7 +85,7 @@ func TestAnUnknownPrincipalStillShowsSomething(t *testing.T) {
 // A column that shows names and filters ids is a filter that finds nothing for
 // everything somebody types.
 func TestTheColumnFilterSearchesTheNameAsWell(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function matchesFilters(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function matchesFilters(", "\n}")
 	if !strings.Contains(body, "personName(") {
 		t.Error("the person filter searches the id the column no longer shows")
 	}
