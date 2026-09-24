@@ -93,6 +93,7 @@ func (s *Server) handleCancelLine(w http.ResponseWriter, r *http.Request) {
 
 	// Durable first, then the side effects (I2), and neither is worth refusing a
 	// caller whose position is already withdrawn.
+	s.stopWorkOf(out, at)
 	s.closeApprovalsOf(id, []string{item})
 	s.wakeFulfilment(id)
 

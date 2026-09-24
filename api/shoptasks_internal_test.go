@@ -37,6 +37,14 @@ func TestTheShopOffersNoUnaddressedTaskToAnOrderer(t *testing.T) {
 	if s.mayWorkShopTask(orderer, taskResp{Assignee: "bob"}) {
 		t.Error("the shop offers the reader somebody else's task")
 	}
+	// A model assigns by the variable it has for a person, and the orderer of an
+	// order is carried as a principal id: assignee="=orderer" is the orderer's task.
+	if !s.mayWorkShopTask(orderer, taskResp{Assignee: "usr_1"}) {
+		t.Error("the shop withholds a task assigned to the reader's principal id")
+	}
+	if s.mayWorkShopTask(orderer, taskResp{Assignee: "usr_2"}) {
+		t.Error("the shop offers the reader a task assigned to somebody else's principal id")
+	}
 }
 
 // TestAHolderIsNotShownTheOrderersAnswers: an order in front of somebody because
@@ -97,6 +105,7 @@ func TestWhomATaskWaitsForIsNamed(t *testing.T) {
 		{"person", taskResp{Assignee: "bob"}, plain, false, shopTaskHolder{Kind: "person", Name: "Bob Muster"}},
 		{"person without a display name", taskResp{Assignee: "eve"}, plain, false, shopTaskHolder{Kind: "person", Name: "eve"}},
 		{"unknown person", taskResp{Assignee: "zoe"}, plain, false, shopTaskHolder{Kind: "person", Name: "zoe"}},
+		{"person by principal id", taskResp{Assignee: "usr_bob"}, plain, false, shopTaskHolder{Kind: "person", Name: "Bob Muster"}},
 		{"groups by id and by name", taskResp{CandidateGroups: "grp_it, Admins,"}, plain, false,
 			shopTaskHolder{Kind: "group", Name: "IT-Support, Admins"}},
 		{"unaddressed", taskResp{}, plain, false, shopTaskHolder{Kind: "open"}},

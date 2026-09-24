@@ -104,3 +104,9 @@ than through option 3.
   giving the server a directory, and the reason it is named here.
 - `createInstanceResp` gains `instanceKey`, which every caller of the start routes can
   now use — the order-to-cash demo's embedded client included.
+- Withdrawing a position — the whole order, or one line — cancels every still-running
+  instance recorded on it, not only its approval. A pending line may have its
+  provisioning started already, and a step of it left in somebody's inbox is work for a
+  position that no longer exists. Cancelling stops the work; what the process already
+  did in a target system is not compensated. Orders placed before instances were
+  recorded fall back to finding the approval by walking the open tasks, as before.

@@ -31,6 +31,50 @@
       }
     },
     {
+      "id": "withdrawing-an-order-stops-the-processes-already-working-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Cancelling an order stops the processes already working it",
+        "de": "Stornieren beendet die Prozesse, die bereits am Auftrag arbeiten"
+      },
+      "summary": {
+        "en": "When an order or one of its positions was cancelled, only a waiting approval was stopped. A position still reads pending while its provisioning runs, so it could be cancelled mid-provisioning, and the provisioning's open step stayed in somebody's inbox and in the shop, beneath a line that said Cancelled. Cancelling now stops every still-running process recorded on the cancelled position. What such a process already did in a target system is not undone.",
+        "de": "Beim Stornieren eines Auftrags oder einer Position wurde bisher nur eine wartende Genehmigung beendet. Eine Position gilt aber als ausstehend, solange ihre Provisionierung läuft, und liess sich deshalb mitten in der Provisionierung stornieren; deren offener Schritt blieb im Posteingang und im Shop stehen, unter einer Zeile mit dem Status Storniert. Stornieren beendet jetzt jeden noch laufenden Prozess, der an der stornierten Position vermerkt ist. Was ein solcher Prozess in einem Zielsystem bereits ausgeführt hat, wird nicht rückgängig gemacht."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Shop",
+        "Orders"
+      ]
+    },
+    {
+      "id": "a-task-a-model-assigns-to-the-person-who-ordered-is-now-thei",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A task assigned to the orderer can be answered by the orderer",
+        "de": "Eine dem Besteller zugewiesene Aufgabe kann der Besteller erledigen"
+      },
+      "summary": {
+        "en": "A model assigns a task with an expression, and the variable it has for a person is usually an id: an order carries its orderer and its recipient as principal ids (usr_…). A task assigned assignee=\"=orderer\" was created and listed under the order in the shop, but refused to the orderer, because the check compared the assignee with the username alone; only operators and administrators could answer it. The check now accepts the username or the principal id, as the mail directory already did when it decides whom a notification reaches. The shop shows such an assignee by display name. The \"Assigned to me\" folder still matches usernames only.",
+        "de": "Ein Modell weist eine Aufgabe über einen Ausdruck zu, und die Variable, die es für eine Person hat, ist meist eine Kennung: ein Auftrag führt Besteller und Empfänger als Prinzipal-Kennungen (usr_…). Eine mit assignee=\"=orderer\" zugewiesene Aufgabe wurde angelegt und im Shop unter dem Auftrag angezeigt, dem Besteller aber verweigert, weil die Prüfung die Zuweisung nur mit dem Benutzernamen verglich; erledigen konnten sie nur Operatoren und Administratoren. Die Prüfung akzeptiert jetzt den Benutzernamen oder die Prinzipal-Kennung, wie es das Mail-Verzeichnis bei der Frage, wen eine Benachrichtigung erreicht, bereits tat. Der Shop zeigt eine solche Zuweisung mit dem Anzeigenamen. Der Ordner «Mir zugewiesen» vergleicht weiterhin nur Benutzernamen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Tasks",
+        "Shop"
+      ]
+    },
+    {
       "id": "moving-a-decision-service-hid-the-arrows-crossing-it-and-lef",
       "version": "Unreleased",
       "date": null,
@@ -316,63 +360,6 @@
           "Die Felder der Sprachen füllen, die vorliegen; die übrigen leer lassen.",
           "Bei einem Produkt mit Ausprägungen je eine Zeile füllen: die id, dann den Namen in jeder Sprache.",
           "Speichern, publizieren und das Portal in jeder Sprache lesen."
-        ]
-      }
-    },
-    {
-      "id": "saving-a-product-from-a-catalogue-that-only-offers-it-no-lon",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A product no longer changes hands by being saved",
-        "de": "Ein Produkt wechselt nicht mehr durch blosses Speichern den Besitzer"
-      },
-      "summary": {
-        "en": "The same product can be offered by several catalogues and is maintained by exactly one of them. Moving that responsibility is a real operation and it is checked: whoever does it must be allowed to edit both the catalogue giving it up and the one taking it on. The console was performing that move by accident. The product form sent the catalogue you happened to be looking at as the responsible one, on every save — so opening a product from a catalogue that merely offers it and pressing save took it away from the team that maintains it, with nothing said, after which its language boxes followed the new catalogue instead. You are now asked, and only when there is something to ask: a new product has no home yet, and one already maintained here has nothing to move. Declining keeps it where it is and still saves your changes, because whether to move it and whether to save are two different questions.",
-        "de": "Dasselbe Produkt kann von mehreren Katalogen angeboten und von genau einem gepflegt werden. Diese Zuständigkeit zu verschieben, ist ein echter Vorgang und wird geprüft: Wer es tut, muss sowohl den abgebenden als auch den übernehmenden Katalog bearbeiten dürfen. Die Konsole führte diese Verschiebung versehentlich aus. Die Produktmaske sendete bei jedem Speichern den gerade betrachteten Katalog als den zuständigen — wer also ein Produkt aus einem Katalog öffnete, der es nur anbietet, und speicherte, nahm es dem pflegenden Team weg, ohne Hinweis; danach richteten sich die Sprachfelder nach dem neuen Katalog. Jetzt wird gefragt, und nur dann, wenn es etwas zu fragen gibt: Ein neues Produkt hat noch keinen Heimatkatalog, und ein hier bereits gepflegtes hat nichts zu verschieben. Wer ablehnt, behält die Zuständigkeit und speichert die Änderungen trotzdem — Verschieben und Speichern sind zwei verschiedene Fragen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Service catalogue"
-      ]
-    },
-    {
-      "id": "the-product-capture-example-runs",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The product-capture example can be run",
-        "de": "Das Beispiel „Produkt erfassen\" lässt sich ausführen"
-      },
-      "summary": {
-        "en": "It shipped in a shape that could never execute: ordinary service tasks on a job type nothing serves, with the target and the HTTP method placed in task headers that never reach a worker. Its README instructed a setup step that cannot be carried out either — there is no worker type to configure for it. The tokens parked without failing, so nothing said so. The nine calls are connector tasks on the reserved REST job type now, which the engine serves itself; nothing has to be configured for them. Two things the example does need, and both are honest: a start form asks once for this Atlas's address, because a model started by hand has nobody to hand it one, and the operator's API token — without which the first call answers 401 and raises an incident instead of parking silently.",
-        "de": "Es wurde in einer Form ausgeliefert, die sich nie ausführen liess: gewöhnliche Service-Tasks auf einem Job-Typ, den niemand bedient, mit Zieladresse und HTTP-Methode in Task-Headern, die keinen Worker erreichen. Auch das README verlangte einen Einrichtungsschritt, der sich nicht befolgen lässt — den dafür nötigen Worker-Typ gibt es nicht. Die Tokens parkten, ohne zu scheitern, und niemand erfuhr davon. Die neun Aufrufe sind nun Connector-Tasks auf dem reservierten REST-Job-Typ, den die Engine selbst bedient; einzurichten ist dafür nichts. Zwei Dinge braucht das Beispiel dennoch, und beide sind redlich: ein Startformular fragt einmal die Adresse dieses Atlas ab, weil ein von Hand gestartetes Modell niemanden hat, der sie mitgäbe, und das API-Token des Betreibers — ohne das der erste Aufruf mit 401 antwortet und einen Incident meldet, statt stumm zu parken."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Beispiele",
-        "Service catalogue"
-      ],
-      "tutorial": {
-        "en": [
-          "Install the example from the handbook's Beispiele chapter.",
-          "Set ATLAS_CONNECTOR_ATLAS_TOKEN in the server's environment to an API token with catalogue-maintenance rights.",
-          "Start the process and enter this Atlas's address in the start form.",
-          "The first step reads the catalogues and the capture form opens with them filled in."
-        ],
-        "de": [
-          "Das Beispiel aus dem Kapitel „Beispiele\" des Handbuchs installieren.",
-          "ATLAS_CONNECTOR_ATLAS_TOKEN in der Serverumgebung auf ein API-Token mit Katalogpflege-Recht setzen.",
-          "Den Prozess starten und im Startformular die Adresse dieses Atlas eintragen.",
-          "Der erste Schritt liest die Kataloge, und die Erfassungsmaske öffnet sich mit gefüllten Listen."
         ]
       }
     }
