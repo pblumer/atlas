@@ -31,6 +31,64 @@
       }
     },
     {
+      "id": "a-decision-service-s-name-box-can-be-resized-and-its-name-is",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The name of a decision service has a size you can set",
+        "de": "Der Name eines Decision Service hat eine Grösse, die Sie festlegen"
+      },
+      "summary": {
+        "en": "Moving the name was half the answer: where it goes decides what it collides with, and how wide it is decides whether it reads at all. A grip on each corner of the selected name now drags its box wider, narrower, taller or shorter, holding the opposite corner still. The box stays inside the service and above the dividing line, and the size is written to the same place DMN keeps the name's position, so it survives a save and means the same thing to another tool. Underneath was a fault the size made visible: dragging a name once brought it back with the word broken across two lines — \"MyServic\" over \"e\" — because the box was measured to the text's own width and the layout wants a hair more than that before it calls a line a fit. The box is rounded up now, and never narrower than the name's longest word, so a name that wraps wraps between words. There is no size at which a word is cut in half.",
+        "de": "Das Verschieben des Namens war die halbe Antwort: Wohin er geht, entscheidet, womit er kollidiert; wie breit er ist, entscheidet, ob er überhaupt lesbar ist. An jeder Ecke des ausgewählten Namens sitzt jetzt ein Griff, der seinen Kasten breiter, schmaler, höher oder niedriger zieht, während die gegenüberliegende Ecke stehen bleibt. Der Kasten bleibt innerhalb des Service und oberhalb der Trennlinie, und die Grösse wird dorthin geschrieben, wo DMN auch die Position des Namens führt — sie übersteht damit ein Speichern und bedeutet für ein anderes Werkzeug dasselbe. Darunter lag ein Fehler, den die Grösse sichtbar machte: Ein einmal verschobener Name kam mit einem über zwei Zeilen zerschnittenen Wort zurück — «MyServic» über «e» — weil der Kasten auf die Breite des Textes selbst gemessen wurde und das Layout eine Spur mehr verlangt, bevor es eine Zeile als passend ansieht. Der Kasten wird jetzt aufgerundet und ist nie schmaler als das längste Wort des Namens. Ein Name, der umbricht, bricht damit zwischen Wörtern um; es gibt keine Grösse, bei der ein Wort zerschnitten wird."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-decision-service-s-border-no-longer-ends-up-over-the-arrow",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A decision service's border stays behind the arrows crossing it",
+        "de": "Der Rand eines Decision Service bleibt hinter den Pfeilen, die ihn kreuzen"
+      },
+      "summary": {
+        "en": "This was fixed twice before — once for drawing a decision service, once for moving one — and reported a third time. Each fix was a rule about one gesture, and there are more gestures than anyone can list: every one that is missed is a diagram with an arrow hidden under a box, found by whoever drew it. The third report was answered differently. The rule is now asserted where the drawing order is actually decided, on every change, instead of at each gesture that might disturb it, so it holds for gestures nobody thought of — including ones added later. Nothing can ask for a decision service to be drawn on top any more, because there is no diagram in which that is what the notation means. A newly drawn service still starts at the very back, behind any service already there, so two overlapping boxes do not hide each other's decisions.",
+        "de": "Das war bereits zweimal korrigiert — einmal für das Zeichnen eines Decision Service, einmal für das Verschieben — und wurde ein drittes Mal gemeldet. Jede Korrektur war eine Regel für eine Geste, und es gibt mehr Gesten, als sich aufzählen lassen: Jede übersehene ist ein Diagramm mit einem Pfeil, der unter einem Kasten verschwindet, gefunden von dem, der es gezeichnet hat. Die dritte Meldung wurde anders beantwortet. Die Regel wird jetzt dort durchgesetzt, wo die Zeichenreihenfolge tatsächlich entschieden wird — bei jeder Änderung —, statt bei jeder Geste, die sie stören könnte. Sie gilt damit auch für Gesten, an die niemand gedacht hat, einschliesslich später hinzugekommener. Ein Decision Service kann nicht mehr nach vorn geholt werden, weil es kein Diagramm gibt, in dem das der Bedeutung der Notation entspräche. Ein neu gezeichneter Service beginnt weiterhin ganz hinten, hinter einem bereits vorhandenen, damit zwei überlappende Kästen nicht gegenseitig ihre Decisions verdecken."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "moving-a-decision-service-hid-the-arrows-crossing-it-and-lef",
       "version": "Unreleased",
       "date": null,
@@ -316,63 +374,6 @@
           "Die Felder der Sprachen füllen, die vorliegen; die übrigen leer lassen.",
           "Bei einem Produkt mit Ausprägungen je eine Zeile füllen: die id, dann den Namen in jeder Sprache.",
           "Speichern, publizieren und das Portal in jeder Sprache lesen."
-        ]
-      }
-    },
-    {
-      "id": "saving-a-product-from-a-catalogue-that-only-offers-it-no-lon",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A product no longer changes hands by being saved",
-        "de": "Ein Produkt wechselt nicht mehr durch blosses Speichern den Besitzer"
-      },
-      "summary": {
-        "en": "The same product can be offered by several catalogues and is maintained by exactly one of them. Moving that responsibility is a real operation and it is checked: whoever does it must be allowed to edit both the catalogue giving it up and the one taking it on. The console was performing that move by accident. The product form sent the catalogue you happened to be looking at as the responsible one, on every save — so opening a product from a catalogue that merely offers it and pressing save took it away from the team that maintains it, with nothing said, after which its language boxes followed the new catalogue instead. You are now asked, and only when there is something to ask: a new product has no home yet, and one already maintained here has nothing to move. Declining keeps it where it is and still saves your changes, because whether to move it and whether to save are two different questions.",
-        "de": "Dasselbe Produkt kann von mehreren Katalogen angeboten und von genau einem gepflegt werden. Diese Zuständigkeit zu verschieben, ist ein echter Vorgang und wird geprüft: Wer es tut, muss sowohl den abgebenden als auch den übernehmenden Katalog bearbeiten dürfen. Die Konsole führte diese Verschiebung versehentlich aus. Die Produktmaske sendete bei jedem Speichern den gerade betrachteten Katalog als den zuständigen — wer also ein Produkt aus einem Katalog öffnete, der es nur anbietet, und speicherte, nahm es dem pflegenden Team weg, ohne Hinweis; danach richteten sich die Sprachfelder nach dem neuen Katalog. Jetzt wird gefragt, und nur dann, wenn es etwas zu fragen gibt: Ein neues Produkt hat noch keinen Heimatkatalog, und ein hier bereits gepflegtes hat nichts zu verschieben. Wer ablehnt, behält die Zuständigkeit und speichert die Änderungen trotzdem — Verschieben und Speichern sind zwei verschiedene Fragen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Service catalogue"
-      ]
-    },
-    {
-      "id": "the-product-capture-example-runs",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The product-capture example can be run",
-        "de": "Das Beispiel „Produkt erfassen\" lässt sich ausführen"
-      },
-      "summary": {
-        "en": "It shipped in a shape that could never execute: ordinary service tasks on a job type nothing serves, with the target and the HTTP method placed in task headers that never reach a worker. Its README instructed a setup step that cannot be carried out either — there is no worker type to configure for it. The tokens parked without failing, so nothing said so. The nine calls are connector tasks on the reserved REST job type now, which the engine serves itself; nothing has to be configured for them. Two things the example does need, and both are honest: a start form asks once for this Atlas's address, because a model started by hand has nobody to hand it one, and the operator's API token — without which the first call answers 401 and raises an incident instead of parking silently.",
-        "de": "Es wurde in einer Form ausgeliefert, die sich nie ausführen liess: gewöhnliche Service-Tasks auf einem Job-Typ, den niemand bedient, mit Zieladresse und HTTP-Methode in Task-Headern, die keinen Worker erreichen. Auch das README verlangte einen Einrichtungsschritt, der sich nicht befolgen lässt — den dafür nötigen Worker-Typ gibt es nicht. Die Tokens parkten, ohne zu scheitern, und niemand erfuhr davon. Die neun Aufrufe sind nun Connector-Tasks auf dem reservierten REST-Job-Typ, den die Engine selbst bedient; einzurichten ist dafür nichts. Zwei Dinge braucht das Beispiel dennoch, und beide sind redlich: ein Startformular fragt einmal die Adresse dieses Atlas ab, weil ein von Hand gestartetes Modell niemanden hat, der sie mitgäbe, und das API-Token des Betreibers — ohne das der erste Aufruf mit 401 antwortet und einen Incident meldet, statt stumm zu parken."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Beispiele",
-        "Service catalogue"
-      ],
-      "tutorial": {
-        "en": [
-          "Install the example from the handbook's Beispiele chapter.",
-          "Set ATLAS_CONNECTOR_ATLAS_TOKEN in the server's environment to an API token with catalogue-maintenance rights.",
-          "Start the process and enter this Atlas's address in the start form.",
-          "The first step reads the catalogues and the capture form opens with them filled in."
-        ],
-        "de": [
-          "Das Beispiel aus dem Kapitel „Beispiele\" des Handbuchs installieren.",
-          "ATLAS_CONNECTOR_ATLAS_TOKEN in der Serverumgebung auf ein API-Token mit Katalogpflege-Recht setzen.",
-          "Den Prozess starten und im Startformular die Adresse dieses Atlas eintragen.",
-          "Der erste Schritt liest die Kataloge, und die Erfassungsmaske öffnet sich mit gefüllten Listen."
         ]
       }
     }
