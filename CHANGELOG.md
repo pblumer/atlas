@@ -35,6 +35,25 @@ _Changed_ / _Removed_ for each version.
   the basket keeps a line of its own rather than disappearing, because a position
   nobody can see is one nobody can take out.
 
+- **A decision was listed under the name of whichever decision happened to come
+  first in its file, not under the name of the file.** A DMN model is one artifact:
+  Atlas stores it under one handle, lists it as one row, publishes it as one thing —
+  and it may hold several decisions. Everywhere else that name is read off
+  `<definitions name>`: the model upload, the import, the model listing and the
+  decision's documentation record. Two paths took the first `<decision name>`
+  instead — the draft listing, and the decision editor's Save to model. So a model
+  called "Kreditpruefung" whose first decision is "Bonitaet" appeared in the Explorer
+  as "Bonitaet" while the editor's own header said "Kreditpruefung", and reordering
+  the decisions inside the file renamed the artifact. Worse, the editor's save
+  mirrors a name change onto the reference: because the two readings differed, every
+  save of an untouched model silently renamed its row. Both paths now read the
+  model's own name, falling back to a decision's name and then its id only while a
+  model being drafted has not named itself yet.
+
+  Existing rows are not rewritten — a stored name is data, and this changes how a
+  new one is derived. A row showing a decision's name corrects itself the next time
+  the model is saved from the editor, or immediately if the name is edited by hand.
+
 - **A catalogue kept in `de-DE` and `en-EN` would have ignored the language switch,
   for the same reason `de; en` did.** The portal narrows a browser's language to its
   base — `de-CH` becomes `de` — because its own words live in a message catalogue

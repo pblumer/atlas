@@ -36,6 +36,35 @@
       }
     },
     {
+      "id": "a-decision-was-listed-under-the-name-of-whichever-decision-h",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A decision model is now listed under its own name",
+        "de": "Ein Entscheidungsmodell steht jetzt unter seinem eigenen Namen"
+      },
+      "summary": {
+        "en": "A DMN file is one artifact — Atlas stores it under one handle, lists it as one row and publishes it as one thing — and it may hold several decisions. The Explorer nevertheless labelled it with whichever decision came first inside it, so a model called \"Credit check\" whose first decision is \"Credit rating\" appeared as \"Credit rating\" while the editor's own header said \"Credit check\", and reordering the decisions renamed the artifact. Every save of an untouched model quietly rewrote that row, too. The listing and the editor now read the same name, the one the model gives itself. Rows written before this keep the name they have; they correct themselves the next time the model is saved from the editor.",
+        "de": "Eine DMN-Datei ist ein Artefakt — Atlas speichert sie unter einem Handle, listet sie als eine Zeile und veröffentlicht sie als eine Einheit — und sie kann mehrere Entscheidungen enthalten. Der Explorer beschriftete sie dennoch mit derjenigen Entscheidung, die in der Datei zuerst stand: Ein Modell namens \"Kreditprüfung\", dessen erste Entscheidung \"Bonität\" heisst, erschien als \"Bonität\", während der Editor im Kopf \"Kreditprüfung\" anzeigte; ein Umsortieren der Entscheidungen benannte das Artefakt um. Zudem schrieb jedes Speichern eines unveränderten Modells diese Zeile still um. Liste und Editor lesen nun denselben Namen, nämlich den, den das Modell sich selbst gibt. Zuvor gespeicherte Zeilen behalten ihren Namen und korrigieren sich beim nächsten Speichern aus dem Editor."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "a-catalogue-kept-in-de-de-and-en-en-would-have-ignored-the-l",
       "version": "Unreleased",
       "date": null,
@@ -363,35 +392,6 @@
       "tags": [
         "DMN"
       ]
-    },
-    {
-      "id": "a-decision-service-is-offered-where-the-author-looks-for-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The decision picker lists a decision service where you look for it",
-        "de": "Der Entscheidungs-Picker führt einen Decision Service dort, wo man ihn sucht"
-      },
-      "summary": {
-        "en": "A decision service is the published interface over part of a decision model — the thing a business rule task is meant to call. The picker was built only from the decisions its application's models offer, so a service could get into the list only by having been deployed: with no model file behind it, and so in no application. It ended up under \"other decisions\", below every decision it is made of. Now it is listed with its own model file, and the list is grouped the way you read it: one group per decision file, your application's files first, the services above the decisions inside them. A decision that belongs to a service says so, because calling it directly reaches past the interface the service exists to be.",
-        "de": "Ein Decision Service ist die veröffentlichte Schnittstelle über einen Teil eines Entscheidungsmodells — das, was ein Business Rule Task aufrufen soll. Der Picker wurde nur aus den Entscheidungen der Modelle einer Applikation gebaut; ein Service kam deshalb nur in die Liste, wenn er bereits deployt war: ohne Modelldatei dahinter und damit in keiner Applikation. Er landete unter „andere Entscheidungen\", unterhalb jeder Entscheidung, aus der er besteht. Jetzt steht er bei seiner Modelldatei, und die Liste ist so gegliedert, wie man sie liest: eine Gruppe je Entscheidungsdatei, die Dateien der eigenen Applikation zuerst, die Services über den Entscheidungen darin. Eine Entscheidung, die zu einem Service gehört, sagt das — denn sie direkt aufzurufen greift an der Schnittstelle vorbei, für die es den Service gibt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "DMN"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
     }
   ]
 }

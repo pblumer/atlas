@@ -373,6 +373,32 @@ test("an existing decision is reachable by deep link and loads its stored model"
   expect(pageErrors).toEqual([]);
 });
 
+test("a model save names the artifact after the model, not after whichever decision comes first", async ({ page }) => {
+  // The stored model calls itself "Eligibility" and its one decision "eligibility",
+  // and the reference carries the model's name — which is what every other path in
+  // Atlas puts there: the upload, the import and the documentation record all read
+  // <definitions name>. A save that read the first decision's name instead found a
+  // difference on every save of an untouched model, and mirrored it onto the
+  // reference: the Explorer row was renamed, silently, to a decision inside the
+  // file. That is the mechanism, so this pins the save on a model nobody renamed.
+  const state = installMock(page, {
+    refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }],
+  });
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  await page.locator("#dmn-save-model").click();
+  await expect(page.locator("#dmn-status")).toHaveText("Saved to the model");
+
+  // The model went back under the handle this session opened, unchanged.
+  expect(state.uploads).toHaveLength(1);
+  expect(state.uploads[0].query).toBe("?handle=eligibility");
+
+  // And the reference was left alone: the name it holds is the name the model
+  // gives itself, so there is nothing to mirror.
+  expect(state.patched).toEqual([]);
+});
+
 test("a decision reference that no longer exists says so instead of opening an empty editor", async ({ page }) => {
   installMock(page, { refs: [] });
   await page.goto("/index.html#/modeler/dmn/e/ref-gone");
