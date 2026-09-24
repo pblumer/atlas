@@ -2330,34 +2330,67 @@ function renderBasket() {
       }, 'X'),
     trail: infoButton(x.id),
   });
-  const atLevel = (level) => shown.filter((x) => levelOf(rel, x.id) === level).map(row);
+  const offerCell = (id) => cell({
+    text: textOf((by[id] || {}).texts, id),
+    // The same control the cascade uses, so a tick means one thing on the
+    // whole page: it adds to the basket, and a second press takes it out.
+    lead: toggle(rel, id, false),
+    meta: [
+      (by[id] || {}).price ? el('span', {}, by[id].price) : null,
+      // The level it will sit under once it is taken, so the same position is
+      // called the same thing before and after the decision.
+      el('span', {}, levelName(rel, id)),
+    ],
+    trail: infoButton(id),
+  });
 
-  const cols = el('div', { class: 'cascade' },
-    // Two levels, matching the cascade: a product and the services behind it. The
-    // third column the basket used to have was the Bundle level, and it is gone —
-    // a root is a Marktleistung whether or not it carries parts.
-    el('div', { class: 'col' },
-      el('div', { class: 'colhead' }, t('col.offering')),
-      atLevel('offering')),
-    el('div', { class: 'col' },
-      el('div', { class: 'colhead' }, t('col.service')),
-      atLevel('service')),
-    el('div', { class: 'col' }),
-    el('div', { class: 'col' },
-      el('div', { class: 'colhead' }, t('col.options')),
-      offers.map((id) => cell({
-        text: textOf((by[id] || {}).texts, id),
-        // The same control the cascade uses, so a tick means one thing on the
-        // whole page: it adds to the basket, and a second press takes it out.
-        lead: toggle(rel, id, false),
-        meta: [
-          (by[id] || {}).price ? el('span', {}, by[id].price) : null,
-          // The level it will sit under once it is taken, so the same position is
-          // called the same thing before and after the decision.
-          el('span', {}, levelName(rel, id)),
-        ],
-        trail: infoButton(id),
-      }))));
+  // One group per offering, and each group one line of the grid.
+  //
+  // The columns were three flat lists, each stacked on its own, so a row's height
+  // in one had nothing to do with its height in the next: a service sat beside
+  // whichever offering happened to share its line, and with two offerings in the
+  // basket nothing said which service belonged to which. What the reader needs is
+  // the relation, and the relation is the one thing three independent lists
+  // cannot draw.
+  //
+  // So every offering is a line and its four cells are the grid's four columns in
+  // that line. The grid makes a line as tall as its tallest cell, which is what
+  // keeps the next offering from starting beside the last one's third service.
+  //
+  // Which offering a row belongs to is read off the same containment the level
+  // is — ownerAmong walks up through what includes and offers it — and the level
+  // itself is still levelOf's answer, not this grouping's.
+  const roots = shown.filter((x) => levelOf(rel, x.id) === 'offering');
+  const ownerOf = ownerAmong(rel, new Set(roots.map((x) => x.id)));
+  const groups = roots.map((x) => ({ root: x, services: [], offers: [] }));
+  const byRoot = new Map(groups.map((g) => [g.root.id, g]));
+  // A service whose offering is not in the basket — an option taken from the
+  // search while the product that offers it was not. It still gets a line of its
+  // own rather than vanishing, because a position nobody can see is a position
+  // nobody can take out.
+  const loose = { root: null, services: [], offers: [] };
+  for (const x of shown) {
+    if (levelOf(rel, x.id) !== 'service') continue;
+    (byRoot.get(ownerOf(x.id)) || loose).services.push(x);
+  }
+  for (const id of offers) (byRoot.get(ownerOf(id)) || loose).offers.push(id);
+  if (loose.services.length || loose.offers.length) groups.push(loose);
+
+  const cols = el('div', { class: 'cascade basket-groups' },
+    // Named once, at the top: the three names belong to the grid, and repeating
+    // them per group would make a table of tables. The third column is the gap
+    // the cascade has there, so a basket and the catalogue above it keep the same
+    // columns in the same places.
+    el('div', { class: 'colhead' }, t('col.offering')),
+    el('div', { class: 'colhead' }, t('col.service')),
+    el('div', {}),
+    el('div', { class: 'colhead' }, t('col.options')),
+    groups.flatMap((g) => [
+      el('div', { class: 'col grp' }, g.root ? row(g.root) : null),
+      el('div', { class: 'col grp' }, g.services.map(row)),
+      el('div', { class: 'col grp' }),
+      el('div', { class: 'col grp' }, g.offers.map(offerCell)),
+    ]));
 
   // The forms below the basket rather than beside each row: a form is taller than a
   // row and an integral part asks its own questions, so a column that had to hold
@@ -3023,6 +3056,45 @@ function depthOf(release, id) {
     if (d > 8) break;
   }
   return d;
+}
+
+// ownerAmong returns a function naming, for any product, the offering among
+// `roots` it hangs under — or '' when it hangs under none of them.
+//
+// Up through what includes it and what offers it, both, because a basket groups by
+// belonging and an option belongs to its offering exactly as much as a part does.
+// That is a different question from the level, and depthOf is not asked it: an
+// option is a service by depth whichever offering is in the basket, but which
+// line it sits on depends on which one is.
+//
+// Breadth-first and every parent rather than the first one depthOf keeps. A part
+// offered by two products — one case for two phones — belongs to whichever of
+// them is in this basket, and the first parent in the release may be the one that
+// is not. Ties go to the root nearest in the graph, then to the one the release
+// lists first, so the same basket always draws the same lines.
+function ownerAmong(release, roots) {
+  const parents = new Map();
+  const link = (whole, part) => {
+    if (!parents.has(part)) parents.set(part, []);
+    parents.get(part).push(whole);
+  };
+  for (const [whole, parts] of Object.entries(release.includes || {})) parts.forEach((p) => link(whole, p));
+  for (const [whole, parts] of Object.entries(release.options || {})) parts.forEach((p) => link(whole, p));
+  return (id) => {
+    const seen = new Set([id]);
+    let level = [id];
+    while (level.length) {
+      const next = [];
+      for (const at of level) {
+        for (const up of parents.get(at) || []) {
+          if (roots.has(up)) return up;
+          if (!seen.has(up)) { seen.add(up); next.push(up); }
+        }
+      }
+      level = next;
+    }
+    return '';
+  };
 }
 
 // headingsHeld is the Kategorie or Produktgruppe column of what somebody holds,

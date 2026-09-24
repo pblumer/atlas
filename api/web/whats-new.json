@@ -2,6 +2,40 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "the-basket-said-what-was-ordered-and-not-what-belonged-to-wh",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The basket shows which service belongs to which offering",
+        "de": "Der Warenkorb zeigt, welcher Service zu welcher Marktleistung gehört"
+      },
+      "summary": {
+        "en": "The basket drew three columns — offering, service, optional — each a list stacked on its own, so a row in one column had nothing to do with the row beside it. With two offerings in the basket, a laptop's hardware could sit beside a monitor and the laptop's sleeve on the monitor's line. Now every offering is one line: its services and its options are the cells of that line, the next offering starts below the previous one's last service, and a rule under each line tells two offerings apart. A part two products share lands under whichever of them is in the basket.",
+        "de": "Der Warenkorb zeichnete drei Spalten — Marktleistung, Service, Optional — jede eine Liste für sich, sodass eine Zeile in der einen Spalte nichts mit der Zeile daneben zu tun hatte. Lagen zwei Marktleistungen im Korb, konnte die Hardware eines Laptops neben einem Monitor stehen und die Laptophülle auf der Zeile des Monitors. Jetzt ist jede Marktleistung eine Zeile: ihre Services und ihre Optionen sind die Zellen dieser Zeile, die nächste Marktleistung beginnt unterhalb des letzten Services der vorigen, und eine Linie unter jeder Zeile trennt zwei Marktleistungen. Ein Teil, das zwei Produkte gemeinsam haben, steht unter demjenigen, das im Korb liegt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue",
+        "Portal"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the portal and add two offerings to the basket, one of them with services and options.",
+          "Open the basket.",
+          "Each offering is one line, with its services and options beside it."
+        ],
+        "de": [
+          "Das Portal öffnen und zwei Marktleistungen in den Warenkorb legen, eine davon mit Services und Optionen.",
+          "Den Warenkorb öffnen.",
+          "Jede Marktleistung ist eine Zeile, ihre Services und Optionen stehen daneben."
+        ]
+      }
+    },
+    {
       "id": "a-decision-was-listed-under-the-name-of-whichever-decision-h",
       "version": "Unreleased",
       "date": null,
@@ -358,35 +392,6 @@
       "tags": [
         "DMN"
       ]
-    },
-    {
-      "id": "a-decision-service-is-offered-where-the-author-looks-for-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The decision picker lists a decision service where you look for it",
-        "de": "Der Entscheidungs-Picker führt einen Decision Service dort, wo man ihn sucht"
-      },
-      "summary": {
-        "en": "A decision service is the published interface over part of a decision model — the thing a business rule task is meant to call. The picker was built only from the decisions its application's models offer, so a service could get into the list only by having been deployed: with no model file behind it, and so in no application. It ended up under \"other decisions\", below every decision it is made of. Now it is listed with its own model file, and the list is grouped the way you read it: one group per decision file, your application's files first, the services above the decisions inside them. A decision that belongs to a service says so, because calling it directly reaches past the interface the service exists to be.",
-        "de": "Ein Decision Service ist die veröffentlichte Schnittstelle über einen Teil eines Entscheidungsmodells — das, was ein Business Rule Task aufrufen soll. Der Picker wurde nur aus den Entscheidungen der Modelle einer Applikation gebaut; ein Service kam deshalb nur in die Liste, wenn er bereits deployt war: ohne Modelldatei dahinter und damit in keiner Applikation. Er landete unter „andere Entscheidungen\", unterhalb jeder Entscheidung, aus der er besteht. Jetzt steht er bei seiner Modelldatei, und die Liste ist so gegliedert, wie man sie liest: eine Gruppe je Entscheidungsdatei, die Dateien der eigenen Applikation zuerst, die Services über den Entscheidungen darin. Eine Entscheidung, die zu einem Service gehört, sagt das — denn sie direkt aufzurufen greift an der Schnittstelle vorbei, für die es den Service gibt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "DMN"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
     }
   ]
 }

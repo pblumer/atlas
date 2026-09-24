@@ -704,7 +704,7 @@ function langFields(prefix, langs, values, opts) {
 // headingBoxes is what the two heading rows are filled with.
 //
 // A heading is two things on the record: the string everything GROUPS by, and a
-// wording per language that is SHOWN. Where there are wordings the boxes hold
+// wording per language that is SHOWN (ADR-0412). Where there are wordings the boxes hold
 // them. Where there are none — every product written before the wordings existed,
 // and every heading somebody simply never translated — the key goes in the first
 // declared language's box and the rest stand empty, because the key is what every
@@ -721,7 +721,8 @@ export function headingBoxes(key, texts, langs) {
 // The key is the first box that has anything in it, in the order the catalogue
 // declares its languages — so a maintainer who fills only the second box still
 // gets a heading rather than a wording with nothing to group by, which publishing
-// refuses.
+// refuses. Writing the two apart is what ADR-0412 chose over making the heading a
+// map: a key no reader sees keeps "same category" a fact about the catalogue.
 //
 // Wordings are stored only when more than one box is filled. One box is "this
 // heading is not translated": the key renders in every language, which is what a
