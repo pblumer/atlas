@@ -1947,9 +1947,20 @@ function infoPanel(rel, item) {
   //
   // This is not the panel branching on which column was clicked — a product with
   // no parts simply has two empty lists and shows neither line. It reads the same
-  // two fields for everything, which is why the panel stays one thing.
-  const carried = namesOf(rel, (((rel || {}).includes || {})[item.id]) || []);
-  const offered = namesOf(rel, (((rel || {}).options || {})[item.id]) || []);
+  // two groups for everything, which is why the panel stays one thing.
+  //
+  // **At any depth, through descendantsOf, and not the one level below this
+  // product.** The column beside this card and the basket behind it both walk the
+  // whole containment graph, so a panel reading one level disagreed with the
+  // screen next to it: a bundle whose hardware carries an operating system named
+  // the hardware and stayed silent about the system, which is ordered with it
+  // either way. The rule that decides the group is descendantsOf's and is the one
+  // the basket applies — integral all the way down, so a part included by
+  // something that was itself an offer is listed as an offer rather than as
+  // something nobody can drop.
+  const parts = descendantsOf(rel, item.id);
+  const carried = namesOf(rel, parts.filter((p) => p.integral).map((p) => p.id));
+  const offered = namesOf(rel, parts.filter((p) => !p.integral).map((p) => p.id));
   return el('div', { class: 'card' },
     el('h3', {}, textOf(item.texts, item.id)),
     productPicture(item.id),

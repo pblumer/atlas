@@ -29,15 +29,27 @@ import (
 // "What does this cost, and what comes with it" is one question. The panel
 // answered the first half and left the second to a column the person had to find
 // for themselves.
+//
+// It then answered the second half for one level only, which is the defect this
+// now guards against. A bundle whose hardware carries an operating system named
+// the hardware and said nothing about the system — while the column beside the
+// card listed both, and the basket ordered both. The panel walks the whole
+// containment graph through descendantsOf, which is the function those two
+// already use: a second walk here is how two screens come to disagree about what
+// a product is.
 func TestTheInfoPanelNamesWhatAProductCarries(t *testing.T) {
 	body := webRegion(t, readWeb(t, "shop.js"), "function infoPanel(", "\n}")
-	for _, group := range []struct{ field, why string }{
-		{"includes", "what always comes with the product"},
-		{"options", "what is offered beside it"},
+	if !strings.Contains(body, "descendantsOf(rel, item.id)") {
+		t.Error("the info panel does not read the product's descendants, so a part two " +
+			"edges down is missing from a card that claims to say what the product carries")
+	}
+	for _, group := range []struct{ filter, why string }{
+		{"p.integral", "what always comes with the product"},
+		{"!p.integral", "what is offered beside it"},
 	} {
-		if !strings.Contains(body, group.field) {
-			t.Errorf("the info panel never reads %q, so it does not say %s",
-				group.field, group.why)
+		if !strings.Contains(body, group.filter) {
+			t.Errorf("the info panel never filters on %q, so it does not separate %s",
+				group.filter, group.why)
 		}
 	}
 }

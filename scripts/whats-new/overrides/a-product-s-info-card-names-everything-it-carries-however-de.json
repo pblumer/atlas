@@ -1,0 +1,20 @@
+{
+  "tags": [
+    "Portal"
+  ],
+  "title": {
+    "en": "The info card names every part a product carries",
+    "de": "Die Info-Karte nennt alle Bestandteile eines Produkts"
+  },
+  "summary": {
+    "en": "The card behind a product's \"i\" read one level of the catalogue's containment graph. A bundle whose hardware carries an operating system therefore named the hardware and said nothing about the system — while the column beside the card listed both, and the basket ordered both. The card now walks the whole graph, through the same function those two already use. What counts as included is unchanged and stays strict: only parts composed all the way down are listed as always included, and a part composed under an optional one is shown as optional, because nothing under an offer comes along unless the offer is taken.",
+    "de": "Die Karte hinter dem \"i\" eines Produkts las nur eine Ebene der Katalogstruktur. Ein Bundle, dessen Hardware ein Betriebssystem mitführt, nannte deshalb die Hardware und schwieg über das System — während die Spalte daneben beides auflistete und der Warenkorb beides bestellte. Die Karte geht jetzt durch die gesamte Struktur, über dieselbe Funktion, die diese beiden bereits verwenden. Was als fest enthalten gilt, bleibt unverändert streng: Aufgeführt wird nur, was durchgehend fest enthalten ist, und ein Bestandteil unterhalb einer Option erscheint als optional — denn unterhalb eines Angebots kommt nichts mit, solange das Angebot nicht gewählt wurde."
+  },
+  "try": {
+    "label": {
+      "en": "Open the shop",
+      "de": "Shop öffnen"
+    },
+    "route": "#/shop"
+  }
+}

@@ -71,6 +71,15 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A product's info card names everything it carries, however deep it sits.** The
+  card read one level of the containment graph, so a bundle whose hardware carries an
+  operating system named the hardware and stayed silent about the system — while the
+  column beside the card listed both, and the basket ordered both. It now walks the
+  whole graph through the same function those two already use. The split is unchanged
+  and stays strict: *Fest enthalten* lists only parts that are composed all the way
+  down, and a part composed under an *optional* one is listed as optional, because
+  nothing under an offer is ordered unless the offer is taken.
+
 - **A decision service's border no longer ends up over the arrows crossing it,
   whatever you did to it.** This was fixed twice before, once for drawing a service
   and once for moving one, and reported a third time. Each fix was a rule about one
