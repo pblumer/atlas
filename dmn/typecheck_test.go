@@ -116,3 +116,52 @@ func TestEveryTypeMismatchIsNamed(t *testing.T) {
 		}
 	}
 }
+
+// The point of the whole record, asserted where Atlas can see it: a decision that
+// declares a `date` input compares it as a date (ADR-0419, temis ADR-0040).
+//
+// Before the engine honoured the declaration, the ISO text arrived as a FEEL
+// string, `< date("2026-06-01")` was null against it, no rule matched and the
+// catch-all answered — the silent wrong answer. This locks in that Atlas passes a
+// date through unconverted and gets a date comparison back, because the value
+// Atlas sends is decoded JSON and JSON has no date: nothing but the declaration
+// can make it one.
+func TestADeclaredDateIsComparedAsADate(t *testing.T) {
+	const dated = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20230324/MODEL/" id="dm" name="Stichtag" namespace="http://atlas/dmn">
+  <inputData id="d1" name="stichtag"><variable name="stichtag" typeRef="date"/></inputData>
+  <decision id="Frist" name="Frist">
+    <variable name="Frist" typeRef="string"/>
+    <informationRequirement><requiredInput href="#d1"/></informationRequirement>
+    <decisionTable id="ddt" hitPolicy="FIRST">
+      <input id="din"><inputExpression id="die" typeRef="date"><text>stichtag</text></inputExpression></input>
+      <output id="dout" typeRef="string"/>
+      <rule id="dr1"><inputEntry id="de1"><text>&lt; date("2026-06-01")</text></inputEntry><outputEntry id="dv1"><text>"vorher"</text></outputEntry></rule>
+      <rule id="dr2"><inputEntry id="de2"><text>-</text></inputEntry><outputEntry id="dv2"><text>"nachher"</text></outputEntry></rule>
+    </decisionTable>
+  </decision>
+</definitions>`
+	reg := dmn.NewRegistry()
+	if err := reg.Deploy(3, []byte(dated)); err != nil {
+		t.Fatalf("deploy: %v", err)
+	}
+
+	for _, tc := range []struct{ in, want string }{
+		{"2026-03-01", "vorher"},
+		{"2026-09-01", "nachher"},
+	} {
+		out, err := reg.Evaluate(context.Background(), 3, "Frist", map[string]any{"stichtag": tc.in})
+		if err != nil {
+			t.Fatalf("Evaluate %s: %v", tc.in, err)
+		}
+		if got := out["Frist"]; got != tc.want {
+			t.Errorf("Frist(%s) = %v, want %v — the date was compared as a string", tc.in, got, tc.want)
+		}
+	}
+
+	// Text the declared type cannot be made from is refused rather than compared as
+	// a string that matches nothing.
+	if _, err := reg.Evaluate(context.Background(), 3, "Frist", map[string]any{"stichtag": "irgendwann"}); err == nil {
+		t.Error("Evaluate with unparseable text: no error, want the job refused")
+	}
+}
