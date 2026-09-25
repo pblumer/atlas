@@ -126,6 +126,28 @@
       }
     },
     {
+      "id": "a-right-withdrawn-in-an-access-review-leaves-the-inventory",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A right withdrawn in an access review leaves the inventory",
+        "de": "Ein in der Rezertifizierung entzogenes Recht verschwindet aus dem Inventar"
+      },
+      "summary": {
+        "en": "Withdrawing a right an order granted started the product's deprovisioning with the product and the holder only. A process that finds what it provisioned by the order found nothing, and it could not report the line returned, so the right stayed in the inventory and the next campaign asked about it again. A withdrawal of an ordered right now goes back through its order, as a return does: the line is returning, and the process starts with the order, the position and the reason. A line the order will not give back is refused and the row stays unanswered. Rights without an order are unchanged.",
+        "de": "Das Entziehen eines bestellten Rechts startete die Deprovisionierung des Produkts nur mit Produkt und Inhaber. Ein Prozess, der das Bereitgestellte über den Auftrag findet, fand nichts und konnte die Position nicht als zurückgegeben melden; das Recht blieb im Inventar, und die nächste Kampagne fragte erneut danach. Das Entziehen eines bestellten Rechts läuft jetzt wie eine Rückgabe über den Auftrag: Die Position ist in Rückgabe, und der Prozess startet mit Auftrag, Position und Grund. Gibt der Auftrag die Position nicht zurück, wird das Entziehen abgelehnt und die Zeile bleibt unbeantwortet. Rechte ohne Auftrag sind unverändert."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Tasks",
+        "Service catalogue"
+      ]
+    },
+    {
       "id": "a-decision-service-s-border-no-longer-ends-up-over-the-arrow",
       "version": "Unreleased",
       "date": null,
@@ -282,35 +304,6 @@
       "summary": {
         "en": "The box around a decision service is a background: DMN encloses the decisions it names with it, and arrows are meant to cross its border — which only reads as a diagram if the border is behind them. The library underneath draws in the order things were added, so a box drawn after an arrow was drawn on top of it, and the arrow vanished inside the box with nothing on the canvas to say where it had gone. Opening a stored file was never affected, because a stored file is read in an order that puts every decision service first; only drawing one by hand was — the case where it is hardest to tell whether the editor lost the arrow or you did. A newly drawn decision service now goes behind what is already there, and what it holds stays in front of it.",
         "de": "Die Box um einen Decision Service ist ein Hintergrund: DMN umschliesst damit die benannten Decisions, und Pfeile sollen ihren Rand kreuzen — was nur dann als Diagramm lesbar ist, wenn der Rand dahinter liegt. Die zugrundeliegende Bibliothek zeichnet in der Reihenfolge des Hinzufügens; eine nach einem Pfeil gezeichnete Box lag deshalb darüber, und der Pfeil verschwand in ihr, ohne dass auf der Zeichenfläche etwas darauf hingewiesen hätte. Das Öffnen einer gespeicherten Datei war nie betroffen, weil dort jeder Decision Service zuerst gelesen wird; betroffen war nur das Zeichnen von Hand — der Fall, in dem am schwersten zu unterscheiden ist, ob der Editor den Pfeil verloren hat oder man selbst. Ein neu gezeichneter Decision Service liegt jetzt hinter dem, was bereits da ist, und was er enthält, bleibt davor."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-decision-service-lost-its-decisions-three-different-ways-a",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A decision service no longer takes its decisions with it",
-        "de": "Ein Decision Service nimmt seine Decisions nicht mehr mit"
-      },
-      "summary": {
-        "en": "The box around a decision service is drawn as a container, which is what paints it beneath what it holds and what carries its decisions when you move it. The library underneath reads a container as an owner; DMN says the opposite — a decision service is an overlay and does not encapsulate the decisions within it. Three places took the owner reading literally. Folding a service and unfolding it handed its decisions back to the diagram rather than to the box, so the next drag moved the box and left every decision standing where it was. Dragging a folded service took nothing with it, and unfolding put everything back where it was folded, silently undoing the move. Deleting a service deleted its decisions, their logic and the requirements between them: a four-decision file came back holding two. Separately, the two ways a service is invoked — by a decision and by a business knowledge model — could be drawn and saved nothing, because the reference went to a property name that does not exist. All four are corrected.",
-        "de": "Die Box um einen Decision Service wird als Container gezeichnet; das lässt sie hinter ihrem Inhalt liegen und die Decisions beim Verschieben mitwandern. Die zugrundeliegende Bibliothek liest einen Container als Eigentümer — DMN sagt das Gegenteil: Ein Decision Service ist ein Overlay und kapselt die Decisions darin nicht. Drei Stellen folgten der Eigentümer-Lesart. Einklappen und wieder Ausklappen gab die Decisions dem Diagramm zurück statt der Box; das nächste Verschieben bewegte die Box und liess jede Decision stehen. Das Verschieben eines eingeklappten Service nahm nichts mit, und das Ausklappen setzte alles dorthin zurück, wo eingeklappt wurde — die Verschiebung war still rückgängig gemacht. Das Löschen eines Service löschte dessen Decisions, deren Logik und die Anforderungen dazwischen: Aus vier Decisions wurden zwei. Unabhängig davon liessen sich die beiden Aufrufwege — durch eine Decision und durch ein Business Knowledge Model — zwar zeichnen, speicherten aber nichts, weil die Referenz unter einem nicht existierenden Eigenschaftsnamen abgelegt wurde. Alle vier Punkte sind behoben."
       },
       "link": {
         "label": "Changelog",

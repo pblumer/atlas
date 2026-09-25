@@ -58,6 +58,10 @@ const (
 	// deprovisioning against nothing would raise an incident about a fact rather
 	// than a fault.
 	outcomeAlreadyGone = "already-gone"
+	// outcomeReturnStarted is a right an order granted, given back through that
+	// order: its line is returning and the process the order froze is running,
+	// with the order and the position it needs to report the line returned.
+	outcomeReturnStarted = "return-started"
 )
 
 // recertifyOpen is the message that opens a campaign.

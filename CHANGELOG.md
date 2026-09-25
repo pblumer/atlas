@@ -71,6 +71,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A right withdrawn in an access review leaves the inventory.** Withdrawing a
+  right an order granted started the product's deprovisioning with the product and
+  the holder only. A process that finds what it provisioned by the order found
+  nothing, and it could not report the line returned, so the right stayed in the
+  inventory and the next campaign asked about it again. A withdrawal of an ordered
+  right now goes back through its order, as a return does: the line is returning,
+  and the process starts with the order, the position and the reason. A line the
+  order will not give back, because it is already going back or something still
+  needs it, is refused and the row stays unanswered, instead of a second
+  deprovisioning running beside the first. Rights without an order are unchanged
+  ([ADR-draft-a-withdrawn-ordered-right-goes-back-through-its-order](docs/adr/draft-a-withdrawn-ordered-right-goes-back-through-its-order.md)).
+
 - **A decision service's border no longer ends up over the arrows crossing it,
   whatever you did to it.** This was fixed twice before, once for drawing a service
   and once for moving one, and reported a third time. Each fix was a rule about one
