@@ -69,7 +69,34 @@ makes it null — it is not a conversion, so a string for a `date` would become 
 rather than a date, and it is applied at output boundaries only.
 
 The last column is the way out that exists today: `date(Stichtag)` converts the string,
-and the comparison is then `true`. That is a change to the **model**, not to Atlas.
+and the comparison is then `true`. `date()` is a FEEL built-in, so that column is
+ordinary, conformant FEEL — nothing non-standard enters the model.
+
+### A third measurement: temis's own contract contradicts itself
+
+temis does not leave the declared type behind. `Definitions.ReachableInputSchema`
+returns it, and `CompiledDecision.ValidateInput` / `Evaluate(…, WithStrictInput())`
+exist precisely so that a wrong input is a named problem rather than a silent null.
+Measured against the same `date`-typed input:
+
+| Sent | `ValidateInput` says |
+|---|---|
+| `"2025-06-01"` | **nothing — it conforms** |
+| `"nonsense"` | **nothing — it conforms** |
+| `""` | **nothing — it conforms** |
+| `42` | `TYPE_MISMATCH: expects date, got number` |
+| `true` | `TYPE_MISMATCH: expects date, got boolean` |
+| `time.Time` | `TYPE_MISMATCH: expects date, got date and time` |
+
+So the schema says the input is a `date`; the validator says any string conforms to it;
+and the evaluator then treats that string as a string, so every date comparison fails.
+Those three cannot all be right. Either the validator should refuse the string — which
+would make today's wrong answer visible — or the evaluator should convert it, which
+would make it correct. Doing neither is what produces a wrong answer with nothing to
+read.
+
+That is the finding that settles this record's shape: **this is a hole in a contract
+temis already has**, not a new opinion Atlas would be imposing on it.
 
 This is not a property of the editor's test panel. Both paths — `Try`
 (ADR-0326, the panel) and `Registry.EvaluateTraced` (what a business rule task runs)
@@ -148,22 +175,40 @@ anything deployed, and it fits the shape of every other repair in this editor: t
 findings strip names the column, and a button writes the wrapper. It costs the author
 one click per column, and it leaves the model saying out loud what it is doing.
 
-**Option C′ — temis converts at the input boundary, by the declared type.** The only
-way a `date`-typed input becomes a FEEL date. It is an engine change, and a departure
-from FEEL, which has no implicit string-to-date: FEEL's own rule at a boundary is
-coercion (conform or null), not conversion. Atlas owns temis, so it is available; what
-it costs is that every temis user inherits Atlas's reading of `typeRef`, and that a
-model relying on a date arriving as a string changes behaviour.
+**Option C′ — temis closes the hole at the input boundary.** The only way a `date`-typed
+input becomes a FEEL date.
+
+An earlier draft of this record called this "a departure from FEEL". That was wrong,
+and the third measurement is why. FEEL has no implicit string-to-date *inside an
+expression*, which is true and not the question: the Go-value-to-FEEL-value mapping is
+outside FEEL entirely, DMN does not prescribe it, and it is the host's boundary to
+define. temis already defines it, already publishes the expected FEEL type per input,
+and already validates against it — it simply accepts a string for a `date` and then
+does not convert it. Closing that is a defect fix inside temis's own contract, not a
+new reading imposed on it.
+
+What it costs: a model relying on a date arriving as a string changes behaviour, and
+the change has to be recorded in temis, not only here.
 
 **Option 2A′ — Atlas converts, for `date and time` only.** Honest and small: it fixes
 the type it can fix and leaves `date` to option 3 or C′. Its cost is a rule with a hole
 in it, which is a thing to explain to every author.
 
-**Recommended: 3 now, C′ as the target.** They compose. Option 3 makes the models that
-exist correct this week, visibly, with nothing deployed changing behaviour. C′ then
-makes the wrapper unnecessary for models written afterwards, and can be measured
-against the models option 3 already made explicit. 2A′ is not recommended: a partial
-conversion is harder to hold in the head than either end of it.
+**Recommended: C′.** The third measurement moves it from "a change to the engine" to
+"the engine's own contract, honoured". The alternative is to leave every date model
+carrying `date(…)` around a value the schema already calls a date — compensation for a
+host defect, written into documents that are supposed to be the business rule and
+nothing else.
+
+Option 3 remains available as a stopgap for a model that must work before C′ lands,
+and it is conformant FEEL, so nothing has to be undone afterwards. It is not
+recommended as the answer, because the boilerplate it leaves is permanent and the
+reason for it will not be legible a year from now.
+
+2A′ is not recommended at all: measured, a `time.Time` is now *rejected* by
+`WithStrictInput` as `date and time` where a `date` is expected, so converting on the
+Atlas side would trade a silent wrong answer for a refused evaluation without ever
+producing the value the model asked for.
 
 For deployed models, whichever is chosen, **option ii**: name the affected decisions at
 the deploy preflight, so the change arrives as a list somebody read rather than as a
@@ -188,10 +233,12 @@ Under **option C′**:
 
 - **Positive.** A declared type becomes load-bearing rather than decorative, which is
   what makes the typed test fields (and any future typed input mapping) worth having.
+- **Positive.** temis's schema, its validator and its evaluator agree again. Today they
+  do not, and the disagreement is invisible from either side alone.
 - **Negative.** A model that relies on a date arriving as a string changes behaviour.
   The preflight list is how that is found before it runs, not after.
-- **Negative.** temis departs from FEEL at the input boundary, and every temis user
-  inherits that. It needs its own record in temis, not only this one here.
+- **Negative.** It needs its own record in temis, and a decision there about which
+  spellings a string may take before it is accepted as a date (ISO 8601 only, or more).
 
 ## What this record does not decide
 
