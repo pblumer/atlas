@@ -161,7 +161,7 @@ func (s *Server) handleRepairFulfilment(w http.ResponseWriter, r *http.Request) 
 	}
 	for _, id := range out.Restarted {
 		o := known[id]
-		start := order.PlacedVariables(o, s.externalURL)
+		start := order.PlacedVariables(o, s.externalURL, s.selfURL)
 		vars := make([]model.VariableValue, 0, len(start))
 		for name, value := range start {
 			vars = append(vars, model.VariableValue{Name: name, Kind: model.VarString, Text: value})

@@ -1,0 +1,53 @@
+{
+  "type": "default",
+  "id": "pe-theme",
+  "components": [
+    {
+      "type": "text",
+      "text": "# Erscheinungsbild des Katalogs\n\nDiese Aufgabe liegt bei der Administration und nicht bei der Katalogpflege — so trennt Atlas die beiden (ADR-0316). Ein Katalog ohne eigenes Erscheinungsbild übernimmt das der Instanz."
+    },
+    {
+      "key": "akzentfarbe",
+      "type": "textfield",
+      "label": "Akzentfarbe",
+      "description": "Als #rgb oder #rrggbb, klein geschrieben. Alles andere weist der Server zurück, statt die Seite halb gebrandet zu lassen.",
+      "defaultValue": "#3355ff"
+    },
+    {
+      "key": "schriftart",
+      "type": "select",
+      "label": "Schriftart",
+      "defaultValue": "system",
+      "description": "Eine Auswahl und keine URL: eine Web-Schrift würde bei jedem Seitenaufruf einen Dritten erreichen und die Adresse der Besucherin dorthin tragen.",
+      "values": [
+        {
+          "value": "system",
+          "label": "System"
+        },
+        {
+          "value": "humanist",
+          "label": "Humanist"
+        },
+        {
+          "value": "serif",
+          "label": "Serif"
+        },
+        {
+          "value": "mono",
+          "label": "Monospace"
+        }
+      ]
+    },
+    {
+      "key": "logo",
+      "type": "filepicker",
+      "label": "Logo",
+      "description": "PNG oder SVG, höchstens 512 KB. Optional — ohne Logo zeigt der Shop die Marke der Instanz.",
+      "accept": ".png,.svg,image/png,image/svg+xml"
+    },
+    {
+      "type": "text",
+      "text": "Das Bild geht beim Abschliessen dieser Aufgabe direkt an den Katalog und wird **keine Prozessvariable** — ein halbes Megabyte im Token-Umfang würde bei jedem weiteren Schritt erneut ins Log geschrieben. Schlägt der Upload fehl, bleibt die Aufgabe offen und sagt warum."
+    }
+  ]
+}

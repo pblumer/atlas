@@ -49,15 +49,19 @@ func TestAProductCarriesItsGroupTheWayItCarriesItsCategory(t *testing.T) {
 		t.Fatalf("no field carries the marker; the fixture has gone stale: %s", raw)
 	}
 
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	// Both halves of the grouping, as the category guard checks both of its own: the
 	// one that collects the groups and the one that decides what falls under the
 	// group now open. Either reading a field the release does not carry leaves every
 	// product under one group.
+	//
+	// Two spellings are accepted because the two halves legitimately have them: the
+	// column names the field to the function that collects both headings, and the
+	// filter reads it off the product. Renaming the tag still fails both.
 	for _, fn := range []string{"function groupsOf(", "function inGroup("} {
 		body := webRegion(t, src, fn, "\n}")
 		body = strings.ReplaceAll(body, "state."+key, "state.<the open group>")
-		if !strings.Contains(body, "."+key) {
+		if !strings.Contains(body, "."+key) && !strings.Contains(body, "'"+key+"'") {
 			t.Errorf("the release spells the group %q and %s never reads it, so every "+
 				"product sits under one group", key, strings.TrimSuffix(fn, "("))
 		}
@@ -71,7 +75,7 @@ func TestAProductCarriesItsGroupTheWayItCarriesItsCategory(t *testing.T) {
 // column built from every product in the catalogue would put groups under headings
 // that hold none of their products.
 func TestTheGroupColumnIsNarrowedByTheCategory(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function groupsOf(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function groupsOf(", "\n}")
 	if !strings.Contains(body, "inCategory") {
 		t.Error("the group column is built from every product rather than from the " +
 			"ones under the heading now open, so a group appears under a category none " +
@@ -86,7 +90,7 @@ func TestTheGroupColumnIsNarrowedByTheCategory(t *testing.T) {
 // heads; a screen that still says Bundle is a screen teaching a vocabulary the
 // catalogue has dropped.
 func TestNothingIsCalledABundleAnyMore(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	body := webRegion(t, src, "function levelOf(", "\n}")
 	if strings.Contains(body, "'bundle'") {
 		t.Error("levelOf still answers 'bundle'. Every root is a Marktleistung, with " +
@@ -104,7 +108,10 @@ func TestNothingIsCalledABundleAnyMore(t *testing.T) {
 // product and cannot be filled — which reads as a feature that does not work.
 func TestTheGroupIsMaintainableBesideTheCategory(t *testing.T) {
 	src := readWeb(t, "catalog-admin.js")
-	if !strings.Contains(src, `name="productGroup"`) {
+	// A row of boxes, one per language the catalogue declares, filled from the key
+	// and its wordings together. The control names are built inside the helper, so
+	// what is searched for is the helper being given the field.
+	if !strings.Contains(src, `headingBoxes(v.productGroup, v.productGroupTexts, langs)`) {
 		t.Error("the product form has no control for the group, so the column the " +
 			"portal draws can never be filled")
 	}

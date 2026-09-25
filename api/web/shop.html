@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Leistungsportal</title>
+<title>Shop</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='52' fill='%23000'/%3E%3Cpath fill='%23fff' fill-rule='evenodd' d='M128 26 244 214 12 214ZM128 172 178 214 78 214ZM111 72H145V99H172V133H145V160H111V133H84V99H111Z'/%3E%3C/svg%3E" />
 <style>
   /* The same token set app.css and the public form declare. What is written here
-     is the instance's brand — the operator's — and portal.js overwrites the accent
+     is the instance's brand — the operator's — and shop.js overwrites the accent
      trio and the typeface on the root once the visitor's catalogue answers, so a
      catalogue with a face of its own shows it and one without falls back to this.
 
@@ -54,6 +54,13 @@
   .parts { margin:10px 0; font-size:14px; }
   .parts ul { margin:4px 0 0; padding-left:18px; }
   .muted { color:var(--muted); font-size:13px; }
+  /* The product's own words, set apart from the muted fact lines under it: those
+     describe the transaction, this describes the thing. Full ink and the body
+     size, with the measure held short enough to read as prose rather than as a
+     wall the eye slides off. */
+  .product-description {
+    color:var(--text); margin:8px 0 12px; max-width:62ch; white-space:pre-line;
+  }
   /* A return sits on one line among others, so it is a link and not a button:
      a row of buttons down the side of a list reads as the list's purpose. */
   button.linkish { background:none; border:0; padding:0 0 0 8px; font:inherit; font-size:13px;
@@ -70,10 +77,13 @@
   .lines { margin:0; padding-left:0; list-style:none; font-size:14px; }
   .lines li { padding:3px 0; border-top:1px solid var(--border); }
   .lines li:first-child { border-top:0; }
-  /* The step a position is sitting on. Read as a statement rather than as a note:
-     it is the answer somebody pressed for, and .muted is what the page uses for
-     what it says without being asked. */
-  .lines .step { font-size:13px; color:var(--text); }
+  /* A position's open tasks, under it (ADR-0416). */
+  .lines .tasks { margin:4px 0 2px 18px; padding:0; list-style:none; font-size:13px; }
+  .lines .tasks li { border-top:0; padding:2px 0; }
+  .lines .tasks .task-name { font-weight:600; }
+  /* What the process link found, under the button that asked for it. Narrow, so a
+     sentence does not stretch the column it sits in. */
+  .follow-note { font-size:12px; padding-left:8px; max-width:34ch; }
   /* One dot per line status. The three that mean "not provisioned" are deliberately
      different colours: a refusal is a decision, a failure is a defect somebody is
      fixing, and a block is neither — showing them alike would tell a visitor the
@@ -124,10 +134,17 @@
 
   /* The four-column cascade. Equal columns that scroll sideways rather than
      collapse: a decomposition read at four levels is the point of the screen, and
-     a narrow window should move it, not fold it. */
+     a narrow window should move it, not fold it — down to the narrow-screen
+     breakpoint, below which one column shows at a time
+     (ADR-0417). */
   .cascade { display:grid; grid-template-columns:repeat(4, minmax(220px, 1fr));
              gap:12px; overflow-x:auto; }
   .col { min-width:0; }
+  /* The basket's lines, one per offering. The grid makes each line as tall as its
+     tallest cell, which is what keeps one offering's services from sliding beside
+     the next; the rule under each line is what tells two offerings apart. */
+  .basket-groups .grp { border-bottom:2px solid var(--border); }
+  .basket-groups .grp .cell:last-child { border-bottom:0; }
   .colhead { font-size:12px; text-transform:uppercase; letter-spacing:.04em;
              color:var(--muted); font-weight:600; padding:0 0 6px; border-bottom:1px solid var(--border); }
   .cell { display:flex; align-items:flex-start; gap:6px; padding:6px 0;
@@ -191,7 +208,10 @@
   .table thead th { font-size:12px; text-transform:uppercase; letter-spacing:.04em;
                     color:var(--muted); font-weight:600; }
   .table .filters td { border-bottom:0; padding-bottom:0; }
-  .table input { width:100%; font:inherit; font-size:13px; padding:5px 8px;
+  /* The filter row's fields only. A bare `.table input` also reached the inputs
+     of a task's form opened inside a row, and stretched its checkbox to the
+     cell's width with the label pushed off the end. */
+  .table .filters input { width:100%; font:inherit; font-size:13px; padding:5px 8px;
                  border:1px solid var(--border-strong); border-radius:6px;
                  background:var(--surface); color:var(--text); }
   .tablewrap { overflow-x:auto; }
@@ -220,7 +240,7 @@
   .cfg h3 { margin:0 0 10px; font-size:15px; }
   .note { color:var(--muted); font-size:12px; margin:10px 0 0; }
 
-  /* --- The sign-in, for a portal that enforces one. ---
+  /* --- The sign-in, for a shop that enforces one. ---
      Narrow and centred, like every sign-in: the form is the only thing on the
      page, and a field stretched across 1400px reads as a page that lost its
      layout. Every colour is a token declared above — the operator's brand, since
@@ -247,12 +267,86 @@
   .signin .or { text-align:center; margin:0 0 4px; }
 
   @media (max-width:520px) { .cards { grid-template-columns:1fr; } }
+
+  /* --- A narrow screen (ADR-0417). ---
+     One breakpoint for the whole page, so a phone and a small tablet read the
+     shop the same way: below it every view is one column wide. 860px and not
+     900: the four-column cascade needs about 920px to show its columns at their
+     minimum width, and the browser tests' default window is 900px wide — so the
+     wide layout keeps the width those tests measure it at. The stepper is hidden
+     on a wide screen and shown here. */
+  .stepper { display:none; }
+  @media (max-width:860px) {
+    #app { padding:16px 12px 72px; }
+    h2 { margin:22px 0 10px; }
+
+    /* The catalogue: one column at a time, the one state.step names, with the
+       stepper above it to go back. A column shown alone takes the width. */
+    .stepper { display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+               margin:0 0 10px; font-size:14px; }
+    .stepper .step-back { margin-top:0; }
+    .step-path { min-width:0; overflow-wrap:break-word; }
+    .cascade { grid-template-columns:1fr; overflow-x:visible; }
+    .cascade[data-step] > .col { display:none; }
+    .cascade[data-step="0"] > .col:nth-child(1),
+    .cascade[data-step="1"] > .col:nth-child(2),
+    .cascade[data-step="2"] > .col:nth-child(3),
+    .cascade[data-step="3"] > .col:nth-child(4) { display:block; }
+    /* Columns nothing is chosen in (what somebody holds) simply stack; the gap
+       between them says where one list ends. */
+    .cascade:not([data-step]):not(.basket-groups) { row-gap:18px; }
+
+    /* The basket: each offering a block, its services and options indented under
+       it with their own label, because the names at the top of the grid no longer
+       stand above them. */
+    .basket-groups > .colhead { display:none; }
+    .basket-groups .grp { border-bottom:0; }
+    .basket-groups .grp:empty { display:none; }
+    .basket-groups .grp-first { border-top:2px solid var(--border); margin-top:6px; }
+    .basket-groups .grp[data-label] { padding-left:22px; }
+    .basket-groups .grp[data-label]::before { content:attr(data-label); display:block;
+      font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
+      font-weight:600; padding:6px 0 2px; }
+
+    /* My orders: the table becomes a list of cards. Each cell says what it is,
+       because the column heads are gone; the filters sit two to a row above. */
+    .tablewrap { overflow-x:visible; }
+    .table.orders, .table.orders tbody, .table.orders tr, .table.orders td { display:block; width:100%; }
+    .table.orders thead { display:block; }
+    .table.orders thead tr:not(.filters) { display:none; }
+    .table.orders .filters { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:12px; }
+    .table.orders .filters td { padding:0; }
+    .table.orders .filters td:empty { display:none; }
+    .table.orders tbody tr { background:var(--surface); border:1px solid var(--border);
+                             border-radius:10px; padding:10px 12px; margin:0 0 12px; }
+    .table.orders tbody td { border-bottom:0; padding:3px 0; }
+    .table.orders tbody td:empty { display:none; }
+    .table.orders tbody td[data-label]::before { content:attr(data-label); display:block;
+      font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
+      font-weight:600; }
+    .lines .tasks { margin-left:8px; }
+    /* A form opened in a row takes the card's width, not 640px of it. */
+    .cfg { max-width:100%; }
+    .follow-note { max-width:none; }
+
+    /* Touch: a fingertip needs about 40px; the 24px squares were drawn for a
+       pointer. The row grows with them rather than crowding them. */
+    .sq { width:40px; height:40px; font-size:15px; border-radius:8px; }
+    .help, .avatar { width:40px; height:40px; }
+    .cell { padding:8px 0; gap:8px; align-items:center; }
+    .cell .label { font-size:15px; }
+    .lang { padding:6px 12px; font-size:13px; }
+    button.linkish { padding:8px 0 8px 8px; }
+    .forwhomfield { flex:1 1 200px; min-width:0; }
+    .forwhom input { min-width:0; width:100%; }
+    .people { min-width:0; right:0; }
+  }
 </style>
 </head>
 <body>
   <div id="app"></div>
-  <!-- A module: portal.js imports theme.js's palette derivation rather than
+  <!-- A module: shop.js imports theme.js's palette derivation rather than
        carrying a second copy of it. -->
-  <script type="module" src="/portal.js"></script>
+  <script type="module" src="/shop.js"></script>
 </body>
 </html>

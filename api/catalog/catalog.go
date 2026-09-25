@@ -132,10 +132,35 @@ type Item struct {
 	State       State  `json:"state"`
 	// Texts holds the item's name per language tag. A release proves it carries one
 	// for every language its catalogue declares.
-	Texts     map[string]string `json:"texts"`
-	Lifecycle Lifecycle         `json:"lifecycle,omitempty"`
-	Variants  []Variant         `json:"variants,omitempty"`
-	Approval  Approval          `json:"approval"`
+	Texts map[string]string `json:"texts"`
+	// Descriptions is what this product *is*, per language tag, beside the name
+	// Texts carries. Empty is the ordinary state for a product whose name says
+	// enough, and means no description anywhere rather than an empty one.
+	//
+	// # Why per language and not one string
+	//
+	// Every other text a person reads off a product is per locale, and this is the
+	// one somebody reads when the name was not enough — which is exactly when not
+	// being able to read it matters. A catalogue declaring German and French could
+	// otherwise translate the name of a thing and not the sentence explaining it.
+	//
+	// It is deliberately not Keywords, which is flat for the opposite reason:
+	// keywords are for *finding* and a searcher's language is not the catalogue's,
+	// while a description is for *showing* and is read in the language the portal
+	// is being read in.
+	//
+	// # What a release demands of it
+	//
+	// Nothing, until there is one. A product with no description publishes, because
+	// not every product needs a paragraph. A product with a description in one of
+	// the catalogue's declared languages and not another does not, because that is
+	// a portal where one audience is told what the thing is and the other is shown
+	// an empty panel — the half-translated catalogue the name check already
+	// refuses, in the field a reader turns to second.
+	Descriptions map[string]string `json:"descriptions,omitempty"`
+	Lifecycle    Lifecycle         `json:"lifecycle,omitempty"`
+	Variants     []Variant         `json:"variants,omitempty"`
+	Approval     Approval          `json:"approval"`
 	// ProvisionProcess and DeprovisionProcess are the BPMN process ids bound to this
 	// item. Both are required to publish: a catalogue that can only grant is not a
 	// lifecycle, and the day somebody must revoke at scale is the wrong day to find
@@ -306,16 +331,55 @@ type Item struct {
 	// it is the word above a column.
 	//
 	// The costs are real and stated rather than hidden. A category has **no ordering
-	// of its own**, so the portal sorts alphabetically — there is nothing on a string
-	// to sort by, and inventing a rank here would be the entity arriving through the
-	// back door. It has **no translation**: it reads the same in every language the
-	// catalogue offers, unlike every product name beside it. And two spellings are
-	// two categories, with nothing to notice that "Arbeitsplatz" and "Arbeitsplätze"
-	// were meant as one.
+	// of its own** — there is nothing on a string to sort by, and inventing a rank
+	// here would be the entity arriving through the back door, so the portal sorts
+	// alphabetically. And two spellings are two categories, with nothing to notice
+	// that "Arbeitsplatz" and "Arbeitsplätze" were meant as one.
 	//
-	// If any of those turns out to matter, the answer is the entity, and this field
-	// is what it would be migrated from.
+	// If either of those turns out to matter, the answer is the entity, and this
+	// field is what it would be migrated from.
+	//
+	// # What this string is, now that the heading is translatable
+	// (ADR-0412)
+	//
+	// The third cost ADR-0360 recorded was that a heading has no translation. It has
+	// one now, in [Item.CategoryTexts] below — and this field did not become it. It
+	// is **the key**: what the portal groups by, what a search hit sets to open the
+	// cascade at the right column, and what an already published release already
+	// holds. The translations are how it is *rendered*.
+	//
+	// That split is the whole of the decision, and it is what makes the change
+	// additive. Had the string become a map, two products would be one category when
+	// their German agreed and two when their French did not — a heading that splits
+	// in a language nobody publishing it reads. Grouping by one value that no reader
+	// ever has to see keeps "same category" a fact about the catalogue rather than
+	// about the reader.
+	//
+	// Where translations are present the key never has to be a word: a stable slug
+	// survives the maintainer deciding the German wording was wrong. Where they are
+	// absent — every product written before the field existed, every single-language
+	// catalogue — the key is the word, and it is what every language renders. That
+	// is the old behaviour exactly, which is why no stored record had to be migrated.
 	Category string `json:"category,omitempty"`
+	// CategoryTexts is [Item.Category] per language tag: the heading as the reader
+	// of this portal reads it, where the key above is what everything groups by.
+	//
+	// Empty is the ordinary state and means the key renders in every language — the
+	// state of every product written before this field and of every catalogue that
+	// declares one language.
+	//
+	// # What a release demands of it
+	//
+	// The rule [Item.Descriptions] follows, for the same reason: optional as a
+	// whole, all-or-nothing once there is one. A heading translated into German and
+	// not French is a portal where one audience reads its own column head and the
+	// other reads somebody else's, and nothing says so, because the fallback renders
+	// and looks deliberate.
+	//
+	// Beside that, a translation without a key is refused. It would put the product
+	// in the bucket for products carrying no heading — under a column head reading
+	// "Ohne Kategorie", while holding the word for one in four languages.
+	CategoryTexts map[string]string `json:"categoryTexts,omitempty"`
 	// ProductGroup is the group this product sits in, one level below its category:
 	// the portal's cascade reads Kategorie > Produktgruppe > Produkt > Services.
 	//
@@ -332,6 +396,11 @@ type Item struct {
 	// belongs to one. And a group with no products does not exist, exactly as a
 	// category with none does not.
 	ProductGroup string `json:"productGroup,omitempty"`
+	// ProductGroupTexts is [Item.ProductGroup] per language tag, exactly as
+	// [Item.CategoryTexts] is the heading's — same split into a key that groups and
+	// texts that render, same all-or-nothing rule at publication, same reason. See
+	// the paragraphs there.
+	ProductGroupTexts map[string]string `json:"productGroupTexts,omitempty"`
 	// Revision is optimistic concurrency, the same field and the same rule the
 	// capability map uses: a write that states a revision is refused when the
 	// stored record has moved past it, rather than silently overwriting somebody

@@ -22,12 +22,37 @@
       <input name="id" />
       <input name="t-de" />
       <input name="t-en" />
-      <input name="category" />
-      <input name="productGroup" />
+      <textarea name="d-de"></textarea>
+      <textarea name="d-en"></textarea>
+      <!-- One box per language for every text a product carries. The real form
+           draws exactly the languages its catalogue declares; the harness carries
+           the four the tests use, and build() is told which of them are declared,
+           so a box the catalogue does not declare is present and never read —
+           which is itself worth proving. -->
+      <input name="t-fr" />
+      <input name="t-it" />
+      <textarea name="d-fr"></textarea>
+      <input name="cat-de" />
+      <input name="cat-fr" />
+      <input name="cat-en" />
+      <input name="cat-it" />
+      <input name="grp-de" />
+      <input name="grp-fr" />
+      <input name="grp-en" />
+      <input name="grp-it" />
       <input name="keywords" />
       <input name="price" />
       <input type="checkbox" name="multipleAllowed" />
-      <textarea name="variants"></textarea>
+      <!-- The shapes grid: three rows of boxes, each with an id and one name box
+           per language the tests use. The real form draws exactly the languages
+           its catalogue declares and as many rows as the product has; the harness
+           carries enough of both to exercise the reading. -->
+      <input name="var-0-id" /><input name="var-0-de" /><input name="var-0-fr" />
+      <input name="var-0-en" /><input name="var-0-it" />
+      <input name="var-1-id" /><input name="var-1-de" /><input name="var-1-fr" />
+      <input name="var-1-en" /><input name="var-1-it" />
+      <input name="var-2-id" /><input name="var-2-de" /><input name="var-2-fr" />
+      <input name="var-2-en" /><input name="var-2-it" />
       <select name="state">
         <option value="draft">draft</option>
         <option value="active">active</option>
@@ -56,7 +81,7 @@
     </form>
     <pre id="out"></pre>
     <script type="module">
-      import { productBody, variantLines, dateOf } from "/catalog-admin.js";
+      import { productBody, variantRows, dateOf, headingBoxes } from "/catalog-admin.js";
 
       const form = document.getElementById("f");
       const out = document.getElementById("out");
@@ -101,11 +126,20 @@
         return body;
       };
 
-      // What the textarea is filled with, which is the other half of the round trip.
-      window.lines = (variants, langs) => variantLines(variants, langs);
+      // What the shapes grid is filled with, which is the other half of ITS round
+      // trip. The markup is returned rather than the values, because the row is
+      // where a shape's id and its names are tied together and a helper that
+      // handed back values alone could not show that they stayed on one row.
+      window.shapeGrid = (variants, langs, blanks) => variantRows(variants, langs, blanks);
 
       // And what a date box is filled with, which is the other half of the window's.
       window.dateBox = (ns) => dateOf(ns);
+
+      // What the heading row is filled with — the other half of ITS round trip,
+      // and the half that matters most here: the row carries the key and every
+      // wording at once, so a render the save cannot read back loses wordings on
+      // a save that changed nothing.
+      window.headingBoxes = (key, texts, langs) => headingBoxes(key, texts, langs);
 
       window.__ready = true;
     </script>

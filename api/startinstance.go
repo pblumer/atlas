@@ -82,6 +82,15 @@ func (s *Server) handleCreateInstanceByProcessID(w http.ResponseWriter, r *http.
 // Split out when the by-id route arrived, so the two cannot answer differently
 // about a process that is deployed but not executable.
 func (s *Server) startInstance(w http.ResponseWriter, key uint64, startVars []model.VariableValue) {
+	// A start form is where personal data most often enters, so it is sealed here —
+	// before the CreateInstance command, which therefore already holds ciphertext
+	// (ADR-0314). This is the funnel for the JSON start body and the API start; the CSV
+	// upload and the public form seal on their own paths, which resolve their definition
+	// differently.
+	if err := s.encipherStartVars(key, startVars); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	var (
 		found       bool
 		notExec     bool
@@ -89,6 +98,8 @@ func (s *Server) startInstance(w http.ResponseWriter, key uint64, startVars []mo
 		statErr     error
 		stats       statsResp
 		driveNeeded bool
+		instKey     uint64
+		processID   string
 	)
 	s.do(func() {
 		d, ok := s.deployments[key]
@@ -102,7 +113,10 @@ func (s *Server) startInstance(w http.ResponseWriter, key uint64, startVars []mo
 			notExec = true
 			return
 		}
-		s.proc.CreateInstance(key, startVars...)
+		processID = d.ProcessID
+		// Reporting, so the answer can name the instance it started and an order
+		// position can be told which instance works it (ADR-0416).
+		s.proc.CreateInstanceReporting(key, &instKey, startVars...)
 		driveNeeded = true
 	})
 	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
@@ -124,6 +138,7 @@ func (s *Server) startInstance(w http.ResponseWriter, key uint64, startVars []mo
 	case statErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
 	default:
-		httpapi.JSON(w, http.StatusOK, createInstanceResp{DefinitionKey: key, Stats: stats})
+		s.notePositionInstance(startVars, instKey, processID)
+		httpapi.JSON(w, http.StatusOK, createInstanceResp{DefinitionKey: key, InstanceKey: instKey, Stats: stats})
 	}
 }

@@ -20,7 +20,7 @@ import (
 
 // TestTheProcessLinkIsOfferedToWhoMayFollowIt.
 func TestTheProcessLinkIsOfferedToWhoMayFollowIt(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	rows := webRegion(t, src, "function orderRowBodies(", "\n}")
 	if !strings.Contains(rows, "state.mayFollowProcess") {
 		t.Error("the row offers the process link to everybody, or to nobody, without " +
@@ -41,7 +41,7 @@ func TestTheProcessLinkIsOfferedToWhoMayFollowIt(t *testing.T) {
 // every provisioning sub-process is started with the order id too, so a search
 // that took the first hit would open one position's process and call it the order.
 func TestTheInstanceIsFoundByTheOrderItIsFor(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "async function followProcess(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "async function followProcess(", "\n}")
 	if !strings.Contains(body, "/api/v1/instances/search") {
 		t.Error("nothing looks the instance up, so the link cannot know where to go")
 	}
@@ -63,7 +63,7 @@ func TestTheInstanceIsFoundByTheOrderItIsFor(t *testing.T) {
 // order whose process is gone is the ordinary late case rather than an error. A
 // link that navigated to nothing would look like the console had broken.
 func TestAnInstanceThatIsGoneIsSaidRatherThanFollowed(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "async function followProcess(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "async function followProcess(", "\n}")
 	if !strings.Contains(body, "proc.none") {
 		t.Error("an order whose instance no longer exists follows a link to nowhere " +
 			"instead of being told that the process has been cleaned up")
@@ -81,34 +81,42 @@ func TestAnInstanceThatIsGoneIsSaidRatherThanFollowed(t *testing.T) {
 // A page that names a cause it cannot know sends whoever reads it to look in the
 // wrong place, and "retention removed it" reads as "it is gone for good".
 func TestAMissingInstanceIsNotBlamedOnRetention(t *testing.T) {
-	src := readWeb(t, "portal.js")
-	for _, key := range []string{"'proc.none'", "'proc.none.order'"} {
-		for _, locale := range []struct{ name, from, to string }{
-			{"de", "  de: {", "\n  },"},
-			{"en", "  en: {", "\n  },"},
-		} {
-			body := webRegion(t, src, locale.from, locale.to)
-			at := strings.Index(body, key)
-			if at < 0 {
-				t.Errorf("%s carries no %s, so one locale says nothing where the other "+
-					"explains", locale.name, key)
-				continue
-			}
-			line := body[at : at+strings.Index(body[at:], "\n")]
-			// Three causes, and the one that was missing is the one that matters: a
-			// process nobody has started yet.
-			if !strings.Contains(line, "gestartet") && !strings.Contains(line, "started") {
-				t.Errorf("%s %s names no cause but the ones it can see afterwards; the "+
-					"ordinary case — nothing has started yet — is not among them: %s",
-					locale.name, key, line)
-			}
+	src := readWeb(t, "shop.js")
+	locales := []struct{ name, from, to string }{
+		{"de", "  de: {", "\n  },"},
+		{"en", "  en: {", "\n  },"},
+	}
+	for _, locale := range locales {
+		body := webRegion(t, src, locale.from, locale.to)
+		at := strings.Index(body, "'proc.none.order'")
+		if at < 0 {
+			t.Errorf("%s carries no 'proc.none.order', so one locale says nothing "+
+				"where the other explains", locale.name)
+			continue
+		}
+		line := body[at : at+strings.Index(body[at:], "\n")]
+		// Three causes, and the one that was missing is the one that matters: a
+		// process nobody has started yet.
+		if !strings.Contains(line, "gestartet") && !strings.Contains(line, "started") {
+			t.Errorf("%s 'proc.none.order' names no cause but the ones it can see "+
+				"afterwards; the ordinary case — nothing has started yet — is not "+
+				"among them: %s", locale.name, line)
 		}
 	}
-	// And the two are told apart, because the order's own orchestration and one
-	// position's process are two different absences.
+	// And the fourth cause is told apart from those three, because it is the one
+	// this server can be certain of: the search answered out of the exported log,
+	// so the instance is known to have existed and known to be gone from here.
+	// Reading "none has started yet" about an instance the page just saw a record
+	// of would send somebody to look for a defect in the fulfilment wake.
+	for _, locale := range locales {
+		if !strings.Contains(webRegion(t, src, locale.from, locale.to), "'proc.archived'") {
+			t.Errorf("%s carries no 'proc.archived', so an instance the archive "+
+				"answered for is reported in the words written for one that may "+
+				"never have existed", locale.name)
+		}
+	}
 	body := webRegion(t, src, "async function followProcess(", "\n}")
-	if !strings.Contains(body, "'proc.none.order'") {
-		t.Error("the order's missing instance is reported in the words written for a " +
-			"position, which names the wrong thing to whoever reads it")
+	if !strings.Contains(body, "'proc.archived'") {
+		t.Error("the archived case is in the catalogue and nothing says it")
 	}
 }

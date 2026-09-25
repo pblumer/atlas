@@ -57,6 +57,17 @@ type apiToken struct {
 	// credential that can do nothing.
 	Scope string `json:"scope,omitempty"`
 
+	// Reach is which *subjects* this token may see — today the ids of the projects
+	// whose content it reaches (ADR-0410). Scope says which routes, Roles says which
+	// kinds of operation, and this says over what: three questions a credential
+	// answers, and none of the other two can express this one, because a machine
+	// principal has no account to be a member of anything.
+	//
+	// Empty means the credential states no reach, which narrows nothing — the reading
+	// that keeps every token already in the field working. A scope whose answer is
+	// too wide for that refuses to be minted without one (apitokens.go).
+	Reach []string `json:"reach,omitempty"`
+
 	// Roles is what this token may *do*, snapshotted from the account that minted it
 	// (ADR-0209). Never admin: a machine that administers
 	// accounts is not a case Atlas has. Both halves are then enforced, and a request
@@ -101,17 +112,20 @@ func (t apiToken) expired(now int64) bool { return t.ExpiresAt != 0 && now >= t.
 // apiTokenView is the JSON shape an operator sees: identity, reach and lifetime,
 // never anything the secret could be recovered from.
 type apiTokenView struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Scope     string `json:"scope"`
-	ExpiresAt int64  `json:"expiresAt,omitempty"`
-	CreatedAt int64  `json:"createdAt"`
-	CreatedBy string `json:"createdBy,omitempty"`
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Scope string `json:"scope"`
+	// Reach is shown for the same reason Scope is: a credential whose reach nobody
+	// can read afterwards is a grant nobody can audit.
+	Reach     []string `json:"reach,omitempty"`
+	ExpiresAt int64    `json:"expiresAt,omitempty"`
+	CreatedAt int64    `json:"createdAt"`
+	CreatedBy string   `json:"createdBy,omitempty"`
 }
 
 func (t apiToken) view() apiTokenView {
 	return apiTokenView{
-		ID: t.ID, Name: t.Name, Scope: t.scope(),
+		ID: t.ID, Name: t.Name, Scope: t.scope(), Reach: t.Reach,
 		ExpiresAt: t.ExpiresAt, CreatedAt: t.CreatedAt, CreatedBy: t.CreatedBy,
 	}
 }

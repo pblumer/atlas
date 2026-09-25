@@ -288,6 +288,15 @@ var (
 	InboundWatchMinuteOverflowed = newEvent("inbound_watch.minute_overflowed")
 )
 
+// Orders (ADR-0416).
+var (
+	// OrderInstanceUnrecorded: an instance started to work an order position could not
+	// be noted on the order. The instance runs; what is lost is the shop's view of its
+	// open tasks, so this is a warning and not a failed start — failing the start would
+	// make the caller retry and start the work twice.
+	OrderInstanceUnrecorded = newEvent("order.instance_unrecorded")
+)
+
 // History retention (ADR-0115/0144) and the OpenSearch exporter (ADR-0114).
 var (
 	RetentionEnabled   = newEvent("retention.enabled")
@@ -349,4 +358,36 @@ var (
 	CallOverrideSkipped      = newEvent("call_override.skipped")
 	CollabParticipantsReaped = newEvent("collab.participants_reaped")
 	PlaygroundSessionsReaped = newEvent("playground.sessions_reaped")
+
+	// PersonalValueUnreadable says a job could not be handed to a worker because one
+	// of the variables it would carry is a personal value whose data subject has been
+	// erased (ADR-0314). The record predicts this — "erasing a subject with a live
+	// instance leaves that instance unable to provision" — and predicts that it will
+	// read as an incident rather than a clear message. This is the line that at least
+	// makes it diagnosable: without it the job is simply never handed out, and a worker
+	// polls forever with nothing anywhere saying why.
+	PersonalValueUnreadable = newEvent("personal_data.value_unreadable")
+
+	// PersonalDataErased records an erasure: one data subject's key destroyed, and with
+	// it every copy of their personal data made unreadable (ADR-0314).
+	//
+	// This line is the *only* remaining evidence that the erasure happened, and that is
+	// what makes it load-bearing rather than informative. The key is gone, the ciphertext
+	// says nothing, and the subject leaves no other trace — so without it an operator
+	// could not demonstrate to an auditor that a deletion request was honoured, on the
+	// date it was honoured, by whom. Demonstrability is half of what a data-protection
+	// obligation asks for.
+	//
+	// It names the subject's id on purpose, which is the one place these events carry an
+	// identifier. An erasure record that does not say *who* was erased proves nothing,
+	// and the id is a reference that this design deliberately keeps readable
+	// ([ADR-0314](../docs/adr/0314-portal-personal-data.md)'s primary defence) rather
+	// than content it protects.
+	PersonalDataErased = newEvent("personal_data.erased")
+
+	// PersonalDataKeyWriteRefused records an attempt to write or delete a data key
+	// through the ordinary secrets API. Overwriting one makes a subject's data unreadable
+	// without erasing it — the same effect as an erasure, with no intent to do it and no
+	// record that it happened — so the attempt is refused and the refusal is audited.
+	PersonalDataKeyWriteRefused = newEvent("personal_data.key_write_refused")
 )

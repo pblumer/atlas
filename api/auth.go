@@ -413,6 +413,9 @@ func (s *Server) principalFor(r *http.Request) *httpapi.Principal {
 				// could would be a much worse leak.
 				Roles: rec.roles(),
 				Scope: rec.scope(),
+				// And over what, where the credential states it (ADR-0410). Empty
+				// narrows nothing, so a token minted before this existed is unchanged.
+				Reach: rec.Reach,
 			}
 		}
 		// An OAuth access token identifies a *person* who approved an application to

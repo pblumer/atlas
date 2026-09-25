@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pblumer/atlas/api/sidecar"
@@ -72,6 +73,10 @@ type Vault struct {
 	dir   string
 	aead  cipher.AEAD
 	keyID string
+	// mu guards the get-or-create of a subject's data key in personal.go, and nothing
+	// else. It exists because that one path is entered from HTTP handlers rather than
+	// from the run loop; the reason it is needed there is argued at dataKeyAEAD.
+	mu sync.Mutex
 }
 
 // New opens (creating if needed) the vault directory and builds the
@@ -180,8 +185,26 @@ func (v *Vault) Delete(name string) error {
 }
 
 // List returns value-free metadata for every stored secret, oldest first. Non-record
-// files are ignored.
+// files are ignored, and so are the per-subject data keys of ADR-0314: those are not
+// credentials an operator manages, and showing them here would invite deleting one —
+// which is an erasure of business data, not the removal of a secret. [Vault.DataSubjects]
+// is their own view.
 func (v *Vault) List() ([]Meta, error) {
+	all, err := v.listAll()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Meta, 0, len(all))
+	for _, m := range all {
+		if !IsDataKeyName(m.Name) {
+			out = append(out, m)
+		}
+	}
+	return out, nil
+}
+
+// listAll is List without the data-key filter: every record in the directory.
+func (v *Vault) listAll() ([]Meta, error) {
 	entries, err := os.ReadDir(v.dir)
 	if err != nil {
 		return nil, fmt.Errorf("vault: read dir: %w", err)

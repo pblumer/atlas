@@ -596,7 +596,13 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	// hand the server a way to check a SQL worker's connection string. The api
 	// package deliberately links none of them (ADR-0173), which is why the check is
 	// wired in here rather than imported there.
-	apiOpts := []api.Option{api.WithLogBuffer(logs), api.WithSystemProcesses(), api.WithSQLProbe(worker.ProbeSQL)}
+	apiOpts := []api.Option{api.WithLogBuffer(logs), api.WithSystemProcesses(), api.WithSQLProbe(worker.ProbeSQL),
+		// The shipped system processes do their work through Atlas's own API — the
+		// fulfilment orchestration asks which positions may start and starts them,
+		// and the approval models report a decision. So they are told the same
+		// address this server's children are. Unconditional: an installation that
+		// supervises no worker still runs orders.
+		api.WithSelfURL(internal)}
 	if tp.Enabled() {
 		apiOpts = append(apiOpts, api.WithTracing())
 		logging.Info(logging.TracingEnabled, "exporting request traces to an OTLP collector",

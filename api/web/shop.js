@@ -1,4 +1,4 @@
-// The self-service portal (ADR-0312).
+// The self-service shop (ADR-0312).
 //
 // A module, so it can reuse theme.js's palette derivation rather than repeat it.
 // That reuse is the point: --accent-ink decides whether a button's label is
@@ -19,7 +19,7 @@ import { applyAccent } from './theme.js';
 
 const STRINGS = {
   de: {
-    'portal.title': 'Leistungsportal',
+    'portal.title': 'Shop',
     'portal.catalog': 'Katalog',
     'portal.orders': 'Meine Bestellungen',
     'portal.none': 'Ihnen ist kein Katalog zugeordnet.',
@@ -59,13 +59,26 @@ const STRINGS = {
     'status.blocked': 'Blockiert',
     'order.running': 'In Arbeit',
     'proc.open': 'Prozess ansehen',
-    'proc.openLine': 'Prozessschritt',
-    'proc.none': 'Zu dieser Position ist keine laufende Prozessinstanz zu finden: Entweder wurde noch keine gestartet, sie ist bereits beendet, oder die Aufbewahrung hat sie entfernt.',
     'proc.none.order': 'Zu diesem Auftrag ist keine laufende Prozessinstanz zu finden: Entweder wurde noch keine gestartet, sie ist bereits beendet, oder die Aufbewahrung hat sie entfernt.',
-    'proc.where': 'Wo steht das?',
+    'proc.archived': 'Der Prozess zu diesem Auftrag steht nur noch im ausgelagerten Ereignisprotokoll. Dieser Server hat ihn nicht mehr und kann ihn nicht anzeigen.',
     'proc.asking': 'Wird abgefragt …',
-    'proc.standing': 'Aktueller Schritt:',
-    'proc.nothingRunning': 'Zu dieser Position läuft gerade kein Prozess.',
+    'proc.slow': 'Der Server hat auf die Suche nach dem Prozess nicht rechtzeitig geantwortet. Der Auftrag selbst ist davon nicht betroffen; bitte später erneut versuchen.',
+    'task.by.fixed': 'Genehmigung durch',
+    'task.by.role': 'Genehmigung durch die Gruppe',
+    'task.by.superior': 'Genehmigung durch die vorgesetzte Person',
+    'task.waits.person': 'wartet auf',
+    'task.waits.group': 'wartet auf die Gruppe',
+    'task.open': 'von allen übernehmbar',
+    'task.due': 'fällig am',
+    'task.work': 'Erledigen',
+    'task.complete': 'Abschliessen',
+    'task.completing': 'Wird abgeschlossen …',
+    'task.noForm': 'Diese Aufgabe fragt nichts ab. Abschliessen meldet sie als erledigt.',
+    'task.formFailed': 'Das Formular dieser Aufgabe konnte nicht geladen werden.',
+    'task.truncated': 'Nicht alle offenen Aufgaben konnten gelesen werden. Aufträge, in denen Sie eine Aufgabe halten, fehlen hier möglicherweise.',
+    'task.held': 'zur Bearbeitung',
+    'step.back': 'Zurück',
+    'step.to': 'Weiter zu',
     'order.completed': 'Abgeschlossen',
     'order.partial': 'Teilweise erfüllt',
     'order.unfulfilled': 'Nicht erfüllt',
@@ -158,11 +171,11 @@ const STRINGS = {
     'find.hits': 'Treffer',
     'find.clear': 'Suche zurücksetzen',
     'find.where': 'in',
-    // The sign-in, for a portal that enforces one. Every string here is read by
+    // The sign-in, for a shop that enforces one. Every string here is read by
     // somebody who is not an operator and has no server log to consult, so each
     // one names what to do next rather than what went wrong.
     'signin.title': 'Bitte melden Sie sich an',
-    'signin.hint': 'Dieses Portal zeigt Ihnen den Katalog, der Ihnen zugeordnet ist, und Ihre eigenen Aufträge. Dazu muss es wissen, wer Sie sind.',
+    'signin.hint': 'Dieser Shop zeigt Ihnen den Katalog, der Ihnen zugeordnet ist, und Ihre eigenen Aufträge. Dazu muss er wissen, wer Sie sind.',
     'signin.user': 'Benutzername',
     'signin.password': 'Passwort',
     'signin.submit': 'Anmelden',
@@ -178,7 +191,7 @@ const STRINGS = {
     'signin.registerLink': 'Registrieren',
   },
   en: {
-    'portal.title': 'Service portal',
+    'portal.title': 'Shop',
     'portal.catalog': 'Catalogue',
     'portal.orders': 'My orders',
     'portal.none': 'No catalogue is assigned to you.',
@@ -218,13 +231,26 @@ const STRINGS = {
     'status.blocked': 'Blocked',
     'order.running': 'In progress',
     'proc.open': 'View the process',
-    'proc.openLine': 'Process step',
-    'proc.none': 'No running process instance was found for this position: either none has started yet, it has already finished, or retention has removed it.',
     'proc.none.order': 'No running process instance was found for this order: either none has started yet, it has already finished, or retention has removed it.',
-    'proc.where': 'Where is this?',
+    'proc.archived': 'This order\'s process is only in the exported event log now. This server no longer holds it and cannot show it.',
     'proc.asking': 'Asking …',
-    'proc.standing': 'Current step:',
-    'proc.nothingRunning': 'Nothing is running for this position right now.',
+    'proc.slow': 'The server did not answer the search for the process in time. The order itself is not affected; please try again later.',
+    'task.by.fixed': 'Approval by',
+    'task.by.role': 'Approval by the group',
+    'task.by.superior': 'Approval by the line manager',
+    'task.waits.person': 'waiting for',
+    'task.waits.group': 'waiting for the group',
+    'task.open': 'open to anyone',
+    'task.due': 'due',
+    'task.work': 'Work on it',
+    'task.complete': 'Complete',
+    'task.completing': 'Completing …',
+    'task.noForm': 'This task asks for nothing. Completing it reports it as done.',
+    'task.formFailed': 'The form of this task could not be loaded.',
+    'task.truncated': 'Not every open task could be read. Orders in which you hold a task may be missing here.',
+    'task.held': 'for you to handle',
+    'step.back': 'Back',
+    'step.to': 'On to',
     'order.completed': 'Completed',
     'order.partial': 'Partly fulfilled',
     'order.unfulfilled': 'Not fulfilled',
@@ -316,7 +342,7 @@ const STRINGS = {
     'find.clear': 'Clear search',
     'find.where': 'in',
     'signin.title': 'Please sign in',
-    'signin.hint': 'This portal shows you the catalogue assigned to you, and your own orders. To do that it has to know who you are.',
+    'signin.hint': 'This shop shows you the catalogue assigned to you, and your own orders. To do that it has to know who you are.',
     'signin.user': 'Username',
     'signin.password': 'Password',
     'signin.submit': 'Sign in',
@@ -330,6 +356,345 @@ const STRINGS = {
     'signin.or': 'or sign in with a username and password',
     'signin.register': 'No account yet?',
     'signin.registerLink': 'Register',
+  },
+  // Français, pour les catalogues tenus en français. Vouvoiement partout, comme
+  // dans l’allemand : le shop s’adresse à une personne qui commande pour son
+  // travail, pas à un compte.
+  fr: {
+    'portal.title': 'Shop',
+    'portal.catalog': 'Catalogue',
+    'portal.orders': 'Mes commandes',
+    'portal.none': 'Aucun catalogue ne vous est attribué.',
+    'portal.none.hint': 'Adressez-vous au service qui a créé votre accès.',
+    'portal.empty': 'Ce catalogue ne propose actuellement rien.',
+    'portal.includes': 'Inclus',
+    'portal.options': 'Également disponible',
+    'portal.order': 'Commander',
+    'portal.ordering': 'Commande en cours …',
+    'portal.noOrders': 'Vous n’avez encore rien commandé.',
+    'portal.placed': 'Commandé le',
+    'portal.approval': 'Approbation nécessaire',
+    'portal.back': 'Retour à Atlas',
+    'portal.held': 'Vous avez déjà',
+    'portal.held.since': 'depuis',
+    'portal.blockedBy': 'En attente de',
+    'portal.reason': 'Motif',
+    'portal.retry': 'Réessayer',
+    'portal.failed': 'Cela n’a pas fonctionné.',
+    'portal.cancel': 'Annuler',
+    'portal.cancelling': 'Annulation en cours …',
+    'order.cancelled': 'Annulée',
+    'status.cancelled': 'Annulée',
+    'portal.return': 'Restituer',
+    'portal.returning': 'Restitution en cours …',
+    'status.returning': 'Restitution en cours',
+    'status.returned': 'Restituée',
+    'portal.return.sure': 'Restituer réellement cette prestation ? L’accès sera retiré.',
+    'status.returnFailed': 'Échec de la restitution',
+    'status.pending': 'En attente',
+    'status.running': 'En cours',
+    'status.done': 'Terminé',
+    'status.skipped': 'Déjà attribué',
+    'status.failed': 'Incident',
+    'status.rejected': 'Refusé',
+    'status.abandoned': 'Abandonné',
+    'status.blocked': 'Bloqué',
+    'order.running': 'En traitement',
+    'proc.open': 'Voir le processus',
+    'proc.none.order': 'Aucune instance de processus en cours ne correspond à cette commande : soit aucune n’a encore été lancée, soit elle est déjà terminée, soit la conservation l’a supprimée.',
+    'proc.archived': 'Le processus de cette commande ne figure plus que dans le journal d’événements externalisé. Ce serveur ne le possède plus et ne peut pas l’afficher.',
+    'proc.asking': 'Interrogation en cours …',
+    'proc.slow': 'Le serveur n’a pas répondu à temps à la recherche du processus. La commande elle-même n’est pas concernée ; veuillez réessayer plus tard.',
+    'task.by.fixed': 'Approbation par',
+    'task.by.role': 'Approbation par le groupe',
+    'task.by.superior': 'Approbation par le supérieur hiérarchique',
+    'task.waits.person': 'en attente de',
+    'task.waits.group': 'en attente du groupe',
+    'task.open': 'ouverte à tous',
+    'task.due': 'échéance',
+    'task.work': 'Traiter',
+    'task.complete': 'Terminer',
+    'task.completing': 'Fin en cours …',
+    'task.noForm': 'Cette tâche ne demande rien. La terminer la signale comme accomplie.',
+    'task.formFailed': 'Le formulaire de cette tâche n’a pas pu être chargé.',
+    'task.truncated': 'Toutes les tâches ouvertes n’ont pas pu être lues. Des commandes dans lesquelles vous détenez une tâche peuvent manquer ici.',
+    'task.held': 'à traiter',
+    'step.back': 'Retour',
+    'step.to': 'Vers',
+    'order.completed': 'Terminée',
+    'order.partial': 'Partiellement exécutée',
+    'order.unfulfilled': 'Non exécutée',
+    'nav.catalog': 'Catalogue',
+    'nav.orders': 'Mes commandes',
+    'nav.services': 'Mes prestations',
+    'nav.help': 'Aide',
+    'col.category': 'Catégorie',
+    'col.group': 'Groupe de produits',
+    'group.all': 'Tous les groupes',
+    'group.none': 'Sans groupe',
+    'col.offering': 'Prestation',
+    'col.options': 'En option',
+    'col.service': 'Service',
+    'act.back': '< retour',
+    'act.discard': 'Supprimer la commande',
+    'act.toBasket': 'Ajouter au panier >',
+    'act.place': 'commander >',
+    'act.cancelLines': 'Résilier la ou les prestations',
+    'act.changeLine': 'Modifier la prestation',
+    'basket.title': 'Panier',
+    'basket.empty': 'Le panier est vide.',
+    'basket.count': 'Dans le panier',
+    'for.order': 'Commander pour :',
+    'for.approve': 'Approuver pour :',
+    'for.search': 'Rechercher une personne',
+    'for.self': 'moi-même',
+    'for.hits': 'personnes',
+    'for.none': 'Personne de ce nom. Un identifiant, un nom d’utilisateur ou une adresse électronique fonctionne aussi.',
+    'for.clear': 'Commander à nouveau pour moi-même',
+    'cfg.title': 'Informations sur cette prestation',
+    'cfg.loading': 'Chargement du formulaire …',
+    'cfg.failed': 'Ce formulaire ne peut pas être chargé. La commande reste possible ; les informations manqueront.',
+    'cfg.invalid': 'Certaines informations sont incomplètes. Veuillez les corriger avant de commander.',
+    'line.withdraw': 'Retirer cette position',
+    'line.withdrawing': 'Retrait en cours …',
+    'line.details': 'Modifier les informations',
+    'line.save': 'Enregistrer les informations',
+    'line.saving': 'Enregistrement en cours …',
+    'line.close': 'Annuler',
+    'line.amended': 'Corrigé',
+    'line.amendedFrom': 'auparavant',
+    'info.price': 'Coût',
+    'price.none': 'Le catalogue n’indique aucun coût.',
+    'cat.none': 'Sans catégorie',
+    'noid.title': 'Commander exige une identité.',
+    'noid.hint': 'Une commande appartient à quelqu’un. Sans connexion, il n’y a personne à qui elle appartienne ni personne à informer. Le catalogue est ici pour être consulté ; pour commander, démarrez le serveur avec --auth.',
+    'cat.all': 'Toutes',
+    'tbl.company': 'Organisation',
+    'tbl.person': 'Personne',
+    'tbl.placed': 'commandé',
+    'tbl.order': 'Commande',
+    'tbl.status': 'Statut',
+    'tbl.searchCompany': 'Rechercher une organisation',
+    'tbl.searchPerson': 'Rechercher une personne',
+    'tbl.searchDate': 'Date',
+    'tbl.searchOrder': 'Rechercher une commande',
+    'tbl.searchStatus': 'Rechercher un statut',
+    'tbl.noMatch': 'Aucune commande ne correspond à la recherche.',
+    'note.noCompany': 'La colonne Organisation reste vide : une commande ne porte aujourd’hui aucune organisation. Elle indique seulement qui commande et qui reçoit.',
+    'note.included': 'Toujours inclus — ne peut pas être désélectionné.',
+    'window.later': 'Commandable à partir du',
+    'window.over': 'Plus commandable depuis le',
+    'window.until': 'Commandable jusqu’au',
+    'variant.label': 'Variante',
+    'variant.many': 'Plusieurs variantes sont possibles — chaque case cochée est une position distincte.',
+    'variant.one': 'Choisissez exactement une variante.',
+    'variant.missing': 'Choisissez une variante pour chaque position avant de commander.',
+    'info.title': 'Informations sur le service',
+    'info.id': 'Identifiant',
+    'info.approval': 'Approbation',
+    'info.none': 'aucune',
+    'info.repeatable': 'Peut être détenu plusieurs fois',
+    'info.includes': 'Toujours inclus',
+    'info.options': 'En option',
+    'info.yes': 'oui',
+    'info.no': 'non',
+    'services.none': 'Vous ne détenez actuellement aucune prestation.',
+    'fav.mark': 'Ajouter aux favoris',
+    'fav.clear': 'Retirer des favoris',
+    'fav.only': 'Favoris uniquement',
+    'fav.none': 'Vous n’avez rien mis en favori.',
+    'fav.unresolved': 'Favoris que ce catalogue ne propose pas',
+    'fav.full': 'Cela dépasse le nombre de favoris qu’un compte peut garder. Retirez-en un avant d’en ajouter un autre.',
+    'find.label': 'Rechercher une prestation',
+    'find.hint': 'Nom, abréviation ou usage prévu',
+    'find.none': 'Aucune prestation ne correspond à la recherche.',
+    'find.hits': 'résultats',
+    'find.clear': 'Réinitialiser la recherche',
+    'find.where': 'dans',
+    'signin.title': 'Veuillez vous connecter',
+    'signin.hint': 'Ce shop vous montre le catalogue qui vous est attribué ainsi que vos propres commandes. Pour cela, il doit savoir qui vous êtes.',
+    'signin.user': 'Nom d’utilisateur',
+    'signin.password': 'Mot de passe',
+    'signin.submit': 'Se connecter',
+    'signin.busy': 'Connexion en cours …',
+    'signin.wrong': 'Ce nom d’utilisateur ou ce mot de passe n’est pas correct.',
+    'signin.throttled': 'Trop de tentatives — le mot de passe n’a même pas été vérifié. Patientez quelques minutes, puis réessayez.',
+    'signin.failed': 'La connexion n’a pas pu aboutir. Réessayez ou adressez-vous au service qui a créé votre accès.',
+    'signin.expired': 'Votre session a expiré. Veuillez vous reconnecter.',
+    'signin.sso': 'Se connecter avec',
+    'signin.ssoFailed': 'La connexion via votre fournisseur d’identité n’a pas fonctionné. Réessayez ou adressez-vous au service qui a créé votre accès.',
+    'signin.or': 'ou avec un nom d’utilisateur et un mot de passe',
+    'signin.register': 'Pas encore de compte ?',
+    'signin.registerLink': 'S’inscrire',
+  },
+  // Italiano, per i cataloghi tenuti in italiano. Forma di cortesia ovunque, come
+  // nelle altre lingue.
+  it: {
+    'portal.title': 'Shop',
+    'portal.catalog': 'Catalogo',
+    'portal.orders': 'I miei ordini',
+    'portal.none': 'Non le è assegnato alcun catalogo.',
+    'portal.none.hint': 'Si rivolga al servizio che ha creato il suo accesso.',
+    'portal.empty': 'Questo catalogo al momento non offre nulla.',
+    'portal.includes': 'Incluso',
+    'portal.options': 'Disponibile anche',
+    'portal.order': 'Ordinare',
+    'portal.ordering': 'Ordine in corso …',
+    'portal.noOrders': 'Non ha ancora ordinato nulla.',
+    'portal.placed': 'Ordinato il',
+    'portal.approval': 'Richiede approvazione',
+    'portal.back': 'Ritorno ad Atlas',
+    'portal.held': 'Dispone già di',
+    'portal.held.since': 'dal',
+    'portal.blockedBy': 'In attesa di',
+    'portal.reason': 'Motivo',
+    'portal.retry': 'Riprovare',
+    'portal.failed': 'Non ha funzionato.',
+    'portal.cancel': 'Annullare',
+    'portal.cancelling': 'Annullamento in corso …',
+    'order.cancelled': 'Annullato',
+    'status.cancelled': 'Annullato',
+    'portal.return': 'Restituire',
+    'portal.returning': 'Restituzione in corso …',
+    'status.returning': 'Restituzione in corso',
+    'status.returned': 'Restituito',
+    'portal.return.sure': 'Restituire davvero questa prestazione? L’accesso verrà revocato.',
+    'status.returnFailed': 'Restituzione non riuscita',
+    'status.pending': 'In attesa',
+    'status.running': 'In corso',
+    'status.done': 'Concluso',
+    'status.skipped': 'Già disponibile',
+    'status.failed': 'Guasto',
+    'status.rejected': 'Rifiutato',
+    'status.abandoned': 'Abbandonato',
+    'status.blocked': 'Bloccato',
+    'order.running': 'In lavorazione',
+    'proc.open': 'Visualizzare il processo',
+    'proc.none.order': 'Per questo ordine non risulta alcuna istanza di processo in corso: o non ne è ancora stata avviata una, o è già terminata, oppure la conservazione l’ha rimossa.',
+    'proc.archived': 'Il processo di questo ordine si trova ormai solo nel registro eventi esternalizzato. Questo server non lo possiede più e non può mostrarlo.',
+    'proc.asking': 'Interrogazione in corso …',
+    'proc.slow': 'Il server non ha risposto in tempo alla ricerca del processo. L’ordine stesso non ne è interessato; riprovare più tardi.',
+    'task.by.fixed': 'Approvazione di',
+    'task.by.role': 'Approvazione del gruppo',
+    'task.by.superior': 'Approvazione del superiore',
+    'task.waits.person': 'in attesa di',
+    'task.waits.group': 'in attesa del gruppo',
+    'task.open': 'aperta a tutti',
+    'task.due': 'scadenza',
+    'task.work': 'Gestire',
+    'task.complete': 'Completare',
+    'task.completing': 'Completamento in corso …',
+    'task.noForm': 'Questa attività non chiede nulla. Completarla la segnala come svolta.',
+    'task.formFailed': 'Non è stato possibile caricare il modulo di questa attività.',
+    'task.truncated': 'Non è stato possibile leggere tutte le attività aperte. Gli ordini in cui lei detiene un’attività potrebbero mancare qui.',
+    'task.held': 'da gestire',
+    'step.back': 'Indietro',
+    'step.to': 'Verso',
+    'order.completed': 'Concluso',
+    'order.partial': 'Parzialmente evaso',
+    'order.unfulfilled': 'Non evaso',
+    'nav.catalog': 'Catalogo',
+    'nav.orders': 'I miei ordini',
+    'nav.services': 'Le mie prestazioni',
+    'nav.help': 'Aiuto',
+    'col.category': 'Categoria',
+    'col.group': 'Gruppo di prodotti',
+    'group.all': 'Tutti i gruppi',
+    'group.none': 'Senza gruppo',
+    'col.offering': 'Prestazione',
+    'col.options': 'Opzionale',
+    'col.service': 'Servizio',
+    'act.back': '< indietro',
+    'act.discard': 'Eliminare l’ordine',
+    'act.toBasket': 'Aggiungere al carrello >',
+    'act.place': 'ordinare >',
+    'act.cancelLines': 'Disdire la o le prestazioni',
+    'act.changeLine': 'Modificare la prestazione',
+    'basket.title': 'Carrello',
+    'basket.empty': 'Il carrello è vuoto.',
+    'basket.count': 'Nel carrello',
+    'for.order': 'Ordinare per:',
+    'for.approve': 'Approvare per:',
+    'for.search': 'Cercare una persona',
+    'for.self': 'me stesso',
+    'for.hits': 'persone',
+    'for.none': 'Nessuno con questo nome. Funziona anche un identificativo, un nome utente o un indirizzo di posta elettronica.',
+    'for.clear': 'Ordinare di nuovo per me stesso',
+    'cfg.title': 'Indicazioni su questa prestazione',
+    'cfg.loading': 'Caricamento del modulo …',
+    'cfg.failed': 'Questo modulo non può essere caricato. È comunque possibile ordinare; le indicazioni mancheranno.',
+    'cfg.invalid': 'Alcune indicazioni non sono complete. La preghiamo di correggerle prima di ordinare.',
+    'line.withdraw': 'Ritirare questa posizione',
+    'line.withdrawing': 'Ritiro in corso …',
+    'line.details': 'Modificare le indicazioni',
+    'line.save': 'Salvare le indicazioni',
+    'line.saving': 'Salvataggio in corso …',
+    'line.close': 'Annullare',
+    'line.amended': 'Corretto',
+    'line.amendedFrom': 'prima',
+    'info.price': 'Costo',
+    'price.none': 'Il catalogo non indica alcun costo.',
+    'cat.none': 'Senza categoria',
+    'noid.title': 'Per ordinare occorre essere qualcuno.',
+    'noid.hint': 'Un ordine appartiene a qualcuno. Senza accesso non c’è nessuno a cui appartenga né nessuno da informare. Il catalogo è qui per essere consultato; per ordinare, avviare il server con --auth.',
+    'cat.all': 'Tutte',
+    'tbl.company': 'Organizzazione',
+    'tbl.person': 'Persona',
+    'tbl.placed': 'ordinato',
+    'tbl.order': 'Ordine',
+    'tbl.status': 'Stato',
+    'tbl.searchCompany': 'Cercare un’organizzazione',
+    'tbl.searchPerson': 'Cercare una persona',
+    'tbl.searchDate': 'Data',
+    'tbl.searchOrder': 'Cercare un ordine',
+    'tbl.searchStatus': 'Cercare uno stato',
+    'tbl.noMatch': 'Nessun ordine corrisponde alla ricerca.',
+    'note.noCompany': 'La colonna Organizzazione resta vuota: oggi un ordine non porta alcuna organizzazione. Indica soltanto chi ordina e chi riceve.',
+    'note.included': 'Sempre incluso — non deselezionabile.',
+    'window.later': 'Ordinabile dal',
+    'window.over': 'Non più ordinabile dal',
+    'window.until': 'Ordinabile fino al',
+    'variant.label': 'Variante',
+    'variant.many': 'Sono possibili più varianti — ogni casella selezionata è una posizione a sé.',
+    'variant.one': 'Scegliere esattamente una variante.',
+    'variant.missing': 'Scegliere una variante per ogni posizione prima di ordinare.',
+    'info.title': 'Indicazioni sul servizio',
+    'info.id': 'Identificativo',
+    'info.approval': 'Approvazione',
+    'info.none': 'nessuna',
+    'info.repeatable': 'Può essere detenuto più volte',
+    'info.includes': 'Sempre incluso',
+    'info.options': 'Opzionale',
+    'info.yes': 'sì',
+    'info.no': 'no',
+    'services.none': 'Al momento non detiene alcuna prestazione.',
+    'fav.mark': 'Aggiungere ai preferiti',
+    'fav.clear': 'Rimuovere dai preferiti',
+    'fav.only': 'Solo preferiti',
+    'fav.none': 'Non ha contrassegnato nulla come preferito.',
+    'fav.unresolved': 'Preferiti che questo catalogo non offre',
+    'fav.full': 'Sono più preferiti di quanti un conto possa conservarne. Ne rimuova uno prima di aggiungerne un altro.',
+    'find.label': 'Cercare una prestazione',
+    'find.hint': 'Nome, abbreviazione o a che cosa le serve',
+    'find.none': 'Nessuna prestazione corrisponde alla ricerca.',
+    'find.hits': 'risultati',
+    'find.clear': 'Azzerare la ricerca',
+    'find.where': 'in',
+    'signin.title': 'Si prega di accedere',
+    'signin.hint': 'Questo shop le mostra il catalogo che le è assegnato e i suoi ordini. Per farlo deve sapere chi è lei.',
+    'signin.user': 'Nome utente',
+    'signin.password': 'Password',
+    'signin.submit': 'Accedere',
+    'signin.busy': 'Accesso in corso …',
+    'signin.wrong': 'Il nome utente o la password non sono corretti.',
+    'signin.throttled': 'Troppi tentativi — la password non è stata nemmeno verificata. Attenda alcuni minuti e riprovi.',
+    'signin.failed': 'L’accesso non è andato a buon fine. Riprovi oppure si rivolga al servizio che ha creato il suo accesso.',
+    'signin.expired': 'La sua sessione è scaduta. Si prega di accedere di nuovo.',
+    'signin.sso': 'Accedere con',
+    'signin.ssoFailed': 'L’accesso tramite il suo fornitore di identità non ha funzionato. Riprovi oppure si rivolga al servizio che ha creato il suo accesso.',
+    'signin.or': 'oppure con nome utente e password',
+    'signin.register': 'Non ha ancora un conto?',
+    'signin.registerLink': 'Registrarsi',
   },
 };
 
@@ -356,7 +721,53 @@ let locale = pickLocale();
 // only happen if the completeness test was removed, and looking broken in review
 // is better than guessing at a language nobody chose.
 function t(key) {
-  return (STRINGS[locale] && STRINGS[locale][key]) || key;
+  // By the tag and then by its language, so a locale of `de-CH` renders the German
+  // catalogue. offeredLocales only ever hands out a tag whose language this page
+  // has strings for, so this never falls past the second step — which is what
+  // keeps ADR-0313's condition true: every string exists in every locale offered.
+  const own = STRINGS[locale] || STRINGS[baseOf(locale)] || {};
+  return own[key] || key;
+}
+
+// offeredLocales is what the language switch offers
+// (ADR-0415).
+//
+// **The languages this catalogue is kept in**, rather than the two this page
+// happens to be translated into. A catalogue kept only in German used to show an
+// EN button that turned the furniture English and left every product name German
+// — a half-translated screen offered by the page itself, which is the thing
+// ADR-0267 refuses to do by guessing and ADR-0313 sets the condition for.
+//
+// Narrowed to the languages this page can render, and that narrowing is the whole
+// of ADR-0313 applied here: a catalogue may be kept in French, and until the
+// furniture is French too, offering an FR button would land somebody on exactly
+// the half-translated screen that record forbids. The French product names are
+// stored and reachable through the fallback; what is not offered is a button that
+// promises a French shop.
+//
+// Before there is a catalogue — the sign-in screen, or a visitor who is nobody's
+// audience — it is this page's own languages, because the switch has to be
+// reachable before the sign-in and there is nothing else to go on.
+function offeredLocales() {
+  const kept = ((state.catalog || {}).languages || []).filter((l) => STRINGS[baseOf(l)]);
+  return kept.length ? kept : Object.keys(STRINGS);
+}
+
+// settleLocale moves the chosen language onto one the catalogue is actually kept
+// in, once that is known.
+//
+// The choice is made before the catalogue is read — from the address, from this
+// browser, or from the visitor's own list — so it is a language and not yet one
+// of this catalogue's tags. A reader who chose English meets a catalogue kept in
+// `en-EN` and should be reading it, not falling through to whatever came first.
+//
+// Same language first, then the catalogue's own first language. It never widens a
+// choice: a reader who chose English and meets a German-only catalogue gets
+// German, because there is no English here to give them.
+function settleLocale() {
+  const offered = offeredLocales();
+  if (offered.includes(locale)) return;
+  locale = offered.find((l) => baseOf(l) === baseOf(locale)) || offered[0];
 }
 
 function setLocale(next) {
@@ -365,12 +776,87 @@ function setLocale(next) {
   render();
 }
 
+// baseOf is the language a tag is in: `de-CH` is German, `zh-Hans` is Chinese,
+// and a bare `de` is its own base.
+//
+// The same reduction pickLocale does to the browser's list, and the two have to
+// agree — that is the whole point of it being one function's worth of rule
+// written twice rather than two rules.
+function baseOf(tag) {
+  return String(tag).toLowerCase().split('-')[0];
+}
+
+// pickText is the entry one language selects out of a map keyed by language tags.
+//
+// **By the language and not by the whole tag**, which is the correction. This page
+// narrows a browser's language to its base, because its own words live in a
+// message catalogue keyed that way; a product's texts are keyed by whatever the
+// CATALOGUE declares, and `de-DE`, `en-GB` and `pt-BR` are all correct and all
+// invisible to a lookup for `de`, `en`, `pt`. A catalogue kept in `de-DE; en-EN`
+// would otherwise store every name under a key nothing here ever asks for, fall
+// through to the first value it had, and show one word in both languages — the
+// defect ADR-0413 was written about, arrived at down a different road.
+//
+// The exact tag wins over a regional one. A catalogue carrying both `de` and
+// `de-CH` means the two deliberately, and answering with whichever the release
+// happened to list first would be a coin toss. Between two regionals of the same
+// language it IS the listed order, which is the release's own and therefore
+// stable — worth knowing rather than worth preventing.
+//
+// A key that is present and blank is not an answer, for the reason it is not one
+// in descriptionOf: it is the shape a cleared box leaves behind.
+function pickText(texts, base) {
+  const said = (v) => typeof v === 'string' && v.trim() !== '';
+  if (said(texts[base])) return texts[base];
+  for (const tag of Object.keys(texts)) {
+    if (said(texts[tag]) && baseOf(tag) === base) return texts[tag];
+  }
+  return '';
+}
+
 // textOf reads a catalogue item's name in the current locale, falling back to
 // whatever the catalogue has. A product is named by its catalogue, not by this
 // page, so there is no key to look up and no way to be complete about it.
 function textOf(texts, fallback) {
   if (!texts) return fallback;
-  return texts[locale] || texts.de || texts.en || Object.values(texts)[0] || fallback;
+  return pickText(texts, locale) || pickText(texts, 'de') || pickText(texts, 'en')
+    || Object.values(texts).find((t) => typeof t === 'string' && t.trim() !== '')
+    || fallback;
+}
+
+// The product's description, in the language this page is being read in where the
+// catalogue has one and in whatever it does have otherwise.
+//
+// The fall-through was deliberately absent, on the reasoning that publishing
+// refuses a product described in one declared language and not another — so a
+// missing description could only be a state the release already rejects, and
+// falling back would quietly undo the rule.
+//
+// That reasoning was wrong, and it hid descriptions rather than surfacing gaps.
+// The two language lists are not the same list. Publishing demands a description
+// in every language the *catalogue* declares; this page is read in one of its
+// *own* locales, taken from the browser and narrowed to what it is translated
+// into. A catalogue offered in German and French is complete by the publish rule
+// and had nothing at all to say to a reader whose browser is English: two
+// descriptions stored, neither shown, and no rule anywhere had been broken.
+//
+// So the locale is asked for first and the rest are reached after it. A paragraph
+// in a language somebody does not read is worse than one they do — which is what
+// the order encodes — and better than the blank the strict read gave them.
+//
+// A key that is present and blank is not an answer. That is the shape a
+// half-filled form leaves behind, and taken as one it would end the search before
+// the language that does say something.
+function descriptionOf(item) {
+  const d = (item || {}).descriptions;
+  if (!d) return '';
+  // Through pickText for each step, so a catalogue kept in `de-DE` is reached by
+  // a reader on `de` — the same correction the name above carries.
+  for (const text of [pickText(d, locale), pickText(d, 'de'), pickText(d, 'en'),
+    ...Object.values(d)]) {
+    if (typeof text === 'string' && text.trim() !== '') return text.trim();
+  }
+  return '';
 }
 
 // The typeface stacks the server ships, mirrored here because the page paints
@@ -428,6 +914,12 @@ function paintFromCache() {
 }
 
 const state = {
+  // tasks are the open tasks of the orders on this page (ADR-0416); taskOpen is
+  // the one whose form is open, and taskError what answering it last said.
+  tasks: [],
+  tasksTruncated: false,
+  taskOpen: '',
+  taskError: '',
   catalog: null,
   release: null,
   orders: [],
@@ -502,6 +994,12 @@ const state = {
   // string because it names a product, and "no product chosen" is not one.
   group: null,
   offering: '',
+  // step is which of the cascade's four columns a narrow screen shows (ADR-0417).
+  // A wide one shows all four and never reads it: the columns side by side are the
+  // point of the screen there. A phone cannot hold four columns, so it shows one
+  // and moves right as somebody chooses — which is the order a cascade is read in
+  // anyway. Choosing in a column advances it; the stepper's back button retreats.
+  step: 0,
   // basket is every item id chosen so far, across products. It is the whole
   // reason this is a two-step order now: the previous page ordered the moment a
   // card's button was pressed, so two bundles were two orders, two approvals and
@@ -598,15 +1096,11 @@ const state = {
   // editing names the position whose details are open for correction, as
   // "<orderId>|<itemId>", empty for none (ADR-0359).
   editing: '',
-  // progress is where each position's process stands, keyed "<orderId>|<position>"
-  // (ADR-0390).
-  //
-  // Per position and not per order, because the order's own orchestration says
-  // "running" and this says which step *this* line is sitting on — which is the
-  // question somebody reading their own order actually has. Empty until asked: the
-  // server finds the instance by walking what is running, and a page of ten orders
-  // would be forty walks to fill a line most readers never read.
-  progress: new Map(),
+  // following is what the process link last found, by order id. Kept per row
+  // because the question was asked from a row: an answer at the top of the page is
+  // off-screen for whoever pressed a button further down, and a button whose
+  // answer nobody sees is a button that did nothing.
+  following: new Map(),
 };
 
 // --- The four levels the mockups draw ---------------------------------------
@@ -695,25 +1189,66 @@ function partsOf(release, id) {
 //
 // Sorted alphabetically, because a heading is a string and there is nothing on it
 // to sort by. An ordering of its own would be the entity the decision refused,
-// arriving through the back door.
+// arriving through the back door. The bucket is always last and only appears when
+// something is in it: a heading for nothing is a heading nobody can use, and
+// hiding uncategorised products entirely would lose them.
 //
-// The bucket is always last and only appears when something is in it: a heading
-// for nothing is a heading nobody can use, and hiding uncategorised products
-// entirely would lose them.
+// Both of those live in headingsOf below, with the reading of the heading itself,
+// because the services view draws the same two columns off a different set of
+// products — and a second implementation of this is how the two screens came to
+// disagree about a heading once already.
 function categoriesOf(release) {
-  const named = new Set();
-  let uncategorised = false;
-  for (const it of products(release)) {
-    const c = (it.category || '').trim();
-    if (c) named.add(c); else uncategorised = true;
+  return headingsOf(products(release), 'category');
+}
+
+// headingOf is one product's heading, in the language this page is being read in.
+//
+// Two fields and not one: the string on the product is the KEY — what everything
+// groups by, what a search hit sets to open the cascade at the right column, what
+// an already published release holds — and the map beside it is how that key is
+// written for a reader (ADR-0412). Where the
+// catalogue has no translation the key renders, which is every product written
+// before the field existed and every catalogue declaring one language.
+//
+// It reads through textOf, so a heading reaches a reader by exactly the rule every
+// other text on this page does: the page's own locale first, then whatever the
+// catalogue does have. The two language lists are not the same list, and a heading
+// stored in German and French with nothing shown to an English reader is the gap
+// the description already learned about.
+function headingOf(item, field) {
+  const key = ((item || {})[field] || '').trim();
+  if (!key) return '';
+  return textOf((item || {})[`${field}Texts`], key);
+}
+
+// headingsOf collects one of the two heading fields off a set of products: each
+// distinct key, and the wording to show it under.
+//
+// **Sorted by the wording, not by the key.** The wording is what is on the screen,
+// and a French reader given a column ordered by German words would be reading an
+// order nothing on the page explains. The bucket for products carrying none stays
+// last, as before.
+//
+// Where two products agree on the key and disagree on the wording, the first in
+// release order wins — deterministic, because a release is sorted by id. It is not
+// a state a published catalogue can be in: publishing refuses the disagreement,
+// for the reason it refuses a half-translated heading.
+function headingsOf(items, field) {
+  const wording = new Map();
+  let none = false;
+  for (const it of items) {
+    const key = (it[field] || '').trim();
+    if (!key) { none = true; continue; }
+    if (!wording.has(key)) wording.set(key, headingOf(it, field));
   }
-  const out = [...named].sort((a, b) => a.localeCompare(b, locale));
-  if (uncategorised) out.push('');
+  const out = [...wording].map(([key, text]) => ({ key, text }))
+    .sort((a, b) => a.text.localeCompare(b.text, locale));
+  if (none) out.push({ key: '', text: '' });
   return out;
 }
 
 // inCategory reports whether a top-level product belongs under the heading now
-// selected. null is every heading, which is what the portal opens on.
+// selected. null is every heading, which is what the shop opens on.
 // groupsOf is every product group named by the products under the heading now
 // open, and the bucket for the ones that name none.
 //
@@ -726,23 +1261,14 @@ function categoriesOf(release) {
 // in two categories appears under both. Nothing is contradicted, because nothing
 // anywhere claims a group belongs to one.
 //
-// Sorted alphabetically and bucketed like the categories above, for the reasons
-// given there: there is nothing on a string to sort by, and hiding the ungrouped
-// products would lose them.
+// Sorted and bucketed like the categories above, through the same function and
+// for the reasons given there.
 function groupsOf(release) {
-  const named = new Set();
-  let ungrouped = false;
-  for (const it of products(release).filter(inCategory)) {
-    const g = (it.productGroup || '').trim();
-    if (g) named.add(g); else ungrouped = true;
-  }
-  const out = [...named].sort((a, b) => a.localeCompare(b, locale));
-  if (ungrouped) out.push('');
-  return out;
+  return headingsOf(products(release).filter(inCategory), 'productGroup');
 }
 
 // inGroup reports whether a product belongs under the group now selected. null is
-// every group, which is what the portal opens on.
+// every group, which is what the shop opens on.
 function inGroup(item) {
   if (state.group === null) return true;
   return (item.productGroup || '').trim() === state.group;
@@ -835,7 +1361,7 @@ async function api(path, options) {
 // behind.
 //
 // A 401 here is the defect this answers. With enforcement on and no session every
-// route the portal reads is refused: the catalogue read was swallowed and drawn as
+// route the shop reads is refused: the catalogue read was swallowed and drawn as
 // "no catalogue is assigned to you", which is a statement about entitlement and
 // not about authentication, and the orders read was not swallowed at all — so what
 // a visitor got was an error line with an HTTP status in it, no catalogue, and
@@ -904,18 +1430,24 @@ async function load() {
     return;
   }
   try {
-    state.catalog = await api('/api/v1/portal/catalog');
+    state.catalog = await api('/api/v1/shop/catalog');
   } catch {
     // 404 here is the ordinary "you are the audience for nothing" answer, not a
     // failure: the page says so rather than showing an error.
     state.catalog = null;
   }
   applyTheme(state.catalog);
+  // The catalogue decides which languages there are to choose between, so the
+  // choice is settled onto one of them the moment it is known — before anything
+  // is drawn, or the first paint would be in a language the switch cannot show as
+  // chosen.
+  settleLocale();
   if (state.catalog) {
     const releases = await api(`/api/v1/catalogs/${state.catalog.id}/releases`);
     state.release = releases && releases.length ? releases[0] : null;
   }
   state.orders = await api('/api/v1/orders');
+  await loadTasks();
   // What one person holds, and what they have marked. Both are facts about an
   // account, and with enforcement off there is no account — the server says so
   // rather than inventing an empty answer, which is right of the server and must
@@ -928,7 +1460,7 @@ async function load() {
     state.held = new Map(((inv && inv.items) || []).map((i) => [i.itemId, i.since]));
   } catch { /* nobody holds anything when there is nobody */ }
   try {
-    const favs = await api('/api/v1/portal/favourites');
+    const favs = await api('/api/v1/shop/favourites');
     state.favourites = new Set((favs && favs.itemIds) || []);
   } catch { /* and nobody has marked anything */ }
   // The directory, for the columns that show who an order is for. Any
@@ -967,7 +1499,7 @@ function loadWhoIAm() {
   state.meID = '';
   state.people = [];
   const me = state.me;
-  // Nothing was readable. Offer less rather than guess more: the ordinary portal
+  // Nothing was readable. Offer less rather than guess more: the ordinary shop
   // still works, ordering for somebody else simply is not offered.
   if (!me) return;
   const user = (me && me.user) || {};
@@ -1003,7 +1535,7 @@ function loadWhoIAm() {
   state.people = state.principals.filter((e) => e.type === 'user');
 }
 
-// signIn posts the password form and, on success, loads the portal the visitor
+// signIn posts the password form and, on success, loads the shop the visitor
 // asked for.
 //
 // It stays here. The Console's sign-in lands on the Console, which is the wrong
@@ -1044,7 +1576,7 @@ async function signIn(username, password) {
 // once five have been wrong. Reported as a credential failure it is how somebody
 // spends a quarter of an hour hunting a password that is already correct. It
 // matters more here than on the Console: an operator can read the server log, and
-// the person this page is for can only telephone the desk this portal exists to
+// the person this page is for can only telephone the desk this shop exists to
 // save. Saying so leaks nothing, because the throttle counts attempts against
 // names that do not exist too.
 //
@@ -1306,7 +1838,7 @@ function cell(opts) {
 // hiding it would remove the one thing somebody wants to know, which is when.
 
 // windowOf reads an item's window, tolerating a release published before the
-// portal read the field.
+// shop read the field.
 function windowOf(item) {
   const w = (item || {}).lifecycle || {};
   return { from: Number(w.from) || 0, until: Number(w.until) || 0 };
@@ -1314,7 +1846,7 @@ function windowOf(item) {
 
 // orderableNow reports whether this moment is inside the item's window. Both sides
 // are inclusive and zero is unbounded, exactly as the server reads them — two
-// readings of one rule that disagreed would be a portal offering what the order is
+// readings of one rule that disagreed would be a shop offering what the order is
 // refused for, which is the failure this pairing exists to prevent.
 function orderableNow(item, at) {
   const w = windowOf(item);
@@ -1421,6 +1953,11 @@ function infoPanel(rel, item) {
   return el('div', { class: 'card' },
     el('h3', {}, textOf(item.texts, item.id)),
     productPicture(item.id),
+    // Above the ordering facts and not muted, because it is the one thing on this
+    // card written for the person deciding rather than about the transaction.
+    // Absent entirely where there is none — an empty paragraph would leave a gap
+    // that reads as something that failed to load.
+    descriptionOf(item) ? el('p', { class: 'product-description' }, descriptionOf(item)) : null,
     el('p', { class: 'muted' }, `${t('info.id')}: ${item.id}`),
     // As the catalogue wrote it, never reformatted. A price here is a sentence
     // somebody chose — "CHF 1'200.–", "im Grundpaket enthalten" — and a page that
@@ -1487,7 +2024,7 @@ async function star(id) {
   if (marked) state.favourites.delete(id); else state.favourites.add(id);
   render();
   try {
-    const out = await api(`/api/v1/portal/favourites/${encodeURIComponent(id)}`,
+    const out = await api(`/api/v1/shop/favourites/${encodeURIComponent(id)}`,
       { method: marked ? 'DELETE' : 'PUT' });
     state.favourites = new Set((out && out.itemIds) || []);
   } catch (e) {
@@ -1601,6 +2138,7 @@ function renderSearch(rel, by) {
             state.group = (item.productGroup || '').trim();
             state.offering = root;
             state.info = it.id;
+            state.step = 3;
             render();
           },
           lead: starButton(it.id),
@@ -1660,14 +2198,15 @@ function renderCatalogue() {
     cell({
       text: t('cat.all'),
       open: state.category === null,
-      onOpen: () => { state.category = null; clearBelow(0); render(); },
+      onOpen: () => { state.category = null; clearBelow(0); state.step = 1; render(); },
     }),
     headings.map((h) => cell({
-      text: h || t('cat.none'),
-      open: state.category === h,
+      text: h.text || t('cat.none'),
+      open: state.category === h.key,
       onOpen: () => {
-        state.category = state.category === h ? null : h;
+        state.category = state.category === h.key ? null : h.key;
         clearBelow(0);
+        state.step = 1;
         render();
       },
     })));
@@ -1682,14 +2221,15 @@ function renderCatalogue() {
     cell({
       text: t('group.all'),
       open: state.group === null,
-      onOpen: () => { state.group = null; clearBelow(1); render(); },
+      onOpen: () => { state.group = null; clearBelow(1); state.step = 2; render(); },
     }),
     groups.map((g) => cell({
-      text: g || t('group.none'),
-      open: state.group === g,
+      text: g.text || t('group.none'),
+      open: state.group === g.key,
       onOpen: () => {
-        state.group = state.group === g ? null : g;
+        state.group = state.group === g.key ? null : g.key;
         clearBelow(1);
+        state.step = 2;
         render();
       },
     })));
@@ -1705,6 +2245,9 @@ function renderCatalogue() {
       onOpen: () => {
         state.offering = state.offering === o.id ? '' : o.id;
         state.info = '';
+        // Only a product chosen has services to show; taking the choice back
+        // leaves a narrow screen on the products it was picked from.
+        state.step = state.offering ? 3 : 2;
         render();
       },
       trail: [starButton(o.id), toggle(rel, o.id, o.integral), infoButton(o.id)],
@@ -1730,7 +2273,9 @@ function renderCatalogue() {
   // for the same reason.
   const body = () => (state.query.trim() !== ''
     ? [renderSearch(rel, by)]
-    : [el('div', { class: 'cascade' }, category, groupCol, offeringCol, serviceCol),
+    : [stepper(name, headings, groups),
+      el('div', { class: 'cascade', 'data-step': String(state.step) },
+        category, groupCol, offeringCol, serviceCol),
       state.info && by[state.info]
         ? el('div', { style: 'margin-top:16px' }, infoPanel(rel, by[state.info])) : null]);
   catalogueBody = body;
@@ -1755,6 +2300,36 @@ function renderCatalogue() {
       unresolved
         ? el('span', { class: 'muted' }, `${t('fav.unresolved')}: ${unresolved}`) : null),
     catalogueBodyNode);
+}
+
+// stepper is the cascade's way back on a narrow screen (ADR-0417), where one
+// column shows at a time: a back button and the path chosen so far. A wide screen
+// hides it — every column is on screen there, and a back button would go
+// somewhere already in view.
+function stepper(name, headings, groups) {
+  const cols = [t('col.category'), t('col.group'), t('col.offering'), t('col.service')];
+  // The words the columns show, not the keys they select by: a heading's key is
+  // its first language's wording and the reader may be reading another.
+  const said = (list, key, all, none) => {
+    if (key === null) return all;
+    const found = list.find((x) => x.key === key);
+    return (found && found.text) || key || none;
+  };
+  const path = [
+    state.step > 0 ? said(headings, state.category, t('cat.all'), t('cat.none')) : null,
+    state.step > 1 ? said(groups, state.group, t('group.all'), t('group.none')) : null,
+    state.step > 2 && state.offering ? name(state.offering) : null,
+  ].filter(Boolean);
+  return el('div', { class: 'stepper' },
+    state.step > 0
+      ? el('button', {
+        class: 'secondary step-back',
+        onclick: () => { state.step = Math.max(0, state.step - 1); render(); },
+      }, `\u2039 ${t('step.back')}`)
+      : null,
+    el('span', { class: 'step-path' },
+      path.length ? el('span', { class: 'muted' }, `${path.join(' \u203a ')} \u203a `) : null,
+      el('strong', {}, cols[state.step] || cols[0])));
 }
 
 // What a keystroke redraws, and the node it redraws into. Both are reset by every
@@ -1874,34 +2449,70 @@ function renderBasket() {
       }, 'X'),
     trail: infoButton(x.id),
   });
-  const atLevel = (level) => shown.filter((x) => levelOf(rel, x.id) === level).map(row);
+  const offerCell = (id) => cell({
+    text: textOf((by[id] || {}).texts, id),
+    // The same control the cascade uses, so a tick means one thing on the
+    // whole page: it adds to the basket, and a second press takes it out.
+    lead: toggle(rel, id, false),
+    meta: [
+      (by[id] || {}).price ? el('span', {}, by[id].price) : null,
+      // The level it will sit under once it is taken, so the same position is
+      // called the same thing before and after the decision.
+      el('span', {}, levelName(rel, id)),
+    ],
+    trail: infoButton(id),
+  });
 
-  const cols = el('div', { class: 'cascade' },
-    // Two levels, matching the cascade: a product and the services behind it. The
-    // third column the basket used to have was the Bundle level, and it is gone —
-    // a root is a Marktleistung whether or not it carries parts.
-    el('div', { class: 'col' },
-      el('div', { class: 'colhead' }, t('col.offering')),
-      atLevel('offering')),
-    el('div', { class: 'col' },
-      el('div', { class: 'colhead' }, t('col.service')),
-      atLevel('service')),
-    el('div', { class: 'col' }),
-    el('div', { class: 'col' },
-      el('div', { class: 'colhead' }, t('col.options')),
-      offers.map((id) => cell({
-        text: textOf((by[id] || {}).texts, id),
-        // The same control the cascade uses, so a tick means one thing on the
-        // whole page: it adds to the basket, and a second press takes it out.
-        lead: toggle(rel, id, false),
-        meta: [
-          (by[id] || {}).price ? el('span', {}, by[id].price) : null,
-          // The level it will sit under once it is taken, so the same position is
-          // called the same thing before and after the decision.
-          el('span', {}, levelName(rel, id)),
-        ],
-        trail: infoButton(id),
-      }))));
+  // One group per offering, and each group one line of the grid.
+  //
+  // The columns were three flat lists, each stacked on its own, so a row's height
+  // in one had nothing to do with its height in the next: a service sat beside
+  // whichever offering happened to share its line, and with two offerings in the
+  // basket nothing said which service belonged to which. What the reader needs is
+  // the relation, and the relation is the one thing three independent lists
+  // cannot draw.
+  //
+  // So every offering is a line and its four cells are the grid's four columns in
+  // that line. The grid makes a line as tall as its tallest cell, which is what
+  // keeps the next offering from starting beside the last one's third service.
+  //
+  // Which offering a row belongs to is read off the same containment the level
+  // is — ownerAmong walks up through what includes and offers it — and the level
+  // itself is still levelOf's answer, not this grouping's.
+  const roots = shown.filter((x) => levelOf(rel, x.id) === 'offering');
+  const ownerOf = ownerAmong(rel, new Set(roots.map((x) => x.id)));
+  const groups = roots.map((x) => ({ root: x, services: [], offers: [] }));
+  const byRoot = new Map(groups.map((g) => [g.root.id, g]));
+  // A service whose offering is not in the basket — an option taken from the
+  // search while the product that offers it was not. It still gets a line of its
+  // own rather than vanishing, because a position nobody can see is a position
+  // nobody can take out.
+  const loose = { root: null, services: [], offers: [] };
+  for (const x of shown) {
+    if (levelOf(rel, x.id) !== 'service') continue;
+    (byRoot.get(ownerOf(x.id)) || loose).services.push(x);
+  }
+  for (const id of offers) (byRoot.get(ownerOf(id)) || loose).offers.push(id);
+  if (loose.services.length || loose.offers.length) groups.push(loose);
+
+  const cols = el('div', { class: 'cascade basket-groups' },
+    // Named once, at the top: the three names belong to the grid, and repeating
+    // them per group would make a table of tables. The third column is the gap
+    // the cascade has there, so a basket and the catalogue above it keep the same
+    // columns in the same places.
+    el('div', { class: 'colhead' }, t('col.offering')),
+    el('div', { class: 'colhead' }, t('col.service')),
+    el('div', {}),
+    el('div', { class: 'colhead' }, t('col.options')),
+    // The labels on the second and fourth cells are for a narrow screen, where the
+    // four cells of a line stack under each other and the names at the top no
+    // longer stand above them (ADR-0417). A wide screen does not draw them.
+    groups.flatMap((g) => [
+      el('div', { class: 'col grp grp-first' }, g.root ? row(g.root) : null),
+      el('div', { class: 'col grp', 'data-label': t('col.service') }, g.services.map(row)),
+      el('div', { class: 'col grp' }),
+      el('div', { class: 'col grp', 'data-label': t('col.options') }, g.offers.map(offerCell)),
+    ]));
 
   // The forms below the basket rather than beside each row: a form is taller than a
   // row and an integral part asks its own questions, so a column that had to hold
@@ -1951,7 +2562,23 @@ function renderBasket() {
           'data-configkey': x.id,
           'data-formid': configFormOf(rel, x.id),
         }, el('p', { class: 'note' }, t('cfg.loading'))))))
-      : null);
+      : null,
+    // What the "i" on a basket row opens. The button was drawn here from the
+    // start and the panel was not, so pressing it set state.info, redrew the
+    // page and showed nothing — a control that answers with a blank.
+    //
+    // It matters most on this screen. The basket is where somebody decides
+    // whether to actually order the thing, and the panel is where the price, the
+    // approval rule, the description and the picture are; a row here is a name
+    // and two buttons, and the name is all they had to go on.
+    //
+    // Below the forms rather than above them, because it belongs to a row and the
+    // forms belong to the order: a panel wedged between a row and the questions
+    // that row asks would read as part of the question. render() harvests every
+    // mounted form before it repaints, so opening this does not cost somebody
+    // what they have typed.
+    state.info && by[state.info]
+      ? el('div', { style: 'margin-top:18px' }, infoPanel(rel, by[state.info])) : null);
 }
 
 // --- What a product needs that its name does not say -------------------------
@@ -2062,6 +2689,12 @@ async function mountConfigForms() {
 // deriveStatus mirrors the server's own rule rather than asking for it: an order
 // carries its lines, and its standing is computed from them so the two cannot
 // disagree. Doing it here keeps that property — a stored status could.
+
+// FOLLOW_TIMEOUT_MS is how long the process link waits for the server before it
+// says so. Long enough for a slow scoped search on a busy engine, short enough
+// that nobody reads the note as a page about to arrive.
+const FOLLOW_TIMEOUT_MS = 20000;
+
 // followProcess opens the instance fulfilling one order.
 //
 // Looked up when the link is pressed rather than resolved for every row: finding
@@ -2072,37 +2705,50 @@ async function mountConfigForms() {
 // started with the order id too, so a search that took the first hit would open
 // one position's process and call it the order.
 //
-// An instance that is gone is the ordinary late case, not an error: history
-// retention deletes one long before the order it fulfilled is deleted. Said rather
-// than followed, because a link to nothing reads as the console having broken.
-async function followProcess(order, line) {
-  state.error = '';
-  // Two different questions, and they are answered by two different instances.
-  //
-  // Without a line: the order's own fulfilment orchestration, which says the order
-  // is running and nothing about which of four positions is waiting on an approval
-  // and which is being provisioned.
-  //
-  // With one: the process working on *that* position. It is found by the position's
-  // own id and by nothing else, because the search answers with only the variables
-  // that matched the query — a search for the order returns every instance it
-  // started, each carrying `orderId` and nothing else, so there would be nothing
-  // left on the page to tell them apart by. `positionId` is what the fulfilment
-  // model passes for exactly this, and it names one instance
-  // (ADR-0384).
-  //
-  // There is deliberately no fallback to the product id. It matches instances from
-  // every order that ever carried that product, and the answer carries only the
-  // variable that matched, so the order cannot be checked from it — opening one of
-  // those would be the defect the position key exists to prevent, one screen
-  // further out. A position whose instance is not found is said, not approximated.
-  const query = line
-    ? `positionId=${lineKey(line)}`
-    : `orderId=${order.id}`;
+// Whatever it finds out is said beside the row it was pressed from. It used to be
+// said in state.error, which is painted above the table: an order further down the
+// page produced a message off-screen, and the button read as broken — which is how
+// it was reported. The one case that works navigates away, and the two that cannot
+// are the two that have to be visible.
+//
+// And narrowed by definition, not only filtered by name afterwards. A search that
+// names no definition reads every instance on the server and every variable of
+// each, and on an installation of any size that does not come back: the note said
+// "Wird abgefragt …" and stayed, which is how it was reported. Named, the search
+// reads that definition's own index — the instances of the fulfilment process,
+// which is one per order. Every deployed version is asked, newest first, because an
+// order placed before the last redeploy is worked by the version it started on.
+//
+// And bounded in time. A lookup that never answers is the one outcome that must not
+// look like "still asking": the reader waits for a page that is not coming.
+async function followProcess(order) {
+  state.following.set(order.id, t('proc.asking'));
+  render();
+  const said = (what) => { state.following.set(order.id, what); render(); };
+  const giveUp = new AbortController();
+  const timer = setTimeout(() => giveUp.abort(), FOLLOW_TIMEOUT_MS);
   try {
-    const page = await api(`/api/v1/instances/search?q=${encodeURIComponent(query)}`);
-    const hits = (page && page.items) || [];
-    const hit = line ? hits[0] : hits.find((i) => i.processId === 'atlas-auftrag-erfuellung');
+    const defs = await api('/api/v1/processes', { signal: giveUp.signal });
+    const versions = (defs || [])
+      .filter((d) => d.processId === 'atlas-auftrag-erfuellung')
+      .sort((a, b) => b.version - a.version);
+    const query = `orderId=${order.id}`;
+    const hits = [];
+    let hit = null;
+    for (const d of versions) {
+      const page = await api(`/api/v1/instances/search?process=${d.key}` +
+        `&q=${encodeURIComponent(query)}`, { signal: giveUp.signal });
+      const found = (page && page.items) || [];
+      hits.push(...found);
+      // Archived first, and separately. The search falls back to the exported event
+      // log when this server's own index has nothing, and marks what it answers with:
+      // the instance was hard-deleted by history retention (ADR-0115) and exists only
+      // in the export. Following one reaches a replay view with nothing to replay,
+      // which says "Could not load this instance's replay." — a dead end two screens
+      // from the page that knew better.
+      hit = found.find((i) => !i.archived && i.processId === 'atlas-auftrag-erfuellung');
+      if (hit) break;
+    }
     if (!hit) {
       // What is known, and not a cause that was guessed. This said the instance had
       // been removed by retention, which is one of three reasons it is not found and
@@ -2110,67 +2756,23 @@ async function followProcess(order, line) {
       // instance to remove, and that is what somebody reads this message about on the
       // day they ordered. A page that names a cause it cannot know sends whoever
       // reads it to look in the wrong place.
-      state.error = t(line ? 'proc.none' : 'proc.none.order');
-      render();
+      const archived = hits.some((i) => i.archived && i.processId === 'atlas-auftrag-erfuellung');
+      said(t(archived ? 'proc.archived' : 'proc.none.order'));
       return;
     }
     window.location.href = `/index.html#/operations/i/${hit.key}`;
   } catch (e) {
-    state.error = `${t('portal.failed')} ${e.message}`;
-    render();
+    said(giveUp.signal.aborted ? t('proc.slow') : `${t('portal.failed')} ${e.message}`);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
-// --- Where one position stands ----------------------------------------------
-//
-// The other half of the link above, and the half that is not an operator's
-// (ADR-0390). Following the
-// instance means the console, and the console shows the whole engine state of that
-// instance — including variables belonging to somebody else's order where a process
-// holds them. So the orderer is answered by a route of their own, gated on owning
-// the order: which step the position is sitting on, and nothing else.
-
-// askProgress fetches where one position's process is.
-//
-// On a press rather than with the page, for the reason followProcess is: the server
-// finds the instance by walking what is running, and drawing this for every row
-// would pay that walk per position of every order on the page.
-//
-// Pressing again re-asks rather than closing. Where something stands is the one
-// thing on this page that moves while it is open, and a button that toggled a
-// stale answer would show yesterday's step as today's.
-async function askProgress(order, line) {
-  const at = `${order.id}|${lineKey(line)}`;
-  state.error = '';
-  state.progress.set(at, { asking: true });
-  render();
-  try {
-    const got = await api(`/api/v1/portal/orders/${encodeURIComponent(order.id)}`
-      + `/lines/${encodeURIComponent(lineKey(line))}/progress`);
-    state.progress.set(at, { state: got.state, steps: got.steps || [] });
-  } catch (e) {
-    // Nothing kept: a stale answer under a failed ask reads as the answer.
-    state.progress.delete(at);
-    state.error = `${t('portal.failed')} ${e.message}`;
-  }
-  render();
-}
-
-// progressNote is that answer in words, or nothing where it was never asked for.
-//
-// "Nothing is running" is said rather than left blank. It is the ordinary state of
-// most positions for most of an order's life — before the position is reached, and
-// after it is finished — and a button that answered with silence reads as broken.
-function progressNote(order, line) {
-  const got = state.progress.get(`${order.id}|${lineKey(line)}`);
-  if (!got) return null;
-  if (got.asking) return el('span', { class: 'muted' }, ` ${t('proc.asking')}`);
-  if (got.state !== 'active' || !got.steps.length) {
-    return el('span', { class: 'muted' }, ` ${t('proc.nothingRunning')}`);
-  }
-  // Every step, comma-separated: a process that forked is on two at once, and
-  // naming the first would be a coin toss rendered as fact.
-  return el('span', { class: 'step' }, ` ${t('proc.standing')} ${got.steps.join(', ')}`);
+// followNote is what the link last found for this order, or nothing where it was
+// never pressed. It sits under the button, which is what makes the press visible.
+function followNote(order) {
+  const said = state.following.get(order.id);
+  return said ? el('div', { class: 'muted follow-note' }, said) : null;
 }
 
 // lineKey is what one position is called, mirroring the server's own rule
@@ -2364,12 +2966,15 @@ function orderRowBodies() {
     // Organisation: rendered because the layout has the column, empty because an
     // order carries no organisation. The note under the table says so once,
     // rather than each row implying the data went missing.
-    el('td', { class: 'muted' }, ''),
-    el('td', {}, personName(o.recipient)),
-    el('td', {}, new Date(o.createdAt / 1e6).toLocaleDateString(locale)),
-    el('td', {}, o.id),
+    el('td', { class: 'muted org' }),
+    el('td', { 'data-label': t('tbl.person') }, personName(o.recipient)),
+    el('td', { 'data-label': t('tbl.placed') }, new Date(o.createdAt / 1e6).toLocaleDateString(locale)),
+    el('td', { 'data-label': t('tbl.order') }, o.id,
+      // An order in front of somebody because they hold one of its tasks, not
+      // because it is theirs. Said, so nobody mistakes it for one they placed.
+      o.held ? el('div', { class: 'muted' }, t('task.held')) : null),
     el('td', {},
-      cancellable(o)
+      !o.held && cancellable(o)
         ? el('button', {
           class: 'sq',
           'aria-label': t('portal.cancel'),
@@ -2388,8 +2993,11 @@ function orderRowBodies() {
           disabled: state.busy,
           onclick: () => followProcess(o),
         }, t('proc.open'))
-        : null),
-    el('td', {},
+        : null,
+      // And what it found, under the button that asked. The one answer that is not
+      // drawn here is the one that navigates away.
+      followNote(o)),
+    el('td', { 'data-label': t('tbl.status') },
       t(deriveStatus(o)),
       el('ul', { class: 'lines' }, (o.lines || []).map((l) => el('li', {},
         el('span', { class: `dot ${l.status}` }),
@@ -2398,42 +3006,26 @@ function orderRowBodies() {
           ? el('span', { class: 'muted' }, ` (${t('portal.blockedBy')}: ${l.blockedBy.join(', ')})`) : null,
         l.reason ? el('span', { class: 'muted' }, ` (${t('portal.reason')}: ${l.reason})`) : null,
         amendedNote(l),
-        returnable(o, l)
+        !o.held && returnable(o, l)
           ? el('button', {
             class: 'linkish',
             disabled: state.busy,
             onclick: () => giveBack(o, l),
           }, state.busy ? t('portal.returning') : t('portal.return'))
           : null,
-        withdrawable(l)
+        !o.held && withdrawable(l)
           ? el('button', {
             class: 'linkish',
             disabled: state.busy,
             onclick: () => withdrawLine(o, l),
           }, state.busy ? t('line.withdrawing') : t('line.withdraw'))
           : null,
-        // Where this position stands, to whoever's position it is. No role: the
-        // route behind it is gated on owning the order, which is the same gate
-        // that let this reader see the order at all.
-        el('button', {
-          class: 'linkish',
-          title: t('proc.where'),
-          disabled: state.busy,
-          onclick: () => askProgress(o, l),
-        }, t('proc.where')),
-        progressNote(o, l),
-        // The instance behind it, to whoever may open one. That is an operations
-        // surface — the console shows the whole state of the instance — so it stays
-        // where it was, beside the answer that needs no role.
-        state.mayFollowProcess
-          ? el('button', {
-            class: 'linkish',
-            title: t('proc.openLine'),
-            disabled: state.busy,
-            onclick: () => followProcess(o, l),
-          }, t('proc.openLine'))
-          : null,
-        correctable(l)
+        // No link into a process here. A position row carried two — where the
+        // position stands, and the position's own instance — and neither was read
+        // as useful by the people this page is for: the status beside the name
+        // already answers "what is happening to my laptop" out of the order's own
+        // record. The order's link above is the one that stayed.
+        !o.held && correctable(l)
           ? el('button', {
             class: 'linkish',
             disabled: state.busy,
@@ -2445,7 +3037,170 @@ function orderRowBodies() {
             },
           }, t('line.details'))
           : null,
-        detailsPanel(o, l)))))));
+        detailsPanel(o, l),
+        taskList(o, l)))))));
+}
+
+// --- The open tasks of a position (ADR-0416) --------------------------------
+//
+// "Wartet" says a position is not done; it does not say on whom. Under each
+// position stands every open task of the processes working it, whom it waits for,
+// and — for whoever holds it — the task's own form, answered here rather than in a
+// second window.
+//
+// The server decides all three: which tasks there are (from the instances the
+// order records on the position, never from a search), whom they wait for (by the
+// approval rule where the task is an approval, which is how an orderer knows it),
+// and whether this reader may answer (the task route's own gate). The page draws.
+
+// loadTasks reads the tasks, and the orders the reader holds a task in, which are
+// listed beside the reader's own. A failure leaves the orders as they were: a
+// missing task list is a list missing, not an order missing.
+async function loadTasks() {
+  state.tasks = [];
+  state.tasksTruncated = false;
+  try {
+    const got = await api('/api/v1/shop/tasks');
+    state.tasks = (got && got.tasks) || [];
+    state.tasksTruncated = !!(got && got.truncated);
+    const own = new Set(state.orders.map((o) => o.id));
+    for (const o of (got && got.orders) || []) {
+      if (!own.has(o.id)) state.orders.push({ ...o, held: true });
+    }
+    state.orders.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  } catch { /* no task list; the orders still stand */ }
+}
+
+// tasksOf are the open tasks of one position.
+function tasksOf(order, line) {
+  const key = lineKey(line);
+  return (state.tasks || []).filter((x) => x.orderId === order.id && x.positionId === key);
+}
+
+// holderText is whom a task waits for, as the reader knows it.
+function holderText(task) {
+  const h = task.holder || {};
+  const by = {
+    fixed: 'task.by.fixed', role: 'task.by.role', superior: 'task.by.superior',
+    person: 'task.waits.person', group: 'task.waits.group',
+  }[h.kind];
+  if (!by) return t('task.open');
+  return h.name ? `${t(by)} ${h.name}` : t(by);
+}
+
+// taskFormKey is where a task's answers are kept between redraws, beside the
+// basket's: the same mounting and the same harvesting serve both.
+const taskFormKey = (task) => `task:${task.key}`;
+
+function taskList(order, line) {
+  const list = tasksOf(order, line);
+  if (!list.length) return null;
+  return el('ul', { class: 'tasks' }, list.map((task) => el('li', { 'data-task': String(task.key) },
+    el('span', { class: 'task-name' }, task.name),
+    ' \u00b7 ', el('span', { class: 'task-holder' }, holderText(task)),
+    task.dueDate
+      ? el('span', { class: 'muted' },
+        ` \u00b7 ${t('task.due')} ${new Date(task.dueDate).toLocaleDateString(locale)}`)
+      : null,
+    task.mayWork
+      ? el('button', {
+        class: 'linkish', disabled: state.busy,
+        onclick: () => toggleTask(task),
+      }, state.taskOpen === String(task.key) ? t('line.close') : t('task.work'))
+      : null,
+    taskPanel(task))));
+}
+
+// toggleTask opens a task's form, seeded with what the task already holds, or
+// closes it. Seeded because a form that opened empty would answer a question with
+// nothing the process had already filled in.
+async function toggleTask(task) {
+  harvest();
+  const key = taskFormKey(task);
+  if (state.taskOpen === String(task.key)) {
+    state.taskOpen = '';
+    delete state.config[key];
+    render();
+    return;
+  }
+  state.taskOpen = String(task.key);
+  state.taskError = '';
+  if (task.formId && !state.config[key]) {
+    try {
+      const scope = task.elementInstanceKey || task.processInstanceKey;
+      state.config[key] = (await api(`/api/v1/instances/${scope}/variables`)) || {};
+    } catch {
+      state.config[key] = {};
+    }
+    // And the order's people by name, for the form to say for whom. They are not
+    // form fields, so answering never writes a name into the process: the order and
+    // the process keep ids (ADR-0314), and a name is only for the reader.
+    const order = state.orders.find((o) => o.id === task.orderId);
+    if (order) {
+      const vars = state.config[key];
+      if (vars.recipientName == null) vars.recipientName = personName(order.recipient);
+      if (vars.ordererName == null) vars.ordererName = personName(order.orderer);
+    }
+  }
+  render();
+}
+
+function taskPanel(task) {
+  if (state.taskOpen !== String(task.key)) return null;
+  const key = taskFormKey(task);
+  return el('div', { class: 'card cfg', style: 'margin-top:8px' },
+    state.taskError ? el('p', { class: 'error' }, state.taskError) : null,
+    task.formId
+      ? el('div', { 'data-configkey': key, 'data-formid': task.formId },
+        el('p', { class: 'note' }, t('cfg.loading')))
+      : el('p', { class: 'note' }, t('task.noForm')),
+    el('div', { class: 'row', style: 'margin-top:10px' },
+      el('button', {
+        class: 'primary', disabled: state.busy,
+        onclick: () => completeTask(task),
+      }, state.busy ? t('task.completing') : t('task.complete'))));
+}
+
+// completeTask answers a task with what its form holds. The form checks itself
+// first, as the Tasks app's does: a required field left empty is the reader's to
+// fill in, not the server's to refuse.
+async function completeTask(task) {
+  const key = taskFormKey(task);
+  let data = {};
+  const form = mounted.get(key);
+  if (form) {
+    let result;
+    try { result = form.submit(); } catch { result = { data: {}, errors: {} }; }
+    if (result.errors && Object.keys(result.errors).length) {
+      state.taskError = t('cfg.invalid');
+      render();
+      return;
+    }
+    data = result.data || {};
+  } else if (task.formId) {
+    state.taskError = t('task.formFailed');
+    render();
+    return;
+  }
+  state.busy = true;
+  state.taskError = '';
+  render();
+  try {
+    await api(`/api/v1/tasks/${task.key}/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ variables: data }),
+    });
+    state.taskOpen = '';
+    delete state.config[key];
+    mounted.delete(key);
+    await load();
+  } catch (e) {
+    state.taskError = `${t('portal.failed')} ${e.message}`;
+  } finally {
+    state.busy = false;
+    render();
+  }
 }
 
 // --- Changing one position ---------------------------------------------------
@@ -2570,7 +3325,7 @@ function renderOrders() {
   orderRowsNode = el('tbody', {}, orderRowBodies());
   return el('div', {},
     el('div', { class: 'tablewrap' },
-      el('table', { class: 'table' },
+      el('table', { class: 'table orders' },
         el('thead', {},
           el('tr', { class: 'filters' },
             filterCell('company', t('tbl.searchCompany')),
@@ -2587,6 +3342,7 @@ function renderOrders() {
             el('th', {}, ''),
             el('th', {}, t('tbl.status')))),
         orderRowsNode)),
+    state.tasksTruncated ? el('p', { class: 'note' }, t('task.truncated')) : null,
     el('p', { class: 'note' }, t('note.noCompany')));
 }
 
@@ -2622,6 +3378,45 @@ function depthOf(release, id) {
   return d;
 }
 
+// ownerAmong returns a function naming, for any product, the offering among
+// `roots` it hangs under — or '' when it hangs under none of them.
+//
+// Up through what includes it and what offers it, both, because a basket groups by
+// belonging and an option belongs to its offering exactly as much as a part does.
+// That is a different question from the level, and depthOf is not asked it: an
+// option is a service by depth whichever offering is in the basket, but which
+// line it sits on depends on which one is.
+//
+// Breadth-first and every parent rather than the first one depthOf keeps. A part
+// offered by two products — one case for two phones — belongs to whichever of
+// them is in this basket, and the first parent in the release may be the one that
+// is not. Ties go to the root nearest in the graph, then to the one the release
+// lists first, so the same basket always draws the same lines.
+function ownerAmong(release, roots) {
+  const parents = new Map();
+  const link = (whole, part) => {
+    if (!parents.has(part)) parents.set(part, []);
+    parents.get(part).push(whole);
+  };
+  for (const [whole, parts] of Object.entries(release.includes || {})) parts.forEach((p) => link(whole, p));
+  for (const [whole, parts] of Object.entries(release.options || {})) parts.forEach((p) => link(whole, p));
+  return (id) => {
+    const seen = new Set([id]);
+    let level = [id];
+    while (level.length) {
+      const next = [];
+      for (const at of level) {
+        for (const up of parents.get(at) || []) {
+          if (roots.has(up)) return up;
+          if (!seen.has(up)) { seen.add(up); next.push(up); }
+        }
+      }
+      level = next;
+    }
+    return '';
+  };
+}
+
 // headingsHeld is the Kategorie or Produktgruppe column of what somebody holds,
 // read off the same products the catalogue reads it off.
 //
@@ -2630,7 +3425,7 @@ function depthOf(release, id) {
 // contains, so a service two edges down has never had a heading of its own to
 // carry. Read directly from what a person holds, this column showed "Ohne
 // Kategorie" for every service they have while the catalogue showed real headings
-// for the same things — the two sides of the portal disagreeing about one field,
+// for the same things — the two sides of the shop disagreeing about one field,
 // which is exactly what ADR-0360 promised they would not do.
 //
 // So each held id is resolved to the product it belongs to and the heading is read
@@ -2640,16 +3435,7 @@ function depthOf(release, id) {
 // at categoriesOf: there is nothing on a string to sort by, and the bucket is last
 // and only appears when something is in it.
 function headingsHeld(rel, by, ids, field) {
-  const named = new Set();
-  let none = false;
-  for (const id of ids) {
-    const root = by[rootOf(rel, id)] || {};
-    const value = (root[field] || '').trim();
-    if (value) named.add(value); else none = true;
-  }
-  const out = [...named].sort((a, b) => a.localeCompare(b, locale));
-  if (none) out.push('');
-  return out;
+  return headingsOf(ids.map((id) => by[rootOf(rel, id)] || {}), field);
 }
 
 function renderServices() {
@@ -2696,6 +3482,8 @@ function renderServices() {
   const at = (level) => ids.filter((id) => levelOf(rel, id) === level);
 
   return el('div', {},
+    // No data-step: nothing in these columns is chosen, so a narrow screen stacks
+    // them rather than stepping through them (ADR-0417).
     el('div', { class: 'cascade' },
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.category')),
@@ -2703,13 +3491,13 @@ function renderServices() {
         // catalogue's: this screen answers "what do I have", and a heading with
         // nothing of theirs under it would be a column of other people's shelves.
         headingsHeld(rel, by, ids, 'category')
-          .map((c) => cell({ text: c || t('cat.none') }))),
+          .map((c) => cell({ text: c.text || t('cat.none') }))),
       // The product group beside the heading, read off what this person holds for
       // the same reason the heading is: this screen answers "what do I have".
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.group')),
         headingsHeld(rel, by, ids, 'productGroup')
-          .map((g) => cell({ text: g || t('group.none') }))),
+          .map((g) => cell({ text: g.text || t('group.none') }))),
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.offering')),
         at('offering').map(row)),
@@ -3023,10 +3811,15 @@ function render() {
         // without this the only way out is the browser's back button, and a visitor
         // who arrived by link has no back to press.
         el('a', { class: 'backlink', href: '/index.html' }, '\u2190 ', t('portal.back')),
-        el('div', { class: 'langs' }, Object.keys(STRINGS).map((l) => el('button', {
-          class: l === locale ? 'lang on' : 'lang',
-          onclick: () => setLocale(l),
-        }, l.toUpperCase()))))),
+        // One button per language this catalogue is kept in, and none at all where
+        // there is only one: a switch with a single position is a control that
+        // says something can be changed and then cannot.
+        el('div', { class: 'langs' }, offeredLocales().length > 1
+          ? offeredLocales().map((l) => el('button', {
+            class: l === locale ? 'lang on' : 'lang',
+            onclick: () => setLocale(l),
+          }, l.toUpperCase()))
+          : null))),
     // The header stands on the sign-in screen too — the mark says who is asking,
     // and the language switch has to be reachable before the sign-in, not after
     // it: a German-speaking visitor meeting an English form is the case this
@@ -3054,7 +3847,7 @@ document.addEventListener('DOMContentLoaded', () => {
   paintFromCache();
   render();
   load().catch((e) => {
-    // A refusal is not a broken portal. The page is one people leave open, so the
+    // A refusal is not a broken shop. The page is one people leave open, so the
     // session behind it runs out while it stands there, and the next load is the
     // same 401 the gate exists for — reported as a failure it is the original
     // defect one step later, with an HTTP status where the sign-in should be.

@@ -81,6 +81,22 @@ type Limits struct {
 	// a generated form request, a mail outbox post.
 	Generated int64
 
+	// PeerLandscape is one peer Atlas's derived starmap, read across the estate
+	// (ADR-0402). Deliberately not Request, although that
+	// one covers "the answer of a peer Atlas": the answers it names are small —
+	// a descriptor, a user, a claim mapping — and a landscape is three orders of
+	// magnitude away from them. Measured on a graph at the mesh's own 400-node
+	// budget with realistic names, reasons and per-node status: 100 nodes / 200 edges
+	// is 61 KiB, 200 / 400 is 123 KiB, and a full 400 / 800 is 246 KiB. So the
+	// ceiling Request would impose truncates almost every real answer, and a
+	// truncated JSON document is indistinguishable from a peer that replied with
+	// nonsense.
+	//
+	// One megabyte is four times the measured worst case, which leaves room for a
+	// peer whose per-node reasons are longer than the measurement's without leaving
+	// room for a peer to make this server hold an unbounded document.
+	PeerLandscape int64
+
 	// ModelUpload is a BPMN, DMN or XOML document. Four megabytes is a diagram far
 	// past what a person maintains by hand.
 	ModelUpload int64
@@ -308,16 +324,19 @@ func Default() Limits {
 		Asset:        512 << 10,
 		Definition:   1 << 20,
 		Generated:    2 << 20,
-		ModelUpload:  4 << 20,
-		Payload:      8 << 20,
-		DataUpload:   16 << 20,
-		Import:       24 << 20,
-		AppBundle:    32 << 20,
-		Archive:      1 << 30,
-		TokenSteps:   10_000,
-		Iterations:   100_000,
-		Variable:     1 << 20,
-		Collection:   16 << 20,
+		// New rather than gathered: there was no peer landscape read before
+		// ADR-0402. See the field for the measurement the number comes from.
+		PeerLandscape: 1 << 20,
+		ModelUpload:   4 << 20,
+		Payload:       8 << 20,
+		DataUpload:    16 << 20,
+		Import:        24 << 20,
+		AppBundle:     32 << 20,
+		Archive:       1 << 30,
+		TokenSteps:    10_000,
+		Iterations:    100_000,
+		Variable:      1 << 20,
+		Collection:    16 << 20,
 		// Eight megabytes is a full enumeration of a few tens of thousands of objects
 		// under a narrow $select; two thousand objects is the batch a run-loop turn can
 		// write without the engine noticeably stalling, and five hundred lines is more

@@ -66,10 +66,19 @@ var catalogGates = []handlerGate{
 	{name: "HandleUpdateCatalog", kind: gated, want: http.StatusNotFound, method: "PATCH", body: `{"rank":9}`, id: true},
 	{name: "HandlePublish", kind: gated, want: http.StatusNotFound, method: "POST", id: true},
 	{name: "HandleListReleases", kind: gated, want: http.StatusNotFound, method: "GET", id: true},
+	// Gated on read and not on write, the same as listing the releases above: the
+	// answer is assembled from a GET on the catalogue and a GET on its releases and
+	// exposes nothing beyond them. Demanding the authority to publish would withhold
+	// it from exactly the person who has to ask somebody else to.
+	{name: "HandleUnpublished", kind: gated, want: http.StatusNotFound, method: "GET", id: true},
 	{name: "HandleListItems", kind: ungated, method: "GET",
 		why: "lists only products whose home the caller maintains; the outsider case is an empty list, proved in TestProductListingFollowsTheHomeCatalogue"},
 	{name: "HandleApproverReport", kind: ungated, method: "GET",
 		why: "reports only on products whose home the caller maintains, by the same lookup as the listing above; the outsider case is an empty report, proved in TestTheApproverReportFollowsTheHomeCatalogue"},
+	{name: "HandleFulfilmentReport", kind: ungated, method: "GET",
+		why: "reports only on the releases of catalogues the caller may edit, by the same mayEdit the report above uses; the outsider case is an empty report, proved in TestTheFulfilmentReportFollowsTheCatalogueYouMaintain"},
+	{name: "HandleTranslationGaps", kind: ungated, method: "GET",
+		why: "reports only on catalogues the caller may edit, by the same mayEdit the two reports above use; the outsider case is an empty report, proved in TestTheTranslationReportFollowsTheCatalogueYouMaintain"},
 	{name: "HandleSaveItem", kind: gated, want: http.StatusNotFound, method: "POST",
 		body: `{"id":"x","homeCatalog":"CAT","state":"active","texts":{"de":"X"},"approval":{"kind":"none"},"provisionProcess":"p","deprovisionProcess":"d"}`},
 	{name: "HandleImport", kind: gated, want: http.StatusNotFound, method: "POST",

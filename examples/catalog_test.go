@@ -149,6 +149,13 @@ var catalogSources = []catalogSource{
 			"csv-upload-form.json", "row-correction-form.json"},
 	},
 	{ID: "onboarding", App: "Onboarding", Dir: "onboarding"},
+	// No Start: every service task in it calls Atlas's own API, which needs an
+	// operator token under ATLAS_CONNECTOR_ATLAS_TOKEN. A reader without one would
+	// press "run it" and get an incident on the first step. The tasks themselves
+	// need nothing configured — they are connector tasks on the reserved REST job
+	// type now — and the address comes from the start form.
+	{ID: "produkt-erfassung", App: "Beispiel: Produkt erfassen", Dir: "produkt-erfassung",
+		Main: "produkt-erfassung/produkt-erfassung.bpmn"},
 	{
 		ID: "order-to-cash", App: "Beispiel: Order-to-Cash",
 		Files: []string{"order-to-cash.bpmn", "order-to-cash-live.bpmn"},

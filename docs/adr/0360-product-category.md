@@ -1,6 +1,6 @@
 # ADR-0360: A category is a heading a product writes on itself, not a thing the catalogue owns
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-09-22: the heading is translatable — see ADR-0412)
 - **Implementation:** Landed
 - **Date:** 2026-09-15
 - **Open question:** Whether a heading ever needs to be **addressed** — renamed
@@ -10,7 +10,12 @@
   arrives the same way: the heading becomes an entity with an identity, and the
   field on the product becomes a reference to it. This decision does not block
   that migration and does not begin it. It stays a string until somebody names a
-  surface that must talk *about* a category rather than *show* one.
+  surface that must talk *about* a category rather than *show* one. **Partly
+  answered**: translation came first and did not need the entity, because it needs
+  only to *show* the heading in more than one language — the string stayed as the
+  key and gained a wording per language beside it. The rest of the list still needs
+  the identity, and this is now the evidence that it does: a rename everywhere at
+  once is still impossible, and a key worded two ways is refused rather than folded.
 - **Question checked:** 2026-09
 
 ## Context and problem statement
@@ -72,10 +77,14 @@ this serves is maintained by people, not by a data governance process.
   rule (`localeCompare`). A maintainer who wants *Hardware* above *Software* cannot
   have it. A rank on a category is exactly the entity this decision refused,
   arriving through the back door, and a test holds the sort against it.
-- **No translation.** The heading reads the same in every locale, unlike every
+- **No translation.** ~~The heading reads the same in every locale, unlike every
   other text on a product. A person using the English portal sees `Arbeitsplatz`.
   That is a genuine regression against the rest of the surface and the honest price
-  of not having an entity with texts.
+  of not having an entity with texts.~~ **Paid off, without the entity**
+  (ADR-0412, 2026-09-22): a product carries a
+  wording per language tag beside each heading, and the string this record decided
+  on stays as the key everything groups by. The two costs above are untouched and
+  still hold.
 - **Two spellings are two categories.** `Hardware` and `hardware ` are two
   headings, and nothing notices. A test records this as a deliberate non-check
   rather than a gap, so that the day it becomes intolerable, the reason it was

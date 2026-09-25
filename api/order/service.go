@@ -93,6 +93,18 @@ type Service struct {
 	// construction, and empty is a supported answer — a model that finds it empty
 	// says where to go instead of printing a link nobody can follow.
 	portalBase func() string
+
+	// apiBase is this server's own HTTP origin, as its children reach it: the
+	// address the supervised workers are told to work for (cmd/atlas: internalURL).
+	// The fulfilment orchestration and the approval processes call Atlas's own API
+	// to do their work, so they have to be told where that is.
+	//
+	// Deliberately NOT portalBase. That one is the operator's configured external
+	// origin *or empty*, and a request built on an empty base is the silent failure
+	// this whole path already learned once: nothing errors, the call goes nowhere,
+	// and the order waits with no incident to find. This one is known whenever the
+	// server is listening.
+	apiBase func() string
 	// grant and revoke keep the inventory in step with what fulfilment actually
 	// did: a line that reaches done records a right, a line that is given back
 	// removes it. See [Grant] for why only those two transitions do.
@@ -134,13 +146,14 @@ func New(loop *runloop.Loop, store *Store, now func() int64,
 	mayOrderForOthers func(*httpapi.Principal) bool,
 	wake func(message, orderID string, vars map[string]string) error,
 	portalBase func() string,
+	apiBase func() string,
 	grant func(Grant) error,
 	revoke func(principal, itemID string, at int64, by string) error,
 	held func(principal string) (map[string]bool, error)) *Service {
 	return &Service{loop: loop, store: store, now: now,
 		release: release, mayOrderFrom: mayOrderFrom, groupsOf: groupsOf,
 		mayOrderForOthers: mayOrderForOthers, wake: wake, portalBase: portalBase,
-		grant: grant, revoke: revoke, held: held}
+		apiBase: apiBase, grant: grant, revoke: revoke, held: held}
 }
 
 // budgets is the effective budget set: the server's where it set one, the defaults
@@ -407,7 +420,7 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		// portalBaseUrl is what a notification's link is built on. It is the
 		// operator's configured origin or empty; a model that finds it empty says
 		// where to go instead of printing a link nobody can follow.
-		if err := s.wake(PlacedMessage, out.ID, PlacedVariables(out, s.portalBase())); err != nil {
+		if err := s.wake(PlacedMessage, out.ID, PlacedVariables(out, s.portalBase(), s.apiBase())); err != nil {
 			httpapi.Error(w, http.StatusInternalServerError,
 				"the order was placed, but fulfilment could not be started: "+err.Error())
 			return
@@ -427,12 +440,18 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 // portalBaseUrl is what a notification's link is built on: the operator's configured
 // origin or empty. A model that finds it empty says where to go instead of printing
 // a link nobody can follow.
-func PlacedVariables(o Order, portalBase string) map[string]string {
+//
+// atlasApiBase is where the orchestration reaches Atlas's own API, which is how it
+// does every piece of its work. It is this server addressing itself, not the
+// operator's external origin, and the two are different values for a good reason:
+// one may be unset and the other is known whenever the server is up.
+func PlacedVariables(o Order, portalBase, apiBase string) map[string]string {
 	return map[string]string{
 		"orderId":       o.ID,
 		"orderer":       o.Orderer,
 		"recipient":     o.Recipient,
 		"portalBaseUrl": portalBase,
+		"atlasApiBase":  apiBase,
 	}
 }
 
@@ -835,6 +854,24 @@ type readyLine struct {
 	// a FEEL expression comparing an absent key is comparing against null, and the
 	// model should be asking whether the string is empty.
 	ApprovalProcess string `json:"approvalProcess"`
+}
+
+// RecordInstance notes, on the order itself, that an instance was started to work
+// one of its positions. found is false for an order this server does not hold —
+// not an error: a process may carry an orderId that names nothing here.
+func (s *Service) RecordInstance(orderID, ref string, inst LineInstance) (found bool, err error) {
+	s.loop.Do(func() {
+		var got Order
+		if got, found, err = s.store.Get(orderID); err != nil || !found {
+			return
+		}
+		var next Order
+		if next, err = RecordInstance(got, ref, inst); err != nil {
+			return
+		}
+		err = s.store.Save(next)
+	})
+	return found, err
 }
 
 // reportReq is one line's provisioning outcome.

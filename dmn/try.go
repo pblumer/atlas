@@ -76,8 +76,9 @@ func (v *Validator) Try(ctx context.Context, src []byte, decisionID string, inpu
 	}
 	out.ModelName = defs.ModelName()
 	// A decision service is offered beside the decisions, because the panel calls
-	// either the same way (services.go).
-	if described := append(describeDecisions(defs), describeServices(defs, src)...); described != nil {
+	// either the same way — the one list the picker is built from too, so the two
+	// cannot come to disagree about what a model offers (validate.go).
+	if described := describeModel(defs, src); described != nil {
 		out.Decisions = described
 	}
 	if decisionID == "" {

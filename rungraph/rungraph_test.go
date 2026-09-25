@@ -35,6 +35,17 @@ type fakeSource struct {
 	keys   []uint64
 	values []*model.ElementInstanceValue
 	failAt int // 1-based index to fail on; 0 never fails
+	// position is what the snapshot says it is as of (§4); positionErr makes the read fail,
+	// which a build has to refuse rather than paper over.
+	position    uint64
+	positionErr bool
+}
+
+func (f *fakeSource) LastAppliedPosition() (uint64, error) {
+	if f.positionErr {
+		return 0, errors.New("position unavailable")
+	}
+	return f.position, nil
 }
 
 func (f *fakeSource) ActiveElementInstances(fn func(key uint64, v *model.ElementInstanceValue) error) error {
@@ -339,6 +350,8 @@ type shrinkingSource struct {
 	keys  []uint64
 	scans int
 }
+
+func (s *shrinkingSource) LastAppliedPosition() (uint64, error) { return 1, nil }
 
 func (s *shrinkingSource) ActiveElementInstances(fn func(key uint64, v *model.ElementInstanceValue) error) error {
 	n := len(s.keys) - s.scans

@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Decisions",
+    "Modeler"
+  ],
+  "title": {
+    "en": "A decision service can be moved, and wired to the decision that calls it",
+    "de": "Ein Decision Service lässt sich verschieben und mit der Entscheidung verbinden, die ihn aufruft"
+  },
+  "summary": {
+    "en": "Dragging a decision service on the canvas was refused outright, which a diagram holding several of them cannot do without. When it did move, the editor re-decided which of its decisions the service returns and which it only works out internally — and for a decision drawn outside the box, an imported model's may well be, that silently cost the service the interface it publishes. A decision service could also not be connected to anything, although DMN makes one invocable exactly as a knowledge model is. All three are fixed. The shapes follow the specification too: input data is a stadium at any size, a decision service carries a heavier border than a decision, a knowledge model is a rectangle with two corners cut rather than a slanted box, and a knowledge requirement ends in an open arrowhead — the one thing that tells it from an information requirement.",
+    "de": "Einen Decision Service auf der Zeichenfläche zu verschieben wurde schlicht verweigert — und genau darauf kommt es an, sobald ein Diagramm mehrere davon trägt. Bewegte er sich doch, entschied der Editor neu, welche seiner Entscheidungen der Service zurückgibt und welche er nur intern ermittelt; bei einer Entscheidung ausserhalb des Kastens, wie sie in importierten Modellen vorkommt, kostete das den Service still die Schnittstelle, die er veröffentlicht. Verbinden liess sich ein Decision Service ausserdem gar nicht, obwohl DMN ihn genauso aufrufbar macht wie ein Knowledge Model. Alle drei Punkte sind behoben. Auch die Formen folgen nun der Spezifikation: Input Data ist in jeder Grösse ein Stadion, ein Decision Service trägt eine kräftigere Umrandung als eine Entscheidung, ein Knowledge Model ist ein Rechteck mit zwei abgeschnittenen Ecken statt eines schiefen Kastens, und ein Knowledge Requirement endet in einer offenen Pfeilspitze — dem einzigen Merkmal, das es von einem Information Requirement unterscheidet."
+  },
+  "try": {
+    "label": {
+      "en": "Open the decisions",
+      "de": "Entscheidungen öffnen"
+    },
+    "route": "#/console/decisions"
+  }
+}

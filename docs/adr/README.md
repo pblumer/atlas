@@ -399,7 +399,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0311](0311-portal-approval-page.md) | The approver decides on a page of their own, in the customer's colours | Accepted | Partial |
 | [0312](0312-portal-catalogue-order-inventory.md) | Catalogue, order, inventory — three models, not one | Accepted | Partial |
 | [0313](0313-portal-language-follows-the-browser.md) | The portal follows the browser's language; the console still does not | Accepted | Not started |
-| [0314](0314-portal-personal-data.md) | Personal data in the portal — a reference by default, a destroyable key for the rest | Accepted | Not started |
+| [0314](0314-portal-personal-data.md) | Personal data in the portal — a reference by default, a destroyable key for the rest | Accepted | Partial |
 | [0315](0315-portal-roles-and-responsibilities.md) | Who runs the portal — a role for the operation, a catalogue for the object | Accepted | Partial |
 | [0316](0316-portal-theme-per-catalogue.md) | A theme belongs to a catalogue, the sign-in screen belongs to the operator | Accepted | Partial |
 | [0317](0317-task-commands-are-an-object-question.md) | Acting on a user task is an object question | Accepted | Landed |
@@ -485,13 +485,24 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0397](0397-enforce-the-orderable-window.md) | The orderable window is enforced when an order is placed | Accepted | Landed |
 | [0398](0398-a-business-rule-task-can-call-a-decision-service.md) | A business rule task can call a decision service | Accepted | Landed |
 | [0399](0399-portal-carries-its-own-sign-in.md) | The service portal carries its own sign-in | Accepted | Landed |
-| [0400](0400-an-edge-that-was-taken-is-not-an-edge-that-was-declared.md) | An edge that was taken is not an edge that was declared | Accepted | Not started |
+| [0400](0400-an-edge-that-was-taken-is-not-an-edge-that-was-declared.md) | An edge that was taken is not an edge that was declared | Accepted | Partial |
 | [0401](0401-graph-identity-across-several-logs.md) | What a node is called when there is more than one log | Accepted | Partial |
-| [0402](0402-one-estate-several-nodes.md) | One estate, several nodes — a starmap stitched from subgraphs | Proposed | Not started |
+| [0402](0402-one-estate-several-nodes.md) | One estate, several nodes — a starmap stitched from subgraphs | Accepted (amended) | Landed |
 | [0403](0403-the-estate-graph-is-derived-from-the-log.md) | The estate graph is derived from the log, never the log from the graph | Accepted | Not started |
 | [0404](0404-the-whole-graph-can-be-walked.md) | The whole graph can be walked, in a projection with a stated scope | Accepted | Partial |
 | [0405](0405-a-decision-is-shown-rather-than-described.md) | A decision is shown, not described | Accepted | Landed |
 | [0406](0406-decision-service-is-drawn-around-its-members.md) | A decision service is drawn, and drawn around its members | Accepted | Landed |
+| [0407](0407-requirements-as-design-time-records.md) | Requirements as design-time records, attached by a declared edge | Proposed | Not started |
+| [0408](0408-portal-shows-no-process-links-per-position.md) | The portal's order rows carry one link into a process, not three | Accepted | Landed |
+| [0409](0409-the-archive-substrate-waits-its-schema-does-not.md) | The archive substrate waits, its schema does not | Proposed | Partial |
+| [0410](0410-a-peer-credential-carries-the-reach-a-membership-cannot-give-it.md) | A peer credential carries the reach a membership cannot give it | Accepted | Partial |
+| [0411](0411-system-processes-call-atlas-directly.md) | The shipped system processes call Atlas as REST connector tasks, told their own address | Accepted | Landed |
+| [0412](0412-translatable-catalogue-headings.md) | A catalogue heading is a key that groups and a wording per language that shows | Accepted | Landed |
+| [0413](0413-a-language-tag-is-checked-where-it-is-written.md) | A language tag is checked where it is written, and nowhere else | Accepted | Landed |
+| [0414](0414-a-missing-translation-is-reported-not-refused.md) | A missing translation is reported, not refused | Accepted | Landed |
+| [0415](0415-the-portal-offers-the-catalogues-languages.md) | The portal offers the languages its catalogue is kept in | Accepted | Landed |
+| [0416](0416-the-shop-shows-an-orders-open-tasks.md) | The shop shows an order's open tasks, and the order records the instances that work it | Accepted | Landed |
+| [0417](0417-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md) | The shop and Tasks are one column wide on a narrow screen | Accepted | Landed |
 
 ## The two states of a record
 

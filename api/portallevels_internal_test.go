@@ -19,7 +19,7 @@ import (
 
 // TestOneRuleNamesTheLevel.
 func TestOneRuleNamesTheLevel(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	// The two views that *derive* a level. The cascade is no longer one of them, and
 	// that is the point rather than a gap: its columns are the levels — the third
 	// holds the products, the fourth everything behind the one chosen — so a row's
@@ -63,7 +63,7 @@ func TestOneRuleNamesTheLevel(t *testing.T) {
 // What still needs pinning is that the level is depth and nothing else — not the
 // kind of edge, not whether the product has parts, not how it was reached.
 func TestTheLevelIsReadOffDepthAndNothingElse(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function levelOf(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function levelOf(", "\n}")
 	if !strings.Contains(body, "depthOf(") {
 		t.Error("the level is worked out without asking how deep the position sits, " +
 			"which is the one thing it is")

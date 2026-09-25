@@ -21,7 +21,7 @@ import (
 
 // TestTheNameHasAFloorUnderIt.
 func TestTheNameHasAFloorUnderIt(t *testing.T) {
-	css := webRegion(t, readWeb(t, "portal.html"), ".cell .label {", "}")
+	css := webRegion(t, readWeb(t, "shop.html"), ".cell .label {", "}")
 	if strings.Contains(css, "anywhere") {
 		t.Error("the row's name may shrink below its longest word, so any sibling that " +
 			"refuses to shrink takes the row and the name wraps one letter per line")
@@ -38,10 +38,10 @@ func TestTheNameHasAFloorUnderIt(t *testing.T) {
 // because the next caller is the one that does it again — and the failure is not an
 // error anybody sees in a test run, it is a column somebody reads.
 func TestWhatARowSaysAboutItselfIsNotAControl(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	trails := trailArguments(src)
 	if len(trails) < 5 {
-		t.Fatalf("found %d trails in portal.js; this guard has lost its subject", len(trails))
+		t.Fatalf("found %d trails in shop.js; this guard has lost its subject", len(trails))
 	}
 	for _, trail := range trails {
 		// A muted span is this page's way of writing "this is a note, not a
@@ -61,12 +61,12 @@ func TestWhatARowSaysAboutItselfIsNotAControl(t *testing.T) {
 // slot that renders it. Without this, "not in the trail" is satisfied by deleting
 // the price.
 func TestTheRowHasSomewhereToPutIt(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function cell(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function cell(", "\n}")
 	if !strings.Contains(body, "o.meta") {
 		t.Fatal("a row has no slot for what it says about itself, so a price or a " +
 			"level has nowhere to go but the controls")
 	}
-	if !strings.Contains(readWeb(t, "portal.html"), ".cell .meta {") {
+	if !strings.Contains(readWeb(t, "shop.html"), ".cell .meta {") {
 		t.Error("the meta slot is rendered and unstyled, so it inherits the row's own " +
 			"size and reads as a second name")
 	}
@@ -74,7 +74,7 @@ func TestTheRowHasSomewhereToPutIt(t *testing.T) {
 	// is drawn in rather than by a count: a count says nothing about *which* caller
 	// stopped, and a column that loses its text legitimately — as the first one did
 	// when it stopped holding products — would fail a count for being correct.
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	for _, view := range []struct{ name, from, to string }{
 		{"a search result, which says where it found the product", "function renderSearch(", "\n}"},
 		{"the basket's optional column, which says a price and a level", "function renderBasket(", "\n}"},

@@ -5,7 +5,7 @@ import (
 	"net/url"
 )
 
-// The portal catalogue tools: what a product manager maintains
+// The shop catalogue tools: what a product manager maintains
 // (ADR-0312, ADR-0315) — the products and services on offer, the catalogues that
 // offer them, and the release that freezes a version of both so an order has
 // something immutable to name.
@@ -30,7 +30,7 @@ import (
 // on the ordinary save, so there is no tool to look for and not find.
 //
 // **Nothing is orderable until it is published.** Editing a catalogue changes
-// what the *next* release will contain and changes nothing the portal shows.
+// what the *next* release will contain and changes nothing the shop shows.
 //
 // # Who may call them
 //
@@ -111,6 +111,12 @@ func catalogItemProps() map[string]any {
 			"resolve through this product, so retiring one means setting \"withdrawn\" here."),
 		"texts": objectProp("The product's name per language tag. Publishing refuses a product " +
 			"missing a text for any language its catalogue declares."),
+		"descriptions": objectProp("What the product IS, per language tag, beside the name in " +
+			"texts — the sentence somebody reads when the name was not enough. Optional as a " +
+			"whole: most products need none, and one with none publishes. Once there is one, " +
+			"publishing demands it in EVERY language the catalogue declares, because a product " +
+			"explained to one audience and not another leaves the other an empty panel. " +
+			"Whitespace does not count as one."),
 		"approval": objectProp("How an order line for this product is approved: {kind, ref}. " +
 			"kind is \"none\" (ordered without approval), \"fixed\" (ref names one principal), " +
 			"\"role\" (ref names a group; any member may approve), \"superior\" (the RECIPIENT's " +
@@ -162,17 +168,29 @@ func catalogItemProps() map[string]any {
 			"\"49.– / Monat\", \"im Grundpaket enthalten\". DISPLAYED AND NEVER COMPUTED — nothing " +
 			"adds these up. It is frozen into the release and copied onto the order line, so an " +
 			"approver's figure stays the figure they decided on."),
-		"category": stringProp("The heading the portal groups it under — \"Arbeitsplatz\", " +
-			"\"Kommunikation\". A heading and nothing else: no ordering, no translation, no entity " +
-			"behind it, and two spellings are two categories. Reuse a heading already in the " +
-			"catalogue rather than inventing a second spelling of it. It is read off the products " +
-			"NOTHING CONTAINS: on a product that is a part of another one the portal never reads " +
-			"it, so set it on the offering and not on the services behind it."),
-		"productGroup": stringProp("The group one level below the heading: the portal's cascade " +
-			"reads Kategorie > Produktgruppe > Produkt > Services. A string with the same costs as " +
-			"`category` above and read off the same products — the group has no record and " +
-			"therefore no category of its own, so the chain is assembled per product and a group " +
-			"whose products sit in two categories appears under both."),
+		"category": stringProp("The heading the shop groups it under — \"Arbeitsplatz\", " +
+			"\"Kommunikation\". THE KEY AND NOT THE WORDING: the shop groups by this value and " +
+			"renders `categoryTexts` beside it, so two spellings are two categories. Reuse a " +
+			"heading already in the catalogue rather than inventing a second spelling of it. A " +
+			"heading and nothing else: no ordering and no entity behind it. It is read off the " +
+			"products NOTHING CONTAINS: on a product that is a part of another one the shop " +
+			"never reads it, so set it on the offering and not on the services behind it."),
+		"categoryTexts": objectProp("The heading per language tag, where `category` above is what " +
+			"the shop groups by: {\"de\": \"Arbeitsplatz\", \"fr\": \"Poste de travail\"}. " +
+			"Leave it out and the key renders in every language, which is the ordinary state for " +
+			"a catalogue declaring one. Optional as a whole and ALL-OR-NOTHING once there is one: " +
+			"publishing refuses a heading translated into one declared language and not another, " +
+			"because the fallback renders and one audience silently reads somebody else's column " +
+			"head. Translations without a `category` are refused too — nothing would read them."),
+		"productGroup": stringProp("The group one level below the heading: the shop's cascade " +
+			"reads Kategorie > Produktgruppe > Produkt > Services. The key, exactly as `category` " +
+			"above is, with `productGroupTexts` for the wording, and read off the same products — " +
+			"the group has no record and therefore no category of its own, so the chain is " +
+			"assembled per product and a group whose products sit in two categories appears " +
+			"under both."),
+		"productGroupTexts": objectProp("The product group per language tag, exactly as " +
+			"`categoryTexts` is the heading's — same key-and-wording split, same all-or-nothing " +
+			"rule at publication. See that property."),
 		"createdAt": integerProp("When the product was first stored. Send back what you read: the " +
 			"write is a replace, so omitting it resets the creation date to now."),
 		"revision": integerProp("THE REVISION YOU READ, as a precondition. When set, the write is " +
@@ -203,7 +221,7 @@ func catalogTools() []Tool {
 		{
 			Name: "atlas_list_catalogs",
 			Description: "List the product catalogues you maintain, lowest rank first. This is the " +
-				"MAINTENANCE list and not the portal one: being the audience for a catalogue puts " +
+				"MAINTENANCE list and not the shop one: being the audience for a catalogue puts " +
 				"nothing in it, so a customer never learns which other customers exist. Read this " +
 				"before changing anything — a catalogue's id is what every other catalogue tool names.",
 			InputSchema: noArgs(),
@@ -250,7 +268,7 @@ func catalogTools() []Tool {
 				"but each one you do send REPLACES that field whole — sending `items` with one id " +
 				"drops every other product the catalogue offered. Read it with atlas_get_catalog " +
 				"first, send the full list back, and pass the `revision` it answered with — the " +
-				"write is then refused rather than erasing a change somebody made in between. Changing it changes nothing the portal shows " +
+				"write is then refused rather than erasing a change somebody made in between. Changing it changes nothing the shop shows " +
 				"until you publish. Requires editor on the catalogue; only its owner may change " +
 				"`members`.",
 			InputSchema: func() map[string]any {
@@ -271,7 +289,8 @@ func catalogTools() []Tool {
 			Name: "atlas_list_catalog_products",
 			Description: "List the products and services whose home catalogue you maintain, with " +
 				"every field: texts, state, approval rule, process bindings, targets, eligibility, " +
-				"price, category, product group, keywords, and the `revision` each is on. READ THIS " +
+				"price, the two headings and their wording per language, keywords, and the " +
+				"`revision` each is on. READ THIS " +
 				"BEFORE EVERY CHANGE — atlas_save_catalog_product replaces the whole record, so " +
 				"this is where the fields you are not changing come from.",
 			InputSchema: noArgs(),
@@ -293,6 +312,51 @@ func catalogTools() []Tool {
 			InputSchema: noArgs(),
 			Handler: func(c *Client, _ map[string]any) (string, error) {
 				return asText(c.get("/api/v1/catalog-products/approver-report"))
+			},
+		},
+		{
+			Name: "atlas_catalog_fulfilment_report",
+			Description: "Which of the services you offer cannot be fulfilled on this " +
+				"installation. A catalogue binds a product to processes by name, and nothing " +
+				"checks those names — not when the binding is written, not when the catalogue " +
+				"is published, not when an order reaches one. Two ways it fails: the process " +
+				"was never deployed, or it is deployed and waits on a job type nothing works. " +
+				"THE SECOND RAISES NO INCIDENT AT ALL: a parked token is work waiting, not " +
+				"work failed, so no retry is spent, nothing turns red, and the order simply " +
+				"stands at waiting. This is the only place it is said. It walks the whole path " +
+				"an order takes — the fulfilment orchestration, the approval process where the " +
+				"rule needs one, then provisioning and the return — because any of them stops " +
+				"it, and it reads the newest release of each catalogue you maintain, since " +
+				"that is what can be ordered today. A problem on the shared orchestration is " +
+				"reported once and names no product: it is one fact about the installation and " +
+				"stops every order alike. Run it beside atlas_catalog_approver_report, which " +
+				"asks the other half — that one whether the rule reaches a person, this one " +
+				"whether the work reaches a worker.",
+			InputSchema: noArgs(),
+			Handler: func(c *Client, _ map[string]any) (string, error) {
+				return asText(c.get("/api/v1/catalog-products/fulfilment-report"))
+			},
+		},
+		{
+			Name: "atlas_catalog_translation_gaps",
+			Description: "Where the catalogues you maintain are written in one of their " +
+				"declared languages and not another: the name, the description, the two " +
+				"headings and the name of every shape the product is ordered in, per product " +
+				"and per language. Publishing used to refuse these and " +
+				"does not any more — the shop falls back to the language the catalogue has, " +
+				"so the refusal protected no reader and instead held a usable catalogue back " +
+				"until the last translation arrived. What the refusal did do is make the gap " +
+				"impossible to ignore, and this is that half kept. READ THIS BEFORE TELLING " +
+				"SOMEBODY A CATALOGUE IS FINISHED: a gap here is invisible in the shop, " +
+				"because a reader is shown the language that exists and nothing says it was " +
+				"not the one they asked for. It reads the catalogues AS THEY STAND rather " +
+				"than their releases, unlike the two reports beside it, because it is a list " +
+				"of work to do — computed from the same input a publish is, so it says " +
+				"exactly what the next publish would have to live with. A product named in no " +
+				"language at all is not here: that one is still refused at publish.",
+			InputSchema: noArgs(),
+			Handler: func(c *Client, _ map[string]any) (string, error) {
+				return asText(c.get("/api/v1/catalog-products/translation-gaps"))
 			},
 		},
 		{
@@ -329,7 +393,7 @@ func catalogTools() []Tool {
 		{
 			Name: "atlas_publish_catalog",
 			Description: "Publish a catalogue: validate it and freeze a release, which is the " +
-				"immutable thing an order names. Until a catalogue has one, the portal shows it to " +
+				"immutable thing an order names. Until a catalogue has one, the shop shows it to " +
 				"nobody; after one, editing the catalogue changes the NEXT release and not what is " +
 				"being ordered today. A refused publish WRITES NOTHING and answers with every " +
 				"problem at once (422) — each naming the catalogue or the product it belongs to — " +
@@ -353,7 +417,7 @@ func catalogTools() []Tool {
 			Description: "List a catalogue's releases, newest first. A release is frozen: it " +
 				"carries the products, edges, approval rules, ceilings and prices as they stood " +
 				"when it was published, which is what lets an order placed last month stay " +
-				"answerable after this month's edits. Read this to see what the portal is actually " +
+				"answerable after this month's edits. Read this to see what the shop is actually " +
 				"offering, as opposed to what the catalogue currently says.",
 			InputSchema: catalogIDArg("The catalogue whose releases to list."),
 			Handler: func(c *Client, args map[string]any) (string, error) {
@@ -362,6 +426,28 @@ func catalogTools() []Tool {
 					return "", err
 				}
 				return asText(c.get(withID(id, "/releases")))
+			},
+		},
+		{
+			Name: "atlas_catalog_unpublished",
+			Description: "What publishing this catalogue would change for the people ordering: " +
+				"products it would ADD, products the shop is STILL OFFERING that it would take " +
+				"away, and products EDITED since the release being served. Ask it before and " +
+				"after editing a catalogue. The second group is the one worth the call: a " +
+				"product dropped from a catalogue is gone from every listing at once and the " +
+				"release goes on offering it, so nothing else you can read says it is still on " +
+				"the shop. \"Edited\" is decided on the record's revision and not on a " +
+				"comparison of fields, so a save that changed nothing still counts — the remedy " +
+				"is atlas_publish_catalog, which loses nothing. A product offered here but homed " +
+				"in a catalogue you do not maintain is never reported as edited, because you " +
+				"cannot read it to compare.",
+			InputSchema: catalogIDArg("The catalogue to compare against its newest release."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get(withID(id, "/unpublished")))
 			},
 		},
 		{

@@ -54,6 +54,12 @@ type Service struct {
 	// reference unresolvable reports the whole catalogue as broken, and every one
 	// resolvable reports a clean estate nobody checked.
 	Approvers ApproverLookup
+
+	// Processes answers what is deployed and what is worked, for the report in
+	// fulfilmentreport.go. Settable for Approvers' reason and nil for Approvers'
+	// reason: the deployments and the workers belong to the server, and a Service
+	// built without them refuses the report rather than guessing at it.
+	Processes ProcessLookup
 }
 
 // New builds the service. Every dependency is an explicit argument (ADR-0147).
@@ -171,7 +177,7 @@ func decodeBody(r *http.Request, into any) error {
 
 // HandleListCatalogs lists the catalogues the caller maintains, lowest rank
 // first. It is the maintenance sight, not the portal one: being the audience for
-// a catalogue puts nothing in this list, and GET /portal/catalog answers that
+// a catalogue puts nothing in this list, and GET /shop/catalog answers that
 // question instead. A customer must not learn from a listing which other
 // customers exist.
 func (s *Service) HandleListCatalogs(w http.ResponseWriter, r *http.Request) {
@@ -201,6 +207,12 @@ func (s *Service) HandleCreateCatalog(w http.ResponseWriter, r *http.Request) {
 	var in Catalog
 	if err := decodeBody(r, &in); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// Refused here and never on the way out: an installation already carrying a
+	// tag that is not one has to be able to open the catalogue and correct it.
+	if why := LanguageListProblem(in.Languages); why != "" {
+		httpapi.Error(w, http.StatusBadRequest, why)
 		return
 	}
 	id, err := newID("cat")
@@ -283,6 +295,17 @@ func (s *Service) HandleUpdateCatalog(w http.ResponseWriter, r *http.Request) {
 	if err := decodeBody(r, &in); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
+	}
+
+	// Before the authority check and before the loop, because it is a statement
+	// about the request and needs nothing that is stored. This is the way the live
+	// bad tag was actually written: the catalogue existed first and the language
+	// was added later.
+	if in.Languages != nil {
+		if why := LanguageListProblem(in.Languages); why != "" {
+			httpapi.Error(w, http.StatusBadRequest, why)
+			return
+		}
 	}
 
 	p := httpapi.PrincipalFrom(r.Context())

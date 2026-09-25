@@ -655,6 +655,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 	// mean anything — a nameless entry, or the same name twice — fails the deploy, for
 	// the same reason a malformed TTL does: it would otherwise index nothing and look
 	// like it was working.
+	var searchableNames, personalNames []string
 	if raw := strings.TrimSpace(proc.Searchable); raw != "" {
 		seen := make(map[string]bool)
 		var names []string
@@ -669,7 +670,68 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			seen[name] = true
 			names = append(names, name)
 		}
+		searchableNames = names
 		b.SetSearchableVariables(names)
+	}
+	// The personal variable names (ADR-0314), resolved at deploy time for the same
+	// reason and refused for the same reasons: a nameless entry or a repeated one would
+	// protect nothing while looking like it was working.
+	if raw := strings.TrimSpace(proc.Personal); raw != "" {
+		seen := make(map[string]bool)
+		var names []string
+		for _, part := range strings.Split(raw, ",") {
+			name := strings.TrimSpace(part)
+			if name == "" {
+				return nil, fmt.Errorf("compiler: process %q: personal %q has an empty variable name", proc.Id, proc.Personal)
+			}
+			if seen[name] {
+				return nil, fmt.Errorf("compiler: process %q: personal names %q twice", proc.Id, name)
+			}
+			seen[name] = true
+			names = append(names, name)
+		}
+		personalNames = names
+		b.SetPersonalVariables(names)
+	}
+	// The data subject: which variable holds the id of the person the personal
+	// variables are about. ADR-0314 says a value is enciphered "under that data key"
+	// without saying how an instance knows whose key that is, and the answer cannot be
+	// left implicit — enciphering under the wrong subject's key makes an erasure either
+	// ineffective (the wrong key is destroyed) or too broad (somebody else's data goes
+	// with it).
+	//
+	// It is declared rather than derived from the instance's initiator, because the one
+	// real process that needed this — an account order — carries the data of a person
+	// who is *not* yet a principal in Atlas at all, and orders one account on behalf of
+	// another person as a matter of course. Neither the starter nor any convention
+	// identifies the subject; only the model knows.
+	if raw := strings.TrimSpace(proc.DataSubject); raw != "" {
+		if strings.Contains(raw, ",") {
+			return nil, fmt.Errorf("compiler: process %q: dataSubject %q names more than one variable: a value is enciphered under exactly one subject's key, so two subjects would mean two keys and no defined erasure (ADR-0314)", proc.Id, proc.DataSubject)
+		}
+		if len(personalNames) == 0 {
+			return nil, fmt.Errorf("compiler: process %q: dataSubject %q is declared but no variable is declared personal: the declaration would encipher nothing. Declare atlas:personal=\"…\" or drop atlas:dataSubject (ADR-0314)", proc.Id, raw)
+		}
+		for _, name := range personalNames {
+			if name == raw {
+				return nil, fmt.Errorf("compiler: process %q: dataSubject %q is itself declared personal: the variable that says whose key opens a value cannot be enciphered under that key, because nothing would be left to look the key up by. A subject id is a reference and stays in the clear (ADR-0314)", proc.Id, raw)
+			}
+		}
+		b.SetDataSubjectVariable(raw)
+	} else if len(personalNames) > 0 {
+		return nil, fmt.Errorf("compiler: process %q: %d variable(s) are declared personal but no atlas:dataSubject says whose data it is: an enciphered value belongs to one person, and without the variable holding that person's id there is no key to encipher under and nothing to destroy on an erasure request. Declare atlas:dataSubject=\"…\" (ADR-0314)", proc.Id, len(personalNames))
+	}
+	// Personal and searchable are mutually exclusive, and this is decidable here. The
+	// index stores what the engine sees, which for a declared variable is ciphertext
+	// under a random nonce: two writes of the same name produce different bytes, so an
+	// exact-match search can never match and a range never order. The declaration would
+	// be a promise the mechanism cannot keep.
+	for _, p := range personalNames {
+		for _, sv := range searchableNames {
+			if p == sv {
+				return nil, fmt.Errorf("compiler: process %q: %q is declared both personal and searchable: a personal value is indexed as ciphertext under a random nonce, so no search could ever match it. Search on a reference — the data subject's id is one — instead (ADR-0314, ADR-0244)", proc.Id, p)
+			}
+		}
 	}
 	ids := make(map[string]int32, len(proc.StartEvents)+len(proc.ServiceTasks)+len(proc.EndEvents))
 	reg := &registrar{b: b, ids: ids, docs: docs, agentParams: agentParams}
@@ -1363,6 +1425,22 @@ type xmlProcess struct {
 	// for these names, because indexing every value would double the write path and
 	// index JSON blobs. Empty = nothing indexed, and the process pays nothing.
 	Searchable string `xml:"searchable,attr"`
+	// Personal is a comma-separated list of variable names holding personal data
+	// (ADR-0314). Same shape and same place as Searchable, because that record asks for
+	// a list rather than a mechanism. A declared variable is *payload*: it may be
+	// written, carried and handed to a worker, and it may not be read by any expression
+	// — see personalRefusal. Empty = nothing declared, and the process pays nothing.
+	Personal string `xml:"personal,attr"`
+	// DataSubject names the one variable holding the id of the person the personal
+	// variables are about (ADR-0314). It is what the enciphering edge looks the data
+	// key up by, so a process that declares personal data must declare it: a value
+	// enciphered under nobody's key could never be erased, and erasure is the entire
+	// point.
+	//
+	// Its own value stays in the clear — it is a reference, which is the record's
+	// primary defence rather than something to hide — so it may be routed on, matched
+	// and indexed like any other variable.
+	DataSubject string `xml:"dataSubject,attr"`
 
 	xmlFlowContent // the process root's flow nodes and sequence flows
 

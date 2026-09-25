@@ -378,6 +378,15 @@ type Server struct {
 	// own mutex thereafter.
 	remoteNodes *remoteNodeCache
 
+	// remoteLandscapes is what peer Atlas servers last said about their own derived
+	// landscapes (ADR-0402, the estate altitude). A
+	// second cache rather than a second field on the first one, because the two reads
+	// cost different amounts and fail independently: a starmap this server's credential
+	// may not read must not expire a descriptor that answered, or the estate would
+	// report a healthy peer as gone. Same lifetime rules as remoteNodes otherwise —
+	// set once before Handler is mounted, mutated under its own mutex.
+	remoteLandscapes *remoteLandscapeCache
+
 	// panoramaMesh is Panorama's derived landscape altitude (ADR-0211): a graph
 	// computed from this server's own resources, never stored. Separate from the
 	// model library above because declared intent and derived fact must not share
@@ -749,6 +758,18 @@ type Server struct {
 	// documents and the WWW-Authenticate challenge build their absolute URLs from;
 	// empty means derive them from the request (ADR-0200).
 	externalURL string
+
+	// selfURL is how this process reaches its own HTTP server — the address its
+	// supervised workers are told to work for (cmd/atlas: internalURL), which is a
+	// loopback origin and, where this server terminates TLS, a plaintext loopback
+	// port nothing outside the process can use.
+	//
+	// The shipped system processes need it: they do their work by calling Atlas's
+	// own API, and a model cannot carry an installation's address. externalURL is
+	// the wrong value for that — it is set only when an operator states one, and a
+	// request built on an empty base fails silently, which is the defect the
+	// fulfilment report exists to surface.
+	selfURL string
 
 	// oidc is the identity provider people may sign in with, when an operator
 	// configured one (WithOIDC, ADR-0210). Nil is the
@@ -1383,17 +1404,18 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// built from it rather than owning it.
 	quit := make(chan struct{})
 	s := &Server{
-		proc:        proc,
-		store:       store,
-		dataDir:     dataDir,
-		limits:      limits.Default(), // WithLimits overrides; there is no "no budget"
-		remoteNodes: newRemoteNodeCache(),
-		quit:        quit,
-		runLoop:     runloop.New(quit),
-		deployments: map[uint64]*deployment{},
-		nextKey:     1,
-		versions:    map[string]int32{},
-		deploys:     ds,
+		proc:             proc,
+		store:            store,
+		dataDir:          dataDir,
+		limits:           limits.Default(), // WithLimits overrides; there is no "no budget"
+		remoteNodes:      newRemoteNodeCache(),
+		remoteLandscapes: newRemoteLandscapeCache(),
+		quit:             quit,
+		runLoop:          runloop.New(quit),
+		deployments:      map[uint64]*deployment{},
+		nextKey:          1,
+		versions:         map[string]int32{},
+		deploys:          ds,
 
 		// Its own group: gofmt aligns a literal's contiguous run, and folding these
 		// into the one above would rewrite every line of it for no change in meaning.
@@ -1578,6 +1600,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		// reach would put an internal address in a mail to somebody who cannot
 		// resolve it.
 		func() string { return s.externalURL },
+		func() string { return s.selfURL },
 		// The inventory. A right the portal granted is engine state, not order
 		// state, because it outlives the order: the instance that produced it is
 		// eligible for retention deletion long before the right ends, and a record
@@ -1722,6 +1745,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// The catalogue can now say which approval rules reach nobody. It asks; the
 	// accounts and the groups are the server's, and this is where the two meet.
 	s.catalogs.Approvers = approverLookup{s: s}
+	s.catalogs.Processes = processLookup{s: s}
 	s.orders.Limits = s.budgets()
 	s.capabilities.Limits = s.budgets()
 	s.playground.Limits = s.budgets()
@@ -2553,6 +2577,18 @@ func WithOffloadedConnectorKinds(kinds []string) Option {
 	return func(s *Server) { s.offloadedKinds = kinds }
 }
 
+// WithSelfURL tells the server how it reaches its own HTTP API, so the shipped
+// system processes can call it.
+//
+// An Option, so it comes from the process's own command line and from nowhere
+// else: a request must not be able to point the engine's own orchestration at
+// another server. Empty is a real state — a Server built by a test that never
+// runs the fulfilment loop has none — and the models then build a request on an
+// empty base, which fails the call rather than sending it somewhere else.
+func WithSelfURL(url string) Option {
+	return func(s *Server) { s.selfURL = strings.TrimRight(strings.TrimSpace(url), "/") }
+}
+
 // WithSupervisedWorkers asks the server to run these workers itself: one child
 // process per entry, restarted while the server lives (ADR-0157 step 7).
 //
@@ -2655,10 +2691,29 @@ func (s *Server) drive() error {
 		// The slow part, with nobody waiting on it: a handler makes the outbound call
 		// a worker exists for, and the caller that dispatched this round is the only
 		// one that waits for it.
-		outcomes := s.jobRunner.Work(jobs, view)
+		// The round's handlers see plaintext for a declared personal value: every
+		// connector resolves its expressions over this reader, and ADR-0314 sends the
+		// transforms that combine personal values into the worker precisely because the
+		// plaintext exists there for the duration of one call. Wrapping happens here,
+		// off the run loop, so the vault read is off it too.
+		outcomes := s.jobRunner.Work(jobs, s.personalReader(view))
 		_ = view.Close()
 		if len(outcomes) == 0 {
 			return nil // nothing this runner serves; the rest is an external worker's
+		}
+		// What a handler returns is a worker result landing a job's output, which is
+		// ADR-0314's in edge as much as an external worker's HTTP completion is — and it
+		// does not pass through that endpoint, so it is sealed here, off the loop, before
+		// Submit turns it into a command. A failure to seal fails the job: writing the
+		// plaintext instead would put an un-erasable value in the log, which is the one
+		// outcome this mechanism exists to prevent.
+		for i := range outcomes {
+			if outcomes[i].Err != nil || len(outcomes[i].Completion.Outputs) == 0 {
+				continue
+			}
+			if sealErr := s.encipherJobVars(outcomes[i].Job.Key, outcomes[i].Completion.Outputs); sealErr != nil {
+				outcomes[i].Err = sealErr
+			}
 		}
 		s.driveMu.Lock()
 		s.do(func() { s.jobRunner.Submit(outcomes) })
@@ -3174,6 +3229,19 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// A preflight carries no credentials by definition, so it is public with them.
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/forms/{token}/schema", s.handlePublicFormPreflight)
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/forms/{token}/start", s.handlePublicFormPreflight)
+
+	// The shop was called the portal and lived at /portal.html. The address was
+	// bookmarked, pasted into mails and printed on intranet pages, none of which a
+	// rename reaches, so the old one keeps leading to the new one rather than to a
+	// 404 that reads as the service having been switched off. The query is kept:
+	// it is where a returning sign-in says how it went.
+	mountFunc(accessPublic, roleAny, "GET /portal.html", func(w http.ResponseWriter, r *http.Request) {
+		to := "/shop.html"
+		if r.URL.RawQuery != "" {
+			to += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, to, http.StatusMovedPermanently)
+	})
 
 	// The embedded UI is the catch-all; the more specific patterns above win under
 	// net/http's precedence rules. Static assets, and the login screen has to load.

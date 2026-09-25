@@ -1,0 +1,17 @@
+{
+  "type": "default",
+  "id": "pe-start",
+  "components": [
+    {
+      "type": "text",
+      "text": "# Produkt erfassen\n\nDieser Ablauf schreibt über Atlas' **eigene HTTP-API** zurück — Kataloge lesen, das Produkt sichern, den Katalog ergänzen, publizieren.\n\nEin Modell kann die Adresse seiner Installation nicht in sich tragen, und dieser Ablauf wird von Hand gestartet, hat also niemanden, der sie mitgäbe. Deshalb diese eine Angabe.\n\n**Voraussetzung beim Betreiber:** ein API-Token mit Katalogpflege-Recht unter `ATLAS_CONNECTOR_ATLAS_TOKEN`. Fehlt es, antwortet die API mit 401 und der erste Schritt meldet einen Incident."
+    },
+    {
+      "key": "atlasApiBase",
+      "type": "textfield",
+      "label": "Adresse dieses Atlas",
+      "description": "Ohne Schrägstrich am Ende, z. B. https://atlas.example.ch",
+      "validate": { "required": true }
+    }
+  ]
+}

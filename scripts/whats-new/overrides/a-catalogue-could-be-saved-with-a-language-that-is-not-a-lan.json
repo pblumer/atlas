@@ -1,0 +1,23 @@
+{
+  "tags": ["Service catalogue", "Shop"],
+  "title": {
+    "en": "The language switch works again in every catalogue",
+    "de": "Die Sprachumschaltung wirkt wieder in jedem Katalog"
+  },
+  "summary": {
+    "en": "A catalogue says which languages it is kept in, as a list. Until now nothing checked that the entries were language tags, and one installation saved a catalogue whose single language was written \"de; en\" — one entry containing a separator, typed where a comma was expected. Everything after that behaved correctly and the result was total: the product form drew one box labelled \"de; en\", both names were typed into it, and the portal, looking for German and for English, found neither and showed whatever it had. Switching the language did nothing at all, for every product in that catalogue, in both languages, and no screen anywhere said why. It was noticed weeks later, two screens away from where it was caused. A language is now checked as it is typed: de, en, de-CH, zh-Hans. Only as it is typed — a catalogue that already carries a bad entry can still be opened, edited and published, because otherwise the installation with the problem would be the one locked out of fixing it. Nothing is corrected automatically either: \"de; en\" can be read two ways and only the person who typed it knows which, and guessing is what hid the fault in the first place. A language listed twice is refused as well, because it would draw two boxes writing the same thing, where the second quietly wins.",
+    "de": "Ein Katalog nennt die Sprachen, in denen er geführt wird, als Liste. Bisher prüfte nichts, ob die Einträge Sprachkürzel sind, und in einer Installation wurde ein Katalog gespeichert, dessen einzige Sprache «de; en» hiess — ein Eintrag mit einem Trennzeichen, getippt, wo ein Komma erwartet wurde. Alles danach verhielt sich korrekt, und die Wirkung war vollständig: Die Produktmaske zeichnete ein Feld mit der Beschriftung «de; en», beide Namen wurden hineingeschrieben, und das Portal, das nach Deutsch und nach Englisch suchte, fand keines von beiden und zeigte, was es hatte. Die Sprachumschaltung bewirkte nichts, für jedes Produkt dieses Katalogs, in beiden Sprachen, und kein Bildschirm nannte den Grund. Bemerkt wurde es Wochen später, zwei Bildschirme von der Ursache entfernt. Eine Sprache wird jetzt beim Eintippen geprüft: de, en, de-CH, zh-Hans. Nur beim Eintippen — ein Katalog, der bereits einen falschen Eintrag trägt, lässt sich weiterhin öffnen, bearbeiten und publizieren, weil sonst ausgerechnet die betroffene Installation von ihrer eigenen Korrektur ausgesperrt wäre. Automatisch korrigiert wird ebenfalls nichts: «de; en» lässt zwei Lesarten zu, und nur wer es getippt hat, weiss welche; Raten ist genau das, was den Fehler verborgen hat. Eine doppelt genannte Sprache wird ebenfalls abgelehnt, denn sie zeichnete zwei Felder, die dasselbe schreiben, wobei das zweite still gewinnt."
+  },
+  "tutorial": {
+    "en": [
+      "Open Catalogue in the console and choose a catalogue.",
+      "Check the language list: one tag per entry, separated by commas.",
+      "Correct anything that is not a tag, save, and publish."
+    ],
+    "de": [
+      "In der Konsole den Katalog öffnen und einen Katalog wählen.",
+      "Die Sprachliste prüfen: ein Kürzel je Eintrag, durch Komma getrennt.",
+      "Was kein Kürzel ist, korrigieren, speichern und publizieren."
+    ]
+  }
+}

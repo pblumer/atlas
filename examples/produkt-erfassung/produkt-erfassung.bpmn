@@ -1,0 +1,414 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Produkt erfassen — vom Katalog bis zur Publikation
+
+  Ein Produkt anzulegen heisst heute: die Konsole öffnen, ein Formular mit
+  zwanzig Feldern ausfüllen, speichern, und darauf vertrauen, dass jemand
+  nachschaut. Dieser Prozess macht dasselbe als Ablauf mit Aufgaben — und
+  gewinnt damit das, was ein Formular nicht hat: eine Prüfung durch eine zweite
+  Ansicht, bevor das Produkt bestellbar wird, und eine Spur, wer was wann
+  entschieden hat.
+
+  Er schreibt ausschliesslich über Atlas' eigene HTTP-API zurück, mit dem
+  rest-Connector und der Verbindung "atlas" — derselbe Weg, den der
+  mitgelieferte Auftragserfüllungsprozess geht. Siehe README.md: ohne diese
+  Verbindung parken die Service-Tasks.
+
+  Ablauf
+
+    Start
+     -> Kataloge holen                (GET  /api/v1/catalogs)
+     -> Produkte holen                (GET  /api/v1/catalog-products)
+     -> Erfassung                     (Formular pe-erfassung: Katalog, Produkt,
+                                       Zusammenstellung und Preise in EINER Aufgabe)
+     -> neuer Katalog?  ja: anlegen   (POST /api/v1/catalogs)
+                        nein: übernehmen
+     -> Entwurf sichern               (POST /api/v1/catalog-products, state=draft)
+     -> Verifizieren                  (Formular pe-pruefen)
+        nein: zurück zur Erfassung
+     -> aktiv setzen                  (POST /api/v1/catalog-products, state=active)
+     -> Katalog frisch lesen          (GET  /api/v1/catalogs/{id})
+     -> Angebot schreiben             (PATCH /api/v1/catalogs/{id})
+     -> neuer Katalog? Erscheinungsbild (Formular pe-theme, Gruppe "administration")
+                        -> Theme setzen (PUT /api/v1/catalogs/{id}/theme)
+     -> Publizieren?                  (Formular pe-publizieren)
+     -> ja: Katalog publizieren       (POST /api/v1/catalogs/{id}/releases)
+
+  Vier Dinge daran sind Entscheidungen und nicht Folgen.
+
+  ERSTENS: Die Erfassung ist EINE Aufgabe und nicht fünf. Katalogwahl,
+  Produktdaten, Zusammenstellung und Preise sind dieselbe Arbeit derselben
+  Person in derselben Sitzung; fünf Aufgaben daraus zu machen hiesse viermal
+  beanspruchen, abschliessen und auf die nächste warten — ein Assistent, der
+  sich wie ein Behördengang anfühlt, und langsamer als das Konsolenformular,
+  das er ersetzen soll. Der Gewinn dieses Prozesses liegt woanders: in der
+  Verifizierung, die eine echte zweite Station ist.
+
+  ZWEITENS: Der Katalog wird erst NACH der Freigabe beschrieben. Ein abgelehntes
+  Produkt gelangt damit gar nicht erst ins Angebot — sonst stünde ein Entwurf in
+  der Item-Liste und jede Freigabe des Katalogs scheiterte an ihm ("state is
+  draft, not active"), bis jemand ihn von Hand entfernt. Es hat noch eine zweite
+  Wirkung: der Schreibvorgang läuft genau einmal, auch wenn die Verifizierung
+  mehrfach zurückschickt, und die Kanten können sich nicht vervielfachen.
+
+  DRITTENS: Vor dem Schreiben am Katalog wird der Katalog frisch gelesen. Ein
+  PATCH ersetzt Items und Edges als Ganzes, und zwischen der Maske und dem
+  Speichern liegen Minuten bis Tage, in denen jemand anderes ein Produkt
+  hinzugefügt haben kann. Ohne den frischen Lesevorgang und die mitgeführte
+  revision wäre dieser Prozess das, wovor der Kommentar am Feld
+  Catalog.Revision warnt: das lautlose Verschwinden fremder Arbeit. Die revision
+  macht daraus eine Absage, die man sieht.
+
+  VIERTENS: Das Erscheinungsbild ist eine eigene Aufgabe für eine andere Gruppe,
+  und sie liegt hinter der Freigabe des Produkts statt davor. Ein Katalog-Theme
+  setzt in Atlas die Administration und nicht die Katalogpflege (ADR-0316,
+  Entscheidung 12) — der Endpunkt antwortet sonst mit 403. Stünde die Aufgabe
+  vorne, wartete eine Produkterfassung auf die Farbwahl einer Administratorin;
+  hier wartet nur die Publikation darauf, und ein neuer Katalog geht nicht
+  ungebrandet live.
+
+  Das Logo wird im Theme-Formular gewählt und geht beim Abschliessen der Aufgabe
+  direkt an den Katalog, ohne je eine Prozessvariable zu werden. Warum nicht als
+  Variable: siehe die Dokumentation am Script-Task "Ziel des Logos benennen".
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             id="defs_produkt_erfassung" targetNamespace="http://atlas/examples">
+  <bpmn:process id="proc_produkt_erfassung" name="Produkt erfassen" isExecutable="true">
+
+    <bpmn:startEvent id="start" name="Erfassung begonnen">
+      <bpmn:documentation>Das Startformular fragt eine einzige Angabe ab: die Adresse dieses Atlas.
+
+Jeder Service-Task hier ruft Atlas' eigene HTTP-API auf, und ein Modell kann die Adresse seiner Installation nicht in sich tragen. Der mitgelieferte Auftragserfüllungsprozess bekommt sie vom Server mitgegeben, weil der Server ihn startet; dieser Prozess wird von Hand gestartet und hat niemanden, der sie mitgäbe.
+
+Voraussetzung beim Betreiber: ein API-Token mit Katalogpflege-Recht, hinterlegt unter ATLAS_CONNECTOR_ATLAS_TOKEN (ADR-0041). Ohne dieses Token antwortet die API mit 401, der Job scheitert und meldet einen Incident — sichtbar, statt stumm zu parken.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:formDefinition formId="pe-start"/>
+      </bpmn:extensionElements>
+      <bpmn:outgoing>f_start_kataloge</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="f_start_kataloge" sourceRef="start" targetRef="kataloge"/>
+
+    <bpmn:serviceTask id="kataloge" name="Kataloge holen">
+      <bpmn:documentation>GET /api/v1/catalogs. Füllt die Auswahlliste der Erfassungsmaske.
+
+Vor der Maske und nicht in ihr: ein Startformular kann nichts laden, und eine Liste, in die man die Katalog-Id von Hand tippt, ist eine Liste, in der man sich vertippt.
+
+Schreibt: kataloge.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:restConnector method="GET"
+          url="=atlasApiBase + &#34;/api/v1/catalogs&#34;"
+          resultVariable="kataloge"
+          authType="bearer" authSecret="atlas"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_start_kataloge</bpmn:incoming>
+      <bpmn:outgoing>f_kataloge_produkte</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_kataloge_produkte" sourceRef="kataloge" targetRef="produkte"/>
+
+    <bpmn:serviceTask id="produkte" name="Bestehende Produkte holen">
+      <bpmn:documentation>GET /api/v1/catalog-products. Füllt die beiden Listen der Zusammenstellung.
+
+Schreibt: produkte.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:restConnector method="GET"
+          url="=atlasApiBase + &#34;/api/v1/catalog-products&#34;"
+          resultVariable="produkte"
+          authType="bearer" authSecret="atlas"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_kataloge_produkte</bpmn:incoming>
+      <bpmn:outgoing>f_produkte_erfassung</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_produkte_erfassung" sourceRef="produkte" targetRef="erfassung"/>
+
+    <bpmn:userTask id="erfassung" name="Produkt erfassen">
+      <bpmn:documentation>Eine Aufgabe für die ganze Erfassung: Katalog, Produktdaten, Zusammenstellung, Preise.
+
+Die Rückkehr aus der Verifizierung landet wieder hier, mit allem Erfassten im Formular. Der Katalogteil ist dann ausgeblendet — er steht bereits fest, und eine zweite Wahl würde einen zweiten Katalog anlegen.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="katalogpflege"/>
+        <zeebe:formDefinition formId="pe-erfassung"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_produkte_erfassung</bpmn:incoming>
+      <bpmn:incoming>f_zurueck_erfassung</bpmn:incoming>
+      <bpmn:outgoing>f_erfassung_gw</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="f_erfassung_gw" sourceRef="erfassung" targetRef="gw_katalog"/>
+
+    <bpmn:exclusiveGateway id="gw_katalog" name="Katalog anlegen?" default="f_katalog_bestehend">
+      <bpmn:incoming>f_erfassung_gw</bpmn:incoming>
+      <bpmn:outgoing>f_katalog_neu</bpmn:outgoing>
+      <bpmn:outgoing>f_katalog_bestehend</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="f_katalog_neu" name="neu, und noch nicht angelegt" sourceRef="gw_katalog" targetRef="katalog_anlegen">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= katalogart = "neu" and katalogId = null</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_katalog_bestehend" name="steht schon" sourceRef="gw_katalog" targetRef="katalog_uebernehmen"/>
+
+    <bpmn:serviceTask id="katalog_anlegen" name="Katalog anlegen">
+      <bpmn:documentation>POST /api/v1/catalogs mit Name, Sprachen und Rang.
+
+Die Bedingung am Gateway fragt zusätzlich, ob katalogId noch leer ist. Ohne das legte die Rückkehr aus der Verifizierung jedes Mal einen weiteren Katalog an — eine nicht gesetzte Variable liest sich in FEEL als null, also trifft die Bedingung genau beim ersten Durchlauf zu.
+
+Schreibt: katalogId, katalogNeu.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:restConnector method="POST"
+          url="=atlasApiBase + &#34;/api/v1/catalogs&#34;"
+          resultVariable="angelegt"
+          authType="bearer" authSecret="atlas"/>
+        <zeebe:ioMapping>
+          <zeebe:input source="=rang" target="rank"/>
+          <zeebe:input source="=sprachenListe" target="languages"/>
+          <zeebe:input source="={de: katalogname}" target="texts"/>
+          <zeebe:output source="=angelegt.id" target="katalogId"/>
+          <zeebe:output source="=true" target="katalogNeu"/>
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_katalog_neu</bpmn:incoming>
+      <bpmn:outgoing>f_anlegen_entwurf</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_anlegen_entwurf" sourceRef="katalog_anlegen" targetRef="katalog_steht"/>
+
+    <bpmn:scriptTask id="katalog_uebernehmen" name="Katalog übernehmen">
+      <bpmn:documentation>Der bereits gewählte oder der beim ersten Durchlauf angelegte. Beides in einem Ausdruck, damit die Rückkehr aus der Verifizierung nicht auf einen leeren Wert trifft, wenn ursprünglich "neu" gewählt wurde.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script resultVariable="katalogId" expression="= if katalogId != null then katalogId else gewaehlterKatalog"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_katalog_bestehend</bpmn:incoming>
+      <bpmn:outgoing>f_uebernehmen_steht</bpmn:outgoing>
+    </bpmn:scriptTask>
+    <bpmn:sequenceFlow id="f_uebernehmen_steht" sourceRef="katalog_uebernehmen" targetRef="katalog_steht"/>
+
+    <bpmn:exclusiveGateway id="katalog_steht" name="Katalog steht">
+      <bpmn:incoming>f_anlegen_entwurf</bpmn:incoming>
+      <bpmn:incoming>f_uebernehmen_steht</bpmn:incoming>
+      <bpmn:outgoing>f_steht_entwurf</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="f_steht_entwurf" sourceRef="katalog_steht" targetRef="entwurf_sichern"/>
+
+    <bpmn:serviceTask id="entwurf_sichern" name="Produkt als Entwurf sichern">
+      <bpmn:documentation>POST /api/v1/catalog-products mit state=draft. Ein Speichern ist ein vollständiges Ersetzen, deshalb reist alles Erfasste mit — ein Feld, das hier fehlt, wäre ein Feld, das dieser Schritt löscht.
+
+Die Suchbegriffe werden beschnitten und leere Einträge fallen weg: split lässt das Leerzeichen hinter dem Komma stehen, und " M365" wäre ein Begriff, den niemand findet.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:restConnector method="POST"
+          url="=atlasApiBase + &#34;/api/v1/catalog-products&#34;"
+          authType="bearer" authSecret="atlas"/>
+        <zeebe:ioMapping>
+          <zeebe:input source="=produktId" target="id"/>
+          <zeebe:input source="=katalogId" target="homeCatalog"/>
+          <zeebe:input source="=&#34;draft&#34;" target="state"/>
+          <zeebe:input source="={de: nameDe, fr: nameFr}" target="texts"/>
+          <zeebe:input source="={de: beschreibungDe, fr: beschreibungFr}" target="descriptions"/>
+          <zeebe:input source="=kategorie" target="category"/>
+          <zeebe:input source="=produktgruppe" target="productGroup"/>
+          <zeebe:input source="=if suchbegriffe = null then [] else (for s in split(suchbegriffe, &#34;,&#34;) return replace(s, &#34;^\s+|\s+$&#34;, &#34;&#34;))[item != &#34;&#34;]" target="keywords"/>
+          <zeebe:input source="={kind: genehmigungsart, ref: genehmigungsref}" target="approval"/>
+          <zeebe:input source="=provisionProzess" target="provisionProcess"/>
+          <zeebe:input source="=deprovisionProzess" target="deprovisionProcess"/>
+          <zeebe:input source="=mehrfach" target="multipleAllowed"/>
+          <zeebe:input source="=preis" target="price"/>
+          <zeebe:input source="=maxTage" target="maxDays"/>
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_steht_entwurf</bpmn:incoming>
+      <bpmn:outgoing>f_entwurf_pruefen</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_entwurf_pruefen" sourceRef="entwurf_sichern" targetRef="pruefen"/>
+
+    <bpmn:userTask id="pruefen" name="Produkt verifizieren">
+      <bpmn:documentation>Die Aufgabe, für die es diesen Prozess gibt. Alles Erfasste steht hier noch einmal und ist noch einmal änderbar; erst die Freigabe macht das Produkt bestellbar und nimmt es ins Angebot des Katalogs auf.
+
+Bewusst dieselbe Gruppe wie die Erfassung: wer ein Vier-Augen-Prinzip will, setzt hier eine andere Gruppe ein. Das ist eine Frage der Organisation und keine, die ein Beispiel für jemanden beantwortet.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="katalogpflege"/>
+        <zeebe:formDefinition formId="pe-pruefen"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_entwurf_pruefen</bpmn:incoming>
+      <bpmn:outgoing>f_pruefen_gw</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="f_pruefen_gw" sourceRef="pruefen" targetRef="gw_pruefen"/>
+
+    <bpmn:exclusiveGateway id="gw_pruefen" name="Freigegeben?" default="f_zurueck_erfassung">
+      <bpmn:incoming>f_pruefen_gw</bpmn:incoming>
+      <bpmn:outgoing>f_freigegeben</bpmn:outgoing>
+      <bpmn:outgoing>f_zurueck_erfassung</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="f_freigegeben" name="ja" sourceRef="gw_pruefen" targetRef="aktiv_setzen">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= freigegeben = true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_zurueck_erfassung" name="nein, überarbeiten" sourceRef="gw_pruefen" targetRef="erfassung"/>
+
+    <bpmn:serviceTask id="aktiv_setzen" name="Produkt aktiv setzen">
+      <bpmn:documentation>POST /api/v1/catalog-products mit state=active. Erst jetzt kann eine Freigabe des Katalogs das Produkt tragen: publish weist jedes Item zurück, dessen Zustand nicht "active" ist.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:restConnector method="POST"
+          url="=atlasApiBase + &#34;/api/v1/catalog-products&#34;"
+          authType="bearer" authSecret="atlas"/>
+        <zeebe:ioMapping>
+          <zeebe:input source="=produktId" target="id"/>
+          <zeebe:input source="=katalogId" target="homeCatalog"/>
+          <zeebe:input source="=&#34;active&#34;" target="state"/>
+          <zeebe:input source="={de: nameDe, fr: nameFr}" target="texts"/>
+          <zeebe:input source="={de: beschreibungDe, fr: beschreibungFr}" target="descriptions"/>
+          <zeebe:input source="=kategorie" target="category"/>
+          <zeebe:input source="=produktgruppe" target="productGroup"/>
+          <zeebe:input source="=if suchbegriffe = null then [] else (for s in split(suchbegriffe, &#34;,&#34;) return replace(s, &#34;^\s+|\s+$&#34;, &#34;&#34;))[item != &#34;&#34;]" target="keywords"/>
+          <zeebe:input source="={kind: genehmigungsart, ref: genehmigungsref}" target="approval"/>
+          <zeebe:input source="=provisionProzess" target="provisionProcess"/>
+          <zeebe:input source="=deprovisionProzess" target="deprovisionProcess"/>
+          <zeebe:input source="=mehrfach" target="multipleAllowed"/>
+          <zeebe:input source="=preis" target="price"/>
+          <zeebe:input source="=maxTage" target="maxDays"/>
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_freigegeben</bpmn:incoming>
+      <bpmn:outgoing>f_aktiv_lesen</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_aktiv_lesen" sourceRef="aktiv_setzen" targetRef="katalog_lesen"/>
+
+    <bpmn:serviceTask id="katalog_lesen" name="Katalog frisch lesen">
+      <bpmn:documentation>GET /api/v1/catalogs/{id}. Holt Items, Edges und vor allem die revision.
+
+Der Schritt sieht überflüssig aus und ist der wichtigste im Prozess. Ein PATCH ersetzt Items und Edges als Ganzes; zwischen der Maske und diesem Punkt liegen Minuten bis Tage, in denen jemand anderes ein Produkt hinzugefügt haben kann. Ohne den frischen Stand schriebe der nächste Schritt einen veralteten zurück und das fremde Produkt wäre weg — ohne Fehler und ohne Spur. Mit der revision wird daraus eine Absage, die jemand sieht.
+
+Schreibt: katalogJetzt.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:restConnector method="GET"
+          url="=atlasApiBase + &#34;/api/v1/catalogs/&#34; + katalogId"
+          resultVariable="katalogJetzt"
+          authType="bearer" authSecret="atlas"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_aktiv_lesen</bpmn:incoming>
+      <bpmn:outgoing>f_lesen_schreiben</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_lesen_schreiben" sourceRef="katalog_lesen" targetRef="katalog_schreiben"/>
+
+    <bpmn:serviceTask id="katalog_schreiben" name="Angebot und Zusammenstellung schreiben">
+      <bpmn:documentation>PATCH /api/v1/catalogs/{id}. Nimmt das freigegebene Produkt ins Angebot und schreibt die Kanten.
+
+composition = integral (immer mitbestellt, nicht abwählbar), aggregation = optional (einzeln bestellbar). Das ist keine Übersetzung, sondern genau der Unterschied, den der Katalog ohnehin führt.
+
+concatenate und nicht append: append hängt eine Liste als EIN Element an und erzeugte damit verschachtelte Kanten, die der Katalog nicht lesen kann.
+
+Hinter der Freigabe und deshalb genau einmal: eine Verifizierung, die mehrfach zurückschickt, kann die Kanten nicht vervielfachen.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:restConnector method="PATCH"
+          url="=atlasApiBase + &#34;/api/v1/catalogs/&#34; + katalogId"
+          authType="bearer" authSecret="atlas"/>
+        <zeebe:ioMapping>
+          <zeebe:input source="=katalogJetzt.revision" target="revision"/>
+          <zeebe:input source="=distinct values(append(katalogJetzt.items, produktId))" target="items"/>
+          <zeebe:input source="=concatenate(katalogJetzt.edges, for t in integraleTeile return {from: produktId, to: t, kind: &#34;composition&#34;}, for t in optionaleTeile return {from: produktId, to: t, kind: &#34;aggregation&#34;})" target="edges"/>
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_lesen_schreiben</bpmn:incoming>
+      <bpmn:outgoing>f_schreiben_gw</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_schreiben_gw" sourceRef="katalog_schreiben" targetRef="gw_theme"/>
+
+    <bpmn:exclusiveGateway id="gw_theme" name="Neuer Katalog?" default="f_kein_theme">
+      <bpmn:incoming>f_schreiben_gw</bpmn:incoming>
+      <bpmn:outgoing>f_theme</bpmn:outgoing>
+      <bpmn:outgoing>f_kein_theme</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="f_theme" name="ja" sourceRef="gw_theme" targetRef="logo_ziel">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= katalogNeu = true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:scriptTask id="logo_ziel" name="Ziel des Logos benennen">
+      <bpmn:documentation>Setzt logoKatalog auf den Katalog, dessen Marke das Bild wird.
+
+Die Aufgabenansicht liest diese Variable und schickt ein im Formular gewähltes Bild beim Abschliessen direkt an /api/v1/catalogs/{id}/logo — mit den Rechten der Person, die abschliesst, und das ist hier eine Administratorin, wie der Endpunkt es verlangt.
+
+Bewusst eine Katalog-Id und keine URL. Eine URL liesse ein Modell jemanden beliebige Anfragen als sich selbst absetzen; eine Id kann nur heissen "dieses Logo auf diesen Katalog", und ob das erlaubt ist, entscheidet weiterhin der Endpunkt.
+
+Die Bytes werden nie eine Prozessvariable: ein halbes Megabyte im Token-Umfang schriebe sich bei jedem folgenden Schritt erneut ins Log (siehe engine/budget.go zu DefaultMaxVariable).</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script resultVariable="logoKatalog" expression="= katalogId"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_theme</bpmn:incoming>
+      <bpmn:outgoing>f_ziel_erfassen</bpmn:outgoing>
+    </bpmn:scriptTask>
+    <bpmn:sequenceFlow id="f_ziel_erfassen" sourceRef="logo_ziel" targetRef="theme_erfassen"/>
+    <bpmn:sequenceFlow id="f_kein_theme" name="bestehend" sourceRef="gw_theme" targetRef="theme_fertig"/>
+
+    <bpmn:userTask id="theme_erfassen" name="Erscheinungsbild festlegen">
+      <bpmn:documentation>Eine eigene Aufgabe für eine andere Gruppe, weil das Theme in Atlas der Administration gehört und nicht der Katalogpflege (ADR-0316, Entscheidung 12).
+
+Sie liegt hinter der Freigabe des Produkts und vor der Publikation: vorne stehend liesse sie eine Produkterfassung auf eine Farbwahl warten, hier wartet nur die Publikation — und ein neuer Katalog geht nicht ungebrandet live.
+
+Das Logo gehört hierher und ist jetzt auch hier. Das gewählte Bild geht beim Abschliessen direkt an den Katalog — es wird keine Prozessvariable, weil ein halbes Megabyte im Token-Umfang bei jedem folgenden Schritt erneut ins Log geschrieben würde.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="administration"/>
+        <zeebe:formDefinition formId="pe-theme"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_ziel_erfassen</bpmn:incoming>
+      <bpmn:outgoing>f_theme_setzen</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="f_theme_setzen" sourceRef="theme_erfassen" targetRef="theme_setzen"/>
+
+    <bpmn:serviceTask id="theme_setzen" name="Theme setzen">
+      <bpmn:documentation>PUT /api/v1/catalogs/{id}/theme.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:restConnector method="PUT"
+          url="=atlasApiBase + &#34;/api/v1/catalogs/&#34; + katalogId + &#34;/theme&#34;"
+          authType="bearer" authSecret="atlas"/>
+        <zeebe:ioMapping>
+          <zeebe:input source="=akzentfarbe" target="accent"/>
+          <zeebe:input source="=schriftart" target="typeface"/>
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_theme_setzen</bpmn:incoming>
+      <bpmn:outgoing>f_setzen_fertig</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_setzen_fertig" sourceRef="theme_setzen" targetRef="theme_fertig"/>
+
+    <bpmn:exclusiveGateway id="theme_fertig" name="Katalog bereit">
+      <bpmn:incoming>f_kein_theme</bpmn:incoming>
+      <bpmn:incoming>f_setzen_fertig</bpmn:incoming>
+      <bpmn:outgoing>f_fertig_fragen</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="f_fertig_fragen" sourceRef="theme_fertig" targetRef="publizieren_fragen"/>
+
+    <bpmn:userTask id="publizieren_fragen" name="Katalog publizieren?">
+      <bpmn:extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="katalogpflege"/>
+        <zeebe:formDefinition formId="pe-publizieren"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_fertig_fragen</bpmn:incoming>
+      <bpmn:outgoing>f_fragen_gw</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="f_fragen_gw" sourceRef="publizieren_fragen" targetRef="gw_publizieren"/>
+
+    <bpmn:exclusiveGateway id="gw_publizieren" name="Publizieren?" default="f_nicht_publizieren">
+      <bpmn:incoming>f_fragen_gw</bpmn:incoming>
+      <bpmn:outgoing>f_publizieren</bpmn:outgoing>
+      <bpmn:outgoing>f_nicht_publizieren</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="f_publizieren" name="ja" sourceRef="gw_publizieren" targetRef="release">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= publizieren = true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_nicht_publizieren" name="nein" sourceRef="gw_publizieren" targetRef="ende"/>
+
+    <bpmn:serviceTask id="release" name="Katalog publizieren">
+      <bpmn:documentation>POST /api/v1/catalogs/{id}/releases. Die Freigabe prüft den ganzen Katalog, nicht nur dieses Produkt — fehlt irgendwo ein Prozess, eine Übersetzung oder eine Beschreibung in einer deklarierten Sprache, antwortet sie mit der Liste der Gründe und der Task meldet einen Incident.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:restConnector method="POST"
+          url="=atlasApiBase + &#34;/api/v1/catalogs/&#34; + katalogId + &#34;/releases&#34;"
+          authType="bearer" authSecret="atlas"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_publizieren</bpmn:incoming>
+      <bpmn:outgoing>f_release_ende</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="f_release_ende" sourceRef="release" targetRef="ende"/>
+
+    <bpmn:endEvent id="ende" name="Produkt erfasst">
+      <bpmn:incoming>f_nicht_publizieren</bpmn:incoming>
+      <bpmn:incoming>f_release_ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+  </bpmn:process>
+</bpmn:definitions>

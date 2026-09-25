@@ -208,7 +208,7 @@ b { font-weight: 600; }
 #drawer-apps a:hover { background: var(--bg); text-decoration: none; }
 #drawer-apps a.active { background: var(--accent-soft); color: var(--accent); }
 #drawer-apps a .soon { margin-left: auto; font-size: 11px; color: var(--muted); font-weight: 500; }
-/* The two portal surfaces are pages of their own and open in their own window, so
+/* The two shop surfaces are pages of their own and open in their own window, so
    the drawer says so before the click rather than after it: an entry that silently
    opens a second window is the same surprise whichever way it is resolved. It is a
    ::after on the attribute that already carries the fact, so nothing has to keep a
@@ -290,6 +290,50 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
   object-fit: contain; background: var(--surface);
 }
 @media (max-width: 760px) { .product-form { grid-template-columns: 1fr; } }
+
+/* ---------- One box per language, side by side ----------
+   Every text a product carries is a map keyed by the catalogue's declared language
+   tags, so the form draws the list rather than a fixed pair: --langs is set inline
+   from that list's length, and a catalogue that adds a fifth language grows a fifth
+   column without anybody editing this rule.
+
+   minmax(0, 1fr) and not 1fr: a grid track's default minimum is its content, so a
+   long untranslated name in one box would push the others out of the card instead
+   of wrapping inside its own.
+
+   Below the breakpoint they stack, because four boxes across a phone are four boxes
+   nobody can type in. */
+.langrow { display: grid; grid-template-columns: repeat(var(--langs, 1), minmax(0, 1fr)); gap: 10px; }
+.langbox { display: block; min-width: 0; }
+.langbox > .langtag {
+  display: block; margin: 0 0 3px;
+  font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted);
+}
+.langbox input, .langbox textarea { width: 100%; box-sizing: border-box; }
+@media (max-width: 760px) { .langrow { grid-template-columns: 1fr; } }
+
+/* ---------- The shapes a product is ordered in ----------
+   One row per shape: a narrow column for the id that never changes, then one equal
+   column per language. --langs is set inline from the catalogue's own list, like
+   the language row above, so a fifth language grows a fifth column.
+
+   The header row is labels rather than a <table>: the grid is a list of inputs and
+   a table would bring cells that have to be styled back into looking like this.
+
+   Below the breakpoint the columns collapse to one, which stacks id and names —
+   readable, and the only shape that fits a phone. */
+.vargrid { display: grid; gap: 6px; }
+.varrow {
+  display: grid;
+  grid-template-columns: minmax(0, 0.6fr) repeat(var(--langs, 1), minmax(0, 1fr));
+  gap: 6px;
+}
+.varrow input { width: 100%; box-sizing: border-box; }
+.varhead {
+  font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted);
+}
+.vargrid + .btn { margin-top: 6px; }
+@media (max-width: 760px) { .varrow { grid-template-columns: 1fr; } }
 
 /* ---------- The product list and the editor beside it ---------- */
 
@@ -4887,12 +4931,21 @@ button.mesh-crumb:focus-visible { outline: 2px solid var(--accent); outline-offs
   width: 68px; padding: 5px 8px; border: 1px solid var(--border-strong); border-radius: 6px;
   background: var(--surface); color: var(--text); font: inherit; font-size: 13px;
 }
-/* Element types: one box per kind on the picture, stacked rather than wrapped into
-   a paragraph of words. A reader ticks these while looking at the canvas, so what
-   matters is that the list can be run down with the eye and that each row is a
-   target big enough to hit — not that it is compact. The heading takes the same
-   muted weight as Show and Depth, because it is the same kind of control. */
+/* Element types, product state and approval: one box per value on the picture,
+   stacked rather than wrapped into a paragraph of words. A reader ticks these while
+   looking at the canvas, so what matters is that the list can be run down with the
+   eye and that each row is a target big enough to hit — not that it is compact. The
+   headings take the same muted weight as Show and Depth, because they are the same
+   kind of control.
+
+   The three lists share one class on purpose. They are one instrument with three
+   scales — tick to show, untick to put down — and giving the facet lists their own
+   look would suggest they answer to a different rule than the boxes above them. */
 .mesh-kinds-head { color: var(--muted); }
+/* Air above a heading that follows a list, so the three groups read as three and
+   not as one long column with words in it. Only between them: the first heading
+   sits under Depth and takes the panel's own spacing. */
+.mesh-kinds + .mesh-kinds-head { margin-top: 8px; }
 .mesh-kinds { display: flex; flex-direction: column; gap: 2px; }
 .mesh-kind {
   display: flex; align-items: center; gap: 6px;
@@ -6457,4 +6510,134 @@ button.im-problem:hover { background: var(--accent-soft); }
 @media (max-width: 900px) {
   .drg-split { grid-template-columns: minmax(0, 1fr); }
   .drg-ov { padding: 10px; }
+}
+
+/* The estate altitude (ADR-0402): one node per domain, drawn on its own
+   canvas while the altitude is new. These rules are additive — nothing the Starmap uses is
+   touched — so a defect here cannot reach the shipped landscape. */
+.estate-root { max-width: 1100px; }
+.estate-picture { margin-top: 16px; padding: 8px; display: flex; justify-content: center; }
+/* The picture is square, because a ring is. It is capped rather than stretched: an estate of
+   three domains spread across a wide screen reads as three unrelated things. */
+.estate-canvas { width: 100%; max-width: 560px; height: auto; }
+.estate-node polygon {
+  fill: var(--surface); stroke: var(--accent); stroke-width: 2;
+}
+/* The domain the reader is standing in is the one they can open, and it says so before it is
+   hovered: the ink the console uses for what is yours. */
+.estate-node[data-local="true"] polygon { stroke: var(--accent-hover); stroke-width: 3; }
+.estate-open { cursor: pointer; }
+.estate-node:focus { outline: none; }
+.estate-node:focus polygon { stroke: var(--accent-hover); stroke-width: 4; }
+/* Severity colours the outline and never the fill, the way the Starmap's do: a fill that
+   changed with a finding would make the kind of thing unreadable at a glance. And unknown is
+   neutral rather than a fourth level of badness — a peer on an older build is an ordinary
+   state of affairs (ADR-0211 §4). */
+.estate-node[data-tone="attention"] polygon { stroke: var(--mesh-attention); }
+.estate-node[data-tone="unknown"] polygon { stroke: var(--muted); stroke-dasharray: 6 4; }
+.estate-holds { font: 600 20px/1 system-ui, sans-serif; fill: var(--text); }
+.estate-name { font: 600 12px/1 system-ui, sans-serif; fill: var(--text); }
+.estate-badge circle { fill: var(--surface); stroke: var(--muted); }
+.estate-badge text { font: 700 11px/1 system-ui, sans-serif; fill: var(--muted); }
+.estate-edge line { stroke: var(--mesh-ink, var(--muted)); stroke-width: 2; }
+.estate-edge-count { font: 600 11px/1 system-ui, sans-serif; fill: var(--muted); }
+.estate-legend { margin-top: 16px; font-size: 13px; line-height: 1.7; }
+.estate-legend p { margin: 0 0 8px; }
+.estate-rows { margin-top: 16px; overflow-x: auto; }
+.estate-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.estate-table th, .estate-table td {
+  text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.estate-table th { font-weight: 600; color: var(--muted); white-space: nowrap; }
+.estate-table .estate-num { text-align: right; }
+/* The state column carries the same three tones as the picture, in text: colour is never the
+   only channel, and this column is the channel that survives a printout. */
+.estate-table td[data-tone="attention"] { color: var(--mesh-attention); }
+.estate-table td[data-tone="unknown"] { color: var(--muted); }
+.estate-reason, .estate-runtime { font-size: 12px; line-height: 1.5; margin-top: 2px; }
+
+/* ---------- Tasks and the top bar on a narrow screen ----------
+   (ADR-0417) The shop's breakpoint,
+   860px, so a phone reads the shop and the inbox the same way: one column.
+
+   The back button is the narrow screen's way from a task to the list, and a wide
+   screen has the list beside the task, so it is hidden there. */
+.tasks-back { display: none; }
+
+/* A tablet: the three panes still fit, but not at their desktop widths. The list
+   keeps a width somebody can scan; the task takes the rest. !important because the
+   list's resizer writes the column widths inline — a width dragged on a desktop
+   is not a width for this screen. */
+@media (max-width: 1180px) and (min-width: 861px) {
+  .tasks { grid-template-columns: 180px 300px 1fr !important; }
+  .tasks-detail { padding: 16px; }
+  .tasks-field { grid-template-columns: 120px 1fr; }
+}
+
+@media (max-width: 860px) {
+  /* The top bar: the view names scroll sideways within it rather than pushing
+     the icons off the screen, and the organisation's name, which the page does
+     not need to be used, gives its place up. */
+  .topbar { gap: 2px; padding: 0 6px; }
+  .topbar .org, .topbar .divider { display: none; }
+  .topnav { flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .topnav::-webkit-scrollbar { display: none; }
+  .topnav a { padding: 0 8px; white-space: nowrap; }
+  .topbar .spacer { display: none; }
+  .icon-btn { width: 36px; height: 36px; flex: 0 0 auto; }
+  main { padding: 12px; }
+
+  /* The inbox and Start: the list, or the task — never both. The grid carries
+     has-selection while something is open. */
+  .tasks, #start-grid { grid-template-columns: 1fr !important; min-height: 0; }
+  /* A grid item is as wide as its content by default, and a row of chips that
+     never wraps is wide: without this the chips widened the whole pane past the
+     screen instead of scrolling inside it. */
+  .tasks > * { min-width: 0; }
+  .tasks-col-resizer { display: none; }
+  .tasks.has-selection > .tasks-folders,
+  .tasks.has-selection > .tasks-list-pane { display: none; }
+  .tasks:not(.has-selection) > .tasks-detail { display: none; }
+  .tasks-back { display: inline-flex; margin: 0 0 12px; }
+
+  /* The folders become one row of chips above the list. */
+  .tasks-folders { padding: 10px; gap: 8px; }
+  .tasks-folders nav { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; gap: 6px; }
+  .tasks-folder { flex: 0 0 auto; white-space: nowrap; }
+  .tasks-list { max-height: none; }
+  .tasks-item { padding: 12px; }
+
+  /* The task: its actions under its name, and each field's label above its value
+     rather than in a 150px column beside it. */
+  .tasks-detail { padding: 14px; }
+  .tasks-detail-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  .tasks-detail-head h1 { font-size: 18px; overflow-wrap: anywhere; }
+  .tasks-detail-actions { flex-wrap: wrap; flex-shrink: 1; }
+  .tasks-fields { max-width: none; }
+  .tasks-field, .tasks-approval .tasks-field { grid-template-columns: 1fr; gap: 2px; }
+  .appr-buttons { flex-wrap: wrap; }
+  .tasks-detail-tabs { overflow-x: auto; }
+  .tasks-detail-tabs button { white-space: nowrap; }
+
+  /* Access review: a row is a card, each cell named by its data-label, the answer
+     buttons under it at a size a thumb finds. The column heads, and the filter row
+     the table enhancer puts under them, go with the columns they stood above. */
+  .rct-filters { flex-wrap: wrap; gap: 8px; }
+  .rct-filters .field.inline { margin: 0 !important; }
+  .rct-table thead { display: none; }
+  .rct-table, .rct-table tbody, .rct-table tr, .rct-table td { display: block; width: 100%; }
+  .rct-table tr { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .rct-table td { border: 0; padding: 3px 0; overflow-wrap: anywhere; }
+  /* The label is set in the cell's left margin rather than as a grid column, so a
+     cell's own content — a pill and the order beside it — keeps flowing as text. */
+  .rct-table td[data-label] { position: relative; padding-left: 132px; }
+  .rct-table td[data-label]::before {
+    content: attr(data-label); position: absolute; left: 0; top: 4px; width: 124px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    color: var(--muted); font-size: 12px;
+  }
+  .rct-table td.row-actions { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 8px; }
+  .rct-table td.row-actions:empty { display: none; }
+  .rct-table td.row-actions .btn { min-height: 40px; }
 }

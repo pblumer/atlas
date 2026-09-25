@@ -33,12 +33,49 @@ type xmlService struct {
 	ID      string   `xml:"id,attr"`
 	Name    string   `xml:"name,attr"`
 	Outputs []xmlRef `xml:"outputDecision"`
-	// Encapsulated is read only by the layout generator, which has to know which
-	// compartment of the service box a decision belongs in (layout.go). Describing
-	// a service needs only its name and what it takes, so nothing here reads it.
+	// Encapsulated is read by the layout generator, which has to know which
+	// compartment of the service box a decision belongs in (layout.go), and by
+	// describeServices, which names a service's members so a picker can show a
+	// decision as belonging to one.
 	Encapsulated   []xmlRef `xml:"encapsulatedDecision"`
 	InputDecisions []xmlRef `xml:"inputDecision"`
 	InputData      []xmlRef `xml:"inputData"`
+}
+
+// servicesPublishingNothing names the decision services a document declares with no
+// output decision, in document order.
+//
+// DMN gives a service one or more of them (1.5 Table 17: outputDecisions [1..*]):
+// they are what it answers with, and the whole reason to address a service rather
+// than the decision inside it. One with none is not an incomplete model that still
+// half works — temis compiles it, Atlas lists it, the decision picker offers it, a
+// business rule task calls it, and the answer is empty.
+//
+// It is read from the document rather than from the compiled model because the
+// engine does not object: a service with nothing to return is, to a compiler, a
+// service with nothing to do.
+func servicesPublishingNothing(src []byte) []string {
+	var parsed xmlServiceDefs
+	if err := xml.Unmarshal(src, &parsed); err != nil {
+		return nil
+	}
+	var out []string
+	for _, s := range parsed.Services {
+		if len(s.Outputs) > 0 {
+			continue
+		}
+		switch {
+		case s.Name != "":
+			out = append(out, s.Name)
+		case s.ID != "":
+			out = append(out, s.ID)
+		default:
+			// A service with neither is refused all the same: it is the document that
+			// is wrong, and saying so without a name beats letting it through.
+			out = append(out, "(unnamed)")
+		}
+	}
+	return out
 }
 
 // serviceNames reduces described services to the names they answer to, in
@@ -147,6 +184,14 @@ func describeServices(defs *tdmn.Definitions, src []byte) []DecisionInfo {
 		for _, ref := range append(append([]xmlRef{}, s.InputData...), s.InputDecisions...) {
 			if f, ok := field(ref); ok {
 				info.Inputs = append(info.Inputs, f)
+			}
+		}
+		// The decisions the service is made of, under the names the catalog lists them
+		// by — its output decisions and the ones it evaluates internally, in that order.
+		// An input decision is the caller's boundary and so is not one of them.
+		for _, ref := range append(append([]xmlRef{}, s.Outputs...), s.Encapsulated...) {
+			if n, ok := byID[localHref(ref.Href)]; ok && n.Name != "" {
+				info.Members = append(info.Members, n.Name)
 			}
 		}
 		if len(s.Outputs) == 1 {

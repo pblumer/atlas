@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
@@ -104,6 +105,18 @@ func (p project) effectiveRole(pr *httpapi.Principal, authEnabled bool) string {
 		return ScopeRoleOwner
 	}
 	if pr == nil {
+		return ""
+	}
+	// A credential that states its reach is narrowed to it, before any role is
+	// considered (ADR-0410). Above this line rather than below because the branches
+	// below grant: an admin is Owner everywhere and a deploy agent Viewer
+	// everywhere, so a reach consulted afterwards would narrow nobody who mattered
+	// — which is exactly the escalation ADR-0402 §1 could not close.
+	//
+	// One-way by construction: an empty reach narrows nothing, and a stated one can
+	// only subtract. So this is safe to sit in the function every route's visibility
+	// check already goes through, and there is one filter rather than two.
+	if len(pr.Reach) > 0 && !slices.Contains(pr.Reach, p.ID) {
 		return ""
 	}
 	if pr.HasRole(RoleAdmin) {

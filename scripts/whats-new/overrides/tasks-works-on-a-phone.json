@@ -1,0 +1,15 @@
+{
+  "tags": ["Tasks"],
+  "title": {
+    "en": "Tasks works on a phone",
+    "de": "Tasks funktioniert auf dem Handy"
+  },
+  "summary": {
+    "en": "Below 860px the inbox and Start show the list or the open task, not both, and a task opens with a button back to the list. The folders become a row of chips, and a task's fields put their label above the value. An access review row is a card with its two answers under it. The top bar keeps its icons on screen and scrolls the view names instead. Between 861px and 1180px the inbox keeps its three panes at narrower widths.",
+    "de": "Unter 860 px Breite zeigen Posteingang und «Start» entweder die Liste oder die geöffnete Aufgabe, nicht beides; eine Aufgabe öffnet sich mit einer Schaltfläche zurück zur Liste. Die Ordner werden zu einer Reihe von Chips, und die Felder einer Aufgabe zeigen die Beschriftung über dem Wert. Eine Zeile der Rezertifizierung ist eine Karte mit den beiden Antworten darunter. Die obere Leiste behält ihre Symbole im Bild und lässt stattdessen die Ansichtsnamen seitlich scrollen. Zwischen 861 px und 1180 px behält der Posteingang seine drei Bereiche in schmaleren Breiten."
+  },
+  "tutorial": {
+    "en": ["Open Tasks on a phone, or narrow the browser window below 860px.", "Open a task from the list; use Back to the list to return.", "Under Access review, answer a row with Still needed or Withdraw… in its card."],
+    "de": ["Tasks auf dem Handy öffnen oder das Browserfenster schmaler als 860 px machen.", "Eine Aufgabe in der Liste öffnen; mit «Back to the list» geht es zurück.", "Unter «Access review» eine Zeile in ihrer Karte mit «Still needed» oder «Withdraw…» beantworten."]
+  }
+}

@@ -98,8 +98,16 @@ function drgEdges(g, pos) {
     const ax = a.x + a.w / 2, ay = a.y + a.h / 2, bx = b.x + b.w / 2, by = b.y + b.h / 2;
     const [x1, y1] = borderPoint(ax, ay, a.w, a.h, bx, by);
     const [x2, y2] = borderPoint(bx, by, b.w, b.h, ax, ay);
-    const dash = e.type === "knowledgeRequirement" ? ` stroke-dasharray="5 4"` : "";
-    return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#94a3b8" stroke-width="1.5"${dash} marker-end="url(#drg-arrow)"/>`;
+    // A knowledge requirement is dashed and ends in an OPEN arrowhead; an information
+    // requirement is solid and ends in a filled one (DMN 1.5 Table 5-2). The head is
+    // not decoration: the two lines mean different things — "this decision needs that
+    // value" against "this decision invokes that logic" — and the head is half of what
+    // says which. data-type is what a reader, and a test, tells them apart by, since an
+    // edge carries no drawn name to be found under.
+    const knowledge = e.type === "knowledgeRequirement";
+    const dash = knowledge ? ` stroke-dasharray="5 4"` : "";
+    const head = knowledge ? "drg-arrow-open" : "drg-arrow";
+    return `<line data-type="${e.type}" x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#94a3b8" stroke-width="1.5"${dash} marker-end="url(#${head})"/>`;
   }).join("");
 }
 
@@ -112,16 +120,19 @@ function drgEdges(g, pos) {
 //   - a business knowledge model is a rectangle with its top-left and bottom-right
 //     corners cut off.
 //
-// The cut is proportional to the box so a small node does not lose its corners
-// entirely, and capped so a large one keeps the notch the notation shows.
+// The cut is proportional to the box, in the proportions the modeler's own renderer
+// cuts it in, so the same model is the same picture in both.
 function nodeShape(type, x, y, w, h, attrs) {
   if (type === "inputData") {
     return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h / 2}" ${attrs}/>`;
   }
   if (type === "businessKnowledgeModel") {
-    const c = Math.min(14, w * 0.11, h * 0.29);
+    // Two corners CUT — the other two stay square. Slanting both whole sides instead
+    // draws a parallelogram, which is not a shape the notation has.
+    const cx = w * 0.11, cy = h * 0.29;
     const pts = [
-      [x, y + h], [x + c, y], [x + w, y], [x + w - c, y + h],
+      [x, y + cy], [x + cx, y], [x + w, y],
+      [x + w, y + h - cy], [x + w - cx, y + h], [x, y + h],
     ].map(([px, py]) => `${px.toFixed(1)},${py.toFixed(1)}`).join(" ");
     return `<polygon points="${pts}" ${attrs}/>`;
   }
@@ -132,8 +143,12 @@ function nodeShape(type, x, y, w, h, attrs) {
 function drgSvg(placed, inner) {
   const { minX, minY, W, H } = drgFrame(placed);
   return `<svg viewBox="${minX.toFixed(0)} ${minY.toFixed(0)} ${W.toFixed(0)} ${H.toFixed(0)}" width="${W.toFixed(0)}" height="${H.toFixed(0)}" style="max-width:100%;height:auto;display:block;font-family:system-ui,-apple-system,sans-serif">
-    <defs><marker id="drg-arrow" markerWidth="10" markerHeight="8" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
-      <path d="M0,0 L8,3 L0,6 z" fill="#94a3b8"/></marker></defs>
+    <defs>
+      <marker id="drg-arrow" markerWidth="10" markerHeight="8" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+        <path d="M0,0 L8,3 L0,6 z" fill="#94a3b8"/></marker>
+      <marker id="drg-arrow-open" markerWidth="10" markerHeight="8" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+        <path d="M0,0 L8,3 L0,6" fill="none" stroke="#94a3b8" stroke-width="1.2"/></marker>
+    </defs>
     ${inner}</svg>`;
 }
 

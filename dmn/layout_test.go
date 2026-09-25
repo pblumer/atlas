@@ -608,3 +608,89 @@ func TestAContradictoryServiceStillGetsAUsableBox(t *testing.T) {
 		t.Errorf("divider at %g is outside the box %+v", y, box)
 	}
 }
+
+// collapsedServiceModel draws a decision service folded: the service has its box and
+// its members have none, which is how DMN 1.5 §6.2.4 depicts a collapsed service —
+// the specification's own example is two DRDs of one graph, the second of which does
+// not contain the decisions at all.
+const collapsedServiceModel = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20230324/MODEL/"
+             xmlns:dmndi="https://www.omg.org/spec/DMN/20230324/DMNDI/"
+             xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/"
+             id="defs" name="Folded" namespace="http://atlas/dmn">
+  <inputData id="in_amount" name="Amount"/>
+  <decision id="dec_score" name="Score">
+    <informationRequirement id="ir_score"><requiredInput href="#in_amount"/></informationRequirement>
+    <literalExpression id="le_score"><text>Amount</text></literalExpression>
+  </decision>
+  <decision id="dec_verdict" name="Verdict">
+    <informationRequirement id="ir_verdict"><requiredDecision href="#dec_score"/></informationRequirement>
+    <literalExpression id="le_verdict"><text>Score</text></literalExpression>
+  </decision>
+  <decisionService id="svc" name="Approval">
+    <outputDecision href="#dec_verdict"/>
+    <encapsulatedDecision href="#dec_score"/>
+    <inputData href="#in_amount"/>
+  </decisionService>
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram id="dia">
+      <dmndi:DMNShape id="sh_svc" dmnElementRef="svc" isCollapsed="true">
+        <dc:Bounds x="100" y="80" width="180" height="100"/>
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="sh_in" dmnElementRef="in_amount">
+        <dc:Bounds x="100" y="300" width="125" height="45"/>
+      </dmndi:DMNShape>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>`
+
+// TestEnsureDiagramLeavesAFoldedServiceFolded proves the one case where a diagram
+// covering only some of the model's nodes is not residue.
+//
+// A partial diagram is normally the leftovers of a tool that drew what it could, so
+// the whole graph is laid out afresh around it. A collapsed decision service looks
+// exactly like that from the outside and is the opposite: somebody folded it, and
+// re-laying the graph would unfold it on the next read — every time, so the fold
+// could never survive being saved.
+func TestEnsureDiagramLeavesAFoldedServiceFolded(t *testing.T) {
+	out, drew := EnsureDiagramReport([]byte(collapsedServiceModel))
+	if drew {
+		t.Error("EnsureDiagram redrew a folded decision service's diagram, unfolding it")
+	}
+	if string(out) != collapsedServiceModel {
+		t.Errorf("model came back changed:\n%s", out)
+	}
+}
+
+// TestEnsureDiagramStillDrawsAnExpandedServicesMissingMembers keeps the exception
+// narrow: without the fold, the same gap is residue and the graph is laid out.
+func TestEnsureDiagramStillDrawsAnExpandedServicesMissingMembers(t *testing.T) {
+	expanded := strings.Replace(collapsedServiceModel, ` isCollapsed="true"`, "", 1)
+	if expanded == collapsedServiceModel {
+		t.Fatal("test setup: the fold was not removed")
+	}
+
+	_, drew := EnsureDiagramReport([]byte(expanded))
+	if !drew {
+		t.Error("a diagram missing two decisions was left alone, but nothing folded them away")
+	}
+}
+
+// TestEnsureDiagramDrawsAServiceThatHasNoBoxAtAll holds the other half of the rule:
+// the fold excuses the members, never the service itself. A service with no shape is
+// the residue the whole rule exists for — dmn-js invents an empty default box for it
+// and the next save writes that emptiness into the document.
+func TestEnsureDiagramDrawsAServiceThatHasNoBoxAtAll(t *testing.T) {
+	noBox := strings.Replace(collapsedServiceModel,
+		`<dmndi:DMNShape id="sh_svc" dmnElementRef="svc" isCollapsed="true">
+        <dc:Bounds x="100" y="80" width="180" height="100"/>
+      </dmndi:DMNShape>`, "", 1)
+	if noBox == collapsedServiceModel {
+		t.Fatal("test setup: the service's shape was not removed")
+	}
+
+	_, drew := EnsureDiagramReport([]byte(noBox))
+	if !drew {
+		t.Error("a model whose decision service has no shape was left alone")
+	}
+}

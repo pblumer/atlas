@@ -262,7 +262,7 @@ the model carries it, because until then the standard is still the richer of the
 | GS1 GDSN, GS1 GPC | Master data for physical trade items between trading partners. An internal service catalogue has no trade items. |
 | eCl@ss, ETIM, UNSPSC | Classification schemes for procurement categories. Potentially useful for `category` (§8), not for the model. |
 | BMEcat, SAP OCI, cXML PunchOut | Catalogue interchange and punch-out for e-procurement. Would become relevant if the SAP import ADR-0312 mentions is ever built; nothing in Atlas needs it today. |
-| schema.org `Product` / `Offer` | Markup for public web merchandising and search indexing. The portal's catalogue is audience-gated and not indexed. |
+| schema.org `Product` / `Offer` | Markup for public web merchandising and search indexing. The shop's catalogue is audience-gated and not indexed. |
 | CPSV-AP (EU / ISA²) | Vocabulary for public-service catalogues. Would matter if public administrations were a target; it describes services to citizens, not provisionable entitlements. |
 | Akeneo, Pimcore (PIM) | Marketing and commerce attribute management. External runtime with its own database, and the wrong domain. |
 | Backstage software catalogue | Developer-portal catalogue of software components, not of orderable services for people. |

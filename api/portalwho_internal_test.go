@@ -21,7 +21,7 @@ import (
 // — so it read as one more place to go. At the far end of the row it belongs to
 // the corner that is about the reader.
 func TestTheHelpSitsPastThePerson(t *testing.T) {
-	nav := webRegion(t, readWeb(t, "portal.js"), "function renderNav(", "\n}")
+	nav := webRegion(t, readWeb(t, "shop.js"), "function renderNav(", "\n}")
 	who := strings.Index(nav, "class: 'who'")
 	help := strings.Index(nav, "class: 'help'")
 	if who < 0 || help < 0 {
@@ -46,7 +46,7 @@ func TestTheHelpSitsPastThePerson(t *testing.T) {
 // somebody else will hold; the reader's own name second; and the word that names
 // neither only where there is nobody to name.
 func TestTheCornerNamesWhoeverTheOrderIsFor(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function whoLabel(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function whoLabel(", "\n}")
 	at := func(needle string) int {
 		i := strings.Index(body, needle)
 		if i < 0 {
@@ -70,7 +70,7 @@ func TestTheCornerNamesWhoeverTheOrderIsFor(t *testing.T) {
 // go on seeing the word that names nobody, and the page would look exactly as it
 // does when it works.
 func TestTheReadersNameIsLearnedBeforeTheGateIsAsked(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function loadWhoIAm(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function loadWhoIAm(", "\n}")
 	learned := strings.Index(body, "state.meName = String(")
 	gate := strings.Index(body, "if (!state.mayOrderForOthers) return;")
 	if learned < 0 || gate < 0 {

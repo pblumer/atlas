@@ -1,0 +1,10 @@
+{
+  "hidden": true,
+  "tags": [
+    "Operations"
+  ],
+  "summary": {
+    "en": "Hidden on purpose, like the rest of the run-graph machinery. The projection can now be counted into cells — by definition, by element, by element type — and that count needs no graph at all: one scan and a map, no CSR and no component pass. There is no route and no screen, because the surface it feeds needs a renderer decision that has not been taken, so there is nothing here for a reader of this list to open.",
+    "de": "Absichtlich verborgen, wie die übrige Run-Graph-Maschinerie. Die Projektion lässt sich jetzt in Zellen zählen — nach Definition, nach Element, nach Elementtyp — und diese Zählung braucht gar keinen Graphen: ein Scan und eine Map, kein CSR und kein Komponentenlauf. Es gibt keine Route und keine Ansicht, weil die zugehörige Oberfläche eine noch nicht getroffene Renderer-Entscheidung voraussetzt; für einen Leser dieser Liste ist also nichts zu öffnen."
+  }
+}

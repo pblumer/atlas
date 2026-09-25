@@ -172,11 +172,76 @@ compacted log no longer holds genesis at all (ADR-0131). So:
 - **keep current** from the tailer, starting at the snapshot's position;
 - **rebuild** whenever the two cannot be reconciled, because the projection is disposable.
 
+#### "Keep current" is a measurement, not an increment (decided, W4)
+
+The middle bullet says what the tailer reads and not what it *does* when it gets there. The
+obvious reading — apply each record to the CSR — is refuted by three structural facts, none of
+them a preference:
+
+- a completing element instance is **deleted** from state (`engine/apply.go`, on
+  `IntentCompleted` and `IntentTerminated`), so in any steady-state installation the node set
+  shrinks as fast as it grows. An increment that can only add diverges from reality in the
+  common case, not in an edge case;
+- the CSR is packed and **undirected** (§2), so one new edge has to be inserted into *both*
+  endpoints' adjacency lists, one of which is in the middle of a 2,448 MB array;
+- union-find merges incrementally by design and **cannot un-merge** (§5), so a removed edge
+  cannot be undone without the component pass running again — 7.8 s at W0's scale.
+
+So the follower does not touch the graph. It **measures drift**: how many node-set changes the
+log holds that the projection does not reflect, counted from the seed. That number decides when
+a rebuild is due, and the projection stays exactly as of its position — the one property §5
+requires of every rendering, and the one an in-place mutation would destroy.
+
+Five properties follow from the structure rather than from taste, and each is a test in
+`rungraph/follow_test.go`:
+
+| Property | Why it is forced |
+|---|---|
+| drift counts **node changes**, not records | A busy installation writes far more variables, jobs and timers than element instances. Counting records would overstate staleness by orders of magnitude and call for rebuilds nothing needed. |
+| the seed's records are **skipped by position** rather than sought past | A `wal.Cursor` cannot be constructed — its fields are unexported and there is no seek. The follower reads from whatever cursor the log gives out and skips every position it has already counted, which is the same re-derivation the OpenSearch exporter does from its high-water mark. It costs a header decode per record, not an application. |
+| the follower is therefore **idempotent under re-delivery** | A cursor is valid within one process run and a restart resumes from genesis by design (ADR-0114), so a follower *will* be handed records it has counted. Skipping by position is what makes that harmless; it is a correctness requirement, not an optimisation. |
+| a **gap** means rebuild, not catch-up | Positions are one dense monotonic sequence (`engine/context.go` increments one counter per event, and every event carrying a position is appended to the log — verified on engine-written state, W4). So a first record more than one past the seed means the records in between are gone: compaction removed them (ADR-0131) and nothing can supply them. Catching up from there yields a projection missing changes with nothing to say so, which is the third bullet's "cannot be reconciled" made detectable. |
+| the rebuild threshold is a **fraction** of the projection | A thousand changes are nothing to a 110 M-node projection and everything to one of two thousand. An absolute threshold would be wrong at one end of the range or the other — the same reason §9's budget is stated in bytes rather than in nodes. |
+
+The measurement is checked against something that did not come from the log: `Arrived` minus
+`Departed` must equal the change in the state store's own count of live element instances over
+the same interval. If the follower counted the wrong records, skipped the wrong ones or
+double-counted a re-delivery, the two numbers part company.
+
 ### 5. One pass computes membership; a query is a lookup. The cloud is an aggregation, not a clustering
 
 The whole-graph walk is a batch job, not a request. One pass over the CSR computes
-**connected components** by union-find, which for this topology *is* the instance-family
-decomposition. Queries are then lookups against that membership, not walks.
+**connected components** by union-find. Queries are then lookups against that membership,
+not walks.
+
+**A component is not an instance, and this section said it was (measured, W2).** The
+sentence above used to end "which for this topology *is* the instance-family
+decomposition". On engine-written state that holds for a nested shape and fails for a flat
+one:
+
+| shape | 64 instances → | components |
+|---|---|---|
+| start → subprocess(start → task) + interrupting boundary timer | 192 nodes, 128 edges | **64** — one per instance |
+| start → parallel gateway → two service tasks | 128 nodes, **0 edges** | **128** — two per instance |
+
+The cause is exact rather than statistical. A live element instance at the process
+instance's own scope carries `FlowScopeKey` pointing at the **process instance**, which is
+not an element instance and therefore not a node of this projection — so two parallel
+top-level branches have nothing joining them. Nesting and boundary attachment supply the
+join; a flat fork does not.
+
+So a component is the **reference-connected** group: what a walk from one node would reach.
+That is the grouping impact analysis asks for, and it is the right thing for this structure
+to compute. What it is *not* is the instance decomposition — and that one needs no
+union-find at all, because `ProcessInstanceKey` is a field on the element instance the
+store already hands over. The distinction is worth this much space because the wrong
+reading is the expensive one: an API named after instance families, answering
+reference-connectivity, would have had every caller believing it answered the cheaper
+question. `rungraph.Membership` is named `SameComponent`/`Members` for that reason.
+
+None of the arithmetic below changes. Components are still the only decomposition this data
+can carry, for the two reasons the next paragraphs give; what changed is what a component
+coincides with.
 
 The cloud is a **group-by along dimensions the nodes already carry** — definition,
 element, worker, incident state, time bucket — and not a community detection. An earlier
@@ -228,6 +293,76 @@ Two rules on the rendering, both inherited rather than invented:
 - **The supernodes are excluded before aggregating and overlaid after layout.** They are
   the hubs every instance touches, so any grouping that keeps them puts everything in one
   cell. This is the visual return of §1's arithmetic.
+
+#### What the cloud actually costs, and what it does not need (measured, W3)
+
+Two findings from building the aggregation, both of which change what this section can
+promise.
+
+**The cloud needs no graph.** A group-by is not a graph operation. It is one scan of the
+store and a map sized by the number of *cells*, so it needs no ordinal map, no CSR and no
+union-find — none of the 2,448 MB the structure costs at 110 M nodes, and none of §9's
+budget. The consequence corrects the reach this record gives away in its consequences: on an
+installation large enough that §9 refuses the whole-graph *walk*, the whole-graph **cloud is
+still available**. What that installation loses is the walk and the drill-down from a cell to
+its members, which needs either a filtered re-scan or the per-node array below; what it keeps
+is the density itself.
+
+**Of the five dimensions this section calls "already carried", the node carries two.**
+Measured against `model.ElementInstanceValue`:
+
+| Dimension | On the value? | What it costs otherwise |
+|---|---|---|
+| definition | yes — `ProcessDefKey` | free |
+| element | yes — `ElementId` | free |
+| element type | yes — `BpmnElementType`, a refinement of the element | free |
+| worker | no — lives on the job | a join, plus 4 bytes per node to carry the result |
+| incident state | no — lives on the incident | the same |
+| time bucket | no — the value has no timestamp at all | the same |
+
+Four bytes per node is **420 MB at 110 M nodes** — the same budget unit whose doubling this
+section's own membership decision refused, and per dimension. So "a group-by along dimensions
+the nodes already carry" is free along three axes and a structural cost along the other
+three, and the sentence should not be read as though all five were the same price.
+`rungraph.Source` would also have to open up for them: it is one method today.
+
+Two smaller properties the implementation forced, worth the record because each one is a
+wrong answer avoided rather than a preference:
+
+- **An element cell is scoped to its definition.** `ElementId` is an index into the compiled
+  graph, not a global identifier, so element 1 of two processes is two elements. Grouping by
+  the number alone would report a density over a cell that does not exist.
+- **Cell order is imposed, not inherited.** A Go map iterates randomly, and this section
+  chose components over a Louvain partition partly because they are stable across rebuilds.
+  A cloud whose cells reshuffle between rebuilds breaks the same promise.
+
+#### The renderer this section was waiting for may already be here (measured, W3)
+
+The build order put the cloud surface behind *a renderer beyond SVG*. That dependency was
+written while the cloud was a coarsened community graph over millions of nodes. §5 then
+changed the mechanism to a group-by, and W3 measured what it produces — tens to thousands of
+cells — and nobody went back to the dependency. Measured against the renderer in the tree:
+
+- the budget is `meshMaxNodes = 400` (`api/panoramamesh.go`);
+- above it, `cluster` in `api/panorama/mesh.go` already draws **one node standing for N
+  children, carrying their count and an aggregated severity, with a sentence saying how many
+  were collapsed** — and it counts processes separately from drafts precisely so the number
+  on the picture can be reconciled with the picture, which is the same discipline a density
+  needs.
+
+That is the shape of a cloud cell. Against the three free axes, using this record's own
+reference size of 200 processes rather than a measurement of a real estate:
+
+| Axis | Cells | Against the 400-node budget |
+|---|---|---|
+| element type | a handful of BPMN types | trivially inside |
+| definition | ~200 | inside; no collapse needed |
+| element | 200 × ~15 ≈ 3 000 | outside; needs a collapse to the definition — the same shape `cluster` already implements one level up |
+
+So "needs a renderer beyond SVG" no longer follows from the mechanism §5 chose. What is
+genuinely still owed for the surface is smaller and different: which axis the default view
+draws and how a reader switches, and §7's browser performance test at the budget. Neither is
+a new renderer.
 
 #### What W0 measured
 

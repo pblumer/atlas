@@ -27,8 +27,8 @@ import (
 func webRegion(t *testing.T, src, from, to string) string {
 	t.Helper()
 	// The source is named by what was searched for rather than by a file name. This
-	// helper started out reading portal.js and said so; it now reads app.js and
-	// portal.html too, and a message naming the wrong file sends whoever reads it
+	// helper started out reading shop.js and said so; it now reads app.js and
+	// shop.html too, and a message naming the wrong file sends whoever reads it
 	// into the wrong one.
 	start := strings.Index(src, from)
 	if start < 0 {
@@ -67,7 +67,7 @@ func TestThePortalGroupsByTheFieldTheReleaseCarries(t *testing.T) {
 	if key == "" {
 		t.Fatalf("no field carries the marker; the fixture has gone stale: %s", raw)
 	}
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	// Both sides of the grouping: the one that collects the headings and the one
 	// that decides what falls under the heading now open. Either reading a field
 	// the release does not carry leaves every product under one heading.
@@ -77,7 +77,10 @@ func TestThePortalGroupsByTheFieldTheReleaseCarries(t *testing.T) {
 		// a bare search for it also matches a function that only ever reads the
 		// selection. Blind that one out, or the guard passes without a read.
 		body = strings.ReplaceAll(body, "state."+key, "state.<the open heading>")
-		if !strings.Contains(body, "."+key) {
+		// Two spellings are accepted because the two sides legitimately have them:
+		// the column names the field to the function that collects both headings,
+		// and the filter reads it off the product. Renaming the tag fails both.
+		if !strings.Contains(body, "."+key) && !strings.Contains(body, "'"+key+"'") {
 			t.Errorf("the release spells the heading %q and %s never reads it, so "+
 				"every product sits under one heading", key, strings.TrimSuffix(fn, "("))
 		}
@@ -90,7 +93,7 @@ func TestThePortalGroupsByTheFieldTheReleaseCarries(t *testing.T) {
 // is not. A note that outlives its cause is worse than none: it tells somebody
 // looking at their own headings that the feature does not exist.
 func TestTheColumnNoLongerSaysTheDataIsMissing(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	if strings.Contains(src, "note.noCategories") {
 		t.Error("the portal still carries the note saying Atlas has no category, which " +
 			"now contradicts the column beside it")
@@ -115,10 +118,27 @@ func TestTheColumnNoLongerSaysTheDataIsMissing(t *testing.T) {
 // decision refused, arriving through the back door — so the sort is the locale's
 // and nothing else.
 func TestAHeadingHasNoOrderingOfItsOwn(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function categoriesOf(", "\n}")
+	src := readWeb(t, "shop.js")
+	// Both columns and both screens collect their headings through one function, so
+	// the ordering is held there. A column sorting for itself is the second
+	// implementation that made the two screens disagree once already.
+	if !strings.Contains(webRegion(t, src, "function categoriesOf(", "\n}"), "headingsOf(") {
+		t.Fatal("the heading column no longer collects through headingsOf; this guard " +
+			"has lost its subject, and the two screens have two orderings again")
+	}
+	body := webRegion(t, src, "function headingsOf(", "\n}")
 	if !strings.Contains(body, "localeCompare") {
 		t.Error("the headings are not sorted by the locale's own rule, so their order " +
 			"is whatever the catalogue happened to store")
+	}
+	// Sorted by what is on the screen and not by what groups. They are the same
+	// string only where the catalogue has not translated the heading: everywhere
+	// else, sorting the keys hands a French reader a column ordered by German
+	// words, in an order nothing on the page explains.
+	if !strings.Contains(body, "a.text.localeCompare(b.text") {
+		t.Error("the headings are sorted by something other than the wording the " +
+			"reader sees, so a translated catalogue orders its column by a string " +
+			"nobody on that page is shown")
 	}
 	for _, rank := range []string{".rank", "categoryRank", "sortOrder"} {
 		if strings.Contains(body, rank) {

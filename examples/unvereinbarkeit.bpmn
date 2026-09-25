@@ -3,7 +3,7 @@
   Unvereinbarkeit (ADR-0342)
   — wöchentlich melden, wer eine verbotene Kombination hält.
 
-  Alles, was das Portal bisher über Zugriff gelernt hat, ist **aufdeckend oder
+  Alles, was der Shop bisher über Zugriff gelernt hat, ist **aufdeckend oder
   zeitlich**: die Bestandsaufnahme hält fest, was da war, der Abgleich prüft, ob es
   stimmt, die Rezertifizierung fragt, ob es noch berechtigt ist, die Befristung
   beendet es von selbst. Alle vier betrachten *ein* Recht, und alle vier schauen
@@ -121,7 +121,7 @@ Der Text nennt die Anzahl und den ältesten Befund. `findings[1]` ist der ältes
         <atlas:mailConnector connector="mail"
           to="=empfaenger"
           subject="=&#34;Unvereinbare Berechtigungen: &#34; + string(bericht.counts.findings) + &#34; Fall/Fälle&#34;"
-          body="=&#34;Guten Tag\n\n&#34; + string(bericht.counts.findings) + &#34; verbotene Kombination(en) bei &#34; + string(bericht.counts.people) + &#34; Person(en), gegen &#34; + string(bericht.pairs) + &#34; erklaerte Regel(n).\n\nAeltester Fall: &#34; + bericht.findings[1].principal + &#34; haelt &#34; + bericht.findings[1].a + &#34; und &#34; + bericht.findings[1].b + &#34;.\n\nEs wird nichts automatisch entzogen. Welche Haelfte aufgegeben wird, ist eine Entscheidung ueber die Arbeit der Person; der Weg dorthin ist eine Rueckgabe der Bestellzeile oder eine Rezertifizierung, und beide halten fest, wer entschieden hat.\n\nFreundliche Gruesse\nIhr Leistungsportal&#34;" />
+          body="=&#34;Guten Tag\n\n&#34; + string(bericht.counts.findings) + &#34; verbotene Kombination(en) bei &#34; + string(bericht.counts.people) + &#34; Person(en), gegen &#34; + string(bericht.pairs) + &#34; erklaerte Regel(n).\n\nAeltester Fall: &#34; + bericht.findings[1].principal + &#34; haelt &#34; + bericht.findings[1].a + &#34; und &#34; + bericht.findings[1].b + &#34;.\n\nEs wird nichts automatisch entzogen. Welche Haelfte aufgegeben wird, ist eine Entscheidung ueber die Arbeit der Person; der Weg dorthin ist eine Rueckgabe der Bestellzeile oder eine Rezertifizierung, und beide halten fest, wer entschieden hat.\n\nFreundliche Gruesse\nIhr Shop&#34;" />
       </bpmn:extensionElements>
       <bpmn:incoming>f_gw_melden</bpmn:incoming>
       <bpmn:outgoing>f_melden_ende</bpmn:outgoing>

@@ -3,8 +3,9 @@
 Eine Atlas-**Applikation mit öffentlichem Start-Formular**, **DMN-gesteuertem
 Kontotyp-Mapping**, menschlicher Freigabe und **Entra-Provisionierung** — plus ein
 **einbettbares HTML+JS-Widget**, das die Bestellung von einer beliebigen Website aus
-startet. Schreibt scharf gegen **contoso.com**, aber fail-closed nur gegen klar
-benannte **Test-Objekte**.
+startet. Schreibt scharf gegen **contoso.com**, und nur gegen klar benannte
+**Test-Objekte**: das `jml-test-`-Präfix steckt im `attributes`-Ausdruck des
+create-user-Tasks, also im Modell.
 
 Tenant und Worker-Name sind **Platzhalter**: `contoso.com` steht für den eigenen
 Entra-Tenant, `contoso` für den Namen, unter dem der Entra-Worker konfiguriert ist.
@@ -14,17 +15,16 @@ UPN-Prüfung auf die eigenen Werte zu setzen.
 ## Der Ablauf
 
 ```
-Start (öffentliches Formular account-order: Vorname, Nachname, Kontotyp, Begründung)
+Start (öffentliches Formular account-order: Personalnummer, Vorname, Nachname,
+                                            Kontotyp, Begründung)
   → [DMN] Profil bestimmen   KontotypMapping: A/E/T/S → { kuerzel, accountEnabled,
                              kategorie, usageLocation }
-  → [Script+Output-Mappings] mailNick, upn = jml-test-<kuerzel>-<mailNick>@contoso.com,
-                             displayName, kategorie
-  → (X) Test-Objekt?   ── sonst ──▶ Ende "Kein Test-Objekt"  (kein Entra-Aufruf)
-        │ jml-test-*@contoso.com
+  → [Script] kategorie aus dem Profil übernehmen
   → 🔑 Freigabe (account-freigabe) – Admin setzt Initialpasswort
   → (X) Freigegeben?   ── ablehnen ▶ Ende "Abgelehnt"
         │ anlegen
-  → [entra create-user] accountEnabled & usageLocation aus dem DMN-Profil
+  → [entra create-user] baut UPN, mailNickname und Anzeigenamen selbst aus Vorname,
+                        Nachname und kuerzel; accountEnabled & usageLocation aus dem Profil
   → Ende "Konto bereitgestellt"
 ```
 
@@ -39,13 +39,36 @@ Start (öffentliches Formular account-order: Vorname, Nachname, Kontotyp, Begrü
 
 Der Typ wird über eine **Entscheidungstabelle** abgebildet, nicht über if/else im
 Prozess — wer die Regeln je Typ ändert, ändert die Tabelle. Das `jml-test-`-Präfix
-baut der Prozess (nicht die Tabelle), damit die **Test-Objekt-Grenze eine
-Prozess-Invariante** bleibt.
+steht nicht in der Tabelle, damit die **Test-Objekt-Grenze im Modell sichtbar** bleibt.
 
-> **Eine Feinheit, die dieses Beispiel zeigt:** ein Script-Task trägt genau **ein**
-> `<zeebe:script>`. Mehrere abgeleitete Werte entstehen deshalb über
-> `zeebe:ioMapping`-**Output-Mappings** (`mailNick`, `upn`, `displayName`,
-> `kategorie`) — jeweils direkt aus schon vorhandenen Variablen.
+> **Was dieses Beispiel über Personendaten zeigt.** Der Prozess deklariert
+> `atlas:personal="vorname,nachname"` und `atlas:dataSubject="personalnummer"`
+> ([ADR-0314](../../docs/adr/0314-portal-personal-data.md)).
+> Eine so deklarierte Variable wird verschlüsselt, bevor sie ein Kommando wird, und
+> Chiffrat lässt sich nicht vergleichen oder verketten — der Compiler **verweigert**
+> deshalb ein Deployment, in dem sie in einem Ausdruck steht, den die Engine auswertet.
+>
+> Früher rechnete hier ein Script-Task `mailNick`, `upn` und `displayName` aus Vorname
+> und Nachname. Diese Rechnung steht jetzt im `attributes`-Ausdruck des
+> create-user-Tasks: **Worker-Ausdrücke wertet der Worker aus**, und dort existiert der
+> Klartext für die Dauer eines Aufrufs und wird nie im Klartext zurückgeschrieben.
+>
+> Das hat einen Preis, und er ist der ehrliche Teil: ein zweites fail-closed Gateway
+> prüfte den gebauten UPN vor jedem Schreibzugriff gegen `jml-test-*@contoso.com`. Diese
+> Prozessvariable gibt es nicht mehr, also gibt es das Gatter nicht mehr. Die Grenze
+> trägt jetzt das Literal im `attributes`-Ausdruck — im Modell sichtbar und im Review
+> prüfbar, aber **strukturell statt zur Laufzeit** geprüft.
+>
+> Der zweite Preis steht im Formular: die **Personalnummer** ist neu, und sie ist nicht
+> fachlich motiviert, sondern von der Löschbarkeit erzwungen. Verschlüsselt wird unter
+> einem Schlüssel, der zu einer Person gehört — also muss das Modell sagen, *welche*
+> Person, und zwar mit einer Kennung, die eine Löschanfrage benennen kann. Ein Vorname
+> und ein Nachname sind keine solche Kennung. Für einen Eintritt kommt sie zwangsläufig
+> von außen (aus dem HR-System), denn im Tenant existiert die Person noch nicht: das
+> Konto wird ja gerade erst bestellt. Die Nummer bleibt im Klartext — sie ist die
+> Referenz, nicht der Inhalt — ist `atlas:searchable` und darf deshalb in Ausdrücken
+> stehen, sodass ein Betreiber die Instanzen einer Person findet, bevor er deren
+> Schlüssel zerstört.
 
 ## Das einbettbare Widget
 

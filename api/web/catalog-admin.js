@@ -1,6 +1,6 @@
 // Filling a catalogue, as a screen rather than as a sequence of curl calls.
 //
-// The portal's three models landed with an API and no authoring surface: catalogues,
+// The shop's three models landed with an API and no authoring surface: catalogues,
 // products, the edges between them and the release that freezes all of it were
 // reachable only by somebody willing to hand-write JSON. That is an answer for
 // whoever wrote the API. The product manager's actual question is "how do I put a
@@ -128,6 +128,7 @@ function textOf(texts, langs, fallback) {
 export async function viewCatalogs({ api, toast, view, isSuperseded }) {
   let cats = [];
   let report = null;
+  let translation = null;
   // null means the directory could not be read, which is different from an empty
   // one: the first degrades to typed ids, the second says there are no groups yet.
   let dir = null;
@@ -137,6 +138,13 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
     // Which approval rules reach nobody. null is "could not be read", which the
     // card below says out loud rather than rendering as "nothing is wrong".
     report = await api("GET", "/api/v1/catalog-products/approver-report").catch(() => null);
+    // And where a catalogue is written in one of its languages and not another.
+    // Publishing refused that until it was pointed out that the shop falls back
+    // rather than showing a blank — so the refusal held usable catalogues back and
+    // protected nobody. This card is what took its place, and it is the whole
+    // reason removing the refusal is safe: a gap nothing says out loud is a gap
+    // that surfaces months later as "the French shop reads oddly".
+    translation = await api("GET", "/api/v1/catalog-products/translation-gaps").catch(() => null);
   } catch (e) {
     if (isSuperseded()) return;
     throw e;
@@ -187,12 +195,13 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
       </aside>
     </div>
 
-    ${approverCard(report)}`;
+    ${approverCard(report)}
+    ${translationCard(translation)}`;
 
   view.querySelector(".cat-new").addEventListener("submit", async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
-    const langs = list(f.get("languages"));
+    const langs = languageList(f.get("languages"));
     if (!langs.length) { toast("A catalogue needs at least one language", "err"); return; }
     // The name is stored under the first language: a catalogue with a name in no
     // language it offers would fail to publish, and asking for the pair here is
@@ -211,6 +220,20 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
 }
 
 const list = (s) => String(s || "").split(",").map((x) => x.trim()).filter(Boolean);
+
+// languageList cuts the language box into tags.
+//
+// On a comma, a semicolon or any run of whitespace. A language tag can contain
+// none of the three, so all three are separators and none of them is ambiguous —
+// and a maintainer who reaches for the wrong one gets the languages they meant
+// instead of one refusal naming a tag they never intended to write.
+//
+// This is NOT the normalisation ADR-0413 refused. That was about a stored ENTRY
+// that might be one tag or two, where only its author knew which; this is about
+// how a human's single line is cut into entries at all, and that has one reading.
+// The API stays strict: it takes a list, and an entry carrying a separator is
+// still refused there, because nothing typed it — a caller built it.
+const languageList = (s) => String(s || "").split(/[,;\s]+/).filter(Boolean);
 
 // approverCard is the standing list of approval rules that reach nobody.
 //
@@ -258,6 +281,62 @@ function approverCard(report) {
       its home catalogue.</p>
     <table class="table">
       <thead><tr><th>Product</th><th>Home</th><th>Kind</th><th>Names</th><th>Why</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+}
+
+// translationCard is what a catalogue still owes its own languages.
+//
+// It exists because a gate was removed. Publishing used to refuse a product named
+// in one declared language and not another; the refusal protected no reader — the
+// shop shows the name the catalogue has rather than a blank — but it did make
+// the gap impossible to ignore. A gap nobody says out loud arrives months later
+// as "the French shop reads oddly", reported by a reader rather than found by a
+// maintainer.
+//
+// Grouped by product and not listed per language, because four rows reading
+// "no name in fr", "no description in fr", "no category in fr", "no product group
+// in fr" are one piece of work: open that product. The three states are the
+// approver card's, for the reason given there.
+function translationCard(report) {
+  if (report === null) {
+    return `<div class="card" style="margin-top:18px; max-width:860px">
+      <h3 style="margin:0 0 6px">Translations</h3>
+      <p class="muted" style="margin:0">This report could not be read, so nothing here says
+        whether any catalogue is missing a translation.</p></div>`;
+  }
+  const gaps = report.gaps || [];
+  const checked = report.checked || 0;
+  // Both counts, because either alone is ambiguous: no gaps across no catalogues
+  // is the answer somebody maintaining nothing gets, and it must not read like a
+  // finished estate.
+  const covered = (report.catalogs || []).length;
+  const over = `${checked} product${checked === 1 ? "" : "s"} in
+    ${covered} catalogue${covered === 1 ? "" : "s"}`;
+  if (!gaps.length) {
+    return `<div class="card" style="margin-top:18px; max-width:860px">
+      <h3 style="margin:0 0 6px">Translations</h3>
+      <p class="muted" style="margin:0">Every product is written in every language its
+        catalogue declares &mdash; ${over} checked.</p></div>`;
+  }
+  // One row per product per catalogue, with what is missing gathered into it.
+  const byProduct = new Map();
+  for (const g of gaps) {
+    const at = `${g.catalog}\u0000${g.item}`;
+    if (!byProduct.has(at)) byProduct.set(at, { catalog: g.catalog, item: g.item, what: [] });
+    byProduct.get(at).what.push(g.message);
+  }
+  const rows = [...byProduct.values()].map((r) => `<tr>
+    <td><code>${esc(r.item)}</code></td>
+    <td><a href="#/catalog/c/${encodeURIComponent(r.catalog)}">${esc(r.catalog)}</a></td>
+    <td>${r.what.map((w) => esc(w)).join("; ")}</td></tr>`).join("");
+  return `<div class="card" style="margin-top:18px; max-width:860px">
+    <h3 style="margin:0 0 6px">Still to translate</h3>
+    <p class="muted" style="max-width:62ch; margin:0 0 10px">${byProduct.size} of ${over}
+      say something in one of their catalogue's languages and not in another. This
+      does <b>not</b> stop a publish: the shop shows the language that exists rather than a
+      blank, which is why it is worth publishing and why nothing else would ever mention it.</p>
+    <table class="table">
+      <thead><tr><th>Product</th><th>Catalogue</th><th>Missing</th></tr></thead>
       <tbody>${rows}</tbody></table></div>`;
 }
 
@@ -417,65 +496,86 @@ const parseTargets = (raw) => String(raw || "").split("\n")
 // product's name boxes are. A text in a language it does not declare belongs to a
 // catalogue that does, and [parseVariants] carries it through untouched rather than
 // showing it here to be edited by somebody who cannot read it.
-export const variantLines = (variants, langs) =>
-  (variants || []).map((v) => {
-    const texts = v.texts || {};
-    const named = (langs || []).filter((l) => texts[l]);
-    // One declared language needs no tag in front of the name: a catalogue with a
-    // single language would otherwise carry "de:" on every line it has.
-    const names = (langs || []).length <= 1
-      ? (named.length ? texts[named[0]] : "")
-      : named.map((l) => `${l}:${texts[l]}`).join(" | ");
-    return `${v.id || ""} = ${names}`.trimEnd();
-  }).join("\n");
+// The shapes a product is ordered in, as a grid: one row per shape, one column
+// for its id and one for each language the catalogue declares.
+//
+// It replaces a textarea with a syntax of its own — `gross = de:Gross | en:Large`.
+// That syntax was better than the semicolon convention it outlived, because it
+// NAMED each language rather than making it a position to count out. It was still
+// a syntax somebody had to be taught, in a form where every other text is a box,
+// and the two separators it spent (`=` and `|`) were two characters a shape name
+// could not contain.
+//
+// Rows rather than a textarea costs one thing and it is worth naming: a textarea
+// can be pasted into and a grid cannot. What it buys is that a shape is entered
+// the way everything else on this form is, and that the Nth column is the Nth
+// language on every row without anybody checking.
 
-// parseVariants reads that back.
+// variantRows draws the grid. Two blank rows follow the stored ones so the common
+// case — adding a shape to a product that has some — needs no button; the button
+// below the grid is for the rest.
+export function variantRows(variants, langs, blanks) {
+  const ls = (langs || []).length ? langs : [""];
+  const rows = [...(variants || [])];
+  for (let n = 0; n < (blanks === undefined ? 2 : blanks); n += 1) rows.push({ id: "", texts: {} });
+  const head = `<div class="varrow varhead" style="--langs:${ls.length}">
+    <span>Id</span>${ls.map((l) => `<span>${esc(l || "name")}</span>`).join("")}</div>`;
+  return `<div class="vargrid">${head}${rows.map((v, n) => variantRow(v, ls, n)).join("")}</div>`;
+}
+
+// variantRow is one shape. The id carries the row's index in its name, and every
+// name box carries the same index, which is what ties a row together across a
+// FormData that has no notion of rows.
+function variantRow(v, ls, n) {
+  const texts = v.texts || {};
+  return `<div class="varrow" style="--langs:${ls.length}">
+    <input name="var-${n}-id" value="${esc(v.id || "")}" autocomplete="off"
+      spellcheck="false" placeholder="gross">
+    ${ls.map((l) => `<input name="var-${n}-${esc(l)}" value="${esc(texts[l] || "")}"
+      autocomplete="off" placeholder="${esc(l ? "" : "15 Zoll")}">`).join("")}</div>`;
+}
+
+// parseVariants reads the grid back.
 //
-// The declared languages are rebuilt from the line and the rest of the texts are
-// kept: a name removed from a line is removed from the variant, and a name in a
-// language this catalogue does not declare survives a save made here. That is the
-// same rule the product's own texts follow one level up, and it is the reason this
-// takes the stored variants rather than building from the textarea alone.
+// Rows are found by their id boxes rather than counted, so a row appended after
+// the form was drawn is read like any other and a gap in the numbering is
+// harmless. A row with no id is not a shape and is dropped — that is how one is
+// removed, and it is why the blank rows at the bottom cost nothing.
 //
-// A line with no `=` is kept as an id with no name rather than dropped, for the
-// reason parseTargets keeps a line with no colon: a line this form swallowed would
-// be a shape somebody believes they entered. The portal falls back to the id, so
-// the omission is visible rather than silent.
-const parseVariants = (raw, langs, stored) => {
+// The declared languages are rebuilt from the row and the rest of the texts are
+// kept: a name cleared in a box is cleared on the shape, and a name in a language
+// this catalogue does not declare survives a save made here. That is the rule the
+// product's own texts follow one level up, and it is why this takes the stored
+// variants rather than building from the form alone.
+//
+// A row with an id and no name is kept rather than dropped, for the reason
+// parseTargets keeps a line with no colon: a shape this form swallowed would be
+// one somebody believes they entered. The shop falls back to the id, so the
+// omission is visible rather than silent.
+const parseVariants = (f, langs, stored) => {
   const was = {};
   for (const v of stored || []) was[v.id] = v.texts || {};
-  return String(raw || "").split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const at = line.indexOf("=");
-      const id = (at < 0 ? line : line.slice(0, at)).trim();
-      const rest = at < 0 ? "" : line.slice(at + 1).trim();
-      const texts = { ...(was[id] || {}) };
-      const given = {};
-      if ((langs || []).length <= 1) {
-        // The one declared language, or none at all. A catalogue declaring no
-        // language has no name boxes either, so the name lands under an unnamed
-        // language and the portal's own fallback still shows it.
-        if (rest) given[(langs || [])[0] || ""] = rest;
-      } else {
-        for (const part of rest.split("|")) {
-          const pair = part.trim();
-          if (!pair) continue;
-          const colon = pair.indexOf(":");
-          // A part with no language tag in a multilingual catalogue is the first
-          // declared language: it is what somebody types when they mean "the
-          // obvious one", and refusing it would lose the name.
-          const lang = colon < 0 ? langs[0] : pair.slice(0, colon).trim();
-          const name = colon < 0 ? pair : pair.slice(colon + 1).trim();
-          if (name) given[lang] = name;
-        }
-      }
-      for (const l of [...(langs || []), ""]) {
-        if (given[l]) texts[l] = given[l]; else delete texts[l];
-      }
-      return { id, texts };
-    });
+  const ls = (langs || []).length ? langs : [""];
+
+  const indexes = [];
+  for (const key of f.keys()) {
+    const m = /^var-(\d+)-id$/.exec(key);
+    if (m) indexes.push(Number(m[1]));
+  }
+  indexes.sort((a, b) => a - b);
+
+  const out = [];
+  for (const n of indexes) {
+    const id = String(f.get(`var-${n}-id`) || "").trim();
+    if (!id) continue;
+    const texts = { ...(was[id] || {}) };
+    for (const l of ls) {
+      const name = String(f.get(`var-${n}-${l}`) || "").trim();
+      if (name) texts[l] = name; else delete texts[l];
+    }
+    out.push({ id, texts });
+  }
+  return out;
 };
 
 // eligibleField is who may RECEIVE this product, as a picker over the directory
@@ -569,6 +669,98 @@ const lifecycleFrom = (f) => {
   return from || until ? { from, until } : {};
 };
 
+// Everything a product says per language, drawn as one box per language.
+//
+// A catalogue declares the languages it is kept in, and every text on a product
+// is a map keyed by those tags. So the form draws the list: one box per declared
+// language, side by side, each labelled with its tag. Four languages is four
+// boxes in a row, and a catalogue that adds a fifth grows a fifth box without
+// anybody editing this.
+//
+// It replaces a convention that packed the wordings into one box separated by
+// semicolons (ADR-0412, amended). That convention was compact and it was a trap:
+// the mapping from position to language was invisible, and the separator leaked —
+// a live catalogue was saved with the single language tag `de; en`, because
+// somebody applied the rule they had been taught here to the language list one
+// screen up (ADR-0413). Every box
+// now says which language it is, and nothing has to be counted.
+
+// langFields draws the row. `prefix` is the control name each box carries before
+// its tag, which is what productBody reads them back by.
+function langFields(prefix, langs, values, opts) {
+  const { rows, placeholder, listID } = opts || {};
+  const ls = langs || [];
+  return `<div class="langrow" style="--langs:${ls.length}">${ls.map((l) => `
+    <label class="langbox"><span class="langtag">${esc(l)}</span>
+      ${rows
+    ? `<textarea name="${esc(prefix)}-${esc(l)}" rows="${rows}"
+        placeholder="${esc(placeholder || "")}">${esc((values || {})[l] || "")}</textarea>`
+    : `<input name="${esc(prefix)}-${esc(l)}" value="${esc((values || {})[l] || "")}"
+        autocomplete="off" placeholder="${esc(placeholder || "")}"
+        ${listID ? `list="${esc(listID)}-${esc(l)}"` : ""}>`}
+    </label>`).join("")}</div>`;
+}
+
+// headingBoxes is what the two heading rows are filled with.
+//
+// A heading is two things on the record: the string everything GROUPS by, and a
+// wording per language that is SHOWN (ADR-0412). Where there are wordings the boxes hold
+// them. Where there are none — every product written before the wordings existed,
+// and every heading somebody simply never translated — the key goes in the first
+// declared language's box and the rest stand empty, because the key is what every
+// language renders. That is what makes the row round-trip: what it shows, saved
+// unchanged, stores what it read.
+export function headingBoxes(key, texts, langs) {
+  if ((langs || []).some((l) => (texts || {})[l])) return texts || {};
+  const first = (langs || [])[0];
+  return first && key ? { [first]: key } : {};
+}
+
+// headingFrom reads one heading row back into the key and the wordings.
+//
+// The key is the first box that has anything in it, in the order the catalogue
+// declares its languages — so a maintainer who fills only the second box still
+// gets a heading rather than a wording with nothing to group by, which publishing
+// refuses. Writing the two apart is what ADR-0412 chose over making the heading a
+// map: a key no reader sees keeps "same category" a fact about the catalogue.
+//
+// Wordings are stored only when more than one box is filled. One box is "this
+// heading is not translated": the key renders in every language, which is what a
+// single-language catalogue wants and what the whole installed base carries.
+// Written for the declared languages only and merged over what is stored, so a
+// wording belonging to a catalogue next door survives a save made here — the rule
+// the names and the descriptions follow.
+export function headingFrom(f, prefix, langs, was) {
+  const texts = { ...(was || {}) };
+  const filled = [];
+  for (const l of langs || []) {
+    const val = String(f.get(`${prefix}-${l}`) || "").trim();
+    if (val) { texts[l] = val; filled.push(val); } else { delete texts[l]; }
+  }
+  if (filled.length < 2) {
+    for (const l of langs || []) delete texts[l];
+  }
+  return { key: filled[0] || "", texts };
+}
+
+// knownHeadingsIn is the pick list for one box: every wording already used for
+// this heading in THIS language, plus the keys of headings nobody has worded yet.
+//
+// Per language, because a German box offering French wordings is a list somebody
+// has to read past. The keys are in it because a heading with no wordings is
+// still a heading to reuse, and typing a second spelling of one is how a category
+// becomes two.
+function knownHeadingsIn(items, field, lang, first) {
+  const out = new Set();
+  for (const i of items) {
+    const key = (i[field] || "").trim();
+    const worded = (i[`${field}Texts`] || {})[lang];
+    if (worded) out.add(worded);
+    else if (key && first) out.add(key);
+  }
+  return [...out].sort();
+}
+
 // productBody is what saving the product form posts.
 //
 // A function and not a block inside the submit handler, for the reason
@@ -601,12 +793,25 @@ export function productBody(f, { productID, homeCatalog, langs, stored }) {
     const val = String(f.get(`t-${l}`) || "").trim();
     if (val) texts[l] = val; else delete texts[l];
   }
+  // The descriptions follow the names exactly, merge rule included: this form
+  // renders one box per language *this* catalogue declares, and a description in a
+  // language it does not declare belongs to a catalogue that does and must survive
+  // a save made here. Emptying a rendered box still clears it, or a description
+  // could be written and never taken back.
+  const descriptions = { ...(was.descriptions || {}) };
+  for (const l of langs || []) {
+    const val = String(f.get(`d-${l}`) || "").trim();
+    if (val) descriptions[l] = val; else delete descriptions[l];
+  }
+  // The two headings, each read back from its own row of per-language boxes.
+  const cg = headingFrom(f, "cat", langs, was.categoryTexts);
+  const pg = headingFrom(f, "grp", langs, was.productGroupTexts);
   return {
     ...was,
-    id: productID, homeCatalog, state: f.get("state"), texts,
+    id: productID, homeCatalog, state: f.get("state"), texts, descriptions,
     approval: approvalFrom(f),
-    category: String(f.get("category") || "").trim(),
-    productGroup: String(f.get("productGroup") || "").trim(),
+    category: cg.key, categoryTexts: cg.texts,
+    productGroup: pg.key, productGroupTexts: pg.texts,
     price: String(f.get("price") || "").trim(),
     configForm: f.get("configForm") || "",
     provisionProcess: f.get("provisionProcess") || "",
@@ -619,7 +824,7 @@ export function productBody(f, { productID, homeCatalog, langs, stored }) {
     lifecycle: lifecycleFrom(f),
     // Merged over what is stored, so a name in a language this catalogue does not
     // declare survives a save made here — the rule the texts above follow.
-    variants: parseVariants(f.get("variants"), langs, was.variants),
+    variants: parseVariants(f, langs, was.variants),
   };
 }
 
@@ -640,9 +845,9 @@ const maxDaysFrom = (f) => {
 // ---------- One catalogue ----------
 
 export async function viewCatalogDetail({ api, apiBytes, toast, view, isSuperseded, me, enforced }, id) {
-  let cat, items, releases, processes, forms, dir, people;
+  let cat, items, releases, processes, forms, dir, people, unpublished;
   try {
-    [cat, items, releases, processes, forms, dir, people] = await Promise.all([
+    [cat, items, releases, processes, forms, dir, people, unpublished] = await Promise.all([
       api("GET", `/api/v1/catalogs/${encodeURIComponent(id)}`),
       api("GET", "/api/v1/catalog-products"),
       api("GET", `/api/v1/catalogs/${encodeURIComponent(id)}/releases`),
@@ -659,6 +864,11 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
       // that carries a *username* — the principals directory carries display names
       // and ids, and an approval for a named person is matched by username.
       api("GET", "/api/v1/users/assignable").catch(() => null),
+      // What publishing would change for the people ordering. .catch(() => null)
+      // and deliberately not an empty answer: null is "not known" and draws
+      // nothing, where an empty difference is drawn as "the shop is serving this
+      // as it stands" — a claim a read that failed is in no position to make.
+      api("GET", `/api/v1/catalogs/${encodeURIComponent(id)}/unpublished`).catch(() => null),
     ]);
   } catch (e) {
     if (isSuperseded()) return;
@@ -712,7 +922,7 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
         ${audienceField(dir, cat.groups)}
         <p class="muted" style="margin:0 0 10px">${(cat.groups || []).length
     ? "Everybody in these groups reaches this catalogue, unless a higher-ranked one reaches them first."
-    : "<b>No group named, so nobody reaches this catalogue</b> — the portal will tell them no catalogue is assigned to them."}</p>
+    : "<b>No group named, so nobody reaches this catalogue</b> — the shop will tell them no catalogue is assigned to them."}</p>
         <button class="btn" type="submit">Save</button>
       </form>
       </div>
@@ -767,16 +977,89 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
     <p class="muted" style="max-width:62ch">Publishing freezes everything above into a release.
       An order names one release and is immune to every edit made afterwards, which is why a
       catalogue can be reworked while approvals are still pending.</p>
+    ${unpublishedCard(unpublished, langs)}
     <div class="row"><button class="btn" data-act="publish">Publish</button></div>
     <div class="publish-report"></div>
     ${releases.length ? `<table class="table" style="margin-top:12px">
       <thead><tr><th>Release</th><th>Published</th><th>Products</th></tr></thead>
       <tbody>${releases.map((r) => `<tr><td>${esc(r.id)}</td><td>${fmtTime(r.createdAt)}</td>
         <td>${(r.items || []).length}</td></tr>`).join("")}</tbody></table>`
-    : `<p class="muted">Never published. Until it is, the portal shows this catalogue to nobody.</p>`}`;
+    : `<p class="muted">Never published. Until it is, the shop shows this catalogue to nobody.</p>`}`;
 
-  wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList,
+  wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, formList,
     mayShare(cat, me, enforced), mayTheme(me, enforced), dir, people);
+}
+
+// ---------- What publishing would change ----------
+//
+// The shop serves a release — a frozen copy — and every screen above serves the
+// live catalogue. Both are right, and between one publish and the next they say
+// different things with nothing on either saying so.
+//
+// One direction of that is invisible rather than merely unstated. Take a product
+// out of a catalogue and it leaves this screen at once; the shop goes on
+// offering it from the release. It is then absent from every screen its
+// maintainer has and present on the one they do not, so the case most worth
+// knowing about is the only one nothing could show. The release table underneath
+// listed dates and left the reader to work out whether today's catalogue is one
+// of them, which is not a question a date answers.
+//
+// The quiet case is drawn too, and for the same reason: "the shop is offering
+// this exactly as it stands" is an answer somebody needs, and a panel that speaks
+// up only when something is wrong cannot be told apart from one that failed to
+// check.
+
+// unpublishedCard states the difference between the newest release and the
+// catalogue above it. langs picks the language a name is read in, the same way the
+// product table picks it.
+function unpublishedCard(diff, langs) {
+  // Not known — an older server, or a read that failed. Nothing is drawn: silence
+  // reads as "no answer here", where either sentence below would be a claim about
+  // the shop that this page cannot support.
+  if (!diff) return "";
+  // Never published is already said under the release table, and in that state
+  // every offered product counts as added — a list nobody needs to read to learn
+  // that the shop shows this catalogue to nobody at all.
+  if (!diff.released) return "";
+
+  const against = `<span class="muted">against ${esc(diff.releaseId)}, published
+    ${esc(fmtTime(diff.releasedAt))}</span>`;
+  const added = diff.added || [], removed = diff.removed || [], changed = diff.changed || [];
+  if (!added.length && !removed.length && !changed.length) {
+    return `<div class="card portal-current" style="margin:12px 0">
+      <div class="row"><span class="pill ok">Nothing to publish</span>
+      The shop is offering this catalogue exactly as it stands.</div>
+      <p class="muted" style="margin:6px 0 0">${against}</p></div>`;
+  }
+
+  // The state is worth saying on a product about to be added, and only there: a
+  // draft or withdrawn product is offered but not orderable, so publishing it
+  // changes the catalogue and changes nothing for the person ordering. Said here,
+  // that is one sentence; found afterwards, it is a republish.
+  const names = (list, withState) => `<ul style="margin:0; padding-left:18px">${list
+    .map((x) => `<li>${esc(textOf(x.texts, langs, x.id))}
+      <span class="muted">${esc(x.id)}</span>${withState && x.state && x.state !== "active"
+    ? ` <span class="pill warn">${esc((STATES.find((st) => st.id === x.state) || {}).name || x.state)}</span>`
+    : ""}</li>`).join("")}</ul>`;
+
+  const block = (list, kind, title, note, withState) => list.length
+    ? `<div class="portal-${kind}" style="margin:12px 0 0"><b>${title} (${list.length})</b>
+        <p class="muted" style="margin:2px 0 6px; max-width:62ch">${note}</p>
+        ${names(list, withState)}</div>`
+    : "";
+
+  // Removed first, because it is the one the reader cannot find anywhere else.
+  return `<div class="card portal-behind" style="margin:12px 0; border-color:#b26b00">
+    <div class="row"><span class="pill warn">Unpublished changes</span>${against}</div>
+    ${block(removed, "removed", "Still offered in the shop", `Not in this catalogue any more.
+      The release goes on offering them, and this is the only screen that says so —
+      publishing is what takes them away from the people ordering.`, false)}
+    ${block(added, "added", "Not in the shop yet", `Offered here and absent from the release.
+      Publishing puts them in front of the people ordering; one that is still in draft
+      or withdrawn is published along with the rest and stays unorderable.`, true)}
+    ${block(changed, "changed", "Edited since the release", `Offered in both. The shop is showing
+      the name, description, price or state the product had when it was published.`, false)}
+  </div>`;
 }
 
 function productRow(it, iid, langs, canAssemble) {
@@ -947,7 +1230,7 @@ function edgeForm(offered, byID, langs) {
 // --- How a catalogue looks ---------------------------------------------------
 //
 // A catalogue's appearance is per catalogue and has been since it was built: the
-// portal and the approval page paint themselves from it, and the API has carried
+// shop and the approval page paint themselves from it, and the API has carried
 // it all along. No screen offered it. So the one thing that makes a catalogue
 // somebody *else's* — their colour, their typeface, their mark at the top — was
 // reachable only by whoever was willing to write JSON by hand, which is the exact
@@ -960,7 +1243,7 @@ function edgeForm(offered, byID, langs) {
 
 // TYPEFACES are the stacks the binary ships, spelled as the server spells them
 // (api/catalog/theme.go). A list and not a URL: a web font would reach a third
-// party on every portal page load, carrying the visitor's address there.
+// party on every shop page load, carrying the visitor's address there.
 const TYPEFACES = [
   { id: "system", name: "System", what: "whatever the reader's device uses" },
   { id: "humanist", name: "Humanist", what: "Segoe UI, Candara, Optima" },
@@ -990,7 +1273,7 @@ function appearanceCard(cat, me, enforced) {
   }
 
   return `<h3 style="margin:0 0 10px">How this catalogue looks</h3>
-    <p class="muted" style="max-width:62ch">The portal and the approval page paint
+    <p class="muted" style="max-width:62ch">The shop and the approval page paint
       themselves from this, so a customer sees their own brand rather than yours. Leave
       both empty and the catalogue wears the instance's appearance. Setting it is an
       administrator's; an editor may change what the catalogue offers and not whose it
@@ -1019,7 +1302,7 @@ function appearanceCard(cat, me, enforced) {
 
     <div class="card" style="margin:0 0 18px; max-width:640px">
       <h4 style="margin:0 0 10px">Brand mark</h4>
-      <p class="muted">Shown at the top of the portal for whoever reaches this catalogue.
+      <p class="muted">Shown at the top of the shop for whoever reaches this catalogue.
         Without one it falls back to the instance's. PNG or SVG.</p>
       <p><img class="cat-logo" src="${esc(logoURL)}" alt=""
         style="max-height:64px; max-width:240px" hidden></p>
@@ -1131,7 +1414,7 @@ async function savePicture({ api, apiBytes, toast }, pid, f) {
 // partOfNote says which products in THIS catalogue carry this one, because that is
 // what decides whether the two headings below are read at all.
 //
-// The portal's cascade reads Kategorie › Produktgruppe › Produkt › Services. The
+// The shop's cascade reads Kategorie › Produktgruppe › Produkt › Services. The
 // two upper columns are collected from the products nothing contains and the two
 // lower ones from the containment graph, so a product that is a part is reached
 // through the product carrying it and its own heading is never read. The form
@@ -1162,7 +1445,7 @@ function partOfNote(it, cat, items, langs) {
       + ` and <b>${wholes[wholes.length - 1]}</b>`;
   const one = wholes.length === 1;
   return `<p class="form-sec-hint">In this catalogue ${carriers} ${one ? "carries" : "carry"}
-    this product, so the portal offers it as a <b>Service</b> behind
+    this product, so the shop offers it as a <b>Service</b> behind
     ${one ? "it" : "them"} and not as a Marktleistung of its own. The two headings below
     are read off the products nothing contains, so a requester reaches this product under
     ${one ? `${wholes[0]}&rsquo;s` : "the carrying product&rsquo;s"} heading and not under
@@ -1196,43 +1479,56 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
       <label class="field">Id${it ? "" : " (short, stable, never renamed)"}
         <input name="id" value="${esc(v.id || "")}" ${it ? "readonly" : "required"} autocomplete="off"
           placeholder="laptop"></label>
-      ${langs.map((l) => `<label class="field">Name (${esc(l)})<input name="t-${esc(l)}"
-        value="${esc((v.texts || {})[l] || "")}" autocomplete="off"></label>`).join("")}
+      <label class="field wide">Name
+        <span class="muted" style="display:block; margin:2px 0 6px">One box per language
+          this catalogue is kept in. A product named in one of them and not another
+          still publishes &mdash; the shop shows the name it has rather than a blank
+          &mdash; and the catalogue screen lists what is still untranslated.</span>
+        ${langFields("t", langs, v.texts)}</label>
+      <label class="field wide">Description
+        <span class="muted" style="display:block; margin:2px 0 6px">What the thing
+          <i>is</i>, for somebody who read the name and is still not sure. Optional:
+          most products do not need one. Written in one language and not another it
+          still publishes, and the reader of the other language is shown the one that
+          exists rather than an empty panel.</span>
+        ${langFields("d", langs, v.descriptions, { rows: 3 })}</label>
       ${partOfNote(it, cat, items, langs)}
       <label class="field wide">Category
         <span class="muted" style="display:block; margin:2px 0 6px">The heading the
-          portal groups this product under &mdash; <code>Arbeitsplatz</code>,
-          <code>Kommunikation</code>. A heading and nothing else: it has no ordering of
-          its own (the portal sorts alphabetically), no translation, and two spellings
-          are two headings. Leave it empty and the product sits under the portal's
-          heading for those that carry none. <b>Read off the products nothing
-          contains</b>: the portal reaches a part through the product that carries it,
-          so a heading written on a part is never read there.</span>
-        <input name="category" value="${esc(v.category || "")}" autocomplete="off"
-          list="known-categories" placeholder="Arbeitsplatz">
-        <datalist id="known-categories">${
-  [...new Set(items.map((i) => (i.category || "").trim()).filter(Boolean))].sort()
-    .map((c) => `<option value="${esc(c)}"></option>`).join("")}</datalist></label>
+          shop groups this product under &mdash; <code>Arbeitsplatz</code>,
+          <code>Kommunikation</code>. One box per language, like the name above.
+          <b>The first box that has anything in it is what the shop groups by</b>;
+          the others are how that heading is worded for a reader. Fill only one and it
+          reads the same in every language. It has no ordering of its own (the shop
+          sorts alphabetically, by what the reader sees) and two spellings are two
+          headings. Leave the row empty and the product sits under the shop's heading
+          for those that carry none. <b>Read off the products nothing contains</b>: the
+          shop reaches a part through the product that carries it, so a heading
+          written on a part is never read there.</span>
+        ${langFields("cat", langs, headingBoxes(v.category, v.categoryTexts, langs),
+    { placeholder: "Arbeitsplatz", listID: "known-categories" })}
+        ${langs.map((l, n) => `<datalist id="known-categories-${esc(l)}">${
+  knownHeadingsIn(items, "category", l, n === 0)
+    .map((c) => `<option value="${esc(c)}"></option>`).join("")}</datalist>`).join("")}</label>
       <label class="field wide">Product group
         <span class="muted" style="display:block; margin:2px 0 6px">One level below the
-          category, and the portal reads the two as a chain: <b>Kategorie &rsaquo;
-          Produktgruppe &rsaquo; Produkt &rsaquo; Services</b>. A string like the heading
-          above, with the same costs &mdash; no ordering of its own, no translation, two
-          spellings are two groups. The group has no record and therefore no category of
-          its own: the chain is assembled from the products that carry both, so a group
-          whose products sit in two categories appears under both. Leave it empty and the
-          product sits under the portal's group for those that carry none. Read off the
+          category, and the shop reads the two as a chain: <b>Kategorie &rsaquo;
+          Produktgruppe &rsaquo; Produkt &rsaquo; Services</b>. It is written exactly like
+          the heading above and carries the same costs &mdash; no ordering of its own,
+          two spellings are two groups. The group has no record and therefore no category
+          of its own: the chain is assembled from the products that carry both, so a
+          group whose products sit in two categories appears under both. Read off the
           same products the heading above is.</span>
-        <input name="productGroup" value="${esc(v.productGroup || "")}" autocomplete="off"
-          list="known-groups" placeholder="Mobile Geräte">
-        <datalist id="known-groups">${
-  [...new Set(items.map((i) => (i.productGroup || "").trim()).filter(Boolean))].sort()
-    .map((g) => `<option value="${esc(g)}"></option>`).join("")}</datalist></label>
+        ${langFields("grp", langs, headingBoxes(v.productGroup, v.productGroupTexts, langs),
+    { placeholder: "Mobile Geräte", listID: "known-groups" })}
+        ${langs.map((l, n) => `<datalist id="known-groups-${esc(l)}">${
+  knownHeadingsIn(items, "productGroup", l, n === 0)
+    .map((g) => `<option value="${esc(g)}"></option>`).join("")}</datalist>`).join("")}</label>
       <label class="field wide">Search terms
         <span class="muted" style="display:block; margin:2px 0 6px">Words somebody might
           search for that are <b>not</b> the product's name &mdash; synonyms, the vendor's
           own term, the abbreviation everybody uses, the thing it replaced. Comma
-          separated. The portal searches the id, every name the product carries and these;
+          separated. The shop searches the id, every name the product carries and these;
           the story this serves is finding a service <i>when the exact name is not
           known</i>, which is the person a search over names alone cannot help. One flat
           list and <b>not one per language</b>: a synonym list is for finding, and a
@@ -1253,22 +1549,20 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
       <label class="field inline wide"><input type="checkbox" name="multipleAllowed"
         ${v.multipleAllowed ? "checked" : ""}> May be held more than once
         <span class="muted">— two licences, two mailboxes</span></label>
-      <label class="field wide">Orderable shapes
-        <span class="muted" style="display:block; margin:2px 0 6px">One per line, as
-          <code>id = name</code> &mdash; <code>gross = 15 Zoll</code>. A laptop's size, a
-          licence tier: the same product, ordered in one of several shapes.${langs.length > 1
-    ? ` This catalogue declares ${langs.length} languages, so name each shape per
-          language as <code>gross = ${langs.map((l) => `${esc(l)}:…`).join(" | ")}</code>;
-          a name with no language in front of it is filed under
-          <code>${esc(langs[0])}</code>.` : ""}
-          They are <b>unordered on purpose</b> &mdash; &ldquo;higher&rdquo; is meaningful
-          for a tier and meaningless for Windows against Linux &mdash; so the basket asks
-          the orderer, and <b>refuses to place the order until a shape is chosen</b> for
-          every position that has any. How many may be ticked is not asked here:
-          &ldquo;may be held more than once&rdquo; above already answers it. Leave it empty for a product with one
+      <div class="field wide">Orderable shapes
+        <span class="muted" style="display:block; margin:2px 0 6px">A laptop's size, a
+          licence tier: the same product, ordered in one of several shapes. One row each
+          &mdash; a short id that never changes, then the name ${langs.length > 1
+    ? `in each of this catalogue's ${langs.length} languages` : "somebody reads"}.
+          <b>Clear the id to remove a shape.</b> They are <b>unordered on purpose</b>
+          &mdash; &ldquo;higher&rdquo; is meaningful for a tier and meaningless for
+          Windows against Linux &mdash; so the basket asks the orderer, and <b>refuses to
+          place the order until a shape is chosen</b> for every position that has any.
+          How many may be ticked is not asked here: &ldquo;may be held more than
+          once&rdquo; above already answers it. Leave it empty for a product with one
           shape, which is most of them.</span>
-        <textarea name="variants" rows="3" spellcheck="false"
-          placeholder="gross = 15 Zoll">${esc(variantLines(v.variants, langs))}</textarea></label>
+        ${variantRows(v.variants, langs)}
+        <button type="button" class="btn ghost" data-add-shape>Add a shape</button></div>
       <div class="field wide">Picture
         <span class="muted" style="display:block; margin:2px 0 6px">A photograph of the
           thing or the vendor's mark, shown to whoever is choosing — PNG, JPEG or SVG,
@@ -1293,9 +1587,9 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
           empty on the right is &ldquo;until somebody withdraws it&rdquo;, and empty on both
           is the ordinary product. The window is what lets a catalogue be
           <b>published ahead of the date it opens</b> &mdash; the product is visible,
-          and the portal will not put it in a basket before the first day or after the
+          and the shop will not put it in a basket before the first day or after the
           last. An order outside it is <b>refused by the server</b>, not only hidden by
-          the portal. Dates are the server's own (UTC), so a window that matters to the
+          the shop. Dates are the server's own (UTC), so a window that matters to the
           hour is not what this field is for.</span>
         <div class="row">
           <label>from <input name="orderableFrom" type="date"
@@ -1555,7 +1849,7 @@ function wireAppearance({ api, toast, view }, id, reload) {
   });
 }
 
-function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, canShare, canTheme, dir, people) {
+function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, formList, canShare, canTheme, dir, people) {
   const id = cat.id;
   const reload = () => { const h = location.hash; location.hash = "#/catalog"; location.hash = h; };
   // patch changes a catalogue with no precondition. That is right for a form whose
@@ -1605,7 +1899,13 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
   // on a narrow viewport the property is ignored and the panel is stacked under the
   // list, exactly as it used to be.
   const cols = view.querySelector(".product-cols");
-  const list = view.querySelector(".product-list");
+  // listEl and not `list`: this module has a `list` helper at the top that splits a
+  // comma-separated field, and the catalogue's own save calls it a hundred lines
+  // below. A DOM element named `list` shadowed it for the whole of this function, so
+  // renaming a catalogue or changing its languages threw "list is not a function" —
+  // caught by the submit handler and shown as a toast, which is why it read as a
+  // server refusal rather than as a page that could not run.
+  const listEl = view.querySelector(".product-list");
   // The column itself, which is what carries the offset: the two panels inside it are
   // containers and only one of them holds anything at a time.
   const side = view.querySelector(".product-side");
@@ -1628,9 +1928,9 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
   // the panel is aligned to, and both arrive as ordinary events on the list. One
   // frame later the table has been rebuilt, so this re-measures rather than predicts.
   const realign = () => requestAnimationFrame(align);
-  if (list) {
-    list.addEventListener("click", realign);
-    list.addEventListener("input", realign);
+  if (listEl) {
+    listEl.addEventListener("click", realign);
+    listEl.addEventListener("input", realign);
   }
   // A viewport change moves the row with no event on the list at all, and a narrow
   // one takes the second column away entirely. Observed rather than bound to
@@ -1713,7 +2013,7 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
     }
     try {
       await patch({
-        texts, languages: list(f.get("languages")), rank: Number(f.get("rank")),
+        texts, languages: languageList(f.get("languages")), rank: Number(f.get("rank")),
         groups: audienceFrom(f),
       });
       toast("Saved");
@@ -1924,6 +2224,32 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
   }
 
   function wireProductForm() {
+    // One more row of shape boxes. Two blank ones are drawn with the grid, which
+    // covers adding a shape to a product that has some; this is for the rest, and
+    // it appends rather than re-rendering so that nothing already typed is lost.
+    //
+    // The index is taken from the rows that are there rather than counted up in a
+    // variable: the form can be redrawn between presses, and a counter would then
+    // reuse a number and make two rows write one shape.
+    const grid = editor.querySelector(".vargrid");
+    const addShape = editor.querySelector("[data-add-shape]");
+    if (grid && addShape) {
+      addShape.addEventListener("click", () => {
+        const used = [...grid.querySelectorAll('input[name$="-id"]')]
+          .map((i) => Number(/^var-(\d+)-id$/.exec(i.name)[1]));
+        const next = used.length ? Math.max(...used) + 1 : 0;
+        const ls = langs.length ? langs : [""];
+        const row = document.createElement("div");
+        row.className = "varrow";
+        row.style.setProperty("--langs", String(ls.length));
+        row.innerHTML = `<input name="var-${next}-id" autocomplete="off" spellcheck="false"
+          placeholder="gross">${ls.map((l) => `<input name="var-${next}-${esc(l)}"
+          autocomplete="off">`).join("")}`;
+        grid.appendChild(row);
+        row.querySelector("input").focus();
+      });
+    }
+
     editor.querySelector(".product-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const f = new FormData(e.target);
@@ -1931,18 +2257,40 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
       const pid = String(editing || f.get("id") || "").trim();
       if (!pid) { toast("A product needs an id", "err"); return; }
 
+      // Which catalogue is responsible for this product afterwards.
+      //
+      // A product is referenced by catalogues and edited through exactly one
+      // (ADR-0315), and the server treats a save naming a different home as a
+      // deliberate ADOPTION — it checks that the caller may edit both sides and
+      // moves it. This screen used to send the catalogue being viewed every time,
+      // so opening a product from a catalogue that merely offers it and pressing
+      // save took it away from whoever was responsible for it, silently, and with
+      // the languages of the new home deciding which boxes were drawn from then on.
+      //
+      // So it is asked, and only when there is something to ask: a product with no
+      // home yet is a new one, and a product already at home here has nothing to
+      // move. Cancelling keeps the home rather than abandoning the save, because
+      // the two are different decisions and the maintainer came here to edit.
+      const was = byID[pid] || {};
+      let home = id;
+      if (was.homeCatalog && was.homeCatalog !== id) {
+        home = window.confirm(
+          `This product is maintained in ${was.homeCatalog}, not in this catalogue.\n\n`
+          + "OK moves it here, so this catalogue's editors become responsible for it "
+          + "and its boxes follow this catalogue's languages.\n\n"
+          + "Cancel keeps it where it is and saves your changes anyway.")
+          ? id
+          : was.homeCatalog;
+      }
       const body = productBody(f, {
-        productID: pid, homeCatalog: id, langs, stored: byID[pid] || {},
+        productID: pid, homeCatalog: home, langs, stored: was,
       });
       try {
         await api("POST", "/api/v1/catalog-products", body);
-        // The picture is its own request, because it is bytes and the product is a
-        // record. It follows the save rather than preceding it, so a product that
-        // was refused never acquires a picture — and a picture that fails to upload
-        // is reported on its own, against a product that is already stored.
-        await savePicture({ api, apiBytes, toast }, pid, f);
         // A new product is offered by the catalogue it was created in: creating one
-        // that nothing offers is the likeliest way to lose work here.
+        // that nothing offers is the likeliest way to lose work here. So it comes
+        // straight after the record and before anything optional — whatever a later
+        // step throws, the product is already where somebody will look for it.
         //
         // This is a second write, and it carries the catalogue's revision like every
         // other list write — so it has its own refusal, reported in its own words.
@@ -1962,6 +2310,18 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
             return;
           }
         }
+        // The picture is its own request, because it is bytes and the product is a
+        // record. It goes last, after the record exists and after the catalogue
+        // offers it: a product that was refused never acquires a picture, and
+        // savePicture reports its own failures rather than raising them.
+        //
+        // That total-ness is not enough on its own, which is how this went wrong
+        // once: the bag below is evaluated HERE, by the caller, before savePicture's
+        // try block is entered. A name the caller cannot resolve throws from this
+        // line, lands in the outer catch, and takes every step after it. Keeping
+        // the step last means the only thing a throw here can still cost is the
+        // picture — one upload, and visibly missing.
+        await savePicture({ api, apiBytes, toast }, pid, f);
         toast("Saved");
         reload();
       } catch (err) {

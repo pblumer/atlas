@@ -38,6 +38,51 @@
   outline-offset: 2px;
 }
 
+/*
+ * The grab handle over a selected Decision Service's name. Barely there until it is
+ * pointed at: it lies on top of the name, and a box drawn around the name at all
+ * times would read as a second element rather than as something to take hold of.
+ */
+.djs-decision-service-label-handle {
+  fill: transparent;
+  stroke: none;
+  cursor: grab;
+}
+
+.djs-decision-service-label-handle:hover {
+  fill: var(--color-blue-205-100-50);
+  fill-opacity: 0.15;
+  stroke: var(--color-blue-205-100-50);
+  stroke-width: 1px;
+  stroke-dasharray: 2, 2;
+}
+
+/*
+ * The fold switch a Decision Service carries at the bottom of its box: a plus while
+ * its definition is folded away, a minus while it is shown. It is laid exactly over
+ * the marker the renderer paints on a folded service, so the two read as one thing.
+ */
+.djs-overlay .dmn-decision-service-toggle {
+  display: block;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  cursor: pointer;
+  outline-offset: 2px;
+}
+
+.djs-overlay .dmn-decision-service-toggle:hover {
+  background: var(--color-grey-225-10-90);
+  border-radius: 2px;
+}
+
 .dmn-definitions {
   position: absolute;
   top: 20px;
@@ -128,4 +173,32 @@
   margin-bottom: -0.15em;
   background-color: currentcolor;
   mask: var(--dmn-icon-decision-service) no-repeat center / contain;
+}
+
+/*
+ * The grips on the corners of that handle, for dragging the name box wider or
+ * narrower. Shown with the handle rather than always, for the same reason: a box
+ * drawn around every name at all times reads as a second element.
+ */
+.djs-decision-service-label-grip {
+  fill: white;
+  stroke: var(--color-blue-205-100-50);
+  stroke-width: 1px;
+  opacity: 0;
+}
+
+.djs-decision-service-label-grip:hover,
+.djs-decision-service-label-grip.djs-dragging,
+.djs-decision-service-label-handle:hover ~ .djs-decision-service-label-grip {
+  opacity: 1;
+}
+
+.djs-decision-service-label-grip[data-corner="nw"],
+.djs-decision-service-label-grip[data-corner="se"] {
+  cursor: nwse-resize;
+}
+
+.djs-decision-service-label-grip[data-corner="ne"],
+.djs-decision-service-label-grip[data-corner="sw"] {
+  cursor: nesw-resize;
 }

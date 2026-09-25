@@ -68,6 +68,7 @@ func inventoryFixture(t *testing.T, lines ...Line) (*Service, *Store, *recordedI
 		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error { wakes++; return nil },
 		func() string { return "https://atlas.example.ch" },
+		func() string { return "http://atlas.test" },
 		inv.grant, inv.revoke, holdsNothing)
 
 	if err := store.Save(Order{
@@ -271,6 +272,7 @@ func basketService(t *testing.T, holds ...string) (*Service, *Store) {
 		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error { return nil },
 		func() string { return "https://atlas.example.ch" },
+		func() string { return "http://atlas.test" },
 		ignoreGrant, ignoreRevoke,
 		func(string) (map[string]bool, error) { return has, nil })
 	return s, store
@@ -344,6 +346,7 @@ func TestAnUnreadableInventoryRefusesTheOrder(t *testing.T) {
 		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error { return nil },
 		func() string { return "" },
+		func() string { return "http://atlas.test" },
 		ignoreGrant, ignoreRevoke,
 		func(string) (map[string]bool, error) { return nil, errors.New("the store is gone") })
 

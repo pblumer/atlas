@@ -594,7 +594,7 @@ async function deployDemo() {
 // below.
 //
 // `separate: true` marks an entry that is a page of its own rather than a view of
-// this application, and it opens in its own window. The two portal surfaces are
+// this application, and it opens in its own window. The two shop surfaces are
 // the only ones: they carry the catalogue's brand instead of the console's, they
 // are written for people who never open the modeller, and they load their own
 // message catalogue — so routing to one is leaving Atlas's shell, not moving inside
@@ -609,10 +609,10 @@ const APPS = [
   { id: "console", name: "Console", route: "#/console", on: true, role: "any" },
   { id: "modeler", name: "Modeler", route: "#/modeler", on: true, role: "modeler" },
   { id: "tasks", name: "Tasks", route: "#/tasks", on: true, role: "user" },
-  // The service portal is a page of its own, not a view of this app, so its route
+  // The shop is a page of its own, not a view of this app, so its route
   // is a path and not a hash — written without a leading slash, because a route in
   // this table is what the handbook appends to the site root (href="/" + route),
-  // and "//portal.html" would be a protocol-relative URL to a host of that name.
+  // and "//shop.html" would be a protocol-relative URL to a host of that name.
   // It is written for people who never open the modeler
   // — ordering a laptop and seeing where the order stands — and it carries the
   // brand of the catalogue the visitor belongs to rather than this console's.
@@ -620,7 +620,7 @@ const APPS = [
   // Without this line the page existed and nothing led to it: it was built, served
   // and reachable only by somebody who already knew the URL. Held by
   // TestBothPortalSurfacesAreReachableFromTheMenu.
-  { id: "portal", name: "Portal", route: "portal.html", on: true, role: "user", separate: true },
+  { id: "portal", name: "Shop", route: "shop.html", on: true, role: "user", separate: true },
   // Where a catalogue is filled. Gated at productmanager (ADR-0315): maintaining a
   // catalogue means choosing from processes already deployed, never deploying one,
   // so it is deliberately not the modeller's role — deploy is code execution.
@@ -671,13 +671,18 @@ const TOPNAV = {
     // (ADR-0341). Not Operations, where reconciliation
     // sits: a finding is repair and the operator's, while this asks a line manager
     // whether somebody on their team still needs something — and a line manager has
-    // never opened Operations. Not one of the two portal pages either: those carry
+    // never opened Operations. Not one of the two shop pages either: those carry
     // the catalogue's brand and are written for people outside the tooling.
     { name: "Access review", route: "#/tasks/recertification", role: "user" },
     { name: "Start", route: "#/tasks/start", role: "operator" },
   ],
   panorama: [
     { name: "Starmap", route: "#/panorama/starmap", role: "modeler" },
+    // The altitude above the Starmap (ADR-0402): the estate rather
+    // than one domain of it. Its own entry rather than a subject inside the Starmap while
+    // the altitude is new — the shipped landscape is not touched until this has been read
+    // against a real estate, and folding it in is a change of its own.
+    { name: "Estate", route: "#/panorama/estate", role: "modeler" },
     { name: "Models", route: "#/panorama", role: "modeler" },
   ],
   // The two altitudes of process data, and the reason the UML class diagram was the
@@ -1146,6 +1151,13 @@ function setChrome(appId, route) {
     `class="${t.route === route ? "active" : ""}">${t.name}` +
     (t.badge ? `<span class="nav-badge" data-badge="${t.badge}" hidden></span>` : "") + `</a>`
   ).join("");
+  // On a narrow screen the view names scroll sideways within the bar, and the one
+  // open may be past its edge; bring it into view so the bar says where one is.
+  const current = topnav.querySelector("a.active");
+  if (current && topnav.scrollWidth > topnav.clientWidth) {
+    const bar = topnav.getBoundingClientRect(), link = current.getBoundingClientRect();
+    topnav.scrollLeft += link.left - bar.left - (bar.width - link.width) / 2;
+  }
   syncIncidentBadge(appId); // the nav says how many tokens are stuck, before anything is opened
   document.querySelectorAll("#drawer-apps a").forEach((a) =>
     a.classList.toggle("active", a.dataset.app === appId));
@@ -1740,7 +1752,7 @@ const GRANTABLE_ROLES = [
   { id: "modeler", name: "Modeller", what: "author drafts, forms and decisions — and deploy them" },
   { id: "operator", name: "Operator", what: "start, cancel and repair instances; read runtime data" },
   { id: "user", name: "User", what: "work on tasks and read what they are given" },
-  { id: "productmanager", name: "Product manager", what: "maintain the portal's catalogues and products, and publish releases" },
+  { id: "productmanager", name: "Product manager", what: "maintain the shop's catalogues and products, and publish releases" },
 ];
 
 function userForm(u) {
@@ -1778,7 +1790,7 @@ function avatarField(u) {
   return `<div class="avatar-field" data-uid="${esc(u.id)}" style="border-top:1px solid var(--border); margin-top:14px; padding-top:12px">
     <b>Picture</b>
     <p class="muted" style="margin:2px 0 8px">Shown beside this person's name wherever Atlas names
-      them — a task list, an approval, the portal's recipient picker. PNG or JPEG.
+      them — a task list, an approval, the shop's recipient picker. PNG or JPEG.
       ${u.avatarSource === "entra"
     ? "This one came from the directory; uploading here replaces it, and the mirror will not put it back."
     : ""}</p>
@@ -2384,7 +2396,7 @@ async function viewConsoleOrg() {
           Every route names the role that reaches it: <span class="chip">admin</span> for this page and the
           rest of the instance's configuration, <span class="chip">modeler</span> to deploy and to author,
           <span class="chip">operator</span> to run what is deployed, <span class="chip">user</span> for a
-          person's own task list, <span class="chip">productmanager</span> to maintain the portal's
+          person's own task list, <span class="chip">productmanager</span> to maintain the shop's
           catalogues without administering the instance.${showPresence ? ` <b>Presence</b> is who is signed in this minute, and only
           administrators see it: <b>online</b> means somebody did something in the last five minutes,
           <b>idle</b> that a session is open but untouched, <b>offline</b> that no browser is reporting.
@@ -7996,12 +8008,53 @@ async function viewTasks(preselectKey) {
       const { data, errors } = state.mountedForm.submit();
       if (errors && Object.keys(errors).length > 0) { toast("Please fix the highlighted fields", "err"); return; }
       // A file field (form-js filepicker) holds the picked File client-side, not its
-      // bytes — so read the selected file as text and submit it as the `csvText`
-      // variable a CSV-import service task parses (ADR-0087). This keeps the upload a
-      // normal user-task step rather than a side-channel endpoint.
+      // bytes, so completing the task has to do something with it. There are two
+      // answers and the task's own variables choose between them.
       const fileInput = document.querySelector("#task-form input[type=file]");
-      if (fileInput && fileInput.files && fileInput.files.length) {
-        try { data.csvText = await fileInput.files[0].text(); }
+      const picked = fileInput && fileInput.files && fileInput.files.length ? fileInput.files[0] : null;
+      // logoKatalog names the catalogue a picked image is the brand mark of. Where
+      // it is set, the image goes straight to that catalogue's logo endpoint and
+      // never becomes a process variable.
+      //
+      // # Why not carry the bytes through the process
+      //
+      // Because engine/budget.go says what that costs, in the comment on
+      // DefaultMaxVariable: past a megabyte "it is a document, and a document in a
+      // token's scope is rewritten into the log on every touch". A logo is capped at
+      // half a megabyte, which is about 683 KB once base64 has grown it — under the
+      // ceiling and rewritten into the write-ahead log at every step the process
+      // takes afterwards, for ever. ADR-0316 already refused to put these same bytes
+      // in the catalogue *record* for a weaker version of the same reason.
+      //
+      // # Why this is not a side channel
+      //
+      // It is the endpoint the Console's own catalogue screen uses, called by the
+      // same browser with the same credentials, and it applies its own rules: PNG or
+      // SVG, half a megabyte, and an administrator. The task that carries this field
+      // is assigned to administrators for exactly that reason, so nothing here grants
+      // anybody anything they did not already have.
+      //
+      // # Why the model names a catalogue and not a URL
+      //
+      // A URL would let a model make whoever completes a task issue any request it
+      // liked, as them. A catalogue id can only ever mean "put this logo on that
+      // catalogue", and the endpoint still decides whether they may.
+      const logoKatalog = (state.formVars || {}).logoKatalog;
+      if (picked && logoKatalog) {
+        try {
+          await apiBytes("PUT", "/api/v1/catalogs/" + encodeURIComponent(logoKatalog) + "/logo", picked);
+        } catch (err) {
+          // Before the completion and not after: a task that finished while its logo
+          // did not is a process that believes the catalogue is branded. Stopping
+          // here leaves the task where it is, with the file still picked.
+          toast("Logo konnte nicht hochgeladen werden: " + err.message, "err");
+          return;
+        }
+      } else if (picked) {
+        // The other answer, unchanged: read the file as text and submit it as the
+        // `csvText` variable a CSV-import service task parses (ADR-0087). This keeps
+        // that upload a normal user-task step rather than a side-channel endpoint.
+        try { data.csvText = await picked.text(); }
         catch (err) { toast("Datei konnte nicht gelesen werden: " + err.message, "err"); return; }
       }
       payload = { variables: data };
@@ -8037,6 +8090,25 @@ async function viewTasks(preselectKey) {
       try { state.mountedForm.destroy(); } catch { /* already gone */ }
       state.mountedForm = null;
     }
+    // And the variables it was filled from, so the two have one lifetime. This is
+    // hygiene rather than a fix: nothing reads them without a mounted form, and a
+    // mount always sets them, so a stale value cannot currently be reached. Kept
+    // because the day they are read from somewhere else is the day that stops
+    // being true, and the failure then is somebody's logo on another catalogue.
+    state.formVars = null;
+  }
+
+  // withPeopleNamed hands a form the people of an approval by name, beside their
+  // ids, for display: the shipped approval form's heading says for whom, and an id
+  // there is a key the approver would have to look up. The names are not form
+  // fields, so completing the form never writes them into the process — the order
+  // and the process keep ids (ADR-0314).
+  function withPeopleNamed(data, approval) {
+    if (!approval) return data;
+    const out = { ...data };
+    if (approval.recipientName && out.recipientName == null) out.recipientName = approval.recipientName;
+    if (approval.ordererName && out.ordererName == null) out.ordererName = approval.ordererName;
+    return out;
   }
 
   // mountForm loads the vendored form-js viewer, the task's bound form schema,
@@ -8060,9 +8132,14 @@ async function viewTasks(preselectKey) {
       if (state.selected !== t.key) return; // selection moved on; drop this mount
       host.innerHTML = "";
       const form = new Form({ container: host });
-      await form.importSchema(def.schema, data || {});
+      await form.importSchema(def.schema, withPeopleNamed(data || {}, state.approvals.get(t.key)));
       if (state.selected !== t.key) { try { form.destroy(); } catch { /* noop */ } return; }
       state.mountedForm = form;
+      // The variables the form was filled from, kept beside it. Completing the task
+      // needs one the form does not render — which catalogue a picked logo belongs
+      // to — and reading it back off the submitted data would only find the fields
+      // somebody can see and edit.
+      state.formVars = data || {};
     } catch (err) {
       host.innerHTML = `<p class="muted err">Failed to load form: ${esc(err.message)}</p>`;
     }
@@ -8188,13 +8265,40 @@ async function viewTasks(preselectKey) {
   // `genehmigt = null`, which is not true, which is a rejection with no reason.
   const decidedHere = (t) => !!t && state.approvals.has(t.key) && t.formId === APPROVAL_FORM;
 
+  // inLanguage is the entry one language selects out of a map keyed by language
+  // tags — **by the language and not by the whole tag**.
+  //
+  // A catalogue declares the tags its texts are keyed by, and `de-DE`, `fr-CH` and
+  // `pt-BR` are as correct as `de`, `fr` and `pt`. A reader's language is a
+  // language: `navigator.language` narrowed to its first subtag, because that is
+  // what the two lists below are written in. Matching whole tags, a catalogue kept
+  // in de-DE and fr-FR answers every lookup with nothing and the row falls through
+  // to whichever text the release happened to list first — the product named in a
+  // language the approver did not ask for, with nothing saying so.
+  //
+  // The same correction the shop carries (ADR-0413, as amended). It is here
+  // separately because this is a second surface reading the same maps, and the
+  // first fix did not reach it.
+  function inLanguage(texts, base) {
+    if (texts[base]) return texts[base];
+    for (const tag of Object.keys(texts)) {
+      if (texts[tag] && String(tag).toLowerCase().split("-")[0] === base) return texts[tag];
+    }
+    return "";
+  }
+
+  // readerLanguages is what this reader has a chance with, best first: their own,
+  // then the two the Console itself is written in.
+  const readerLanguages = () => [(navigator.language || "en").slice(0, 2), "en", "de"];
+
   // approvalName is the product as the catalogue wrote it, in a language this reader
   // has a chance with, falling back to the id. The Console is English and a catalogue
   // need not be, so "the first text there is" beats showing an id.
   function approvalName(a) {
     const texts = a.texts || {};
-    for (const tag of [(navigator.language || "en").slice(0, 2), "en", "de"]) {
-      if (texts[tag]) return texts[tag];
+    for (const base of readerLanguages()) {
+      const said = inLanguage(texts, base);
+      if (said) return said;
     }
     const first = Object.values(texts).find((v) => v);
     return first || a.itemId || "—";
@@ -8205,8 +8309,9 @@ async function viewTasks(preselectKey) {
   // case the row is simply left out.
   function approvalCatalogue(a) {
     const texts = a.catalogTexts || {};
-    for (const tag of [(navigator.language || "en").slice(0, 2), "en", "de"]) {
-      if (texts[tag]) return texts[tag];
+    for (const base of readerLanguages()) {
+      const said = inLanguage(texts, base);
+      if (said) return said;
     }
     return Object.values(texts).find((v) => v) || "";
   }
@@ -8253,8 +8358,8 @@ async function viewTasks(preselectKey) {
         ${row("Product", `${esc(approvalName(a))} <span class="chip">${esc(a.itemId)}</span>`)}
         ${row("Variant", a.variantId ? esc(a.variantId) : "")}
         ${row("Cost", a.price ? esc(a.price) : "")}
-        ${row("For", esc(a.recipient))}
-        ${row("Ordered by", esc(a.orderer))}
+        ${row("For", esc(a.recipientName || a.recipient))}
+        ${row("Ordered by", esc(a.ordererName || a.orderer))}
         ${row("Order", `<span class="chip">${esc(a.orderId)}</span>`)}
         ${row("Catalogue", esc(approvalCatalogue(a)))}
       </div>
@@ -8316,6 +8421,10 @@ async function viewTasks(preselectKey) {
     destroyForm();
     destroyProc();
     const t = state.tasks.find((x) => x.key === state.selected);
+    // A narrow screen shows the list or the task, not both side by side
+    // (ADR-0417); the grid says which.
+    const grid = detailEl.closest(".tasks");
+    if (grid) grid.classList.toggle("has-selection", !!t);
     if (!t) {
       detailEl.innerHTML = `<div class="tasks-detail-empty muted">Select a task to see its details.</div>`;
       return;
@@ -8378,6 +8487,7 @@ async function viewTasks(preselectKey) {
       ? `<div class="tasks-doc"><h2>What to do</h2><div class="md">${renderMarkdown(t.documentation)}</div></div>`
       : "";
     detailEl.innerHTML = `
+      <button class="btn ghost small tasks-back" id="task-back">\u2039 Back to the list</button>
       <header class="tasks-detail-head">
         <h1>${esc(taskTitle(t))}</h1>
         <div class="tasks-detail-actions">
@@ -8410,6 +8520,11 @@ async function viewTasks(preselectKey) {
       const b = document.getElementById(id);
       if (b) b.addEventListener("click", () => decideApproval(t, approved));
     }
+    document.getElementById("task-back").addEventListener("click", () => {
+      state.selected = null;
+      renderList();
+      renderDetail();
+    });
     document.getElementById("task-claim").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
       btn.disabled = true;
@@ -8565,6 +8680,10 @@ async function viewTasks(preselectKey) {
             orderId: a.orderId || "", itemId: a.itemId || "",
             positionId: a.positionId || "", variantId: a.variantId || "",
             recipient: a.recipient || "", orderer: a.orderer || "",
+            // The two people by name, as the server resolved them when it read the
+            // approval. The ids stay beside them: the form of the task may still
+            // read one, and a name is only for the reader.
+            recipientName: a.recipientName || "", ordererName: a.ordererName || "",
             price: a.price || "", texts: a.texts || {},
             // Which customer's catalogue this order came from. The page this replaced
             // said it in the catalogue's own colours; the Console is Atlas's own
@@ -8781,11 +8900,14 @@ async function viewStartProcess() {
   function renderDetail() {
     destroyForm();
     const p = state.procs.find((x) => x.key === state.selected);
+    const grid = detailEl.closest(".tasks");
+    if (grid) grid.classList.toggle("has-selection", !!p);
     if (!p) {
       detailEl.innerHTML = `<div class="tasks-detail-empty muted">Select a process to start it via its form.</div>`;
       return;
     }
     detailEl.innerHTML = `
+      <button class="btn ghost small tasks-back" id="start-back">\u2039 Back to the list</button>
       <header class="tasks-detail-head">
         <h1>${esc(p.name || p.processId)}</h1>
         <button class="btn" id="start-go" title="Start a new instance with the form values above">Start process</button>
@@ -8797,6 +8919,11 @@ async function viewStartProcess() {
       <div class="tasks-form" id="start-form"><p class="muted">Loading form&hellip;</p></div>
       <div class="tasks-publish" id="start-publish"></div>`;
     renderPublish(p);
+    detailEl.querySelector("#start-back").addEventListener("click", () => {
+      state.selected = null;
+      renderList();
+      renderDetail();
+    });
     detailEl.querySelector("#start-go").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
       let variables = {};
@@ -9497,6 +9624,13 @@ async function viewPanoramaStarmap() {
   await mod.mountPanoramaMesh(view, { api, toast });
 }
 
+async function viewPanoramaEstate() {
+  const gen = navGen;
+  const mod = await import("./panorama-estate.js");
+  if (superseded(gen)) return;
+  await mod.mountPanoramaEstate(view, { api, toast });
+}
+
 async function viewPanoramaModel(id) {
   const gen = navGen;
   const mod = await import("./panorama-viewer.js");
@@ -10017,15 +10151,22 @@ async function route() {
     if (path === "#/operations/sql-mock") return await viewSQLMockJournal();
     if (path === "#/operations/decisions") return await viewDecisions();
     if (path === "#/tasks/recertification") {
+      // Taken before the import, as the routes above take it: the closure is read
+      // after the view's first await, and without it that read threw.
+      const gen = navGen;
       const { viewRecertification } = await import("./recertification.js");
       return await viewRecertification({ api, toast, view, isSuperseded: () => superseded(gen) });
     }
     if (path === "#/operations/reconciliation") {
+      // Taken before the import, as the routes above take it: the closure is read
+      // after the view's first await, and without it that read threw.
+      const gen = navGen;
       const { viewReconciliation } = await import("./reconciliation.js");
       return await viewReconciliation({ api, toast, view, isSuperseded: () => superseded(gen) });
     }
     if (path === "#/operations/call-activities") return await viewCallActivities();
     if (path === "#/panorama/starmap") return await viewPanoramaStarmap();
+    if (path === "#/panorama/estate") return await viewPanoramaEstate();
     if (path === "#/panorama") return await viewPanoramaModels();
     const pm = path.match(/^#\/panorama\/models\/(.+)$/);
     if (pm) return await viewPanoramaModel(decodeURIComponent(pm[1]));

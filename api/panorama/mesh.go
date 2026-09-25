@@ -397,6 +397,28 @@ type Product struct {
 	// reached, so the binding names an id and never a version.
 	ProvisionProcess   string
 	DeprovisionProcess string
+	// State is the item's catalogue state as the store spells it — "draft",
+	// "active", "withdrawn" (see [catalog.State]) — and it is carried rather than
+	// reduced to a flag.
+	//
+	// Three values and not a boolean, because the two that are not active are not
+	// the same thing and a reader narrowing by this is usually asking about
+	// precisely that difference: a draft is an item somebody is still writing, a
+	// withdrawn one is an item that was real and was retired. Collapsed into
+	// "not active" they become one heap, and "what did we retire" — the question
+	// that sends somebody to this picture in the first place — can no longer be
+	// asked at all.
+	State string
+	// Approval is the item's approval rule kind, as [catalog.ApprovalKind] spells
+	// it: "none", "fixed", "role", "superior", or the name a registered process is
+	// known by. Empty from a store that has no rule on the item.
+	//
+	// The kind and not a "needs approval" boolean, for the reason above and one
+	// more: the set is open — a fifth kind is modelled and registered under a name
+	// rather than built in — so the fact is a string this package must not try to
+	// enumerate. Whether that adds up to "requires approval" is a reading, and a
+	// reading belongs where the picture is drawn.
+	Approval string
 }
 
 // Landscape is everything the mesh derives from, already filtered for this caller.
@@ -536,6 +558,21 @@ type Node struct {
 	// application, and one field holding two kinds of container is how a reader ends
 	// up asking which one they have.
 	Catalog string `json:"catalog,omitempty"`
+	// ProductState and ApprovalKind are a product node's two catalogue facets, and
+	// are empty on every other kind — see [Product.State] and [Product.Approval]
+	// for why each carries the store's own spelling rather than a flag.
+	//
+	// ProductState is deliberately *not* the State field further down. That one is
+	// the observation state behind Severity — whether this thing is healthy — and
+	// these two are what the catalogue says the offering is. A withdrawn product
+	// whose provisioning process is green is an ordinary state of affairs, and one
+	// field answering both questions is how a reader ends up reading the wrong one.
+	//
+	// They reach only products this caller may see: a product they may not is drawn
+	// as a restricted placeholder of another kind entirely and never gets here, so
+	// no facet of a hidden offering leaves the server.
+	ProductState string `json:"productState,omitempty"`
+	ApprovalKind string `json:"approvalKind,omitempty"`
 	// ProcessID and Version identify a process node well enough to navigate to the
 	// Operations view (L2) without a second lookup. On a definition node they are the
 	// identity itself rather than a navigation aid (ADR-0401 §2).
@@ -578,6 +615,27 @@ type Node struct {
 	// empty when the severity is the node's own. ADR-0211 §4 requires it: a red
 	// parent that cannot say which child is red is not actionable.
 	SeverityFrom string `json:"severityFrom,omitempty"`
+	// Holds is how many nodes a domain's own landscape holds (ADR-0402 §2), and zero on
+	// every other kind. It is what makes the estate's budget legible: a domain standing
+	// for four hundred nodes and one standing for four are the same size on the picture,
+	// and only this says they are not.
+	Holds int `json:"holds,omitempty"`
+	// DrawnBy names the credential whose reach produced a domain's answer (ADR-0402 §1),
+	// and is empty on every other kind and on this runtime's own domain. A federated read
+	// is as wide as the credential that made it, and the picture states that rather than
+	// leaving a reader to discover it.
+	DrawnBy string `json:"drawnBy,omitempty"`
+	// Restricted is how many of a domain's [Holds] nodes stood in as placeholders for
+	// resources the credential that drew it may not see. Set on a domain node only,
+	// and read against that node rather than against the picture: [Graph.Restricted]
+	// counts what *this* reader may not see in *this* graph, and this counts what
+	// somebody else's credential could not see in somebody else's.
+	//
+	// Keeping the two apart is the whole point of ADR-0402 §1's disclosure rule. A
+	// federated subgraph is as wide as the credential that fetched it (ADR-0410), so a
+	// domain whose reach covered half of it has to say so beside the count — an
+	// incompleteness that is stated is a fact, one that is not is a discovery.
+	Restricted int `json:"restricted,omitempty"`
 	// Incidents is how many unresolved incidents the engine holds against this node.
 	// Only a process node can carry one — an incident belongs to a token, and only a
 	// process has tokens — so it is absent everywhere else rather than zero, because
@@ -636,11 +694,23 @@ type Node struct {
 // binding catalog already applies — a deployment target is org-wide infrastructure
 // with no sharing scope of its own.
 //
-// No edges are derived to it, and that absence is deliberate rather than pending. A
-// promotion is an act, not a stored relationship: this server does not record which
-// of its applications is running over there, so any line drawn from one to a target
-// would be an assertion nobody made. What it does know is that the peer exists and
-// whether it answers, and that is exactly what is drawn.
+// No edges are derived to it, and that absence is deliberate rather than pending —
+// but not for the reason this comment used to give. It said a promotion is an act and
+// not a stored relationship, and that this server does not record which of its
+// applications is running over there. It does: `deploymentTarget.Bindings` maps a
+// local application id to the id the same application has on that target, written on
+// the first successful promotion (`api/promote.go`, ADR-0129 option C1) and read back
+// on every later one.
+//
+// What that map is, precisely, is the record of **a promotion that happened** — not
+// evidence that the application is still deployed there, which nothing local can
+// know. So the join is a fact and the current state is not, which is why the join
+// belongs to the estate altitude that draws exactly that
+// (ADR-0402 §4: the only
+// estate-wide edges that are facts are the application joins a promotion recorded)
+// rather than to this picture, where a line between an application and a target would
+// read as "runs there now". What L0 knows about a target is that the peer exists and
+// whether it answers, and that is what is drawn.
 type Target struct {
 	ID   string
 	Name string
@@ -675,6 +745,10 @@ type Edge struct {
 	// reconciliation, a compensation branch and an error handler are each correctly
 	// zero for months and each load-bearing.
 	Taken *int64 `json:"taken,omitempty"`
+	// Promoted is how many applications an estate join stands for (ADR-0402 §4): one
+	// edge between two domains, and the number of recorded promotions along it. Zero
+	// on every other kind of edge, where it would be a claim about nothing.
+	Promoted int `json:"promoted,omitempty"`
 	// TakenSince is when the counting started, in Unix seconds: the moment the source
 	// definition was deployed, because the counter is keyed by definition key and a
 	// redeploy starts a fresh one. It is the window without which Taken says nothing,
@@ -1159,6 +1233,11 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 			node := Node{
 				ID: productNodeID(id), Kind: KindProduct, Name: it.Name,
 				Provenance: ProvenanceDerived,
+				// What the catalogue says this offering is. Only ever reached for a
+				// product this caller may view — the branch above sends the others to a
+				// restricted placeholder — so this is not a second place to get the
+				// visibility rule right.
+				ProductState: it.State, ApprovalKind: it.Approval,
 			}
 			if home, ok := foldInto[id]; ok {
 				node.Catalog = catalogNodeID(home)

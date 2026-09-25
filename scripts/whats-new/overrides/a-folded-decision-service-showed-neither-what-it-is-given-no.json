@@ -1,0 +1,29 @@
+{
+  "title": {
+    "en": "A folded decision service keeps its arrows",
+    "de": "Ein zugeklappter Decision Service behält seine Pfeile"
+  },
+  "summary": {
+    "en": "Folding a decision service used to take away the arrows reaching in from outside, leaving the input data sitting unattached beside it. They now end on the folded box, which is what the service is given and what it gives. Unfolding puts the box back exactly as it was, size and dividing line included.",
+    "de": "Beim Zuklappen eines Decision Service verschwanden bisher die Pfeile, die von aussen hineinreichten; die Input-Daten standen danach unverbunden daneben. Sie enden jetzt am zugeklappten Kasten — das ist, was der Service bekommt und was er liefert. Das Aufklappen stellt den Kasten wieder genau so her, wie er war, samt Grösse und Trennlinie."
+  },
+  "tutorial": {
+    "en": [
+      "Open a decision model that has a decision service.",
+      "Select the service and choose the fold entry on its context pad.",
+      "The box shrinks and keeps every arrow reaching in from outside.",
+      "Choose the same entry again to unfold it."
+    ],
+    "de": [
+      "Ein Entscheidungsmodell mit einem Decision Service öffnen.",
+      "Den Service auswählen und im Kontextmenü den Eintrag zum Zuklappen wählen.",
+      "Der Kasten wird klein und behält jeden Pfeil, der von aussen hineinreicht.",
+      "Denselben Eintrag erneut wählen, um wieder aufzuklappen."
+    ]
+  },
+  "try": {
+    "label": { "en": "Open the Modeler", "de": "Modeler öffnen" },
+    "route": "#/modeler"
+  },
+  "tags": [ "Modeler" ]
+}

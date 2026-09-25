@@ -224,15 +224,22 @@ func TestBothProcessesAreRequired(t *testing.T) {
 	contains(t, problems, "provision")
 }
 
-// TestEveryDeclaredLanguageIsTranslated: a customer must not meet a product in a
-// language the catalogue promised and does not have.
-func TestEveryDeclaredLanguageIsTranslated(t *testing.T) {
+// TestEveryDeclaredLanguageIsReportedAndNotRefused.
+//
+// This used to refuse, on the reasoning that a customer must not meet a product
+// in a language the catalogue promised and does not have. They never did: the
+// portal falls back to the language the catalogue has, so what the refusal
+// actually stopped was a usable catalogue going live. It is reported instead —
+// see translationgaps_test.go for the whole of that argument.
+func TestEveryDeclaredLanguageIsReportedAndNotRefused(t *testing.T) {
 	in := Input{
 		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de", "fr"}, Items: []string{"a"}}},
 		Items:    []Item{item("a")}, // has "de" only
 	}
-	_, problems := Publish(in)
-	contains(t, problems, "fr")
+	if _, problems := Publish(in); len(problems) != 0 {
+		t.Errorf("a product named in one of two declared languages was refused: %+v", problems)
+	}
+	contains(t, TranslationGaps(in), "no name in fr")
 }
 
 // TestRankTieIsRefused: ranks resolve which catalogue a user sees, so a tie is a
@@ -337,13 +344,18 @@ func TestPublishReportsEveryProblemAtOnce(t *testing.T) {
 	broken := item("a")
 	broken.ProvisionProcess = ""
 	broken.DeprovisionProcess = ""
+	// Three refusals of three different kinds, so the test cannot pass on one
+	// check reported twice. The third used to be the missing French text; that is
+	// a gap now and not a refusal, so it is a blank category instead — still a
+	// refusal, and still nothing to do with the two above it.
+	broken.Category = "   "
 	in := Input{
 		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de", "fr"}, Items: []string{"a"}}},
 		Items:    []Item{broken},
 	}
 	_, problems := Publish(in)
 	if len(problems) < 3 {
-		t.Fatalf("want at least 3 problems (provision, deprovision, fr), got %v", problems)
+		t.Fatalf("want at least 3 problems (provision, deprovision, blank category), got %v", problems)
 	}
 }
 
@@ -770,4 +782,91 @@ func TestAPublishThatDoesNotSayWhatItIsForIsRefused(t *testing.T) {
 	// A subject that is not in the input is a caller error, not an empty catalogue.
 	_, problems = Publish(Input{CatalogID: "gone", Catalogs: two})
 	contains(t, problems, "is not in this input")
+}
+
+// A description is optional as a whole and all-or-nothing once there is one
+// (#1069). The rule is not "every product needs a paragraph" — most do not — it is
+// that a product which explains itself must explain itself to everybody the
+// catalogue is published for.
+
+// bilingual is an item a two-language catalogue accepts by name, so these tests
+// fail on the description rule or not at all.
+func bilingual(id string) Item {
+	it := item(id)
+	it.Texts = map[string]string{"de": id, "fr": id}
+	return it
+}
+
+func TestAProductNeedsNoDescriptionAtAll(t *testing.T) {
+	it := bilingual("vpn")
+
+	_, problems := Publish(Input{
+		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de", "fr"}, Items: []string{"vpn"}}},
+		Items:    []Item{it},
+	})
+
+	if len(problems) != 0 {
+		t.Fatalf("the fixture itself is unpublishable: %+v", problems)
+	}
+}
+
+// TestADescriptionInOneLanguageIsReportedAndNotRefused.
+//
+// The name's rule, one field down, and relaxed with it: the portal falls back to
+// the description it has rather than showing an empty panel, so the half is worth
+// publishing and worth saying. See translationgaps_test.go.
+func TestADescriptionInOneLanguageIsReportedAndNotRefused(t *testing.T) {
+	it := bilingual("vpn")
+	it.Descriptions = map[string]string{"de": "Verschlüsselter Zugang ins Firmennetz."}
+
+	in := Input{
+		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de", "fr"}, Items: []string{"vpn"}}},
+		Items:    []Item{it},
+	}
+	if _, problems := Publish(in); len(problems) != 0 {
+		t.Errorf("a product described in one of two declared languages was refused: %+v", problems)
+	}
+	gaps := TranslationGaps(in)
+	contains(t, gaps, "no description in fr")
+	// And not a complaint about the language it does have.
+	for _, g := range gaps {
+		if strings.HasSuffix(g.Message, " de") {
+			t.Errorf("the language that has a description was faulted: %+v", g)
+		}
+	}
+}
+
+// Whitespace is not a description. Read as one it would demand a translation of
+// nothing in every other language the catalogue declares — turning a field
+// somebody cleared into a wall in front of the release.
+func TestADescriptionOfSpacesIsNoDescription(t *testing.T) {
+	it := bilingual("vpn")
+	it.Descriptions = map[string]string{"de": "   "}
+
+	_, problems := Publish(Input{
+		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de", "fr"}, Items: []string{"vpn"}}},
+		Items:    []Item{it},
+	})
+
+	for _, p := range problems {
+		if strings.Contains(p.Message, "description") {
+			t.Errorf("blank spaces were read as a description: %+v", p)
+		}
+	}
+}
+
+// A description in every declared language is the case the rule exists to let
+// through.
+func TestADescriptionInEveryLanguagePublishes(t *testing.T) {
+	it := bilingual("vpn")
+	it.Descriptions = map[string]string{"de": "Zugang ins Firmennetz.", "fr": "Accès au réseau."}
+
+	_, problems := Publish(Input{
+		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de", "fr"}, Items: []string{"vpn"}}},
+		Items:    []Item{it},
+	})
+
+	if len(problems) != 0 {
+		t.Errorf("a fully translated description was refused: %+v", problems)
+	}
 }

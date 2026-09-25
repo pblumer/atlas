@@ -1,0 +1,28 @@
+{
+  "tags": [
+    "Service catalogue",
+    "Shop"
+  ],
+  "title": {
+    "en": "Kategorie and Produktgruppe in the reader's language",
+    "de": "Kategorie und Produktgruppe in der Sprache der Leserin"
+  },
+  "summary": {
+    "en": "A catalogue says which languages it is kept in, and it refuses to publish a product named in one of them and not another. So a catalogue kept in German, French, English and Italian had every product name, every shape and every description translated — and then filed all of them under two German words. The portal's first two columns, Kategorie and Produktgruppe, were the last text on the page that did not reach a reader in their own language, and nothing pointed it out: the German word simply appeared, and it looked deliberate. A product can now carry each heading once per language. In the console both are a single box, the wordings in the order the catalogue lists its languages and separated by semicolons: Arbeitsplatz; Poste de travail; Workplace; Postazione. Write one wording and it is shown in every language, which is what every product that exists today already does — nothing had to be changed, and no published release reads differently. The first entry stays the one the portal files products under, so a product stays in its category whatever language somebody is reading in, and the column is sorted by the words actually on the screen. Publishing checks two things it can prove: a heading translated into one of the catalogue's languages and not another is refused, because the missing one would quietly fall back to the first; and two products that word the same heading differently are refused too, because one column can only say one of them.",
+    "de": "Ein Katalog nennt die Sprachen, in denen er geführt wird, und verweigert die Publikation eines Produktes, das in einer davon benannt ist und in einer anderen nicht. Ein Katalog in Deutsch, Französisch, Englisch und Italienisch hatte also jeden Produktnamen, jede Ausprägung und jede Beschreibung übersetzt — und alles zusammen unter zwei deutschen Wörtern abgelegt. Die ersten beiden Spalten des Portals, Kategorie und Produktgruppe, waren der letzte Text der Seite, der die Leserin nicht in ihrer Sprache erreichte, und nichts wies darauf hin: Das deutsche Wort erschien einfach, und es sah beabsichtigt aus. Ein Produkt kann jede der beiden Überschriften jetzt einmal pro Sprache führen. In der Konsole ist beides je ein Feld, die Bezeichnungen in der Reihenfolge der Katalogsprachen und durch Semikolon getrennt: Arbeitsplatz; Poste de travail; Workplace; Postazione. Wer nur eine Bezeichnung schreibt, zeigt sie in allen Sprachen — genau das, was jedes heute bestehende Produkt bereits tut; nichts musste umgestellt werden, und kein publiziertes Release liest sich anders. Der erste Eintrag bleibt der Wert, unter dem das Portal ablegt: Ein Produkt bleibt in seiner Kategorie, in welcher Sprache auch gelesen wird, und die Spalte ist nach den Wörtern sortiert, die tatsächlich auf dem Bildschirm stehen. Beim Publizieren wird zweierlei geprüft, weil es beweisbar ist: Eine Überschrift, die in einer Katalogsprache übersetzt ist und in einer anderen nicht, wird abgelehnt — die fehlende fiele still auf die erste zurück; und zwei Produkte, die dieselbe Überschrift unterschiedlich bezeichnen, werden ebenfalls abgelehnt, weil eine Spalte nur eines von beiden sagen kann."
+  },
+  "tutorial": {
+    "en": [
+      "Open Catalogue in the console and pick a catalogue kept in more than one language.",
+      "Open a product and find the Category and Product group boxes.",
+      "Write the heading once per language, in the order named above the box, separated by semicolons.",
+      "Save, publish the catalogue, and open the portal in each language."
+    ],
+    "de": [
+      "In der Konsole den Katalog öffnen und einen Katalog wählen, der in mehr als einer Sprache geführt wird.",
+      "Ein Produkt öffnen und die Felder Kategorie und Produktgruppe aufsuchen.",
+      "Die Überschrift einmal pro Sprache schreiben, in der über dem Feld genannten Reihenfolge, durch Semikolon getrennt.",
+      "Speichern, den Katalog publizieren und das Portal in jeder Sprache öffnen."
+    ]
+  }
+}

@@ -19,6 +19,14 @@ import (
 // request that was taken back before it was ever considered. So the approval's
 // instance is cancelled with the line.
 //
+// The same is true of every other process already working the line. A pending
+// line may have its provisioning started — the line reads pending until that
+// process reports — and a provisioning step in somebody's inbox ("enter the
+// address for the new account") is work for a position that no longer exists.
+// Every instance the order recorded on a withdrawn line (ADR-0416) that is still
+// running is cancelled with it. What such a process already did in a target
+// system is not undone: cancelling stops the work, it does not compensate it.
+//
 // And the fulfilment orchestrator is parked waiting to hear that the order moved.
 // It has to be told, or it waits for a line that will never start.
 
@@ -119,6 +127,7 @@ func (s *Server) handleCancelOrder(w http.ResponseWriter, r *http.Request) {
 	// making the cancellation less true, and neither is worth refusing a caller
 	// whose order is already withdrawn — so they are reported in the log and not
 	// in the response.
+	s.stopWorkOf(out, at)
 	s.closeApprovalsOf(id, cancelled)
 	s.wakeFulfilment(id)
 
@@ -155,6 +164,41 @@ func (s *Server) closeApprovalsOf(orderID string, items []string) {
 			continue
 		}
 		s.do(func() { s.proc.CancelInstance(task.ProcessInstanceKey) })
+		_ = s.drive()
+	}
+}
+
+// stopWorkOf cancels every still-running instance recorded on the lines this
+// withdrawal took back — the ones it marked cancelled at the moment at.
+//
+// The recorded instances are the certain answer (ADR-0416). An order placed before
+// instances were recorded names none, and for it [Server.closeApprovalsOf] still
+// finds the approval by walking the open tasks.
+func (s *Server) stopWorkOf(o order.Order, at int64) {
+	var keys []uint64
+	for _, l := range o.Lines {
+		if l.Status != order.StatusCancelled || l.DecidedAt != at {
+			continue
+		}
+		for _, in := range l.Instances {
+			keys = append(keys, in.Key)
+		}
+	}
+	if len(keys) == 0 {
+		return
+	}
+	var stopped bool
+	s.do(func() {
+		for _, k := range keys {
+			// A finished instance is the ordinary case for an approval that already
+			// decided, and there is nothing to stop.
+			if _, active, err := s.store.ActiveProcessInstance(k); err == nil && active {
+				s.proc.CancelInstance(k)
+				stopped = true
+			}
+		}
+	})
+	if stopped {
 		_ = s.drive()
 	}
 }

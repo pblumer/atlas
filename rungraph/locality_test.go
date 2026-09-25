@@ -35,8 +35,17 @@ import (
 // is cheaper than a package whose only purpose is to be shared by two callers.
 func engineFixture(t *testing.T) (*engine.Processor, *state.Store) {
 	t.Helper()
+	p, store, _ := engineFixtureIn(t)
+	return p, store
+}
+
+// engineFixtureIn is engineFixture plus the WAL directory, for a test that tails the same
+// log the processor is writing.
+func engineFixtureIn(t *testing.T) (*engine.Processor, *state.Store, string) {
+	t.Helper()
 	dir := t.TempDir()
-	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
+	walDir := filepath.Join(dir, "wal")
+	log, err := wal.Open(wal.Options{Dir: walDir})
 	if err != nil {
 		t.Fatalf("wal.Open: %v", err)
 	}
@@ -45,7 +54,7 @@ func engineFixture(t *testing.T) (*engine.Processor, *state.Store) {
 		t.Fatalf("state.Open: %v", err)
 	}
 	t.Cleanup(func() { _ = store.Close(); _ = log.Close() })
-	return engine.New(1, log, store, engine.SystemClock{}), store
+	return engine.New(1, log, store, engine.SystemClock{}), store, walDir
 }
 
 // parkingWorkload is a process that leaves a *shape* behind rather than a single node.

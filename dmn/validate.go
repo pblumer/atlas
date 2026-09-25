@@ -68,6 +68,9 @@ func (v *Validator) Validate(ctx context.Context, modelRef string) (ValidationRe
 	if collisions := nameCollisions(defs, xml); len(collisions) > 0 {
 		return ValidationResult{Resolved: true, Message: collisionMessage(collisions)}, nil
 	}
+	if empty := servicesPublishingNothing(xml); len(empty) > 0 {
+		return ValidationResult{Resolved: true, Message: publishesNothingMessage(empty)}, nil
+	}
 	names, aliases := decisionNames(defs)
 	return ValidationResult{
 		Resolved:  true,
@@ -100,10 +103,22 @@ type DecisionInfo struct {
 	// one should see which is the published interface and which is a decision inside
 	// it (services.go).
 	Service bool `json:"service,omitempty"`
+	// Members are the decisions a service publishes or evaluates internally, under
+	// the names a caller addresses them by; empty on a decision, which has none.
+	//
+	// It is here so a picker can show a decision as belonging to a service. Calling
+	// one of them works and answers correctly, which is exactly why it needs saying:
+	// it reaches past the interface the service exists to be, and ties the caller to
+	// an arrangement the service was meant to be free to change.
+	//
+	// Input decisions are deliberately absent. One names the boundary the *caller*
+	// supplies, so it sits outside the service rather than within it (DMN §10.4).
+	Members []string `json:"members,omitempty"`
 }
 
 // Describe resolves modelRef, compiles it, and returns its model name and the
-// self-description of each evaluable decision (inputs + output). Like Validate it
+// self-description of everything the model offers a caller by name — its decision
+// services and its evaluable decisions, each with its inputs and output. Like Validate it
 // returns a non-nil error only for an infrastructure failure; an unresolved handle
 // or an invalid model yields an empty result (a best-effort catalog entry), not an
 // error, so one broken reference does not blank the whole picker.
@@ -119,7 +134,20 @@ func (v *Validator) Describe(ctx context.Context, modelRef string) (string, []De
 	if err != nil || diags.HasErrors() {
 		return "", nil, nil
 	}
-	return defs.ModelName(), describeDecisions(defs), nil
+	return defs.ModelName(), describeModel(defs, xml), nil
+}
+
+// describeModel is everything a model offers a caller under a name: the decision
+// services it publishes, then the decisions it provides. A business rule task
+// addresses either with the same one string, so either belongs in the same list —
+// and a catalog that carried only the decisions left a service reachable solely
+// because it happened to be deployed, under no model handle and in no application.
+//
+// Services come first because a service is the published interface over part of the
+// model and the decisions in it are its workings. An author shown the interface
+// first picks the interface, which is the whole reason DMN has one.
+func describeModel(defs *tdmn.Definitions, src []byte) []DecisionInfo {
+	return append(describeServices(defs, src), describeDecisions(defs)...)
 }
 
 // describeDecisions turns a compiled model's decision requirements graph into a
@@ -205,6 +233,9 @@ func (v *Validator) ValidateXML(ctx context.Context, xml []byte) ValidationResul
 	if collisions := nameCollisions(defs, xml); len(collisions) > 0 {
 		return ValidationResult{Resolved: true, Message: collisionMessage(collisions)}
 	}
+	if empty := servicesPublishingNothing(xml); len(empty) > 0 {
+		return ValidationResult{Resolved: true, Message: publishesNothingMessage(empty)}
+	}
 	names, aliases := decisionNames(defs)
 	return ValidationResult{Resolved: true, Valid: true, ModelName: defs.ModelName(), Decisions: names, Aliases: aliases, Services: serviceNames(describeServices(defs, xml))}
 }
@@ -216,6 +247,25 @@ func (v *Validator) ValidateXML(ctx context.Context, xml []byte) ValidationResul
 func collisionMessage(names []string) string {
 	return "more than one thing is called " + strings.Join(quoted(names), ", ") +
 		" — a business rule task names one string, so each name has to mean one decision or one decision service"
+}
+
+// publishesNothingMessage says which decision services return nothing.
+//
+// The failure this refuses is silence, which is why it is refused at the gate rather
+// than left to evaluation: the task completes, the variable it was to fill is unset,
+// and the process carries on past a decision that was never made. Nobody is told.
+//
+// It is also how a stored model came to be broken in the first place. A service's
+// membership lives in references and its picture in the diagram, an editor rewrote
+// one and the interface went with it, and every check between there and the disk
+// said the model was fine. This one does not.
+func publishesNothingMessage(names []string) string {
+	subject, verb := "the decision service ", " returns nothing"
+	if len(names) > 1 {
+		subject, verb = "the decision services ", " return nothing"
+	}
+	return subject + strings.Join(quoted(names), ", ") + verb +
+		" — a decision service publishes one or more output decisions (DMN 1.5 Table 17), and they are what it answers with"
 }
 
 // quoted renders names for a message, so a name with a space in it still reads as

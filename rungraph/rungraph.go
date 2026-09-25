@@ -38,6 +38,14 @@ import (
 // the live store would be a builder that could read two halves of different states.
 type Source interface {
 	ActiveElementInstances(fn func(key uint64, v *model.ElementInstanceValue) error) error
+	// LastAppliedPosition is the log position the snapshot is as of — the highest position
+	// folded into the state it shows. §4 keeps the projection current "from the tailer,
+	// starting at the snapshot's position", so a source that cannot say which position that
+	// is cannot seed a projection anybody could resume from; and §5 forbids a picture that
+	// cannot say as of when it is true. It is part of the interface rather than an optional
+	// assertion for that reason: a graph claiming "as of 0" would be indistinguishable from
+	// one genuinely at genesis, and a claim nobody can check is worse than no claim.
+	LastAppliedPosition() (uint64, error)
 }
 
 // Ordinals is the persisted key→ordinal map ADR-0404 §3 requires.
@@ -52,7 +60,12 @@ type Source interface {
 // to nothing. A flat ascending uint64 array is the persistable shape, and it is also the
 // mmap-able one §10's dial wants.
 type Ordinals struct {
-	keys []uint64 // ascending; index is the ordinal
+	// Position is the log position the snapshot these keys came from was as of (§4). The
+	// map is the persisted half of the projection, so it is the half that has to record
+	// when it is true: one persisted at an unknown position cannot be reconciled with a
+	// log, and a tailer could only resume from genesis.
+	Position uint64
+	keys     []uint64 // ascending; index is the ordinal
 }
 
 // Len is how many nodes the map holds.
@@ -90,10 +103,17 @@ func (o *Ordinals) Key(ordinal uint32) uint64 { return o.keys[ordinal] }
 // is not. A descending or unordered stream would produce a map whose binary search is
 // wrong and whose ordinals carry no locality, and it would do so silently.
 func BuildOrdinals(src Source) (*Ordinals, error) {
+	// The position first, and a failure here fails the build: §4 resumes the tailer at the
+	// snapshot's position, so an ordinal map persisted at an unknown one is a map nobody can
+	// reconcile with a log.
+	pos, err := src.LastAppliedPosition()
+	if err != nil {
+		return nil, fmt.Errorf("rungraph: read the snapshot's log position: %w", err)
+	}
 	var keys []uint64
 	var last uint64
 	var seen bool
-	err := src.ActiveElementInstances(func(key uint64, _ *model.ElementInstanceValue) error {
+	err = src.ActiveElementInstances(func(key uint64, _ *model.ElementInstanceValue) error {
 		if seen && key <= last {
 			return fmt.Errorf("element instance scan is not ascending: %#x after %#x", key, last)
 		}
@@ -104,7 +124,7 @@ func BuildOrdinals(src Source) (*Ordinals, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Ordinals{keys: keys}, nil
+	return &Ordinals{Position: pos, keys: keys}, nil
 }
 
 // Graph is the CSR projection: an offset per node and a concatenated array of neighbour
@@ -128,6 +148,15 @@ type Graph struct {
 	// Edges counts edges, not entries in Targets. len(Targets) is 2 × Edges.
 	Edges int
 }
+
+// Position is the log position this projection is as of: the highest position folded into
+// the snapshot it was seeded from (§4). It is what a tailer resumes at, and what a picture
+// drawn from this graph has to name as its "as of" (§5).
+//
+// Read through the ordinal map rather than copied beside it, for the reason the map itself
+// is held rather than passed alongside: two fields that can disagree are a graph whose every
+// answer is plausible and wrong.
+func (g *Graph) Position() uint64 { return g.Ordinals.Position }
 
 // Neighbours is node ord's adjacency list. The slice aliases Targets: a walk reads it and
 // does not own it.
@@ -269,9 +298,17 @@ func eachEdge(src Source, ords *Ordinals, fn func(from, to uint32)) (seen int, e
 }
 
 // Components labels every node with its connected component, in one pass over the CSR by
-// union-find (ADR-0404 §5). For this topology that pass *is* the instance-family
-// decomposition: the run graph is a forest of millions of small components, so "which
-// family does this element belong to" is a label lookup afterwards rather than a walk.
+// union-find (ADR-0404 §5). The run graph is a forest of millions of small components, so
+// "what is this element connected to" becomes a label lookup afterwards rather than a walk —
+// which is what [Graph.Membership] is over this array.
+//
+// This comment used to say the pass *is* the instance-family decomposition, repeating §5. W2's
+// acceptance measurement on engine-written state disproved it: two service tasks on parallel
+// top-level branches of one instance share only the process instance as a parent, and a
+// process instance is not an element instance, so nothing joins them and one instance becomes
+// two components (rungraph/component_test.go). A component is the **reference-connected**
+// group, which is the grouping impact analysis wants; the instance grouping is a field on the
+// element instance and needs none of this.
 //
 // The return is one label per ordinal, and the label is the smallest ordinal in the
 // component. That choice is not cosmetic: it makes the label stable under a rebuild that

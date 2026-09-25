@@ -171,10 +171,13 @@ func TestPublishingRefusesAndSaysEverythingThatIsWrong(t *testing.T) {
 	cat := decode[Catalog](t, do(t, s.HandleCreateCatalog, "POST", "/api/v1/catalogs",
 		`{"rank":1,"languages":["de","fr"]}`))
 
-	// An item with no deprovision process and no French text.
+	// An item with no deprovision process and a blank category. Two refusals of
+	// two kinds, which is what makes "everything at once" a claim worth checking.
+	// The second used to be a missing French text; a missing translation does not
+	// refuse any more, it is reported by TranslationGaps.
 	do(t, s.HandleSaveItem, "POST", "/api/v1/catalog-items",
 		`{"id":"a","homeCatalog":"`+cat.ID+`","state":"active","texts":{"de":"A"},`+
-			`"approval":{"kind":"none"},"provisionProcess":"prov"}`)
+			`"category":"  ","approval":{"kind":"none"},"provisionProcess":"prov"}`)
 	do(t, s.HandleUpdateCatalog, "PATCH", "/x", `{"items":["a"]}`, "id", cat.ID)
 
 	rec := do(t, s.HandlePublish, "POST", "/x", "", "id", cat.ID)
@@ -182,7 +185,7 @@ func TestPublishingRefusesAndSaysEverythingThatIsWrong(t *testing.T) {
 		t.Fatalf("publish = %d (%s), want 422", rec.Code, rec.Body)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"deprovision", "fr"} {
+	for _, want := range []string{"deprovision", "blank category"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("refusal does not mention %q: %s", want, body)
 		}
@@ -319,6 +322,7 @@ func TestAnUnreadableStoreIsAnError(t *testing.T) {
 		{"save product", s.HandleSaveItem, "POST", `{"id":"a"}`, false},
 		{"publish", s.HandlePublish, "POST", "", true},
 		{"list releases", s.HandleListReleases, "GET", "", true},
+		{"unpublished changes", s.HandleUnpublished, "GET", "", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
