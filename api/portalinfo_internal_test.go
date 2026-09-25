@@ -51,9 +51,19 @@ func TestEveryColumnOfTheCascadeOpensWhatItHolds(t *testing.T) {
 // none of that is a service's rather than a bundle's. A panel that branched on the
 // level would be a second thing to keep true, and the first place it would go
 // wrong is the level nobody clicks.
+//
+// "integral" was on this list and is not a level: it marks a *containment edge* as
+// a part that comes with the whole rather than an offer standing beside it, which
+// is a fact about the pair and not about where either sits in the cascade. The
+// panel has always separated those two groups — it read the release's `includes`
+// and `options` to do it, and now reads the same distinction off descendantsOf so
+// that a part two edges down is not missing from the card. What the guard is
+// actually for is the state of the screen: a panel that read which column is open
+// would say different things about the same product depending on how somebody
+// arrived at it, so state.offering and state.category are refused here instead.
 func TestThePanelItselfAsksNothingAboutTheLevel(t *testing.T) {
 	body := webRegion(t, readWeb(t, "shop.js"), "function infoPanel(", "\n}")
-	for _, level := range []string{"bundle", "offering", "integral", "depthOf", "levelsOf"} {
+	for _, level := range []string{"bundle", "depthOf", "levelsOf", "state.offering", "state.category", "state.group"} {
 		if strings.Contains(body, level) {
 			t.Errorf("the panel reads %q, so it says something different depending on "+
 				"which column was clicked", level)
