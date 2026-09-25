@@ -500,7 +500,7 @@ func evalDecision(ctx context.Context, defs *tdmn.Definitions, decisionId string
 	// accepted under either spelling, so a task deployed before temis told the two
 	// apart still finds its input (names.go).
 	aliased := aliasedInputs(nodes, in)
-	if err := refuseTypeMismatch(dec, aliased, decisionId, where); err != nil {
+	if err := refuseTypeMismatch(defs, decisionId, aliased, where); err != nil {
 		return nil, nil, err
 	}
 	res, err := dec.Evaluate(ctx, tdmn.Input(aliased), tdmn.WithTrace())
@@ -537,6 +537,16 @@ func evalDecision(ctx context.Context, defs *tdmn.Definitions, decisionId string
 // something somebody sees: the handler returns the error, the job fails, and its
 // retries run out into an incident (ADR-0061).
 //
+// It validates against the decision's *reachable* inputs, not its directly
+// declared ones, and that distinction is the difference between a check that
+// works and one that only looks like it. A business rule task supplies the leaf
+// inputs of a whole requirements cone: for `Kreditentscheid`, which requires only
+// the decisions `Bonität` and `Tragbarkeit`, the task sends `betrag`,
+// `laufzeitMonate`, `einkommen` and `zahlungsstoerungen` — and that decision
+// declares none of them directly. Its own InputSchema is empty, so a check built
+// on it would pass every input of every layered model without looking at one,
+// which is exactly the shape a well-factored DRG has at the top.
+//
 // Only TYPE_MISMATCH, deliberately, though temis reports four codes:
 //
 //   - MISSING_INPUT would be redundant. temis already refuses a missing required
@@ -555,9 +565,16 @@ func evalDecision(ctx context.Context, defs *tdmn.Definitions, decisionId string
 // Every mismatch is named rather than only the first, so an operator reading an
 // incident sees the whole picture instead of fixing one input and meeting the
 // next.
-func refuseTypeMismatch(dec *tdmn.CompiledDecision, in map[string]any, decisionId, where string) error {
+func refuseTypeMismatch(defs *tdmn.Definitions, decisionId string, in map[string]any, where string) error {
+	probs, err := defs.ValidateReachableInput(decisionId, tdmn.Input(in))
+	if err != nil {
+		// The decision was resolved a few lines up, so this cannot be "no such
+		// decision" in practice; treating it as "nothing to check" keeps a future
+		// engine change from turning a working evaluation into a failed job.
+		return nil
+	}
 	var bad []string
-	for _, p := range dec.ValidateInput(tdmn.Input(in)) {
+	for _, p := range probs {
 		if p.Code != "TYPE_MISMATCH" {
 			continue
 		}

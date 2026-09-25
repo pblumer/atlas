@@ -319,12 +319,17 @@ different route. It is named here rather than quietly fixed, because "the variab
 absent" and "the variable has the wrong type" are different questions with different right
 answers.
 
-Two limits on the measurement, stated so it is not read for more than it says. The schema
-compared against is Atlas's own per-decision view, which lists a decision's *reachable*
-inputs, while the refusal checks temis's *direct* ones — a subset, with the same declared
-type per name, so a clean result on the larger set is clean on the smaller one too. And
+One limit on the measurement, stated so it is not read for more than it says:
 `Kreditfreigabe`'s nine evaluations are counted although the refusal does not reach a
-decision service at all; excluding them changes nothing, since they are clean either way.
+decision service at all. Excluding them changes nothing — they are clean either way.
+
+The schema compared against is the *reachable*-input view, which is the same set the
+refusal checks, so the measurement and the code ask the same question of the same names.
+(The first version of this measurement was made while the refusal still used the direct
+schema, and was argued to carry over as a superset. It did carry, but the reasoning hid
+the real defect: the direct schema is empty for a composed decision, so the check it
+backed was not conservative — it was blind. The measurement was re-read against what the
+code now does.)
 
 ## The refusal
 
@@ -338,8 +343,19 @@ carries on. The answer is plausible and wrong, and nothing downstream — not th
 not the retained record, not an incident — distinguishes it from a right one. That
 silence is the whole defect this record is about.
 
-`evalDecision` therefore asks `CompiledDecision.ValidateInput` before evaluating and
-returns an error on a mismatch. The handler returns it, the job fails, its retries run
+`evalDecision` therefore asks temis to validate the input before evaluating and returns
+an error on a mismatch.
+
+It asks against the decision's **reachable** inputs (`Definitions.ValidateReachableInput`),
+not the ones it declares directly, and that distinction is the difference between a check
+that works and one that only appears to. A business rule task supplies the leaf inputs of
+a whole requirements cone. `Kreditentscheid` requires only the decisions `Bonität` and
+`Tragbarkeit` and declares no input data at all, so its own `InputSchema()` is empty — a
+check built on it would wave every input of every layered model through without looking at
+one. That is not an edge case: it is the shape a well-factored DRG has at the top, which
+is precisely where a business rule task points. Measured on the model at hand: with the
+direct schema, `betrag` sent as `"30000"` returned `abgelehnt` where the right types return
+`bewilligt`, silently; with the reachable schema it is refused and named. The handler returns it, the job fails, its retries run
 out, and an incident carries the message (ADR-0061). Retry behaviour is untouched: there
 is no non-retryable job in Atlas today, and inventing one here would be a second
 decision smuggled into this one.

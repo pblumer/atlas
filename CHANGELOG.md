@@ -25,6 +25,12 @@ _Changed_ / _Removed_ for each version.
   the incident carries the mismatch, naming every wrongly-typed input rather than only
   the first. Retry behaviour is unchanged.
 
+  The check covers the inputs a task actually sends — the leaf inputs of the decision's
+  whole requirements graph, not just the ones it declares directly. That matters for any
+  model with a top decision built on other decisions: such a decision declares no inputs
+  of its own, so a narrower check would pass every value it is sent without looking at
+  one, which is exactly where a business rule task usually points.
+
   Only a type mismatch is refused. An input the decision does not declare is still
   ignored, because a task's io-mapping may legitimately carry a row the decision never
   reads; a missing required input is still refused by the engine itself, with a better

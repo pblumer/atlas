@@ -165,3 +165,66 @@ func TestADeclaredDateIsComparedAsADate(t *testing.T) {
 		t.Error("Evaluate with unparseable text: no error, want the job refused")
 	}
 }
+
+// A composed decision is checked against the inputs a task actually sends it —
+// the leaf inputs of its whole requirements cone, not the ones it declares
+// directly (ADR-0419).
+//
+// This is the case a well-factored model has at the top, and the one a check
+// built on a decision's own InputSchema misses entirely: `Entscheid` requires two
+// decisions and no input data, so its declared inputs are empty and every value a
+// task sends would pass unexamined. The task supplies `betrag` and `stoerungen`,
+// because that is what the decisions underneath consume.
+func TestAComposedDecisionIsCheckedAgainstWhatTheTaskSends(t *testing.T) {
+	const layered = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20230324/MODEL/" id="lm" name="Geschichtet" namespace="http://atlas/dmn">
+  <inputData id="l1" name="betrag"><variable name="betrag" typeRef="number"/></inputData>
+  <inputData id="l2" name="stoerungen"><variable name="stoerungen" typeRef="number"/></inputData>
+  <decision id="Gross" name="Gross">
+    <variable name="gross" typeRef="boolean"/>
+    <informationRequirement><requiredInput href="#l1"/></informationRequirement>
+    <literalExpression id="lg"><text>betrag &gt; 1000</text></literalExpression>
+  </decision>
+  <decision id="Sauber" name="Sauber">
+    <variable name="sauber" typeRef="boolean"/>
+    <informationRequirement><requiredInput href="#l2"/></informationRequirement>
+    <literalExpression id="ls"><text>stoerungen = 0</text></literalExpression>
+  </decision>
+  <decision id="Entscheid" name="Entscheid">
+    <variable name="entscheid" typeRef="string"/>
+    <informationRequirement><requiredDecision href="#Gross"/></informationRequirement>
+    <informationRequirement><requiredDecision href="#Sauber"/></informationRequirement>
+    <literalExpression id="le"><text>if gross and sauber then "gross und sauber" else "sonst"</text></literalExpression>
+  </decision>
+</definitions>`
+	reg := dmn.NewRegistry()
+	if err := reg.Deploy(4, []byte(layered)); err != nil {
+		t.Fatalf("deploy: %v", err)
+	}
+
+	right := map[string]any{"betrag": 2000, "stoerungen": 0}
+	out, err := reg.Evaluate(context.Background(), 4, "Entscheid", right)
+	if err != nil {
+		t.Fatalf("Evaluate with the right types: %v", err)
+	}
+	if got := out["entscheid"]; got != "gross und sauber" {
+		t.Fatalf("entscheid = %v, want \"gross und sauber\"", got)
+	}
+
+	// A string where the leaf input declares a number. `betrag > 1000` is null
+	// against it, `gross` is null, and the answer flips to "sonst" with nothing to
+	// read — the silent wrong answer, two levels below the decision the task names.
+	_, err = reg.Evaluate(context.Background(), 4, "Entscheid", map[string]any{"betrag": "2000", "stoerungen": 0})
+	if err == nil {
+		t.Fatal("Evaluate with a string two levels down: no error, want the job refused")
+	}
+	if !strings.Contains(err.Error(), "betrag") || !strings.Contains(err.Error(), "expects number") {
+		t.Errorf("error = %q, want it to name the input and its declared type", err)
+	}
+
+	// The cone is the bound, not the whole model: an input no decision under
+	// `Entscheid` reads is still ignored rather than refused.
+	if _, err := reg.Evaluate(context.Background(), 4, "Gross", map[string]any{"betrag": 2000, "stoerungen": "viele"}); err != nil {
+		t.Errorf("Evaluate of a decision whose cone excludes the bad input: %v, want it ignored", err)
+	}
+}
