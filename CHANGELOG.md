@@ -12,6 +12,26 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A decision's date inputs are dates again (ADR-0419).** A DMN element that declares
+  `typeRef="date"` was handed its value as a plain string, because JSON has no date and
+  nothing between the two consulted the declaration. A decision table column typed
+  `date` whose rule read `< date("2026-01-01")` therefore matched nothing: the catch-all
+  row answered, with no diagnostic, no trace entry and no error. A wrong answer that
+  nothing downstream could tell from a right one — in the test panel and, through the
+  same evaluation path, in a running business rule task.
+
+  The fix is in the engine, not here: temis now converts an input by the type the model
+  declares (ISO 8601 and nothing else — a locale-dependent spelling would mean guessing
+  between 03.04.2026 and 04.03.2026), reports a string the type cannot be made from as a
+  type mismatch instead of passing it through, and names a FEEL value by its FEEL type
+  rather than its Go type. Atlas carries it by the module bump.
+
+  **Nothing deployed here changes behaviour, and that was measured rather than assumed:**
+  across all 12 registered model handles and all 19 decisions on the running instance,
+  every declared input type is `string`, `number`, or undeclared — not one temporal type.
+
 ### Added
 
 - **The decision picker tells a decision service's answer from its workings.** A

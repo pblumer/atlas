@@ -1,13 +1,13 @@
 # ADR-0419: A declared type is honoured at the decision boundary
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-25
 - **Deciders:** Atlas maintainers
-- **Open question:** whether any deployed model reads a typed date input as a string on
-  purpose — that decides whether a conversion is a fix or a break, and it cannot be
-  answered from the code, only by looking at the deployed models; and, prior to that,
-  which of options 3, C′ and 2A′ this installation wants
+- **Open question:** whether Atlas should evaluate a business rule task's decision
+  *strictly* — temis can now report a wrongly-typed input, and Atlas does not ask, so a
+  string the declared type cannot be made from still reaches the decision unconverted
+  and still falls through to the catch-all
 - **Question checked:** 2026-09
 
 ## Context and problem statement
@@ -194,21 +194,44 @@ the change has to be recorded in temis, not only here.
 the type it can fix and leaves `date` to option 3 or C′. Its cost is a rule with a hole
 in it, which is a thing to explain to every author.
 
-**Recommended: C′.** The third measurement moves it from "a change to the engine" to
-"the engine's own contract, honoured". The alternative is to leave every date model
-carrying `date(…)` around a value the schema already calls a date — compensation for a
-host defect, written into documents that are supposed to be the business rule and
-nothing else.
+**Chosen: C′, and it has landed** — in temis as
+[ADR-0040](https://github.com/pblumer/temis/blob/main/docs/adr/ADR-0040-eingabetyp-schema-validierung-auswertung.md),
+carried here by the module bump. `inputToValues` converts by the declared type,
+`ValidateInput` accepts a string only where that type can be made from it, and `goKind`
+names a FEEL value by its FEEL type. **Nothing in Atlas implements the conversion**,
+which is the point: the boundary belongs to the engine that defines it.
 
-Option 3 remains available as a stopgap for a model that must work before C′ lands,
-and it is conformant FEEL, so nothing has to be undone afterwards. It is not
-recommended as the answer, because the boilerplate it leaves is permanent and the
-reason for it will not be legible a year from now.
+Option 3 was not needed. It remains conformant FEEL — `date()` is a built-in — and is
+still the answer for a model that must run against an older engine. It was not chosen
+because the boilerplate it leaves is permanent and its reason is not legible a year on.
 
-2A′ is not recommended at all: measured, a `time.Time` is now *rejected* by
-`WithStrictInput` as `date and time` where a `date` is expected, so converting on the
-Atlas side would trade a silent wrong answer for a refused evaluation without ever
-producing the value the model asked for.
+2A′ was ruled out by measurement: a `time.Time` is *rejected* by `WithStrictInput` as
+`date and time` where a `date` is expected, so converting on the Atlas side would have
+traded a silent wrong answer for a refused evaluation without ever producing the value
+the model asked for.
+
+### What it costs here: nothing, and that was measured rather than assumed
+
+The question this record carried was whether a model in this installation reads a typed
+date input as a string on purpose. It was answered by reading every model, not by
+reasoning about them: across all 12 registered model handles and all 19 decisions on
+the running instance, **every declared input type is `string`, `number`, or undeclared
+— not one temporal type.** The six `.dmn` files in this repository declare only
+`string`, `boolean`, `number`, and one custom `Rating`.
+
+So no deployed decision changes behaviour, and the preflight report this record
+proposed as option **ii** is not needed here. It stays the right thing for an
+installation that does have such a model, and is left unbuilt rather than built against
+nothing.
+
+Measured after the bump, through Atlas's own `Try`, on a `date`-typed column whose rule
+reads `< date("2026-01-01")`:
+
+| sent | before | after |
+|---|---|---|
+| `"2025-06-01"` | `"neu"` — the catch-all | **`"alt"`** |
+| `"2027-06-01"` | `"neu"` | `"neu"` |
+| `"nonsense"` | `"neu"` | `"neu"` — see the consequences |
 
 For deployed models, whichever is chosen, **option ii**: name the affected decisions at
 the deploy preflight, so the change arrives as a list somebody read rather than as a
@@ -229,16 +252,21 @@ Under **option 3**:
 - **Negative.** Every date column carries a wrapper, forever, including in models
   written after C′ lands. That is the cost of a repair that leaves a trace.
 
-Under **option C′**:
+Under **option C′**, as landed:
 
-- **Positive.** A declared type becomes load-bearing rather than decorative, which is
-  what makes the typed test fields (and any future typed input mapping) worth having.
-- **Positive.** temis's schema, its validator and its evaluator agree again. Today they
-  do not, and the disagreement is invisible from either side alone.
-- **Negative.** A model that relies on a date arriving as a string changes behaviour.
-  The preflight list is how that is found before it runs, not after.
-- **Negative.** It needs its own record in temis, and a decision there about which
-  spellings a string may take before it is accepted as a date (ISO 8601 only, or more).
+- **Positive.** A declared type is load-bearing rather than decorative, which is what
+  makes the typed test fields — and any future typed input mapping — worth having.
+- **Positive.** temis's schema, its validator and its evaluator agree again. They did
+  not, and the disagreement was invisible from any one side alone.
+- **Neutral here.** No deployed model relies on a date arriving as a string, because no
+  deployed model declares a temporal input at all.
+- **Still open, and Atlas's own.** Atlas evaluates **leniently** — it never passes
+  `WithStrictInput`. So a string the declared type cannot be made from (`"nonsense"`
+  for a `date`) still reaches the decision unconverted and still falls through to the
+  catch-all, silently. temis can now report it; Atlas does not ask. Whether a business
+  rule task should evaluate strictly is a question about what a running process ought
+  to do with a wrongly-typed variable — refuse the job and raise an incident, or carry
+  on — and that is a larger decision than this record's.
 
 ## What this record does not decide
 
