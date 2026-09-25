@@ -503,6 +503,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0415](0415-the-portal-offers-the-catalogues-languages.md) | The portal offers the languages its catalogue is kept in | Accepted | Landed |
 | [0416](0416-the-shop-shows-an-orders-open-tasks.md) | The shop shows an order's open tasks, and the order records the instances that work it | Accepted | Landed |
 | [0417](0417-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md) | The shop and Tasks are one column wide on a narrow screen | Accepted | Landed |
+| [0418](0418-a-withdrawn-ordered-right-goes-back-through-its-order.md) | A withdrawn ordered right goes back through its order | Accepted | Landed |
 
 ## The two states of a record
 

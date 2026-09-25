@@ -130,7 +130,7 @@ _Changed_ / _Removed_ for each version.
   order will not give back, because it is already going back or something still
   needs it, is refused and the row stays unanswered, instead of a second
   deprovisioning running beside the first. Rights without an order are unchanged
-  ([ADR-draft-a-withdrawn-ordered-right-goes-back-through-its-order](docs/adr/draft-a-withdrawn-ordered-right-goes-back-through-its-order.md)).
+  ([ADR-0418](docs/adr/0418-a-withdrawn-ordered-right-goes-back-through-its-order.md)).
 
 - **A decision service's border no longer ends up over the arrows crossing it,
   whatever you did to it.** This was fixed twice before, once for drawing a service

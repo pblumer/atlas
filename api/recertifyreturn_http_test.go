@@ -10,7 +10,7 @@ import (
 )
 
 // A right an order granted, withdrawn in a recertification, goes back through that
-// order (ADR-draft-a-withdrawn-ordered-right-goes-back-through-its-order).
+// order (ADR-0418).
 //
 // Before this, the withdrawal started the product's deprovisioning with the
 // product and the holder only. A process that finds what it provisioned by the

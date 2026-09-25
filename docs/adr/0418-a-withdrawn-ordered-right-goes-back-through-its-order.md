@@ -1,4 +1,4 @@
-# ADR-DRAFT: A withdrawn ordered right goes back through its order
+# ADR-0418: A withdrawn ordered right goes back through its order
 
 - **Status:** Accepted
 - **Implementation:** Landed

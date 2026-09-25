@@ -197,8 +197,8 @@
         "de": "Das Entziehen eines bestellten Rechts startete die Deprovisionierung des Produkts nur mit Produkt und Inhaber. Ein Prozess, der das Bereitgestellte über den Auftrag findet, fand nichts und konnte die Position nicht als zurückgegeben melden; das Recht blieb im Inventar, und die nächste Kampagne fragte erneut danach. Das Entziehen eines bestellten Rechts läuft jetzt wie eine Rückgabe über den Auftrag: Die Position ist in Rückgabe, und der Prozess startet mit Auftrag, Position und Grund. Gibt der Auftrag die Position nicht zurück, wird das Entziehen abgelehnt und die Zeile bleibt unbeantwortet. Rechte ohne Auftrag sind unverändert."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0418",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0418-a-withdrawn-ordered-right-goes-back-through-its-order.md"
       },
       "tags": [
         "Tasks",

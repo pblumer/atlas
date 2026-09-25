@@ -209,7 +209,7 @@ func (e errReturnRefused) Unwrap() error { return e.err }
 // park an instance raising an incident about a fact rather than a fault.
 //
 // A right an order granted goes back through that order
-// (ADR-draft-a-withdrawn-ordered-right-goes-back-through-its-order): the line is
+// (ADR-0418): the line is
 // marked returning and the process the order froze runs with the order, the
 // position and the recipient, exactly as when the orderer gives it back. That is
 // what lets the process find what it provisioned and report the line returned,

@@ -139,7 +139,7 @@ accepted and for the same reason.
 
 A right an order granted is the exception: it goes back through that order, as a
 return does, so that its process knows the order and can report the line returned
-([ADR-draft-a-withdrawn-ordered-right-goes-back-through-its-order](draft-a-withdrawn-ordered-right-goes-back-through-its-order.md)).
+([ADR-0418](0418-a-withdrawn-ordered-right-goes-back-through-its-order.md)).
 
 **The decision is recorded when the person decides, not when the target system has
 caught up.** What is being attested is a judgement; the process's outcome is the
