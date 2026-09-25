@@ -421,6 +421,18 @@ const NOTATION_PAINT = {
     // be putting it on a floor the standard deliberately leaves it off.
     catalog: { fill: "var(--surface)", stroke: "var(--mesh-ink)" },
   },
+  // The product map is a picture of the catalogue alone, so its two kinds are the
+  // whole of what the reader is telling apart, and a step of lilac tint between them
+  // is too little to carry that. A product is drawn dark yellow and a catalogue dark
+  // blue: two hues, far apart in lightness as well as in hue, so the difference
+  // survives a projector and a greyscale printout. Only here — every other view keeps
+  // the tints above. `ink` is the colour of what is written *inside* the shape (the
+  // collapsed-product count a catalogue carries), which the accent would lose on the
+  // dark blue.
+  products: {
+    product: { fill: "#b8860b", stroke: "#7a5a07" },
+    catalog: { fill: "#1e3a8a", stroke: "#12245a", ink: "#ffffff" },
+  },
 };
 
 // paintFor is the fill and outline one node is drawn with: the notation's, where it
@@ -3510,7 +3522,7 @@ function renderGraph(graph, layoutMs, frame,
         `fill="${prov.ghost ? "none" : style.fill}" stroke="${sev.stroke || style.stroke}" ` +
         `stroke-width="${sev.stroke ? 3 : 2.2}" ${style.dashed || prov.ghost ? 'stroke-dasharray="4 3"' : ""}`)}
       <circle class="mesh-pin" r="4" cx="${(-r * 0.72).toFixed(1)}" cy="${(r * 0.72).toFixed(1)}"/>
-      ${n.children ? `<text class="mesh-count" text-anchor="middle" dy="4">${n.children}</text>` : ""}
+      ${n.children ? `<text class="mesh-count" text-anchor="middle" dy="4"${style.ink ? ` style="fill:${style.ink}"` : ""}>${n.children}</text>` : ""}
       ${badge}
       <g class="mesh-caption" data-room="${(r + 8).toFixed(1)}">
       <text class="mesh-label" text-anchor="middle" dy="${(r + 14).toFixed(1)}"><tspan class="mesh-label-ink">${label}</tspan></text>
