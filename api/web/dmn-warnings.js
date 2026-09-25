@@ -1,7 +1,17 @@
 // dmn-warnings.js — author-time findings for a decision model.
 //
-// Both of the findings here are about the same thing: the two ways a model's
-// requirements graph and its logic can disagree about a **knowledge model**.
+// Every finding here is about one thing: the ways a model's requirements graph and
+// its logic can disagree. The graph is what gets reviewed and what goes into the
+// decision's published documentation; the logic is what runs. When they drift, the
+// drawing is a claim nobody checked.
+//
+// Two families. The first is about a **knowledge model**, below. The second is about
+// an **information requirement** — what a decision is given — and is the one an
+// author meets first: a decision table's input column carries a FEEL expression, not
+// a reference to the requirement, so nothing in DMN makes the two agree. That is
+// deliberate (one requirement can feed several columns, one column can combine
+// several requirements), which is why this reports the disagreement instead of
+// forbidding it.
 //
 // A knowledge model is a reusable FEEL function. DMN says a decision that invokes
 // one declares a knowledge requirement for it, and the DRG draws that requirement as
@@ -175,6 +185,166 @@ export function knowledgeModelFindings(definitions) {
         // It is declared rather than performed: this module knows the model, not the
         // canvas, and the editor is what owns dmn-js.
         fix: { kind: "connect", source: bkm.id, target: callerId, label: "Draw the requirement" },
+      });
+    }
+  }
+
+  return findings;
+}
+
+
+// providedName is the identifier a decision's logic reads an element's value under:
+// its <variable name> where it declares one, and its label otherwise. The same rule
+// the engine applies (dmn/validate.go describeDecisions reads VarName, then Name), so
+// a finding here and a diagnostic there are about the same name.
+const providedName = (el) => (el && el.variable && el.variable.name) || (el && el.name) || "";
+
+// SIMPLE_NAME matches a FEEL name as the decision-table editor writes one: a plain
+// identifier, possibly with spaces in it ("input 1", "Decision 2"). It is how the
+// unbound-input finding stays narrow. An input expression that is anything more — a
+// comparison, a call, a path, arithmetic — may read a name this module cannot resolve
+// without being a FEEL implementation, so those are passed over in silence rather
+// than guessed at.
+const SIMPLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*(?: +[A-Za-z0-9_]+)*$/;
+
+// mentionsName reports whether text reads name, as opposed to calling it. Bounded by
+// what a FEEL name may not contain, so "amount" is not found inside "amount due".
+//
+// It errs towards finding a mention: "input" *is* found inside "input 1", which is
+// wrong, and wrong in the safe direction — a requirement that looks used stays quiet,
+// and a warning an author learns to ignore is worse than no warning.
+function mentionsName(text, name) {
+  if (!name) return false;
+  const re = new RegExp("(^|[^A-Za-z0-9_])" + escapeRe(name) + "($|[^A-Za-z0-9_])");
+  return re.test(withoutStrings(text));
+}
+
+// decisionTableOf returns a decision's table, or null when its logic is something
+// else (a literal expression, an invocation) or is not written yet.
+function decisionTableOf(decision) {
+  const logic = decision && decision.decisionLogic;
+  return logic && logic.$type === "dmn:DecisionTable" ? logic : null;
+}
+
+// requirementsOf lists what a decision is given: the required element, the name its
+// value arrives under, and the requirement itself.
+function requirementsOf(decision, byId) {
+  const out = [];
+  for (const ir of decision.informationRequirement || []) {
+    const id = refId(ir.requiredInput) || refId(ir.requiredDecision);
+    const provider = id && byId.get(id);
+    if (!provider) continue; // a reference into another model names nothing here
+    out.push({ requirement: ir, provider, name: providedName(provider) });
+  }
+  return out;
+}
+
+// informationRequirementFindings returns the ways a decision's graph and its table
+// disagree about what it is given.
+//
+// Two findings, and they are not the same severity because they do not end the same
+// way:
+//
+//   - **The table reads a name nothing provides.** This does not deploy: temis
+//     answers `unknown variable`, at error severity, and Atlas's deploy gate refuses
+//     the model (dmn/registry.go Deploy). So the author does find out — at Deploy or
+//     Test, phrased as a FEEL variable, about a diagram they drew minutes ago. Said
+//     here it is about the diagram, at the moment it stops being true.
+//   - **A requirement is drawn that the table never reads.** This deploys, and runs.
+//     Nothing anywhere says a word, which is exactly why it is worth saying: the
+//     graph claims a dependency the decision does not have, and the graph is what is
+//     reviewed.
+//
+// Both are silent while the author is still building the decision, and the two ways of
+// being silent are mirror images of the same rule — a disagreement needs two sides.
+// An arrow drawn before the logic is not a disagreement, and neither is a table
+// written before the arrows: a decision with no information requirement at all has not
+// yet said what it is given, so nothing its table reads can be said to be missing.
+//
+// What that costs, stated rather than discovered: a decision that has a table, reads a
+// name and requires nothing does not deploy either, and is not reported here. It is
+// also the state every decision passes through a minute after it is drawn — the table
+// arrives with a default column called "input" — so reporting it would put a finding
+// on the screen for every new decision, which is how an author learns to stop reading
+// the strip. Deploy and Test still say so.
+//
+// definitions is dmn-js's `getDefinitions()` — the moddle model, available whichever
+// view is open, so the findings do not go quiet inside a decision's own table.
+export function informationRequirementFindings(definitions) {
+  const drg = (definitions && definitions.drgElement) || [];
+  const decisions = drg.filter((el) => el.$type === "dmn:Decision");
+  if (!decisions.length) return [];
+
+  const byId = new Map(drg.map((el) => [el.id, el]));
+  const texts = expressionTexts(drg);
+  const findings = [];
+
+  // Every name the model has to offer, for the repair below. A name two elements
+  // share resolves to neither: there would be nothing to choose between them.
+  const providers = new Map(); // name → element, or null where it is ambiguous
+  for (const el of drg) {
+    const name = providedName(el);
+    if (!name || el.$type === "dmn:DecisionService") continue;
+    providers.set(name, providers.has(name) ? null : el);
+  }
+
+  for (const decision of decisions) {
+    // Logic of some kind: a literal expression reads its requirements as much as a
+    // table does, and an unused one is as wrong there.
+    if (!decision.decisionLogic) continue;
+
+    const table = decisionTableOf(decision);
+    const requirements = requirementsOf(decision, byId);
+    const given = new Set(requirements.map((r) => r.name).filter(Boolean));
+    const mine = texts.filter((t) => t.owner === decision.id);
+
+    // The table reads a name nothing gives it — once there is a graph to disagree with.
+    for (const input of (table && requirements.length ? table.input : []) || []) {
+      const text = ((input.inputExpression && input.inputExpression.text) || "").trim();
+      if (!text || !SIMPLE_NAME.test(text) || given.has(text)) continue;
+
+      // A repair only where there is one: exactly one element in the model answers to
+      // that name, and it is not already required. Where none or several do, which
+      // element ought to feed this decision is the author's to say, and a button that
+      // guessed would be writing their model for them.
+      const source = providers.get(text);
+      const fix = source && source.id !== decision.id && !given.has(providedName(source))
+        ? { kind: "connect", source: source.id, target: decision.id, label: "Draw the requirement" }
+        : undefined;
+
+      findings.push({
+        severity: "error",
+        rule: "decision-input-unbound",
+        element: decision.id,
+        label: labelFor(decision),
+        message: `“${labelFor(decision)}” reads “${text}”, and nothing gives it that. `
+          + `A decision is given what its requirements provide and nothing else, so this `
+          + `column is empty at every evaluation — and the model will not deploy: the `
+          + `engine reports it as an unknown variable.`,
+        ...(fix ? { fix } : {}),
+      });
+    }
+
+    // A requirement is drawn that the table never reads.
+    for (const { provider, name } of requirements) {
+      if (!name || mine.some(({ text }) => mentionsName(text, name))) continue;
+      findings.push({
+        severity: "warning",
+        rule: "information-requirement-unused",
+        element: decision.id,
+        label: labelFor(decision),
+        message: `“${labelFor(decision)}” requires “${labelFor(provider)}” and never reads it. `
+          + `It deploys and it runs, so nothing later will say so — but the graph shows a `
+          + `dependency the decision does not have, and the graph is what gets reviewed.`,
+        // The repair is the column that would use it, which is the same edit drawing
+        // the requirement offers to make. Declared, not performed: this module knows
+        // the model, not the canvas.
+        ...(table ? {
+          fix: {
+            kind: "add-input", source: provider.id, target: decision.id,
+            label: "Add the input column",
+          },
+        } : {}),
       });
     }
   }

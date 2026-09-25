@@ -1087,6 +1087,187 @@ test("the missing requirement can be drawn from the finding, and the drawing is 
   expect(state.draftSaves[0].xml).toMatch(/<knowledgeRequirement[\s\S]*?requiredKnowledge[^>]*#bkm_tier/);
 });
 
+// The other half of the same disagreement, and the one an author meets first: what a
+// decision is *given*. A decision table's input column carries a FEEL expression and
+// not a reference to the requirement that feeds it, so nothing in DMN makes the two
+// agree — which is deliberate, and is why one requirement can feed several columns.
+//
+// The two directions do not end the same way, which is why they are not the same
+// severity. A table that reads a name nothing provides does not deploy: temis answers
+// `unknown variable` at error severity and the deploy gate refuses the model (measured
+// in dmn/, not assumed). A requirement drawn and never read deploys and runs, and
+// nothing anywhere says a word — the graph claims a dependency the decision does not
+// have, and the graph is what gets reviewed and what goes into the documentation.
+//
+// DRIFT_XML is the model as it was reported: "Decision 1" is given an input and another
+// decision, and its table reads neither — it still carries the default column the table
+// editor makes, called "input".
+const DRIFT_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20230324/MODEL/" xmlns:dmndi="https://www.omg.org/spec/DMN/20230324/DMNDI/" xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/" xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/" id="def_myTest" name="MyTest" namespace="http://atlas/dmn">
+  <inputData id="in_1" name="input 1"><variable name="input 1" typeRef="boolean"/></inputData>
+  <inputData id="in_2" name="Input 2"><variable name="Input 2" typeRef="string"/></inputData>
+  <decision id="dec_2" name="Decision 2">
+    <variable name="Decision 2" typeRef="string"/>
+    <informationRequirement id="ir_2"><requiredInput href="#in_2"/></informationRequirement>
+    <decisionTable id="dt_2" hitPolicy="UNIQUE">
+      <input id="dt2_i1"><inputExpression id="dt2_e1" typeRef="string"><text>Input 2</text></inputExpression></input>
+      <output id="dt2_o1" typeRef="string"/>
+      <rule id="dt2_r1"><inputEntry id="dt2_ie1"><text>-</text></inputEntry><outputEntry id="dt2_oe1"><text>"x"</text></outputEntry></rule>
+    </decisionTable>
+  </decision>
+  <decision id="dec_1" name="Decision 1">
+    <variable name="Decision 1" typeRef="string"/>
+    <informationRequirement id="ir_a"><requiredInput href="#in_1"/></informationRequirement>
+    <informationRequirement id="ir_b"><requiredDecision href="#dec_2"/></informationRequirement>
+    <decisionTable id="dt_1" hitPolicy="UNIQUE">
+      <input id="dt1_i1"><inputExpression id="dt1_e1" typeRef="string"><text>input</text></inputExpression></input>
+      <output id="dt1_o1" typeRef="string"/>
+      <rule id="dt1_r1"><inputEntry id="dt1_ie1"><text>-</text></inputEntry><outputEntry id="dt1_oe1"><text>"y"</text></outputEntry></rule>
+    </decisionTable>
+  </decision>
+  <dmndi:DMNDI><dmndi:DMNDiagram id="dd">
+    <dmndi:DMNShape id="s1" dmnElementRef="in_1"><dc:Bounds x="40" y="170" width="150" height="60"/></dmndi:DMNShape>
+    <dmndi:DMNShape id="s2" dmnElementRef="in_2"><dc:Bounds x="300" y="170" width="150" height="60"/></dmndi:DMNShape>
+    <dmndi:DMNShape id="s3" dmnElementRef="dec_2"><dc:Bounds x="300" y="40" width="150" height="60"/></dmndi:DMNShape>
+    <dmndi:DMNShape id="s4" dmnElementRef="dec_1"><dc:Bounds x="40" y="40" width="150" height="60"/></dmndi:DMNShape>
+    <dmndi:DMNEdge id="e1" dmnElementRef="ir_a"><di:waypoint x="115" y="170"/><di:waypoint x="115" y="100"/></dmndi:DMNEdge>
+    <dmndi:DMNEdge id="e2" dmnElementRef="ir_b"><di:waypoint x="300" y="70"/><di:waypoint x="190" y="70"/></dmndi:DMNEdge>
+    <dmndi:DMNEdge id="e3" dmnElementRef="ir_2"><di:waypoint x="375" y="170"/><di:waypoint x="375" y="100"/></dmndi:DMNEdge>
+  </dmndi:DMNDiagram></dmndi:DMNDI>
+</definitions>`;
+
+test("the editor says when a decision reads a name nothing gives it, and when it is given something it never reads", async ({ page }) => {
+  installMock(page, { refs: [{ id: "ref-1", name: "MyTest", modelRef: "mytest", projectId: "app-1" }] });
+  await page.route("**/api/v1/dmn-models/*/xml", (route) =>
+    route.fulfill({ body: DRIFT_XML, contentType: "application/xml" }));
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  const strip = page.locator("#dmn-warn");
+  await expect(strip).toBeVisible();
+  const rows = strip.locator("li");
+  // Three: the column that reads nothing, and each of the two requirements it leaves
+  // unread. "Decision 2" is correctly wired and is not mentioned.
+  await expect(rows).toHaveCount(3);
+  await expect(rows.nth(0)).toContainText("“Decision 1” reads “input”, and nothing gives it that");
+  await expect(rows.nth(0)).toContainText("will not deploy");
+  await expect(rows.nth(1)).toContainText("“Decision 1” requires “input 1” and never reads it");
+  await expect(rows.nth(2)).toContainText("“Decision 1” requires “Decision 2” and never reads it");
+  await expect(strip).not.toContainText("“Decision 2” reads");
+
+  // Only one of the three does not deploy, and it is marked: a reader who has learned
+  // that the strip is advisory would otherwise file it with the two that run.
+  await expect(strip.locator("li.dmn-warn-error")).toHaveCount(1);
+
+  // One badge, on the one decision all three findings are about.
+  await expect(page.locator(".dmn-canvas .djs-overlay .unsup-badge")).toHaveCount(1);
+});
+
+test("the column a requirement implies can be added from the finding", async ({ page }) => {
+  const state = installMock(page, { refs: [{ id: "ref-1", name: "MyTest", modelRef: "mytest", projectId: "app-1" }] });
+  await page.route("**/api/v1/dmn-models/*/xml", (route) =>
+    route.fulfill({ body: DRIFT_XML, contentType: "application/xml" }));
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  const strip = page.locator("#dmn-warn");
+  await expect(strip.locator("li")).toHaveCount(3);
+  // The unbound column has no repair: which element ought to provide "input" is the
+  // author's to say, and no element in this model answers to that name. Each unread
+  // requirement does — the column that would read it.
+  const fixes = strip.locator(".dmn-warn-fix");
+  await expect(fixes).toHaveCount(2);
+  await expect(fixes.first()).toHaveText("Add the input column");
+
+  await fixes.first().click();
+
+  // One finding fewer, because the model changed: the findings are recomputed from it
+  // after every command, not crossed off a list.
+  await expect(strip.locator("li")).toHaveCount(2);
+  await expect(strip).not.toContainText("requires “input 1” and never reads it");
+
+  // As easy to take back as to make, and without having to find the canvas first.
+  expect(await page.evaluate(() => document.activeElement.tagName.toLowerCase())).toBe("svg");
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(strip.locator("li")).toHaveCount(3);
+
+  // And what it writes is in the model, typed as the input data is typed — not only
+  // on screen. The save carries it.
+  await strip.locator(".dmn-warn-fix").first().click();
+  await expect(strip.locator("li")).toHaveCount(2);
+  await page.locator("#dmn-save").click();
+  await expect(page.locator("#dmn-status")).toHaveText("Draft saved");
+  expect(state.draftSaves).toHaveLength(1);
+  const saved = state.draftSaves[0].xml;
+  expect(saved).toMatch(/<inputExpression[^>]*typeRef="boolean"[^>]*>\s*<text>input 1<\/text>/);
+  // The rule grew a cell with the column. A table whose columns outnumber a rule's
+  // cells is one the editor draws wrong and the XML does not mean.
+  expect((saved.match(/<inputEntry/g) || []).length).toBeGreaterThanOrEqual(3);
+});
+
+test("drawing a requirement gives the decision the column it implies", async ({ page }) => {
+  const state = installMock(page, { refs: [{ id: "ref-1", name: "MyTest", modelRef: "mytest", projectId: "app-1" }] });
+  await page.route("**/api/v1/dmn-models/*/xml", (route) =>
+    route.fulfill({ body: DRIFT_XML, contentType: "application/xml" }));
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  const strip = page.locator("#dmn-warn");
+  await expect(strip.locator("li")).toHaveCount(3);
+
+  // The hint under the canvas is a static strip of prose that overlaps where the
+  // shapes land in this viewport. Hidden for the drag only: it is not what is being
+  // tested, and a pointer that lands on it lands on nothing.
+  await page.addStyleTag({ content: "#dmn-hint { display: none }" });
+
+  // Draw a requirement the way an author draws one: select the element, take the
+  // connect entry off its context pad, drop it on the decision.
+  const shape = (id) => page.locator(`.dmn-canvas .djs-element[data-element-id="${id}"]`);
+  await shape("in_2").click();
+  const before = await page.locator(".dmn-canvas .djs-connection").count();
+  // Stepped by hand rather than with dragTo: diagram-js starts a drag on a threshold
+  // and follows the pointer, so a single synthetic move from source to target is a
+  // click that happens to end elsewhere.
+  const pad = await page.locator(
+    '.dmn-canvas .djs-context-pad .entry[data-action="connect"]').boundingBox();
+  const onto = await shape("dec_1").boundingBox();
+  await page.mouse.move(pad.x + pad.width / 2, pad.y + pad.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(onto.x + onto.width / 2, onto.y + onto.height / 2, { steps: 12 });
+  await page.mouse.up();
+  // The gesture drew an arrow: without this the assertions below would also pass on a
+  // drag that did nothing at all.
+  await expect(page.locator(".dmn-canvas .djs-connection")).toHaveCount(before + 1);
+
+  // No fourth finding. The requirement just drawn is read, because drawing it wrote the
+  // column that reads it — which is the whole point: the transcription an author would
+  // otherwise do by hand is where the graph and the table start to differ.
+  await expect(strip.locator("li")).toHaveCount(3);
+  await expect(strip).not.toContainText("requires “Input 2” and never reads it");
+
+  // One undo takes the column and the arrow back together: a default the author can
+  // refuse, not a rule. dmn-js binds its keyboard to the canvas, and a drag that ends
+  // on a shape leaves focus wherever the pointer went down — so the canvas is focused
+  // first, which is what a user's next click does anyway.
+  await page.locator(".dmn-canvas .djs-container svg").first().focus();
+  expect(await page.evaluate(() => document.activeElement.tagName.toLowerCase())).toBe("svg");
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(page.locator(".dmn-canvas .djs-connection")).toHaveCount(before);
+  await expect(strip.locator("li")).toHaveCount(3);
+
+  // Redrawn, the column is in the model and not only on the canvas, typed as the input
+  // data is typed, with a cell in every rule — a table whose columns outnumber a rule's
+  // cells is one the editor draws wrong and the XML does not mean.
+  await page.keyboard.press("ControlOrMeta+Shift+z");
+  await expect(page.locator(".dmn-canvas .djs-connection")).toHaveCount(before + 1);
+  await page.locator("#dmn-save").click();
+  await expect(page.locator("#dmn-status")).toHaveText("Draft saved");
+  const saved = state.draftSaves[state.draftSaves.length - 1].xml;
+  expect(saved).toMatch(/<inputExpression[^>]*typeRef="string"[^>]*>\s*<text>Input 2<\/text>/);
+  const decisionOne = saved.slice(saved.indexOf('id="dec_1"'));
+  expect((decisionOne.match(/<inputEntry/g) || []).length).toBe(2);
+});
+
 // A DMN file names two independent namespaces: MODEL for the logic and DMNDI for the
 // picture. dmn-js binds both from a `dmnVersion` constructor option that defaults to
 // "1.3", so a model in the DMN 1.5 namespace used to be refused outright with

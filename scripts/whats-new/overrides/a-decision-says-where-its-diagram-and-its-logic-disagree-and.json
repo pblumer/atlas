@@ -1,0 +1,18 @@
+{
+  "tags": ["Modeler", "Decisions"],
+  "title": {
+    "en": "A decision's diagram and its logic are kept in step",
+    "de": "Diagramm und Logik einer Decision bleiben beieinander"
+  },
+  "summary": {
+    "en": "Draw an arrow saying a decision needs an input, and its table gains the column that reads it — named and typed like the element it comes from, as part of the same step, so one undo takes the arrow and the column back together. Nothing is written when the table already reads that name: it is a default you can change, not a rule. That transcription — drawing the arrow, then opening the table and typing the same name again — is where the diagram and the logic used to start differing. Where they already differ, the findings strip under the canvas says so: a decision that reads a name nothing gives it (the one case the engine refuses outright, so it never deploys) and a decision given something it never reads (which deploys, runs, and which nothing else would ever mention — the diagram claims a dependency the decision does not have, and the diagram is what gets reviewed). The second offers to write the missing column for you. The same check reaches the process: a business rule task now says where its input mapping and the decision's own inputs disagree. An input the decision reads and no row feeds arrives empty, every rule that tests it falls through, and the process carries on with whatever the table's last row says — a wrong answer rather than a failure, which nothing downstream can tell apart.",
+    "de": "Zeichnen Sie einen Pfeil, der besagt, dass eine Decision eine Eingabe benötigt, erhält ihre Tabelle die Spalte, die diese liest — benannt und typisiert wie das Element, aus dem sie stammt, im selben Schritt, sodass ein einziges Rückgängig Pfeil und Spalte gemeinsam zurücknimmt. Nichts wird geschrieben, wenn die Tabelle diesen Namen bereits liest: Es ist eine Vorgabe, die Sie ändern können, keine Regel. Genau diese Übertragung — erst den Pfeil zeichnen, dann die Tabelle öffnen und denselben Namen noch einmal tippen — war die Stelle, an der Diagramm und Logik auseinanderzulaufen begannen. Wo sie bereits auseinanderlaufen, sagt es die Befundleiste unter der Zeichenfläche: eine Decision, die einen Namen liest, den ihr nichts gibt (der eine Fall, den die Engine rundweg ablehnt, der also gar nicht deployt), und eine Decision, der etwas gegeben wird, das sie nie liest (das deployt und läuft und das sonst nirgends erwähnt würde — das Diagramm behauptet eine Abhängigkeit, die die Decision nicht hat, und das Diagramm ist das, was geprüft wird). Der zweite Befund bietet an, die fehlende Spalte für Sie zu schreiben. Dieselbe Prüfung reicht bis in den Prozess: Ein Business Rule Task sagt jetzt, wo seine Eingabezuordnung und die Eingaben der Decision nicht zusammenpassen. Eine Eingabe, die die Decision liest und die keine Zeile speist, kommt leer an, jede Regel, die sie prüft, greift nicht, und der Prozess läuft mit dem weiter, was die letzte Zeile der Tabelle sagt — eine falsche Antwort statt eines Fehlers, und die beiden sind nachgelagert nicht zu unterscheiden."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}
