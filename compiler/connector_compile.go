@@ -217,21 +217,27 @@ var entraOps = map[string]entraOp{
 	"disable":             {needsUser: true},
 	"add-group-member":    {needsUser: true, needsGroup: true},
 	"remove-group-member": {needsUser: true, needsGroup: true},
-	"create-group":        {needsAttributes: true},
-	"get-group":           {needsGroup: true},
-	"list-groups":         {isList: true},
-	"delta-groups":        {isDelta: true},
-	"update-group":        {needsGroup: true, needsAttributes: true},
-	"delete-group":        {needsGroup: true},
-	"add-group-owner":     {needsUser: true, needsGroup: true},
-	"remove-group-owner":  {needsUser: true, needsGroup: true},
-	"create-team":         {needsGroup: true},
-	"add-team-member":     {needsUser: true, needsGroup: true},
-	"add-team-owner":      {needsUser: true, needsGroup: true},
-	"create-channel":      {needsGroup: true, needsAttributes: true},
-	"archive-team":        {needsGroup: true},
-	"assign-license":      {needsUser: true, needsAttributes: true},
-	"assign-role":         {needsUser: true, needsAttributes: true},
+	// The membership reads. They are listings like list-users and list-groups — the
+	// query fields apply and a resultVariable is required — and they additionally
+	// address one object, which is what makes them the two a reconciliation run reads
+	// a scope from (ADR-0334). See connector/entra's Ops table for what each collects.
+	"list-group-members": {needsGroup: true, isList: true},
+	"list-user-groups":   {needsUser: true, isList: true},
+	"create-group":       {needsAttributes: true},
+	"get-group":          {needsGroup: true},
+	"list-groups":        {isList: true},
+	"delta-groups":       {isDelta: true},
+	"update-group":       {needsGroup: true, needsAttributes: true},
+	"delete-group":       {needsGroup: true},
+	"add-group-owner":    {needsUser: true, needsGroup: true},
+	"remove-group-owner": {needsUser: true, needsGroup: true},
+	"create-team":        {needsGroup: true},
+	"add-team-member":    {needsUser: true, needsGroup: true},
+	"add-team-owner":     {needsUser: true, needsGroup: true},
+	"create-channel":     {needsGroup: true, needsAttributes: true},
+	"archive-team":       {needsGroup: true},
+	"assign-license":     {needsUser: true, needsAttributes: true},
+	"assign-role":        {needsUser: true, needsAttributes: true},
 }
 
 // The listing bounds a model inherits when it authors none.
@@ -251,6 +257,24 @@ const (
 // at deploy is better than the 400 it becomes at run time, which an operator has to
 // read out of a failed job to learn a number that was knowable all along.
 const maxEntraPageSize = 999
+
+// entraOpsWhere lists the operations a predicate holds for, sorted, for the error
+// messages that have to say where a field applies.
+//
+// Read off the table rather than written into each sentence. The sentences used to
+// name "list-users and list-groups" in four places, which was true until a fifth
+// listing operation existed and then wrong in four places at once — the drift this
+// package keeps one table to avoid.
+func entraOpsWhere(pred func(entraOp) bool) string {
+	out := make([]string, 0, len(entraOps))
+	for n, spec := range entraOps {
+		if pred(spec) {
+			out = append(out, n)
+		}
+	}
+	sort.Strings(out)
+	return strings.Join(out, ", ")
+}
 
 // entraOpNames lists the operations, sorted, for the error messages.
 func entraOpNames() []string {
@@ -430,14 +454,17 @@ func entraFieldGating(taskID, op string, spec entraOp, cn *xmlEntraConnector) er
 		{"advancedQuery", cn.AdvancedQuery},
 	} {
 		if strings.TrimSpace(a.raw) != "" && !spec.isList {
-			return fmt.Errorf("compiler: entra task %q sets %s on operation %q, which is not a listing (%s applies to list-users and list-groups)", taskID, a.what, op, a.what)
+			return fmt.Errorf("compiler: entra task %q sets %s on operation %q, which is not a listing (%s applies to the listing operations: %s)",
+				taskID, a.what, op, a.what, entraOpsWhere(func(e entraOp) bool { return e.isList }))
 		}
 	}
 	if strings.TrimSpace(cn.Select) != "" && !spec.isList && !spec.isDelta {
-		return fmt.Errorf("compiler: entra task %q sets select on operation %q, which returns no collection (select applies to list-users, list-groups and the delta operations)", taskID, op)
+		return fmt.Errorf("compiler: entra task %q sets select on operation %q, which returns no collection (select applies to the operations that return one: %s)",
+			taskID, op, entraOpsWhere(func(e entraOp) bool { return e.isList || e.isDelta }))
 	}
 	if strings.TrimSpace(cn.DeltaLink) != "" && !spec.isDelta {
-		return fmt.Errorf("compiler: entra task %q sets deltaLink on operation %q, which is not a change-tracking query (deltaLink applies to delta-users and delta-groups)", taskID, op)
+		return fmt.Errorf("compiler: entra task %q sets deltaLink on operation %q, which is not a change-tracking query (deltaLink applies to %s)",
+			taskID, op, entraOpsWhere(func(e entraOp) bool { return e.isDelta }))
 	}
 	return nil
 }
@@ -459,7 +486,8 @@ func entraListBound(taskID, op string, isList bool, what, raw string, def, max i
 		return 0, nil
 	}
 	if !isList {
-		return 0, fmt.Errorf("compiler: entra task %q sets %s on operation %q, which returns no collection (%s applies to list-users, list-groups and the delta operations)", taskID, what, op, what)
+		return 0, fmt.Errorf("compiler: entra task %q sets %s on operation %q, which returns no collection (%s applies to the operations that return one: %s)",
+			taskID, what, op, what, entraOpsWhere(func(e entraOp) bool { return e.isList || e.isDelta }))
 	}
 	n, err := strconv.Atoi(raw)
 	if err != nil {

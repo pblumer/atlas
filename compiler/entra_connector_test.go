@@ -169,12 +169,12 @@ func TestEntraConnectorValidation(t *testing.T) {
 		{"non-numeric pageSize", `connector="c" operation="list-users" resultVariable="r" pageSize="viele"`, "non-numeric pageSize"},
 		{"negative maxUsers", `connector="c" operation="list-users" resultVariable="r" maxUsers="-1"`, "negative maxUsers"},
 		{"pageSize above Graph's ceiling", `connector="c" operation="list-users" resultVariable="r" pageSize="1000"`, "above the 999"},
-		{"filter on a single-object read", `connector="c" operation="get-user" userId="u" filter="x eq 1"`, "applies to list-users"},
-		{"select on a single-object read", `connector="c" operation="get-user" userId="u" select="id"`, "applies to list-users"},
-		{"pageSize on a single-object read", `connector="c" operation="disable" userId="u" pageSize="10"`, "applies to list-users"},
-		{"maxUsers on a single-object read", `connector="c" operation="disable" userId="u" maxUsers="10"`, "applies to list-users"},
-		{"search on a single-object read", `connector="c" operation="get-user" userId="u" search="&#34;x:y&#34;"`, "applies to list-users"},
-		{"advancedQuery on a single-object read", `connector="c" operation="disable" userId="u" advancedQuery="true"`, "applies to list-users"},
+		{"filter on a single-object read", `connector="c" operation="get-user" userId="u" filter="x eq 1"`, "applies to the listing operations"},
+		{"select on a single-object read", `connector="c" operation="get-user" userId="u" select="id"`, "applies to the operations that return one"},
+		{"pageSize on a single-object read", `connector="c" operation="disable" userId="u" pageSize="10"`, "applies to the operations that return one"},
+		{"maxUsers on a single-object read", `connector="c" operation="disable" userId="u" maxUsers="10"`, "applies to the operations that return one"},
+		{"search on a single-object read", `connector="c" operation="get-user" userId="u" search="&#34;x:y&#34;"`, "applies to the listing operations"},
+		{"advancedQuery on a single-object read", `connector="c" operation="disable" userId="u" advancedQuery="true"`, "applies to the listing operations"},
 		{"non-boolean advancedQuery", `connector="c" operation="list-users" resultVariable="r" advancedQuery="vielleicht"`, "non-boolean advancedQuery"},
 		{"search with advancedQuery false", `connector="c" operation="list-users" resultVariable="r" search="&#34;x:y&#34;" advancedQuery="false"`, "only as an advanced query"},
 		{"bad FEEL search", `connector="c" operation="list-users" resultVariable="r" search="="`, "search"},
@@ -184,6 +184,13 @@ func TestEntraConnectorValidation(t *testing.T) {
 		{"advancedQuery on a delta query", `connector="c" operation="delta-groups" resultVariable="r" advancedQuery="true"`, "not a listing"},
 		{"deltaLink on a listing", `connector="c" operation="list-users" resultVariable="r" deltaLink="https://x"`, "not a change-tracking query"},
 		{"deltaLink on a single-object read", `connector="c" operation="get-user" userId="u" deltaLink="https://x"`, "not a change-tracking query"},
+		// The two membership reads are listings that also address one object, so both
+		// halves of that are refused: a group's members with no group, and a user's
+		// groups with no user. Without the id the request would be a tenant-wide
+		// listing wearing the wrong name.
+		{"group members without a group", `connector="c" operation="list-group-members" resultVariable="r"`, "groupId"},
+		{"user groups without a user", `connector="c" operation="list-user-groups" resultVariable="r"`, "userId"},
+		{"group members without a result variable", `connector="c" operation="list-group-members" groupId="g"`, "resultVariable"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Parse(1, 1, strings.NewReader(entraTaskBPMN(tc.attrs)))

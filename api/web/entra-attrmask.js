@@ -81,6 +81,10 @@ export function entraResultShape(operation) {
       return "Bei dieser Operation das Gruppen-Objekt (id, displayName, mailNickname, …).";
     case "list-groups":
       return "Bei List groups ein JSON-Array aller passenden Gruppen (erforderlich).";
+    case "list-group-members":
+      return "Bei List group members ein JSON-Array der Benutzer, die direkt Mitglied dieser Gruppe sind — verschachtelte Gruppen sind nicht aufgelöst (erforderlich).";
+    case "list-user-groups":
+      return "Bei List a user's groups ein JSON-Array der Gruppen, in denen dieser Benutzer direkt Mitglied ist — Verzeichnisrollen und administrative Einheiten sind nicht enthalten (erforderlich).";
     case "delta-users":
     case "delta-groups":
       return "Bei einer Delta-Abfrage ein Objekt { value: [Änderungen], deltaLink: \"…\" } — value die geänderten Objekte (gelöschte mit @removed markiert), deltaLink der Cursor für den nächsten Lauf (erforderlich).";
@@ -117,6 +121,8 @@ export function entraResultType(operation) {
   switch (operation) {
     case "list-users":
     case "list-groups":
+    case "list-group-members":
+    case "list-user-groups":
       return "array";
     case "assign-license":
     case "assign-role":

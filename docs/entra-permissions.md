@@ -35,6 +35,8 @@ Derived from the Graph request each operation issues (`connector/entra/offload.g
 | `add-group-member`, `remove-group-member` | `POST` / `DELETE /groups/{id}/members` | **`GroupMember.ReadWrite.All`** (tighter) or `Group.ReadWrite.All` |
 | `create-group`, `update-group`, `delete-group`, `add-group-owner`, `remove-group-owner` | `POST` / `PATCH` / `DELETE /groups[/{id}/owners]` | **`Group.ReadWrite.All`** |
 | `get-group`, `list-groups`, `delta-groups` | `GET /groups[/delta]` | `Group.Read.All` (subset of `Group.ReadWrite.All`) |
+| `list-group-members` | `GET /groups/{id}/members/microsoft.graph.user` | `GroupMember.Read.All` (subset of `GroupMember.ReadWrite.All`) [^unverified] |
+| `list-user-groups` | `GET /users/{id}/memberOf/microsoft.graph.group` | `GroupMember.Read.All` together with `User.Read.All` [^unverified] |
 | `create-team` | `PUT /groups/{id}/team` | `Group.ReadWrite.All` (or `Team.Create`) |
 | `add-team-member`, `add-team-owner` | `POST /teams/{id}/members` | `TeamMember.ReadWrite.All` |
 | `create-channel` | `POST /teams/{id}/channels` | `Channel.Create` |
@@ -91,3 +93,9 @@ when a process actually uses those operations, and drop them otherwise.
   test-object-gated provisioning flow, the process-side boundary this page refers to.
 - [MIM comparison](comparisons/mim.md) — where this Worker Type sits against the MIM
   management-agent surface.
+
+[^unverified]: These two rows are derived from the request the operation issues and
+    from the read permission its neighbours need, **not** read off Microsoft's own
+    permission reference — that page was not reachable when this was written. Check
+    them against the Graph documentation for `group: list members` and
+    `user: list memberOf` before granting, and correct this table if they differ.

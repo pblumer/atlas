@@ -280,6 +280,14 @@ func TestRunMapsEveryOperation(t *testing.T) {
 		{op: "list-groups", job: Job{ResultVariable: "gruppen"},
 			method: "GET", path: "/groups",
 			wantBodyIs: func(b any) bool { return b == nil }},
+		// The two membership reads: a listing whose collection hangs off one object,
+		// cast to the type the question is about (ADR-0334).
+		{op: "list-group-members", job: Job{GroupID: "g1", ResultVariable: "leute"},
+			method: "GET", path: "/groups/g1/members/microsoft.graph.user",
+			wantBodyIs: func(b any) bool { return b == nil }},
+		{op: "list-user-groups", job: Job{UserID: "arno@contoso.com", ResultVariable: "gruppen"},
+			method: "GET", path: "/users/arno@contoso.com/memberOf/microsoft.graph.group",
+			wantBodyIs: func(b any) bool { return b == nil }},
 		{op: "update-group",
 			job:    Job{GroupID: "g1", Attributes: map[string]any{"displayName": "Vertrieb"}},
 			method: "PATCH", path: "/groups/g1",
@@ -339,7 +347,7 @@ func TestRunMapsEveryOperation(t *testing.T) {
 		})
 	}
 	// Every operation in the table is covered above; a new one must be added here too.
-	if len(Ops) != 27 {
+	if len(Ops) != 29 {
 		t.Errorf("Ops has %d operations; add the new one to this test", len(Ops))
 	}
 }

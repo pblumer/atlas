@@ -28,6 +28,29 @@
 // worker's own endpoint, so a redirected page cannot carry the directory-wide
 // bearer to another host.
 //
+// # Reading a membership, and what that is for
+//
+// Two of the listings do not enumerate the tenant but hang off one object:
+// list-group-members reads a group's members, list-user-groups the groups one
+// account is in. They exist for reconciliation (ADR-0334), which compares what
+// Atlas believes somebody holds against what the tenant grants — and which reads
+// *absence* inside a declared scope as a finding. That is why they are operations
+// here rather than a REST task with a hand-authored URL: a run promises it read a
+// scope whole, and the paging, the bound and the failure behaviour that promise
+// rests on belong in one place.
+//
+// Both address a cast segment — .../members/microsoft.graph.user and
+// .../memberOf/microsoft.graph.group — because a group's members may be devices and
+// service principals, and an account's memberOf carries directory roles and
+// administrative units. A reconciliation compares people against products, so the
+// operation drops what the question is not about rather than leaving a model to know
+// that it must.
+//
+// They report **direct** membership. add-group-member and remove-group-member set and
+// clear a direct membership, so a transitive answer would report rights this worker
+// cannot revoke. Nested membership is therefore invisible to them, which is a limit
+// worth knowing rather than one worth hiding.
+//
 // # Advanced queries
 //
 // Graph gates endsWith, ne, not and $search behind *advanced query support*, which is

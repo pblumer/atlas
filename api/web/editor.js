@@ -3355,6 +3355,7 @@ const SERVICE_TASK_KINDS = [
         options: [
           { v: "create-user", l: "Create user" },
           { v: "get-user", l: "Read user" },
+          { v: "get-user-photo", l: "Read user photo" },
           { v: "list-users", l: "List users" },
           { v: "delta-users", l: "Delta users (Änderungen)" },
           { v: "update-user", l: "Update user" },
@@ -3367,6 +3368,8 @@ const SERVICE_TASK_KINDS = [
           { v: "create-group", l: "Create group" },
           { v: "get-group", l: "Read group" },
           { v: "list-groups", l: "List groups" },
+          { v: "list-group-members", l: "List group members" },
+          { v: "list-user-groups", l: "List a user's groups" },
           { v: "delta-groups", l: "Delta groups (Änderungen)" },
           { v: "update-group", l: "Update group" },
           { v: "delete-group", l: "Delete group" },
@@ -3385,12 +3388,12 @@ const SERVICE_TASK_KINDS = [
         key: "userId", label: "User", placeholder: "arno@contoso.com", fx: true,
         // The operations that address a user (compiler's needsUser). An explicit list so
         // an operation that takes only a group never prompts for a user it ignores.
-        showIf: (v) => ["get-user", "update-user", "delete-user", "reset-password", "enable", "disable", "add-group-member", "remove-group-member", "add-group-owner", "remove-group-owner", "add-team-member", "add-team-owner", "assign-license", "assign-role"].includes(v.operation),
+        showIf: (v) => ["get-user", "update-user", "delete-user", "reset-password", "enable", "disable", "add-group-member", "remove-group-member", "add-group-owner", "remove-group-owner", "add-team-member", "add-team-owner", "assign-license", "assign-role", "list-user-groups", "get-user-photo"].includes(v.operation),
         hint: "A user principal name or object id. May be a FEEL expression (fx) over the instance's variables.",
       },
       {
         key: "groupId", label: "Group / Team", placeholder: "8f9a…-object-id", fx: true,
-        showIf: (v) => ["add-group-member", "remove-group-member", "delete-group", "get-group", "update-group", "add-group-owner", "remove-group-owner", "create-team", "add-team-member", "add-team-owner", "create-channel", "archive-team"].includes(v.operation),
+        showIf: (v) => ["add-group-member", "remove-group-member", "delete-group", "get-group", "update-group", "add-group-owner", "remove-group-owner", "create-team", "add-team-member", "add-team-owner", "create-channel", "archive-team", "list-group-members"].includes(v.operation),
         hint: "The group's object id — which is also the id of the Team stood up on it, so the team operations take it here too. Entra addresses groups by id, not by display name. May be a FEEL expression (fx).",
       },
       {
@@ -3418,17 +3421,17 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "filter", label: "Filter", placeholder: "accountEnabled eq true", fx: true,
-        showIf: (v) => v.operation === "list-users" || v.operation === "list-groups",
+        showIf: (v) => ["list-users", "list-groups", "list-group-members", "list-user-groups"].includes(v.operation),
         hint: "An OData $filter over the directory, e.g. startsWith(displayName,'Arno') or department eq 'IT'. Empty lists every user. May be a FEEL expression (fx), so a process can list the department it is actually about. Forms Graph calls advanced — endsWith, ne, not — additionally need the Erweiterte Abfrage switch below.",
       },
       {
         key: "search", label: "Suche", placeholder: "\"displayName:Arno\"", fx: true,
-        showIf: (v) => v.operation === "list-users" || v.operation === "list-groups",
+        showIf: (v) => ["list-users", "list-groups", "list-group-members", "list-user-groups"].includes(v.operation),
         hint: "Graphs $search über das Verzeichnis — geschrieben genau so, wie Graph es nimmt, Anführungszeichen inklusive: \"displayName:Arno\", oder zusammengesetzt \"mail:blumer\" AND \"displayName:Arno\". Der Worker kodiert den Begriff, erfindet aber keine Anführungszeichen darum, sonst wäre der zusammengesetzte Fall nicht schreibbar. Eine Suche schaltet die erweiterte Abfrage automatisch ein — Graph kennt keinen anderen Weg, sie auszuführen.",
       },
       {
         key: "advancedQuery", label: "Erweiterte Abfrage", type: "select",
-        showIf: (v) => v.operation === "list-users" || v.operation === "list-groups",
+        showIf: (v) => ["list-users", "list-groups", "list-group-members", "list-user-groups"].includes(v.operation),
         options: [
           { v: "", l: "Aus (streng konsistent)" },
           { v: "true", l: "Ein (ConsistencyLevel: eventual)" },
@@ -3437,17 +3440,17 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "select", label: "Properties", placeholder: "id,displayName,mail",
-        showIf: (v) => ["list-users", "list-groups", "delta-users", "delta-groups"].includes(v.operation),
+        showIf: (v) => ["list-users", "list-groups", "list-group-members", "list-user-groups", "delta-users", "delta-groups"].includes(v.operation),
         hint: "An OData $select: which properties each object comes back with. Empty returns Graph's default set. Naming the few a process actually reads keeps a large read out of the state store. On a delta query Graph threads the $select forward into the deltaLink, so a resume keeps it automatically.",
       },
       {
         key: "pageSize", label: "Page size", placeholder: "100",
-        showIf: (v) => ["list-users", "list-groups", "delta-users", "delta-groups"].includes(v.operation),
+        showIf: (v) => ["list-users", "list-groups", "list-group-members", "list-user-groups", "delta-users", "delta-groups"].includes(v.operation),
         hint: "How many objects to ask for per request ($top, at most 999). Every page is followed either way — the result variable receives the whole read, never one page — so this only trades request count against response size. Empty leaves Graph its own page size.",
       },
       {
         key: "maxUsers", label: "Maximum objects", placeholder: "1000",
-        showIf: (v) => ["list-users", "list-groups", "delta-users", "delta-groups"].includes(v.operation),
+        showIf: (v) => ["list-users", "list-groups", "list-group-members", "list-user-groups", "delta-users", "delta-groups"].includes(v.operation),
         hint: "Caps what may land in the result variable. A read returning more fails the job rather than truncating, because a short result is a wrong answer, not a partial one — and a truncated change set would persist a deltaLink having skipped changes. Empty uses 1000; 0 is unbounded.",
       },
       {

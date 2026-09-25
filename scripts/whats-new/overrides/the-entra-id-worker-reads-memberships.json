@@ -1,0 +1,20 @@
+{
+  "tags": [
+    "Worker"
+  ],
+  "title": {
+    "en": "The Entra ID worker reads memberships",
+    "de": "Der Entra-ID-Worker liest Mitgliedschaften"
+  },
+  "summary": {
+    "en": "Two operations join the Entra worker: List group members answers who is directly in a group, and List a user's groups answers which groups one account is directly in. Both follow every page, take the same filter, projection and bound as the other listings, and fail rather than truncate when a read outgrows that bound. They are what a reconciliation needs — comparing what Atlas believes somebody holds against what the tenant actually grants rests on a reading somebody can promise is complete, and a shortened answer would report everybody it left out as having lost their access. Until now the worker could add and remove a membership but never read one.",
+    "de": "Zwei Operationen kommen zum Entra-Worker dazu: List group members beantwortet, wer direkt Mitglied einer Gruppe ist, und List a user's groups, in welchen Gruppen ein Konto direkt Mitglied ist. Beide folgen allen Seiten, nehmen denselben Filter, dieselbe Feldauswahl und dieselbe Obergrenze wie die übrigen Auflistungen und scheitern lieber, als ein zu grosses Ergebnis zu kürzen. Sie sind das, was ein Abgleich braucht: Der Vergleich zwischen dem, was Atlas über einen Zugriff festhält, und dem, was der Tenant tatsächlich gewährt, stützt sich auf eine Lesung, deren Vollständigkeit jemand zusagen kann — eine gekürzte Antwort würde alle Ausgelassenen als Personen melden, die ihren Zugriff verloren haben. Bisher konnte der Worker eine Mitgliedschaft setzen und entfernen, aber nie eine lesen."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

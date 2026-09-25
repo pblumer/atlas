@@ -2,6 +2,34 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "the-entra-id-worker-reads-memberships",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The Entra ID worker reads memberships",
+        "de": "Der Entra-ID-Worker liest Mitgliedschaften"
+      },
+      "summary": {
+        "en": "Two operations join the Entra worker: List group members answers who is directly in a group, and List a user's groups answers which groups one account is directly in. Both follow every page, take the same filter, projection and bound as the other listings, and fail rather than truncate when a read outgrows that bound. They are what a reconciliation needs — comparing what Atlas believes somebody holds against what the tenant actually grants rests on a reading somebody can promise is complete, and a shortened answer would report everybody it left out as having lost their access. Until now the worker could add and remove a membership but never read one.",
+        "de": "Zwei Operationen kommen zum Entra-Worker dazu: List group members beantwortet, wer direkt Mitglied einer Gruppe ist, und List a user's groups, in welchen Gruppen ein Konto direkt Mitglied ist. Beide folgen allen Seiten, nehmen denselben Filter, dieselbe Feldauswahl und dieselbe Obergrenze wie die übrigen Auflistungen und scheitern lieber, als ein zu grosses Ergebnis zu kürzen. Sie sind das, was ein Abgleich braucht: Der Vergleich zwischen dem, was Atlas über einen Zugriff festhält, und dem, was der Tenant tatsächlich gewährt, stützt sich auf eine Lesung, deren Vollständigkeit jemand zusagen kann — eine gekürzte Antwort würde alle Ausgelassenen als Personen melden, die ihren Zugriff verloren haben. Bisher konnte der Worker eine Mitgliedschaft setzen und entfernen, aber nie eine lesen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Worker"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "the-shop-works-on-a-phone",
       "version": "Unreleased",
       "date": null,
@@ -296,35 +324,6 @@
         "Tasks",
         "Shop"
       ]
-    },
-    {
-      "id": "moving-a-decision-service-hid-the-arrows-crossing-it-and-lef",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Moving or resizing a decision service no longer breaks the picture",
-        "de": "Verschieben und Grössenändern eines Decision Service zerlegt das Bild nicht mehr"
-      },
-      "summary": {
-        "en": "Four things went wrong the moment you touched the box, and three of them were the same fault. The arrows crossing its border disappeared underneath it: a newly drawn service already went behind what was there, but the library underneath moves a shape by taking it out of the diagram and putting it back, and putting it back with nothing said about where means on top — so a stored file drew correctly right up to the first nudge. The name stayed where it was while the box travelled, because where you put it is recorded in diagram coordinates and nothing kept the two in step; the further the box went, the further outside it the name sat, and DMN says the name belongs inside the shape. Shrinking the box past the name left it outside in the same way. And the tool strip followed the stray name rather than the service, because it is placed from the element's drawn extent and a name outside the box stretches that extent to cover both. The name now keeps its place in the box: a move carries it along, a resize carries it with whichever corner you dragged and pulls it back inside only when it no longer fits, and one undo takes the whole gesture back. Folding remembers where the name was and gives it back when you unfold, even if you dragged the folded box across the canvas first.",
-        "de": "Vier Dinge gingen schief, sobald man die Box anfasste, und drei davon waren derselbe Fehler. Die Pfeile, die ihren Rand kreuzen, verschwanden darunter: Ein neu gezeichneter Service lag bereits hinter dem Vorhandenen, doch die zugrundeliegende Bibliothek verschiebt eine Form, indem sie sie aus dem Diagramm nimmt und wieder einsetzt — ohne Angabe einer Position landet sie zuoberst. Eine gespeicherte Datei wurde deshalb korrekt gezeichnet, bis zum ersten Anstupsen. Der Name blieb stehen, während die Box wanderte, weil seine Position in Diagrammkoordinaten festgehalten wird und nichts die beiden synchron hielt; je weiter die Box zog, desto weiter lag der Name ausserhalb — und DMN verlangt den Namen innerhalb der Form. Eine Verkleinerung der Box über den Namen hinaus liess ihn auf dieselbe Weise draussen stehen. Und die Werkzeugleiste folgte dem versprengten Namen statt dem Service, weil sie aus der gezeichneten Ausdehnung des Elements positioniert wird und ein Name ausserhalb der Box diese Ausdehnung über beides spannt. Der Name hält jetzt seinen Platz in der Box: Ein Verschieben nimmt ihn mit, eine Grössenänderung führt ihn mit der angefassten Ecke und holt ihn nur dann zurück, wenn er nicht mehr hineinpasst, und ein einziges Rückgängig nimmt die ganze Geste zurück. Das Zuklappen merkt sich die Position des Namens und gibt sie beim Aufklappen zurück, auch wenn die zugeklappte Box zwischendurch über die Zeichenfläche gezogen wurde."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
     }
   ]
 }

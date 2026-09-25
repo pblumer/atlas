@@ -84,14 +84,38 @@ var Ops = map[string]Op{
 	"disable":             {Method: "PATCH", NeedsUser: true, Label: "disable an account"},
 	"add-group-member":    {Method: "POST", NeedsUser: true, NeedsGroup: true, Label: "add a group member"},
 	"remove-group-member": {Method: "DELETE", NeedsUser: true, NeedsGroup: true, Label: "remove a group member"},
-	"create-group":        {Method: "POST", NeedsAttributes: true, Label: "create a group"},
-	"get-group":           {Method: "GET", NeedsGroup: true, Label: "read a group"},
-	"list-groups":         {Method: "GET", IsList: true, ListPath: "/groups", Label: "list groups"},
-	"delta-groups":        {Method: "GET", IsDelta: true, ListPath: "/groups/delta", Label: "delta-query groups"},
-	"update-group":        {Method: "PATCH", NeedsGroup: true, NeedsAttributes: true, Label: "update a group"},
-	"delete-group":        {Method: "DELETE", NeedsGroup: true, Label: "delete a group"},
-	"add-group-owner":     {Method: "POST", NeedsUser: true, NeedsGroup: true, Label: "add a group owner"},
-	"remove-group-owner":  {Method: "DELETE", NeedsUser: true, NeedsGroup: true, Label: "remove a group owner"},
+	// The two membership *reads*, and they exist for reconciliation (ADR-0334):
+	// comparing what Atlas believes somebody holds against what the tenant actually
+	// grants. Every other read here answers a question about one object; these two
+	// answer the two axes a reconciliation run declares a scope on — a reference read
+	// whole ("these are the members of this group") and a subject read whole ("this is
+	// everything this person holds here").
+	//
+	// Both address a **cast segment** rather than the bare collection, and that is the
+	// operation knowing what it means rather than the model filtering afterwards: a
+	// group's members may be devices and service principals, and a user's memberOf
+	// carries directory roles and administrative units. A reconciliation compares
+	// people against products, so anything else in the answer is something a model
+	// would have to know to drop — and a model that forgot would report a device as a
+	// person holding a right.
+	//
+	// **Direct membership, not transitive.** add-group-member and remove-group-member
+	// set and clear a direct membership, so a transitive answer would report rights
+	// this worker cannot revoke — a finding whose only honest resolution is "not by
+	// this path". Nested membership is therefore invisible here, which is a limit to
+	// state rather than hide.
+	"list-group-members": {Method: "GET", NeedsGroup: true, IsList: true,
+		ListPath: "/groups/{group}/members/microsoft.graph.user", Label: "list a group's members"},
+	"list-user-groups": {Method: "GET", NeedsUser: true, IsList: true,
+		ListPath: "/users/{user}/memberOf/microsoft.graph.group", Label: "list a user's group memberships"},
+	"create-group":       {Method: "POST", NeedsAttributes: true, Label: "create a group"},
+	"get-group":          {Method: "GET", NeedsGroup: true, Label: "read a group"},
+	"list-groups":        {Method: "GET", IsList: true, ListPath: "/groups", Label: "list groups"},
+	"delta-groups":       {Method: "GET", IsDelta: true, ListPath: "/groups/delta", Label: "delta-query groups"},
+	"update-group":       {Method: "PATCH", NeedsGroup: true, NeedsAttributes: true, Label: "update a group"},
+	"delete-group":       {Method: "DELETE", NeedsGroup: true, Label: "delete a group"},
+	"add-group-owner":    {Method: "POST", NeedsUser: true, NeedsGroup: true, Label: "add a group owner"},
+	"remove-group-owner": {Method: "DELETE", NeedsUser: true, NeedsGroup: true, Label: "remove a group owner"},
 	// A Team's id is its group's id: create-team teamifies an existing (Microsoft
 	// 365) group, and the team operations address /teams/{groupId}. GroupID therefore
 	// carries the team throughout, so no separate team-id field is authored. Removing a
@@ -430,6 +454,20 @@ func collectionPage(res any, op string) ([]any, string, error) {
 	return list, next, nil
 }
 
+// collectionPath fills a collection template's {user} and {group} placeholders with
+// the ids this job resolved, already path-escaped by the caller.
+//
+// A template rather than a function per operation: a listing whose collection hangs off
+// one object ("/groups/{group}/members/...") differs from a tenant-wide one in exactly
+// one way — the id in the middle — and a second code path would be a second place for
+// the query building, the paging and the cap to drift apart. An operation whose
+// ListPath carries no placeholder is returned unchanged, which is every tenant-wide
+// listing and every delta query.
+func collectionPath(tmpl, user, group string) string {
+	p := strings.ReplaceAll(tmpl, "{user}", user)
+	return strings.ReplaceAll(p, "{group}", group)
+}
+
 // listPath builds the first request of a listing over the given collection ("/users",
 // "/groups"). The parameter names are written literally rather than through url.Values,
 // which would percent-encode the leading $ into %24: legal, decoded identically by
@@ -612,7 +650,7 @@ func request(j Job, spec Op, baseURL string) Request {
 	base := strings.TrimRight(baseURL, "/")
 	r := Request{Method: spec.Method, Eventual: spec.IsList && j.advanced(), Binary: spec.IsBinary}
 	if spec.IsList {
-		r.Path = listPath(j, spec.ListPath)
+		r.Path = listPath(j, collectionPath(spec.ListPath, user, group))
 		return r
 	}
 	if spec.IsDelta {
@@ -622,7 +660,7 @@ func request(j Job, spec Op, baseURL string) Request {
 			r.Path = dl
 			return r
 		}
-		r.Path = deltaPath(j, spec.ListPath)
+		r.Path = deltaPath(j, collectionPath(spec.ListPath, user, group))
 		return r
 	}
 	switch j.Operation {

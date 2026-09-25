@@ -14,6 +14,19 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The Entra ID worker reads memberships.** Two operations: *List group members*
+  answers who is directly in a group, *List a user's groups* answers which groups one
+  account is directly in. Both page to the end, take the same filter, projection and
+  bound as the other listings, and fail rather than truncate when a read outgrows that
+  bound. They exist for reconciliation: comparing what Atlas believes somebody holds
+  against what the tenant grants needs a reading of a scope somebody can promise is
+  complete, and a truncated one would report everybody the answer left out as having
+  lost their access. Before this, the worker could add and remove a membership but
+  never read one, so that comparison could only be assembled from a REST task carrying
+  Graph's paging in its own diagram. Both read direct membership, and both drop what
+  the question is not about — a group's devices and service principals, an account's
+  directory roles.
+
 - **The shop works on a phone.** Below 860px every view of the shop is one column
   wide. The catalogue shows the column you have reached, and a stepper above it goes
   back and names the path so far. The basket stacks each offering over its own
