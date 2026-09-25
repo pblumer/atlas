@@ -88,7 +88,7 @@ func (s *Server) handleReturnLine(w http.ResponseWriter, r *http.Request) {
 	// Durable first, then the process (I2). The line says a return is under way
 	// before anything runs, so a start that fails leaves a visible "returning" an
 	// operator can act on rather than a silent nothing.
-	if err := s.startReturn(process, id, item, out); err != nil {
+	if err := s.startReturn(process, id, item, out, ""); err != nil {
 		httpapi.Error(w, http.StatusInternalServerError,
 			"the return was recorded, but its process could not be started: "+err.Error())
 		return
@@ -100,7 +100,11 @@ func (s *Server) handleReturnLine(w http.ResponseWriter, r *http.Request) {
 // the order and the line it is about, the variant that was chosen, and who holds
 // it. The process reports its outcome back through the same endpoint a
 // provisioning does.
-func (s *Server) startReturn(process, orderID, ref string, o order.Order) error {
+//
+// reason is set when something other than the orderer asked for the return — a
+// recertification — and says what, in words for the person the process shows it
+// to. The orderer's own return carries none.
+func (s *Server) startReturn(process, orderID, ref string, o order.Order, reason string) error {
 	position, err := order.ResolveLine(o, ref)
 	if err != nil {
 		return err
@@ -125,6 +129,9 @@ func (s *Server) startReturn(process, orderID, ref string, o order.Order) error 
 	}
 	if variant != "" {
 		vars = append(vars, model.VariableValue{Name: "variantId", Kind: model.VarString, Text: variant})
+	}
+	if reason != "" {
+		vars = append(vars, model.VariableValue{Name: "reason", Kind: model.VarString, Text: reason})
 	}
 
 	var key uint64

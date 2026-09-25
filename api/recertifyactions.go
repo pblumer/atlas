@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/api/order"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
@@ -143,7 +145,16 @@ func (s *Server) decideOnRow(w http.ResponseWriter, r *http.Request, decision st
 
 	outcome := ""
 	if decision == decisionRevoke {
-		if outcome, err = s.revokeCertifiedRight(row); err != nil {
+		if outcome, err = s.revokeCertifiedRight(row, me); err != nil {
+			// A return the order refuses — the line already going back, or still
+			// needed by something held beside it — is a state somebody can see and
+			// act on, not a fault; the row stays undecided so it can be answered
+			// once that has changed.
+			var refused errReturnRefused
+			if errors.As(err, &refused) {
+				httpapi.Error(w, http.StatusConflict, err.Error())
+				return
+			}
 			httpapi.Error(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -181,20 +192,47 @@ func (s *Server) handleRevokeRecertifyRow(w http.ResponseWriter, r *http.Request
 	s.decideOnRow(w, r, decisionRevoke)
 }
 
-// revokeCertifiedRight runs the product's deprovisioning, and reports which of the
-// two things happened.
+// errReturnRefused is an order declining to give a line back: it is already on its
+// way back, or something still held needs it. It is the order's answer, and it
+// is passed on as the reason the decision could not be carried out.
+type errReturnRefused struct{ err error }
+
+func (e errReturnRefused) Error() string { return e.err.Error() }
+func (e errReturnRefused) Unwrap() error { return e.err }
+
+// revokeCertifiedRight takes the right away, and reports which of the three things
+// happened.
 //
 // The right may be gone already: a campaign is a snapshot and the estate moves
 // under it. That is not an error and is not treated as one — the decision is still
 // a decision somebody made, and starting a deprovisioning against nothing would
 // park an instance raising an incident about a fact rather than a fault.
-func (s *Server) revokeCertifiedRight(row recertifyRow) (string, error) {
-	held, err := s.holdsRight(row.Principal, row.ItemID)
+//
+// A right an order granted goes back through that order
+// (ADR-draft-a-withdrawn-ordered-right-goes-back-through-its-order): the line is
+// marked returning and the process the order froze runs with the order, the
+// position and the recipient, exactly as when the orderer gives it back. That is
+// what lets the process find what it provisioned and report the line returned,
+// and a returned line is the one thing that ends an ordered right in the
+// inventory. Only a right no order stands behind — adopted, legacy, or one whose
+// order retention has deleted — takes the catalogue's deprovisioning directly.
+func (s *Server) revokeCertifiedRight(row recertifyRow, by string) (string, error) {
+	held, ok, err := s.heldRight(row.Principal, row.ItemID)
 	if err != nil {
 		return "", fmt.Errorf("revoke: read what %s holds: %w", row.Principal, err)
 	}
-	if !held {
+	if !ok {
 		return outcomeAlreadyGone, nil
+	}
+	reason := "recertification: withdrawn in campaign " + row.CampaignID
+	if held.OrderID != "" {
+		returned, err := s.returnOrderedRight(held, by, reason)
+		if err != nil {
+			return "", err
+		}
+		if returned {
+			return outcomeReturnStarted, nil
+		}
 	}
 
 	var (
@@ -220,14 +258,70 @@ func (s *Server) revokeCertifiedRight(row recertifyRow) (string, error) {
 	if opErr != nil {
 		return "", opErr
 	}
-	if err := s.startDeprovisioningFor(process, row.ItemID, row.Principal,
-		"recertification: withdrawn in campaign "+row.CampaignID); err != nil {
+	if err := s.startDeprovisioningFor(process, row.ItemID, row.Principal, reason); err != nil {
 		return "", err
 	}
 	return outcomeDeprovisioning, nil
 }
 
-// holdsRight answers whether the inventory still records this pair.
+// returnOrderedRight gives an ordered right back through the order that granted
+// it, and reports whether it did.
+//
+// false with no error is "no order stands behind this any more": the order was
+// deleted by retention, no longer carries the position, or names somebody else as
+// its recipient. The caller then takes the catalogue's path, as it did before
+// orders were consulted at all. An order that carries the position but refuses to
+// return it is an errReturnRefused, and nothing is started.
+func (s *Server) returnOrderedRight(held model.EntitlementValue, by, reason string) (bool, error) {
+	ref := held.ItemID
+	if held.VariantID != "" {
+		ref = held.ItemID + "#" + held.VariantID
+	}
+	var (
+		out       order.Order
+		process   string
+		found     bool
+		returnErr error
+		opErr     error
+	)
+	at := s.now()
+	s.do(func() {
+		ord, ok, err := s.orderStore.Get(held.OrderID)
+		if err != nil {
+			opErr = err
+			return
+		}
+		if !ok || ord.Recipient != held.Principal {
+			return
+		}
+		if _, err := order.ResolveLine(ord, ref); err != nil {
+			return
+		}
+		found = true
+		process = order.ReturnProcessOf(ord, ref)
+		if out, returnErr = order.Returning(ord, ref, at, by); returnErr != nil {
+			return
+		}
+		opErr = s.orderStore.Save(out)
+	})
+	switch {
+	case opErr != nil:
+		return false, fmt.Errorf("revoke: return %s through order %s: %w", ref, held.OrderID, opErr)
+	case !found:
+		return false, nil
+	case returnErr != nil:
+		return false, errReturnRefused{fmt.Errorf("revoke: order %s does not give %s back: %w",
+			held.OrderID, ref, returnErr)}
+	}
+	// Durable first, then the process, as for the orderer's own return (I2).
+	if err := s.startReturn(process, held.OrderID, ref, out, reason); err != nil {
+		return false, fmt.Errorf("the return was recorded on order %s, but its process could "+
+			"not be started: %w", held.OrderID, err)
+	}
+	return true, nil
+}
+
+// heldRight reads what the inventory records for this pair, if anything.
 //
 // One person's holdings are a prefix scan, so this is cheap — but a scan is still a
 // scan, and ADR-0239 puts scans off the loop whatever their expected size. The
@@ -235,15 +329,18 @@ func (s *Server) revokeCertifiedRight(row recertifyRow) (string, error) {
 // there is anything to deprovision, and a right that disappears between this read
 // and the process starting produces a deprovisioning that finds nothing, which is
 // what a deprovisioning does about a right that is not there.
-func (s *Server) holdsRight(principal, itemID string) (bool, error) {
-	found := false
+func (s *Server) heldRight(principal, itemID string) (model.EntitlementValue, bool, error) {
+	var (
+		held  model.EntitlementValue
+		found bool
+	)
 	err := s.readOffLoop(func(rv *state.ReadView, _ defIndex) error {
 		return rv.EntitlementsOf(principal, func(v *model.EntitlementValue) error {
 			if v.ItemID == itemID {
-				found = true
+				held, found = *v, true
 			}
 			return nil
 		})
 	})
-	return found, err
+	return held, found, err
 }

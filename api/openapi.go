@@ -1843,7 +1843,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  jsonBody("An optional note", schemaObj(map[string]any{"note": tString()})),
 			resp: jsonBody("The row, now decided", tObject())}},
 		{"POST", "/api/v1/recertification/{id}/rows/{row}/revoke", s.handleRevokeRecertifyRow, apiOp{
-			summary: "Attest that this right is no longer needed, and run the product's deprovisioning process — never a direct worker call. A right already gone by the time the decision arrives is recorded and starts nothing: a campaign is a snapshot and the estate moves under it. A decided row cannot be decided again, because an attestation says what somebody judged at one moment",
+			summary: "Attest that this right is no longer needed, and run the product's deprovisioning process — never a direct worker call. A right an order granted goes back through that order, as a return does: the line becomes returning and the process the order froze starts with the order, the position and the reason (outcome return-started); a return the order refuses (the line already going back, or still needed) is a 409 and decides nothing. A right already gone by the time the decision arrives is recorded and starts nothing: a campaign is a snapshot and the estate moves under it. A decided row cannot be decided again, because an attestation says what somebody judged at one moment",
 			tag:     "Catalogue", role: RoleUser,
 			req:  jsonBody("An optional note", schemaObj(map[string]any{"note": tString()})),
 			resp: jsonBody("The row, now decided", tObject())}},
