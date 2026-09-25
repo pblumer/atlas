@@ -264,12 +264,67 @@ Under **option C′**, as landed:
 - **Positive, and decided here.** A business rule task now **refuses** a wrongly-typed
   input rather than carrying on with the catch-all answer. See "The refusal" below for
   what is refused and what deliberately is not.
-- **Negative, and the price of the refusal.** A wrong mapping that produced a wrong
-  answer silently now produces an incident. That is the point, but it is a behaviour
+- **Negative in principle, nil in practice, and that was measured.** A wrong mapping
+  that produced a wrong answer silently now produces an incident. That is a behaviour
   change on deployed processes: an instance whose io-mapping has always delivered a
   string where the model declares a number stops at the task instead of passing it.
-  This is the failure becoming visible, not a new failure — but it becomes visible all
-  at once, at upgrade.
+  On this installation it costs nothing — see "What the refusal would have cost"
+  below — but the shape of the risk is real for any installation that has such a
+  mapping, and it surfaces all at once, at upgrade.
+
+## What the refusal would have cost, on the history rather than in principle
+
+The question the refusal raises is not whether it is right but what it breaks on the way
+in: an instance whose mapping has always delivered the wrong type fails at the task the
+moment this ships. That is answerable from the retained evaluation history rather than by
+argument, so it was answered that way before shipping.
+
+Every retained evaluation of every deployed decision was read and run through the same
+predicate the code uses — a value is refused only when its kind contradicts the input's
+declared type:
+
+| Decision | Evaluations | Declared inputs | Would be refused |
+|---|---|---|---|
+| RowValid | 424 | email, group, license — all `string` | 0 |
+| Freigabe | 20 | betrag `number`, risiko `string` | 0 |
+| ReisePflichten | 15 | alter `number`, reiseart `string` | 0 |
+| Kreditfreigabe (service) | 9 | betrag, laufzeitMonate, einkommen `number`; bonitaet `string` | 0 |
+| Begrüssung | 8 | Name `string` | 0 |
+| KontotypMapping | 5 | kontotyp `string` | 0 |
+| Tagesgruss_holen | 5 | Stunde `number` | 0 |
+| Alter prüfen | 4 | Alter `number` | 0 |
+| Notenschluessel | 2 | punkte `number` | 0 |
+| praemie | 2 | alter, jahreskilometer `number`; fahrzeugklasse `string` | 0 |
+| bw-vorpruefung | 1 | abschluss `string`, erfahrungJahre `number` | 0 |
+| **Total** | **495** | | **0** |
+
+Not one value in the whole history contradicts its declared type. The counts agree with
+the per-decision totals the registry reports, so the history is complete rather than
+sampled.
+
+Two things the reading settled that the argument could not.
+
+**The `UNKNOWN_INPUT` exclusion is not hypothetical.** `praemie` is supplied
+`schadenfreiJahre` and `selbstbehalt`, which its schema does not declare. Had the refusal
+covered that code, both of its evaluations would have failed — a working decision broken
+by a mapping that costs nothing. The narrow scope is what the data asks for.
+
+**A `null` is not covered, and it is the shape that actually occurs here.** Twenty
+evaluations carried a null where a type is declared: RowValid 15, Begrüssung 4,
+KontotypMapping 1 — the last of them the most recent run of that decision. temis does not
+call a null a type mismatch, so none of these is refused, and the account-ordering
+evaluation of 2026-09-22 stands as it was: `kontotyp: null`, no rule matched, output null,
+no incident. That is the same silence this record set out to remove, reached by a
+different route. It is named here rather than quietly fixed, because "the variable is
+absent" and "the variable has the wrong type" are different questions with different right
+answers.
+
+Two limits on the measurement, stated so it is not read for more than it says. The schema
+compared against is Atlas's own per-decision view, which lists a decision's *reachable*
+inputs, while the refusal checks temis's *direct* ones — a subset, with the same declared
+type per name, so a clean result on the larger set is clean on the smaller one too. And
+`Kreditfreigabe`'s nine evaluations are counted although the refusal does not reach a
+decision service at all; excluding them changes nothing, since they are clean either way.
 
 ## The refusal
 
@@ -340,3 +395,9 @@ Koerzierung in `inputToValues` sitzt und von aussen nicht nachzuziehen ist.
 Whether a business rule task's **input mapping** should also be typed. The mapping is
 FEEL over the instance's variables and produces whatever that FEEL produces; it is a
 separate boundary with a separate answer.
+
+Whether a **null** where a type is declared should be refused. temis does not call it a
+type mismatch, and this record does not make it one: "absent" and "wrongly typed" are
+different claims about a variable, and a decision may legitimately be written to answer
+for a missing input. The history shows it is the case that actually occurs here, so it
+wants a record of its own rather than a line in this one.

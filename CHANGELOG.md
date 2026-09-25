@@ -30,10 +30,18 @@ _Changed_ / _Removed_ for each version.
   reads; a missing required input is still refused by the engine itself, with a better
   message; and an out-of-range value is a question for its own record.
 
-  **This is a behaviour change on deployed processes.** An instance whose mapping has
-  always delivered the wrong type now stops at the task instead of passing it. That is
-  the failure becoming visible, not a new failure — but it becomes visible at upgrade.
-  A decision **service** is not covered: temis publishes no input schema for one yet.
+  **Nothing here changes behaviour, and that was measured rather than assumed.** Every
+  retained evaluation of every deployed decision — 495 across 11 decisions — was run
+  through the same check: not one value contradicts its declared type, so not one would
+  have been refused. The measurement also confirmed the narrow scope: one decision is
+  supplied two inputs its model does not declare, and both of its evaluations would have
+  failed had an undeclared input been refused too.
+
+  For an installation that does have such a mapping, this is still a behaviour change on
+  processes already running: the task stops instead of passing a wrong value on, all at
+  once, at upgrade. Two cases stay uncovered — a decision **service**, because the engine
+  publishes no input schema for one yet, and a `null` where a type is declared, which is
+  a question about an absent variable rather than a wrongly typed one.
 
 ### Fixed
 
