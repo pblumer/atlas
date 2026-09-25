@@ -1,4 +1,4 @@
-# ADR-DRAFT: A declared type is honoured at the decision boundary
+# ADR-0419: A declared type is honoured at the decision boundary
 
 - **Status:** Proposed
 - **Implementation:** Not started
