@@ -78,3 +78,67 @@ test("picking the decision service fills the task with it", async ({ page }) => 
   expect(task).toMatch(/<zeebe:input[^>]*target="bonitaet"/);
   expect(page.__errors).toEqual([]);
 });
+
+// Where the task's input mapping and the decision's own inputs disagree.
+//
+// It is the same drift the decision editor reports one level down, at the place it
+// does the most damage. Inside a model, a name nothing provides does not deploy — the
+// engine answers `unknown variable` and the deploy gate refuses it. Here it does
+// deploy: the mapping is FEEL over the instance's variables, and nothing can know that
+// "betrag" was meant where "betraege" was typed. An input the decision declares and the
+// task never maps arrives null, every rule that tests it falls through, and the process
+// carries on with whatever the table's last row says — a wrong answer rather than a
+// failure, and nothing downstream tells the two apart.
+test("the task says where its input mapping and the decision's inputs disagree", async ({ page }) => {
+  await openPicker(page);
+  const note = page.locator("#dmn-inputs-drift");
+  // The rows, and the note under them, live in their own group. Opened only when it is
+  // shut: a panel re-render keeps whichever groups were open, so an unconditional click
+  // after one closes the group it was meant to open.
+  const openInputs = async () => {
+    const head = page.locator(".pgroup-head", { hasText: "Decision inputs" });
+    const group = page.locator(".pgroup", { has: head });
+    if (((await group.getAttribute("class")) || "").includes("collapsed")) await head.click();
+  };
+
+  await openInputs();
+  // Nothing to say before a decision is picked: there is nothing to compare against.
+  await expect(note).toBeHidden();
+
+  await page.locator("#f-decision-pick").selectOption("Kreditfreigabe");
+  // Picking fills the rows from the decision's own inputs and re-renders the panel
+  // around the filled-in task, which closes the groups again.
+  const firstTarget = page.locator("#dmn-inputs .dmn-input-row .dmn-in-target").first();
+  await expect(firstTarget).toHaveValue("betrag");
+  await openInputs();
+  await expect(firstTarget).toBeVisible();
+  // They agree, so the note stays away. A note that is always there is a note nobody
+  // reads.
+  await expect(note).toBeHidden();
+
+  // Mistype one target, which is how this happens in life — a rename on one side, a
+  // hand-typed name on the other.
+  await firstTarget.fill("betraege");
+
+  // Both directions, because they are different mistakes: one input arrives empty, and
+  // one row feeds a name the decision never reads.
+  await expect(note).toBeVisible();
+  await expect(note).toContainText("The decision reads");
+  await expect(note).toContainText("betrag");
+  await expect(note).toContainText("no row feeds it");
+  await expect(note).toContainText("betraege");
+  await expect(note).toContainText("is ignored");
+
+  // It follows the typing rather than the save: a row corrected and not yet committed
+  // is exactly when it is useful.
+  await firstTarget.fill("betrag");
+  await expect(note).toBeHidden();
+
+  // And an input left unmapped is reported on its own, without anything extra being
+  // fed: the two halves are independent.
+  await firstTarget.fill("");
+  await expect(note).toBeVisible();
+  await expect(note).toContainText("no row feeds it");
+  await expect(note).not.toContainText("is ignored");
+  expect(page.__errors).toEqual([]);
+});

@@ -14,6 +14,26 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A decision says where its diagram and its logic disagree, and drawing a
+  requirement writes the column it implies.** A decision table's input column carries
+  an expression, not a reference to the arrow that feeds it, and DMN keeps the two
+  apart on purpose — one requirement can feed several columns, one column can combine
+  several. Nothing made them agree, so a decision could be drawn as needing an input
+  and another decision while its table read neither.
+
+  Three things now hold that together. Drawing an information requirement gives the
+  decision the column it implies, named and typed like the element it comes from, as
+  part of the same step — one undo takes the arrow and the column back together, and
+  nothing is written when the table already reads that name. The findings strip under
+  the canvas says when a decision reads a name nothing gives it, which is the one case
+  that does not deploy at all, and when a decision is given something it never reads,
+  which deploys and runs and which nothing else would ever mention; the second offers
+  to write the missing column. And a business rule task now says where its input
+  mapping and the decision's own inputs disagree — an input the decision reads and no
+  row feeds arrives empty, the rules that test it do not match, and the process carries
+  on with a wrong answer rather than a failure.
+
+
 - **The shop works on a phone.** Below 860px every view of the shop is one column
   wide. The catalogue shows the column you have reached, and a stepper above it goes
   back and names the path so far. The basket stacks each offering over its own

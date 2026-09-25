@@ -35,7 +35,8 @@ import { renderTrace, fmtVal as traceValue } from "./dmn-trace.js";
 import { collectDecisionDocumentation, exportDecisionDocumentation } from "./decision-doc.js";
 import { attachCollab } from "./collab.js";
 import { dmnSurface } from "./dmn-collab.js";
-import { knowledgeModelFindings } from "./dmn-warnings.js";
+import { informationRequirementFindings, knowledgeModelFindings } from "./dmn-warnings.js";
+import { addInputColumn, nameOf, tableOf } from "./dmn-input-column.js";
 
 // Only the editor stylesheets we actually use are loaded, lazily, so non-editor
 // pages stay light — same discipline as the bpmn-js loader.
@@ -332,6 +333,72 @@ function hintFor(active) {
     calls this decision. ` + HINT_TAIL;
 }
 
+// attachRequirementColumns gives a decision table the column an information
+// requirement implies, the moment the requirement is drawn. It returns a teardown.
+//
+// This is the half of the problem that is not a warning. An author who draws "this
+// decision needs that input" has said what they mean; having to then open the table
+// and type the same name again is not a decision they are making, it is a transcription
+// — and a transcription is where the graph and the table start to differ.
+//
+// It is a default and not a rule, which is why it is queued into the command that
+// draws the requirement rather than applied after it: one Ctrl+Z takes the column and
+// the arrow back together, and an author who wants a different expression edits the
+// column they were given. Nothing is added when the decision has no table yet, when
+// its logic is something else, or when a column already reads that name.
+function attachRequirementColumns(modeler, toast) {
+  let bound = null; // the viewer whose command stack we are listening to
+  let off = () => {};
+
+  const onPostExecute = (viewer) => (event) => {
+    const connection = event.context && event.context.connection;
+    const bo = connection && connection.businessObject;
+    if (!bo || typeof bo.$instanceOf !== "function"
+      || !bo.$instanceOf("dmn:InformationRequirement")) return;
+
+    const target = event.context.target || (connection && connection.target);
+    const source = event.context.source || (connection && connection.source);
+    if (!target || !source) return;
+
+    const decision = target.businessObject;
+    if (!tableOf(decision)) return;
+
+    let added = "";
+    try {
+      added = addInputColumn(viewer.get("modeling"), target, decision, source.businessObject);
+    } catch { /* a model shape this does not understand keeps its requirement anyway */ }
+    if (added) {
+      toast && toast(`“${nameOf(source.businessObject)}” added as an input column of `
+        + `“${decision.name || decision.id}”.`, "ok");
+    }
+  };
+
+  const bind = () => {
+    let viewer;
+    try { viewer = modeler.getActiveViewer(); } catch { viewer = null; }
+    if (!viewer || viewer === bound) return;
+    off();
+    bound = viewer;
+    let eventBus;
+    try { eventBus = viewer.get("eventBus"); } catch { off = () => {}; return; }
+    const handler = onPostExecute(viewer);
+    // postExecute, so the requirement is on the model before the column that reads it
+    // is written — and inside the same command, so undo takes both.
+    eventBus.on("commandStack.connection.create.postExecute", handler);
+    off = () => {
+      try { eventBus.off("commandStack.connection.create.postExecute", handler); } catch { /* gone with its view */ }
+    };
+  };
+
+  bind();
+  modeler.on("views.changed", bind);
+
+  return () => {
+    off();
+    try { modeler.off("views.changed", bind); } catch { /* already torn down */ }
+  };
+}
+
 // attachDmnWarnings keeps the findings strip under the canvas, and the badges on the
 // requirements graph, in step with the model. It returns a teardown.
 //
@@ -386,7 +453,11 @@ function attachDmnWarnings(modeler, strip, toast) {
 
   const render = () => {
     try {
-      findings = knowledgeModelFindings(modeler.getDefinitions());
+      const definitions = modeler.getDefinitions();
+      // What a decision is given first, then what it calls: the first is the one an
+      // author is looking at when it goes wrong, and one of them does not deploy.
+      findings = informationRequirementFindings(definitions)
+        .concat(knowledgeModelFindings(definitions));
     } catch {
       findings = []; // mid-import, or a model dmn-js has not settled: nothing to say yet
     }
@@ -397,10 +468,12 @@ function attachDmnWarnings(modeler, strip, toast) {
     }
     strip.innerHTML = `<ul>${findings.map((f) => {
       const fix = f.fix
-        ? ` <button type="button" class="dmn-warn-fix" data-fix-source="${esc(f.fix.source)}"`
+        ? ` <button type="button" class="dmn-warn-fix" data-fix-kind="${esc(f.fix.kind)}"`
+          + ` data-fix-source="${esc(f.fix.source)}"`
           + ` data-fix-target="${esc(f.fix.target)}">${esc(f.fix.label)}</button>`
         : "";
-      return `<li><button type="button" data-el="${esc(f.element)}" data-rule="${esc(f.rule)}">`
+      return `<li class="${f.severity === "error" ? "dmn-warn-error" : ""}">`
+        + `<button type="button" data-el="${esc(f.element)}" data-rule="${esc(f.rule)}">`
         + `${esc(f.message)}</button>${fix}</li>`;
     }).join("")}</ul>`;
   };
@@ -489,21 +562,57 @@ function attachDmnWarnings(modeler, strip, toast) {
       + "context pad.", "ok");
   };
 
+  // applyColumn writes the column a requirement implies into the decision's table:
+  // the other repair, for the other direction of the same drift. It runs on the
+  // requirements graph because that is where the decision's shape is, and a change
+  // needs a shape to be announced against; the table it edits is the same moddle
+  // object the table view reads, so the column is there when the author opens it.
+  const applyColumn = (providerId, decisionId) => {
+    const viewer = viewerNow();
+    if (!viewer) return;
+    let registry, modeling;
+    try {
+      registry = viewer.get("elementRegistry");
+      modeling = viewer.get("modeling");
+    } catch {
+      toast && toast("This view cannot add the column.", "err");
+      return;
+    }
+    const decision = registry.get(decisionId);
+    const provider = registry.get(providerId);
+    if (!decision || !provider) {
+      toast && toast("One of the two elements is not on the requirements graph.", "err");
+      return;
+    }
+    const added = addInputColumn(
+      modeling, decision, decision.businessObject, provider.businessObject);
+    focusCanvas(viewer);
+    if (!added) {
+      toast && toast("There is no decision table to add a column to.", "err");
+      return;
+    }
+    toast && toast(`Input column “${added}” added — Ctrl+Z takes it back.`, "ok");
+  };
+
   const onClick = (e) => {
     const fixBtn = e.target.closest("button[data-fix-source]");
     if (fixBtn) {
+      const kind = fixBtn.getAttribute("data-fix-kind") || "connect";
       const source = fixBtn.getAttribute("data-fix-source");
       const target = fixBtn.getAttribute("data-fix-target");
-      // The repair is a drawing, so it happens on the drawing: from a decision's own
-      // view the graph is opened first, which is also where the author then sees it.
+      const run = kind === "add-input" ? applyColumn : applyFix;
+      // The repair is made on the drawing either way — one draws an edge, the other
+      // needs the decision's shape to announce the change against — so from a
+      // decision's own view the graph is opened first, which is also where the author
+      // then sees what happened.
       const view = modeler.getActiveView();
       if (view && view.type === "drd") {
-        applyFix(source, target);
+        run(source, target);
         return;
       }
       const graph = modeler.getViews().find((v) => v.type === "drd");
       if (!graph) return;
-      modeler.open(graph).then(() => applyFix(source, target)).catch(() => { /* nothing to draw on */ });
+      modeler.open(graph).then(() => run(source, target)).catch(() => { /* nothing to draw on */ });
       return;
     }
     const btn = e.target.closest("button[data-el]");
@@ -832,10 +941,12 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   caretObserver.observe(canvas, { childList: true, subtree: true });
 
   let dropWarnings = () => {};
+  let dropColumns = () => {};
   current = {
     destroy() {
       caretObserver.disconnect();
       dropWarnings();
+      dropColumns();
       try { modeler && modeler.destroy(); } catch { /* already gone */ }
       modeler = null;
     },
@@ -912,6 +1023,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
     if (gen !== generation) return;
     renderViews();
     dropWarnings = attachDmnWarnings(modeler, warnEl, toast);
+    dropColumns = attachRequirementColumns(modeler, toast);
     patchCaretFields();
     // The status line says what a *save* just did, so it starts empty and is cleared
     // by anything else. That a draft is open is a standing fact rather than an event,

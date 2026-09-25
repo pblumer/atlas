@@ -3093,6 +3093,23 @@ tr[hidden] { display: none; }
   padding: 0 7px; margin-left: 4px; font-size: 11.5px; white-space: nowrap;
 }
 .dmn-warn button.dmn-warn-fix:hover { background: var(--surface); }
+/* One finding in the strip does not deploy — the decision reads a name nothing gives
+   it, which the engine refuses. It is marked because the others are things that run:
+   a reader who has learned that the strip is advisory would otherwise file this one
+   with them and find out at Deploy. */
+.dmn-warn li.dmn-warn-error { color: var(--danger); }
+
+/* Where a business rule task's input mapping and the decision's own inputs disagree
+   (editor.js renderDecisionDrift). It sits under the rows it is about, and is hidden
+   whenever they agree — the same rule the findings strip follows, for the same reason.
+   A note rather than an alarm: this deploys and runs, which is exactly the problem. */
+.dmn-drift {
+  margin-top: 6px; padding: 6px 9px; border-radius: 4px;
+  background: var(--warn-soft); color: var(--warn); font-size: 12px; line-height: 1.5;
+}
+.dmn-drift[hidden] { display: none; }
+.dmn-drift p { margin: 0; }
+.dmn-drift p + p { margin-top: 4px; }
 
 /* Collapsible property groups (Camunda-style tidy panel). A generic groupify
    turns each <h3> section in the properties panel into a header that toggles its
