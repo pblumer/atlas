@@ -71,6 +71,15 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The catalogue's dates read "Invalid Date".** Every timestamp on the catalogue
+  screens — a release's publication date, the catalogue list's last-changed column,
+  and the line saying which release the shop is serving — came out as *Invalid Date*.
+  The catalogue tree keeps time in nanoseconds; the screen read them as seconds and
+  multiplied by a thousand, which lands past the range a date can hold. It reads the
+  unit it is given now, and the helper is named after that unit, because the product
+  carries both: a release's own timestamp here is nanoseconds and the one the
+  applications API reports is seconds.
+
 - **A product's info card names everything it carries, however deep it sits.** The
   card read one level of the containment graph, so a bundle whose hardware carries an
   operating system named the hardware and stayed silent about the system — while the

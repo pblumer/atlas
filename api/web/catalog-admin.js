@@ -30,7 +30,15 @@ import { openPickModal } from "./pickmodal.js";
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const fmtTime = (unix) => unix ? new Date(unix * 1000).toLocaleString() : "—";
+// Every timestamp this screen renders comes from the catalogue tree, and that tree
+// keeps time in **nanoseconds** — catalog.Lifecycle says so, and the catalogue
+// service's clock is time.Now().UnixNano(). This read them as seconds and multiplied
+// by a thousand, which lands far past the millisecond range a Date can hold: every
+// one of them rendered as "Invalid Date". Named for the unit rather than for the
+// job, because both units live in this product — a release carries nanoseconds here
+// and api/releases.go's own publishedAt is seconds — and a name that does not say
+// which one it takes is how the two came to be mixed.
+const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—";
 
 // publishRefusal renders why a publish was refused.
 //
@@ -160,7 +168,7 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
     <td>${(c.groups || []).length
     ? esc((c.groups || []).map((g) => nameOfPrincipal(dir, g)).join(", "))
     : "<span class='muted'>nobody yet</span>"}</td>
-    <td>${fmtTime(c.updatedAt)}</td>
+    <td>${fmtNano(c.updatedAt)}</td>
   </tr>`).join("");
 
   view.innerHTML = `
@@ -982,7 +990,7 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
     <div class="publish-report"></div>
     ${releases.length ? `<table class="table" style="margin-top:12px">
       <thead><tr><th>Release</th><th>Published</th><th>Products</th></tr></thead>
-      <tbody>${releases.map((r) => `<tr><td>${esc(r.id)}</td><td>${fmtTime(r.createdAt)}</td>
+      <tbody>${releases.map((r) => `<tr><td>${esc(r.id)}</td><td>${fmtNano(r.createdAt)}</td>
         <td>${(r.items || []).length}</td></tr>`).join("")}</tbody></table>`
     : `<p class="muted">Never published. Until it is, the shop shows this catalogue to nobody.</p>`}`;
 
@@ -1023,7 +1031,7 @@ function unpublishedCard(diff, langs) {
   if (!diff.released) return "";
 
   const against = `<span class="muted">against ${esc(diff.releaseId)}, published
-    ${esc(fmtTime(diff.releasedAt))}</span>`;
+    ${esc(fmtNano(diff.releasedAt))}</span>`;
   const added = diff.added || [], removed = diff.removed || [], changed = diff.changed || [];
   if (!added.length && !removed.length && !changed.length) {
     return `<div class="card portal-current" style="margin:12px 0">

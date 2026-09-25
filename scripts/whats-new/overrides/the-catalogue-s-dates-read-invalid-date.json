@@ -1,0 +1,20 @@
+{
+  "tags": [
+    "Catalogue"
+  ],
+  "title": {
+    "en": "The catalogue's dates are readable again",
+    "de": "Die Daten im Katalog sind wieder lesbar"
+  },
+  "summary": {
+    "en": "Every date on the catalogue screens read \"Invalid Date\": the publication date of each release, the last-changed column of the catalogue list, and the line naming the release the shop is currently serving. The catalogue keeps time in nanoseconds, and the screen read those numbers as seconds — a thousand times too large for a date to hold. They now render as the moment they stand for.",
+    "de": "Jedes Datum in der Katalogverwaltung zeigte \"Invalid Date\": das Veröffentlichungsdatum jedes Releases, die Spalte mit der letzten Änderung in der Katalogliste und die Zeile, die das aktuell im Shop ausgelieferte Release nennt. Der Katalog führt Zeitangaben in Nanosekunden, und die Oberfläche las sie als Sekunden — tausendfach zu gross für ein darstellbares Datum. Jetzt erscheint der Zeitpunkt, für den sie stehen."
+  },
+  "try": {
+    "label": {
+      "en": "Open the catalogue",
+      "de": "Katalog öffnen"
+    },
+    "route": "#/catalogs"
+  }
+}

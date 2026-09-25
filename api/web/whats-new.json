@@ -126,6 +126,34 @@
       }
     },
     {
+      "id": "the-catalogue-s-dates-read-invalid-date",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The catalogue's dates are readable again",
+        "de": "Die Daten im Katalog sind wieder lesbar"
+      },
+      "summary": {
+        "en": "Every date on the catalogue screens read \"Invalid Date\": the publication date of each release, the last-changed column of the catalogue list, and the line naming the release the shop is currently serving. The catalogue keeps time in nanoseconds, and the screen read those numbers as seconds — a thousand times too large for a date to hold. They now render as the moment they stand for.",
+        "de": "Jedes Datum in der Katalogverwaltung zeigte \"Invalid Date\": das Veröffentlichungsdatum jedes Releases, die Spalte mit der letzten Änderung in der Katalogliste und die Zeile, die das aktuell im Shop ausgelieferte Release nennt. Der Katalog führt Zeitangaben in Nanosekunden, und die Oberfläche las sie als Sekunden — tausendfach zu gross für ein darstellbares Datum. Jetzt erscheint der Zeitpunkt, für den sie stehen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Catalogue"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the catalogue",
+          "de": "Katalog öffnen"
+        },
+        "route": "#/catalogs"
+      }
+    },
+    {
       "id": "a-product-s-info-card-names-everything-it-carries-however-de",
       "version": "Unreleased",
       "date": null,
@@ -281,35 +309,6 @@
       "summary": {
         "en": "Four things went wrong the moment you touched the box, and three of them were the same fault. The arrows crossing its border disappeared underneath it: a newly drawn service already went behind what was there, but the library underneath moves a shape by taking it out of the diagram and putting it back, and putting it back with nothing said about where means on top — so a stored file drew correctly right up to the first nudge. The name stayed where it was while the box travelled, because where you put it is recorded in diagram coordinates and nothing kept the two in step; the further the box went, the further outside it the name sat, and DMN says the name belongs inside the shape. Shrinking the box past the name left it outside in the same way. And the tool strip followed the stray name rather than the service, because it is placed from the element's drawn extent and a name outside the box stretches that extent to cover both. The name now keeps its place in the box: a move carries it along, a resize carries it with whichever corner you dragged and pulls it back inside only when it no longer fits, and one undo takes the whole gesture back. Folding remembers where the name was and gives it back when you unfold, even if you dragged the folded box across the canvas first.",
         "de": "Vier Dinge gingen schief, sobald man die Box anfasste, und drei davon waren derselbe Fehler. Die Pfeile, die ihren Rand kreuzen, verschwanden darunter: Ein neu gezeichneter Service lag bereits hinter dem Vorhandenen, doch die zugrundeliegende Bibliothek verschiebt eine Form, indem sie sie aus dem Diagramm nimmt und wieder einsetzt — ohne Angabe einer Position landet sie zuoberst. Eine gespeicherte Datei wurde deshalb korrekt gezeichnet, bis zum ersten Anstupsen. Der Name blieb stehen, während die Box wanderte, weil seine Position in Diagrammkoordinaten festgehalten wird und nichts die beiden synchron hielt; je weiter die Box zog, desto weiter lag der Name ausserhalb — und DMN verlangt den Namen innerhalb der Form. Eine Verkleinerung der Box über den Namen hinaus liess ihn auf dieselbe Weise draussen stehen. Und die Werkzeugleiste folgte dem versprengten Namen statt dem Service, weil sie aus der gezeichneten Ausdehnung des Elements positioniert wird und ein Name ausserhalb der Box diese Ausdehnung über beides spannt. Der Name hält jetzt seinen Platz in der Box: Ein Verschieben nimmt ihn mit, eine Grössenänderung führt ihn mit der angefassten Ecke und holt ihn nur dann zurück, wenn er nicht mehr hineinpasst, und ein einziges Rückgängig nimmt die ganze Geste zurück. Das Zuklappen merkt sich die Position des Namens und gibt sie beim Aufklappen zurück, auch wenn die zugeklappte Box zwischendurch über die Zeichenfläche gezogen wurde."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-decision-service-drawn-around-an-existing-arrow-hid-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A decision service no longer hides the arrows it is drawn around",
-        "de": "Ein Decision Service verdeckt die umschlossenen Pfeile nicht mehr"
-      },
-      "summary": {
-        "en": "The box around a decision service is a background: DMN encloses the decisions it names with it, and arrows are meant to cross its border — which only reads as a diagram if the border is behind them. The library underneath draws in the order things were added, so a box drawn after an arrow was drawn on top of it, and the arrow vanished inside the box with nothing on the canvas to say where it had gone. Opening a stored file was never affected, because a stored file is read in an order that puts every decision service first; only drawing one by hand was — the case where it is hardest to tell whether the editor lost the arrow or you did. A newly drawn decision service now goes behind what is already there, and what it holds stays in front of it.",
-        "de": "Die Box um einen Decision Service ist ein Hintergrund: DMN umschliesst damit die benannten Decisions, und Pfeile sollen ihren Rand kreuzen — was nur dann als Diagramm lesbar ist, wenn der Rand dahinter liegt. Die zugrundeliegende Bibliothek zeichnet in der Reihenfolge des Hinzufügens; eine nach einem Pfeil gezeichnete Box lag deshalb darüber, und der Pfeil verschwand in ihr, ohne dass auf der Zeichenfläche etwas darauf hingewiesen hätte. Das Öffnen einer gespeicherten Datei war nie betroffen, weil dort jeder Decision Service zuerst gelesen wird; betroffen war nur das Zeichnen von Hand — der Fall, in dem am schwersten zu unterscheiden ist, ob der Editor den Pfeil verloren hat oder man selbst. Ein neu gezeichneter Decision Service liegt jetzt hinter dem, was bereits da ist, und was er enthält, bleibt davor."
       },
       "link": {
         "label": "Changelog",
