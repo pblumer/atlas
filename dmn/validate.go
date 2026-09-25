@@ -114,6 +114,18 @@ type DecisionInfo struct {
 	// Input decisions are deliberately absent. One names the boundary the *caller*
 	// supplies, so it sits outside the service rather than within it (DMN §10.4).
 	Members []string `json:"members,omitempty"`
+	// Internal is the subset of Members the service *encapsulates* — the decisions it
+	// evaluates on the way to its answer, as opposed to the output decisions it
+	// publishes (DMN §10.4 splits the two, and Members deliberately merges them
+	// because both are "made of").
+	//
+	// The difference is the whole point of a service. An output decision is what the
+	// service answers with, so calling it directly gets the same value by a longer
+	// route. An encapsulated one is a working, and a caller that addresses it has
+	// bound itself to an arrangement the service exists to be free to change — the
+	// interface is then a claim rather than a boundary. A caller cannot see which it
+	// is from the name, so this says it.
+	Internal []string `json:"internal,omitempty"`
 }
 
 // Describe resolves modelRef, compiles it, and returns its model name and the

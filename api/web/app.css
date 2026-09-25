@@ -648,6 +648,22 @@ textarea::placeholder {
 .dmn-test-inputs { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
 .dmn-test-inputs .field { margin: 0; min-width: 160px; }
 .dmn-test-inputs .field span .muted { font-weight: normal; }
+/* The panel's controls follow what the decision declares, so it carries kinds the
+   rest of the console has never needed: a list for a boolean, a calendar for a date.
+   Styled here rather than by widening the shared `.field` rule, which names its
+   input types one by one — adding date and time to it would restyle every date field
+   in the console to settle one panel. */
+.dmn-test-inputs .field input[type="date"],
+.dmn-test-inputs .field input[type="time"],
+.dmn-test-inputs .field input[type="datetime-local"],
+.dmn-test-inputs .field select {
+  display: block; width: 100%; box-sizing: border-box; margin-top: 5px;
+  padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 6px;
+  font: inherit; color: var(--text); background: var(--surface);
+}
+.dmn-test-inputs .field select:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft);
+}
 .dmn-test-result { margin-top: 10px; }
 .dmn-test-result .res { margin-bottom: 10px; }
 

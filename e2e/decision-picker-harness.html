@@ -47,12 +47,19 @@
       // so it must not be marked as one of its members.
       const svc = {
         id: "Kreditfreigabe", name: "Kreditfreigabe", model: "Kreditfreigabe", modelRef: "kreditfreigabe",
+        // Kreditentscheid is what the service publishes; Tragbarkeit is a working it
+        // evaluates on the way there. Members holds both, internal only the second.
         service: true, members: [ "Kreditentscheid", "Tragbarkeit" ],
+        internal: [ "Tragbarkeit" ], deployed: true,
         inputs: [ { name: "betrag", type: "number" }, { name: "bonitaet", type: "string" } ],
         output: { name: "entscheid", type: "string" },
       };
-      const dec = (id, model, modelRef) => ({
-        id, name: id, model, modelRef, inputs: [ { name: "x", type: "number" } ], output: { name: id },
+      // `deployed` is what the engine can run right now, which is a different question
+      // from where the entry came from: a decision written into the model and never
+      // deployed is offered here and refused by the deploy preflight later.
+      const dec = (id, model, modelRef, deployed = true) => ({
+        id, name: id, model, modelRef, deployed,
+        inputs: [ { name: "x", type: "number" } ], output: { name: id },
       });
       // The application's own references. The server lists a service first; the picker
       // must not depend on that, so this list deliberately buries it in the middle.
@@ -61,7 +68,7 @@
         dec("Tragbarkeit", "Kreditfreigabe", "kreditfreigabe"),
         svc,
         dec("Kreditentscheid", "Kreditfreigabe", "kreditfreigabe"),
-        dec("praemie", "Tarif 2027", "praemie-tarif"),
+        dec("praemie", "Tarif 2027", "praemie-tarif", false),
       ];
       // Everything the engine can resolve: the above, plus another application's model
       // and one reachable only because it is deployed (no model handle).

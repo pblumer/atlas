@@ -2,6 +2,93 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "the-decision-picker-tells-a-decision-service-s-answer-from-i",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The picker tells a decision service's answer from its workings",
+        "de": "Die Auswahl unterscheidet die Antwort eines Decision Service von seinen Zwischenschritten"
+      },
+      "summary": {
+        "en": "A decision service publishes the decisions it answers with and encapsulates the ones it evaluates on the way there. The picker merged the two: every one of them read “inside <service>”. They are not the same offer. Calling a published decision gets the service's own answer by a longer route; calling an encapsulated one reaches past the interface into an arrangement the service exists to be free to change — and nothing later says a word about it, because it runs and it answers correctly. The two now read differently, “published by X” against “internal to X — bypasses it”, and a service's workings are listed last, after the decisions that are somebody's to call. All of them stay selectable: the decision id on a task is a free-text field and the picker is a convenience, so refusing one here would move the practice out of sight rather than stop it. The list makes the boundary-respecting pick the easy one and leaves the other reading as what it is.",
+        "de": "Ein Decision Service veröffentlicht die Decisions, mit denen er antwortet, und kapselt jene, die er auf dem Weg dorthin auswertet. Die Auswahl hat beide vermischt: Jede von ihnen las sich als „inside <Service>“. Es sind aber nicht dieselben Angebote. Eine veröffentlichte Decision aufzurufen liefert die Antwort des Service auf einem Umweg; eine gekapselte aufzurufen greift an der Schnittstelle vorbei in eine Anordnung, die der Service ändern können soll — und niemand sagt später ein Wort dazu, weil es läuft und korrekt antwortet. Beide lesen sich jetzt unterschiedlich, „published by X“ gegenüber „internal to X — bypasses it“, und die Zwischenschritte eines Service stehen zuletzt, nach den Decisions, die tatsächlich für Aufrufer gedacht sind. Auswählbar bleiben alle: Die decisionId am Task ist ein freies Textfeld und die Auswahl nur eine Bequemlichkeit — eine Sperre hier würde die Praxis aus dem Blick schieben statt sie zu beenden. Die Reihenfolge macht die grenzwahrende Auswahl zur bequemen und lässt die andere als das erscheinen, was sie ist."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "the-decision-picker-says-when-a-decision-is-not-deployed",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The decision picker says when a decision is not deployed yet",
+        "de": "Die Decision-Auswahl sagt, wenn eine Decision noch nicht deployt ist"
+      },
+      "summary": {
+        "en": "A business rule task's picker offers what is in the decision model, and that is a layer above what the engine can run: writing a decision into the model makes it callable by name, deploying it makes it runnable. Between those two the task saved cleanly and looked right, and the refusal only arrived at Publish — in a message about a decision you picked minutes earlier, from a check you were not thinking about. Such an entry now says “not deployed” beside its name, alongside the notes that were already there, and the two stack: a decision can be inside a decision service and not deployed, and you need both facts before you pick it. Drafts are still not offered at all — nothing you have not deliberately written to the model can be wired into a process.",
+        "de": "Die Auswahl eines Business Rule Task bietet an, was im Decision-Modell steht, und das ist eine Schicht über dem, was die Engine ausführen kann: Eine Decision ins Modell zu schreiben macht sie über ihren Namen aufrufbar, sie zu deployen macht sie lauffähig. Dazwischen liess sich der Task sauber speichern und sah richtig aus, und die Ablehnung kam erst beim Publish — in einer Meldung über eine Decision, die Sie Minuten vorher ausgewählt hatten, aus einer Prüfung, an die Sie gerade nicht dachten. Ein solcher Eintrag trägt jetzt „not deployed“ neben seinem Namen, neben den Vermerken, die es schon gab, und beide stehen nebeneinander: Eine Decision kann in einem Decision Service liegen und nicht deployt sein, und beides muss man vor der Auswahl wissen. Entwürfe werden weiterhin gar nicht angeboten — nichts, was Sie nicht bewusst ins Modell geschrieben haben, lässt sich an einen Prozess hängen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "the-test-panel-s-fields-follow-the-type-the-decision-declare",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Testing a decision offers the right field for each input",
+        "de": "Beim Testen einer Decision passt das Eingabefeld zum Datentyp"
+      },
+      "summary": {
+        "en": "Trying a decision meant answering, in a plain text box, a question the model had already answered: which spelling of a date this input wants, whether the boolean is true or TRUE or 1. The declared type is part of the description the panel is built from, so the panel now uses it. A boolean is a list, with a blank entry — an input nobody set is missing, not false, and the two do not evaluate the same. A date gets a calendar, a time gets a clock, a number gets a spinner, and a duration keeps a text field with the shape of the answer in the placeholder, because browsers have no control for one. What each field sends is unchanged, and deliberately so: the value a process variable would carry, so a decision tried here still sees exactly what it would see at runtime.",
+        "de": "Eine Decision auszuprobieren hiess bisher, in einem einfachen Textfeld eine Frage zu beantworten, die das Modell längst beantwortet hatte: welche Schreibweise eines Datums diese Eingabe erwartet, ob der Boolean true oder TRUE oder 1 lautet. Der deklarierte Typ steht in der Beschreibung, aus der das Panel gebaut wird — und wird jetzt auch verwendet. Ein Boolean ist eine Auswahlliste, mit einem leeren Eintrag: Eine Eingabe, die niemand gesetzt hat, fehlt, sie ist nicht false, und beides wird unterschiedlich ausgewertet. Ein Datum bekommt einen Kalender, eine Zeit eine Uhr, eine Zahl ein Zahlenfeld, und eine Dauer behält ein Textfeld mit der Form der Antwort im Platzhalter, weil Browser dafür kein Bedienelement kennen. Was die Felder senden, bleibt unverändert, und zwar bewusst: genau den Wert, den auch eine Prozessvariable trägt, damit eine hier getestete Decision dasselbe sieht wie zur Laufzeit."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "a-decision-says-where-its-diagram-and-its-logic-disagree-and",
       "version": "Unreleased",
       "date": null,
@@ -254,71 +341,6 @@
       "tags": [
         "Tasks",
         "Operations"
-      ]
-    },
-    {
-      "id": "a-task-s-checkbox-in-the-shop-is-a-checkbox-again",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A task's checkbox in the shop is a checkbox again",
-        "de": "Die Checkbox einer Aufgabe im Shop ist wieder eine Checkbox"
-      },
-      "summary": {
-        "en": "A task answered inside an order row in the shop drew its checkbox as wide as the table cell, with the label pushed off the end. The orders table's field rule reached the task form's inputs too; it now styles the filter row only.",
-        "de": "Wurde eine Aufgabe in einer Auftragszeile im Shop erledigt, war ihre Checkbox so breit wie die Tabellenzelle, und die Beschriftung rutschte über den Rand. Die Regel für die Filterfelder der Auftragstabelle griff auch auf die Felder des Formulars; sie gilt jetzt nur noch für die Filterzeile."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Shop"
-      ]
-    },
-    {
-      "id": "withdrawing-an-order-stops-the-processes-already-working-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Cancelling an order stops the processes already working it",
-        "de": "Stornieren beendet die Prozesse, die bereits am Auftrag arbeiten"
-      },
-      "summary": {
-        "en": "When an order or one of its positions was cancelled, only a waiting approval was stopped. A position still reads pending while its provisioning runs, so it could be cancelled mid-provisioning, and the provisioning's open step stayed in somebody's inbox and in the shop, beneath a line that said Cancelled. Cancelling now stops every still-running process recorded on the cancelled position. What such a process already did in a target system is not undone.",
-        "de": "Beim Stornieren eines Auftrags oder einer Position wurde bisher nur eine wartende Genehmigung beendet. Eine Position gilt aber als ausstehend, solange ihre Provisionierung läuft, und liess sich deshalb mitten in der Provisionierung stornieren; deren offener Schritt blieb im Posteingang und im Shop stehen, unter einer Zeile mit dem Status Storniert. Stornieren beendet jetzt jeden noch laufenden Prozess, der an der stornierten Position vermerkt ist. Was ein solcher Prozess in einem Zielsystem bereits ausgeführt hat, wird nicht rückgängig gemacht."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Shop",
-        "Orders"
-      ]
-    },
-    {
-      "id": "a-task-a-model-assigns-to-the-person-who-ordered-is-now-thei",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A task assigned to the orderer can be answered by the orderer",
-        "de": "Eine dem Besteller zugewiesene Aufgabe kann der Besteller erledigen"
-      },
-      "summary": {
-        "en": "A model assigns a task with an expression, and the variable it has for a person is usually an id: an order carries its orderer and its recipient as principal ids (usr_…). A task assigned assignee=\"=orderer\" was created and listed under the order in the shop, but refused to the orderer, because the check compared the assignee with the username alone; only operators and administrators could answer it. The check now accepts the username or the principal id, as the mail directory already did when it decides whom a notification reaches. The shop shows such an assignee by display name. The \"Assigned to me\" folder still matches usernames only.",
-        "de": "Ein Modell weist eine Aufgabe über einen Ausdruck zu, und die Variable, die es für eine Person hat, ist meist eine Kennung: ein Auftrag führt Besteller und Empfänger als Prinzipal-Kennungen (usr_…). Eine mit assignee=\"=orderer\" zugewiesene Aufgabe wurde angelegt und im Shop unter dem Auftrag angezeigt, dem Besteller aber verweigert, weil die Prüfung die Zuweisung nur mit dem Benutzernamen verglich; erledigen konnten sie nur Operatoren und Administratoren. Die Prüfung akzeptiert jetzt den Benutzernamen oder die Prinzipal-Kennung, wie es das Mail-Verzeichnis bei der Frage, wen eine Benachrichtigung erreicht, bereits tat. Der Shop zeigt eine solche Zuweisung mit dem Anzeigenamen. Der Ordner «Mir zugewiesen» vergleicht weiterhin nur Benutzernamen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Tasks",
-        "Shop"
       ]
     }
   ]
