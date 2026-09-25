@@ -14,6 +14,42 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The decision picker tells a decision service's answer from its workings.** A
+  service publishes output decisions and encapsulates the ones it evaluates on the way
+  there (DMN §10.4), and the catalogue merged the two: every one of them read
+  *inside <service>*. They are not the same offer. Calling an output decision gets the
+  service's own answer by a longer route; calling an encapsulated one reaches past the
+  interface into an arrangement the service exists to be free to change — and nothing
+  later says a word, because it runs and answers correctly. The two now read
+  differently (*published by X* against *internal to X — bypasses it*), and a service's
+  workings are listed last, after the decisions that are somebody's to call. All of
+  them stay selectable: a task's decision id is a free-text field and the picker is a
+  convenience, so refusing one here would move the practice out of sight rather than
+  stop it. Enforcing the boundary belongs in the deploy preflight, where every path
+  goes through it; this is the half that can be done without changing what deploys.
+
+- **The decision picker says when a decision is not deployed.** A business rule task's
+  picker offers what is in the decision *model*, which is a layer above what the engine
+  can run: writing a decision into the model makes it callable by name, deploying it
+  makes it runnable. Between the two the task saved cleanly and looked right, and the
+  refusal arrived at Publish — in a message about a decision picked minutes earlier,
+  from a preflight the author was not thinking about. Such an entry now carries
+  *not deployed* beside its name, next to the notes already there, and the two stack:
+  a decision can be inside a decision service and not deployed, and an author needs
+  both facts before picking it. A draft is still not offered at all — nothing an author
+  has not deliberately written to the model can be wired to a process.
+
+- **The test panel's fields follow the type the decision declares.** Trying a decision
+  meant answering, in a text box, a question the model had already answered: which
+  spelling of a date this input wants, whether the boolean is `true` or `TRUE` or `1`.
+  The declared type is in the description the panel is built from, so the panel now
+  uses it — a list for a boolean, with a blank entry because an input nobody set is
+  missing rather than false; a calendar for a date; a clock for a time; a number
+  spinner for a number; and the shape of the answer in the placeholder for a duration,
+  which has no browser control. What each field sends is unchanged and deliberately so:
+  the value a process variable would carry, so a decision tried here still sees what it
+  would see at runtime.
+
 - **A decision says where its diagram and its logic disagree, and drawing a
   requirement writes the column it implies.** A decision table's input column carries
   an expression, not a reference to the arrow that feeds it, and DMN keeps the two

@@ -189,9 +189,20 @@ func describeServices(defs *tdmn.Definitions, src []byte) []DecisionInfo {
 		// The decisions the service is made of, under the names the catalog lists them
 		// by — its output decisions and the ones it evaluates internally, in that order.
 		// An input decision is the caller's boundary and so is not one of them.
-		for _, ref := range append(append([]xmlRef{}, s.Outputs...), s.Encapsulated...) {
+		//
+		// The encapsulated ones are named a second time in Internal, because the two
+		// halves are not the same offer: an output decision called directly answers
+		// what the service answers, while an encapsulated one is a working somebody
+		// reached past the interface to get at.
+		for _, ref := range s.Outputs {
 			if n, ok := byID[localHref(ref.Href)]; ok && n.Name != "" {
 				info.Members = append(info.Members, n.Name)
+			}
+		}
+		for _, ref := range s.Encapsulated {
+			if n, ok := byID[localHref(ref.Href)]; ok && n.Name != "" {
+				info.Members = append(info.Members, n.Name)
+				info.Internal = append(info.Internal, n.Name)
 			}
 		}
 		if len(s.Outputs) == 1 {

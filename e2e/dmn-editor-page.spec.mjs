@@ -615,6 +615,79 @@ test("a decision service says why it has no rule matrix, instead of claiming the
   await expect(result).not.toContainText("no table logic");
 });
 
+// The test panel's fields follow what the decision declares.
+//
+// A text box for every input made the author answer a question the model had already
+// answered: which spelling of a date this one wants, whether the boolean is `true` or
+// `TRUE` or `1`. The declared type is in the catalog the panel is built from, so the
+// panel can just use the right control — and the value each of them produces is the
+// one a process variable would carry, so a decision tried here still sees what it
+// would see at runtime.
+test("the test panel gives each input the control its declared type asks for", async ({ page }) => {
+  const state = installMock(page, {
+    refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }],
+    decisions: [{
+      id: "Decision_stored", name: "eligibility",
+      inputs: [
+        { name: "amount", type: "number" },
+        { name: "active", type: "boolean" },
+        { name: "asOf", type: "date" },
+        { name: "at", type: "time" },
+        { name: "when", type: "date and time" },
+        { name: "within", type: "duration" },
+        { name: "note", type: "string" },
+        { name: "other", type: "" },
+      ],
+      output: { name: "result", type: "string" },
+    }],
+  });
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+  await page.locator("#dmn-test").click();
+
+  const field = (name) => page.locator(`#dmn-test-inputs [data-in="${name}"]`);
+  await expect(field("amount")).toHaveAttribute("type", "number");
+  await expect(field("asOf")).toHaveAttribute("type", "date");
+  await expect(field("at")).toHaveAttribute("type", "time");
+  await expect(field("when")).toHaveAttribute("type", "datetime-local");
+  // A duration has no browser control, so it stays text — with the shape of the
+  // answer in the placeholder rather than left to be guessed.
+  await expect(field("within")).toHaveAttribute("type", "text");
+  await expect(field("within")).toHaveAttribute("placeholder", "P1D");
+  await expect(field("note")).toHaveAttribute("type", "text");
+  // A type the panel does not know is text too: text is what a string is, and the
+  // safest thing an unrecognised type can be.
+  await expect(field("other")).toHaveAttribute("type", "text");
+
+  // A boolean is a list, because it has two values and neither is a spelling
+  // question. The blank entry is what leaves it unanswered: an input the decision
+  // reads and nobody set is missing, not false, and those do not evaluate the same.
+  expect(await field("active").evaluate((el) => el.tagName)).toBe("SELECT");
+  expect(await field("active").evaluate((el) =>
+    Array.from(el.options, (o) => o.value))).toEqual(["", "true", "false"]);
+
+  // The declared type also decides what travels. The values here are the ones a
+  // process variable would carry.
+  await field("amount").fill("250");
+  await field("active").selectOption("false");
+  await field("asOf").fill("2026-09-25");
+  await field("when").fill("2026-09-25T14:30");
+  await field("within").fill("P1D");
+  await page.locator("#dmn-test-run").click();
+  await expect(page.locator("#dmn-test-result .res-val")).toHaveText("approve");
+
+  const run = state.tries[state.tries.length - 1];
+  expect(run.inputs.amount).toBe(250);
+  expect(run.inputs.active).toBe(false);
+  expect(run.inputs.asOf).toBe("2026-09-25");
+  expect(run.inputs.when).toBe("2026-09-25T14:30");
+  expect(run.inputs.within).toBe("P1D");
+  // Left unanswered, so not sent at all — rather than sent as an empty string or as
+  // a false nobody chose.
+  expect(run.inputs).not.toHaveProperty("at");
+  expect(run.inputs).not.toHaveProperty("note");
+});
+
 test("a decision whose logic has no table says that, and one with no trace at all says that instead", async ({ page }) => {
   // The two silences the panel has to tell apart. A trace that exists and holds no
   // table is a statement about the model; no trace is a statement about the run.

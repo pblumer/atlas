@@ -1592,30 +1592,80 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   // anything the browser re-derives out of the XML.
   let described = [];
 
-  // testValue turns what somebody typed into the value the decision will see. The
+  // TEXT_TYPES are the declared types whose value travels as the text that was
+  // entered. A date, a time and a duration each have one spelling the whole system
+  // already uses — ISO 8601 — and parsing them here would only invent a second.
+  const TEXT_TYPES = new Set(["string", "date", "time", "date and time", "duration"]);
+
+  // testValue turns what somebody entered into the value the decision will see. The
   // declared type decides: a number field sends a number, a boolean sends true or
-  // false, and anything else is sent as JSON when it parses (so a list or a record
-  // can be typed) and as plain text when it does not — which is what a string is.
+  // false, a date sends its ISO text, and anything else is sent as JSON when it
+  // parses (so a list or a record can be typed) and as plain text when it does not.
+  //
+  // What it deliberately does not do is convert a date into anything cleverer. The
+  // panel's contract is that a decision tried here sees what it would see at runtime
+  // (dmn/try.go), and at runtime a variable arrives as decoded JSON — which has no
+  // date. Sending a FEEL date from here alone would make the panel answer questions
+  // the running engine answers differently, which is worse than the plain string.
   function testValue(raw, type) {
     const text = String(raw ?? "").trim();
     if (text === "") return null;
     if (type === "number") { const n = Number(text); return Number.isNaN(n) ? text : n; }
     if (type === "boolean") return text === "true";
-    if (type === "string") return text;
+    if (TEXT_TYPES.has(type)) return text;
     try { return JSON.parse(text); } catch { return text; }
   }
 
+  // TEST_FIELDS is the control each declared type gets. A boolean is a list because
+  // it has exactly two values and neither of them is a spelling question; a date is
+  // a date field because "was that 2026-09-25 or 25.09.2026" is a question an author
+  // should never have to ask a text box — and an ISO date is what the model reads
+  // either way, so the picker removes the mistake without changing the value.
+  // A type with no entry falls back to text, which is what a string is and what an
+  // unknown type is safest as.
+  const TEST_FIELDS = {
+    boolean: { control: "select" },
+    number: { type: "number", step: "any", placeholder: "250" },
+    date: { type: "date" },
+    time: { type: "time", step: "1" },
+    "date and time": { type: "datetime-local", step: "1" },
+    duration: { type: "text", placeholder: "P1D" },
+  };
+
+  // testControl is the field for one input. `data-in` carries the name on every kind
+  // of control, so the form is read back the same way whatever it is made of.
+  function testControl(field, value) {
+    const spec = TEST_FIELDS[field.type] || { type: "text" };
+    const name = esc(field.name);
+    const current = esc(value || "");
+    if (spec.control === "select") {
+      // The blank option is what leaves an input unset: a boolean the decision reads
+      // and the author has not answered is not false, it is missing, and the two do
+      // not evaluate the same.
+      const option = (v, label) =>
+        `<option value="${v}"${v === (value || "") ? " selected" : ""}>${label}</option>`;
+      return `<select data-in="${name}">${option("", "—")}${option("true", "true")}`
+        + `${option("false", "false")}</select>`;
+    }
+    const attrs = [`type="${spec.type}"`, spec.step ? `step="${spec.step}"` : "",
+      spec.placeholder ? `placeholder="${esc(spec.placeholder)}"` : ""].filter(Boolean).join(" ");
+    return `<input ${attrs} data-in="${name}" value="${current}"/>`;
+  }
+
   // renderTestForm draws one field per input the chosen decision consumes, keeping
-  // whatever was already typed into a field of the same name — retyping the amount
+  // whatever was already entered into a field of the same name — retyping the amount
   // on every edit of the table is exactly the friction this panel exists to remove.
+  // A kept value the new control cannot hold (a date field given last round's free
+  // text) is dropped by the browser, which is the right end: the field then shows
+  // empty rather than a value it would not send.
   function renderTestForm() {
     const chosen = described.find((d) => d.id === testDecision.value) || described[0];
     const kept = {};
-    testInputs.querySelectorAll("input[data-in]").forEach((el) => { kept[el.dataset.in] = el.value; });
+    testInputs.querySelectorAll("[data-in]").forEach((el) => { kept[el.dataset.in] = el.value; });
     const fields = (chosen && chosen.inputs) || [];
     testInputs.innerHTML = fields.length
-      ? fields.map((f) => `<label class="field"><span>${esc(f.name)}${f.type ? ` <span class="muted">${esc(f.type)}</span>` : ""}</span>` +
-          `<input type="text" data-in="${esc(f.name)}" value="${esc(kept[f.name] || "")}" placeholder="${esc(f.type === "number" ? "250" : f.type === "boolean" ? "true" : "")}"/></label>`).join("")
+      ? fields.map((f) => `<label class="field"><span>${esc(f.name)}${f.type ? ` <span class="muted">${esc(f.type)}</span>` : ""}</span>`
+          + testControl(f, kept[f.name]) + `</label>`).join("")
       : `<p class="muted">This decision reads no input data, so there is nothing to fill in.</p>`;
   }
 
@@ -1646,7 +1696,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
     const chosen = described.find((d) => d.id === testDecision.value);
     const types = {};
     for (const f of (chosen && chosen.inputs) || []) types[f.name] = f.type;
-    testInputs.querySelectorAll("input[data-in]").forEach((el) => {
+    testInputs.querySelectorAll("[data-in]").forEach((el) => {
       const v = testValue(el.value, types[el.dataset.in]);
       if (v !== null) inputs[el.dataset.in] = v;
     });

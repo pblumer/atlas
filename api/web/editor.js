@@ -8060,25 +8060,54 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         };
         take(scoped, true);
         take((all || []).filter((d) => !inProject.has(decKey(d))), false);
+        // noteFor says what an author has to know about an entry before picking it,
+        // in one line beside the name.
+        //
+        // Two of the three cost something if they are missing. "not deployed" means
+        // the decision is in the model, the task saves, and the deploy preflight
+        // refuses it later — about a decision picked minutes ago. "internal to X"
+        // means the pick reaches past a decision service into one of its workings:
+        // it runs and answers correctly, which is exactly why nothing else will ever
+        // mention it, and the service's author has lost the freedom the interface
+        // exists to give them (DMN §10.4).
+        const noteFor = (d, service) => {
+          const notes = [];
+          if (d.service) notes.push("decision service");
+          else if (service && service.internal) notes.push(`internal to ${service.name} — bypasses it`);
+          else if (service) notes.push("published by " + service.name);
+          if (!d.deployed) notes.push("not deployed");
+          return notes.join(" · ");
+        };
         const optionFor = (d, note) => {
           const label = note ? `${d.name} — ${note}` : d.name;
           return `<option value="${esc(d.id)}" data-key="${esc(decKey(d))}"${d.id === cur ? " selected" : ""}>${esc(label)}</option>`;
         };
-        // Within a file: the published interfaces, then the decisions. A decision a
-        // service is made of says which one. Calling it works and answers correctly,
-        // which is why it needs saying — it reaches past the interface the service
-        // exists to be, and ties this task to an arrangement the service was meant to
-        // stay free to change (DMN §10.4).
+        // Within a file: the published interfaces, then the decisions that are
+        // somebody's to call, then the workings of a service last.
+        //
+        // The order is the recommendation. All three are selectable, because refusing
+        // one here would refuse nothing — the decision id on a task is a free-text
+        // field and the picker is a convenience, so a ban in the dropdown moves the
+        // practice from visible to invisible rather than stopping it. What the order
+        // and the note do instead is make the boundary-respecting pick the easy one,
+        // and leave the other reading as what it is.
         const groupFor = (f) => {
           const services = f.items.filter((d) => d.service);
           const decisions = f.items.filter((d) => !d.service);
-          const inside = new Map();
+          const belongsTo = new Map(); // decision id → { name, internal }
           for (const s of services) {
-            for (const m of s.members || []) if (!inside.has(m)) inside.set(m, s.name);
+            const internal = new Set(s.internal || []);
+            for (const m of s.members || []) {
+              if (!belongsTo.has(m)) belongsTo.set(m, { name: s.name, internal: internal.has(m) });
+            }
           }
+          const isInternal = (d) => !!(belongsTo.get(d.id) || {}).internal;
           const opts = services
-            .map((d) => optionFor(d, "decision service"))
-            .concat(decisions.map((d) => optionFor(d, inside.has(d.id) ? "inside " + inside.get(d.id) : "")));
+            .map((d) => optionFor(d, noteFor(d)))
+            .concat(decisions.filter((d) => !isInternal(d))
+              .map((d) => optionFor(d, noteFor(d, belongsTo.get(d.id)))))
+            .concat(decisions.filter(isInternal)
+              .map((d) => optionFor(d, noteFor(d, belongsTo.get(d.id)))));
           const where = f.deployed
             ? " — deployed only"
             : !f.mine && projectId ? " — other application" : "";
