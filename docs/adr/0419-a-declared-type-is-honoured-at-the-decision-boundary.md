@@ -4,10 +4,11 @@
 - **Implementation:** Landed
 - **Date:** 2026-09-25
 - **Deciders:** Atlas maintainers
-- **Open question:** whether Atlas should evaluate a business rule task's decision
-  *strictly* — temis can now report a wrongly-typed input, and Atlas does not ask, so a
-  string the declared type cannot be made from still reaches the decision unconverted
-  and still falls through to the catch-all
+- **Open question:** whether a decision **service** should be held to the same
+  standard — neither the conversion nor the refusal reaches one today, because temis
+  publishes no input schema for a `CompiledService`, and the working set the
+  conversion does use is empty whenever a service's output decision reaches its
+  inputs through other decisions rather than directly
 - **Question checked:** 2026-09
 
 ## Context and problem statement
@@ -260,13 +261,79 @@ Under **option C′**, as landed:
   not, and the disagreement was invisible from any one side alone.
 - **Neutral here.** No deployed model relies on a date arriving as a string, because no
   deployed model declares a temporal input at all.
-- **Still open, and Atlas's own.** Atlas evaluates **leniently** — it never passes
-  `WithStrictInput`. So a string the declared type cannot be made from (`"nonsense"`
-  for a `date`) still reaches the decision unconverted and still falls through to the
-  catch-all, silently. temis can now report it; Atlas does not ask. Whether a business
-  rule task should evaluate strictly is a question about what a running process ought
-  to do with a wrongly-typed variable — refuse the job and raise an incident, or carry
-  on — and that is a larger decision than this record's.
+- **Positive, and decided here.** A business rule task now **refuses** a wrongly-typed
+  input rather than carrying on with the catch-all answer. See "The refusal" below for
+  what is refused and what deliberately is not.
+- **Negative, and the price of the refusal.** A wrong mapping that produced a wrong
+  answer silently now produces an incident. That is the point, but it is a behaviour
+  change on deployed processes: an instance whose io-mapping has always delivered a
+  string where the model declares a number stops at the task instead of passing it.
+  This is the failure becoming visible, not a new failure — but it becomes visible all
+  at once, at upgrade.
+
+## The refusal
+
+The conversion above makes a declared type mean something. This section says what
+happens when the value cannot be made to mean it.
+
+Atlas evaluates leniently: it never passes `WithStrictInput`, and a wrongly-typed value
+is not an error in FEEL. `betrag = "500"` against a column typed `number` does not
+raise; the comparison is null, no rule matches, the catch-all row answers, and the token
+carries on. The answer is plausible and wrong, and nothing downstream — not the trace,
+not the retained record, not an incident — distinguishes it from a right one. That
+silence is the whole defect this record is about.
+
+`evalDecision` therefore asks `CompiledDecision.ValidateInput` before evaluating and
+returns an error on a mismatch. The handler returns it, the job fails, its retries run
+out, and an incident carries the message (ADR-0061). Retry behaviour is untouched: there
+is no non-retryable job in Atlas today, and inventing one here would be a second
+decision smuggled into this one.
+
+Only `TYPE_MISMATCH` is refused, of the four codes temis reports:
+
+| Code | Refused | Why |
+|---|---|---|
+| `TYPE_MISMATCH` | yes | the silent-wrong-answer case this record exists for |
+| `MISSING_INPUT` | no | temis already refuses it from `Evaluate` as `MISSING_REQUIRED_INPUT`, with a better message |
+| `UNKNOWN_INPUT` | no | an io-mapping may carry a row the decision does not read; temis ignores it, and failing the job would break processes that work today |
+| `VALUE_NOT_ALLOWED` | no | a value question, not a type question — a model can constrain an input more narrowly than any deployed task knows, so it gets its own record |
+
+Every mismatch is named, not only the first, so an operator reads the whole problem out
+of one incident instead of fixing one input and meeting the next.
+
+## Ein Decision Service ist hier nicht abgedeckt
+
+Die Prüfung dieses Records sitzt in `evalDecision`. Ein Decision Service läuft
+über `evalService`, und dort greift sie nicht. Das ist keine Nachlässigkeit,
+sondern fehlendes Material: `tdmn.CompiledService` veröffentlicht weder
+`InputSchema()` noch `ValidateInput` — es gibt in temis nichts, wogegen hier
+geprüft werden könnte.
+
+Die Koerzierung aus temis ADR-0040 erreicht einen Service ebenfalls nur
+teilweise. `(*CompiledService).declaredInputs()` liest `inputs` der
+Output-Decisions, und `buildInputSchema` füllt die aus `RequiredInputs` — den
+**direkten** `<requiredInput>`-Referenzen, nicht dem transitiven Kegel. Im
+einzigen hier deployten Service (`kreditfreigabe`) hat die `outputDecision`
+`Kreditentscheid` zwei Information Requirements, beide `requiredDecision`. Die
+Menge ist also leer und die Koerzierung ein No-op, obwohl das `<decisionService>`
+seine typisierten Grenzwerte selbst auflistet (`in_betrag: number`,
+`in_laufzeit: number`, `in_einkommen: number`, `dec_bonitaet → bonitaet: string`).
+
+Gemessen ist der Schaden heute null: dieser eine Service führt ausschliesslich
+`number` und `string`, und für beide ist die Go-Abbildung schon vor ADR-0040
+richtig. Die Lücke schlägt erst bei einem Service zu, der ein `date`, `time`,
+`date and time` oder eine Dauer an seiner Grenze führt — und dann still, weil
+ein nicht koerziertes Datum keinen Fehler wirft, sondern eine nicht matchende
+Zeile.
+
+Der Weg dorthin ist ein Eingabeschema für den Service in temis, gespeist aus
+`<inputData>` und `<inputDecision>` des `decisionService`-Elements (DMN §10.4
+sieht genau diese Quelle vor). Das ist additiv, macht `WithStrictInput` an der
+Service-Grenze erstmals wirksam, und ist derselbe Beschluss wie ADR-0040, nur
+eine Ebene höher. Die Alternative — die Typprüfung in Atlas aus
+`dmn/services.go` nachzubauen — wurde verworfen: sie erzeugt ein zweites
+Typsystem neben dem von temis und löst ohnehin nur die Hälfte, weil die
+Koerzierung in `inputToValues` sitzt und von aussen nicht nachzuziehen ist.
 
 ## What this record does not decide
 

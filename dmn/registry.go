@@ -34,6 +34,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 
 	tdmn "github.com/pblumer/temis/dmn"
 )
@@ -498,7 +499,11 @@ func evalDecision(ctx context.Context, defs *tdmn.Definitions, decisionId string
 	// An input the model labels differently from the identifier it binds is
 	// accepted under either spelling, so a task deployed before temis told the two
 	// apart still finds its input (names.go).
-	res, err := dec.Evaluate(ctx, tdmn.Input(aliasedInputs(nodes, in)), tdmn.WithTrace())
+	aliased := aliasedInputs(nodes, in)
+	if err := refuseTypeMismatch(dec, aliased, decisionId, where); err != nil {
+		return nil, nil, err
+	}
+	res, err := dec.Evaluate(ctx, tdmn.Input(aliased), tdmn.WithTrace())
 	if err != nil {
 		return nil, nil, fmt.Errorf("dmn: evaluate %q in %s: %w", decisionId, where, err)
 	}
@@ -518,6 +523,50 @@ func evalDecision(ctx context.Context, defs *tdmn.Definitions, decisionId string
 		}
 	}
 	return outputs, trace, nil
+}
+
+// refuseTypeMismatch stops an evaluation whose input does not carry the type the
+// model declares for it (ADR-0419).
+//
+// The failure it prevents is the one this whole family of changes is about. A
+// value of the wrong type does not raise anything in FEEL: it makes every
+// comparison that reads it null, so no rule matches, the catch-all row answers,
+// and the token carries on with a plausible wrong result that nothing downstream
+// can tell from a right one. There is no diagnostic and no trace entry to find it
+// by — only a process that went the other way. Refusing is what turns that into
+// something somebody sees: the handler returns the error, the job fails, and its
+// retries run out into an incident (ADR-0061).
+//
+// Only TYPE_MISMATCH, deliberately, though temis reports four codes:
+//
+//   - MISSING_INPUT would be redundant. temis already refuses a missing required
+//     input from Evaluate itself, as MISSING_REQUIRED_INPUT, and names the input
+//     it wanted; doing it here first would only replace that message with a worse
+//     one.
+//   - UNKNOWN_INPUT stays ignored. A business rule task's io-mapping may carry a
+//     row the decision does not declare — one mapping shared across decisions, or
+//     a row left behind when a column went away — and temis simply does not read
+//     it. Failing the job over a value that costs nothing would break processes
+//     that run correctly today.
+//   - VALUE_NOT_ALLOWED is a different decision than this record made. It is a
+//     value question, not a type question, and a model can constrain an input more
+//     narrowly than any deployed task knows; it is left for its own record.
+//
+// Every mismatch is named rather than only the first, so an operator reading an
+// incident sees the whole picture instead of fixing one input and meeting the
+// next.
+func refuseTypeMismatch(dec *tdmn.CompiledDecision, in map[string]any, decisionId, where string) error {
+	var bad []string
+	for _, p := range dec.ValidateInput(tdmn.Input(in)) {
+		if p.Code != "TYPE_MISMATCH" {
+			continue
+		}
+		bad = append(bad, p.Message)
+	}
+	if len(bad) == 0 {
+		return nil
+	}
+	return fmt.Errorf("dmn: evaluate %q in %s: %s", decisionId, where, strings.Join(bad, "; "))
 }
 
 // evalService evaluates a decision service — DMN's published interface over part

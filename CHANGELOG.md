@@ -12,6 +12,29 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Changed
+
+- **A business rule task refuses a wrongly-typed input instead of answering wrongly
+  (ADR-0419).** A variable of the wrong type is not an error in FEEL. A `"500"` where the
+  model declares `number` made every comparison against it null, so no rule matched, the
+  catch-all row answered, and the token carried on with a plausible wrong result. Nothing
+  downstream could tell it from a right one: no diagnostic, no trace entry, no incident —
+  only a process that went the other way.
+
+  Now the evaluation is refused before it runs. The job fails, its retries run out, and
+  the incident carries the mismatch, naming every wrongly-typed input rather than only
+  the first. Retry behaviour is unchanged.
+
+  Only a type mismatch is refused. An input the decision does not declare is still
+  ignored, because a task's io-mapping may legitimately carry a row the decision never
+  reads; a missing required input is still refused by the engine itself, with a better
+  message; and an out-of-range value is a question for its own record.
+
+  **This is a behaviour change on deployed processes.** An instance whose mapping has
+  always delivered the wrong type now stops at the task instead of passing it. That is
+  the failure becoming visible, not a new failure — but it becomes visible at upgrade.
+  A decision **service** is not covered: temis publishes no input schema for one yet.
+
 ### Fixed
 
 - **A decision's date inputs are dates again (ADR-0419).** A DMN element that declares
