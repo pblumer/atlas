@@ -303,14 +303,26 @@ export function informationRequirementFindings(definitions) {
       const text = ((input.inputExpression && input.inputExpression.text) || "").trim();
       if (!text || !SIMPLE_NAME.test(text) || given.has(text)) continue;
 
-      // A repair only where there is one: exactly one element in the model answers to
-      // that name, and it is not already required. Where none or several do, which
-      // element ought to feed this decision is the author's to say, and a button that
-      // guessed would be writing their model for them.
+      // Two repairs, and which one is offered turns on what the model already holds.
+      //
+      // Exactly one element answers to that name and is not already required: the
+      // missing half is the arrow, and drawing it is unambiguous. Nothing answers to it
+      // at all: the missing half is the element, and creating it is offered too — this
+      // is the direction that runs from the table back to the graph, which is the one
+      // an author works in when they add a column before they have drawn what feeds it.
+      //
+      // Several elements answer to it: nothing is offered. Which of them ought to feed
+      // this decision is the author's to say, and a button that guessed would be
+      // writing their model for them. Neither repair is ever applied on its own: a name
+      // typed into a table is also exactly what a typo looks like, so the author's click
+      // is what separates the two.
       const source = providers.get(text);
-      const fix = source && source.id !== decision.id && !given.has(providedName(source))
-        ? { kind: "connect", source: source.id, target: decision.id, label: "Draw the requirement" }
-        : undefined;
+      let fix;
+      if (source && source.id !== decision.id && !given.has(providedName(source))) {
+        fix = { kind: "connect", source: source.id, target: decision.id, label: "Draw the requirement" };
+      } else if (!providers.has(text)) {
+        fix = { kind: "create-input", source: text, target: decision.id, label: "Add it as input data" };
+      }
 
       findings.push({
         severity: "error",

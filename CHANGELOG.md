@@ -34,6 +34,35 @@ _Changed_ / _Removed_ for each version.
   on with a wrong answer rather than a failure.
 
 
+- **A decision's input columns follow the graph they come from, and nothing is thrown
+  away without asking.** Drawing a requirement already wrote the column it implies, but
+  the graph is edited after it is drawn and nothing carried those edits through. Rename
+  an input and its column went on reading a name that no longer existed; change its
+  type and the column kept the old one; delete the arrow, or the element at the end of
+  it, and the column was left reading a name nothing provided — a model that does not
+  deploy, discovered later and phrased as a FEEL variable.
+
+  Renames and type changes are now followed automatically, inside the author's own
+  command, so a single undo takes the whole change back. That includes a case dmn-js
+  gets half right: an element that declares a `<variable>` is read by that variable's
+  name rather than by its label, and renaming an input data in the properties panel
+  moved only the label — the diagram said one thing and the engine read another, and
+  nothing reported it because the model still deployed.
+
+  Removing a requirement asks first. The column it fed owns a cell in every rule, and
+  each of those cells is a unary test somebody wrote, so taking the column away takes
+  logic with it; the question is asked once per action, however many arrows the action
+  removes, and the removal is queued into that same action so one undo puts the arrow
+  and its columns back together. Refusing keeps the column, and the findings strip then
+  says it reads a name nothing provides.
+
+  The other direction is offered rather than done. A column that reads a name no
+  element in the model answers to now carries a repair that draws that input data into
+  the graph and connects it — typed as the column that asked for it, and taken back by
+  one undo. It stays a button because a name typed into a table is also exactly what a
+  typo looks like.
+
+
 - **The shop works on a phone.** Below 860px every view of the shop is one column
   wide. The catalogue shows the column you have reached, and a stepper above it goes
   back and names the path so far. The basket stacks each offering over its own

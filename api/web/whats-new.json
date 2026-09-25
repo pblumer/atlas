@@ -31,6 +31,35 @@
       }
     },
     {
+      "id": "a-decision-s-input-columns-follow-the-graph-they-come-from-a",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A decision's columns follow the diagram, and nothing is thrown away unasked",
+        "de": "Die Spalten einer Decision folgen dem Diagramm, und nichts wird ungefragt verworfen"
+      },
+      "summary": {
+        "en": "Drawing an arrow already wrote the column that reads it. But a diagram is edited after it is drawn, and those edits went nowhere: rename an input and its column went on reading a name that no longer existed, change its type and the column kept the old one, delete the arrow and the column was left reading a name nothing provides — a model that will not deploy, found out much later and phrased as a FEEL variable. Renames and type changes now follow by themselves, inside the same step you made, so one undo takes the whole change back. That includes the case where the diagram and the engine quietly disagreed: an element that declares a variable is read by that variable's name and not by its label, so renaming an input in the properties panel used to move the label alone — the picture said one thing, the engine read another, and nothing reported it because the model still deployed. Removing an arrow asks first. The column it fed owns a cell in every rule, and each of those cells is something somebody wrote, so taking the column away takes logic with it. You are asked once per action, however many arrows it removes, and one undo puts the arrow and its columns back together; refuse, and the column stays and the findings strip says it reads a name nothing provides. The other direction is offered rather than done: a column reading a name no element answers to now carries a button that draws that input into the diagram and connects it, typed as the column that asked for it. It stays a button because a name typed into a table is also exactly what a typo looks like.",
+        "de": "Einen Pfeil zu zeichnen schrieb bereits die Spalte, die ihn liest. Ein Diagramm wird aber weiterbearbeitet, nachdem es gezeichnet wurde, und diese Änderungen liefen ins Leere: Wurde eine Eingabe umbenannt, las ihre Spalte weiter einen Namen, den es nicht mehr gab; wurde ihr Typ geändert, behielt die Spalte den alten; wurde der Pfeil gelöscht, blieb eine Spalte zurück, die einen Namen liest, den nichts liefert — ein Modell, das nicht deployt, bemerkt viel später und formuliert als FEEL-Variable. Umbenennungen und Typänderungen werden jetzt von selbst nachgeführt, im selben Schritt, den Sie gemacht haben, sodass ein einziges Rückgängig die ganze Änderung zurücknimmt. Dazu gehört der Fall, in dem Diagramm und Engine stillschweigend auseinanderliefen: Ein Element, das eine Variable deklariert, wird über deren Namen gelesen und nicht über seine Beschriftung — eine Eingabe im Eigenschaftenpanel umzubenennen bewegte bisher nur die Beschriftung. Das Bild sagte das eine, die Engine las das andere, und gemeldet wurde es nicht, weil das Modell weiterhin deployte. Das Entfernen eines Pfeils fragt zuerst nach. Die Spalte, die er gespeist hat, besitzt in jeder Regel eine Zelle, und jede dieser Zellen hat jemand geschrieben — die Spalte zu entfernen nimmt also Logik mit. Gefragt werden Sie einmal pro Aktion, unabhängig davon, wie viele Pfeile sie entfernt, und ein Rückgängig bringt Pfeil und Spalten gemeinsam zurück; lehnen Sie ab, bleibt die Spalte stehen, und die Befundleiste sagt, dass sie einen Namen liest, den nichts liefert. Die Gegenrichtung wird angeboten statt ausgeführt: Eine Spalte, die einen Namen liest, auf den kein Element hört, trägt jetzt eine Schaltfläche, die genau diese Eingabe ins Diagramm zeichnet und verbindet — typisiert wie die Spalte, die danach verlangt hat. Es bleibt eine Schaltfläche, weil ein in eine Tabelle getippter Name genauso aussieht wie ein Tippfehler."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "the-shop-works-on-a-phone",
       "version": "Unreleased",
       "date": null,
@@ -291,35 +320,6 @@
         "Tasks",
         "Shop"
       ]
-    },
-    {
-      "id": "moving-a-decision-service-hid-the-arrows-crossing-it-and-lef",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Moving or resizing a decision service no longer breaks the picture",
-        "de": "Verschieben und Grössenändern eines Decision Service zerlegt das Bild nicht mehr"
-      },
-      "summary": {
-        "en": "Four things went wrong the moment you touched the box, and three of them were the same fault. The arrows crossing its border disappeared underneath it: a newly drawn service already went behind what was there, but the library underneath moves a shape by taking it out of the diagram and putting it back, and putting it back with nothing said about where means on top — so a stored file drew correctly right up to the first nudge. The name stayed where it was while the box travelled, because where you put it is recorded in diagram coordinates and nothing kept the two in step; the further the box went, the further outside it the name sat, and DMN says the name belongs inside the shape. Shrinking the box past the name left it outside in the same way. And the tool strip followed the stray name rather than the service, because it is placed from the element's drawn extent and a name outside the box stretches that extent to cover both. The name now keeps its place in the box: a move carries it along, a resize carries it with whichever corner you dragged and pulls it back inside only when it no longer fits, and one undo takes the whole gesture back. Folding remembers where the name was and gives it back when you unfold, even if you dragged the folded box across the canvas first.",
-        "de": "Vier Dinge gingen schief, sobald man die Box anfasste, und drei davon waren derselbe Fehler. Die Pfeile, die ihren Rand kreuzen, verschwanden darunter: Ein neu gezeichneter Service lag bereits hinter dem Vorhandenen, doch die zugrundeliegende Bibliothek verschiebt eine Form, indem sie sie aus dem Diagramm nimmt und wieder einsetzt — ohne Angabe einer Position landet sie zuoberst. Eine gespeicherte Datei wurde deshalb korrekt gezeichnet, bis zum ersten Anstupsen. Der Name blieb stehen, während die Box wanderte, weil seine Position in Diagrammkoordinaten festgehalten wird und nichts die beiden synchron hielt; je weiter die Box zog, desto weiter lag der Name ausserhalb — und DMN verlangt den Namen innerhalb der Form. Eine Verkleinerung der Box über den Namen hinaus liess ihn auf dieselbe Weise draussen stehen. Und die Werkzeugleiste folgte dem versprengten Namen statt dem Service, weil sie aus der gezeichneten Ausdehnung des Elements positioniert wird und ein Name ausserhalb der Box diese Ausdehnung über beides spannt. Der Name hält jetzt seinen Platz in der Box: Ein Verschieben nimmt ihn mit, eine Grössenänderung führt ihn mit der angefassten Ecke und holt ihn nur dann zurück, wenn er nicht mehr hineinpasst, und ein einziges Rückgängig nimmt die ganze Geste zurück. Das Zuklappen merkt sich die Position des Namens und gibt sie beim Aufklappen zurück, auch wenn die zugeklappte Box zwischendurch über die Zeichenfläche gezogen wurde."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
     }
   ]
 }

@@ -36,7 +36,10 @@ import { collectDecisionDocumentation, exportDecisionDocumentation } from "./dec
 import { attachCollab } from "./collab.js";
 import { dmnSurface } from "./dmn-collab.js";
 import { informationRequirementFindings, knowledgeModelFindings } from "./dmn-warnings.js";
-import { addInputColumn, nameOf, tableOf } from "./dmn-input-column.js";
+import {
+  addInputColumn, columnsFedBy, columnsNamed, columnTypeIn, nameOf, namesGivenTo,
+  providedNames, removeInputColumn, renameInputColumn, tableOf,
+} from "./dmn-input-column.js";
 
 // Only the editor stylesheets we actually use are loaded, lazily, so non-editor
 // pages stay light — same discipline as the bpmn-js loader.
@@ -333,44 +336,261 @@ function hintFor(active) {
     calls this decision. ` + HINT_TAIL;
 }
 
-// attachRequirementColumns gives a decision table the column an information
-// requirement implies, the moment the requirement is drawn. It returns a teardown.
+// attachColumnSync keeps a decision's input columns in step with the requirements
+// graph that feeds them. It returns a teardown.
 //
-// This is the half of the problem that is not a warning. An author who draws "this
-// decision needs that input" has said what they mean; having to then open the table
-// and type the same name again is not a decision they are making, it is a transcription
-// — and a transcription is where the graph and the table start to differ.
+// This is the half of the drift problem that is not a warning. An author who draws
+// "this decision needs that input" has said what they mean; having to then open the
+// table and type the same name again is not a decision they are making, it is a
+// transcription — and a transcription is where the graph and the table start to
+// differ. The same holds for every later edit to the graph, which is where the three
+// concerns below come from:
 //
-// It is a default and not a rule, which is why it is queued into the command that
-// draws the requirement rather than applied after it: one Ctrl+Z takes the column and
-// the arrow back together, and an author who wants a different expression edits the
-// column they were given. Nothing is added when the decision has no table yet, when
-// its logic is something else, or when a column already reads that name.
-function attachRequirementColumns(modeler, toast) {
+//   1. **A requirement is drawn** → the column it implies is added. A default and not
+//      a rule, which is why it is queued into the command that draws the requirement
+//      rather than applied after it: one Ctrl+Z takes the column and the arrow back
+//      together, and an author who wants a different expression edits what they got.
+//   2. **A provider is renamed or retyped** → the columns it feeds follow. Also
+//      queued into the author's own command, for the same reason: they renamed one
+//      thing, and undo should not leave them half-renamed.
+//   3. **A requirement is removed** → the columns it fed are now unbound, and this is
+//      the one case that is *asked* about. A column owns a cell in every rule, each of
+//      them a unary test somebody wrote, so removing it silently would throw away
+//      logic that nothing else records.
+//
+// 2 and 3 hang off the generic `commandStack.preExecute` / `postExecute` pair rather
+// than a list of command names, because the list is longer than it looks and getting
+// it wrong fails silently: the canvas renames with `element.updateLabel`, the
+// properties panel with `element.updateProperties`, a type change arrives as
+// `element.updateModdleProperties` inside a `properties-panel.multi-command-executor`,
+// and a peer's change applied by the collaboration session is none of those. What is
+// invariant is the model before the action and the model after it, so that is what is
+// compared. The nesting is counted so the comparison happens once per action and the
+// follow-up lands inside it; diagram-js fires neither event on undo or redo, so a
+// followed rename is undone rather than re-applied.
+function attachColumnSync(modeler, toast) {
   let bound = null; // the viewer whose command stack we are listening to
   let off = () => {};
 
-  const onPostExecute = (viewer) => (event) => {
-    const connection = event.context && event.context.connection;
-    const bo = connection && connection.businessObject;
-    if (!bo || typeof bo.$instanceOf !== "function"
-      || !bo.$instanceOf("dmn:InformationRequirement")) return;
+  const definitionsNow = () => {
+    try { return modeler.getDefinitions(); } catch { return null; }
+  };
 
-    const target = event.context.target || (connection && connection.target);
-    const source = event.context.source || (connection && connection.source);
-    if (!target || !source) return;
-
-    const decision = target.businessObject;
-    if (!tableOf(decision)) return;
-
-    let added = "";
+  const bindTo = (viewer) => {
+    let eventBus, registry, modeling;
     try {
-      added = addInputColumn(viewer.get("modeling"), target, decision, source.businessObject);
-    } catch { /* a model shape this does not understand keeps its requirement anyway */ }
-    if (added) {
-      toast && toast(`“${nameOf(source.businessObject)}” added as an input column of `
-        + `“${decision.name || decision.id}”.`, "ok");
-    }
+      eventBus = viewer.get("eventBus");
+      registry = viewer.get("elementRegistry");
+      modeling = viewer.get("modeling");
+    } catch { return () => {}; }
+    // A view whose modeling cannot write moddle properties (a decision's own editors
+    // are not all diagram-js) has no business writing a table from here.
+    if (!modeling || typeof modeling.updateModdleProperties !== "function") return () => {};
+
+    // A change is announced against a shape, so a decision this view does not draw
+    // cannot be edited from it. That is only true away from the requirements graph,
+    // where every DRG element has one — and there the findings strip reports what was
+    // not followed rather than nothing being said.
+    const shapeOf = (bo) => {
+      try { return (bo && registry.get(bo.id)) || null; } catch { return null; }
+    };
+
+    // 1. A requirement is drawn.
+    const onConnected = (event) => {
+      const connection = event.context && event.context.connection;
+      const bo = connection && connection.businessObject;
+      if (!bo || typeof bo.$instanceOf !== "function"
+        || !bo.$instanceOf("dmn:InformationRequirement")) return;
+
+      const target = event.context.target || (connection && connection.target);
+      const source = event.context.source || (connection && connection.source);
+      if (!target || !source) return;
+
+      const decision = target.businessObject;
+      if (!tableOf(decision)) return;
+
+      let added = "";
+      try {
+        added = addInputColumn(modeling, target, decision, source.businessObject);
+      } catch { /* a model shape this does not understand keeps its requirement anyway */ }
+      if (added) {
+        toast && toast(`“${nameOf(source.businessObject)}” added as an input column of `
+          + `“${decision.name || decision.id}”.`, "ok");
+      }
+    };
+
+    // 2 and 3: the envelope around one author action.
+    let depth = 0;      // how deep in nested commands we are
+    let before = null;  // what every element provided before the action
+    let dropped = [];   // the requirements the action removed, with what they fed
+    let busy = false;   // our own follow-up commands are not author edits
+
+    // `dropped` is deliberately not cleared here. diagram-js fires the command's own
+    // `commandStack.connection.delete.preExecute` *before* the generic
+    // `commandStack.preExecute`, so an arrow deleted on its own has already been
+    // collected by the time this runs; clearing it here would throw away exactly the
+    // case it exists for. It is cleared once the action has been followed through.
+    const onPreExecute = () => {
+      if (busy) return;
+      if (depth++ === 0) before = providedNames(definitionsNow());
+    };
+
+    // Collected while the requirement is still on the model: once the command has run,
+    // the arrow is gone and there is nothing left to say which column it fed.
+    const onRequirementDropped = (event) => {
+      if (busy) return;
+      const connection = event.context && event.context.connection;
+      const bo = connection && connection.businessObject;
+      if (!bo || typeof bo.$instanceOf !== "function"
+        || !bo.$instanceOf("dmn:InformationRequirement")) return;
+      const source = connection.source;
+      const target = connection.target;
+      if (!source || !target) return;
+
+      const decision = target.businessObject;
+      const table = tableOf(decision);
+      const name = nameOf(source.businessObject);
+      if (!table || !name) return;
+      const columns = columnsNamed(table, name);
+      if (columns.length) dropped.push({ decision, table, name, columns });
+    };
+
+    const onPostExecute = () => {
+      if (busy || depth === 0) return;
+      if (--depth > 0) return;
+      const was = before;
+      const removed = dropped;
+      before = null;
+      dropped = [];
+      if (!was) return;
+      busy = true;
+      try {
+        follow(was, removed);
+      } catch { /* a model shape this does not understand keeps the author's edit */ }
+      finally { busy = false; }
+    };
+
+    // realignVariables finishes a job dmn-js starts. An element that declares a
+    // `<variable>` is read by that variable's name and not by its label — a table and
+    // the engine both look there first (dmn/validate.go) — so a rename that moves one
+    // and not the other changes the drawing and nothing else.
+    //
+    // dmn-js knows this and has NameChangeBehavior for it, but the behaviour covers
+    // two thirds of the ways a name is typed: `element.updateLabel` (the canvas) syncs
+    // any element's variable, while `element.updateProperties` (the properties panel's
+    // Name field) syncs a Decision's and a knowledge model's — and returns early for an
+    // Input Data. So renaming an input in the panel leaves its variable, and with it
+    // the name the whole model reads it under, at the old value, and nothing says so
+    // because the model still deploys.
+    //
+    // Only where *this action* changed the label, and only where dmn-js has not already
+    // moved the variable itself. Both conditions matter: a model can be imported with a
+    // label and a variable that were always different, and that is somebody's model, not
+    // something to rewrite the next time they move a shape.
+    const realignVariables = (was) => {
+      for (const [el, snapshot] of was) {
+        if (!el.variable) continue;
+        const label = el.name || "";
+        if (!label || label === snapshot.label || label === el.variable.name) continue;
+        const shape = shapeOf(el);
+        if (!shape) continue;
+        modeling.updateModdleProperties(shape, el.variable, { name: label });
+      }
+    };
+
+    // followRenames rewrites the columns a provider feeds when the name or the type it
+    // provides has changed. Read after realignVariables, so a label change that moved
+    // the variable with it is seen here as the rename it became.
+    const followRenames = (definitions, was) => {
+      const now = providedNames(definitions);
+      for (const [el, snapshot] of was) {
+        const current = now.get(el);
+        if (!current) continue; // gone: a delete, which is the other half below
+        const renamed = current.name !== snapshot.name && !!snapshot.name && !!current.name;
+        const retyped = current.typeRef !== snapshot.typeRef && !!current.typeRef;
+        if (!renamed && !retyped) continue;
+        // On a rename the columns still read the old name; on a type change alone they
+        // already read the current one.
+        for (const { decision, input } of columnsFedBy(
+          definitions, el, renamed ? snapshot.name : current.name)) {
+          const shape = shapeOf(decision);
+          if (!shape) continue;
+          renameInputColumn(modeling, shape, input, current.name, current.typeRef);
+        }
+      }
+    };
+
+    // askAboutOrphans offers to take away the columns a removed requirement left
+    // reading a name nothing provides. One question per action, however many arrows the
+    // action removed, and the removals are queued inside it so a single undo puts the
+    // arrow and its columns back together.
+    const askAboutOrphans = (definitions, removed) => {
+      if (!removed.length) return;
+      const live = new Set((definitions && definitions.drgElement) || []);
+      const pending = [];
+      for (const entry of removed) {
+        // The decision went with the delete: its table went too.
+        if (!live.has(entry.decision)) continue;
+        // Something else still gives it that name — two arrows can provide one name,
+        // and then nothing was lost.
+        if (namesGivenTo(definitions, entry.decision).has(entry.name)) continue;
+        const shape = shapeOf(entry.decision);
+        if (!shape) continue;
+        pending.push({ ...entry, shape });
+      }
+      if (!pending.length) return;
+
+      const total = pending.reduce((n, p) => n + p.columns.length, 0);
+      const many = total > 1;
+      const lines = pending.map((p) => `  • “${p.name}” in “${p.decision.name || p.decision.id}”`
+        + (p.columns.length > 1 ? ` (${p.columns.length} columns)` : ""));
+      const ok = window.confirm(
+        `Remove the input ${many ? "columns" : "column"} as well?\n\n`
+        + lines.join("\n")
+        + `\n\nNothing gives the decision ${many ? "those names" : "that name"} any more, so `
+        + `${many ? "these columns read names that do not resolve" : "this column reads a name "
+          + "that does not resolve"} and the model will not deploy.\n\n`
+        + `Removing ${many ? "a column" : "it"} also removes its cell in every rule, and those `
+        + `cells are logic somebody wrote — which is why this is a question and not something `
+        + `that just happens. Cancel keeps ${many ? "them" : "it"}; the findings below the `
+        + `canvas will point at ${many ? "each one" : "it"}.`);
+      if (!ok) return;
+
+      for (const p of pending) {
+        for (const input of p.columns) removeInputColumn(modeling, p.shape, p.table, input);
+      }
+      toast && toast(`${total} input ${many ? "columns" : "column"} removed with the `
+        + `${removed.length > 1 ? "requirements" : "requirement"} — Ctrl+Z takes `
+        + `${many ? "them" : "it"} back.`, "ok");
+    };
+
+    // A followed rename says nothing. It is the author's own edit reaching the place
+    // they meant it to reach, the way a rename reaches a reference in any other tool,
+    // and the properties panel commits a name per debounced keystroke — a toast for
+    // each of those would be one message per letter typed. The removal below is the
+    // opposite case and does say so, because it throws something away.
+    const follow = (was, removed) => {
+      const definitions = definitionsNow();
+      if (!definitions) return;
+      realignVariables(was);
+      followRenames(definitions, was);
+      askAboutOrphans(definitions, removed);
+    };
+
+    const handlers = [
+      // postExecute, so the requirement is on the model before the column that reads it
+      // is written — and inside the same command, so undo takes both.
+      ["commandStack.connection.create.postExecute", onConnected],
+      ["commandStack.connection.delete.preExecute", onRequirementDropped],
+      ["commandStack.preExecute", onPreExecute],
+      ["commandStack.postExecute", onPostExecute],
+    ];
+    for (const [event, handler] of handlers) eventBus.on(event, handler);
+    return () => {
+      for (const [event, handler] of handlers) {
+        try { eventBus.off(event, handler); } catch { /* gone with its view */ }
+      }
+    };
   };
 
   const bind = () => {
@@ -379,15 +599,7 @@ function attachRequirementColumns(modeler, toast) {
     if (!viewer || viewer === bound) return;
     off();
     bound = viewer;
-    let eventBus;
-    try { eventBus = viewer.get("eventBus"); } catch { off = () => {}; return; }
-    const handler = onPostExecute(viewer);
-    // postExecute, so the requirement is on the model before the column that reads it
-    // is written — and inside the same command, so undo takes both.
-    eventBus.on("commandStack.connection.create.postExecute", handler);
-    off = () => {
-      try { eventBus.off("commandStack.connection.create.postExecute", handler); } catch { /* gone with its view */ }
-    };
+    off = bindTo(viewer);
   };
 
   bind();
@@ -594,13 +806,101 @@ function attachDmnWarnings(modeler, strip, toast) {
     toast && toast(`Input column “${added}” added — Ctrl+Z takes it back.`, "ok");
   };
 
+  // freeSpotBelow picks where a created input data goes: under the decision that asked
+  // for it, and moved aside until it is not on top of anything. An auto-layout would be
+  // the thorough answer and the wrong one here — it would move the author's own diagram
+  // to place one element.
+  const freeSpotBelow = (decision, registry) => {
+    const WIDTH = 125, HEIGHT = 45, PAD = 24;
+    const others = registry.filter((el) => el.parent && typeof el.x === "number" && !el.waypoints);
+    const clear = (cx, cy) => !others.some((el) =>
+      Math.abs(el.x + el.width / 2 - cx) < (el.width + WIDTH) / 2 + PAD
+      && Math.abs(el.y + el.height / 2 - cy) < (el.height + HEIGHT) / 2 + PAD);
+    const cy = decision.y + decision.height + 100 + HEIGHT / 2;
+    const cx = decision.x + decision.width / 2;
+    for (let step = 0; step < 8; step++) {
+      for (const dx of step ? [step * 170, -step * 170] : [0]) {
+        if (clear(cx + dx, cy)) return { x: cx + dx, y: cy };
+      }
+    }
+    return { x: cx, y: cy };
+  };
+
+  // applyNewInput draws the element a column says the decision is given, and the arrow
+  // to it: the repair for the direction that runs from the table back to the graph.
+  //
+  // It is the one repair that creates something rather than joining two things that are
+  // already on the canvas, which is exactly why it stays a button. A column's expression
+  // is typed by hand, and a name that nothing provides is as likely to be a typo as a
+  // piece of the model that has not been drawn yet — a modeler that guessed would turn
+  // every slip into an element. The author's click is what tells the two apart.
+  //
+  // The arrow is drawn from inside the create command, so one Ctrl+Z takes the element
+  // and its requirement back together rather than leaving a stray input data behind.
+  const applyNewInput = (name, decisionId) => {
+    const viewer = viewerNow();
+    if (!viewer) return;
+    let registry, modeling, elementFactory, drdFactory, canvas, eventBus;
+    try {
+      registry = viewer.get("elementRegistry");
+      modeling = viewer.get("modeling");
+      elementFactory = viewer.get("elementFactory");
+      drdFactory = viewer.get("drdFactory");
+      canvas = viewer.get("canvas");
+      eventBus = viewer.get("eventBus");
+    } catch {
+      toast && toast("This view cannot add an input.", "err");
+      return;
+    }
+    const decision = registry.get(decisionId);
+    if (!decision) {
+      toast && toast("That decision is not on the requirements graph.", "err");
+      return;
+    }
+
+    let shape;
+    try {
+      shape = elementFactory.createShape({ type: "dmn:InputData" });
+      shape.businessObject.name = name;
+      // Typed as the column that asked for it rather than as dmn-js's "Any": the author
+      // already said what this is when they wrote the tests in the cells underneath, and
+      // an element created here should not make them say it a second time.
+      shape.businessObject.variable = drdFactory.create("dmn:InformationItem", {
+        name,
+        typeRef: columnTypeIn(decision.businessObject, name) || "Any",
+      });
+      shape.businessObject.variable.$parent = shape.businessObject;
+    } catch (err) {
+      toast && toast("Could not create the input: " + err.message, "err");
+      return;
+    }
+
+    const connect = (event) => {
+      try { modeling.connect(event.context.shape, decision); } catch { /* the element stays */ }
+    };
+    eventBus.once("commandStack.shape.create.postExecute", connect);
+    try {
+      modeling.createShape(shape, freeSpotBelow(decision, registry), canvas.getRootElement());
+    } catch (err) {
+      try { eventBus.off("commandStack.shape.create.postExecute", connect); } catch { /* never bound */ }
+      toast && toast("Could not create the input: " + err.message, "err");
+      return;
+    }
+    try { viewer.get("selection").select(shape); } catch { /* created either way */ }
+    focusCanvas(viewer);
+    toast && toast(`“${name}” added as input data and drawn to the decision — Ctrl+Z takes `
+      + `both back.`, "ok");
+  };
+
   const onClick = (e) => {
     const fixBtn = e.target.closest("button[data-fix-source]");
     if (fixBtn) {
       const kind = fixBtn.getAttribute("data-fix-kind") || "connect";
       const source = fixBtn.getAttribute("data-fix-source");
       const target = fixBtn.getAttribute("data-fix-target");
-      const run = kind === "add-input" ? applyColumn : applyFix;
+      const run = kind === "add-input" ? applyColumn
+        : kind === "create-input" ? applyNewInput
+          : applyFix;
       // The repair is made on the drawing either way — one draws an edge, the other
       // needs the decision's shape to announce the change against — so from a
       // decision's own view the graph is opened first, which is also where the author
@@ -1023,7 +1323,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
     if (gen !== generation) return;
     renderViews();
     dropWarnings = attachDmnWarnings(modeler, warnEl, toast);
-    dropColumns = attachRequirementColumns(modeler, toast);
+    dropColumns = attachColumnSync(modeler, toast);
     patchCaretFields();
     // The status line says what a *save* just did, so it starts empty and is cleared
     // by anything else. That a draft is open is a standing fact rather than an event,
