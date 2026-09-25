@@ -1,0 +1,15 @@
+{
+  "tags": ["Decisions", "Deployments"],
+  "title": {
+    "en": "Deploying one decision versions its decision service too",
+    "de": "Ein Einzel-Deploy versioniert auch den Decision Service"
+  },
+  "summary": {
+    "en": "The Deploy button in the decision editor recorded a version for each decision in the model, but none for the decision service over them. Nothing broke at runtime, because a service is resolved either way and the newly deployed model evaluated correctly. What broke was everything built on the deployment record: the version list, the deployed-version chip in the editor, and the answer to which version a business rule task is pinned to all went on naming a superseded version, with nothing to suggest they were wrong. Publishing the whole application always recorded it correctly, so the same model deployed both ways told two different stories. The single-decision deploy now follows the same rule the application publish already stated: a decision service is published and versioned like a decision, because it is what a task names.",
+    "de": "Die Deploy-Schaltfläche im Decision-Editor hat für jede Decision des Modells eine Version aufgezeichnet, für den Decision Service darüber jedoch keine. Zur Laufzeit ist nichts ausgefallen, weil ein Service ohnehin aufgelöst wird und das neu deploytete Modell korrekt ausgewertet hat. Ausgefallen ist alles, was auf dem Deployment-Datensatz aufsetzt: Die Versionsliste, der Versions-Chip im Editor und die Antwort darauf, an welche Version ein Business Rule Task gebunden ist, nannten weiterhin eine abgelöste Version — ohne jeden Hinweis darauf, dass sie falsch lagen. Beim Publizieren der ganzen Applikation war der Eintrag immer korrekt; dasselbe Modell erzählte über die zwei Wege also zwei verschiedene Geschichten. Der Einzel-Deploy hält sich jetzt an dieselbe Regel, die das Applikations-Deploy bereits formuliert: Ein Decision Service wird wie eine Decision publiziert und versioniert, weil er das ist, was ein Task benennt."
+  },
+  "try": {
+    "label": { "en": "Open Decisions", "de": "Decisions öffnen" },
+    "route": "#/operations/decisions"
+  }
+}

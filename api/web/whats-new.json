@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "deploying-one-decision-now-versions-its-decision-service-too",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Deploying one decision versions its decision service too",
+        "de": "Ein Einzel-Deploy versioniert auch den Decision Service"
+      },
+      "summary": {
+        "en": "The Deploy button in the decision editor recorded a version for each decision in the model, but none for the decision service over them. Nothing broke at runtime, because a service is resolved either way and the newly deployed model evaluated correctly. What broke was everything built on the deployment record: the version list, the deployed-version chip in the editor, and the answer to which version a business rule task is pinned to all went on naming a superseded version, with nothing to suggest they were wrong. Publishing the whole application always recorded it correctly, so the same model deployed both ways told two different stories. The single-decision deploy now follows the same rule the application publish already stated: a decision service is published and versioned like a decision, because it is what a task names.",
+        "de": "Die Deploy-Schaltfläche im Decision-Editor hat für jede Decision des Modells eine Version aufgezeichnet, für den Decision Service darüber jedoch keine. Zur Laufzeit ist nichts ausgefallen, weil ein Service ohnehin aufgelöst wird und das neu deploytete Modell korrekt ausgewertet hat. Ausgefallen ist alles, was auf dem Deployment-Datensatz aufsetzt: Die Versionsliste, der Versions-Chip im Editor und die Antwort darauf, an welche Version ein Business Rule Task gebunden ist, nannten weiterhin eine abgelöste Version — ohne jeden Hinweis darauf, dass sie falsch lagen. Beim Publizieren der ganzen Applikation war der Eintrag immer korrekt; dasselbe Modell erzählte über die zwei Wege also zwei verschiedene Geschichten. Der Einzel-Deploy hält sich jetzt an dieselbe Regel, die das Applikations-Deploy bereits formuliert: Ein Decision Service wird wie eine Decision publiziert und versioniert, weil er das ist, was ein Task benennt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Decisions",
+        "Deployments"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Decisions",
+          "de": "Decisions öffnen"
+        },
+        "route": "#/operations/decisions"
+      }
+    },
+    {
       "id": "a-business-rule-task-refuses-a-wrongly-typed-input-instead-o",
       "version": "Unreleased",
       "date": null,
@@ -327,28 +356,6 @@
         },
         "route": "#/modeler"
       }
-    },
-    {
-      "id": "a-right-withdrawn-in-an-access-review-leaves-the-inventory",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A right withdrawn in an access review leaves the inventory",
-        "de": "Ein in der Rezertifizierung entzogenes Recht verschwindet aus dem Inventar"
-      },
-      "summary": {
-        "en": "Withdrawing a right an order granted started the product's deprovisioning with the product and the holder only. A process that finds what it provisioned by the order found nothing, and it could not report the line returned, so the right stayed in the inventory and the next campaign asked about it again. A withdrawal of an ordered right now goes back through its order, as a return does: the line is returning, and the process starts with the order, the position and the reason. A line the order will not give back is refused and the row stays unanswered. Rights without an order are unchanged.",
-        "de": "Das Entziehen eines bestellten Rechts startete die Deprovisionierung des Produkts nur mit Produkt und Inhaber. Ein Prozess, der das Bereitgestellte über den Auftrag findet, fand nichts und konnte die Position nicht als zurückgegeben melden; das Recht blieb im Inventar, und die nächste Kampagne fragte erneut danach. Das Entziehen eines bestellten Rechts läuft jetzt wie eine Rückgabe über den Auftrag: Die Position ist in Rückgabe, und der Prozess startet mit Auftrag, Position und Grund. Gibt der Auftrag die Position nicht zurück, wird das Entziehen abgelehnt und die Zeile bleibt unbeantwortet. Rechte ohne Auftrag sind unverändert."
-      },
-      "link": {
-        "label": "ADR-0418",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0418-a-withdrawn-ordered-right-goes-back-through-its-order.md"
-      },
-      "tags": [
-        "Tasks",
-        "Service catalogue"
-      ]
     }
   ]
 }

@@ -12,6 +12,18 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Deploying one decision now versions its decision service too.** The Deploy button
+  in the decision editor — and the single-decision deploy behind it — recorded a
+  version for each decision in the model but none for the decision service over them.
+  Nothing broke at runtime, because a service is resolved either way and the new model
+  evaluated correctly; what broke was every surface built on the deployment record. The
+  version list, the editor's deployed-version chip and the answer to "which version is
+  this task pinned to" all went on naming a superseded version, with nothing to suggest
+  they were wrong. Publishing the whole application always did it correctly, so a model
+  deployed both ways told two different stories.
+
 ### Changed
 
 - **A business rule task refuses a wrongly-typed input instead of answering wrongly

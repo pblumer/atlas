@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -590,5 +591,47 @@ func TestAModelerCanReadADeployedDecisionsSource(t *testing.T) {
 	h.ServeHTTP(anonRec, anon)
 	if anonRec.Code == http.StatusOK {
 		t.Errorf("anonymous read = 200, want a refusal")
+	}
+}
+
+// A decision service is versioned by the single-decision deploy too, not only by
+// an application publish.
+//
+// The two paths write the same record from the same validation result, but this
+// one read only its Decisions and left its Services out. Nothing broke at runtime
+// — the registry indexes a service either way, so the new model evaluated
+// correctly — which is why it survived: every surface built on the *record* went
+// on naming a superseded version. A version list that says the old one is current
+// is worse than no version list, because an operator reading it has no reason to
+// doubt it.
+func TestDeployingOneDecisionVersionsItsServiceToo(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+	seedReferencedDecision(t, x, "approval", decisionServiceDMN)
+
+	rep := deployOneDecision(t, x, "?modelRef=approval", decisionServiceDMN)
+
+	var named []string
+	for _, d := range rep.Decisions {
+		named = append(named, d.DecisionID)
+	}
+	if !slices.Contains(named, "Approval") {
+		t.Errorf("the deploy report names %v, want the service \"Approval\" among them", named)
+	}
+
+	rows := listDecisionDeployments(t, x, "?decisionId=Approval")
+	if len(rows) != 1 {
+		t.Fatalf("version list for the service = %d rows, want 1", len(rows))
+	}
+	if !rows[0].Current || rows[0].Version != 1 || rows[0].Key != rep.Key {
+		t.Errorf("service row = %+v, want v1 current under the deployment key %d", rows[0], rep.Key)
+	}
+
+	// Deploying again must move the service's current version with the rest, so the
+	// list keeps telling the truth rather than freezing at the first deploy.
+	second := deployOneDecision(t, x, "?modelRef=approval", decisionServiceDMN)
+	rows = listDecisionDeployments(t, x, "?decisionId=Approval")
+	if len(rows) != 2 || !rows[0].Current || rows[0].Version != 2 || rows[0].Key != second.Key {
+		t.Fatalf("after a second deploy the service list = %+v, want v2 current", rows)
 	}
 }

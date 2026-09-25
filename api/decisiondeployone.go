@@ -95,8 +95,15 @@ func (s *Server) handleDeployDecision(w http.ResponseWriter, r *http.Request) {
 		artifactID: r.URL.Query().Get("artifactId"),
 		modelRef:   sanitizeHandle(r.URL.Query().Get("modelRef")),
 		modelName:  res.ModelName,
-		decisions:  res.Decisions,
-		xml:        body,
+		// A decision service is published and versioned like a decision, because it is
+		// what a business rule task names — the same rule the application deploy
+		// follows (projectdeploy.go). Leaving the services out here recorded no version
+		// for them at all: the runtime still resolved the new model, because the
+		// registry indexes services either way, but every surface built on the
+		// deployment record — the version list, the editor's deployed-version chip,
+		// which version a task is pinned to — kept naming a superseded one.
+		decisions: append(append([]string{}, res.Decisions...), res.Services...),
+		xml:       body,
 	}
 	var (
 		recs   []persistedDecision
