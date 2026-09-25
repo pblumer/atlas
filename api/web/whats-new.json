@@ -320,35 +320,6 @@
         },
         "route": "#/modeler"
       }
-    },
-    {
-      "id": "a-decision-service-drawn-around-an-existing-arrow-hid-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A decision service no longer hides the arrows it is drawn around",
-        "de": "Ein Decision Service verdeckt die umschlossenen Pfeile nicht mehr"
-      },
-      "summary": {
-        "en": "The box around a decision service is a background: DMN encloses the decisions it names with it, and arrows are meant to cross its border — which only reads as a diagram if the border is behind them. The library underneath draws in the order things were added, so a box drawn after an arrow was drawn on top of it, and the arrow vanished inside the box with nothing on the canvas to say where it had gone. Opening a stored file was never affected, because a stored file is read in an order that puts every decision service first; only drawing one by hand was — the case where it is hardest to tell whether the editor lost the arrow or you did. A newly drawn decision service now goes behind what is already there, and what it holds stays in front of it.",
-        "de": "Die Box um einen Decision Service ist ein Hintergrund: DMN umschliesst damit die benannten Decisions, und Pfeile sollen ihren Rand kreuzen — was nur dann als Diagramm lesbar ist, wenn der Rand dahinter liegt. Die zugrundeliegende Bibliothek zeichnet in der Reihenfolge des Hinzufügens; eine nach einem Pfeil gezeichnete Box lag deshalb darüber, und der Pfeil verschwand in ihr, ohne dass auf der Zeichenfläche etwas darauf hingewiesen hätte. Das Öffnen einer gespeicherten Datei war nie betroffen, weil dort jeder Decision Service zuerst gelesen wird; betroffen war nur das Zeichnen von Hand — der Fall, in dem am schwersten zu unterscheiden ist, ob der Editor den Pfeil verloren hat oder man selbst. Ein neu gezeichneter Decision Service liegt jetzt hinter dem, was bereits da ist, und was er enthält, bleibt davor."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
     }
   ]
 }
