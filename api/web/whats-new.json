@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-28",
   "entries": [
     {
+      "id": "the-handbook-teaches-a-process-test-that-can-fail-a-build",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Test a process the way you test code — the handbook now shows how",
+        "de": "Einen Prozess testen wie Code – das Handbuch zeigt jetzt, wie"
+      },
+      "summary": {
+        "en": "The Playground can do more than show a report: it holds a run to expectations, checks every case against a rule of your own, keeps a run as the baseline for the next one, and replays the whole scenario from the command line, where a missed expectation fails the build. The handbook's test chapter now explains all of it, in German and English — including the trap you are likely to meet first: a rule with a typo that selects no case still counts as passed.",
+        "de": "Der Playground kann mehr als einen Bericht zeigen: Er prüft einen Lauf gegen Erwartungen, hält jeden Fall an eine eigene Regel, bewahrt einen Lauf als Baseline für den nächsten auf und spielt das ganze Szenario über die Kommandozeile ab, wo eine verfehlte Erwartung den Build rot färbt. Das Testkapitel des Handbuchs erklärt das jetzt vollständig, auf Deutsch und Englisch – samt dem Stolperstein, auf den man zuerst trifft: Eine Regel mit Tippfehler, die keinen Fall auswählt, gilt trotzdem als erfüllt."
+      },
+      "link": {
+        "label": "ADR-0215",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0215-modeler-playground.md"
+      },
+      "tags": [
+        "Handbook",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "a-business-rule-task-can-be-bound-to-one-deployed-version-of",
       "version": "Unreleased",
       "date": null,
@@ -281,35 +310,6 @@
       "summary": {
         "en": "Trying a decision meant answering, in a plain text box, a question the model had already answered: which spelling of a date this input wants, whether the boolean is true or TRUE or 1. The declared type is part of the description the panel is built from, so the panel now uses it. A boolean is a list, with a blank entry — an input nobody set is missing, not false, and the two do not evaluate the same. A date gets a calendar, a time gets a clock, a number gets a spinner, and a duration keeps a text field with the shape of the answer in the placeholder, because browsers have no control for one. What each field sends is unchanged, and deliberately so: the value a process variable would carry, so a decision tried here still sees exactly what it would see at runtime.",
         "de": "Eine Decision auszuprobieren hiess bisher, in einem einfachen Textfeld eine Frage zu beantworten, die das Modell längst beantwortet hatte: welche Schreibweise eines Datums diese Eingabe erwartet, ob der Boolean true oder TRUE oder 1 lautet. Der deklarierte Typ steht in der Beschreibung, aus der das Panel gebaut wird — und wird jetzt auch verwendet. Ein Boolean ist eine Auswahlliste, mit einem leeren Eintrag: Eine Eingabe, die niemand gesetzt hat, fehlt, sie ist nicht false, und beides wird unterschiedlich ausgewertet. Ein Datum bekommt einen Kalender, eine Zeit eine Uhr, eine Zahl ein Zahlenfeld, und eine Dauer behält ein Textfeld mit der Form der Antwort im Platzhalter, weil Browser dafür kein Bedienelement kennen. Was die Felder senden, bleibt unverändert, und zwar bewusst: genau den Wert, den auch eine Prozessvariable trägt, damit eine hier getestete Decision dasselbe sieht wie zur Laufzeit."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-decision-says-where-its-diagram-and-its-logic-disagree-and",
-      "version": "0.7.0",
-      "date": "2026-09-28",
-      "category": "Added",
-      "title": {
-        "en": "A decision's diagram and its logic are kept in step",
-        "de": "Diagramm und Logik einer Decision bleiben beieinander"
-      },
-      "summary": {
-        "en": "Draw an arrow saying a decision needs an input, and its table gains the column that reads it — named and typed like the element it comes from, as part of the same step, so one undo takes the arrow and the column back together. Nothing is written when the table already reads that name: it is a default you can change, not a rule. That transcription — drawing the arrow, then opening the table and typing the same name again — is where the diagram and the logic used to start differing. Where they already differ, the findings strip under the canvas says so: a decision that reads a name nothing gives it (the one case the engine refuses outright, so it never deploys) and a decision given something it never reads (which deploys, runs, and which nothing else would ever mention — the diagram claims a dependency the decision does not have, and the diagram is what gets reviewed). The second offers to write the missing column for you. The same check reaches the process: a business rule task now says where its input mapping and the decision's own inputs disagree. An input the decision reads and no row feeds arrives empty, every rule that tests it falls through, and the process carries on with whatever the table's last row says — a wrong answer rather than a failure, which nothing downstream can tell apart.",
-        "de": "Zeichnen Sie einen Pfeil, der besagt, dass eine Decision eine Eingabe benötigt, erhält ihre Tabelle die Spalte, die diese liest — benannt und typisiert wie das Element, aus dem sie stammt, im selben Schritt, sodass ein einziges Rückgängig Pfeil und Spalte gemeinsam zurücknimmt. Nichts wird geschrieben, wenn die Tabelle diesen Namen bereits liest: Es ist eine Vorgabe, die Sie ändern können, keine Regel. Genau diese Übertragung — erst den Pfeil zeichnen, dann die Tabelle öffnen und denselben Namen noch einmal tippen — war die Stelle, an der Diagramm und Logik auseinanderzulaufen begannen. Wo sie bereits auseinanderlaufen, sagt es die Befundleiste unter der Zeichenfläche: eine Decision, die einen Namen liest, den ihr nichts gibt (der eine Fall, den die Engine rundweg ablehnt, der also gar nicht deployt), und eine Decision, der etwas gegeben wird, das sie nie liest (das deployt und läuft und das sonst nirgends erwähnt würde — das Diagramm behauptet eine Abhängigkeit, die die Decision nicht hat, und das Diagramm ist das, was geprüft wird). Der zweite Befund bietet an, die fehlende Spalte für Sie zu schreiben. Dieselbe Prüfung reicht bis in den Prozess: Ein Business Rule Task sagt jetzt, wo seine Eingabezuordnung und die Eingaben der Decision nicht zusammenpassen. Eine Eingabe, die die Decision liest und die keine Zeile speist, kommt leer an, jede Regel, die sie prüft, greift nicht, und der Prozess läuft mit dem weiter, was die letzte Zeile der Tabelle sagt — eine falsche Antwort statt eines Fehlers, und die beiden sind nachgelagert nicht zu unterscheiden."
       },
       "link": {
         "label": "Changelog",

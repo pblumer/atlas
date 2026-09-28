@@ -6358,9 +6358,11 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
         <div class="card">
           <b data-l="de">② Playground (Modeler)</b><b data-l="en">② Playground (Modeler)</b>
           <p class="lead" data-l="de">Den Entwurf mit echten Daten auf der echten Engine rechnen lassen – in einer
-            Wegwerf-Sandbox, ohne Deploy und ohne Nebenwirkungen. <a href="#playground">Mehr dazu unten.</a></p>
+            Wegwerf-Sandbox, ohne Deploy und ohne Nebenwirkungen. <a href="#playground">Mehr dazu unten.</a> Als
+            <a href="#szenarien">Szenario</a> gespeichert, wird daraus ein Regressionstest, auch in der Pipeline.</p>
           <p class="lead" data-l="en">Run the draft with real data on the real engine – in a throwaway sandbox,
-            with no deploy and no side effects. <a href="#playground">More below.</a></p>
+            with no deploy and no side effects. <a href="#playground">More below.</a> Saved as a
+            <a href="#szenarien">scenario</a>, it becomes a regression test, in the pipeline too.</p>
         </div>
         <div class="card">
           <b data-l="de">③ FEEL „Test expression"</b><b data-l="en">③ FEEL "Test expression"</b>
@@ -6488,6 +6490,210 @@ atlas_create_instance     key=&lt;definition key&gt;      → starts an instance
           releases the sandbox immediately rather than leaving it to its TTL: a sandbox is a live engine on the
           server.</p>
       </div>
+
+      <div id="szenarien" style="scroll-margin-top:66px"></div>
+      <h3 data-l="de">Vom Bericht zum Urteil: Erwartungen</h3>
+      <h3 data-l="en">From report to verdict: expectations</h3>
+      <p data-l="de">Ein Bericht beantwortet «wie ist es gelaufen?» und braucht einen Menschen, der ihn beurteilt.
+        <b>Erwartungen</b> machen daraus eine Antwort, auf die auch eine Maschine reagieren kann. Sie stehen im
+        Playground unter Schritt ③ <b>Expectations</b>: <i>every case finishes</i>, <i>no incidents</i>, eine
+        Obergrenze für die p90-Dauer, die Elemente, die mindestens einmal erreicht werden müssen
+        (<i>Must reach</i>), und je Pool eine Obergrenze für die Warteschlange. Jede Erwartung ist freiwillig; was
+        leer bleibt, wird nicht geprüft.</p>
+      <p data-l="en">A report answers "how did that go?" and needs a person to judge it. <b>Expectations</b> turn it
+        into an answer a machine can act on too. They sit in the Playground under step ③ <b>Expectations</b>:
+        <i>every case finishes</i>, <i>no incidents</i>, an upper bound for the p90 duration, the elements that
+        have to be reached at least once (<i>Must reach</i>), and an upper bound for each pool's queue. Every
+        expectation is optional; what stays empty is not checked.</p>
+      <p data-l="de"><i>Must reach</i> ist Abdeckung: Wer den Ablehnungszweig dort nennt, stellt sicher, dass der
+        Datensatz ihn überhaupt erreicht. Ein Test, der nur den Happy Path durchläuft, prüft den Rest nicht – er
+        schweigt über ihn.</p>
+      <p data-l="en"><i>Must reach</i> is coverage: naming the rejection branch there makes sure the dataset reaches
+        it at all. A test that only walks the happy path does not check the rest – it is silent about it.</p>
+
+      <h3 data-l="de">Regeln je Fall</h3><h3 data-l="en">Rules per case</h3>
+      <p data-l="de">«Der Median liegt unter vier Stunden» ist eine Aussage über den ganzen Lauf. «Jeder Antrag über
+        30 Tage wird abgelehnt» ist eine Aussage über <i>jeden</i> Fall – und ein Lauf, in dem sie neun von zehn
+        Mal gilt, ist nicht zu neun Zehnteln richtig, sondern für den zehnten falsch. Dafür gibt es unter
+        <b>Per case</b> Regeln: ein <code>when</code>, das die Fälle auswählt, und ein <code>then</code>, das sie
+        zeigen müssen – beides FEEL, dieselbe Sprache wie die Bedingungen im Diagramm.</p>
+      <p data-l="en">"The median is under four hours" is a statement about the whole run. "Every request over 30
+        days is rejected" is a statement about <i>every</i> case – and a run in which it holds nine times in ten is
+        not nine tenths right, it is wrong for the tenth. That is what the rules under <b>Per case</b> are for: a
+        <code>when</code> that selects the cases and a <code>then</code> they have to show – both FEEL, the
+        language the diagram's own conditions are written in.</p>
+      <pre><code>when  dauer &gt; 30
+then  end = "abgelehnt"</code></pre>
+      <p data-l="de">Im Geltungsbereich stehen die Variablen des Falls, so wie der Lauf sie hinterlassen hat, dazu
+        <code>end</code> – die BPMN-Id des letzten erreichten Elements – und <code>durationSeconds</code>. Die
+        Auswahl <i>ends at…</i> fügt die End-Events des Diagramms ein, statt sie abtippen zu lassen. Verstösst ein
+        Fall gegen eine Regel, nennt das Urteil ihn: mit seiner Nummer in der Ergebnistabelle, auf einige Fälle
+        begrenzt. Ein Fall, der nicht zu Ende gelaufen ist, bleibt für eine Regel unentschieden; ob alle Fälle
+        fertig werden, sagt die Erwartung <i>every case finishes</i>.</p>
+      <p data-l="en">In scope are the case's variables as the run left them, plus <code>end</code> – the BPMN id of
+        the last element it reached – and <code>durationSeconds</code>. The <i>ends at…</i> picker inserts the
+        diagram's end events instead of having them typed. When a case breaks a rule, the verdict names it: by its
+        number in the results table, bounded to a handful of cases. A case that did not finish leaves a rule
+        undecided; whether every case finishes is what the expectation <i>every case finishes</i> says.</p>
+      <div class="note warn">
+        <div class="lbl" data-l="de">Zwei Stolpersteine</div><div class="lbl" data-l="en">Two traps</div>
+        <p data-l="de"><b>Eine Regel, die keinen Fall trifft, gilt als erfüllt.</b> Ein Tippfehler im
+          <code>when</code> – <code>duaer &gt; 30</code> statt <code>dauer &gt; 30</code> – wählt nichts aus, und
+          das Urteil lautet trotzdem bestanden; daneben steht nur <i>no case of 200 matched</i>. In einer Pipeline
+          liest das niemand, solange sie grün ist. Deshalb jede neue Regel einmal <b>rot</b> sehen: einen Fehler
+          absichtlich ins Modell setzen, prüfen, dass die Regel anschlägt, und ihn wieder entfernen.</p>
+        <p data-l="en"><b>A rule that matches no case counts as met.</b> A typo in the <code>when</code> –
+          <code>duaer &gt; 30</code> for <code>dauer &gt; 30</code> – selects nothing, and the verdict still says
+          passed; only <i>no case of 200 matched</i> stands beside it. In a pipeline nobody reads that while it is
+          green. So watch every new rule go <b>red</b> once: put a mistake into the model on purpose, check that
+          the rule catches it, and take the mistake out again.</p>
+        <p data-l="de"><b><code>end</code> und <code>durationSeconds</code> überdecken gleichnamige
+          Prozessvariablen.</b> Eine Regel liest dort das letzte Element und die Dauer, nie eine Variable, die
+          zufällig so heisst.</p>
+        <p data-l="en"><b><code>end</code> and <code>durationSeconds</code> shadow process variables of the same
+          name.</b> A rule reads the last element and the duration there, never a variable that happens to share
+          the name.</p>
+      </div>
+
+      <h3 data-l="de">Szenarien: einen Lauf wiederholbar machen</h3>
+      <h3 data-l="en">Scenarios: making a run repeatable</h3>
+      <p data-l="de">Ein <b>Szenario</b> hält einen Lauf fest, damit ihn jemand wiederholen kann, der nicht dabei
+        war: welches Modell mit welchem Seed, welche Antworten für Aufgaben und Umsysteme (Stubs), welche
+        Kapazitäten (Pools), welcher Datensatz in welchem Takt, und was dabei gelten muss. Gespeichert wird es im Playground unter
+        <b>Scenario</b>, geöffnet unter <b>Saved scenarios</b>; es gehört zu seinem Diagramm.</p>
+      <p data-l="en">A <b>scenario</b> records a run so that somebody who was not there can repeat it: which model
+        with which seed, which answers for tasks and other systems (stubs), which capacities (pools), which dataset
+        at which pace, and what has to hold. It is saved in the Playground under <b>Scenario</b> and opened under <b>Saved
+        scenarios</b>; it belongs to its diagram.</p>
+      <ul>
+        <li data-l="de"><b>Derselbe Seed, dieselben Zahlen.</b> Gleicher Datensatz, gleiche Einstellungen und
+          gleicher Seed ergeben denselben Bericht. Nur deshalb taugt ein Szenario als Regressionstest.</li>
+        <li data-l="en"><b>Same seed, same numbers.</b> The same dataset, settings and seed produce the same
+          report. That is the only reason a scenario works as a regression test.</li>
+        <li data-l="de"><b>Es läuft gegen den aktuellen Entwurf.</b> Wer das Modell ändert und das Szenario erneut
+          startet, prüft genau diese Änderung.</li>
+        <li data-l="en"><b>It runs against the current draft.</b> Change the model and start the scenario again,
+          and you are testing exactly that change.</li>
+        <li data-l="de"><b>Nur ein beschriebener Datensatz lässt sich speichern.</b> Eine hochgeladene CSV-Datei
+          wird auf dem Server gelesen und liegt nicht im Browser, der sie speichern könnte; dafür gibt es
+          <b>Generated</b>.</li>
+        <li data-l="en"><b>Only a described dataset can be saved.</b> An uploaded CSV file is read on the server and
+          is not in the browser to store; that is what <b>Generated</b> is for.</li>
+        <li data-l="de"><b>Eine Baseline ist der Lauf, an dem der nächste gemessen wird.</b> <i>Keep as
+          baseline</i> nimmt nur einen bestandenen Lauf an – eine rote Baseline würde jeden Fehler danach
+          verdecken. Der nächste Lauf steht dann unter <i>Against the baseline</i> daneben, und zwar nur mit dem,
+          was sich bewegt hat.</li>
+        <li data-l="en"><b>A baseline is the run the next one is measured against.</b> <i>Keep as baseline</i> only
+          takes a run that passed – a failing baseline would hide every failure after it. The next run then
+          appears beside it under <i>Against the baseline</i>, showing only what moved.</li>
+      </ul>
+
+      <h3 data-l="de">In der Pipeline: <code>atlas playground</code></h3>
+      <h3 data-l="en">In the pipeline: <code>atlas playground</code></h3>
+      <p data-l="de">Dasselbe Szenario läuft ohne Browser – im Terminal oder in einem CI-Job. Der Befehl stellt
+        dieselben drei Anfragen, die der Modeler stellt, und kann deshalb nicht von ihm abweichen. Die Sandbox wird
+        auf jedem Weg verworfen, auch nach einem Fehler.</p>
+      <p data-l="en">The same scenario runs without a browser – in a terminal or a CI job. The command sends the
+        same three requests the Modeler sends, so it cannot drift from it. The sandbox is discarded on every path
+        out, a failed one included.</p>
+      <pre><code>atlas playground --server https://atlas-test.example.com --scenario gast-regeln --compare</code></pre>
+      <table id="playground-flags">
+        <thead><tr>
+          <th data-l="de">Angabe</th><th data-l="en">Flag</th>
+          <th data-l="de">Bedeutung</th><th data-l="en">Meaning</th>
+        </tr></thead>
+        <tbody>
+          <tr><td><code>--server</code></td>
+            <td data-l="de">Adresse der Atlas-Instanz; ohne Angabe <code>http://localhost:8080</code></td>
+            <td data-l="en">Address of the Atlas instance; <code>http://localhost:8080</code> when omitted</td></tr>
+          <tr><td><code>--token</code></td>
+            <td data-l="de">API-Token, wenn die Anmeldung eingeschaltet ist; ohne Angabe aus <code>ATLAS_TOKEN</code></td>
+            <td data-l="en">API token when sign-in is on; taken from <code>ATLAS_TOKEN</code> when omitted</td></tr>
+          <tr><td><code>--scenario</code></td>
+            <td data-l="de">ein gespeichertes Szenario, nach seiner Id</td>
+            <td data-l="en">a saved scenario, by its id</td></tr>
+          <tr><td><code>--file</code></td>
+            <td data-l="de">ein Szenario aus einer lokalen JSON-Datei, damit es in einem Pull Request geprüft werden
+              kann, bevor es gespeichert wird; genau eines von <code>--scenario</code> und <code>--file</code></td>
+            <td data-l="en">a scenario from a local JSON file, so it can be reviewed in a pull request before it is
+              stored; exactly one of <code>--scenario</code> and <code>--file</code></td></tr>
+          <tr><td><code>--compare</code></td>
+            <td data-l="de">den Lauf neben die gespeicherte Baseline stellen; nur mit <code>--scenario</code></td>
+            <td data-l="en">set the run beside the stored baseline; only with <code>--scenario</code></td></tr>
+          <tr><td><code>--keep-baseline</code></td>
+            <td data-l="de">diesen Lauf als neue Baseline behalten, sofern er bestanden hat; nur mit
+              <code>--scenario</code></td>
+            <td data-l="en">keep this run as the new baseline, provided it passed; only with
+              <code>--scenario</code></td></tr>
+          <tr><td><code>--timeout</code></td>
+            <td data-l="de">wie lange auf den Lauf gewartet wird; ohne Angabe 30 Minuten</td>
+            <td data-l="en">how long to wait for the run; 30 minutes when omitted</td></tr>
+        </tbody>
+      </table>
+      <p data-l="de">Der <b>Exit-Code</b> unterscheidet, was eine Pipeline unterscheiden muss: <code>0</code> –
+        alle Erwartungen erfüllt; <code data-exit="failed">3</code> – der Lauf fand statt und hat sie verfehlt, der
+        Prozess hält nicht mehr; <code>1</code> – alles andere, etwa ein nicht erreichbarer Server oder ein
+        fehlendes Token.</p>
+      <p data-l="en">The <b>exit status</b> tells apart what a pipeline has to tell apart: <code>0</code> – every
+        expectation met; <code data-exit="failed">3</code> – the run happened and missed them, the process no
+        longer holds up; <code>1</code> – anything else, such as an unreachable server or a missing token.</p>
+      <p data-l="de">So sieht es aus, wenn jemand im Gateway die Grenze von 30 auf 40 Tage verschiebt: Die Regel
+        schlägt in 33 Fällen an, und der Vergleich zeigt, dass die Fälle nun länger dauern – sie gehen zur Linie
+        statt in die Ablehnung.</p>
+      <p data-l="en">This is what it looks like when somebody moves the gateway's limit from 30 to 40 days: the rule
+        fires in 33 cases, and the comparison shows the cases taking longer – they go to the line manager instead of
+        into the rejection.</p>
+      <pre><code>ok   cases completed              want at least 200     got 200 of 200
+…
+FAIL Über 30 Tage wird abgelehnt  want every matching case got 76 of 109 held, 33 broke it
+…
+     Über 30 Tage wird abgelehnt: cases 7, 13, 18, 25, 31, 32, 52, 54, 60, 74, and more
+
+FAIL
+
+against the baseline:
+!! median duration              0s -> 1h2m31s
+…</code></pre>
+      <p data-l="de">In einer Pipeline kommt das Modell aus dem Repository. Es wird als Entwurf auf eine
+        Testinstanz geladen, danach läuft sein Szenario dagegen:</p>
+      <p data-l="en">In a pipeline the model comes from the repository. It is uploaded to a test instance as a
+        draft, and its scenario then runs against it:</p>
+      <pre data-l="de"><code># Das Modell als Entwurf auf die Testinstanz laden …
+curl -sf -X POST "$ATLAS/api/v1/drafts" \
+  -H "Authorization: Bearer $ATLAS_TOKEN" -H "Content-Type: application/xml" \
+  --data-binary @prozesse/gastzugang.bpmn
+
+# … und sein Szenario dagegen laufen lassen. Exit-Code 3 färbt den Build rot.
+atlas playground --server "$ATLAS" --file szenarien/gastzugang.json</code></pre>
+      <pre data-l="en"><code># Upload the model to the test instance as a draft …
+curl -sf -X POST "$ATLAS/api/v1/drafts" \
+  -H "Authorization: Bearer $ATLAS_TOKEN" -H "Content-Type: application/xml" \
+  --data-binary @processes/guest-access.bpmn
+
+# … and run its scenario against it. Exit status 3 turns the build red.
+atlas playground --server "$ATLAS" --file scenarios/guest-access.json</code></pre>
+      <ul>
+        <li data-l="de"><b>Die Datei ist das Szenario.</b> Sie enthält dieselben drei Teile, die gespeichert
+          werden: <code>open</code> (Modell, Seed, Stubs und Pools), <code>run</code> (Datensatz und Takt) und
+          <code>expect</code> (die Erwartungen). <code>open</code> nennt den Entwurf über seine Prozess-Id.</li>
+        <li data-l="en"><b>The file is the scenario.</b> It holds the same three parts that are stored:
+          <code>open</code> (model, seed, stubs and pools), <code>run</code> (dataset and pace) and
+          <code>expect</code> (the expectations). <code>open</code> names the draft by its process id.</li>
+        <li data-l="de"><b>Das Token</b> stellt eine Administratorin als API-Token mit dem Geltungsbereich
+          <code>full</code> aus (<code>docs/install.md</code>, «Credentials for machines»). Es reicht für Entwurf und
+          Playground und ist nie <code>admin</code>.</li>
+        <li data-l="en"><b>The token</b> is an API token with scope <code>full</code>, minted by an administrator
+          (<code>docs/install.md</code>, "Credentials for machines"). It reaches drafts and the Playground and is
+          never <code>admin</code>.</li>
+        <li data-l="de"><b>Eine eigene Testinstanz.</b> Ein Playground-Lauf kann weder Mails senden noch ein
+          Umsystem aufrufen. Das Hochladen des Entwurfs überschreibt aber den Entwurf gleicher Prozess-Id auf dieser
+          Instanz. Deshalb läuft die Pipeline gegen eine Instanz, auf der niemand modelliert – oder gegen eine
+          Wegwerf-Instanz, die der Job selbst startet: Atlas ist ein einzelnes Binary.</li>
+        <li data-l="en"><b>An instance of its own.</b> A Playground run can neither send mail nor call another
+          system. Uploading the draft does, however, overwrite the draft of the same process id on that instance.
+          So the pipeline runs against an instance nobody models on – or against a throwaway instance the job starts
+          itself: Atlas is a single binary.</li>
+      </ul>
 
       <h3 data-l="de">Ein Verzeichnis einrichten</h3>
       <h3 data-l="en">Configuring a directory</h3>
@@ -6848,12 +7054,16 @@ atlas worker --connector mssql</code></pre>
 
       <div class="note">
         <span class="lbl" data-l="de">Empfohlener Test-Rhythmus</span><span class="lbl" data-l="en">Recommended test rhythm</span>
-        <p data-l="de" style="margin:.3em 0 0">Simuliere den Fluss → prüfe deine FEEL-Ausdrücke → starte ein paar
-          echte Instanzen mit typischen <i>und</i> untypischen Daten (Grenzwerte, leere Felder, Fehlerfälle) →
-          schau in Operations, ob Timeline und Variablen stimmen. Erst dann produktiv.</p>
-        <p data-l="en" style="margin:.3em 0 0">Simulate the flow → check your FEEL expressions → start a few real
-          instances with typical <i>and</i> atypical data (boundaries, empty fields, error cases) → check in
-          Operations that the timeline and variables are correct. Only then go to production.</p>
+        <p data-l="de" style="margin:.3em 0 0">Simuliere den Fluss → prüfe deine FEEL-Ausdrücke → lass im
+          Playground einen Datensatz mit typischen <i>und</i> untypischen Fällen laufen (Grenzwerte, leere Felder,
+          Fehlerfälle) und halte als <a href="#szenarien">Szenario</a> fest, was gelten muss → lass das Szenario bei
+          jeder Änderung laufen, auch in der Pipeline → starte echte Instanzen und schau in Operations, ob Timeline
+          und Variablen stimmen. Erst dann produktiv.</p>
+        <p data-l="en" style="margin:.3em 0 0">Simulate the flow → check your FEEL expressions → run a dataset of
+          typical <i>and</i> atypical cases in the Playground (boundaries, empty fields, error cases) and record what
+          has to hold as a <a href="#szenarien">scenario</a> → run the scenario on every change, in the pipeline too
+          → start real instances and check in Operations that the timeline and variables are correct. Only then go
+          to production.</p>
       </div>
     </section>
 

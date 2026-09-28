@@ -265,3 +265,23 @@ test("the test chapter leads to the Playground", async ({ page }) => {
   }
   await expect(page.locator("#playground")).toHaveCount(1);
 });
+
+// A scenario is what turns a Playground run into a regression test, and `atlas
+// playground` is what runs it in a pipeline. Both live in the test chapter, below the
+// Playground, so the card and the rhythm note have to lead there — in both languages —
+// and the anchor has to exist. The flag table itself is held to the command's code by
+// cmd/atlas/playgroundhandbook_test.go.
+test("the test chapter leads to scenarios and the pipeline runner", async ({ page }) => {
+  const calls = [];
+  installMock(page, calls);
+  await page.goto("/handbuch.html");
+
+  for (const lang of ["de", "en"]) {
+    await page.click(`#lang-${lang}`);
+    await expect(page.locator(`#testen [data-l="${lang}"] a[href="#szenarien"]`).first()).toBeVisible();
+  }
+  await expect(page.locator("#szenarien")).toHaveCount(1);
+  // The first column only: the descriptions name --scenario too ("only with --scenario").
+  await expect(page.locator("#testen #playground-flags td:first-child code", { hasText: /^--scenario$/ }))
+    .toHaveCount(1);
+});
