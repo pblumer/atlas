@@ -24,6 +24,28 @@
       ]
     },
     {
+      "id": "a-loop-whose-collection-outgrew-its-budget-while-it-filled-f",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A loop no longer loses its collected results without saying so",
+        "de": "Ein Loop verliert seine gesammelten Ergebnisse nicht mehr stillschweigend"
+      },
+      "summary": {
+        "en": "A multi-instance loop whose collected output grew past ATLAS_LIMIT_COLLECTION while it ran finished without the collection, and at the instance's root without an incident, so the process carried on as if the loop had produced nothing. The round that would take the collection past its budget now stops with an incident naming the collection and the size it would have reached, as it did in 0.6.0. Resolving that incident does not run the round again yet — it did not in 0.6.0 either — so the limit has to fit a loop before the loop runs.",
+        "de": "Ein Multi-Instance-Loop, dessen gesammelte Ausgabe während des Laufs über ATLAS_LIMIT_COLLECTION wuchs, wurde ohne die Sammlung abgeschlossen, auf oberster Ebene der Instanz sogar ohne Incident, und der Prozess lief weiter, als hätte der Loop nichts geliefert. Die Runde, welche die Sammlung über das Budget bringen würde, hält jetzt mit einem Incident an, der die Sammlung und die erreichte Grösse nennt, wie schon in 0.6.0. Das Auflösen dieses Incidents führt die Runde noch nicht erneut aus, auch in 0.6.0 nicht; das Limit muss deshalb zum Loop passen, bevor er läuft."
+      },
+      "link": {
+        "label": "ADR-0296",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0296-a-loop-records-its-element.md"
+      },
+      "tags": [
+        "Engine",
+        "Multi-instance"
+      ]
+    },
+    {
       "id": "a-declared-type-now-reaches-a-decision-built-on-other-decisi",
       "version": "Unreleased",
       "date": null,
@@ -304,39 +326,6 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "the-shop-works-on-a-phone",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The shop works on a phone",
-        "de": "Der Shop funktioniert auf dem Handy"
-      },
-      "summary": {
-        "en": "Below 860px every view of the shop is one column wide. The catalogue shows the column you have reached, and a stepper above it goes back and names the path so far. The basket stacks each offering over its own services and options. My orders is a list of cards, with each position's tasks, and the form to answer one, at the card's width. The buttons grow to a fingertip's size. A wide screen keeps its layout.",
-        "de": "Unter 860 px Breite ist jede Ansicht des Shops einspaltig. Der Katalog zeigt die Spalte, bei der man gerade ist; eine Leiste darüber führt zurück und nennt den bisherigen Weg. Der Warenkorb zeigt jedes Angebot mit seinen Services und Optionen darunter. «Meine Aufträge» ist eine Liste von Karten, mit den Aufgaben jeder Position und dem Formular zu ihrer Erledigung in der Breite der Karte. Die Schaltflächen sind gross genug für den Finger. Auf breiten Bildschirmen bleibt die bisherige Darstellung."
-      },
-      "link": {
-        "label": "ADR-0417",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0417-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md"
-      },
-      "tags": [
-        "Shop"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the shop on a phone, or narrow the browser window below 860px.",
-          "In the catalogue, choose a category, a group and a product; use Back to return.",
-          "Under My orders, open a task with Work on it and answer it in the card."
-        ],
-        "de": [
-          "Den Shop auf dem Handy öffnen oder das Browserfenster schmaler als 860 px machen.",
-          "Im Katalog eine Kategorie, eine Gruppe und ein Produkt wählen; mit «Zurück» geht es zurück.",
-          "Unter «Meine Aufträge» eine Aufgabe mit «Erledigen» öffnen und in der Karte erledigen."
-        ]
       }
     }
   ]

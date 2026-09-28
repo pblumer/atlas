@@ -27,6 +27,22 @@ _Changed_ / _Removed_ for each version.
   kept until then, and is tracked in
   [issue #1123](https://github.com/pblumer/atlas/issues/1123).
 
+- **A loop whose collection outgrew its budget while it filled finished without it.**
+  Since a loop records one element per round rather than the whole list
+  ([ADR-0296](docs/adr/0296-a-loop-records-its-element.md)), nothing measured the list
+  against `ATLAS_LIMIT_COLLECTION` while it filled. The promotion that measured it at the
+  end refused it, ignored its own refusal and completed the loop: the collection was
+  gone, and for a loop at the instance's root the incident went with the element that
+  carried it. The process carried on with the collection unset. v0.6.0 parked the round
+  that took the list past its budget, and that is what happens again: each round measures
+  the list its element produces before the element is recorded, and the incident names
+  the collection and the size it would have reached. The log still carries one element
+  per round. The measure is taken in memory, and a list is only re-serialised for it
+  when it is within one element of its budget, so a loop that ends exactly at the budget
+  still completes. ADR-0296 is amended to say so. Resolving the incident does not run the
+  round again yet — it did not in 0.6.0 either — so the budget has to fit a loop before
+  the loop runs.
+
 - **A declared type now reaches a decision built on other decisions (ADR-0419).** The
   engine converted an input by what the decision being evaluated declares *itself*.
   For a decision whose requirements are other decisions — the shape a well-factored

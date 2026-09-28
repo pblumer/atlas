@@ -1,6 +1,8 @@
 package engine_test
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -238,6 +240,126 @@ func TestARefusedWriteDoesNotPromiseThatResolvingWritesIt(t *testing.T) {
 		if !strings.Contains(inc.Message, "does not write it again") {
 			t.Errorf("message = %q, want it to say that resolving does not write the value", inc.Message)
 		}
+	}
+}
+
+// TestACollectionThatOutgrowsItsBudgetWhileFillingParksItsRound is the case the two
+// tests above leave between them. A loop's collection is seeded with one null per item
+// and filled a round at a time, so it can fit its budget when it is seeded and outgrow
+// it halfway through. Before ADR-0296 every round wrote the whole list and was measured
+// doing it. Since a round records only its own element, nothing measured the list while
+// it filled, and the promotion that measured it at the end refused the write and then
+// completed the loop anyway: the collection gone, no incident, the instance finished.
+//
+// So the round that would take the collection past its budget is refused, as it was
+// before: the incident names the collection and the size it would have reached, and the
+// instance stays where it is. The log carries that answer too — a replay of it from
+// nothing reaches the same standing instance and the same incident.
+func TestACollectionThatOutgrowsItsBudgetWhileFillingParksItsRound(t *testing.T) {
+	for _, seq := range []bool{false, true} {
+		name := "parallel"
+		if seq {
+			name = "sequential"
+		}
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			h1 := openHarness(t, dir)
+			// Each round collects an eight-byte number. The seed "[null,null,null]" is
+			// sixteen bytes and the list after the first round twenty, both inside the
+			// budget; after the second it would be twenty-four.
+			cp := miCollectProcess(t, "[1000000, 2000000, 3000000]", seq)
+			p1 := engine.New(1, h1.log, h1.store, &manualClock{})
+			p1.SetMaxCollection(20)
+			p1.Deploy(cp)
+			if err := p1.Recover(); err != nil {
+				t.Fatalf("Recover: %v", err)
+			}
+			p1.CreateInstance(cp.Key)
+			if err := p1.RunUntilIdle(); err != nil {
+				t.Fatalf("RunUntilIdle: %v", err)
+			}
+
+			check := func(stage string, s *state.Store) (elements int) {
+				t.Helper()
+				incs := incidents(t, s)
+				if len(incs) != 1 {
+					t.Fatalf("%s: incidents = %d, want the refusal", stage, len(incs))
+				}
+				for _, inc := range incs {
+					if inc.Reason != model.IncidentVariableTooLarge {
+						t.Errorf("%s: incident reason = %v, want IncidentVariableTooLarge", stage, inc.Reason)
+					}
+					if !strings.Contains(inc.Message, `"results" is 24 bytes`) {
+						t.Errorf("%s: incident message = %q, want it to name the collection at 24 bytes", stage, inc.Message)
+					}
+				}
+				pi, ei := counts(t, s)
+				if pi != 1 || ei == 0 {
+					t.Fatalf("%s: process=%d element=%d, want the instance still standing — "+
+						"a loop that completed has dropped its collection", stage, pi, ei)
+				}
+				if got := varText(t, s, model.NewKey(1, 1), "results"); got != "" {
+					t.Errorf("%s: results = %q at the instance root, want nothing promoted", stage, got)
+				}
+				return ei
+			}
+			live := check("live", h1.store)
+			h1.close(t)
+
+			// The log is the source of truth: wipe the state and rebuild it from nothing.
+			if err := os.RemoveAll(filepath.Join(dir, "state")); err != nil {
+				t.Fatalf("RemoveAll: %v", err)
+			}
+			h2 := openHarness(t, dir)
+			defer h2.close(t)
+			p2 := engine.New(1, h2.log, h2.store, &manualClock{})
+			p2.SetMaxCollection(20)
+			p2.Deploy(cp)
+			if err := p2.Recover(); err != nil {
+				t.Fatalf("Recover after wiping the state: %v", err)
+			}
+			if replayed := check("replayed", h2.store); replayed != live {
+				t.Errorf("replayed element instances = %d, live had %d", replayed, live)
+			}
+		})
+	}
+}
+
+// TestACollectionExactlyAtItsBudgetCompletes pins the other edge of the same
+// measurement: the limit itself is allowed, for a collection as for a variable. A size
+// estimated rather than computed would refuse the last round here — the element it
+// replaces is four bytes of null — and a loop exactly at its budget would park for
+// nothing.
+func TestACollectionExactlyAtItsBudgetCompletes(t *testing.T) {
+	for _, seq := range []bool{false, true} {
+		name := "parallel"
+		if seq {
+			name = "sequential"
+		}
+		t.Run(name, func(t *testing.T) {
+			h := openHarness(t, t.TempDir())
+			defer h.close(t)
+			cp := miCollectProcess(t, "[1000000, 2000000, 3000000]", seq)
+			p := engine.New(1, h.log, h.store, &manualClock{})
+			p.SetMaxCollection(28) // exactly "[10000000,20000000,30000000]"
+			p.Deploy(cp)
+			if err := p.Recover(); err != nil {
+				t.Fatalf("Recover: %v", err)
+			}
+			p.CreateInstance(cp.Key)
+			if err := p.RunUntilIdle(); err != nil {
+				t.Fatalf("RunUntilIdle: %v", err)
+			}
+			if n := len(incidents(t, h.store)); n != 0 {
+				t.Fatalf("incidents = %d, want none at exactly the budget", n)
+			}
+			if pi, ei := counts(t, h.store); pi != 0 || ei != 0 {
+				t.Errorf("process=%d element=%d, want the loop completed", pi, ei)
+			}
+			if got := varText(t, h.store, model.NewKey(1, 1), "results"); got != "[10000000,20000000,30000000]" {
+				t.Errorf("results = %q, want [10000000,20000000,30000000]", got)
+			}
+		})
 	}
 }
 
