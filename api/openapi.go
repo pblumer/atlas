@@ -1285,9 +1285,10 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Per-target status", tArray())}},
 
 		{"POST", "/api/v1/targets", s.handleCreateTarget, apiOp{
-			summary: "Register a deployment target: a peer Atlas this server can promote releases to; the credential is stored by reference, never by value (admin-only, ADR-0129)", tag: "Deployment targets", role: RoleAdmin,
+			summary: "Register a deployment target: a peer Atlas this server can promote releases to; credentials are stored by reference, never by value (admin-only, ADR-0129). credentialRef is what a promotion presents and readCredentialRef what a read of the peer presents — its descriptor, and the estate altitude's landscape (ADR-0402) — because a token carries one scope and the two jobs need different ones: a deploy credential is refused both read routes, and a landscape credential is refused the import route. Leave readCredentialRef empty to present the same credential for both, which is what every target configured before it did", tag: "Deployment targets", role: RoleAdmin,
 			req: jsonBody("Target", schemaObj(map[string]any{
-				"name": tString(), "baseUrl": tString(), "kind": tString(), "credentialRef": tString(),
+				"name": tString(), "baseUrl": tString(), "kind": tString(),
+				"credentialRef": tString(), "readCredentialRef": tString(),
 			}, "name", "baseUrl")),
 			resp: jsonBody("Created target", tObject())}},
 		{"GET", "/api/v1/targets", s.handleListTargets, apiOp{

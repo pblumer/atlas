@@ -233,7 +233,7 @@ operator now learns the peer domains' names, roughly how large each is, and whic
 promotion has reached. The names were already visible to such a reader as `target` nodes on the
 landscape itself; the size and the join are what this adds.
 
-#### One target, one credential, and two jobs it cannot both do (open, found 2026-09-23)
+#### One target, one credential, and two jobs it cannot both do (found 2026-09-23, decided 2026-09-28)
 
 Running two installations against each other surfaced a gap this record did not anticipate, in
 the record it depends on rather than in this one.
@@ -258,9 +258,18 @@ Three ways out, and the choice is not this record's to make alone:
 | A token that carries several scopes | Larger: the scope is a single word everywhere it is read, and a set changes `apiScopeMayReach` and every place a scope is displayed or minted. |
 | Widen the deploy token to the two read routes | Refused here: ADR-0129's deploy token is narrow on purpose, and the estate is not a reason to widen the one credential a peer hands out. |
 
-Nothing is built for it. The estate works today with a credential minted for reading, which is
-what the measurement above used, and an installation that wants both needs two targets or the
-first option.
+**Decided and built (2026-09-28): the first option.** A target names a second, optional
+`readCredentialRef`, and a read of the peer presents it where it is configured. Empty means the
+two jobs share one credential, which is what every target configured before this says, so
+nothing that exists moves. The three reads that present it are the estate's fan-out, the
+landscape's target rows and the observation projection; the two promotion paths keep naming
+`credentialRef`, because a deploy credential is the narrowest thing that can publish and this
+does not widen it. See ADR-0129, which owns the target
+record.
+
+The second option — a token carrying several scopes — stays unbuilt and is the larger change it
+was: a scope is a single word everywhere it is read, minted and displayed. The third stays
+refused.
 
 ### 2. The budget is per node and cannot be multiplied
 

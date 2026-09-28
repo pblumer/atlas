@@ -274,6 +274,32 @@ one is far beyond what the problem warrants.
 - Bad: introduces a global identity and a uniqueness/collision rule that belongs
   in the ADR that actually needs it, not here.
 
+## A target names two credentials, because it does two jobs (2026-09-28)
+
+This record's target carries one credential reference, and for as long as promoting was the only
+thing a target was for, one was right. Reading a peer arrived afterwards — its descriptor for the
+landscape's target rows (ADR-0189 §6), and then its
+whole derived landscape for the estate altitude
+(ADR-0402) — and the two jobs turn out to need
+credentials that cannot be the same one.
+
+They are disjoint by design rather than by oversight, which is why no amount of configuration
+fixed it. A deploy token reaches the import route and nothing else, deliberately: it is the
+narrowest thing that can publish, and that narrowness is this record's own decision. A credential
+that reaches a peer's descriptor and its landscape is refused the import route for the same
+reason, from the other side. And a token carries one scope. Measured against two installations
+rather than argued: a deploy token answers `401` at both read routes, and a landscape credential
+answers `403` at `POST /api/v1/applications/import`.
+
+So the target names a second, optional reference, `readCredentialRef`, and a read presents it
+where it is configured. What that changes for an existing target is nothing: empty means the two
+jobs share the one credential, which is what every target says today — including one whose single
+credential is a status token an operator configured so the landscape could draw the peer at all.
+
+Two handles into the vault rather than one, and a handle is not a secret (ADR-0069/0070), so the
+disclosure is unchanged. What an operator gains is the ability to hand a peer two narrow
+credentials instead of choosing which half of the relationship works.
+
 ## Links
 
 - implements Phase 3 of [ADR-0128](0128-process-applications.md) (process

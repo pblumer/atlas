@@ -86,7 +86,7 @@ func (s *Server) handlePanoramaEstate(w http.ResponseWriter, r *http.Request) {
 			// further than the Authorization header the fan-out sets, and reaches no
 			// payload, no log line and no error message.
 			peers = append(peers, remoteTarget{
-				target: t, credential: s.resolveConnectorSecret(t.CredentialRef),
+				target: t, credential: s.resolveConnectorSecret(t.readRef()),
 			})
 		}
 	})
