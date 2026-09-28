@@ -781,6 +781,13 @@ func TestApprovingALineThroughTheAPI(t *testing.T) {
 		`{"by":"usr_other","approved":true}`, "id", placed.ID, "item", "laptop"); rec.Code != http.StatusBadRequest {
 		t.Errorf("second approval = %d, want 400", rec.Code)
 	}
+	// Nor a line already settled: that would write a decision beside somebody else's.
+	if _, err := Approve(Line{ItemID: "x", Status: StatusRejected}, "usr_imke", 1700); err == nil {
+		t.Error("Approve of a rejected line must fail")
+	}
+	if _, err := Approve(Line{ItemID: "x", Status: StatusPending}, "usr_imke", 0); err == nil {
+		t.Error("Approve without a moment must fail")
+	}
 	// And never without an author.
 	if rec := do(t, s.HandleDecide, op, "POST",
 		`{"approved":true}`, "id", placed.ID, "item", "account"); rec.Code != http.StatusBadRequest {

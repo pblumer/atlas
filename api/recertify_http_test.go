@@ -358,6 +358,18 @@ func TestAnUnassignedRowBelongsToWhoeverOpenedTheCampaign(t *testing.T) {
 	}
 }
 
+// countOfKind counts the pending items of one kind.
+func countOfKind(t *testing.T, rep map[string]any, kind string) int {
+	t.Helper()
+	n := 0
+	for _, it := range pendingItems(t, rep) {
+		if it["kind"] == kind {
+			n++
+		}
+	}
+	return n
+}
+
 // TestARowOfferedToAGroupIsAnsweredByItsMembers.
 //
 // A campaign can be handed to a standing function — the integration managers —
@@ -414,6 +426,13 @@ func TestARowOfferedToAGroupIsAnsweredByItsMembers(t *testing.T) {
 	login(t, boC, ts, "bo", "correct horse battery")
 	if got := len(rowsOf(t, readCampaign(t, boC, ts, id, "?mine=true"))); got != 1 {
 		t.Errorf("a member's own view has %d row(s), want the 1 offered to the group", got)
+	}
+	// What a member owes includes it; what an outsider owes does not.
+	if got := countOfKind(t, readPending(t, boC, ts, ""), "recertification"); got != 1 {
+		t.Errorf("a member owes %d recertification(s), want the 1 offered to the group", got)
+	}
+	if got := countOfKind(t, readPending(t, cy, ts, ""), "recertification"); got != 0 {
+		t.Errorf("somebody outside the group owes %d recertification(s), want none", got)
 	}
 	if code, raw := cReq(t, boC, ts,
 		"POST", "/api/v1/recertification/"+id+"/rows/"+row+"/keep", ""); code != http.StatusOK {
