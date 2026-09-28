@@ -2851,6 +2851,25 @@ function returnable(order, line) {
   return true;
 }
 
+// grantingLines maps each product to the order line that granted it to the viewer:
+// the newest line that is still held and whose order names the viewer as its
+// recipient. Both conditions are the point. The orders on this page include ones
+// placed for somebody else, and an older line for the same product — cancelled,
+// refused, or held by a colleague — must not stand in for the viewer's own; keyed
+// by product alone, the last order read won, and that is the oldest one.
+function grantingLines(orders, meID) {
+  const out = new Map();
+  for (const o of orders || []) {
+    if (meID && o.recipient && o.recipient !== meID) continue;
+    for (const l of o.lines || []) {
+      if (out.has(l.itemId)) continue;
+      if (!['done', 'returning', 'returnFailed'].includes(l.status)) continue;
+      out.set(l.itemId, { order: o, line: l });
+    }
+  }
+  return out;
+}
+
 // giveBack starts a line's deprovisioning, then reloads. It asks first: revoking
 // an access somebody has been using is the one thing on this page with a
 // consequence outside Atlas, and a mis-click deletes an account.
@@ -3450,10 +3469,7 @@ function renderServices() {
   // *list* is built: the inventory is, because the order behind a right is
   // deleted by retention long before the right ends (ADR-0312), and a list
   // assembled from orders would start losing services on the ninetieth day.
-  const lineOf = new Map();
-  for (const o of state.orders) {
-    for (const l of o.lines || []) lineOf.set(l.itemId, { order: o, line: l });
-  }
+  const lineOf = grantingLines(state.orders, state.meID);
 
   const row = (id) => {
     const found = lineOf.get(id);
