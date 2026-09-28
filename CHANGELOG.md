@@ -92,11 +92,6 @@ credentials.
   loop's element, an entitlement — so take a backup before upgrading and restore it, rather
   than starting 0.6.x on a data directory 0.7.0 has written.
 
-**Known issue.** A multi-instance loop whose output collection outgrows
-`ATLAS_LIMIT_COLLECTION` (16 MiB by default) completes without the collection and without
-an incident; 0.6.0 parked it with a `VariableTooLarge` incident. Until that is fixed, keep a
-loop's collected output well below the limit, or raise the limit.
-
 ### Added
 
 - **A deployment target can name a second credential, for reading the peer rather than
@@ -4061,6 +4056,22 @@ loop's collected output well below the limit, or raise the limit.
   names the catalogue in words instead. Information kept, presentation dropped.
 
 ### Fixed
+
+- **A loop whose collection outgrew its budget while it filled finished without it.**
+  Since a loop records one element per round rather than the whole list
+  ([ADR-0296](docs/adr/0296-a-loop-records-its-element.md)), nothing measured the list
+  against `ATLAS_LIMIT_COLLECTION` while it filled. The promotion that measured it at the
+  end refused it, ignored its own refusal and completed the loop: the collection was
+  gone, and for a loop at the instance's root the incident went with the element that
+  carried it. The process carried on with the collection unset. v0.6.0 parked the round
+  that took the list past its budget, and that is what happens again: each round measures
+  the list its element produces before the element is recorded, and the incident names
+  the collection and the size it would have reached. The log still carries one element
+  per round. The measure is taken in memory, and a list is only re-serialised for it
+  when it is within one element of its budget, so a loop that ends exactly at the budget
+  still completes. ADR-0296 is amended to say so. Resolving the incident does not run the
+  round again yet — it did not in 0.6.0 either — so the budget has to fit a loop before
+  the loop runs.
 
 - **Giving a right back found the oldest order for the product, not the viewer's own.**
   "Meine Leistungen" looked up the order line behind each held right by product id

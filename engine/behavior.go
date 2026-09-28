@@ -4557,6 +4557,10 @@ func promoteMultiInstanceOutput(c *ProcessingContext, bodyKey uint64, ei *model.
 			out.ScopeKey = ei.FlowScopeKey // promote to the parent scope
 			// The collection's own budget, not the variable one: it fitted at the body
 			// scope, so refusing it one scope up would park a loop for having finished.
+			// It fitted because setListElement measured every round against this same
+			// budget before recording it. That measure is what keeps the refusal below
+			// unreachable — were it reached, the collection would be dropped with the
+			// scope and the loop would complete without it (ADR-0296, amended).
 			c.appendCollection(model.IntentVariableCreated, out)
 		}
 	}
@@ -4706,10 +4710,49 @@ func setListElement(c *ProcessingContext, scope uint64, name string, idx int, va
 		parkOversizedWrite(c, scope, name, int64(len(text)), c.p.variableCeiling())
 		return false
 	}
+	vk := toVarKind(kind)
+	// The collection this element produces, measured against the collection's own
+	// budget before the element is recorded. The element event does not carry the list
+	// (ADR-0296), so this is the last point at which anything can: the promotion that
+	// measures it again when the loop finishes cannot refuse without dropping every
+	// result the loop produced, and did exactly that.
+	if size, fits := collectionAfter(c, scope, name, idx, expr.FromStored(toExprKind(vk), b, text)); !fits {
+		parkOversizedWrite(c, scope, name, size, c.p.collectionCeiling())
+		return false
+	}
 	return c.appendVariableElement(model.VariableValue{
 		ScopeKey: scope, Name: name, Index: int32(idx),
-		Kind: toVarKind(kind), Bool: b, Text: text,
+		Kind: vk, Bool: b, Text: text,
 	})
+}
+
+// collectionAfter reports whether the list at (scope, name) still fits the collection
+// budget once element idx is el, and, where it does not, the size it would have — the
+// size setVariableElement would store when the element event is applied, computed the
+// same way. A write that fold ignores — no list there, or an index outside it — fits.
+//
+// It does not re-serialise the list on the common path. The list as it stands plus
+// the element as the list will hold it is an upper bound, since setting an element
+// replaces one; only a list within one element of its budget is folded to learn its
+// exact size. That is the one case where the difference decides anything, and a bound
+// used there would refuse a loop that ends exactly at the budget, which is allowed.
+func collectionAfter(c *ProcessingContext, scope uint64, name string, idx int, el expr.Value) (int64, bool) {
+	ceiling := c.p.collectionCeiling()
+	cur := c.GetVariable(scope, name)
+	if cur == nil || cur.Kind != model.VarJSON {
+		return 0, true
+	}
+	_, _, elem := expr.Classify(expr.ListOf(el))
+	if int64(len(cur.Text)+len(elem)) <= ceiling {
+		return 0, true
+	}
+	elems, ok := expr.AsList(expr.FromStored(expr.KindJSON, false, cur.Text))
+	if !ok || idx < 0 || idx >= len(elems) {
+		return 0, true
+	}
+	elems[idx] = el
+	_, _, text := expr.Classify(expr.ListOf(elems...))
+	return int64(len(text)), int64(len(text)) <= ceiling
 }
 
 // callActivityBehavior runs a call activity: on activation it starts a separate

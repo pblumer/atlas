@@ -1,6 +1,7 @@
 # ADR-0296: A loop records the element it produced, not the collection so far
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-09-28: a round is measured against the collection
+  budget again before its element is recorded — see the amendment note below)
 - **Implementation:** Landed
 - **Date:** 2026-09-09
 - **Deciders:** Atlas engine team
@@ -123,6 +124,30 @@ had already been serialised — replay does the work the live path does, which i
 - Bad: a hundred thousand results of a kilobyte each cost a hundred gigabytes of log to
   record a hundred megabytes of answer, and ADR-0294 already established that no budget
   can make that safe.
+
+## Amendment note (2026-09-28): the collection budget is checked again
+
+The negative consequence above was worse than it reads. "Enforced indirectly" was true
+of the path that fills the collection; it was not true of the one that promotes it.
+`promoteMultiInstanceOutput` still measured the finished list against the collection
+budget, and a refusal there stopped nothing: the refusal's return value was ignored,
+the body's scope was dropped with the list in it, and the body completed. Where the
+refusal's incident sat on the body — a loop at the instance's root — completing the body
+deleted it too. A loop whose list outgrew its budget while it filled therefore completed
+without its collection, and at the root without a trace: measured with one probe on
+v0.6.0, which parked the round with a `VariableTooLarge` incident, on the tree just before
+this record's merge, which did the same, and on the tree after it, which completed.
+
+`setListElement` measures the list the element produces again, against the collection
+budget, before it records the element; a round that would take the list past it parks
+with the incident naming the collection and the size it would reach, which is what
+v0.6.0 did. The element record is unchanged — it still carries one element, so the log
+stays linear. What this costs is in memory, not in the log: the list as it stands plus
+the element is an upper bound on the result, and only a list within one element of its
+budget is folded to learn its exact size, so the budget itself stays reachable.
+
+The promotion keeps its own check and it stays unreachable under a constant budget,
+because every round was measured against the same number first.
 
 ## Links
 
