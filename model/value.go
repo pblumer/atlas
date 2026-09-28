@@ -1336,8 +1336,9 @@ const (
 	// value was past the budget for a variable, or for a multi-instance activity's
 	// output collection (ADR-0294). Unlike the two above it
 	// names an element that *did* run: the work happened and its result is the thing
-	// that will not fit. Resolving retries the write, so correcting the data — or
-	// raising the budget — lets it through.
+	// that will not fit. Resolving it does not write the value again: nothing re-runs
+	// the element's write, so the incident goes and the element stays where it stopped
+	// (#1123).
 	IncidentVariableTooLarge IncidentReason = 3
 	// IncidentPersonalInTheClear marks an element whose write was refused because it
 	// carried a value the process declared personal (ADR-0314) and carried it in the

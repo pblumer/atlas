@@ -2,6 +2,28 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-refused-write-s-incident-no-longer-tells-you-to-resolve-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A refused write's incident no longer tells you to resolve it",
+        "de": "Der Incident einer abgelehnten Schreiboperation empfiehlt nicht mehr das Auflösen"
+      },
+      "summary": {
+        "en": "When a value is larger than its variable or collection budget, the element stops with an incident. That incident used to say \"resolve to write it again\", but resolving does not write the value: the incident disappears and the element stays where it stopped, now with no incident at all. The message now says so, and that the limit has to be raised before the work producing such a value runs. Making resolve continue the element is tracked in issue #1123.",
+        "de": "Ist ein Wert grösser als das Budget für eine Variable oder eine Sammlung, hält das Element mit einem Incident an. Dieser Incident empfahl bisher, ihn aufzulösen, damit der Wert geschrieben wird. Das Auflösen schreibt den Wert jedoch nicht: Der Incident verschwindet, und das Element bleibt stehen, danach ganz ohne Incident. Die Meldung sagt das jetzt und weist darauf hin, dass das Limit erhöht werden muss, bevor die Arbeit läuft, die einen solchen Wert erzeugt. Dass das Auflösen das Element fortsetzt, wird in Issue #1123 verfolgt."
+      },
+      "link": {
+        "label": "ADR-0294",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0294-a-variable-is-a-record.md"
+      },
+      "tags": [
+        "Engine",
+        "Operations"
+      ]
+    },
+    {
       "id": "a-declared-type-now-reaches-a-decision-built-on-other-decisi",
       "version": "Unreleased",
       "date": null,
@@ -314,39 +336,6 @@
           "Den Shop auf dem Handy öffnen oder das Browserfenster schmaler als 860 px machen.",
           "Im Katalog eine Kategorie, eine Gruppe und ein Produkt wählen; mit «Zurück» geht es zurück.",
           "Unter «Meine Aufträge» eine Aufgabe mit «Erledigen» öffnen und in der Karte erledigen."
-        ]
-      }
-    },
-    {
-      "id": "tasks-works-on-a-phone",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Tasks works on a phone",
-        "de": "Tasks funktioniert auf dem Handy"
-      },
-      "summary": {
-        "en": "Below 860px the inbox and Start show the list or the open task, not both, and a task opens with a button back to the list. The folders become a row of chips, and a task's fields put their label above the value. An access review row is a card with its two answers under it. The top bar keeps its icons on screen and scrolls the view names instead. Between 861px and 1180px the inbox keeps its three panes at narrower widths.",
-        "de": "Unter 860 px Breite zeigen Posteingang und «Start» entweder die Liste oder die geöffnete Aufgabe, nicht beides; eine Aufgabe öffnet sich mit einer Schaltfläche zurück zur Liste. Die Ordner werden zu einer Reihe von Chips, und die Felder einer Aufgabe zeigen die Beschriftung über dem Wert. Eine Zeile der Rezertifizierung ist eine Karte mit den beiden Antworten darunter. Die obere Leiste behält ihre Symbole im Bild und lässt stattdessen die Ansichtsnamen seitlich scrollen. Zwischen 861 px und 1180 px behält der Posteingang seine drei Bereiche in schmaleren Breiten."
-      },
-      "link": {
-        "label": "ADR-0417",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0417-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md"
-      },
-      "tags": [
-        "Tasks"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Tasks on a phone, or narrow the browser window below 860px.",
-          "Open a task from the list; use Back to the list to return.",
-          "Under Access review, answer a row with Still needed or Withdraw… in its card."
-        ],
-        "de": [
-          "Tasks auf dem Handy öffnen oder das Browserfenster schmaler als 860 px machen.",
-          "Eine Aufgabe in der Liste öffnen; mit «Back to the list» geht es zurück.",
-          "Unter «Access review» eine Zeile in ihrer Karte mit «Still needed» oder «Withdraw…» beantworten."
         ]
       }
     }

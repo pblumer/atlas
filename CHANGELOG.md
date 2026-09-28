@@ -14,6 +14,19 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A refused write's incident no longer tells you to resolve it.** A value past its
+  variable or collection budget ([ADR-0294](docs/adr/0294-a-variable-is-a-record.md))
+  parks its element with an incident, and the incident
+  said: *check what produced it, then resolve to write it again*. Resolving does not write
+  it again. Nothing re-runs the refused write, so the incident is deleted and the element
+  stays where it stopped — now with no incident at all, which is harder to find than the
+  refusal was. Measured for a job's result and for a loop's round; on v0.6.0 the loop
+  behaved the same way. The message now says that resolving does not write the value,
+  and that the limit has to be raised before the work that produces such a value runs.
+  Making resolve resume the element needs a decision about where a refused value is
+  kept until then, and is tracked in
+  [issue #1123](https://github.com/pblumer/atlas/issues/1123).
+
 - **A declared type now reaches a decision built on other decisions (ADR-0419).** The
   engine converted an input by what the decision being evaluated declares *itself*.
   For a decision whose requirements are other decisions — the shape a well-factored

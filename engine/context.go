@@ -400,8 +400,8 @@ func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.Var
 		return false
 	}
 	// A value past the budget is not written and not silently dropped: an incident
-	// names the variable and both sizes, and resolving retries
-	// (ADR-0294). Deleting is never refused — a delete carries
+	// names the variable and both sizes (ADR-0294) — though resolving it does not
+	// write the value again (#1123). Deleting is never refused — a delete carries
 	// no value, and refusing to shrink an instance would be the wrong way round.
 	return c.appendVariable(intent, v, c.p.variableCeiling())
 }
