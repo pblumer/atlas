@@ -14,6 +14,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A decision service refuses a wrongly-typed input, as its decision does.** A business
+  rule task that names a decision with an input of the wrong type fails into an incident
+  (ADR-0419); the same task naming the decision service over it got a silent catch-all
+  answer instead, because the engine published no input schema for a service and there
+  was nothing to validate against. temis ADR-0042 gives a service one — the input data
+  read behind its interface and the results of its input decisions, each with its
+  declared type — and the service is now refused by the same rule, naming every
+  mismatched input. The schema also reaches an input decision the conversion could not see
+  before: one declared `date` and sent as text used to arrive at the decisions behind the
+  interface as a string, and now arrives as a date. The ten retained evaluations of the one
+  deployed service were read against the new schema first; none would have been refused.
+
 - **The handbook counted what it no longer had: thirty examples, nine apps, four roles.**
   The examples chapter said "thirty" above thirty-eight cards, the welcome chapter headed
   its eight app cards "the nine apps" after Approvals folded into the inbox (ADR-0394), and

@@ -1,40 +1,9 @@
-## A decision service: converted now, still not refused
-
-This record's refusal sits in `evalDecision`. A decision service goes through
-`evalService`, and the two halves of "honour the declared type" have come apart
-there.
-
-**Conversion reaches it.** temis ADR-0041 corrected what ADR-0040 had scoped too
-narrowly: a decision is converted by the union over its requirements cone rather
-than by what it declares itself. A service's working set is built from its output
-decisions, so it inherited the correction — which matters, because that set was
-empty for exactly the services that encapsulate anything. In the depth fixture, a
-`date` declared two levels below the service now reaches it as a date, asserted
-from both the composed decision and the service over it.
-
-**Refusal does not.** `CompiledService` still publishes no input schema, so there
-is nothing for Atlas to ask at that boundary. The same wrongly-typed value is
-refused when a task names the decision and answers silently when it names the
-service — `Pruefung` returns `abgelehnt` where `Gesamturteil` returns the
-mismatch. temis ADR-0041 names a published service schema as what it does not
-decide; until it exists, so does this.
-
-The asymmetry is asserted rather than left to be rediscovered
-(`TestRemainingGapAServiceDoesNotRefuseAWronglyTypedInput`), with a failure
-message saying what to do when it closes.
-
 # ADR-0419: A declared type is honoured at the decision boundary
 
 - **Status:** Accepted
 - **Implementation:** Landed
 - **Date:** 2026-09-25
 - **Deciders:** Atlas maintainers
-- **Open question:** whether a decision **service** should *refuse* a wrongly-typed
-  input, not only convert one — temis ADR-0041 gave a service the conversion by
-  making its working set the output decisions' cones, but `CompiledService` still
-  publishes no input schema, so `evalService` has nothing to validate against and
-  the same value that fails at a decision answers silently at the service over it
-- **Question checked:** 2026-09
 
 ## Context and problem statement
 
@@ -344,9 +313,11 @@ different route. It is named here rather than quietly fixed, because "the variab
 absent" and "the variable has the wrong type" are different questions with different right
 answers.
 
-One limit on the measurement, stated so it is not read for more than it says:
-`Kreditfreigabe`'s nine evaluations are counted although the refusal does not reach a
-decision service at all. Excluding them changes nothing — they are clean either way.
+`Kreditfreigabe` is a decision service, and the refusal did not reach one when this was
+measured; it does since temis ADR-0042 (see "A decision service is refused by the same
+rule" below). Its evaluations were therefore read again against the schema the service
+now publishes, including a tenth made after its model changed: all ten carry numbers as
+numbers and strings as strings, so none would be refused either way.
 
 The schema compared against is the *reachable*-input view, which is the same set the
 refusal checks, so the measurement and the code ask the same question of the same names.
@@ -397,39 +368,37 @@ Only `TYPE_MISMATCH` is refused, of the four codes temis reports:
 Every mismatch is named, not only the first, so an operator reads the whole problem out
 of one incident instead of fixing one input and meeting the next.
 
-## Ein Decision Service ist hier nicht abgedeckt
+## A decision service is refused by the same rule
 
-Die Prüfung dieses Records sitzt in `evalDecision`. Ein Decision Service läuft
-über `evalService`, und dort greift sie nicht. Das ist keine Nachlässigkeit,
-sondern fehlendes Material: `tdmn.CompiledService` veröffentlicht weder
-`InputSchema()` noch `ValidateInput` — es gibt in temis nichts, wogegen hier
-geprüft werden könnte.
+A task may name a decision service instead of a decision, and for a while the two
+halves of this record came apart there. temis converted a service's inputs by declared
+type once ADR-0041 built its working set from its output decisions' cones, but it
+published no input schema, so `evalService` had nothing to validate against: the same
+wrongly-typed value that failed at `Gesamturteil` answered `abgelehnt` at the service
+`Pruefung` over it.
 
-Die Koerzierung aus temis ADR-0040 erreicht einen Service ebenfalls nur
-teilweise. `(*CompiledService).declaredInputs()` liest `inputs` der
-Output-Decisions, und `buildInputSchema` füllt die aus `RequiredInputs` — den
-**direkten** `<requiredInput>`-Referenzen, nicht dem transitiven Kegel. Im
-einzigen hier deployten Service (`kreditfreigabe`) hat die `outputDecision`
-`Kreditentscheid` zwei Information Requirements, beide `requiredDecision`. Die
-Menge ist also leer und die Koerzierung ein No-op, obwohl das `<decisionService>`
-seine typisierten Grenzwerte selbst auflistet (`in_betrag: number`,
-`in_laufzeit: number`, `in_einkommen: number`, `dec_bonitaet → bonitaet: string`).
+temis ADR-0042 gave the service a schema — `CompiledService.InputSchema()` and
+`ValidateInput()` — and `evalService` now asks it before evaluating, with the same
+`refuseTypeMismatch` and the same one refused code. The schema is what a caller
+supplies: the input data read behind the interface, the output decisions' cones cut at
+the input decisions, plus the input decisions themselves, typed by their own variable.
+It follows what the evaluation reads rather than the list in the `<decisionService>`
+element; the two agree on a well-formed model, and where a declaration is incomplete it
+is the declaration that is wrong.
 
-Gemessen ist der Schaden heute null: dieser eine Service führt ausschliesslich
-`number` und `string`, und für beide ist die Go-Abbildung schon vor ADR-0040
-richtig. Die Lücke schlägt erst bei einem Service zu, der ein `date`, `time`,
-`date and time` oder eine Dauer an seiner Grenze führt — und dann still, weil
-ein nicht koerziertes Datum keinen Fehler wirft, sondern eine nicht matchende
-Zeile.
+Two consequences are specific to a service.
 
-Der Weg dorthin ist ein Eingabeschema für den Service in temis, gespeist aus
-`<inputData>` und `<inputDecision>` des `decisionService`-Elements (DMN §10.4
-sieht genau diese Quelle vor). Das ist additiv, macht `WithStrictInput` an der
-Service-Grenze erstmals wirksam, und ist derselbe Beschluss wie ADR-0040, nur
-eine Ebene höher. Die Alternative — die Typprüfung in Atlas aus
-`dmn/services.go` nachzubauen — wurde verworfen: sie erzeugt ein zweites
-Typsystem neben dem von temis und löst ohnehin nur die Hälfte, weil die
-Koerzierung in `inputToValues` sitzt und von aussen nicht nachzuziehen ist.
+- **An input decision is converted and checked.** A cone names input data, not
+  decisions, so a `date`-typed input decision sent as text used to reach the
+  encapsulated decisions as a string. It is now a date, and a value its type cannot be
+  made from is refused.
+- **`MISSING_INPUT` is not redundant here.** The table above leaves it to temis because a
+  decision's evaluation refuses a missing required input itself. A service's does not:
+  a missing value is read as null. Refusing it is the same question as refusing a null,
+  below, and stays with it.
+
+`TestAServiceRefusesAWronglyTypedInputLikeItsDecision` asserts the symmetry; it replaced
+the gap test that asserted the asymmetry until temis could close it.
 
 ## What this record does not decide
 
