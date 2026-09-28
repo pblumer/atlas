@@ -33,8 +33,8 @@ const (
 // Well-known roles. Roles are a free-form list on the user, not a single "admin"
 // bool, so richer RBAC can grow here without reshaping the record (ADR-0044).
 //
-// Four of them, and each route says which one it needs
-// (ADR-0209). They are a list, not a lattice: an account
+// Five of them — productmanager joined the first four with ADR-0315 — and each
+// route says which one it needs (ADR-0209). They are a list, not a lattice: an account
 // carries several, and the question asked at the boundary is only "does this
 // principal hold the role this route names". So a modeller who is also to start
 // test instances holds `modeler` *and* `operator` — deliberately, because the

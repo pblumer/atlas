@@ -165,17 +165,23 @@ test("the chapter is reachable from the table of contents", async ({ page }) => 
 
 // The accounts chapter is the one part of the handbook that documents something a
 // reader can lock themselves out with, so it is worth a test that it is there, that
-// it names all four roles, and that it says the two things an operator has to know
-// before switching the claim mapping on.
-test("the accounts chapter names the four roles and the cost of federating them", async ({ page }) => {
+// it names every role the server grants (api/routeroles.go: grantableRoles), and that
+// it says the two things an operator has to know before switching the claim mapping on.
+//
+// Every role, not "the four": the table said four for as long as productmanager
+// (ADR-0315) was missing from it. The role is looked for in the table's first column,
+// because a description may name another role — productmanager's says it is
+// deliberately not modeler — and a match there would be a second element, not a row.
+test("the accounts chapter names every role and the cost of federating them", async ({ page }) => {
   const calls = [];
   installMock(page, calls);
   await page.goto("/handbuch.html");
   await expect(page.locator('#toc a[href="#konten"]')).toBeVisible();
 
   const chapter = page.locator("#konten");
-  for (const role of ["admin", "modeler", "operator", "user"]) {
-    await expect(chapter.locator("table code", { hasText: new RegExp(`^${role}$`) })).toBeVisible();
+  const roles = chapter.locator("table").first().locator("td:first-child code");
+  for (const role of ["admin", "modeler", "operator", "user", "productmanager"]) {
+    await expect(roles.filter({ hasText: new RegExp(`^${role}$`) })).toBeVisible();
   }
   // Both languages, because a chapter that exists in one is half a chapter.
   for (const [lang, text] of [
