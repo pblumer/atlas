@@ -49,6 +49,9 @@ func TestWhatSomebodyHoldsIsFiledUnderTheHeadingTheyOrderedItUnder(t *testing.T)
 	// bare search for the field also matches the label. Blind it out, or the guard
 	// can never go green.
 	view = strings.ReplaceAll(view, "t('col.category')", "t(<the column head>)")
+	// The same for the page's own selection: the heading chosen is state.category,
+	// shared with the catalogue, and reading it is not reading a product's field.
+	view = strings.ReplaceAll(view, "state.category", "state.<the heading chosen>")
 	for _, field := range []string{".category", ".productGroup"} {
 		if strings.Contains(view, field) {
 			t.Errorf("the services view still reads %s itself; the heading of a held "+

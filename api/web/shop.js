@@ -1000,11 +1000,6 @@ const state = {
   // and moves right as somebody chooses — which is the order a cascade is read in
   // anyway. Choosing in a column advances it; the stepper's back button retreats.
   step: 0,
-  // held is where the cascade of what somebody holds stands, kept apart from the
-  // catalogue's: the two screens are read for different reasons, and choosing a
-  // heading in one should not move the other. Same shape and same meanings as the
-  // four fields above.
-  heldAt: { heading: null, group: null, offering: '', step: 0 },
   // basket is every item id chosen so far, across products. It is the whole
   // reason this is a two-step order now: the previous page ordered the moment a
   // card's button was pressed, so two bundles were two orders, two approvals and
@@ -3522,8 +3517,21 @@ function renderServices() {
   const productOf = (id) => ownerOf(id) || rootOf(rel, id);
   const offerings = [...new Set([...held, ...services.map(productOf)])];
 
-  const where = state.heldAt;
-  const choose = (next) => { Object.assign(where, next); state.info = ''; render(); };
+  // The same position the catalogue stands at — category, group, product and the
+  // column a narrow screen shows — so a heading chosen in one screen is the heading
+  // the other opens on, and somebody switching between "what can I order" and
+  // "what do I have" keeps their place.
+  const where = {
+    heading: state.category, group: state.group, offering: state.offering, step: state.step,
+  };
+  const choose = (next) => {
+    if ('heading' in next) state.category = next.heading;
+    if ('group' in next) state.group = next.group;
+    if ('offering' in next) state.offering = next.offering;
+    if ('step' in next) state.step = next.step;
+    state.info = '';
+    render();
+  };
   const inCat = offerings.filter((id) => where.heading === null || filedUnder(by[id], 'category') === where.heading);
   const inGroup = inCat.filter((id) => where.group === null || filedUnder(by[id], 'productGroup') === where.group);
   const sortByName = (list) => [...list].sort((a, b) =>

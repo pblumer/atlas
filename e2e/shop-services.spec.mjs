@@ -109,3 +109,24 @@ test("my services are a cascade, read like the catalogue", async ({ page }) => {
   expect(await column(page, 4)).toEqual(["Apple iPhone hardware", "Smartphone case"]);
   expect(await page.evaluate(() => window.__unmatched)).toEqual([]);
 });
+
+// One selection for both screens: a heading chosen in "My services" is the heading
+// the catalogue opens on, and back again, so switching between "what can I order"
+// and "what do I have" keeps somebody's place.
+test("the catalogue and my services share where the cascade stands", async ({ page }) => {
+  await openServices(page);
+  await page.getByRole("button", { name: "Identity", exact: true }).click();
+  await page.getByRole("button", { name: "Personal account", exact: true }).click();
+
+  await page.getByRole("button", { name: "Catalogue", exact: true }).click();
+  await page.waitForSelector(".cascade");
+  await expect(page.locator(".cascade > .col:nth-child(1) .label.on")).toHaveText("Identity");
+  await expect(page.locator(".cascade > .col:nth-child(2) .label.on")).toHaveText("Personal account");
+  expect(await column(page, 3)).toEqual(["Internal user account"]);
+
+  // And the other way: a product chosen in the catalogue is the one whose services
+  // "My services" shows.
+  await page.getByRole("button", { name: "Internal user account", exact: true }).click();
+  await page.getByRole("button", { name: "My services", exact: true }).click();
+  expect(await column(page, 4)).toEqual(["Internal account (U)"]);
+});
