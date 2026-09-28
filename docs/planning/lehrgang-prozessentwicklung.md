@@ -88,7 +88,7 @@ sagen und die Übungsumgebung entsprechend ausstatten.
 | PR | Inhalt | Stand |
 |---|---|---|
 | 1 | Grundlagen und Nebenbefunde: dieser Plan, Beobachtungsmaterial; Beispielzahlen an den Katalog gebunden (`examples/handbookcounts_test.go`); Apps- und Rollenangaben im Handbuch nachgeführt (Rolle `productmanager`); ISDS-Konzept 5.2.3 und R-04 auf das Rollenmodell nachgeführt | in Arbeit |
-| 2 | Testen als Code: Szenarien, Erwartungen, Regeln, Baseline, Vergleich, `atlas playground` in CI — Erweiterung «Testen & Simulieren» | offen |
+| 2 | Testen als Code: Szenarien, Erwartungen, Regeln, Baseline, Vergleich, `atlas playground` in CI — Erweiterung «Testen & Simulieren» (Anker `#szenarien`); Flag-Tabelle und Exit-Code durch `cmd/atlas/playgroundhandbook_test.go` an den Code gebunden | in Arbeit |
 | 3 | Ausliefern: Applikation, Release, Deployment-Ziele, API-Tokens, Promotion, Quellbaum — neues Kapitel, nur Mechanik | offen |
 | 4 | Weiterentwickeln: Versionen, Migration inkl. Fork, Deaktivieren, DMN-Deployment — neues Kapitel | offen |
 | 5 | Eigener Worker über die Job-API, Zustellgarantie, Idempotenz — Erweiterung «Formulare & Worker» | offen |
@@ -144,3 +144,9 @@ dient die Ausgangsmessung der Beobachtungssitzung.
   deshalb nicht angepasst; eine vollständige Durchsicht des Dokuments wird empfohlen.
 - `docs/compliance/zugriffsschutz-konzept.md`, Massnahme M9, nennt vier Rollen. Das ist
   der Stand zum Zeitpunkt der Massnahme und wurde als Aufzeichnung nicht verändert.
+- **Playground-Regel ohne Treffer gilt als erfüllt.** Eine Regel, deren `when` keinen
+  Fall auswählt (etwa wegen eines Tippfehlers), besteht; das Urteil vermerkt nur «no case
+  of N matched», und `atlas playground` endet mit Exit-Code 0. ADR-0215 hat das bewusst
+  so entschieden. Für den Lehrgang ist es ein Lernpunkt («jede Regel einmal rot sehen»);
+  ob eine Regel zusätzlich eine Mindestzahl an Treffern verlangen können soll, wäre eine
+  Produktfrage.
