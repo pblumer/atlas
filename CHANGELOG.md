@@ -853,9 +853,10 @@ _Changed_ / _Removed_ for each version.
   decisions, nothing else from the graph behind it.
 
   Two things are worth knowing. A service evaluation records its inputs and outputs but
-  no trace, because the engine offers none for a service. And the editor still cannot
-  *draw* a decision service — a model that has one comes from the temis Modeler, from
-  Camunda, or from hand-written XML.
+  no trace, because the engine offers none for a service. And when this landed the
+  editor could not yet *draw* a decision service, so a model that had one came from the
+  temis Modeler, from Camunda, or from hand-written XML; it can now (see *The decision
+  editor draws decision services* below).
 - **An incompatibility can be declared on the screen that declares everything else
   about a catalogue.** A product may exclude another — the clerk who may create a
   supplier must not also approve payments to it — and the record has carried that
@@ -2359,6 +2360,56 @@ _Changed_ / _Removed_ for each version.
   on the target box.
   ([ADR-0351](docs/adr/0351-an-enumeration-says-which-values-a-member-may-take.md),
   [ADR-0306](docs/adr/0306-a-lifecycle-may-take-its-states-from-an-enumeration.md))
+
+- **A self-service catalogue: people order from it, an approval decides, and an inventory
+  records what they hold.** Atlas had no catalogue to order from and no record of what
+  anybody had been given. Three models now carry it, kept apart because they diverge the
+  moment somebody orders
+  ([ADR-0312](docs/adr/0312-portal-catalogue-order-inventory.md)). A **catalogue** is
+  design-time and versioned: products with their variants, an approval rule, the processes
+  that provision and deprovision them, and what contains and requires what. Publishing
+  checks it and freezes a **release**, or answers **422** with every problem at once. An
+  **order** (`/api/v1/orders`) is placed against one frozen release, and a line that needs
+  approval goes through one of three shipped approval processes — a named person, a group,
+  or the orderer's superior. A provisioned line becomes an **entitlement** held by its
+  recipient: engine state of its own rather than a variable of the order, so retention
+  cannot delete the evidence that somebody holds a privilege. `GET /api/v1/inventory`
+  reads it.
+
+  People order in what is now the **shop** (`/shop.html`, in the app menu; it arrived as
+  the portal, and the rename is under *Changed*). It shows the one catalogue a person's
+  groups reach — a catalogue's rank decides when several do — in that catalogue's own
+  theme ([ADR-0316](docs/adr/0316-portal-theme-per-catalogue.md)). An approval is an
+  ordinary user task and is decided in the Tasks inbox. A catalogue is maintained on the
+  **Catalogue** screen (`#/catalog`) by the new `productmanager` role together with
+  editor rights on that catalogue; the role is grantable like the other roles, and **no
+  upgrade grants it**
+  ([ADR-0315](docs/adr/0315-portal-roles-and-responsibilities.md)). Changing who
+  maintains a catalogue is its owner's or an administrator's decision. The many entries
+  about the catalogue, the shop, orders and the inventory elsewhere in this section are
+  what was built on this.
+
+- **A user task's assignee and candidate groups may be expressions.** Both attributes
+  were read as literal text, so a value beginning with `=` addressed a user or a group of
+  that literal name — nobody. A leading `=` now makes it FEEL, evaluated when the task
+  activates and frozen onto the job, so recovery replays the answer rather than
+  evaluating it again. An expression that does not compile refuses the deployment; one
+  whose result is empty or not a string parks the element with an incident, and resolving
+  it re-runs the activation. It never creates a task addressed to nobody
+  ([ADR-0318](docs/adr/0318-user-task-assignment-expressions.md)).
+
+- **The decision editor draws decision services.** A decision service — DMN's interface
+  over part of a decision graph, naming what it returns and what it works out internally
+  — could sit in a model Atlas deployed, but the editor had no shape for one: a model
+  carrying one came from the temis Modeler, from Camunda or from hand-written XML. The
+  vendored editor is now built from a fork of dmn-js that draws it, as a box with a
+  divider line: what the service returns above, what it works out internally below.
+  Dragging the divider moves a decision from one side to the other, one undo restores
+  exactly the membership that was there, and both the membership and the divider survive
+  a save and a reopen. Calling a service from a business rule task, folding one away and
+  laying one out are entries of their own in this section, and so are the defects that
+  drawing them on real models turned up.
+
 - **A write arrow can set several members of a data object at once.** A step that
   captures a form's worth of fields writes them from one arrow with a row per field,
   rather than one arrow per field. BPMN always allowed this — a data association carries
@@ -2972,6 +3023,14 @@ _Changed_ / _Removed_ for each version.
   this change what Atlas is? — and the usual answer is no, which moves the marker and
   writes nothing. What the marker buys is that it is asked by the person who knows the
   feature rather than by nobody.
+
+- **`/metrics` says whether workers are pulling, and how much work is parked.**
+  `atlas_jobs_activated_total` counts leases taken, so a queue nobody pulls from no longer
+  looks like one being worked through. `atlas_jobs_lease_timeouts_total` counts leases
+  that elapsed with no report — the only trace of a worker that took a job and vanished,
+  which the failure counter never sees. `atlas_open_incidents` is the number of tokens
+  parked on an unresolved incident, read from the stored incidents when `/metrics` is
+  scraped ([ADR-0142](docs/adr/0142-prometheus-metrics.md)).
 
 - **The information model can now be read off the processes instead of typed in beside
   them.** [ADR-0230](docs/adr/0230-process-information-model.md) and
@@ -3615,6 +3674,13 @@ _Changed_ / _Removed_ for each version.
   fourth place to go. At the end it reads as what it is: part of the corner that is
   about the reader rather than about what they are reading.
 
+- **A mail task may name a person or a group instead of an address.** A `to`, `cc` or
+  `bcc` entry without an `@` was handed to the mail server as it stood, to be rejected
+  there. It is now looked up in this server's directory when the mail is sent and
+  replaced by the address of the account it names, or of every member of the group it
+  names. An entry that matches nobody fails the job with a message naming it, instead of a
+  notification going quietly to nobody.
+
 - **The class canvas's palette is drawn in the notation now, not in Unicode.** Its marks
   were characters — `▭` for a business object, `▢` for a value type, `☰` for an
   enumeration, `◇` and `◆` for the two kinds of whole. That was a defensible trade when
@@ -3811,6 +3877,29 @@ _Changed_ / _Removed_ for each version.
   title serves every Worker Type: not wanting to read it is a statement about the
   section, not about Jira.
 
+- **A refused variable write now stops what comes next, instead of only saying so.**
+  The variable and collection budgets refuse a value past their ceiling and raise an
+  incident on the element that produced it. That was half a refusal: terminating an
+  element clears the incident it carries, so a site that refused a write and then let
+  its element finish left nothing behind at all — not the value, and not the report.
+  The run looked successful, and the only evidence was a variable that was not there.
+
+  Every site at which a model's or a worker's value becomes a variable now answers
+  what happens next, and each answer follows from that site's own semantics. A message
+  or signal catch does not complete, because its subscription is already correlated
+  and neither is delivered twice. A call activity does not resume without the result
+  it called for, because the child instance is already gone. An output mapping does
+  not let its activity finish having promoted nothing, and keeps the activity's local
+  scope — that is where the raw result the mapping reads still is, so resolving
+  re-evaluates over it. An input mapping stops the behaviour *before* it runs, rather
+  than handing a worker a job missing what the model promised it.
+
+  **Upgrade note:** an instance whose write is refused now stays where it is, with an
+  incident naming the variable and both sizes. Resolving it retries the write, so
+  correcting the data — or raising `ATLAS_LIMIT_VARIABLE` / `ATLAS_LIMIT_COLLECTION` —
+  lets it carry on. Before this, such an instance could complete as though nothing had
+  happened.
+
 ### Removed
 
 - **The two links on a portal order's position rows.** A position row offered "Wo
@@ -3821,9 +3910,10 @@ _Changed_ / _Removed_ for each version.
   position and correcting its details stay; they act on the position rather than
   look at a process.
 
-  `GET /api/v1/portal/orders/{id}/lines/{position}/progress` is unchanged. It is API
-  surface with callers that are not this page, and a screen that stopped drawing a
-  button for a route is not a reason to withdraw the route.
+  `GET /api/v1/shop/orders/{id}/lines/{position}/progress` is unchanged by this — it
+  was under `/api/v1/portal/…` when this was written, and moved with the rename under
+  *Changed*. It is API surface with callers that are not this page, and a screen that
+  stopped drawing a button for a route is not a reason to withdraw the route.
 
 - **The standalone approval page.** It existed because the Console is an operator's
   instrument and most approvers are not operators — right about the people, and wrong
@@ -5103,6 +5193,18 @@ _Changed_ / _Removed_ for each version.
   into a toolchain cache. The JavaScript half of that proof had therefore never run. It
   runs now, and a second guard reads the allowlist directly, so the rule no longer
   depends on where a host happens to keep its binaries.
+
+- **A DMN 1.5 model opens in the decision editor, with its diagram, and is saved back as
+  1.5.** A model in the DMN 1.5 namespace — what the temis Modeler and other current tools
+  write — deployed, evaluated and rendered in the read-only view, and the decision editor
+  refused it with "failed to parse document as <dmn:Definitions>", because it read every
+  model as DMN 1.3. It now takes the version from the document's own namespace, and the
+  diagram Atlas generates for a model — when it is opened, and on Auto-layout — is written
+  in that version's DMNDI namespace too, so the model opens with its layout. A model
+  opened as 1.5 is saved as 1.5, a 1.3 model stays 1.3, and a new decision still starts
+  as 1.3. A tool that reads diagrams Atlas generated can no longer assume the 1.3 DMNDI
+  namespace ([ADR-0379](docs/adr/0379-dmn-version-follows-the-document.md)).
+
 - **A knowledge model's expression opened unstyled.** dmn-js does not show a business
   knowledge model in the literal-expression view a decision's expression opens in. A
   knowledge model is a FEEL *function* — it has an expression language, formal parameters
@@ -5398,6 +5500,15 @@ _Changed_ / _Removed_ for each version.
   before until its next deploy — the information was never written down.
   ([issue #919](https://github.com/pblumer/atlas/issues/919))
 
+- **Renaming a class a data store holds no longer leaves the information model
+  unsaveable.** A store names its class by name, and the class diagram carried a rename
+  into the attributes typed with that class and into the lifecycles that borrow its
+  states, but not into the store. The store was left naming a class nothing declared, Save
+  was refused with `store-unknown-class`, and the way out was to rename the class back by
+  hand. A rename now reaches the store too. A delete cannot be followed that way, so
+  deleting a class a store holds now names that store before the delete is confirmed,
+  instead of the refusal arriving at the next save.
+
 - **Deleting a DMN reference now says what it would break.** The confirm read "Delete
   this DMN reference? The temis model itself is not affected" — true, and not the
   thing a reader needs. What a reference decides is not the file on disk; it is
@@ -5490,8 +5601,10 @@ _Changed_ / _Removed_ for each version.
   What scoping does not repair is that finding your own instance by elimination is still
   a guess when two callers start the same definition at once. Closing that means the
   start answering with the key it minted, which is a change to the engine's command path
-  rather than to a page, and is tracked in
-  [issue #933](https://github.com/pblumer/atlas/issues/933).
+  rather than to a page, and was tracked in
+  [issue #933](https://github.com/pblumer/atlas/issues/933). A start now does answer
+  with it, as `instanceKey` (see *An order in the shop says whom each position waits
+  for* above).
 - **PowerShell runs under `--script-sandbox=strict`, and a profile that cannot start an
   enabled interpreter refuses to boot.** The strict allowlist admitted the installed
   runtimes, the loader and trust files, and a private scratch directory — everything
@@ -5724,7 +5837,44 @@ _Changed_ / _Removed_ for each version.
   ([ADR-0301](docs/adr/0301-derive-the-model-from-the-processes.md),
   [ADR-0310](docs/adr/0310-read-the-difference-between-what-is-built-and-what-is-planned.md))
 
+- **A task folder judges every task in one listing against the same moment.** The
+  "overdue", "due within" and instance-age conditions called FEEL's `now()`, which reads
+  the clock again for every task, so a task on the edge of a window could fall on either
+  side of it depending on when the listing reached it. They now compare against `scanAt`,
+  the one instant the request is evaluated at. The expression a folder shows, and returns
+  as `feel`, reads `scanAt` where it read `now()`; a folder is stored as its conditions,
+  so nothing stored changes.
+
+- **A multi-instance loop records each round's result, not the collection so far.** Every
+  finished iteration wrote the whole output collection back, so round N recorded N
+  elements: the log grew with the square of the iteration count, and the variable
+  timeline kept every half-filled copy of the list. A round now records one
+  `VariableElementSet` event carrying its element and its index, and replay rebuilds the
+  list from those; eighty rounds of ~200-byte results write 165 KB of log instead of
+  821 KB ([ADR-0296](docs/adr/0296-a-loop-records-its-element.md)). Each element is
+  measured against `ATLAS_LIMIT_VARIABLE` as it is written, and parks its iteration with
+  an incident when it does not fit.
+
+  **Upgrade note:** logs and state written by 0.6.x are read unchanged, and loops already
+  running carry on. The new record is one-way: a 0.6.x build has no case for it and skips
+  it on replay, so do not roll back to 0.6.x while a loop with an output collection is
+  running.
+
 ### Security
+
+- **Completing, claiming or releasing a user task now requires holding it.**
+  `POST /api/v1/tasks/{key}/complete`, `/claim` and `/unclaim` asked only for the `user`
+  role, which every signed-in account has, and then acted on whatever task the key named
+  — and the task list hands out the keys. So any signed-in account could decide any open
+  task, an approval among them. A task the model addressed, by assignee or by candidate
+  groups, is now answered only by whoever holds it under the inbox's own rule; anybody
+  else gets **403**. Operators and administrators still act on every task, a task
+  addressed to nobody stays open work anybody may take, and with authentication off
+  nothing changes ([ADR-0317](docs/adr/0317-task-commands-are-an-object-question.md)).
+
+  **Upgrade note:** an integration that answers other people's tasks through an account
+  holding only the `user` role now gets 403. Give that account the `operator` role, or
+  let the addressed person act.
 
 - **Model-authored scripts no longer inherit Atlas credentials.** The supervised script
   worker starts from an explicit runtime allowlist, and each interpreter receives only
@@ -5981,29 +6131,6 @@ no stored format and no default changes; this one is worth checking your models 
   firing on two tokens from one branch now parks — a deadlocked join, visible in
   Operations and terminable, where before it continued silently. Worth a look at any
   model that forks and rejoins through an exclusive merge.
-
-- **A refused variable write now stops what comes next, instead of only saying so.**
-  The variable and collection budgets refuse a value past their ceiling and raise an
-  incident on the element that produced it. That was half a refusal: terminating an
-  element clears the incident it carries, so a site that refused a write and then let
-  its element finish left nothing behind at all — not the value, and not the report.
-  The run looked successful, and the only evidence was a variable that was not there.
-
-  Every site at which a model's or a worker's value becomes a variable now answers
-  what happens next, and each answer follows from that site's own semantics. A message
-  or signal catch does not complete, because its subscription is already correlated
-  and neither is delivered twice. A call activity does not resume without the result
-  it called for, because the child instance is already gone. An output mapping does
-  not let its activity finish having promoted nothing, and keeps the activity's local
-  scope — that is where the raw result the mapping reads still is, so resolving
-  re-evaluates over it. An input mapping stops the behaviour *before* it runs, rather
-  than handing a worker a job missing what the model promised it.
-
-  **Upgrade note:** an instance whose write is refused now stays where it is, with an
-  incident naming the variable and both sizes. Resolving it retries the write, so
-  correcting the data — or raising `ATLAS_LIMIT_VARIABLE` / `ATLAS_LIMIT_COLLECTION` —
-  lets it carry on. Before this, such an instance could complete as though nothing had
-  happened.
 
 - **The class canvas got its toolbox, and its boxes stopped overflowing.** Three
   things about the drawing were wrong on any model larger than the examples, and an
