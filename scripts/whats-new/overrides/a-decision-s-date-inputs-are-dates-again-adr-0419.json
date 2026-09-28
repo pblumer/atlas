@@ -1,0 +1,15 @@
+{
+  "tags": ["Decisions", "Engine"],
+  "title": {
+    "en": "A decision's date inputs are dates again",
+    "de": "Datums-Eingaben einer Decision sind wieder Datumswerte"
+  },
+  "summary": {
+    "en": "An element that declares typeRef=\"date\" was handed its value as a plain string, because JSON has no date and nothing between the two consulted the declaration. A decision table column typed date whose rule read `< date(\"2026-01-01\")` therefore matched nothing: the catch-all row answered, with no diagnostic, no trace entry and no error — a wrong answer that nothing downstream could tell from a right one, in the test panel and, through the same evaluation path, in a running business rule task. The fix is in the engine rather than here: temis now converts an input by the type the model declares, in ISO 8601 and nothing else (a locale-dependent spelling would mean guessing between 03.04.2026 and 04.03.2026), reports a string the type cannot be made from as a type mismatch instead of passing it through, and names a value by its FEEL type rather than its Go type. Nothing deployed here changes behaviour, and that was measured rather than assumed: across all 12 registered model handles and all 19 decisions on the running instance, every declared input type is string, number, or undeclared — not one date, time or duration.",
+    "de": "Ein Element mit typeRef=\"date\" bekam seinen Wert als schlichte Zeichenkette, weil JSON kein Datum kennt und nichts dazwischen die Deklaration gelesen hat. Eine als date typisierte Tabellenspalte, deren Regel `< date(\"2026-01-01\")` lautete, traf deshalb nie zu: Die Auffangzeile antwortete — ohne Diagnose, ohne Trace-Eintrag, ohne Fehler. Eine falsche Antwort, die nachgelagert von einer richtigen nicht zu unterscheiden war, im Testpanel wie über denselben Auswertungspfad in einem laufenden Business Rule Task. Der Fix liegt in der Engine und nicht hier: temis wandelt eine Eingabe jetzt nach dem im Modell deklarierten Typ um, ausschliesslich in ISO 8601 (eine gebietsabhängige Schreibweise hiesse, zwischen 03.04.2026 und 04.03.2026 zu raten), meldet eine Zeichenkette, aus der sich der Typ nicht bilden lässt, als Typkonflikt statt sie durchzureichen, und benennt einen Wert über seinen FEEL-Typ statt über seinen Go-Typ. An nichts Deploytem ändert sich das Verhalten, und das wurde gemessen statt angenommen: Über alle 12 registrierten Modell-Handles und alle 19 Decisions der laufenden Instanz ist jeder deklarierte Eingabetyp string, number oder gar nicht deklariert — kein einziges Datum, keine Zeit, keine Dauer."
+  },
+  "try": {
+    "label": { "en": "Open the Modeler", "de": "Modeler öffnen" },
+    "route": "#/modeler"
+  }
+}

@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The depth fixture.
+
+  roundtrip-kitchen-sink.dmn covers breadth: every notation element, so nothing is
+  lost when a model is rewritten. This one covers the other axis, and exists
+  because a whole family of checks passed against single-table models while being
+  blind to anything built on top of one (ADR-0419).
+
+  What it deliberately contains:
+
+    - four leaf inputs, one per type family that has ever behaved differently at
+      the Go/FEEL boundary: number, string, boolean and date;
+    - three decisions whose inputs are all DIRECT, one of each logic kind that
+      matters here (two tables, one literal expression);
+    - one decision, Gesamturteil, whose requirements are ONLY other decisions. It
+      declares no input of its own, so its own input schema is empty. A check
+      scoped to a decision's direct inputs sees nothing here and passes everything;
+    - a decision service over the whole of it, so the service boundary is exercised
+      with a composed output decision rather than a flat one;
+    - no DMNDI, so a reader of this model goes through diagram generation.
+
+  A model-facing check is not finished until it has been pointed at this file.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20230324/MODEL/"
+             id="defs_layered" name="Geschichtete Pruefung" namespace="http://atlas/dmn/layered">
+
+  <decisionService id="svc_pruefung" name="Pruefung">
+    <variable name="Pruefung" typeRef="string"/>
+    <outputDecision href="#dec_urteil"/>
+    <encapsulatedDecision href="#dec_tragbar"/>
+    <encapsulatedDecision href="#dec_treue"/>
+    <encapsulatedDecision href="#dec_risiko"/>
+    <inputData href="#in_betrag"/>
+    <inputData href="#in_seit"/>
+    <inputData href="#in_klasse"/>
+    <inputData href="#in_aktiv"/>
+  </decisionService>
+
+  <inputData id="in_betrag" name="antragBetrag"><variable name="antragBetrag" typeRef="number"/></inputData>
+  <inputData id="in_seit" name="kundeSeit"><variable name="kundeSeit" typeRef="date"/></inputData>
+  <inputData id="in_klasse" name="risikoKlasse"><variable name="risikoKlasse" typeRef="string"/></inputData>
+  <inputData id="in_aktiv" name="aktiv"><variable name="aktiv" typeRef="boolean"/></inputData>
+
+  <decision id="dec_tragbar" name="Tragbar">
+    <variable name="tragbar" typeRef="boolean"/>
+    <informationRequirement id="ir_tra"><requiredInput href="#in_betrag"/></informationRequirement>
+    <decisionTable id="dt_tragbar" hitPolicy="FIRST">
+      <input id="i_tra"><inputExpression id="ie_tra" typeRef="number"><text>antragBetrag</text></inputExpression></input>
+      <output id="o_tra" name="tragbar" typeRef="boolean"/>
+      <rule id="r_tra_1"><inputEntry id="e_tra_1"><text>&lt;= 50000</text></inputEntry><outputEntry id="x_tra_1"><text>true</text></outputEntry></rule>
+      <rule id="r_tra_2"><inputEntry id="e_tra_2"><text>-</text></inputEntry><outputEntry id="x_tra_2"><text>false</text></outputEntry></rule>
+    </decisionTable>
+  </decision>
+
+  <decision id="dec_treue" name="Treue">
+    <variable name="treu" typeRef="boolean"/>
+    <informationRequirement id="ir_tre"><requiredInput href="#in_seit"/></informationRequirement>
+    <literalExpression id="le_treue" typeRef="boolean"><text>kundeSeit &lt; date("2020-01-01")</text></literalExpression>
+  </decision>
+
+  <decision id="dec_risiko" name="Risiko">
+    <variable name="risiko" typeRef="string"/>
+    <informationRequirement id="ir_ris_1"><requiredInput href="#in_klasse"/></informationRequirement>
+    <informationRequirement id="ir_ris_2"><requiredInput href="#in_aktiv"/></informationRequirement>
+    <decisionTable id="dt_risiko" hitPolicy="FIRST">
+      <input id="i_ris_1"><inputExpression id="ie_ris_1" typeRef="string"><text>risikoKlasse</text></inputExpression></input>
+      <input id="i_ris_2"><inputExpression id="ie_ris_2" typeRef="boolean"><text>aktiv</text></inputExpression></input>
+      <output id="o_ris" name="risiko" typeRef="string"/>
+      <rule id="r_ris_1"><inputEntry id="e_ris_1a"><text>"A"</text></inputEntry><inputEntry id="e_ris_1b"><text>true</text></inputEntry><outputEntry id="x_ris_1"><text>"tief"</text></outputEntry></rule>
+      <rule id="r_ris_2"><inputEntry id="e_ris_2a"><text>"A"</text></inputEntry><inputEntry id="e_ris_2b"><text>-</text></inputEntry><outputEntry id="x_ris_2"><text>"mittel"</text></outputEntry></rule>
+      <rule id="r_ris_3"><inputEntry id="e_ris_3a"><text>-</text></inputEntry><inputEntry id="e_ris_3b"><text>-</text></inputEntry><outputEntry id="x_ris_3"><text>"hoch"</text></outputEntry></rule>
+    </decisionTable>
+  </decision>
+
+  <decision id="dec_urteil" name="Gesamturteil">
+    <variable name="urteil" typeRef="string"/>
+    <informationRequirement id="ir_urt_1"><requiredDecision href="#dec_tragbar"/></informationRequirement>
+    <informationRequirement id="ir_urt_2"><requiredDecision href="#dec_treue"/></informationRequirement>
+    <informationRequirement id="ir_urt_3"><requiredDecision href="#dec_risiko"/></informationRequirement>
+    <decisionTable id="dt_urteil" hitPolicy="FIRST">
+      <input id="i_urt_1"><inputExpression id="ie_urt_1" typeRef="boolean"><text>tragbar</text></inputExpression></input>
+      <input id="i_urt_2"><inputExpression id="ie_urt_2" typeRef="boolean"><text>treu</text></inputExpression></input>
+      <input id="i_urt_3"><inputExpression id="ie_urt_3" typeRef="string"><text>risiko</text></inputExpression></input>
+      <output id="o_urt" name="urteil" typeRef="string"/>
+      <rule id="r_urt_1"><inputEntry id="e_urt_1a"><text>false</text></inputEntry><inputEntry id="e_urt_1b"><text>-</text></inputEntry><inputEntry id="e_urt_1c"><text>-</text></inputEntry><outputEntry id="x_urt_1"><text>"abgelehnt"</text></outputEntry></rule>
+      <rule id="r_urt_2"><inputEntry id="e_urt_2a"><text>true</text></inputEntry><inputEntry id="e_urt_2b"><text>true</text></inputEntry><inputEntry id="e_urt_2c"><text>"tief"</text></inputEntry><outputEntry id="x_urt_2"><text>"bewilligt"</text></outputEntry></rule>
+      <rule id="r_urt_3"><inputEntry id="e_urt_3a"><text>true</text></inputEntry><inputEntry id="e_urt_3b"><text>-</text></inputEntry><inputEntry id="e_urt_3c"><text>"hoch"</text></inputEntry><outputEntry id="x_urt_3"><text>"abgelehnt"</text></outputEntry></rule>
+      <rule id="r_urt_4"><inputEntry id="e_urt_4a"><text>-</text></inputEntry><inputEntry id="e_urt_4b"><text>-</text></inputEntry><inputEntry id="e_urt_4c"><text>-</text></inputEntry><outputEntry id="x_urt_4"><text>"manuelle Pruefung"</text></outputEntry></rule>
+    </decisionTable>
+  </decision>
+</definitions>

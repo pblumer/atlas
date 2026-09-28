@@ -12,6 +12,94 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A declared type now reaches a decision built on other decisions (ADR-0419).** The
+  engine converted an input by what the decision being evaluated declares *itself*.
+  For a decision whose requirements are other decisions — the shape a well-factored
+  model has at the top, and where a business rule task usually points — that is
+  nothing at all, so nothing was converted. A `date` reached the decision that
+  declares it as the text it was sent as, the comparison was null, and a decision
+  table cannot tell null from false. The same sub-decision evaluated on its own was
+  right, which is what made it so hard to see: the wrong answer appeared levels above
+  its cause, with no diagnostic and no trace entry.
+
+  Carried by the engine bump. A decision service inherited the correction, because
+  its working set is built from its output decisions — and that set was empty for
+  exactly the services that encapsulate something.
+
+  Not everything moved: a service converts its inputs now but still does not refuse a
+  wrongly-typed one, because the engine publishes no input schema for a service. The
+  same value is refused when a task names the decision and answered silently when it
+  names the service over it. That is asserted rather than left to be rediscovered.
+
+- **Deploying one decision now versions its decision service too.** The Deploy button
+  in the decision editor — and the single-decision deploy behind it — recorded a
+  version for each decision in the model but none for the decision service over them.
+  Nothing broke at runtime, because a service is resolved either way and the new model
+  evaluated correctly; what broke was every surface built on the deployment record. The
+  version list, the editor's deployed-version chip and the answer to "which version is
+  this task pinned to" all went on naming a superseded version, with nothing to suggest
+  they were wrong. Publishing the whole application always did it correctly, so a model
+  deployed both ways told two different stories.
+
+### Changed
+
+- **A business rule task refuses a wrongly-typed input instead of answering wrongly
+  (ADR-0419).** A variable of the wrong type is not an error in FEEL. A `"500"` where the
+  model declares `number` made every comparison against it null, so no rule matched, the
+  catch-all row answered, and the token carried on with a plausible wrong result. Nothing
+  downstream could tell it from a right one: no diagnostic, no trace entry, no incident —
+  only a process that went the other way.
+
+  Now the evaluation is refused before it runs. The job fails, its retries run out, and
+  the incident carries the mismatch, naming every wrongly-typed input rather than only
+  the first. Retry behaviour is unchanged.
+
+  The check covers the inputs a task actually sends — the leaf inputs of the decision's
+  whole requirements graph, not just the ones it declares directly. That matters for any
+  model with a top decision built on other decisions: such a decision declares no inputs
+  of its own, so a narrower check would pass every value it is sent without looking at
+  one, which is exactly where a business rule task usually points.
+
+  Only a type mismatch is refused. An input the decision does not declare is still
+  ignored, because a task's io-mapping may legitimately carry a row the decision never
+  reads; a missing required input is still refused by the engine itself, with a better
+  message; and an out-of-range value is a question for its own record.
+
+  **Nothing here changes behaviour, and that was measured rather than assumed.** Every
+  retained evaluation of every deployed decision — 495 across 11 decisions — was run
+  through the same check: not one value contradicts its declared type, so not one would
+  have been refused. The measurement also confirmed the narrow scope: one decision is
+  supplied two inputs its model does not declare, and both of its evaluations would have
+  failed had an undeclared input been refused too.
+
+  For an installation that does have such a mapping, this is still a behaviour change on
+  processes already running: the task stops instead of passing a wrong value on, all at
+  once, at upgrade. Two cases stay uncovered — a decision **service**, because the engine
+  publishes no input schema for one yet, and a `null` where a type is declared, which is
+  a question about an absent variable rather than a wrongly typed one.
+
+### Fixed
+
+- **A decision's date inputs are dates again (ADR-0419).** A DMN element that declares
+  `typeRef="date"` was handed its value as a plain string, because JSON has no date and
+  nothing between the two consulted the declaration. A decision table column typed
+  `date` whose rule read `< date("2026-01-01")` therefore matched nothing: the catch-all
+  row answered, with no diagnostic, no trace entry and no error. A wrong answer that
+  nothing downstream could tell from a right one — in the test panel and, through the
+  same evaluation path, in a running business rule task.
+
+  The fix is in the engine, not here: temis now converts an input by the type the model
+  declares (ISO 8601 and nothing else — a locale-dependent spelling would mean guessing
+  between 03.04.2026 and 04.03.2026), reports a string the type cannot be made from as a
+  type mismatch instead of passing it through, and names a FEEL value by its FEEL type
+  rather than its Go type. Atlas carries it by the module bump.
+
+  **Nothing deployed here changes behaviour, and that was measured rather than assumed:**
+  across all 12 registered model handles and all 19 decisions on the running instance,
+  every declared input type is `string`, `number`, or undeclared — not one temporal type.
+
 ### Added
 
 - **A deployment target can name a second credential, for reading the peer rather than
