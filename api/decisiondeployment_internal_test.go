@@ -78,7 +78,7 @@ func eligibilityProcess(processID, binding string) string {
 
 // eligibilityProcessAt is eligibilityProcess bound to one deployed version of the
 // decision with atlas:version, rather than to latest
-// (ADR-draft-a-business-rule-task-chooses-its-decision-version).
+// (ADR-0423).
 func eligibilityProcessAt(processID string, version int) string {
 	return `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0">
   <process id="` + processID + `" isExecutable="true">
@@ -331,7 +331,7 @@ func TestDecisionOnlyApplicationSurvivesRestart(t *testing.T) {
 
 // TestLatestFollowsTheNewestVersionWhenTheTaskRuns is the binding the product owner
 // chose on 2026-09-28, end to end and across a restart
-// (ADR-draft-a-business-rule-task-chooses-its-decision-version):
+// (ADR-0423):
 //
 //	publish eligibility v1 → deploy A (latest), C (version 1) → A, C see v1
 //	publish eligibility v2 → A, again                         → A sees v2

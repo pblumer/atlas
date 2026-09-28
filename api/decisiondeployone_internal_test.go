@@ -171,7 +171,7 @@ func TestDeployingTheSameDecisionAgainVersionsIt(t *testing.T) {
 
 	// Latest is the newest version when the task runs, so a process deployed before
 	// follows the new version as one deployed after does
-	// (ADR-draft-a-business-rule-task-chooses-its-decision-version).
+	// (ADR-0423).
 	if got := runAndReadVerdict(t, x, procA, "proc-a"); got != "vip" {
 		t.Fatalf("A after v2 was deployed: verdict = %q, want vip (the newest version)", got)
 	}

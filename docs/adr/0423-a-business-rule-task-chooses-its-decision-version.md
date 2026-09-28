@@ -1,4 +1,4 @@
-# ADR-DRAFT: A business rule task follows the newest decision when it runs, or the version it names
+# ADR-0423: A business rule task follows the newest decision when it runs, or the version it names
 
 - **Status:** Accepted
 - **Implementation:** Landed

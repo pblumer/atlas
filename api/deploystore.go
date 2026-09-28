@@ -82,7 +82,7 @@ type persistedDeployment struct {
 const bindingPinned = "pinned"
 
 // bindingRuntime is the [persistedDeployment.BindingPolicy] value of every
-// deployment written from ADR-draft-a-business-rule-task-chooses-its-decision-version on:
+// deployment written from ADR-0423 on:
 // its latest-bound tasks evaluate the newest decision deployment when the job is
 // worked, and DecisionBindings carries only the fixed versions its tasks name.
 const bindingRuntime = "runtime"

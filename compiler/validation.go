@@ -119,7 +119,7 @@ const (
 	// here. It used to be read as latest, so a model that pinned a tag ran whatever
 	// was newest. A deploy refuses it; a definition already deployed with one is
 	// brought back on reload and keeps the behaviour it had (ADR-0177,
-	// ADR-draft-a-business-rule-task-chooses-its-decision-version).
+	// ADR-0423).
 	RuleDecisionVersionTag = "decision.version-tag"
 )
 

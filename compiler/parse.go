@@ -3105,7 +3105,7 @@ type xmlCalledDecision struct {
 	// say it is not supported.
 	VersionTag string `xml:"versionTag,attr"`
 	// Version is atlas:version, the deployed version of the decision the task
-	// evaluates (ADR-draft-a-business-rule-task-chooses-its-decision-version). A Camunda engine
+	// evaluates (ADR-0423). A Camunda engine
 	// ignores the attribute and runs latest.
 	Version string `xml:"version,attr"`
 }

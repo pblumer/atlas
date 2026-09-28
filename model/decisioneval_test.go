@@ -107,7 +107,7 @@ func TestDecisionEvaluationDecodeErrors(t *testing.T) {
 
 // A record written before DecisionKey existed ends after TraceJSON. It must still
 // decode, reading the key as 0 — "not recorded" — rather than failing or inventing
-// one (ADR-draft-a-business-rule-task-chooses-its-decision-version).
+// one (ADR-0423).
 func TestADecisionEvaluationRecordedBeforeItsKeyStillDecodes(t *testing.T) {
 	v := &DecisionEvaluationValue{
 		ProcessInstanceKey: NewKey(1, 1),

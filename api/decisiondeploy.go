@@ -28,7 +28,7 @@ import (
 
 // resolveVersionPins resolves every fixed-version reference in a compiled process
 // to the decision deployment holding that version, before anything is written
-// (ADR-draft-a-business-rule-task-chooses-its-decision-version). A version that is not
+// (ADR-0423). A version that is not
 // deployed refuses the deploy and names what is: a task that names v4 of a decision
 // that stands at v3 must not deploy, and certainly must not run v3.
 //

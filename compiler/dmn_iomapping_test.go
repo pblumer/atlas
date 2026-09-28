@@ -153,7 +153,7 @@ func TestBusinessRuleTaskBinding(t *testing.T) {
 }
 
 // TestBusinessRuleTaskVersionBinding covers the two bindings
-// ADR-draft-a-business-rule-task-chooses-its-decision-version adds on the compiler side: a
+// ADR-0423 adds on the compiler side: a
 // fixed version (atlas:version), read onto the detail, and Camunda's versionTag, which
 // used to be read as latest and is now refused.
 func TestBusinessRuleTaskVersionBinding(t *testing.T) {

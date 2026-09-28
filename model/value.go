@@ -706,7 +706,7 @@ type DecisionEvaluationValue struct {
 	// DecisionKey is the deployment whose model answered: a decision deployment, or
 	// the process's own key for a bundled model. It is what makes the version that
 	// ran a fact in the log once latest is resolved when the job is worked
-	// (ADR-draft-a-business-rule-task-chooses-its-decision-version). An appended field: a
+	// (ADR-0423). An appended field: a
 	// record written before it ends after TraceJSON and reads 0, "not recorded".
 	DecisionKey uint64
 }

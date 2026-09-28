@@ -1029,7 +1029,7 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 	// Resolve every fixed decision version the model names before anything is
 	// written, so a version that is not deployed refuses the whole model instead of
 	// leaving the processes before it deployed
-	// (ADR-draft-a-business-rule-task-chooses-its-decision-version).
+	// (ADR-0423).
 	versionPins := make([]map[compiler.DecisionVersionRef]uint64, len(deployables))
 	for i := range deployables {
 		pins, err := s.resolveVersionPins(deployables[i].Process)
@@ -1063,7 +1063,7 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 
 		// Latest is settled when the job is worked, and the evaluation records the
 		// deployment that answered; a fixed version was resolved above
-		// (ADR-draft-a-business-rule-task-chooses-its-decision-version).
+		// (ADR-0423).
 		cp.ResolveLatestAtRuntime(versionPins[i])
 
 		if err := s.deploys.Save(persistedDeployment{
@@ -3726,7 +3726,7 @@ type decisionEvaluationView struct {
 	// DecisionKey and DecisionVersion say which deployment answered and which
 	// version of the decision that is — absent for an evaluation recorded before
 	// the key was, and the version absent for a model bundled with the process
-	// (ADR-draft-a-business-rule-task-chooses-its-decision-version).
+	// (ADR-0423).
 	DecisionKey     uint64 `json:"decisionKey,omitempty"`
 	DecisionVersion int32  `json:"decisionVersion,omitempty"`
 }

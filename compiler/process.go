@@ -391,7 +391,7 @@ const (
 	// BindingLatest evaluates the newest deployed version of the decision (the
 	// default, matching Camunda). It is zero so an unset binding means "latest".
 	// When "newest" is settled depends on the deployment's binding policy: when the
-	// job is worked for a definition deployed from ADR-draft-a-business-rule-task-chooses-its-decision-version
+	// job is worked for a definition deployed from ADR-0423
 	// on, at deploy time for one deployed under ADR-0319.
 	BindingLatest DecisionBinding = iota
 	// BindingDeployment evaluates the decision snapshotted with this process's own
@@ -399,7 +399,7 @@ const (
 	BindingDeployment
 	// BindingVersion evaluates the one deployed version of the decision the task
 	// names (atlas:version), resolved to its decision deployment when the process is
-	// deployed (ADR-draft-a-business-rule-task-chooses-its-decision-version).
+	// deployed (ADR-0423).
 	BindingVersion
 	// BindingVersionTag is Camunda's `versionTag` binding, which Atlas does not
 	// support: a version cannot carry a tag here. It is kept apart rather than read
@@ -1420,7 +1420,7 @@ type CompiledProcess struct {
 	decisionPins    map[string]uint64
 	decisionsPinned bool
 	// latestAtRuntime is the binding policy of a definition deployed from
-	// ADR-draft-a-business-rule-task-chooses-its-decision-version on: its latest-bound tasks
+	// ADR-0423 on: its latest-bound tasks
 	// evaluate the newest decision deployment when their job is worked, and nothing
 	// about them is pinned. versionPins is the decision deployment each
 	// version-bound reference resolved to at deploy time, under the same policy.
@@ -2190,7 +2190,7 @@ type DecisionVersionRef struct {
 // VersionBoundDecisions returns the distinct (decision, version) pairs this
 // process's local, version-bound business rule tasks name, in node order — the
 // references a deploy resolves to exact decision deployments
-// (ADR-draft-a-business-rule-task-chooses-its-decision-version).
+// (ADR-0423).
 func (p *CompiledProcess) VersionBoundDecisions() []DecisionVersionRef {
 	var out []DecisionVersionRef
 	seen := map[DecisionVersionRef]bool{}
@@ -2215,7 +2215,7 @@ func (p *CompiledProcess) VersionBoundDecisions() []DecisionVersionRef {
 // policy: its latest-bound tasks evaluate the newest decision deployment when the
 // job is worked, and pins records the decision deployment each version-bound
 // reference resolved to
-// (ADR-draft-a-business-rule-task-chooses-its-decision-version). Like PinDecisions it
+// (ADR-0423). Like PinDecisions it
 // mutates the compiled process and must be called before the processor sees it.
 func (p *CompiledProcess) ResolveLatestAtRuntime(pins map[DecisionVersionRef]uint64) {
 	p.latestAtRuntime = true

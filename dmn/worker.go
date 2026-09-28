@@ -201,7 +201,7 @@ func Handler(store state.Reader, lookup ProcessLookup, reg *Registry, sink func(
 //   - `latest` on a definition deployed under the runtime policy — the newest
 //     decision deployment of the decision *now*, when the job is worked, else the
 //     model bundled with the process
-//     (ADR-draft-a-business-rule-task-chooses-its-decision-version). The choice is made
+//     (ADR-0423). The choice is made
 //     once, here, and the key that answered is recorded with the evaluation: a
 //     replay applies the recorded completion and chooses nothing.
 //   - `latest` on a definition deployed under ADR-0319 — the key frozen at deploy.

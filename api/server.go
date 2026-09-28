@@ -217,7 +217,7 @@ type Server struct {
 	// decisionVersionKeys maps a decision id and version to the decision deployment
 	// holding it — what a fixed-version business rule task resolves to at deploy
 	// time, and how an evaluation's recorded key is read back as a version
-	// (ADR-draft-a-business-rule-task-chooses-its-decision-version). It follows the records
+	// (ADR-0423). It follows the records
 	// exactly as decisionVersions does.
 	decisionVersionKeys map[string]map[int32]uint64
 	// keySpace is the durable floor under nextKey: the highest definition key this

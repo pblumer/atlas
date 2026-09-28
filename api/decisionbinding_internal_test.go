@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// Tests for the bindings ADR-draft-a-business-rule-task-chooses-its-decision-version
+// Tests for the bindings ADR-0423
 // introduces, beyond latest following the newest version (decisiondeployment tests).
 
 // A task that names a version that is not deployed must not deploy — and the refusal

@@ -148,7 +148,7 @@ func (s *Server) definitionsPinnedTo(key uint64) []decisionPinRef {
 		}
 		// A fixed version is as pinned as a frozen latest: the task names exactly this
 		// deployment and nothing else will do
-		// (ADR-draft-a-business-rule-task-chooses-its-decision-version).
+		// (ADR-0423).
 		for _, ref := range d.cp.VersionBoundDecisions() {
 			if pinned, ok := d.cp.VersionPinnedKey(ref.DecisionID, ref.Version); ok && pinned == key {
 				out = append(out, decisionPinRef{
@@ -161,7 +161,7 @@ func (s *Server) definitionsPinnedTo(key uint64) []decisionPinRef {
 }
 
 // definitionsStrandedBy is the guard the runtime policy needs on top of the pins
-// (ADR-draft-a-business-rule-task-chooses-its-decision-version): which deployed
+// (ADR-0423): which deployed
 // definitions would be left with a latest-bound task that nothing can answer.
 //
 // Under that policy latest is the newest decision deployment when the job is

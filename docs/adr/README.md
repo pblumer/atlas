@@ -508,6 +508,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0420](0420-one-graph-model-several-projections.md) | One graph model, several projections, and a successor view built beside the starmap | Proposed | Not started |
 | [0421](0421-a-task-is-listed-to-whoever-it-was-addressed-to.md) | A task is listed to whoever it was addressed to | Accepted | Landed |
 | [0422](0422-who-decided-is-recorded.md) | Who decided is recorded, on the task, the order and the right | Accepted | Landed |
+| [0423](0423-a-business-rule-task-chooses-its-decision-version.md) | A business rule task follows the newest decision when it runs, or the version it names | Accepted | Landed |
 
 ## The two states of a record
 

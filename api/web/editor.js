@@ -536,7 +536,7 @@ function decCard(d, i) {
 }
 
 // decVersionChip names the deployed version that answered, when the evaluation
-// record carries it (ADR-draft-a-business-rule-task-chooses-its-decision-version): which
+// record carries it (ADR-0423): which
 // version ran is what latest decides when the task runs, and without it an operator
 // sees a table and cannot tell which one. An evaluation recorded before the key was
 // shows nothing rather than a guess; one answered by the model deployed with the
@@ -2860,7 +2860,7 @@ function upsertExt(modeler, element, type, props) {
 // calledDecisionVersion reads the atlas:version a business rule task's
 // zeebe:calledDecision names ("" when none). The attribute is Atlas's own, so bpmn-js
 // keeps it among the element's unknown attributes rather than as a property
-// (ADR-draft-a-business-rule-task-chooses-its-decision-version).
+// (ADR-0423).
 function calledDecisionVersion(cd) {
   if (!cd) return "";
   const v = typeof cd.get === "function" ? cd.get("atlas:version") : (cd.$attrs && cd.$attrs["atlas:version"]);
@@ -7009,7 +7009,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               <datalist id="dl-connector"></datalist></label>
               <p class="muted" id="nt-connector" style="font-size:12px"></p>`;
           }
-          // Three bindings (ADR-draft-a-business-rule-task-chooses-its-decision-version): the
+          // Three bindings (ADR-0423): the
           // newest version when the task runs, one deployed version the author picks
           // (atlas:version), or the model deployed with the process. A binding this
           // panel does not offer — Camunda's versionTag — is shown as it is and kept,

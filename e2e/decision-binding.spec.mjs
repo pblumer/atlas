@@ -1,5 +1,5 @@
 // End-to-end coverage for the business rule task's binding field (api/web/editor.js,
-// ADR-draft-a-business-rule-task-chooses-its-decision-version). Driven through the real
+// ADR-0423). Driven through the real
 // vendored bpmn-js and the real properties panel.
 //
 // The field used to offer two bindings and describe one of them wrongly: "Latest —
