@@ -149,6 +149,6 @@ dient die Ausgangsmessung der Beobachtungssitzung.
   of N matched», und `atlas playground` endet mit Exit-Code 0. ADR-0215 hat das bewusst
   so entschieden. Für den Lehrgang ist es ein Lernpunkt («jede Regel einmal rot sehen»).
   Vorschlag für eine Mindestzahl an Treffern je Regel, samt Meldung der Variablen, die kein
-  Fall trägt: ADR-draft-a-playground-rule-can-demand-the-cases-it-speaks-about
-  (`docs/adr/draft-a-playground-rule-can-demand-the-cases-it-speaks-about.md`, Status
+  Fall trägt: ADR-0424
+  (`docs/adr/0424-a-playground-rule-can-demand-the-cases-it-speaks-about.md`, Status
   «Proposed»). Modul M4 wird nach dem Entscheid darüber geschrieben.

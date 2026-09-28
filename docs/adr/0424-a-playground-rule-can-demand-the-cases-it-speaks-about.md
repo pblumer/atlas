@@ -1,4 +1,4 @@
-# ADR-DRAFT: A Playground rule can demand the cases it speaks about
+# ADR-0424: A Playground rule can demand the cases it speaks about
 
 - **Status:** Proposed
 - **Implementation:** Not started

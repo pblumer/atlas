@@ -509,6 +509,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0421](0421-a-task-is-listed-to-whoever-it-was-addressed-to.md) | A task is listed to whoever it was addressed to | Accepted | Landed |
 | [0422](0422-who-decided-is-recorded.md) | Who decided is recorded, on the task, the order and the right | Accepted | Landed |
 | [0423](0423-a-business-rule-task-chooses-its-decision-version.md) | A business rule task follows the newest decision when it runs, or the version it names | Accepted | Landed |
+| [0424](0424-a-playground-rule-can-demand-the-cases-it-speaks-about.md) | A Playground rule can demand the cases it speaks about | Proposed | Not started |
 
 ## The two states of a record
 
