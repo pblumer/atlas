@@ -165,6 +165,46 @@ are 'domain B holds 12 applications' answers nothing the target list does not"*.
 - Good: nothing new on the token.
 - Bad: data in a name; a global list that grows per department; disclosure by scope name.
 
+## What running two installations found (2026-09-23)
+
+The mechanism was built against unit tests, HTTP tests with an unauthenticated peer, and a
+browser test over a mocked payload. All of them passed, and two of this record's decisions were
+wrong in ways none of them could see. Both were found within minutes of pointing two real
+installations at each other, and both are fixed here.
+
+**The scope reached the landscape and not the descriptor.** The estate read is two steps: a peer
+is asked who it is before it is asked for a landscape, because the descriptor's feature list is
+the only thing that can tell a version boundary from a fault
+(ADR-0402 §3). This record's scope listed the
+two mesh routes and stopped there, so with authentication on — the default — a landscape
+credential answered `403` at the first step and every peer was drawn as *unreachable*. The
+scope now reaches `GET /api/v1/node` as well. It discloses nothing the narrower `status` scope
+does not already exist to hand a peer.
+
+**A reach that only subtracts filters an empty set.** The check sits above the granting branches
+so that it narrows an admin and a deploy agent alike, and that much was right. What was missed
+is that everything *below* those branches reads a sharing scope — an owner, a member, a group —
+and a credential has no account to be any of them with. So a landscape token minted the obvious
+way, with a reach naming one project, saw a landscape of **zero** nodes: the reach narrowed a
+set that was already empty. The estate drew that as a peer holding nothing, which is how an
+empty installation and a credential that grants nothing came to render identically.
+
+The reach therefore **grants as well as bounds**: inside it, and after the role branches so it
+can never raise what a role already gave, a credential with a stated reach is a viewer. That is
+what ADR-0402 §1's "one peer credential per administrative unit" means — the deploy agent above
+it has exactly this grant, wholesale, and the whole point of this record was to make it
+expressible per subject instead.
+
+Measured after the fix, against two installations: the same credential reads one application of
+the four its peer holds, an administrator there reads thirteen nodes, and the estate draws the
+domain at the size the credential could see rather than at the size it is.
+
+**What this did not fix, and is not this record's to fix.** A deployment target carries one
+credential reference and a token carries one scope, so a target configured for promotion cannot
+also be read at the estate altitude: a deploy token reaches neither the descriptor nor the mesh,
+and a landscape credential is refused the import route. Promoting and being read are two jobs,
+and today one reference has to do both. See ADR-0402's open question.
+
 ## Links
 
 - relates to [ADR-0402](0402-one-estate-several-nodes.md) §1 — the record that commissioned

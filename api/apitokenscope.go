@@ -142,6 +142,17 @@ var apiScopeAllowed = map[string][]string{
 	// The landscape is one read and its projection of the same picture. Nothing else
 	// belongs here: a peer asked for a starmap is not thereby asked for an instance.
 	apiScopeLandscape: {
+		// The descriptor, because the estate read is two steps and not one
+		// (ADR-0402 §3): a peer is asked who it is
+		// *before* it is asked for a landscape, so a version boundary can be told from a
+		// fault. Without this route a landscape credential fails at the first step and
+		// every peer is reported unreachable — which is what a real two-installation run
+		// found, and no test with an unauthenticated peer could.
+		//
+		// It adds nothing this scope did not already imply: the same descriptor is what
+		// the narrower `status` scope exists for, and it carries an id, a build and a
+		// feature list.
+		"GET /api/v1/node",
 		"GET /api/v1/panorama/mesh",
 		"GET /api/v1/panorama/mesh/archimate",
 	},

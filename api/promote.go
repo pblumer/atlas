@@ -81,6 +81,9 @@ func (s *Server) handleCreateTarget(w http.ResponseWriter, r *http.Request) {
 		BaseURL       string `json:"baseUrl"`
 		Kind          string `json:"kind"`
 		CredentialRef string `json:"credentialRef"`
+		// Optional, and empty means "the same credential for both jobs" — which is what
+		// every target configured before this says.
+		ReadCredentialRef string `json:"readCredentialRef"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -103,9 +106,10 @@ func (s *Server) handleCreateTarget(w http.ResponseWriter, r *http.Request) {
 	}
 	rec := deploymentTarget{
 		ID: id, Name: name, BaseURL: base,
-		Kind:          strings.TrimSpace(payload.Kind),
-		CredentialRef: strings.TrimSpace(payload.CredentialRef),
-		CreatedAt:     time.Now().Unix(),
+		Kind:              strings.TrimSpace(payload.Kind),
+		CredentialRef:     strings.TrimSpace(payload.CredentialRef),
+		ReadCredentialRef: strings.TrimSpace(payload.ReadCredentialRef),
+		CreatedAt:         time.Now().Unix(),
 	}
 	var saveErr error
 	// A target is a node on the Starmap, so the reading it was drawn from no longer

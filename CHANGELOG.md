@@ -77,6 +77,10 @@ credentials.
   log (`deployment.reloaded_with_problems`); redeploying it needs the expression fixed.
 - A process deployed before keeps resolving a decision's `latest` version when the task
   activates; redeploying it pins the version at deploy time.
+- A value past its variable or collection budget now parks its element with an incident
+  instead of letting it complete without the value. Resolving that incident does not write
+  the value again (issue #1123): raise `ATLAS_LIMIT_VARIABLE` or `ATLAS_LIMIT_COLLECTION`
+  before the work runs.
 - A model-authored script starts from an allowlisted environment, so a script that read a
   variable from the server's environment no longer sees it.
 - The state store's block cache now defaults to 64 MB and its write buffer to 16 MB
@@ -94,6 +98,25 @@ an incident; 0.6.0 parked it with a `VariableTooLarge` incident. Until that is f
 loop's collected output well below the limit, or raise the limit.
 
 ### Added
+
+- **A deployment target can name a second credential, for reading the peer rather than
+  publishing to it.** A target's credential does two jobs, and they need credentials that cannot
+  be the same one: publishing reaches the import route and nothing else — a deploy token is
+  deliberately the narrowest thing that can publish — while reading a peer needs its descriptor
+  and, at the estate altitude, its derived landscape, and a credential that reaches those is
+  refused the import route. A token carries one scope, so one reference could only ever do one
+  of the two. Measured against two installations rather than argued: a deploy token answers 401
+  at both read routes, and a landscape credential answers 403 at the import route.
+
+  The consequence was quiet and wrong: a target configured for promotion — which is what a
+  target is for — was drawn on the estate as *unreachable*, and the picture was honest about
+  knowing nothing while an operator could see the peer was plainly there.
+
+  A target now takes an optional `readCredentialRef` beside its `credentialRef`, and a read of
+  the peer presents it: the estate's fan-out, the landscape's target rows and the observation
+  projection. Leaving it empty means the two jobs share one credential, which is what every
+  target configured before this says, so nothing that exists moves. Both are handles into the
+  vault and neither is a secret, so naming two discloses no more than naming one.
 
 - **The decision picker tells a decision service's answer from its workings.** A
   service publishes output decisions and encapsulates the ones it evaluates on the way
@@ -285,6 +308,25 @@ loop's collected output well below the limit, or raise the limit.
   French page and deliver half of one. A reader whose browser is English, meeting a
   German-only catalogue, now gets a German page rather than English navigation beside
   German products.
+
+- **A credential minted for reading another Atlas can now actually read it.** Two installations
+  pointed at each other found two defects in the credential reach released with the estate, both
+  of which every test passed over.
+
+  A `landscape` credential reaches the peer's node descriptor as well as its starmap. The estate
+  read is two steps — a peer is asked who it is before it is asked for a landscape, because that
+  is the only way to tell a peer one version behind from a peer in trouble — and the scope
+  covered only the second step. With authentication on, which is the default, every peer was
+  drawn as unreachable.
+
+  And a stated reach now **grants** viewer inside itself, not only withholds everything outside
+  it. The reach was checked above the branches that grant, so it narrowed an administrator and a
+  deploy agent correctly; but everything below those branches reads a sharing scope, and a
+  credential has no account to be an owner or a member with. A token minted with a reach over one
+  application therefore saw a landscape of nothing at all — and the estate drew that as a peer
+  holding nothing, so an empty installation and a credential that grants nothing looked the same.
+  Measured after the fix: the same credential reads the one application its reach names, where an
+  administrator on that server reads four.
 
 - **The estate: one node per domain, and each one says how wide the credential that drew it
   was.** A new Panorama view beside the Starmap draws this installation and every configured
@@ -3971,15 +4013,19 @@ loop's collected output well below the limit, or raise the limit.
   and neither is delivered twice. A call activity does not resume without the result
   it called for, because the child instance is already gone. An output mapping does
   not let its activity finish having promoted nothing, and keeps the activity's local
-  scope — that is where the raw result the mapping reads still is, so resolving
-  re-evaluates over it. An input mapping stops the behaviour *before* it runs, rather
+  scope — that is where the raw result the mapping reads still is. An input mapping
+  stops the behaviour *before* it runs, rather
   than handing a worker a job missing what the model promised it.
 
   **Upgrade note:** an instance whose write is refused now stays where it is, with an
-  incident naming the variable and both sizes. Resolving it retries the write, so
-  correcting the data — or raising `ATLAS_LIMIT_VARIABLE` / `ATLAS_LIMIT_COLLECTION` —
-  lets it carry on. Before this, such an instance could complete as though nothing had
-  happened.
+  incident naming the variable and both sizes. Before this, such an instance could
+  complete as though nothing had happened. Resolving the incident does **not** retry the
+  write, whatever this entry said when it landed: nothing re-runs a refused write, so the
+  incident is deleted and the element stays where it stopped. That is measured for a
+  job's result and for a loop's round, and the other sites go through the same resume
+  path. Raise `ATLAS_LIMIT_VARIABLE` / `ATLAS_LIMIT_COLLECTION` before the work runs;
+  making resolve resume the element is
+  [issue #1123](https://github.com/pblumer/atlas/issues/1123).
 
 ### Removed
 
@@ -4015,6 +4061,14 @@ loop's collected output well below the limit, or raise the limit.
   names the catalogue in words instead. Information kept, presentation dropped.
 
 ### Fixed
+
+- **Giving a right back found the oldest order for the product, not the viewer's own.**
+  "Meine Leistungen" looked up the order line behind each held right by product id
+  alone. Orders arrive newest first and each later line overwrote the earlier one, so
+  the oldest order won — including one placed for somebody else, or one whose line was
+  cancelled or refused — and the give-back button disappeared from a right the viewer
+  held through a newer order. The line used now is the newest one that is still held and
+  whose order names the viewer as recipient, and a source guard holds both conditions.
 
 - **A declared type now reaches a decision built on other decisions (ADR-0419).** The
   engine converted an input by what the decision being evaluated declares *itself*.
