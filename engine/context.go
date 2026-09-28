@@ -429,11 +429,11 @@ func (c *ProcessingContext) appendCollection(intent model.Intent, v model.Variab
 // collection so far (ADR-0296).
 //
 // The collection's own ceiling is not checked here, because this write does not carry
-// the collection. What bounds it is that each element is checked against the variable
-// budget and the loop's iteration count is bounded (ADR-0276) — the product of the two
-// is the ceiling the collection actually has, and it is now the only one that can be
-// exceeded without anything noticing. Said plainly in the record rather than papered
-// over: this is the one guarantee the change gives up.
+// the collection. Its caller checks it: setListElement measures the list this element
+// produces before it records the element. ADR-0296 first left that out, trusting the
+// variable budget times the iteration bound to cap the list; nothing then refused a
+// list that outgrew its budget while it filled, and the promotion that did refuse it
+// dropped the whole collection without an incident (amended 2026-09-28).
 func (c *ProcessingContext) appendVariableElement(v model.VariableValue) bool {
 	v.ProducerKey = c.producer
 	cp, atRoot := c.processOfScope(v.ScopeKey)

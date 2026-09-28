@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Engine",
+    "Multi-instance"
+  ],
+  "title": {
+    "en": "A loop no longer loses its collected results without saying so",
+    "de": "Ein Loop verliert seine gesammelten Ergebnisse nicht mehr stillschweigend"
+  },
+  "summary": {
+    "en": "A multi-instance loop whose collected output grew past ATLAS_LIMIT_COLLECTION while it ran finished without the collection, and at the instance's root without an incident, so the process carried on as if the loop had produced nothing. The round that would take the collection past its budget now stops with an incident naming the collection and the size it would have reached, as it did in 0.6.0. Resolving that incident does not run the round again yet — it did not in 0.6.0 either — so the limit has to fit a loop before the loop runs.",
+    "de": "Ein Multi-Instance-Loop, dessen gesammelte Ausgabe während des Laufs über ATLAS_LIMIT_COLLECTION wuchs, wurde ohne die Sammlung abgeschlossen, auf oberster Ebene der Instanz sogar ohne Incident, und der Prozess lief weiter, als hätte der Loop nichts geliefert. Die Runde, welche die Sammlung über das Budget bringen würde, hält jetzt mit einem Incident an, der die Sammlung und die erreichte Grösse nennt, wie schon in 0.6.0. Das Auflösen dieses Incidents führt die Runde noch nicht erneut aus, auch in 0.6.0 nicht; das Limit muss deshalb zum Loop passen, bevor er läuft."
+  }
+}
