@@ -152,6 +152,9 @@ func (s *Server) handleDecideApprovals(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "encode decision: "+err.Error())
 		return
 	}
+	// The same completer the single completion writes, so a process reads who
+	// decided whichever button was pressed.
+	vars = withCompleter(r, vars)
 	decided := []decisionOutcome{}
 	for _, a := range held {
 		out := decisionOutcome{TaskKey: a.Task.Key, OrderID: a.OrderID, ItemID: a.ItemID}

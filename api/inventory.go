@@ -36,6 +36,9 @@ type heldItem struct {
 	// OrderID is empty for anything Atlas did not grant itself, which is the honest
 	// answer rather than an omission.
 	OrderID string `json:"orderId,omitempty"`
+	// ApprovedBy is who approved the order line that granted it, as a principal
+	// id, empty where no approval was recorded.
+	ApprovedBy string `json:"approvedBy,omitempty"`
 }
 
 // inventoryResp is one principal's inventory. The principal is echoed because the
@@ -87,7 +90,7 @@ func (s *Server) handleInventory(w http.ResponseWriter, r *http.Request) {
 		return rv.EntitlementsOf(principal, func(v *model.EntitlementValue) error {
 			items = append(items, heldItem{
 				ItemID: v.ItemID, VariantID: v.VariantID, Since: v.Since,
-				Origin: v.Origin.String(), OrderID: v.OrderID,
+				Origin: v.Origin.String(), OrderID: v.OrderID, ApprovedBy: v.ApprovedBy,
 			})
 			return nil
 		})

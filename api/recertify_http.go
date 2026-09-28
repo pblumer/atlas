@@ -51,9 +51,10 @@ func (s *Server) handleOpenRecertification(w http.ResponseWriter, r *http.Reques
 	now := at.Unix()
 
 	var (
-		in     recertifyInput
-		ran    bool
-		runErr error
+		in                 recertifyInput
+		ran                bool
+		runErr             error
+		reviewerGroupKnown bool
 	)
 	s.do(func() {
 		ran = true
@@ -72,6 +73,9 @@ func (s *Server) handleOpenRecertification(w http.ResponseWriter, r *http.Reques
 		for _, d := range open {
 			in.Disputes[disputeKey(d.Principal, d.ItemID)] = d
 		}
+		if name := strings.TrimSpace(msg.ReviewerGroup); name != "" {
+			in.ReviewerGroup, reviewerGroupKnown, runErr = s.resolveGroup(name)
+		}
 	})
 	if !ran {
 		httpapi.Error(w, http.StatusServiceUnavailable, "recertify: this server is shutting down")
@@ -79,6 +83,12 @@ func (s *Server) handleOpenRecertification(w http.ResponseWriter, r *http.Reques
 	}
 	if runErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "recertify: "+runErr.Error())
+		return
+	}
+	if strings.TrimSpace(msg.ReviewerGroup) != "" && !reviewerGroupKnown {
+		httpapi.Error(w, http.StatusBadRequest, fmt.Sprintf(
+			"reviewerGroup %q names no group this server knows; rows offered to it would reach "+
+				"nobody. Name an existing group by its name or id", msg.ReviewerGroup))
 		return
 	}
 
@@ -287,4 +297,14 @@ func recertifyReason(cmp recertifyCampaign) string {
 			"ids and how the people were named before reading this as an estate with nothing to "+
 			"certify", len(cmp.Items), len(cmp.Principals))
 	}
+}
+
+// resolveGroup finds a group by id or, failing that, by name, and returns its id.
+// Runs on the loop, where the group store is read.
+func (s *Server) resolveGroup(ref string) (string, bool, error) {
+	if g, ok, err := s.groups.Get(ref); err != nil || ok {
+		return g.ID, ok, err
+	}
+	g, ok, err := s.groups.byName(ref, "")
+	return g.ID, ok, err
 }

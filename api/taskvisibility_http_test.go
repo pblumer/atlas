@@ -63,12 +63,11 @@ func startTask(t *testing.T, ts *httptest.Server, c *http.Client, bpmn string) {
 	}
 }
 
-// The read half of the object axis. A task the model addressed to a group is
-// listed to that group's members and to operators and administrators, and to
-// nobody else: before this every signed-in account read the whole inbox, so an
-// approval offered to the integration managers was shown — with its order — to
-// every ordinary user who opened the Tasks app.
-func TestAGroupTaskIsShownOnlyToItsGroup(t *testing.T) {
+// intmgrServer is an authenticated server with the group intmgr and three signed-in
+// accounts: imke, a member; mallory, who is not; and otto, an operator. It returns
+// the administrator's client, each account's id and each account's client.
+func intmgrServer(t *testing.T) (*httptest.Server, *http.Client, map[string]string, map[string]*http.Client) {
+	t.Helper()
 	ts, _ := newAuthServer(t, "root", "rootpassword")
 	admin := newClient(t)
 	if login(t, admin, ts, "root", "rootpassword") != http.StatusOK {
@@ -116,6 +115,16 @@ func TestAGroupTaskIsShownOnlyToItsGroup(t *testing.T) {
 		}
 		clients[u] = c
 	}
+	return ts, admin, ids, clients
+}
+
+// The read half of the object axis. A task the model addressed to a group is
+// listed to that group's members and to operators and administrators, and to
+// nobody else: before this every signed-in account read the whole inbox, so an
+// approval offered to the integration managers was shown — with its order — to
+// every ordinary user who opened the Tasks app.
+func TestAGroupTaskIsShownOnlyToItsGroup(t *testing.T) {
+	ts, admin, _, clients := intmgrServer(t)
 
 	startTask(t, ts, admin, groupTaskBPMN)
 	startTask(t, ts, admin, openTaskBPMN)
@@ -171,5 +180,48 @@ func TestAGroupTaskIsShownOnlyToItsGroup(t *testing.T) {
 		if inInstance[groupKey] != tc.seesGroup {
 			t.Errorf("%s sees the group task by instance = %v, want %v", tc.who, inInstance[groupKey], tc.seesGroup)
 		}
+	}
+}
+
+// A completion names who completed it. A group task can otherwise only report the
+// group as its decider, and the value is the server's: a body that tries to name
+// somebody else is overruled.
+func TestACompletionNamesWhoCompletedIt(t *testing.T) {
+	ts, admin, ids, clients := intmgrServer(t)
+	startTask(t, ts, admin, groupTaskBPMN)
+	var key, inst uint64
+	for k := range taskKeysSeenBy(t, ts, clients["imke"], "") {
+		code, body := cReq(t, admin, ts, "GET", fmt.Sprintf("/api/v1/tasks/%d", k), "")
+		if code != http.StatusOK {
+			t.Fatalf("get %d: %d (%s)", k, code, body)
+		}
+		var tk struct {
+			ProcessInstanceKey uint64 `json:"processInstanceKey"`
+		}
+		if err := json.Unmarshal(body, &tk); err != nil {
+			t.Fatalf("decode task: %v", err)
+		}
+		key, inst = k, tk.ProcessInstanceKey
+	}
+	if key == 0 {
+		t.Fatal("imke is shown no task")
+	}
+	if code, b := cReq(t, clients["imke"], ts, "POST", fmt.Sprintf("/api/v1/tasks/%d/complete", key),
+		`{"variables":{"genehmigt":true,"completedBy":"`+ids["mallory"]+`"}}`); code != http.StatusOK {
+		t.Fatalf("imke complete: %d (%s)", code, b)
+	}
+	code, body := cReq(t, admin, ts, "GET", fmt.Sprintf("/api/v1/instances/%d/variables", inst), "")
+	if code != http.StatusOK {
+		t.Fatalf("read variables: %d (%s)", code, body)
+	}
+	var vars map[string]any
+	if err := json.Unmarshal(body, &vars); err != nil {
+		t.Fatalf("decode variables: %v (%s)", err, body)
+	}
+	if vars["completedBy"] != ids["imke"] {
+		t.Errorf("completedBy = %v, want imke's id %s", vars["completedBy"], ids["imke"])
+	}
+	if vars["genehmigt"] != true {
+		t.Errorf("the form's own answer was lost: genehmigt = %v", vars["genehmigt"])
 	}
 }

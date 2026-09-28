@@ -985,7 +985,7 @@ func (s *Service) recordInventory(o Order, ref string, status LineStatus) error 
 		}
 		return s.grant(Grant{
 			Principal: o.Recipient, ItemID: itemID, VariantID: variant,
-			OrderID: o.ID, At: o.UpdatedAt, Until: until,
+			OrderID: o.ID, At: o.UpdatedAt, Until: until, ApprovedBy: line.ApprovedBy,
 		})
 	case StatusReturned:
 		// The moment is the order's, not a fresh clock reading: it is the same
@@ -1003,15 +1003,21 @@ func (s *Service) recordInventory(o Order, ref string, status LineStatus) error 
 type decideReq struct {
 	By     string `json:"by"`
 	Reason string `json:"reason"`
+	// Approved records an approval instead of a refusal. Absent means a refusal,
+	// which is what every caller sent before approvals were recorded.
+	Approved bool `json:"approved"`
 }
 
-// HandleDecide records that an approver refused a line.
+// HandleDecide records an approver's decision on a line: a refusal, or with
+// "approved": true an approval.
 //
 // It exists because [Service.HandleReport] deliberately will not take a
 // rejection: that is a decision with an author, not a provisioning outcome, and
-// a second way in would make the author optional. Approving needs no call at all
-// — a line that was approved simply goes on to be provisioned, and its outcome
-// arrives through the ordinary report.
+// a second way in would make the author optional. An approval settles nothing —
+// the line goes on to be provisioned and its outcome arrives through the ordinary
+// report — so recording one only writes who approved and when ([Approve]), and
+// wakes nobody. It is optional for an approval process: one that does not call it
+// leaves the line without an approver on record, as every line was before.
 func (s *Service) HandleDecide(w http.ResponseWriter, r *http.Request) {
 	id, item := r.PathValue("id"), r.PathValue("item")
 
@@ -1040,7 +1046,12 @@ func (s *Service) HandleDecide(w http.ResponseWriter, r *http.Request) {
 			}
 			lineOK = true
 			var next Line
-			if next, decideErr = Reject(lines[i], req.By, s.now(), req.Reason); decideErr != nil {
+			if req.Approved {
+				next, decideErr = Approve(lines[i], req.By, s.now())
+			} else {
+				next, decideErr = Reject(lines[i], req.By, s.now(), req.Reason)
+			}
+			if decideErr != nil {
 				return
 			}
 			lines[i] = next
@@ -1063,6 +1074,9 @@ func (s *Service) HandleDecide(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusNotFound, "order "+id+" carries no line for "+item)
 	case decideErr != nil:
 		httpapi.Error(w, http.StatusBadRequest, decideErr.Error())
+	case req.Approved:
+		// An approval settles nothing, so nothing waiting on the line has moved.
+		httpapi.JSON(w, http.StatusOK, got)
 	default:
 		// A refusal settles a line exactly as a provisioning outcome does, so what
 		// waited on it has to be told.

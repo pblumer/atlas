@@ -5295,6 +5295,9 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// Who completed it travels with the answer (taskcompleter.go): a task offered to
+	// a group can otherwise only report the group as the one who decided.
+	vars = withCompleter(r, vars)
 	// Completing is deciding: it writes the form's answer into the instance and
 	// lets the process act on it. Who may (taskauthority.go) is asked before the
 	// processor is told anything.

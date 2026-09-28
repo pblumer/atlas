@@ -745,6 +745,49 @@ func TestRejectingALineThroughTheAPI(t *testing.T) {
 	}
 }
 
+// TestApprovingALineThroughTheAPI: an approval is recorded with its author and
+// leaves the line to be provisioned. A group approval could otherwise only say that
+// the line went on, and an access review asks who let it.
+func TestApprovingALineThroughTheAPI(t *testing.T) {
+	s := newService(t)
+	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
+		`{"releaseId":"rel_1","items":["workplace"]}`))
+	op := &httpapi.Principal{UserID: "usr_op", Roles: []string{"operator"}}
+
+	rec := do(t, s.HandleDecide, op, "POST",
+		`{"by":"usr_imke","approved":true}`, "id", placed.ID, "item", "laptop")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("approve = %d (%s), want 200", rec.Code, rec.Body)
+	}
+	got := decode[Order](t, do(t, s.HandleGet, someone("usr_1"), "GET", "", "id", placed.ID))
+	var laptop Line
+	for _, l := range got.Lines {
+		if l.ItemID == "laptop" {
+			laptop = l
+		}
+	}
+	if laptop.ApprovedBy != "usr_imke" || laptop.ApprovedAt == 0 {
+		t.Fatalf("approval = %q at %d, want usr_imke and a moment", laptop.ApprovedBy, laptop.ApprovedAt)
+	}
+	if laptop.Status != StatusPending && laptop.Status != StatusRunning {
+		t.Fatalf("laptop = %s after an approval, want it still on its way", laptop.Status)
+	}
+	if laptop.DecidedBy != "" {
+		t.Errorf("an approval wrote decidedBy = %q, which belongs to a refusal", laptop.DecidedBy)
+	}
+
+	// Once: a second approval would overwrite the author this exists to keep.
+	if rec := do(t, s.HandleDecide, op, "POST",
+		`{"by":"usr_other","approved":true}`, "id", placed.ID, "item", "laptop"); rec.Code != http.StatusBadRequest {
+		t.Errorf("second approval = %d, want 400", rec.Code)
+	}
+	// And never without an author.
+	if rec := do(t, s.HandleDecide, op, "POST",
+		`{"approved":true}`, "id", placed.ID, "item", "account"); rec.Code != http.StatusBadRequest {
+		t.Errorf("approval without by = %d, want 400", rec.Code)
+	}
+}
+
 // TestARejectionNeedsAnApproverAndAReason: the API cannot be a way around the
 // rule the transition holds.
 func TestARejectionNeedsAnApproverAndAReason(t *testing.T) {

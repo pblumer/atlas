@@ -229,6 +229,7 @@ func (t *Tx) EndEntitlement(principal, itemID string, endedAt int64,
 		Principal: held.Principal, ItemID: held.ItemID, VariantID: held.VariantID,
 		OrderID: held.OrderID, Since: held.Since, Until: held.Until,
 		Origin: held.Origin, EndedAt: endedAt, EndedReason: reason, EndedBy: endedBy,
+		ApprovedBy: held.ApprovedBy,
 	}
 	if err := t.b.Set(keyEntitlementHistory(principal, endedAt, itemID),
 		t.encodeValue(&row), nil); err != nil {
