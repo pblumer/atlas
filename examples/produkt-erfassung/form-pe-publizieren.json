@@ -4,7 +4,7 @@
   "components": [
     {
       "type": "text",
-      "text": "# Katalog publizieren?\n\nDas Produkt ist aktiv. Bestellbar wird es erst mit einer Freigabe des Katalogs — bis dahin liest das Portal die vorige.\n\nDie Freigabe prüft den **ganzen** Katalog, nicht nur dieses Produkt. Fehlt irgendwo ein gebundener Prozess, eine Übersetzung oder eine Beschreibung in einer deklarierten Sprache, antwortet sie mit der Liste der Gründe und dieser Prozess meldet einen Incident."
+      "text": "# Katalog publizieren?\n\nDas Produkt ist aktiv. Bestellbar wird es erst mit einer Freigabe des Katalogs — bis dahin liest der Shop die vorige.\n\nDie Freigabe prüft den **ganzen** Katalog, nicht nur dieses Produkt. Fehlt irgendwo ein gebundener Prozess, eine Übersetzung oder eine Beschreibung in einer deklarierten Sprache, antwortet sie mit der Liste der Gründe und dieser Prozess meldet einen Incident."
     },
     {
       "key": "publizieren",

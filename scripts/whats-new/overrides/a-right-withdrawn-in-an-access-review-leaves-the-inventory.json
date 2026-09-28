@@ -1,0 +1,11 @@
+{
+  "tags": ["Tasks", "Service catalogue"],
+  "title": {
+    "en": "A right withdrawn in an access review leaves the inventory",
+    "de": "Ein in der Rezertifizierung entzogenes Recht verschwindet aus dem Inventar"
+  },
+  "summary": {
+    "en": "Withdrawing a right an order granted started the product's deprovisioning with the product and the holder only. A process that finds what it provisioned by the order found nothing, and it could not report the line returned, so the right stayed in the inventory and the next campaign asked about it again. A withdrawal of an ordered right now goes back through its order, as a return does: the line is returning, and the process starts with the order, the position and the reason. A line the order will not give back is refused and the row stays unanswered. Rights without an order are unchanged.",
+    "de": "Das Entziehen eines bestellten Rechts startete die Deprovisionierung des Produkts nur mit Produkt und Inhaber. Ein Prozess, der das Bereitgestellte über den Auftrag findet, fand nichts und konnte die Position nicht als zurückgegeben melden; das Recht blieb im Inventar, und die nächste Kampagne fragte erneut danach. Das Entziehen eines bestellten Rechts läuft jetzt wie eine Rückgabe über den Auftrag: Die Position ist in Rückgabe, und der Prozess startet mit Auftrag, Position und Grund. Gibt der Auftrag die Position nicht zurück, wird das Entziehen abgelehnt und die Zeile bleibt unbeantwortet. Rechte ohne Auftrag sind unverändert."
+  }
+}

@@ -27,6 +27,22 @@ type decisionCatalogItem struct {
 	// apart from the shape of the entry — it has to be told.
 	Service bool     `json:"service,omitempty"`
 	Members []string `json:"members,omitempty"`
+	// Internal is the part of Members the service encapsulates rather than publishes.
+	// The picker needs the two apart: calling an output decision gets the service's
+	// own answer by a longer route, calling an encapsulated one reaches past the
+	// interface into a working the service was meant to stay free to change.
+	Internal []string `json:"internal,omitempty"`
+	// Deployed says the engine can run this decision right now. It is not the same
+	// question as where the entry came from: an entry with a model handle may be
+	// deployed or not, and the picker has to be able to say which. Left out of the
+	// JSON when false, because the panel asks "is it deployed" and absence is the
+	// answer it wants.
+	//
+	// Worth saying in the list rather than only at Publish: a task wired to a
+	// decision that is in the model and has never been deployed saves cleanly,
+	// looks right, and is refused later by the deploy preflight — in a message
+	// about a decision the author picked minutes ago and has no reason to suspect.
+	Deployed bool `json:"deployed,omitempty"`
 }
 
 // handleListDecisions returns what the DMN references offer a business rule task
@@ -44,8 +60,9 @@ type decisionCatalogItem struct {
 func (s *Server) handleListDecisions(w http.ResponseWriter, r *http.Request) {
 	filter := r.URL.Query().Get("projectId")
 	var (
-		refs    []dmnRef
-		loadErr error
+		refs     []dmnRef
+		deployed []dmn.DeployedDecision
+		loadErr  error
 	)
 	s.do(func() {
 		var all []dmnRef
@@ -67,10 +84,19 @@ func (s *Server) handleListDecisions(w http.ResponseWriter, r *http.Request) {
 			}
 			refs = append(refs, rec)
 		}
+		// Read in the same turn as the references: the registry's compiled models are
+		// run-loop-owned state, and what the picker needs from them — which decisions
+		// are runnable — is wanted for every listing, scoped or not.
+		deployed = s.dmnRegistry.DeployedDecisions()
 	})
 	if loadErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "list dmn references: "+loadErr.Error())
 		return
+	}
+
+	deployedID := make(map[string]bool, len(deployed))
+	for _, d := range deployed {
+		deployedID[d.ID] = true
 	}
 
 	out := []decisionCatalogItem{}
@@ -96,6 +122,8 @@ func (s *Server) handleListDecisions(w http.ResponseWriter, r *http.Request) {
 				Output:   d.Output,
 				Service:  d.Service,
 				Members:  d.Members,
+				Internal: d.Internal,
+				Deployed: deployedID[d.ID],
 			})
 		}
 	}
@@ -110,8 +138,6 @@ func (s *Server) handleListDecisions(w http.ResponseWriter, r *http.Request) {
 	// a project-scoped listing stays limited to the project's own references. Reading
 	// the registry's compiled models is run-loop-owned state, so it runs on the loop.
 	if filter == "" {
-		var deployed []dmn.DeployedDecision
-		s.do(func() { deployed = s.dmnRegistry.DeployedDecisions() })
 		for _, d := range deployed {
 			if seenDecision[d.ID] {
 				continue
@@ -127,7 +153,8 @@ func (s *Server) handleListDecisions(w http.ResponseWriter, r *http.Request) {
 				// No Members: the registry describes what it can evaluate, not how the
 				// model was drawn. An entry reaching the catalog this way has no model
 				// handle either, so there is nothing for a member marker to point at.
-				Service: d.Service,
+				Service:  d.Service,
+				Deployed: true,
 			})
 		}
 	}

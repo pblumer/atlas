@@ -959,7 +959,8 @@ func authoringTools() []Tool {
 			Name: "atlas_list_decisions",
 			Description: "List the DMN decisions (with their inputs and outputs) discoverable from the registered " +
 				"decision references, optionally filtered to one project. Use a decision's id as a business rule " +
-				"task's calledDecision.",
+				"task's calledDecision. Each row carries `deployed`: false means the decision is in the model and " +
+				"callable by name, but the engine cannot run it yet, so a task wired to it is refused at deploy.",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"projectId": stringProp("Optional project id to filter by (from atlas_create_project).")},

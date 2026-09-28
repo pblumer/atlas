@@ -62,7 +62,7 @@ const (
 	// portalPage is the service portal, the second surface that can start a
 	// federated login (ADR-0399). Named here
 	// because this file decides where a login may end, and that is the same list.
-	portalPage = "/portal.html"
+	portalPage = "/shop.html"
 
 	// oidcReturnCookie carries which of those two pages started this login, so the
 	// callback lands back on it.

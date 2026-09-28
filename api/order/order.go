@@ -283,6 +283,54 @@ type Line struct {
 	ReturnedBy string `json:"returnedBy,omitempty"`
 	DecidedAt  int64  `json:"decidedAt,omitempty"`
 	Reason     string `json:"reason,omitempty"`
+	// Instances are the process instances started to work this position, oldest
+	// first: its approval, its provisioning, and later its return (ADR-0416).
+	//
+	// Recorded by the server at the moment it starts one, because that is the only
+	// moment the link is certain. Found afterwards it would be a search over every
+	// running instance's variables — the walk a large installation does not finish
+	// in any time a reader waits — and a guess where two processes carry the same
+	// order id. Empty on a line nothing has started for yet, and on every line of an
+	// order placed before the server kept the record.
+	Instances []LineInstance `json:"instances,omitempty"`
+}
+
+// LineInstance is one process instance that works an order position.
+type LineInstance struct {
+	// Key is the instance's key, which is what its open tasks are found under.
+	Key uint64 `json:"key"`
+	// ProcessID is the BPMN process id it is an instance of — which of the
+	// position's processes this is, without a second read to learn it.
+	ProcessID string `json:"processId,omitempty"`
+	// StartedAt is when it was started, in Unix nanoseconds.
+	StartedAt int64 `json:"startedAt"`
+}
+
+// RecordInstance notes that an instance was started to work one position.
+//
+// ref names the position the way a process does: its key, or the product where
+// the order carries one position of it. Recording the same instance twice records
+// it once, so a caller that retries does not make one instance look like two.
+func RecordInstance(o Order, ref string, inst LineInstance) (Order, error) {
+	position, err := ResolveLine(o, ref)
+	if err != nil {
+		return o, err
+	}
+	next := o
+	next.Lines = append([]Line(nil), o.Lines...)
+	for i := range next.Lines {
+		if next.Lines[i].Key() != position {
+			continue
+		}
+		for _, have := range next.Lines[i].Instances {
+			if have.Key == inst.Key {
+				return o, nil
+			}
+		}
+		next.Lines[i].Instances = append(append([]LineInstance(nil),
+			next.Lines[i].Instances...), inst)
+	}
+	return next, nil
 }
 
 // Key is what identifies this line inside its order.

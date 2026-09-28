@@ -19,7 +19,7 @@ type favsResp struct {
 
 func favsOf(t *testing.T, ts *httptest.Server, c *http.Client) favsResp {
 	t.Helper()
-	code, body := cReq(t, c, ts, "GET", "/api/v1/portal/favourites", "")
+	code, body := cReq(t, c, ts, "GET", "/api/v1/shop/favourites", "")
 	if code != http.StatusOK {
 		t.Fatalf("read favourites: %d (%s)", code, body)
 	}
@@ -49,7 +49,7 @@ func TestAMarkSurvivesAndIsTheCallersOwn(t *testing.T) {
 
 	for _, id := range []string{"vpn", "laptop"} {
 		if code, b := cReq(t, admin, ts, "PUT",
-			"/api/v1/portal/favourites/"+id, ""); code != http.StatusOK {
+			"/api/v1/shop/favourites/"+id, ""); code != http.StatusOK {
 			t.Fatalf("mark %s: %d (%s)", id, code, b)
 		}
 	}
@@ -63,7 +63,7 @@ func TestAMarkSurvivesAndIsTheCallersOwn(t *testing.T) {
 		t.Errorf("another account reads %v; a favourites list is one person's", got.ItemIDs)
 	}
 	if code, b := cReq(t, other, ts, "PUT",
-		"/api/v1/portal/favourites/copilot", ""); code != http.StatusOK {
+		"/api/v1/shop/favourites/copilot", ""); code != http.StatusOK {
 		t.Fatalf("the other account cannot mark: %d (%s)", code, b)
 	}
 	if got := favsOf(t, ts, admin); len(got.ItemIDs) != 2 {
@@ -72,7 +72,7 @@ func TestAMarkSurvivesAndIsTheCallersOwn(t *testing.T) {
 
 	// Unmarking takes one away and leaves the rest.
 	if code, b := cReq(t, admin, ts, "DELETE",
-		"/api/v1/portal/favourites/vpn", ""); code != http.StatusOK {
+		"/api/v1/shop/favourites/vpn", ""); code != http.StatusOK {
 		t.Fatalf("unmark: %d (%s)", code, b)
 	}
 	if got := favsOf(t, ts, admin); len(got.ItemIDs) != 1 || got.ItemIDs[0] != "laptop" {
@@ -99,7 +99,7 @@ func TestAMarkNeedsNoCatalogueToResolveTo(t *testing.T) {
 		t.Fatal("admin login failed")
 	}
 	if code, b := cReq(t, admin, ts, "PUT",
-		"/api/v1/portal/favourites/gibt-es-nicht", ""); code != http.StatusOK {
+		"/api/v1/shop/favourites/gibt-es-nicht", ""); code != http.StatusOK {
 		t.Fatalf("marking an unresolvable product = %d (%s), want 200", code, b)
 	}
 	if got := favsOf(t, ts, admin); len(got.ItemIDs) != 1 {
@@ -128,11 +128,11 @@ func TestTheFavouriteCeilingRefusesRatherThanGrowing(t *testing.T) {
 
 	for _, id := range []string{"a", "b"} {
 		if code, b := cReq(t, admin, ts, "PUT",
-			"/api/v1/portal/favourites/"+id, ""); code != http.StatusOK {
+			"/api/v1/shop/favourites/"+id, ""); code != http.StatusOK {
 			t.Fatalf("mark %s: %d (%s)", id, code, b)
 		}
 	}
-	code, body := cReq(t, admin, ts, "PUT", "/api/v1/portal/favourites/c", "")
+	code, body := cReq(t, admin, ts, "PUT", "/api/v1/shop/favourites/c", "")
 	if code != http.StatusUnprocessableEntity {
 		t.Fatalf("marking past the ceiling = %d (%s), want 422", code, body)
 	}
@@ -146,7 +146,7 @@ func TestTheFavouriteCeilingRefusesRatherThanGrowing(t *testing.T) {
 	// Re-marking one that is already there stays fine at the ceiling — it writes
 	// nothing, so it cannot exceed anything.
 	if code, b := cReq(t, admin, ts, "PUT",
-		"/api/v1/portal/favourites/a", ""); code != http.StatusOK {
+		"/api/v1/shop/favourites/a", ""); code != http.StatusOK {
 		t.Errorf("re-marking at the ceiling = %d (%s), want 200: it adds nothing", code, b)
 	}
 }
@@ -159,7 +159,7 @@ func TestTheFavouriteCeilingRefusesRatherThanGrowing(t *testing.T) {
 func TestFavouritesNeedAnAccount(t *testing.T) {
 	ts := newTestServer(t)
 	c := newClient(t)
-	if code, _ := cReq(t, c, ts, "GET", "/api/v1/portal/favourites", ""); code != http.StatusBadRequest {
+	if code, _ := cReq(t, c, ts, "GET", "/api/v1/shop/favourites", ""); code != http.StatusBadRequest {
 		t.Errorf("favourites with nobody signed in = %d, want 400", code)
 	}
 }

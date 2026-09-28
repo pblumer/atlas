@@ -1,0 +1,21 @@
+{
+  "tags": ["Service catalogue", "Shop"],
+  "title": {
+    "en": "The portal is now the Shop",
+    "de": "Das Portal heisst jetzt Shop"
+  },
+  "summary": {
+    "en": "The page where people browse their catalogue and order is called the Shop: in the menu, in its title, in the handbook and in the catalogue screens. It lives at /shop.html; the old address /portal.html forwards to it, so bookmarks keep working. Its API moved from /api/v1/portal/… to /api/v1/shop/…, and the old paths are gone. The shipped approval and fulfilment processes carry the new name and deploy as a new version on the next start.",
+    "de": "Die Seite, auf der man den eigenen Katalog durchsieht und bestellt, heisst jetzt Shop: im Menü, im Seitentitel, im Handbuch und in den Katalogmasken. Sie liegt unter /shop.html; die alte Adresse /portal.html leitet dorthin weiter, Lesezeichen funktionieren also weiter. Ihre API liegt neu unter /api/v1/shop/… statt /api/v1/portal/…, die alten Pfade gibt es nicht mehr. Die mitgelieferten Genehmigungs- und Erfüllungsprozesse tragen den neuen Namen und werden beim nächsten Start als neue Version installiert."
+  },
+  "tutorial": {
+    "en": [
+      "Open the menu: the entry is called Shop.",
+      "Open an old bookmark to /portal.html — it lands on /shop.html."
+    ],
+    "de": [
+      "Das Menü öffnen: der Eintrag heisst Shop.",
+      "Ein altes Lesezeichen auf /portal.html öffnen — es landet auf /shop.html."
+    ]
+  }
+}

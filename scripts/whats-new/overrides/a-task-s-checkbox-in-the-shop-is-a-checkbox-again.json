@@ -1,0 +1,11 @@
+{
+  "tags": ["Shop"],
+  "title": {
+    "en": "A task's checkbox in the shop is a checkbox again",
+    "de": "Die Checkbox einer Aufgabe im Shop ist wieder eine Checkbox"
+  },
+  "summary": {
+    "en": "A task answered inside an order row in the shop drew its checkbox as wide as the table cell, with the label pushed off the end. The orders table's field rule reached the task form's inputs too; it now styles the filter row only.",
+    "de": "Wurde eine Aufgabe in einer Auftragszeile im Shop erledigt, war ihre Checkbox so breit wie die Tabellenzelle, und die Beschriftung rutschte über den Rand. Die Regel für die Filterfelder der Auftragstabelle griff auch auf die Felder des Formulars; sie gilt jetzt nur noch für die Filterzeile."
+  }
+}

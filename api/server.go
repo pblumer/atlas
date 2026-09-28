@@ -3230,6 +3230,19 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/forms/{token}/schema", s.handlePublicFormPreflight)
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/forms/{token}/start", s.handlePublicFormPreflight)
 
+	// The shop was called the portal and lived at /portal.html. The address was
+	// bookmarked, pasted into mails and printed on intranet pages, none of which a
+	// rename reaches, so the old one keeps leading to the new one rather than to a
+	// 404 that reads as the service having been switched off. The query is kept:
+	// it is where a returning sign-in says how it went.
+	mountFunc(accessPublic, roleAny, "GET /portal.html", func(w http.ResponseWriter, r *http.Request) {
+		to := "/shop.html"
+		if r.URL.RawQuery != "" {
+			to += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, to, http.StatusMovedPermanently)
+	})
+
 	// The embedded UI is the catch-all; the more specific patterns above win under
 	// net/http's precedence rules. Static assets, and the login screen has to load.
 	sub, err := fs.Sub(webFS, "web")

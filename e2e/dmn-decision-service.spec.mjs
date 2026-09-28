@@ -535,10 +535,13 @@ test("the shipped modeler draws a Decision Service the way DMN draws one", async
   expect(result.expanded.decisionRadius).toBe(0);
   expect(result.collapsed.serviceRadius).toBeGreaterThan(0);
 
-  // The name sits in the top right, clear of the output decisions the upper
-  // compartment holds — centred, it would sit on top of them.
+  // The name starts in the top left, where DMN 1.5 Figures 6-7, 6-8 and 6-9 draw it.
+  // A default rather than the notation: §6.2.5 requires the name inside the shape
+  // and nothing more, the figures do not agree with each other (6-6 centres it), and
+  // a DMNLabel with bounds moves it — which dmn-decision-service-overlay.spec.mjs
+  // holds.
   expect(result.expanded.labelTop).toBeLessThan(0.25);
-  expect(result.expanded.labelCentre).toBeGreaterThan(0.65);
+  expect(result.expanded.labelCentre).toBeLessThan(0.35);
 
   // Collapsed: the name is centred over a plus marker, and there is no
   // compartment to divide.

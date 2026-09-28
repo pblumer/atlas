@@ -21,7 +21,7 @@ import (
 //     ordered.
 //
 // The guards read the region they guard rather than the file: `includes` and
-// `options` appear in half a dozen functions, and a search across portal.js would
+// `options` appear in half a dozen functions, and a search across shop.js would
 // pass whatever those two views did.
 
 // TestTheInfoPanelNamesWhatAProductCarries.
@@ -30,7 +30,7 @@ import (
 // answered the first half and left the second to a column the person had to find
 // for themselves.
 func TestTheInfoPanelNamesWhatAProductCarries(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function infoPanel(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function infoPanel(", "\n}")
 	for _, group := range []struct{ field, why string }{
 		{"includes", "what always comes with the product"},
 		{"options", "what is offered beside it"},
@@ -48,7 +48,7 @@ func TestTheInfoPanelNamesWhatAProductCarries(t *testing.T) {
 // order: the cascade's "+" reaches it only while the bundle is the open column,
 // and the basket is where somebody decides what they are actually asking for.
 func TestTheBasketOffersWhatIsOptional(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function renderBasket(", "\n// --- What a product needs")
+	body := webRegion(t, readWeb(t, "shop.js"), "function renderBasket(", "\n// --- What a product needs")
 	if !strings.Contains(body, "options") {
 		t.Error("the basket never reads the release's options, so the optional parts of " +
 			"a chosen bundle cannot be ordered from the screen that places the order")
@@ -63,7 +63,7 @@ func TestTheBasketOffersWhatIsOptional(t *testing.T) {
 	// And nothing pre-selects them. An offer that arrived ticked would be ordered
 	// by everybody who did not look, which is the opposite of an offer — so the
 	// only recursion the basket performs is over what is integral.
-	walk := webRegion(t, readWeb(t, "portal.js"), "  const add = (id, integral)", "  for (const id of state.basket)")
+	walk := webRegion(t, readWeb(t, "shop.js"), "  const add = (id, integral)", "  for (const id of state.basket)")
 	if strings.Contains(walk, "options") {
 		t.Error("the basket pulls optional parts in by itself, so an aggregation is " +
 			"ordered by anybody who did not notice it")

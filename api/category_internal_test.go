@@ -27,8 +27,8 @@ import (
 func webRegion(t *testing.T, src, from, to string) string {
 	t.Helper()
 	// The source is named by what was searched for rather than by a file name. This
-	// helper started out reading portal.js and said so; it now reads app.js and
-	// portal.html too, and a message naming the wrong file sends whoever reads it
+	// helper started out reading shop.js and said so; it now reads app.js and
+	// shop.html too, and a message naming the wrong file sends whoever reads it
 	// into the wrong one.
 	start := strings.Index(src, from)
 	if start < 0 {
@@ -67,7 +67,7 @@ func TestThePortalGroupsByTheFieldTheReleaseCarries(t *testing.T) {
 	if key == "" {
 		t.Fatalf("no field carries the marker; the fixture has gone stale: %s", raw)
 	}
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	// Both sides of the grouping: the one that collects the headings and the one
 	// that decides what falls under the heading now open. Either reading a field
 	// the release does not carry leaves every product under one heading.
@@ -93,7 +93,7 @@ func TestThePortalGroupsByTheFieldTheReleaseCarries(t *testing.T) {
 // is not. A note that outlives its cause is worse than none: it tells somebody
 // looking at their own headings that the feature does not exist.
 func TestTheColumnNoLongerSaysTheDataIsMissing(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	if strings.Contains(src, "note.noCategories") {
 		t.Error("the portal still carries the note saying Atlas has no category, which " +
 			"now contradicts the column beside it")
@@ -118,7 +118,7 @@ func TestTheColumnNoLongerSaysTheDataIsMissing(t *testing.T) {
 // decision refused, arriving through the back door — so the sort is the locale's
 // and nothing else.
 func TestAHeadingHasNoOrderingOfItsOwn(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	// Both columns and both screens collect their headings through one function, so
 	// the ordering is held there. A column sorting for itself is the second
 	// implementation that made the two screens disagree once already.

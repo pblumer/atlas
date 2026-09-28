@@ -42,7 +42,7 @@
       "key": "logo",
       "type": "filepicker",
       "label": "Logo",
-      "description": "PNG oder SVG, höchstens 512 KB. Optional — ohne Logo zeigt das Portal die Marke der Instanz.",
+      "description": "PNG oder SVG, höchstens 512 KB. Optional — ohne Logo zeigt der Shop die Marke der Instanz.",
       "accept": ".png,.svg,image/png,image/svg+xml"
     },
     {

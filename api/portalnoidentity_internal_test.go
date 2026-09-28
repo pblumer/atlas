@@ -19,7 +19,7 @@ import (
 // nobody to hold responsible — and that refusal stays. What changes is that the
 // page stops walking somebody up to it.
 func TestOrderingIsNotOfferedWithoutAnIdentity(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function renderActions(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function renderActions(", "\n}")
 	if !strings.Contains(body, "state.canOrder") {
 		t.Error("the action row offers an order without asking whether there is " +
 			"anybody to place it, so the last button reaches the server and comes back refused")
@@ -36,7 +36,7 @@ func TestOrderingIsNotOfferedWithoutAnIdentity(t *testing.T) {
 // worth reading in this mode, so the control is shown disabled rather than hidden,
 // exactly as an integral part is.
 func TestTheBasketIsNotFillableWhenItCannotBeSubmitted(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function toggle(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function toggle(", "\n}")
 	if !strings.Contains(body, "state.canOrder") {
 		t.Error("the basket control is offered with nobody to order, so a basket can " +
 			"be filled that has no way out")
@@ -53,7 +53,7 @@ func TestTheBasketIsNotFillableWhenItCannotBeSubmitted(t *testing.T) {
 // principal carrying a user id, and a page that inferred it from the mode would
 // disagree the day the two stop meaning the same thing.
 func TestWhetherAnOrderIsPossibleIsTheServersRuleMirrored(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function loadWhoIAm(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function loadWhoIAm(", "\n}")
 	if !strings.Contains(body, "state.canOrder = state.meID !== ''") {
 		t.Error("whether an order can be placed is not read from the identity the " +
 			"session carries")
@@ -72,8 +72,8 @@ func TestWhetherAnOrderIsPossibleIsTheServersRuleMirrored(t *testing.T) {
 // cost the catalogue. Before this, one 400 from a per-person list threw out of
 // load() and the page showed an error instead of the shop.
 func TestAMissingPerAccountListDoesNotTakeThePageDown(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "async function load(", "\n}")
-	for _, route := range []string{"/api/v1/inventory", "/api/v1/portal/favourites"} {
+	body := webRegion(t, readWeb(t, "shop.js"), "async function load(", "\n}")
+	for _, route := range []string{"/api/v1/inventory", "/api/v1/shop/favourites"} {
 		i := strings.Index(body, route)
 		if i < 0 {
 			t.Errorf("load() no longer reads %s", route)

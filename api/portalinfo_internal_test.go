@@ -15,7 +15,7 @@ import (
 // the bundle lives in.
 //
 // The guards read the region they guard rather than the file: `infoButton` appears
-// in three separate views, so a search across portal.js would find it whatever the
+// in three separate views, so a search across shop.js would find it whatever the
 // cascade did.
 
 // TestEveryColumnOfTheCascadeOpensWhatItHolds.
@@ -24,7 +24,7 @@ import (
 // nobody can read — the price among them, which exists to be read and nothing
 // else.
 func TestEveryColumnOfTheCascadeOpensWhatItHolds(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	// The two columns that hold products. The two to their left hold headings —
 	// a category and a product group are strings a product writes on itself, not
 	// things with a price or an approval rule, so there is nothing for a panel to
@@ -52,7 +52,7 @@ func TestEveryColumnOfTheCascadeOpensWhatItHolds(t *testing.T) {
 // level would be a second thing to keep true, and the first place it would go
 // wrong is the level nobody clicks.
 func TestThePanelItselfAsksNothingAboutTheLevel(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function infoPanel(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function infoPanel(", "\n}")
 	for _, level := range []string{"bundle", "offering", "integral", "depthOf", "levelsOf"} {
 		if strings.Contains(body, level) {
 			t.Errorf("the panel reads %q, so it says something different depending on "+
@@ -75,9 +75,9 @@ func TestThePanelItselfAsksNothingAboutTheLevel(t *testing.T) {
 // unreachable.
 //
 // Guarded per view rather than per file, because infoPanel appears three times and
-// a search across portal.js would find it however many views had forgotten it.
+// a search across shop.js would find it however many views had forgotten it.
 func TestEveryViewThatOffersThePanelAlsoDrawsIt(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	for _, view := range []struct{ name, from, to string }{
 		{"the catalogue", "function renderCatalogue(", "\nfunction renderBasket("},
 		{"the basket", "function renderBasket(", "\n// --- What a product needs"},

@@ -37,7 +37,7 @@ test("a task worker is offered Tasks and the Console, not the Modeler", async ({
   // approval is a kind of task, so it sits in the Tasks sub-navigation beside
   // Access review. As a drawer entry it was shown to everybody and empty for almost
   // all of them, because there is no approver role to gate on.
-  await expect(drawer(page)).toHaveText(["Console", "Tasks", "Portal"]);
+  await expect(drawer(page)).toHaveText(["Console", "Tasks", "Shop"]);
   // And inside the Console, the administrator's screens are not offered either.
   const names = await topnav(page).allTextContents();
   expect(names).toContain("Dashboard");
@@ -49,7 +49,7 @@ test("a modeller who also operates is offered both", async ({ page }) => {
   stubAPI(page, { username: "mona", roles: ["modeler", "operator", "user"] });
   await boot(page);
 
-  await expect(drawer(page)).toHaveText(["Console", "Modeler", "Tasks", "Portal", "Operations", "Panorama", "Data"]);
+  await expect(drawer(page)).toHaveText(["Console", "Modeler", "Tasks", "Shop", "Operations", "Panorama", "Data"]);
 });
 
 test("an administrator is offered everything, Organization included", async ({ page }) => {
@@ -58,7 +58,7 @@ test("an administrator is offered everything, Organization included", async ({ p
 
   // Catalogue rides productmanager, which mona above does not hold — admin does,
   // because admin is the one superset.
-  await expect(drawer(page)).toHaveText(["Console", "Modeler", "Tasks", "Portal", "Catalogue", "Operations", "Panorama", "Data"]);
+  await expect(drawer(page)).toHaveText(["Console", "Modeler", "Tasks", "Shop", "Catalogue", "Operations", "Panorama", "Data"]);
   expect(await topnav(page).allTextContents()).toContain("Organization");
 });
 

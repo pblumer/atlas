@@ -1,0 +1,15 @@
+{
+  "tags": ["Modeler", "Decisions"],
+  "title": {
+    "en": "Testing a decision offers the right field for each input",
+    "de": "Beim Testen einer Decision passt das Eingabefeld zum Datentyp"
+  },
+  "summary": {
+    "en": "Trying a decision meant answering, in a plain text box, a question the model had already answered: which spelling of a date this input wants, whether the boolean is true or TRUE or 1. The declared type is part of the description the panel is built from, so the panel now uses it. A boolean is a list, with a blank entry — an input nobody set is missing, not false, and the two do not evaluate the same. A date gets a calendar, a time gets a clock, a number gets a spinner, and a duration keeps a text field with the shape of the answer in the placeholder, because browsers have no control for one. What each field sends is unchanged, and deliberately so: the value a process variable would carry, so a decision tried here still sees exactly what it would see at runtime.",
+    "de": "Eine Decision auszuprobieren hiess bisher, in einem einfachen Textfeld eine Frage zu beantworten, die das Modell längst beantwortet hatte: welche Schreibweise eines Datums diese Eingabe erwartet, ob der Boolean true oder TRUE oder 1 lautet. Der deklarierte Typ steht in der Beschreibung, aus der das Panel gebaut wird — und wird jetzt auch verwendet. Ein Boolean ist eine Auswahlliste, mit einem leeren Eintrag: Eine Eingabe, die niemand gesetzt hat, fehlt, sie ist nicht false, und beides wird unterschiedlich ausgewertet. Ein Datum bekommt einen Kalender, eine Zeit eine Uhr, eine Zahl ein Zahlenfeld, und eine Dauer behält ein Textfeld mit der Form der Antwort im Platzhalter, weil Browser dafür kein Bedienelement kennen. Was die Felder senden, bleibt unverändert, und zwar bewusst: genau den Wert, den auch eine Prozessvariable trägt, damit eine hier getestete Decision dasselbe sieht wie zur Laufzeit."
+  },
+  "try": {
+    "label": { "en": "Open the Modeler", "de": "Modeler öffnen" },
+    "route": "#/modeler"
+  }
+}

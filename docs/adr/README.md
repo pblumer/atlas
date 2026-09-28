@@ -500,6 +500,11 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0412](0412-translatable-catalogue-headings.md) | A catalogue heading is a key that groups and a wording per language that shows | Accepted | Landed |
 | [0413](0413-a-language-tag-is-checked-where-it-is-written.md) | A language tag is checked where it is written, and nowhere else | Accepted | Landed |
 | [0414](0414-a-missing-translation-is-reported-not-refused.md) | A missing translation is reported, not refused | Accepted | Landed |
+| [0415](0415-the-portal-offers-the-catalogues-languages.md) | The portal offers the languages its catalogue is kept in | Accepted | Landed |
+| [0416](0416-the-shop-shows-an-orders-open-tasks.md) | The shop shows an order's open tasks, and the order records the instances that work it | Accepted | Landed |
+| [0417](0417-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md) | The shop and Tasks are one column wide on a narrow screen | Accepted | Landed |
+| [0418](0418-a-withdrawn-ordered-right-goes-back-through-its-order.md) | A withdrawn ordered right goes back through its order | Accepted | Landed |
+| [0419](0419-a-declared-type-is-honoured-at-the-decision-boundary.md) | A declared type is honoured at the decision boundary | Proposed | Not started |
 
 ## The two states of a record
 

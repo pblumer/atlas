@@ -1,0 +1,11 @@
+{
+  "tags": ["Tasks", "Shop"],
+  "title": {
+    "en": "A task assigned to the orderer can be answered by the orderer",
+    "de": "Eine dem Besteller zugewiesene Aufgabe kann der Besteller erledigen"
+  },
+  "summary": {
+    "en": "A model assigns a task with an expression, and the variable it has for a person is usually an id: an order carries its orderer and its recipient as principal ids (usr_…). A task assigned assignee=\"=orderer\" was created and listed under the order in the shop, but refused to the orderer, because the check compared the assignee with the username alone; only operators and administrators could answer it. The check now accepts the username or the principal id, as the mail directory already did when it decides whom a notification reaches. The shop shows such an assignee by display name. The \"Assigned to me\" folder still matches usernames only.",
+    "de": "Ein Modell weist eine Aufgabe über einen Ausdruck zu, und die Variable, die es für eine Person hat, ist meist eine Kennung: ein Auftrag führt Besteller und Empfänger als Prinzipal-Kennungen (usr_…). Eine mit assignee=\"=orderer\" zugewiesene Aufgabe wurde angelegt und im Shop unter dem Auftrag angezeigt, dem Besteller aber verweigert, weil die Prüfung die Zuweisung nur mit dem Benutzernamen verglich; erledigen konnten sie nur Operatoren und Administratoren. Die Prüfung akzeptiert jetzt den Benutzernamen oder die Prinzipal-Kennung, wie es das Mail-Verzeichnis bei der Frage, wen eine Benachrichtigung erreicht, bereits tat. Der Shop zeigt eine solche Zuweisung mit dem Anzeigenamen. Der Ordner «Mir zugewiesen» vergleicht weiterhin nur Benutzernamen."
+  }
+}

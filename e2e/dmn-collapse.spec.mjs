@@ -73,29 +73,36 @@ async function fold(page, { andUnfold = false } = {}) {
     const registry = viewer.get("elementRegistry");
     const service = registry.get("Service_Approval");
 
-    const pad = () => Object.keys(viewer.get("contextPad").getEntries(service));
     const modeling = viewer.get("modeling");
 
+    // The switch is drawn in the box, at the bottom edge, the way a collapsed
+    // sub-process carries its own; it is an overlay, so it is read off the document.
+    const toggle = () => {
+      const button = document.querySelector(".dmn-decision-service-toggle");
+
+      return button && button.className;
+    };
+
+    viewer.get("selection").select(service);
+
     // Read before doing: a bundle built from a commit without the fold has neither
-    // the command nor the entry, and the tests below would otherwise fail with a bare
+    // the command nor the switch, and the tests below would otherwise fail with a bare
     // TypeError that says nothing about where the bytes came from.
     const shipped = {
       command: typeof modeling.collapseDecisionService === "function",
-      padBefore: pad(),
+      toggleBefore: toggle(),
+      padBefore: Object.keys(viewer.get("contextPad").getEntries(service)),
     };
     if (!shipped.command) {
       return { shipped, missing: true };
     }
-
-    const padBefore = shipped.padBefore;
 
     modeling.collapseDecisionService(service, true);
 
     const onCanvas = (id) => !!registry.get(id);
     const state = {
       shipped,
-      padBefore,
-      padAfter: pad(),
+      toggleAfter: toggle(),
       onCanvas: {
         output: onCanvas("Decision_Output"),
         encapsulated: onCanvas("Decision_Encapsulated"),
@@ -132,8 +139,15 @@ test("the shipped bundle folds a decision service, and the model survives it", a
   expect(state.shipped.command,
     "the shipped bundle has collapseDecisionService — if not, it was built from a "
     + "commit before the fold, whatever ATLAS-VENDORED.txt says").toBe(true);
-  expect(state.shipped.padBefore, "the shipped bundle offers the fold on the context pad")
-    .toContain("decision-service.collapse");
+
+  // The switch is in the box now, where a collapsed sub-process carries its own, and
+  // only there: two controls for one act is the thing the move was meant to end.
+  expect(state.shipped.toggleBefore,
+    "the shipped bundle draws the fold switch in the service")
+    .toContain("dmn-icon-minus");
+  expect(state.shipped.padBefore).not.toContain("decision-service.collapse");
+  expect(state.toggleAfter, "and the same switch offers the way back")
+    .toContain("dmn-icon-plus");
 
   // The members leave the picture; the input decision does not — it is the boundary
   // the caller supplies, which DMN draws outside the service.

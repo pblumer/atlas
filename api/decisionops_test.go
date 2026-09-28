@@ -269,6 +269,72 @@ func TestDecisionEvaluationsDrilldown(t *testing.T) {
 	}
 }
 
+// TestTheCatalogSaysWhetherADecisionIsDeployed pins the marker the picker shows.
+//
+// The catalog offers what is in the *model*, which is a layer above what the engine
+// can run: writing a decision into the model makes it callable by name, deploying it
+// makes it runnable. Between the two a business rule task wired to it saves cleanly
+// and looks right, and the refusal arrives at Publish — about a decision the author
+// picked minutes earlier. So the catalog has to say which it is, and it has to say it
+// for a *referenced* decision, not only for one that reached the list by being
+// deployed.
+func TestTheCatalogSaysWhetherADecisionIsDeployed(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+	pid := x.mkProject("Dinner")
+	x.saveDraft(pid, dinnerBPMN)
+	if code, b := x.do(http.MethodPost, "/api/v1/dmnrefs",
+		`{"name":"Dish decision","modelRef":"dish","projectId":"`+pid+`"}`); code != http.StatusOK {
+		t.Fatalf("add ref status=%d body=%s", code, b)
+	}
+
+	dish := func(url string) decisionCatalogItem {
+		t.Helper()
+		code, b := x.do(http.MethodGet, url, "")
+		if code != http.StatusOK {
+			t.Fatalf("GET %s status=%d body=%s", url, code, b)
+		}
+		var items []decisionCatalogItem
+		if err := json.Unmarshal(b, &items); err != nil {
+			t.Fatalf("decode catalog: %v", err)
+		}
+		for _, it := range items {
+			if it.ID == "Dish" {
+				return it
+			}
+		}
+		t.Fatalf("catalog omits Dish; body=%s", b)
+		return decisionCatalogItem{}
+	}
+
+	// Referenced and not deployed: offered, with its editable handle, and marked.
+	for _, url := range []string{"/api/v1/decisions", "/api/v1/decisions?projectId=" + pid} {
+		before := dish(url)
+		if before.ModelRef == "" {
+			t.Errorf("%s: Dish ModelRef = empty, want the editable handle", url)
+		}
+		if before.Deployed {
+			t.Errorf("%s: Dish Deployed = true before any deploy, want false", url)
+		}
+	}
+
+	if code, b := x.do(http.MethodPost, "/api/v1/projects/"+pid+"/deploy", ""); code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, b)
+	}
+
+	// Deployed now — and still through its reference, so the flag is not a restatement
+	// of "this entry came from the registry": it is the same entry, answered differently.
+	for _, url := range []string{"/api/v1/decisions", "/api/v1/decisions?projectId=" + pid} {
+		after := dish(url)
+		if after.ModelRef == "" {
+			t.Errorf("%s: Dish ModelRef = empty after deploy, want the editable handle", url)
+		}
+		if !after.Deployed {
+			t.Errorf("%s: Dish Deployed = false after deploy, want true", url)
+		}
+	}
+}
+
 // TestListDecisionsIncludesDeployed proves the picker can offer a decision that is
 // deployed even when no DMN reference exists for it. It deploys the dinner process
 // (which bundles the "dish" model into the registry), deletes the reference, then

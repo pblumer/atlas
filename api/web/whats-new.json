@@ -2,310 +2,17 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
-      "id": "a-catalogue-could-be-saved-with-a-language-that-is-not-a-lan",
+      "id": "the-decision-picker-tells-a-decision-service-s-answer-from-i",
       "version": "Unreleased",
       "date": null,
-      "category": "Fixed",
+      "category": "Added",
       "title": {
-        "en": "The language switch works again in every catalogue",
-        "de": "Die Sprachumschaltung wirkt wieder in jedem Katalog"
+        "en": "The picker tells a decision service's answer from its workings",
+        "de": "Die Auswahl unterscheidet die Antwort eines Decision Service von seinen Zwischenschritten"
       },
       "summary": {
-        "en": "A catalogue says which languages it is kept in, as a list. Until now nothing checked that the entries were language tags, and one installation saved a catalogue whose single language was written \"de; en\" — one entry containing a separator, typed where a comma was expected. Everything after that behaved correctly and the result was total: the product form drew one box labelled \"de; en\", both names were typed into it, and the portal, looking for German and for English, found neither and showed whatever it had. Switching the language did nothing at all, for every product in that catalogue, in both languages, and no screen anywhere said why. It was noticed weeks later, two screens away from where it was caused. A language is now checked as it is typed: de, en, de-CH, zh-Hans. Only as it is typed — a catalogue that already carries a bad entry can still be opened, edited and published, because otherwise the installation with the problem would be the one locked out of fixing it. Nothing is corrected automatically either: \"de; en\" can be read two ways and only the person who typed it knows which, and guessing is what hid the fault in the first place. A language listed twice is refused as well, because it would draw two boxes writing the same thing, where the second quietly wins.",
-        "de": "Ein Katalog nennt die Sprachen, in denen er geführt wird, als Liste. Bisher prüfte nichts, ob die Einträge Sprachkürzel sind, und in einer Installation wurde ein Katalog gespeichert, dessen einzige Sprache «de; en» hiess — ein Eintrag mit einem Trennzeichen, getippt, wo ein Komma erwartet wurde. Alles danach verhielt sich korrekt, und die Wirkung war vollständig: Die Produktmaske zeichnete ein Feld mit der Beschriftung «de; en», beide Namen wurden hineingeschrieben, und das Portal, das nach Deutsch und nach Englisch suchte, fand keines von beiden und zeigte, was es hatte. Die Sprachumschaltung bewirkte nichts, für jedes Produkt dieses Katalogs, in beiden Sprachen, und kein Bildschirm nannte den Grund. Bemerkt wurde es Wochen später, zwei Bildschirme von der Ursache entfernt. Eine Sprache wird jetzt beim Eintippen geprüft: de, en, de-CH, zh-Hans. Nur beim Eintippen — ein Katalog, der bereits einen falschen Eintrag trägt, lässt sich weiterhin öffnen, bearbeiten und publizieren, weil sonst ausgerechnet die betroffene Installation von ihrer eigenen Korrektur ausgesperrt wäre. Automatisch korrigiert wird ebenfalls nichts: «de; en» lässt zwei Lesarten zu, und nur wer es getippt hat, weiss welche; Raten ist genau das, was den Fehler verborgen hat. Eine doppelt genannte Sprache wird ebenfalls abgelehnt, denn sie zeichnete zwei Felder, die dasselbe schreiben, wobei das zweite still gewinnt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Service catalogue",
-        "Portal"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Catalogue in the console and choose a catalogue.",
-          "Check the language list: one tag per entry, separated by commas.",
-          "Correct anything that is not a tag, save, and publish."
-        ],
-        "de": [
-          "In der Konsole den Katalog öffnen und einen Katalog wählen.",
-          "Die Sprachliste prüfen: ein Kürzel je Eintrag, durch Komma getrennt.",
-          "Was kein Kürzel ist, korrigieren, speichern und publizieren."
-        ]
-      }
-    },
-    {
-      "id": "the-console-asks-for-each-language-in-its-own-box-side-by-si",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "One box per language, side by side",
-        "de": "Ein Feld je Sprache, nebeneinander"
-      },
-      "summary": {
-        "en": "The name, the description, the category and the product group are each asked for once per language the catalogue is kept in, in their own labelled box, side by side. A catalogue kept in four languages shows four boxes; one that adds a fifth grows a fifth. This replaces a single box in which the wordings were separated by semicolons — compact, and a trap: which word was French was something to count out against a list on another screen, and the separator was then applied one screen up, to the catalogue's own language list, which is where the language switch stopped working. For the two headings the row does one thing worth knowing: the first box with anything in it is the value the portal files the product under, and the rest are how that heading is written for a reader. Fill only one and it reads the same in every language. The orderable shapes follow the same shape, as a grid: one row per shape, a narrow box for the id that never changes and one box per language beside it. That replaces a text area with a syntax of its own — better than the semicolons, because it named each language rather than making it a position to count, and still something to be taught in a form where every other text is a box. Clearing the id removes a shape, two blank rows stand under the ones that exist, and a button adds more.",
-        "de": "Name, Beschreibung, Kategorie und Produktgruppe werden je einmal pro Katalogsprache erfasst, in einem eigenen, beschrifteten Feld, nebeneinander. Ein Katalog in vier Sprachen zeigt vier Felder; kommt eine fünfte dazu, kommt ein fünftes Feld. Das ersetzt ein einzelnes Feld, in dem die Bezeichnungen durch Semikolon getrennt standen — kompakt, und eine Falle: Welches Wort das französische war, musste man gegen eine Liste auf einem anderen Bildschirm abzählen, und das Trennzeichen wurde anschliessend eine Ebene höher angewandt, auf die Sprachliste des Katalogs — dort, wo die Sprachumschaltung aufhörte zu wirken. Bei den beiden Überschriften leistet die Zeile eines, das man wissen sollte: Das erste gefüllte Feld ist der Wert, unter dem das Portal ablegt; die übrigen sind die Bezeichnungen für die Leserin. Wer nur eines füllt, zeigt es in allen Sprachen. Die bestellbaren Ausprägungen folgen derselben Form, als Raster: eine Zeile je Ausprägung, ein schmales Feld für die unveränderliche id und daneben ein Feld je Sprache. Das ersetzt ein Textfeld mit eigener Syntax — besser als die Semikolons, weil es jede Sprache benannte, statt sie zur abzuzählenden Position zu machen, und trotzdem etwas, das man lernen musste, in einer Maske, in der jeder andere Text ein Feld ist. Wer die id leert, entfernt eine Ausprägung; unter den vorhandenen stehen zwei leere Zeilen, und eine Schaltfläche fügt weitere hinzu."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Service catalogue"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Catalogue in the console and open a product.",
-          "Fill the boxes for the languages you have; leave the rest empty.",
-          "For a product with shapes, fill one row per shape: its id, then its name in each language.",
-          "Save, publish, and read the portal in each language."
-        ],
-        "de": [
-          "In der Konsole den Katalog öffnen und ein Produkt öffnen.",
-          "Die Felder der Sprachen füllen, die vorliegen; die übrigen leer lassen.",
-          "Bei einem Produkt mit Ausprägungen je eine Zeile füllen: die id, dann den Namen in jeder Sprache.",
-          "Speichern, publizieren und das Portal in jeder Sprache lesen."
-        ]
-      }
-    },
-    {
-      "id": "saving-a-product-from-a-catalogue-that-only-offers-it-no-lon",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A product no longer changes hands by being saved",
-        "de": "Ein Produkt wechselt nicht mehr durch blosses Speichern den Besitzer"
-      },
-      "summary": {
-        "en": "The same product can be offered by several catalogues and is maintained by exactly one of them. Moving that responsibility is a real operation and it is checked: whoever does it must be allowed to edit both the catalogue giving it up and the one taking it on. The console was performing that move by accident. The product form sent the catalogue you happened to be looking at as the responsible one, on every save — so opening a product from a catalogue that merely offers it and pressing save took it away from the team that maintains it, with nothing said, after which its language boxes followed the new catalogue instead. You are now asked, and only when there is something to ask: a new product has no home yet, and one already maintained here has nothing to move. Declining keeps it where it is and still saves your changes, because whether to move it and whether to save are two different questions.",
-        "de": "Dasselbe Produkt kann von mehreren Katalogen angeboten und von genau einem gepflegt werden. Diese Zuständigkeit zu verschieben, ist ein echter Vorgang und wird geprüft: Wer es tut, muss sowohl den abgebenden als auch den übernehmenden Katalog bearbeiten dürfen. Die Konsole führte diese Verschiebung versehentlich aus. Die Produktmaske sendete bei jedem Speichern den gerade betrachteten Katalog als den zuständigen — wer also ein Produkt aus einem Katalog öffnete, der es nur anbietet, und speicherte, nahm es dem pflegenden Team weg, ohne Hinweis; danach richteten sich die Sprachfelder nach dem neuen Katalog. Jetzt wird gefragt, und nur dann, wenn es etwas zu fragen gibt: Ein neues Produkt hat noch keinen Heimatkatalog, und ein hier bereits gepflegtes hat nichts zu verschieben. Wer ablehnt, behält die Zuständigkeit und speichert die Änderungen trotzdem — Verschieben und Speichern sind zwei verschiedene Fragen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Service catalogue"
-      ]
-    },
-    {
-      "id": "the-product-capture-example-runs",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The product-capture example can be run",
-        "de": "Das Beispiel „Produkt erfassen\" lässt sich ausführen"
-      },
-      "summary": {
-        "en": "It shipped in a shape that could never execute: ordinary service tasks on a job type nothing serves, with the target and the HTTP method placed in task headers that never reach a worker. Its README instructed a setup step that cannot be carried out either — there is no worker type to configure for it. The tokens parked without failing, so nothing said so. The nine calls are connector tasks on the reserved REST job type now, which the engine serves itself; nothing has to be configured for them. Two things the example does need, and both are honest: a start form asks once for this Atlas's address, because a model started by hand has nobody to hand it one, and the operator's API token — without which the first call answers 401 and raises an incident instead of parking silently.",
-        "de": "Es wurde in einer Form ausgeliefert, die sich nie ausführen liess: gewöhnliche Service-Tasks auf einem Job-Typ, den niemand bedient, mit Zieladresse und HTTP-Methode in Task-Headern, die keinen Worker erreichen. Auch das README verlangte einen Einrichtungsschritt, der sich nicht befolgen lässt — den dafür nötigen Worker-Typ gibt es nicht. Die Tokens parkten, ohne zu scheitern, und niemand erfuhr davon. Die neun Aufrufe sind nun Connector-Tasks auf dem reservierten REST-Job-Typ, den die Engine selbst bedient; einzurichten ist dafür nichts. Zwei Dinge braucht das Beispiel dennoch, und beide sind redlich: ein Startformular fragt einmal die Adresse dieses Atlas ab, weil ein von Hand gestartetes Modell niemanden hat, der sie mitgäbe, und das API-Token des Betreibers — ohne das der erste Aufruf mit 401 antwortet und einen Incident meldet, statt stumm zu parken."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Beispiele",
-        "Service catalogue"
-      ],
-      "tutorial": {
-        "en": [
-          "Install the example from the handbook's Beispiele chapter.",
-          "Set ATLAS_CONNECTOR_ATLAS_TOKEN in the server's environment to an API token with catalogue-maintenance rights.",
-          "Start the process and enter this Atlas's address in the start form.",
-          "The first step reads the catalogues and the capture form opens with them filled in."
-        ],
-        "de": [
-          "Das Beispiel aus dem Kapitel „Beispiele\" des Handbuchs installieren.",
-          "ATLAS_CONNECTOR_ATLAS_TOKEN in der Serverumgebung auf ein API-Token mit Katalogpflege-Recht setzen.",
-          "Den Prozess starten und im Startformular die Adresse dieses Atlas eintragen.",
-          "Der erste Schritt liest die Kataloge, und die Erfassungsmaske öffnet sich mit gefüllten Listen."
-        ]
-      }
-    },
-    {
-      "id": "a-folded-decision-service-showed-neither-what-it-is-given-no",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A folded decision service keeps its arrows",
-        "de": "Ein zugeklappter Decision Service behält seine Pfeile"
-      },
-      "summary": {
-        "en": "Folding a decision service used to take away the arrows reaching in from outside, leaving the input data sitting unattached beside it. They now end on the folded box, which is what the service is given and what it gives. Unfolding puts the box back exactly as it was, size and dividing line included.",
-        "de": "Beim Zuklappen eines Decision Service verschwanden bisher die Pfeile, die von aussen hineinreichten; die Input-Daten standen danach unverbunden daneben. Sie enden jetzt am zugeklappten Kasten — das ist, was der Service bekommt und was er liefert. Das Aufklappen stellt den Kasten wieder genau so her, wie er war, samt Grösse und Trennlinie."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a decision model that has a decision service.",
-          "Select the service and choose the fold entry on its context pad.",
-          "The box shrinks and keeps every arrow reaching in from outside.",
-          "Choose the same entry again to unfold it."
-        ],
-        "de": [
-          "Ein Entscheidungsmodell mit einem Decision Service öffnen.",
-          "Den Service auswählen und im Kontextmenü den Eintrag zum Zuklappen wählen.",
-          "Der Kasten wird klein und behält jeden Pfeil, der von aussen hineinreicht.",
-          "Denselben Eintrag erneut wählen, um wieder aufzuklappen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "the-shipped-fulfilment-and-approval-processes-could-never-ru",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Orders are actually worked now — the shipped processes could never run",
-        "de": "Aufträge werden jetzt wirklich bearbeitet — die mitgelieferten Prozesse konnten nie laufen"
-      },
-      "summary": {
-        "en": "The fulfilment orchestration and the three approval processes do all their work by calling Atlas's own API, and those calls were authored in a shape that cannot be executed: a job type nothing serves, with the target and the HTTP method placed in task headers that never reach a worker at all. The documented fix — configure a worker of type \"rest\" named \"atlas\" — could not be carried out either, because there is no such worker type. And the failure was silent by construction: parked work is waiting, not failed, so no retry was spent, no incident appeared, and nothing turned red. One installation had fourteen orders standing at \"Waiting\" for weeks with nothing anywhere to say why. The calls are real REST connector tasks now, running on the job type the engine already serves, and they are told this server's own address when the order starts. Nothing to configure. One step remains and it is a real one: an API token with the operator role, read from ATLAS_CONNECTOR_ATLAS_TOKEN — and a missing token now fails the call visibly instead of parking it.",
-        "de": "Die Auftragserfüllung und die drei Genehmigungsprozesse erledigen ihre ganze Arbeit über Aufrufe an Atlas' eigene API, und diese Aufrufe waren in einer Form hinterlegt, die sich nicht ausführen lässt: ein Job-Typ, den niemand bedient, mit Zieladresse und HTTP-Methode in Task-Headern, die einen Worker überhaupt nie erreichen. Auch der dokumentierte Ausweg — einen Worker vom Typ „rest\" namens „atlas\" einrichten — liess sich nicht befolgen, denn diesen Worker-Typ gibt es nicht. Und der Fehler war bauartbedingt stumm: geparkte Arbeit wartet, sie scheitert nicht, also wurde kein Wiederholungsversuch verbraucht, es erschien kein Incident, und nichts wurde rot. Auf einer Installation standen vierzehn Aufträge wochenlang auf „Wartet\", ohne dass irgendetwas den Grund nannte. Die Aufrufe sind nun echte REST-Connector-Tasks auf jenem Job-Typ, den die Engine ohnehin bedient, und sie erfahren beim Start des Auftrags die Adresse ihres eigenen Servers. Einzurichten ist nichts. Ein Schritt bleibt, und er ist real: ein API-Token mit der Rolle operator, gelesen aus ATLAS_CONNECTOR_ATLAS_TOKEN — ein fehlendes Token lässt den Aufruf jetzt sichtbar scheitern, statt ihn zu parken."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Self-service portal",
-        "Processes"
-      ],
-      "tutorial": {
-        "en": [
-          "Mint an API token with the operator role under Console → API tokens.",
-          "Set ATLAS_CONNECTOR_ATLAS_TOKEN to its secret in the server's environment and restart.",
-          "Place an order in the service portal.",
-          "Under Operations → Instances the fulfilment process moves past its first step; an order needing approval appears in the approver's task list."
-        ],
-        "de": [
-          "Unter Konsole → API-Tokens ein Token mit der Rolle operator erzeugen.",
-          "ATLAS_CONNECTOR_ATLAS_TOKEN in der Serverumgebung auf dessen Geheimnis setzen und neu starten.",
-          "Im Leistungsportal eine Bestellung aufgeben.",
-          "Unter Betrieb → Instanzen läuft die Auftragserfüllung über ihren ersten Schritt hinaus; ein genehmigungspflichtiger Auftrag erscheint im Postkorb der genehmigenden Person."
-        ]
-      }
-    },
-    {
-      "id": "saving-a-product-said-apibytes-is-not-defined-and-quietly-le",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Saving a product works again — and a new product is offered right away",
-        "de": "Ein Produkt lässt sich wieder speichern — und wird sofort angeboten"
-      },
-      "summary": {
-        "en": "Pressing Save on a product answered \"apiBytes is not defined\". The message named the picture, and the picture was the least of it: the product record was already written by then, and the step the error skipped was the one that tells the catalogue to offer a new product. So the save ended with the product stored, the catalogue unchanged, and a product nothing offers — which appears on no screen its maintainer has, while the message sent them looking at the image. Saving works again, and the order of the three writes was turned around: the record, then the offering, then the picture. A picture that fails now costs a picture, which is one upload and visibly missing.",
-        "de": "Beim Speichern eines Produktes erschien die Meldung „apiBytes is not defined“. Die Meldung nannte das Bild, und das Bild war das Geringste: der Produktdatensatz war zu diesem Zeitpunkt bereits geschrieben, und übersprungen wurde jener Schritt, der dem Katalog aufträgt, ein neues Produkt anzubieten. Das Speichern endete damit mit einem abgelegten Produkt, einem unveränderten Katalog und einem Produkt, das niemand anbietet — auf keinem Bildschirm der betreuenden Person sichtbar, während die Meldung sie auf das Bild schauen liess. Das Speichern funktioniert wieder, und die Reihenfolge der drei Schreibvorgänge wurde umgestellt: erst der Datensatz, dann das Angebot, dann das Bild. Ein fehlgeschlagenes Bild kostet nun ein Bild — einen Upload, und sichtbar fehlend."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Service catalogue"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a catalogue under Catalogue and press \"New product\".",
-          "Fill in the id and the name, and choose a picture.",
-          "Press Save — the product is stored and the catalogue offers it.",
-          "Check the product list: the new product is in it."
-        ],
-        "de": [
-          "Unter Katalog einen Katalog öffnen und „Neues Produkt“ drücken.",
-          "Id und Bezeichnung ausfüllen und ein Bild wählen.",
-          "Speichern drücken — das Produkt wird abgelegt und vom Katalog angeboten.",
-          "In der Produktliste nachsehen: das neue Produkt steht darin."
-        ]
-      }
-    },
-    {
-      "id": "the-portal-s-link-into-an-order-s-process-answered-where-nob",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "\"View the process\" answers next to the order it was pressed on",
-        "de": "„Prozess ansehen“ antwortet neben dem Auftrag, bei dem gedrückt wurde"
-      },
-      "summary": {
-        "en": "The link on an order row opens the process fulfilling it. When there is no process to open — none started yet, or none left — it used to say so above the table, out of sight of anybody who pressed a button in a row further down: the page appeared to do nothing, which is how it was reported. The answer is now under the button that asked for it. One of those two cases was not even said: where an instance survives only in the exported event log, the link followed it into a replay view that could only report a failure to load. That case now has words of its own, on the portal, naming the one cause the server is certain of.",
-        "de": "Der Verweis auf einer Auftragszeile öffnet den Prozess, der den Auftrag erfüllt. Gab es keinen zu öffnenden Prozess — noch keiner gestartet oder keiner mehr vorhanden —, stand die Auskunft bisher oberhalb der Tabelle und damit ausserhalb des Blickfelds derjenigen, die weiter unten eine Schaltfläche gedrückt hatten: die Seite schien nichts zu tun, und so wurde es gemeldet. Die Antwort steht nun unter der Schaltfläche, die sie ausgelöst hat. Einer der beiden Fälle wurde überdies gar nicht benannt: liegt eine Instanz nur noch im ausgelagerten Ereignisprotokoll, folgte der Verweis ihr in eine Ansicht, die bloss einen Ladefehler melden konnte. Dieser Fall hat nun eigene Worte im Portal und nennt jene Ursache, derer der Server sicher ist."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Self-service portal"
-      ],
-      "tutorial": {
-        "en": [
-          "Open \"My orders\" in the service portal.",
-          "Press \"View the process\" on an order — the running process opens.",
-          "On an order whose process has finished, the reason appears under the button."
-        ],
-        "de": [
-          "Im Leistungsportal „Meine Aufträge“ öffnen.",
-          "Bei einem Auftrag „Prozess ansehen“ drücken — der laufende Prozess öffnet sich.",
-          "Bei einem Auftrag ohne laufenden Prozess erscheint der Grund unter der Schaltfläche."
-        ]
-      }
-    },
-    {
-      "id": "a-folded-decision-service-stays-folded",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A folded decision service stays folded",
-        "de": "Ein zugeklappter Decision Service bleibt zugeklappt"
-      },
-      "summary": {
-        "en": "Atlas draws a diagram for a decision model that has none, and lays the whole thing out afresh when a model's diagram covers only part of it — on the reasoning that half a diagram is usually the leftovers of a tool that drew what it could. A folded decision service looks exactly like that from the outside and is the opposite: DMN folds one by leaving its contents out of the picture on purpose. So Atlas was unfolding, on every read, what somebody had just folded — and a fold could never survive being saved. It now recognises the one case: a diagram missing exactly the decisions of a folded service is complete. Anything else missing is still drawn, including a service with no box of its own at all.",
-        "de": "Atlas erzeugt für ein Entscheidungsmodell ohne Diagramm eines und legt das ganze Diagramm neu an, wenn es nur einen Teil des Modells abdeckt — mit der Begründung, ein halbes Diagramm sei meist der Rest eines Werkzeugs, das zeichnete, was es konnte. Ein zugeklappter Decision Service sieht von aussen genauso aus und ist das Gegenteil: DMN klappt ihn zu, indem sein Inhalt absichtlich aus dem Bild bleibt. Atlas klappte also bei jedem Lesen wieder auf, was jemand gerade zugeklappt hatte — und eine Faltung überlebte kein Speichern. Jetzt erkennt Atlas diesen einen Fall: Ein Diagramm, dem genau die Entscheidungen eines zugeklappten Service fehlen, ist vollständig. Alles andere, was fehlt, wird weiterhin gezeichnet, auch ein Service ganz ohne eigenen Kasten."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "DMN"
-      ]
-    },
-    {
-      "id": "a-decision-service-is-offered-where-the-author-looks-for-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The decision picker lists a decision service where you look for it",
-        "de": "Der Entscheidungs-Picker führt einen Decision Service dort, wo man ihn sucht"
-      },
-      "summary": {
-        "en": "A decision service is the published interface over part of a decision model — the thing a business rule task is meant to call. The picker was built only from the decisions its application's models offer, so a service could get into the list only by having been deployed: with no model file behind it, and so in no application. It ended up under \"other decisions\", below every decision it is made of. Now it is listed with its own model file, and the list is grouped the way you read it: one group per decision file, your application's files first, the services above the decisions inside them. A decision that belongs to a service says so, because calling it directly reaches past the interface the service exists to be.",
-        "de": "Ein Decision Service ist die veröffentlichte Schnittstelle über einen Teil eines Entscheidungsmodells — das, was ein Business Rule Task aufrufen soll. Der Picker wurde nur aus den Entscheidungen der Modelle einer Applikation gebaut; ein Service kam deshalb nur in die Liste, wenn er bereits deployt war: ohne Modelldatei dahinter und damit in keiner Applikation. Er landete unter „andere Entscheidungen\", unterhalb jeder Entscheidung, aus der er besteht. Jetzt steht er bei seiner Modelldatei, und die Liste ist so gegliedert, wie man sie liest: eine Gruppe je Entscheidungsdatei, die Dateien der eigenen Applikation zuerst, die Services über den Entscheidungen darin. Eine Entscheidung, die zu einem Service gehört, sagt das — denn sie direkt aufzurufen greift an der Schnittstelle vorbei, für die es den Service gibt."
+        "en": "A decision service publishes the decisions it answers with and encapsulates the ones it evaluates on the way there. The picker merged the two: every one of them read “inside <service>”. They are not the same offer. Calling a published decision gets the service's own answer by a longer route; calling an encapsulated one reaches past the interface into an arrangement the service exists to be free to change — and nothing later says a word about it, because it runs and it answers correctly. The two now read differently, “published by X” against “internal to X — bypasses it”, and a service's workings are listed last, after the decisions that are somebody's to call. All of them stay selectable: the decision id on a task is a free-text field and the picker is a convenience, so refusing one here would move the practice out of sight rather than stop it. The list makes the boundary-respecting pick the easy one and leaves the other reading as what it is.",
+        "de": "Ein Decision Service veröffentlicht die Decisions, mit denen er antwortet, und kapselt jene, die er auf dem Weg dorthin auswertet. Die Auswahl hat beide vermischt: Jede von ihnen las sich als „inside <Service>“. Es sind aber nicht dieselben Angebote. Eine veröffentlichte Decision aufzurufen liefert die Antwort des Service auf einem Umweg; eine gekapselte aufzurufen greift an der Schnittstelle vorbei in eine Anordnung, die der Service ändern können soll — und niemand sagt später ein Wort dazu, weil es läuft und korrekt antwortet. Beide lesen sich jetzt unterschiedlich, „published by X“ gegenüber „internal to X — bypasses it“, und die Zwischenschritte eines Service stehen zuletzt, nach den Decisions, die tatsächlich für Aufrufer gedacht sind. Auswählbar bleiben alle: Die decisionId am Task ist ein freies Textfeld und die Auswahl nur eine Bequemlichkeit — eine Sperre hier würde die Praxis aus dem Blick schieben statt sie zu beenden. Die Reihenfolge macht die grenzwahrende Auswahl zur bequemen und lässt die andere als das erscheinen, was sie ist."
       },
       "link": {
         "label": "Changelog",
@@ -313,7 +20,7 @@
       },
       "tags": [
         "Modeler",
-        "DMN"
+        "Decisions"
       ],
       "try": {
         "label": {
@@ -324,75 +31,317 @@
       }
     },
     {
-      "id": "a-product-s-description-was-stored-frozen-into-the-release-a",
+      "id": "the-decision-picker-says-when-a-decision-is-not-deployed",
       "version": "Unreleased",
       "date": null,
-      "category": "Fixed",
+      "category": "Added",
       "title": {
-        "en": "A product's description now reaches the people reading it",
-        "de": "Die Produktbeschreibung erreicht jetzt die Lesenden"
+        "en": "The decision picker says when a decision is not deployed yet",
+        "de": "Die Decision-Auswahl sagt, wenn eine Decision noch nicht deployt ist"
       },
       "summary": {
-        "en": "The portal asked for a description in the language the page itself is read in — German or English, taken from the browser — and showed nothing at all when the catalogue had no text under that key. Publishing, however, only guarantees a description in every language the catalogue declares, and those are two different lists: a catalogue offered in German and French was complete by that rule and said nothing to a reader whose browser is English. Two descriptions written, neither on screen. The reader's own language is still preferred, so a product described in several still shows the right one; the others are reached only after it. A product's picture is shown beside the description where the catalogue carries one.",
-        "de": "Das Portal verlangte die Beschreibung in der Sprache, in der die Seite selbst gelesen wird — Deutsch oder Englisch, aus dem Browser übernommen — und zeigte gar nichts, wenn der Katalog unter diesem Schlüssel keinen Text hatte. Die Veröffentlichung sichert eine Beschreibung jedoch nur in jeder Sprache zu, die der Katalog deklariert, und das sind zwei verschiedene Listen: Ein auf Deutsch und Französisch angebotener Katalog war nach dieser Regel vollständig und sagte einer Person mit englischem Browser nichts. Zwei Beschreibungen erfasst, keine sichtbar. Die eigene Sprache der lesenden Person wird weiterhin bevorzugt, ein mehrsprachig beschriebenes Produkt zeigt also die richtige; die übrigen kommen erst danach. Das Produktbild wird daneben angezeigt, sofern der Katalog eines führt."
+        "en": "A business rule task's picker offers what is in the decision model, and that is a layer above what the engine can run: writing a decision into the model makes it callable by name, deploying it makes it runnable. Between those two the task saved cleanly and looked right, and the refusal only arrived at Publish — in a message about a decision you picked minutes earlier, from a check you were not thinking about. Such an entry now says “not deployed” beside its name, alongside the notes that were already there, and the two stack: a decision can be inside a decision service and not deployed, and you need both facts before you pick it. Drafts are still not offered at all — nothing you have not deliberately written to the model can be wired into a process.",
+        "de": "Die Auswahl eines Business Rule Task bietet an, was im Decision-Modell steht, und das ist eine Schicht über dem, was die Engine ausführen kann: Eine Decision ins Modell zu schreiben macht sie über ihren Namen aufrufbar, sie zu deployen macht sie lauffähig. Dazwischen liess sich der Task sauber speichern und sah richtig aus, und die Ablehnung kam erst beim Publish — in einer Meldung über eine Decision, die Sie Minuten vorher ausgewählt hatten, aus einer Prüfung, an die Sie gerade nicht dachten. Ein solcher Eintrag trägt jetzt „not deployed“ neben seinem Namen, neben den Vermerken, die es schon gab, und beide stehen nebeneinander: Eine Decision kann in einem Decision Service liegen und nicht deployt sein, und beides muss man vor der Auswahl wissen. Entwürfe werden weiterhin gar nicht angeboten — nichts, was Sie nicht bewusst ins Modell geschrieben haben, lässt sich an einen Prozess hängen."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       },
       "tags": [
-        "Self-service portal",
-        "Catalogue"
+        "Modeler",
+        "Decisions"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "the-test-panel-s-fields-follow-the-type-the-decision-declare",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Testing a decision offers the right field for each input",
+        "de": "Beim Testen einer Decision passt das Eingabefeld zum Datentyp"
+      },
+      "summary": {
+        "en": "Trying a decision meant answering, in a plain text box, a question the model had already answered: which spelling of a date this input wants, whether the boolean is true or TRUE or 1. The declared type is part of the description the panel is built from, so the panel now uses it. A boolean is a list, with a blank entry — an input nobody set is missing, not false, and the two do not evaluate the same. A date gets a calendar, a time gets a clock, a number gets a spinner, and a duration keeps a text field with the shape of the answer in the placeholder, because browsers have no control for one. What each field sends is unchanged, and deliberately so: the value a process variable would carry, so a decision tried here still sees exactly what it would see at runtime.",
+        "de": "Eine Decision auszuprobieren hiess bisher, in einem einfachen Textfeld eine Frage zu beantworten, die das Modell längst beantwortet hatte: welche Schreibweise eines Datums diese Eingabe erwartet, ob der Boolean true oder TRUE oder 1 lautet. Der deklarierte Typ steht in der Beschreibung, aus der das Panel gebaut wird — und wird jetzt auch verwendet. Ein Boolean ist eine Auswahlliste, mit einem leeren Eintrag: Eine Eingabe, die niemand gesetzt hat, fehlt, sie ist nicht false, und beides wird unterschiedlich ausgewertet. Ein Datum bekommt einen Kalender, eine Zeit eine Uhr, eine Zahl ein Zahlenfeld, und eine Dauer behält ein Textfeld mit der Form der Antwort im Platzhalter, weil Browser dafür kein Bedienelement kennen. Was die Felder senden, bleibt unverändert, und zwar bewusst: genau den Wert, den auch eine Prozessvariable trägt, damit eine hier getestete Decision dasselbe sieht wie zur Laufzeit."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-decision-says-where-its-diagram-and-its-logic-disagree-and",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A decision's diagram and its logic are kept in step",
+        "de": "Diagramm und Logik einer Decision bleiben beieinander"
+      },
+      "summary": {
+        "en": "Draw an arrow saying a decision needs an input, and its table gains the column that reads it — named and typed like the element it comes from, as part of the same step, so one undo takes the arrow and the column back together. Nothing is written when the table already reads that name: it is a default you can change, not a rule. That transcription — drawing the arrow, then opening the table and typing the same name again — is where the diagram and the logic used to start differing. Where they already differ, the findings strip under the canvas says so: a decision that reads a name nothing gives it (the one case the engine refuses outright, so it never deploys) and a decision given something it never reads (which deploys, runs, and which nothing else would ever mention — the diagram claims a dependency the decision does not have, and the diagram is what gets reviewed). The second offers to write the missing column for you. The same check reaches the process: a business rule task now says where its input mapping and the decision's own inputs disagree. An input the decision reads and no row feeds arrives empty, every rule that tests it falls through, and the process carries on with whatever the table's last row says — a wrong answer rather than a failure, which nothing downstream can tell apart.",
+        "de": "Zeichnen Sie einen Pfeil, der besagt, dass eine Decision eine Eingabe benötigt, erhält ihre Tabelle die Spalte, die diese liest — benannt und typisiert wie das Element, aus dem sie stammt, im selben Schritt, sodass ein einziges Rückgängig Pfeil und Spalte gemeinsam zurücknimmt. Nichts wird geschrieben, wenn die Tabelle diesen Namen bereits liest: Es ist eine Vorgabe, die Sie ändern können, keine Regel. Genau diese Übertragung — erst den Pfeil zeichnen, dann die Tabelle öffnen und denselben Namen noch einmal tippen — war die Stelle, an der Diagramm und Logik auseinanderzulaufen begannen. Wo sie bereits auseinanderlaufen, sagt es die Befundleiste unter der Zeichenfläche: eine Decision, die einen Namen liest, den ihr nichts gibt (der eine Fall, den die Engine rundweg ablehnt, der also gar nicht deployt), und eine Decision, der etwas gegeben wird, das sie nie liest (das deployt und läuft und das sonst nirgends erwähnt würde — das Diagramm behauptet eine Abhängigkeit, die die Decision nicht hat, und das Diagramm ist das, was geprüft wird). Der zweite Befund bietet an, die fehlende Spalte für Sie zu schreiben. Dieselbe Prüfung reicht bis in den Prozess: Ein Business Rule Task sagt jetzt, wo seine Eingabezuordnung und die Eingaben der Decision nicht zusammenpassen. Eine Eingabe, die die Decision liest und die keine Zeile speist, kommt leer an, jede Regel, die sie prüft, greift nicht, und der Prozess läuft mit dem weiter, was die letzte Zeile der Tabelle sagt — eine falsche Antwort statt eines Fehlers, und die beiden sind nachgelagert nicht zu unterscheiden."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-decision-s-input-columns-follow-the-graph-they-come-from-a",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A decision's columns follow the diagram, and nothing is thrown away unasked",
+        "de": "Die Spalten einer Decision folgen dem Diagramm, und nichts wird ungefragt verworfen"
+      },
+      "summary": {
+        "en": "Drawing an arrow already wrote the column that reads it. But a diagram is edited after it is drawn, and those edits went nowhere: rename an input and its column went on reading a name that no longer existed, change its type and the column kept the old one, delete the arrow and the column was left reading a name nothing provides — a model that will not deploy, found out much later and phrased as a FEEL variable. Renames and type changes now follow by themselves, inside the same step you made, so one undo takes the whole change back. That includes the case where the diagram and the engine quietly disagreed: an element that declares a variable is read by that variable's name and not by its label, so renaming an input in the properties panel used to move the label alone — the picture said one thing, the engine read another, and nothing reported it because the model still deployed. Removing an arrow asks first. The column it fed owns a cell in every rule, and each of those cells is something somebody wrote, so taking the column away takes logic with it. You are asked once per action, however many arrows it removes, and one undo puts the arrow and its columns back together; refuse, and the column stays and the findings strip says it reads a name nothing provides. The other direction is offered rather than done: a column reading a name no element answers to now carries a button that draws that input into the diagram and connects it, typed as the column that asked for it. It stays a button because a name typed into a table is also exactly what a typo looks like.",
+        "de": "Einen Pfeil zu zeichnen schrieb bereits die Spalte, die ihn liest. Ein Diagramm wird aber weiterbearbeitet, nachdem es gezeichnet wurde, und diese Änderungen liefen ins Leere: Wurde eine Eingabe umbenannt, las ihre Spalte weiter einen Namen, den es nicht mehr gab; wurde ihr Typ geändert, behielt die Spalte den alten; wurde der Pfeil gelöscht, blieb eine Spalte zurück, die einen Namen liest, den nichts liefert — ein Modell, das nicht deployt, bemerkt viel später und formuliert als FEEL-Variable. Umbenennungen und Typänderungen werden jetzt von selbst nachgeführt, im selben Schritt, den Sie gemacht haben, sodass ein einziges Rückgängig die ganze Änderung zurücknimmt. Dazu gehört der Fall, in dem Diagramm und Engine stillschweigend auseinanderliefen: Ein Element, das eine Variable deklariert, wird über deren Namen gelesen und nicht über seine Beschriftung — eine Eingabe im Eigenschaftenpanel umzubenennen bewegte bisher nur die Beschriftung. Das Bild sagte das eine, die Engine las das andere, und gemeldet wurde es nicht, weil das Modell weiterhin deployte. Das Entfernen eines Pfeils fragt zuerst nach. Die Spalte, die er gespeist hat, besitzt in jeder Regel eine Zelle, und jede dieser Zellen hat jemand geschrieben — die Spalte zu entfernen nimmt also Logik mit. Gefragt werden Sie einmal pro Aktion, unabhängig davon, wie viele Pfeile sie entfernt, und ein Rückgängig bringt Pfeil und Spalten gemeinsam zurück; lehnen Sie ab, bleibt die Spalte stehen, und die Befundleiste sagt, dass sie einen Namen liest, den nichts liefert. Die Gegenrichtung wird angeboten statt ausgeführt: Eine Spalte, die einen Namen liest, auf den kein Element hört, trägt jetzt eine Schaltfläche, die genau diese Eingabe ins Diagramm zeichnet und verbindet — typisiert wie die Spalte, die danach verlangt hat. Es bleibt eine Schaltfläche, weil ein in eine Tabelle getippter Name genauso aussieht wie ein Tippfehler."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "the-shop-works-on-a-phone",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The shop works on a phone",
+        "de": "Der Shop funktioniert auf dem Handy"
+      },
+      "summary": {
+        "en": "Below 860px every view of the shop is one column wide. The catalogue shows the column you have reached, and a stepper above it goes back and names the path so far. The basket stacks each offering over its own services and options. My orders is a list of cards, with each position's tasks, and the form to answer one, at the card's width. The buttons grow to a fingertip's size. A wide screen keeps its layout.",
+        "de": "Unter 860 px Breite ist jede Ansicht des Shops einspaltig. Der Katalog zeigt die Spalte, bei der man gerade ist; eine Leiste darüber führt zurück und nennt den bisherigen Weg. Der Warenkorb zeigt jedes Angebot mit seinen Services und Optionen darunter. «Meine Aufträge» ist eine Liste von Karten, mit den Aufgaben jeder Position und dem Formular zu ihrer Erledigung in der Breite der Karte. Die Schaltflächen sind gross genug für den Finger. Auf breiten Bildschirmen bleibt die bisherige Darstellung."
+      },
+      "link": {
+        "label": "ADR-0417",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0417-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md"
+      },
+      "tags": [
+        "Shop"
       ],
       "tutorial": {
         "en": [
-          "Open the service portal and pick a product in the cascade.",
-          "Press the round \"i\" at the right edge of its row.",
-          "The panel shows the picture, the description, the price and the approval rule.",
-          "Switch the language with the DE/EN buttons in the header: where the catalogue has both, the description follows."
+          "Open the shop on a phone, or narrow the browser window below 860px.",
+          "In the catalogue, choose a category, a group and a product; use Back to return.",
+          "Under My orders, open a task with Work on it and answer it in the card."
         ],
         "de": [
-          "Das Leistungsportal öffnen und in der Kaskade ein Produkt auswählen.",
-          "Das runde „i“ am rechten Rand der Zeile drücken.",
-          "Der Bereich zeigt Bild, Beschreibung, Preis und Genehmigungsregel.",
-          "Die Sprache mit den Schaltflächen DE/EN in der Kopfzeile wechseln: Führt der Katalog beide, folgt die Beschreibung."
+          "Den Shop auf dem Handy öffnen oder das Browserfenster schmaler als 860 px machen.",
+          "Im Katalog eine Kategorie, eine Gruppe und ein Produkt wählen; mit «Zurück» geht es zurück.",
+          "Unter «Meine Aufträge» eine Aufgabe mit «Erledigen» öffnen und in der Karte erledigen."
         ]
       }
     },
     {
-      "id": "the-info-button-on-the-basket-did-nothing",
+      "id": "tasks-works-on-a-phone",
       "version": "Unreleased",
       "date": null,
-      "category": "Fixed",
+      "category": "Added",
       "title": {
-        "en": "The info button on the basket opens the product again",
-        "de": "Der Info-Knopf im Warenkorb öffnet das Produkt wieder"
+        "en": "Tasks works on a phone",
+        "de": "Tasks funktioniert auf dem Handy"
       },
       "summary": {
-        "en": "Every row in the basket carried the round \"i\", it responded to a press, and nothing opened. The catalogue page and the \"my services\" page both showed the panel; the basket drew the button and never the panel itself. That left the one screen where somebody decides whether to actually place the order with a row that was a name and two buttons — the price, the approval rule, the description and the picture were all out of reach at exactly the moment they matter. The panel now opens below the basket, and anything already typed into a product's configuration form is kept when it does.",
-        "de": "Jede Zeile im Warenkorb trug das runde „i“, es reagierte auf einen Druck, und es öffnete sich nichts. Die Katalogseite und die Seite „Meine Leistungen“ zeigten den Bereich beide; der Warenkorb zeichnete nur den Knopf, nie den Bereich selbst. Damit blieb ausgerechnet auf jenem Bildschirm, auf dem über die Bestellung entschieden wird, eine Zeile aus Name und zwei Schaltflächen übrig — Preis, Genehmigungsregel, Beschreibung und Bild waren genau dann unerreichbar, wenn sie zählen. Der Bereich öffnet sich nun unterhalb des Warenkorbs; bereits eingetippte Angaben in einem Konfigurationsformular bleiben dabei erhalten."
+        "en": "Below 860px the inbox and Start show the list or the open task, not both, and a task opens with a button back to the list. The folders become a row of chips, and a task's fields put their label above the value. An access review row is a card with its two answers under it. The top bar keeps its icons on screen and scrolls the view names instead. Between 861px and 1180px the inbox keeps its three panes at narrower widths.",
+        "de": "Unter 860 px Breite zeigen Posteingang und «Start» entweder die Liste oder die geöffnete Aufgabe, nicht beides; eine Aufgabe öffnet sich mit einer Schaltfläche zurück zur Liste. Die Ordner werden zu einer Reihe von Chips, und die Felder einer Aufgabe zeigen die Beschriftung über dem Wert. Eine Zeile der Rezertifizierung ist eine Karte mit den beiden Antworten darunter. Die obere Leiste behält ihre Symbole im Bild und lässt stattdessen die Ansichtsnamen seitlich scrollen. Zwischen 861 px und 1180 px behält der Posteingang seine drei Bereiche in schmaleren Breiten."
+      },
+      "link": {
+        "label": "ADR-0417",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0417-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md"
+      },
+      "tags": [
+        "Tasks"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Tasks on a phone, or narrow the browser window below 860px.",
+          "Open a task from the list; use Back to the list to return.",
+          "Under Access review, answer a row with Still needed or Withdraw… in its card."
+        ],
+        "de": [
+          "Tasks auf dem Handy öffnen oder das Browserfenster schmaler als 860 px machen.",
+          "Eine Aufgabe in der Liste öffnen; mit «Back to the list» geht es zurück.",
+          "Unter «Access review» eine Zeile in ihrer Karte mit «Still needed» oder «Withdraw…» beantworten."
+        ]
+      }
+    },
+    {
+      "id": "a-decision-service-s-name-can-be-moved-out-of-the-way-and-th",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Move a decision service's name, and fold it from the box",
+        "de": "Namen eines Decision Service verschieben, Einklappen direkt in der Box"
+      },
+      "summary": {
+        "en": "DMN requires a decision service's name inside the shape and says nothing about where — and its own figures disagree, one drawing it centred at the top and three at the top left. Whichever corner an editor picks is wrong for some diagram: the name lands on a decision, or on an arrow crossing the border. So it starts at the top left, and a grab handle over it drags it anywhere inside the box, above the dividing line — where DMN puts the name, alongside the decisions the service publishes. Where you put it is stored as the shape's label bounds, DMN's own place for it, so it survives a save and means the same thing to another tool; nothing is written until you move it. Folding the service away has moved too: from the context menu into the box, as a plus at the bottom edge while the definition is hidden and a minus while it is shown, in the same place either way.",
+        "de": "DMN verlangt den Namen eines Decision Service innerhalb der Form und sagt nichts darüber, wo — und die eigenen Abbildungen widersprechen sich: eine zeichnet ihn oben mittig, drei oben links. Welche Ecke ein Editor auch wählt, für irgendein Diagramm ist sie falsch: Der Name landet auf einer Decision oder auf einem Pfeil, der den Rand kreuzt. Er beginnt deshalb oben links, und ein Griff über dem Namen zieht ihn an jede Stelle innerhalb der Box, oberhalb der Trennlinie — dorthin, wo DMN den Namen zusammen mit den veröffentlichten Decisions verortet. Die gewählte Stelle wird als Label-Bounds der Form gespeichert, also dort, wo DMN sie vorsieht; sie übersteht das Speichern und bedeutet für ein anderes Werkzeug dasselbe. Geschrieben wird erst, wenn Sie den Namen bewegen. Auch das Einklappen ist umgezogen: vom Kontextmenü in die Box, als Plus am unteren Rand bei verborgener Definition und als Minus bei sichtbarer — beides an derselben Stelle."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       },
       "tags": [
-        "Self-service portal"
+        "Modeler",
+        "Decisions"
       ],
-      "tutorial": {
-        "en": [
-          "Put a product in the basket in the service portal.",
-          "Open the basket.",
-          "Press the round \"i\" on one of the rows — the panel opens below the columns.",
-          "Press it again to close it, or press it on another row to switch."
-        ],
-        "de": [
-          "Im Leistungsportal ein Produkt in den Warenkorb legen.",
-          "Den Warenkorb öffnen.",
-          "Auf einer Zeile das runde „i“ drücken — der Bereich öffnet sich unterhalb der Spalten.",
-          "Erneut drücken schliesst ihn, ein Druck auf eine andere Zeile wechselt."
-        ]
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
       }
+    },
+    {
+      "id": "a-decision-service-s-name-box-can-be-resized-and-its-name-is",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The name of a decision service has a size you can set",
+        "de": "Der Name eines Decision Service hat eine Grösse, die Sie festlegen"
+      },
+      "summary": {
+        "en": "Moving the name was half the answer: where it goes decides what it collides with, and how wide it is decides whether it reads at all. A grip on each corner of the selected name now drags its box wider, narrower, taller or shorter, holding the opposite corner still. The box stays inside the service and above the dividing line, and the size is written to the same place DMN keeps the name's position, so it survives a save and means the same thing to another tool. Underneath was a fault the size made visible: dragging a name once brought it back with the word broken across two lines — \"MyServic\" over \"e\" — because the box was measured to the text's own width and the layout wants a hair more than that before it calls a line a fit. The box is rounded up now, and never narrower than the name's longest word, so a name that wraps wraps between words. There is no size at which a word is cut in half.",
+        "de": "Das Verschieben des Namens war die halbe Antwort: Wohin er geht, entscheidet, womit er kollidiert; wie breit er ist, entscheidet, ob er überhaupt lesbar ist. An jeder Ecke des ausgewählten Namens sitzt jetzt ein Griff, der seinen Kasten breiter, schmaler, höher oder niedriger zieht, während die gegenüberliegende Ecke stehen bleibt. Der Kasten bleibt innerhalb des Service und oberhalb der Trennlinie, und die Grösse wird dorthin geschrieben, wo DMN auch die Position des Namens führt — sie übersteht damit ein Speichern und bedeutet für ein anderes Werkzeug dasselbe. Darunter lag ein Fehler, den die Grösse sichtbar machte: Ein einmal verschobener Name kam mit einem über zwei Zeilen zerschnittenen Wort zurück — «MyServic» über «e» — weil der Kasten auf die Breite des Textes selbst gemessen wurde und das Layout eine Spur mehr verlangt, bevor es eine Zeile als passend ansieht. Der Kasten wird jetzt aufgerundet und ist nie schmaler als das längste Wort des Namens. Ein Name, der umbricht, bricht damit zwischen Wörtern um; es gibt keine Grösse, bei der ein Wort zerschnitten wird."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-right-withdrawn-in-an-access-review-leaves-the-inventory",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A right withdrawn in an access review leaves the inventory",
+        "de": "Ein in der Rezertifizierung entzogenes Recht verschwindet aus dem Inventar"
+      },
+      "summary": {
+        "en": "Withdrawing a right an order granted started the product's deprovisioning with the product and the holder only. A process that finds what it provisioned by the order found nothing, and it could not report the line returned, so the right stayed in the inventory and the next campaign asked about it again. A withdrawal of an ordered right now goes back through its order, as a return does: the line is returning, and the process starts with the order, the position and the reason. A line the order will not give back is refused and the row stays unanswered. Rights without an order are unchanged.",
+        "de": "Das Entziehen eines bestellten Rechts startete die Deprovisionierung des Produkts nur mit Produkt und Inhaber. Ein Prozess, der das Bereitgestellte über den Auftrag findet, fand nichts und konnte die Position nicht als zurückgegeben melden; das Recht blieb im Inventar, und die nächste Kampagne fragte erneut danach. Das Entziehen eines bestellten Rechts läuft jetzt wie eine Rückgabe über den Auftrag: Die Position ist in Rückgabe, und der Prozess startet mit Auftrag, Position und Grund. Gibt der Auftrag die Position nicht zurück, wird das Entziehen abgelehnt und die Zeile bleibt unbeantwortet. Rechte ohne Auftrag sind unverändert."
+      },
+      "link": {
+        "label": "ADR-0418",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0418-a-withdrawn-ordered-right-goes-back-through-its-order.md"
+      },
+      "tags": [
+        "Tasks",
+        "Service catalogue"
+      ]
+    },
+    {
+      "id": "a-decision-service-s-border-no-longer-ends-up-over-the-arrow",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A decision service's border stays behind the arrows crossing it",
+        "de": "Der Rand eines Decision Service bleibt hinter den Pfeilen, die ihn kreuzen"
+      },
+      "summary": {
+        "en": "This was fixed twice before — once for drawing a decision service, once for moving one — and reported a third time. Each fix was a rule about one gesture, and there are more gestures than anyone can list: every one that is missed is a diagram with an arrow hidden under a box, found by whoever drew it. The third report was answered differently. The rule is now asserted where the drawing order is actually decided, on every change, instead of at each gesture that might disturb it, so it holds for gestures nobody thought of — including ones added later. Nothing can ask for a decision service to be drawn on top any more, because there is no diagram in which that is what the notation means. A newly drawn service still starts at the very back, behind any service already there, so two overlapping boxes do not hide each other's decisions.",
+        "de": "Das war bereits zweimal korrigiert — einmal für das Zeichnen eines Decision Service, einmal für das Verschieben — und wurde ein drittes Mal gemeldet. Jede Korrektur war eine Regel für eine Geste, und es gibt mehr Gesten, als sich aufzählen lassen: Jede übersehene ist ein Diagramm mit einem Pfeil, der unter einem Kasten verschwindet, gefunden von dem, der es gezeichnet hat. Die dritte Meldung wurde anders beantwortet. Die Regel wird jetzt dort durchgesetzt, wo die Zeichenreihenfolge tatsächlich entschieden wird — bei jeder Änderung —, statt bei jeder Geste, die sie stören könnte. Sie gilt damit auch für Gesten, an die niemand gedacht hat, einschliesslich später hinzugekommener. Ein Decision Service kann nicht mehr nach vorn geholt werden, weil es kein Diagramm gibt, in dem das der Bedeutung der Notation entspräche. Ein neu gezeichneter Service beginnt weiterhin ganz hinten, hinter einem bereits vorhandenen, damit zwei überlappende Kästen nicht gegenseitig ihre Decisions verdecken."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "access-review-and-reconciliation-open-again",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Access review and Reconciliation open again",
+        "de": "Rezertifizierung und Abgleich öffnen wieder"
+      },
+      "summary": {
+        "en": "Both pages showed an error card, \"gen is not defined\", instead of their rows. The router handed each a check for whether a later navigation had replaced it, over a value neither route had set, and the page's first use of that check threw. Both routes now set it, as the routes beside them already did.",
+        "de": "Beide Seiten zeigten eine Fehlerkarte, «gen is not defined», statt ihrer Zeilen. Der Router übergab jeder eine Prüfung, ob eine spätere Navigation sie abgelöst hatte, über einen Wert, den keine der beiden Routen gesetzt hatte; der erste Aufruf dieser Prüfung schlug fehl. Beide Routen setzen den Wert jetzt, wie es die benachbarten Routen bereits taten."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Tasks",
+        "Operations"
+      ]
     }
   ]
 }

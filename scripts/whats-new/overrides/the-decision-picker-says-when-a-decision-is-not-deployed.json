@@ -1,0 +1,15 @@
+{
+  "tags": ["Modeler", "Decisions"],
+  "title": {
+    "en": "The decision picker says when a decision is not deployed yet",
+    "de": "Die Decision-Auswahl sagt, wenn eine Decision noch nicht deployt ist"
+  },
+  "summary": {
+    "en": "A business rule task's picker offers what is in the decision model, and that is a layer above what the engine can run: writing a decision into the model makes it callable by name, deploying it makes it runnable. Between those two the task saved cleanly and looked right, and the refusal only arrived at Publish — in a message about a decision you picked minutes earlier, from a check you were not thinking about. Such an entry now says “not deployed” beside its name, alongside the notes that were already there, and the two stack: a decision can be inside a decision service and not deployed, and you need both facts before you pick it. Drafts are still not offered at all — nothing you have not deliberately written to the model can be wired into a process.",
+    "de": "Die Auswahl eines Business Rule Task bietet an, was im Decision-Modell steht, und das ist eine Schicht über dem, was die Engine ausführen kann: Eine Decision ins Modell zu schreiben macht sie über ihren Namen aufrufbar, sie zu deployen macht sie lauffähig. Dazwischen liess sich der Task sauber speichern und sah richtig aus, und die Ablehnung kam erst beim Publish — in einer Meldung über eine Decision, die Sie Minuten vorher ausgewählt hatten, aus einer Prüfung, an die Sie gerade nicht dachten. Ein solcher Eintrag trägt jetzt „not deployed“ neben seinem Namen, neben den Vermerken, die es schon gab, und beide stehen nebeneinander: Eine Decision kann in einem Decision Service liegen und nicht deployt sein, und beides muss man vor der Auswahl wissen. Entwürfe werden weiterhin gar nicht angeboten — nichts, was Sie nicht bewusst ins Modell geschrieben haben, lässt sich an einen Prozess hängen."
+  },
+  "try": {
+    "label": { "en": "Open the Modeler", "de": "Modeler öffnen" },
+    "route": "#/modeler"
+  }
+}

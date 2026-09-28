@@ -155,3 +155,102 @@ func TestWithdrawingClosesTheApprovalItWasWaitingOn(t *testing.T) {
 		t.Errorf("%d approval task(s) still open on a withdrawn order (%s)", len(tasks), body)
 	}
 }
+
+// handProvisionBPMN is a provisioning model whose first step is a person's: the
+// shape of "enter the address for the new account", which is what stood open
+// under a withdrawn order.
+const handProvisionBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="prov-hand" isExecutable="true">
+    <startEvent id="start"/>
+    <userTask id="Erfassen" name="Adresse erfassen">
+      <extensionElements>
+        <zeebe:assignmentDefinition assignee="alice"/>
+      </extensionElements>
+    </userTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="Erfassen"/>
+    <sequenceFlow id="f2" sourceRef="Erfassen" targetRef="end"/>
+  </process>
+</definitions>`
+
+// startProvisioning starts handProvisionBPMN for one position, the way the
+// orchestration starts a position's process, and returns the instance key.
+func startProvisioning(t *testing.T, ts *httptest.Server, admin *http.Client, orderID, position string) uint64 {
+	t.Helper()
+	code, b := cReq(t, admin, ts, "POST", "/api/v1/instances", `{"processId":"prov-hand","variables":{
+		"orderId":"`+orderID+`","itemId":"`+position+`","positionId":"`+position+`"}}`)
+	if code != http.StatusOK {
+		t.Fatalf("start the provisioning: %d (%s)", code, b)
+	}
+	var resp struct {
+		InstanceKey uint64 `json:"instanceKey"`
+	}
+	if err := json.Unmarshal(b, &resp); err != nil || resp.InstanceKey == 0 {
+		t.Fatalf("the start answered without the instance it started: %s", b)
+	}
+	return resp.InstanceKey
+}
+
+// stillRunning reports whether an instance is active, by asking to cancel it:
+// the route answers 404 for an instance that is not.
+func stillRunning(t *testing.T, ts *httptest.Server, admin *http.Client, key uint64) bool {
+	t.Helper()
+	code, b := cReq(t, admin, ts, "DELETE", fmt.Sprintf("/api/v1/instances/%d", key), "")
+	switch code {
+	case http.StatusOK:
+		return true
+	case http.StatusNotFound:
+		return false
+	}
+	t.Fatalf("cancel %d: %d (%s)", key, code, b)
+	return false
+}
+
+// TestWithdrawingStopsTheWorkAlreadyStarted.
+//
+// A pending line may already have its provisioning running — the line reads
+// pending until that process reports — with a step in somebody's inbox. Withdrawn,
+// that step is work for a position that no longer exists, so every instance the
+// order recorded on the line stops with it: the approval of one position and the
+// provisioning of the other alike.
+func TestWithdrawingStopsTheWorkAlreadyStarted(t *testing.T) {
+	ts, admin, _, _, ord := anOrderBobApproves(t)
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/deployments", handProvisionBPMN); code != http.StatusOK {
+		t.Fatalf("deploy: %d (%s)", code, b)
+	}
+	approval := startApproval(t, ts, admin, ord, "vpn", "bob")
+	provisioning := startProvisioning(t, ts, admin, ord, "laptop")
+
+	if code, res := cancelOrder(t, ts, admin, ord, `{}`); code != http.StatusOK || len(res.Cancelled) != 2 {
+		t.Fatalf("cancel = %d, cancelled %v", code, res.Cancelled)
+	}
+	if stillRunning(t, ts, admin, provisioning) {
+		t.Error("the provisioning of a withdrawn line is still running, its step still in an inbox")
+	}
+	if stillRunning(t, ts, admin, approval) {
+		t.Error("the approval of a withdrawn line is still running")
+	}
+}
+
+// TestWithdrawingOnePositionStopsOnlyItsWork: the other position's process is its
+// own and carries on.
+func TestWithdrawingOnePositionStopsOnlyItsWork(t *testing.T) {
+	ts, admin, _, _, ord := anOrderBobApproves(t)
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/deployments", handProvisionBPMN); code != http.StatusOK {
+		t.Fatalf("deploy: %d (%s)", code, b)
+	}
+	approval := startApproval(t, ts, admin, ord, "vpn", "bob")
+	provisioning := startProvisioning(t, ts, admin, ord, "laptop")
+
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/orders/"+ord+"/lines/laptop/cancel", `{}`); code != http.StatusOK {
+		t.Fatalf("withdraw the laptop: %d (%s)", code, b)
+	}
+	if stillRunning(t, ts, admin, provisioning) {
+		t.Error("the withdrawn position's provisioning is still running")
+	}
+	// Asked last: stillRunning stops what it finds running.
+	if !stillRunning(t, ts, admin, approval) {
+		t.Error("withdrawing the laptop stopped the VPN's approval")
+	}
+}

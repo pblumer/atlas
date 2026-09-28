@@ -1,0 +1,11 @@
+{
+  "tags": ["Shop", "Orders"],
+  "title": {
+    "en": "Cancelling an order stops the processes already working it",
+    "de": "Stornieren beendet die Prozesse, die bereits am Auftrag arbeiten"
+  },
+  "summary": {
+    "en": "When an order or one of its positions was cancelled, only a waiting approval was stopped. A position still reads pending while its provisioning runs, so it could be cancelled mid-provisioning, and the provisioning's open step stayed in somebody's inbox and in the shop, beneath a line that said Cancelled. Cancelling now stops every still-running process recorded on the cancelled position. What such a process already did in a target system is not undone.",
+    "de": "Beim Stornieren eines Auftrags oder einer Position wurde bisher nur eine wartende Genehmigung beendet. Eine Position gilt aber als ausstehend, solange ihre Provisionierung läuft, und liess sich deshalb mitten in der Provisionierung stornieren; deren offener Schritt blieb im Posteingang und im Shop stehen, unter einer Zeile mit dem Status Storniert. Stornieren beendet jetzt jeden noch laufenden Prozess, der an der stornierten Position vermerkt ist. Was ein solcher Prozess in einem Zielsystem bereits ausgeführt hat, wird nicht rückgängig gemacht."
+  }
+}

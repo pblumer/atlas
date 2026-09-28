@@ -17,7 +17,7 @@ import (
 
 // TestTheChooserFollowsWhatTheCatalogueAllows.
 func TestTheChooserFollowsWhatTheCatalogueAllows(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function renderBasket(", "\n// --- What a product needs")
+	body := webRegion(t, readWeb(t, "shop.js"), "function renderBasket(", "\n// --- What a product needs")
 	// The exact read, not the word: the paragraph above it explains the rule and
 	// would satisfy a guard that only looked for the name.
 	if !strings.Contains(body, "item.multipleAllowed") {
@@ -32,7 +32,7 @@ func TestTheChooserFollowsWhatTheCatalogueAllows(t *testing.T) {
 // A tick that could not be untaken would make the only way out of a wrong colour
 // emptying the basket.
 func TestAShapeIsChosenAndUnchosen(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	body := webRegion(t, src, "function pickShape(", "\n}")
 	// The decision written down, branch by branch. A guard that only looked for
 	// "push" and "splice" would be satisfied by a version that pushed on the wrong
@@ -57,7 +57,7 @@ func TestAShapeIsChosenAndUnchosen(t *testing.T) {
 // The answer collected on screen is a list now, and sending only its first entry
 // would order one phone and show two.
 func TestTheOrderCarriesEveryChosenShape(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "async function order(", "\nfunction el(")
+	body := webRegion(t, readWeb(t, "shop.js"), "async function order(", "\nfunction el(")
 	if strings.Contains(body, "variants[c.id] = state.variants[c.id];") {
 		t.Error("the order sends one shape per product, so the second position of a " +
 			"product ordered twice is dropped on the way out")

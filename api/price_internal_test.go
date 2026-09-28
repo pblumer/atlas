@@ -67,7 +67,7 @@ func TestTheApprovalTakesTheFigureFromTheOrderAndNotTheCatalogue(t *testing.T) {
 // "somebody left it blank" look identical. Publishing refuses the second, and this
 // is the first said out loud.
 func TestThePortalSaysWhenTheCatalogueNamesNoCost(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	if !strings.Contains(src, "t('price.none')") {
 		t.Error("the portal renders a missing price as nothing, which reads as a field " +
 			"somebody forgot rather than a catalogue that says nothing about cost")
@@ -82,7 +82,7 @@ func TestThePortalSaysWhenTheCatalogueNamesNoCost(t *testing.T) {
 // parse a price would have invented all three without deciding anything. If a
 // total is ever wanted it arrives with a money model, not by accident.
 func TestNoPageTurnsAPriceIntoANumber(t *testing.T) {
-	for _, page := range []string{"portal.js", "app.js", "catalog-admin.js"} {
+	for _, page := range []string{"shop.js", "app.js", "catalog-admin.js"} {
 		src := readWeb(t, page)
 		for _, arithmetic := range []string{
 			"parseFloat(", "parseInt(", "Number(",

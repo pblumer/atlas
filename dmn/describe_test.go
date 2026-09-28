@@ -207,6 +207,49 @@ func TestDescribeOffersTheServiceFirst(t *testing.T) {
 	}
 }
 
+// TestDescribeTellsAPublishedDecisionFromAWorking proves the two halves of "made of"
+// come back apart.
+//
+// DMN §10.4 splits them and Members deliberately merges them, because both are what
+// the service is built from. The difference is the whole point of a service, though:
+// an output decision is what it answers with, so calling that directly gets the same
+// value by a longer route, while an encapsulated one is a working — a caller bound to
+// it has reached past the interface into an arrangement the service exists to be free
+// to change. Nothing later says a word about it: it runs, and it answers correctly.
+// So a picker that cannot tell the two apart cannot warn about the one that matters.
+func TestDescribeTellsAPublishedDecisionFromAWorking(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "approval.dmn"), []byte(approvalServiceModel), 0o644); err != nil {
+		t.Fatalf("write model: %v", err)
+	}
+	v := dmn.NewValidator(dmn.DirResolver{Dir: dir})
+
+	_, offered, err := v.Describe(context.Background(), "approval")
+	if err != nil {
+		t.Fatalf("Describe: %v", err)
+	}
+	svc := offered[0]
+	if !svc.Service {
+		t.Fatalf("first entry = %+v, want the decision service", svc)
+	}
+	// Members is unchanged — everything the service is made of, output decisions first.
+	if got := strings.Join(svc.Members, ","); got != "Verdict,Score" {
+		t.Errorf("service members = %q, want \"Verdict,Score\"", got)
+	}
+	// Internal is the encapsulated half only. Verdict is published and must not be in
+	// it: marking the service's own answer as a working would put a warning on the
+	// pick an author is supposed to make.
+	if got := strings.Join(svc.Internal, ","); got != "Score" {
+		t.Errorf("service internal = %q, want \"Score\"", got)
+	}
+	// And a plain decision claims neither.
+	for _, d := range offered[1:] {
+		if len(d.Internal) > 0 {
+			t.Errorf("%q names internal decisions %v, want none: it is not a service", d.ID, d.Internal)
+		}
+	}
+}
+
 // TestDescribeNamesNoMembersForAPlainDecision proves Members is a statement about a
 // service and nothing else: a model without one offers decisions that belong to
 // nothing, and say so by naming no members.

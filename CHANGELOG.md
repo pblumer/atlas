@@ -12,7 +12,349 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **The decision picker tells a decision service's answer from its workings.** A
+  service publishes output decisions and encapsulates the ones it evaluates on the way
+  there (DMN §10.4), and the catalogue merged the two: every one of them read
+  *inside <service>*. They are not the same offer. Calling an output decision gets the
+  service's own answer by a longer route; calling an encapsulated one reaches past the
+  interface into an arrangement the service exists to be free to change — and nothing
+  later says a word, because it runs and answers correctly. The two now read
+  differently (*published by X* against *internal to X — bypasses it*), and a service's
+  workings are listed last, after the decisions that are somebody's to call. All of
+  them stay selectable: a task's decision id is a free-text field and the picker is a
+  convenience, so refusing one here would move the practice out of sight rather than
+  stop it. Enforcing the boundary belongs in the deploy preflight, where every path
+  goes through it; this is the half that can be done without changing what deploys.
+
+- **The decision picker says when a decision is not deployed.** A business rule task's
+  picker offers what is in the decision *model*, which is a layer above what the engine
+  can run: writing a decision into the model makes it callable by name, deploying it
+  makes it runnable. Between the two the task saved cleanly and looked right, and the
+  refusal arrived at Publish — in a message about a decision picked minutes earlier,
+  from a preflight the author was not thinking about. Such an entry now carries
+  *not deployed* beside its name, next to the notes already there, and the two stack:
+  a decision can be inside a decision service and not deployed, and an author needs
+  both facts before picking it. A draft is still not offered at all — nothing an author
+  has not deliberately written to the model can be wired to a process.
+
+- **The test panel's fields follow the type the decision declares.** Trying a decision
+  meant answering, in a text box, a question the model had already answered: which
+  spelling of a date this input wants, whether the boolean is `true` or `TRUE` or `1`.
+  The declared type is in the description the panel is built from, so the panel now
+  uses it — a list for a boolean, with a blank entry because an input nobody set is
+  missing rather than false; a calendar for a date; a clock for a time; a number
+  spinner for a number; and the shape of the answer in the placeholder for a duration,
+  which has no browser control. What each field sends is unchanged and deliberately so:
+  the value a process variable would carry, so a decision tried here still sees what it
+  would see at runtime.
+
+- **A decision says where its diagram and its logic disagree, and drawing a
+  requirement writes the column it implies.** A decision table's input column carries
+  an expression, not a reference to the arrow that feeds it, and DMN keeps the two
+  apart on purpose — one requirement can feed several columns, one column can combine
+  several. Nothing made them agree, so a decision could be drawn as needing an input
+  and another decision while its table read neither.
+
+  Three things now hold that together. Drawing an information requirement gives the
+  decision the column it implies, named and typed like the element it comes from, as
+  part of the same step — one undo takes the arrow and the column back together, and
+  nothing is written when the table already reads that name. The findings strip under
+  the canvas says when a decision reads a name nothing gives it, which is the one case
+  that does not deploy at all, and when a decision is given something it never reads,
+  which deploys and runs and which nothing else would ever mention; the second offers
+  to write the missing column. And a business rule task now says where its input
+  mapping and the decision's own inputs disagree — an input the decision reads and no
+  row feeds arrives empty, the rules that test it do not match, and the process carries
+  on with a wrong answer rather than a failure.
+
+
+- **A decision's input columns follow the graph they come from, and nothing is thrown
+  away without asking.** Drawing a requirement already wrote the column it implies, but
+  the graph is edited after it is drawn and nothing carried those edits through. Rename
+  an input and its column went on reading a name that no longer existed; change its
+  type and the column kept the old one; delete the arrow, or the element at the end of
+  it, and the column was left reading a name nothing provided — a model that does not
+  deploy, discovered later and phrased as a FEEL variable.
+
+  Renames and type changes are now followed automatically, inside the author's own
+  command, so a single undo takes the whole change back. That includes a case dmn-js
+  gets half right: an element that declares a `<variable>` is read by that variable's
+  name rather than by its label, and renaming an input data in the properties panel
+  moved only the label — the diagram said one thing and the engine read another, and
+  nothing reported it because the model still deployed.
+
+  Removing a requirement asks first. The column it fed owns a cell in every rule, and
+  each of those cells is a unary test somebody wrote, so taking the column away takes
+  logic with it; the question is asked once per action, however many arrows the action
+  removes, and the removal is queued into that same action so one undo puts the arrow
+  and its columns back together. Refusing keeps the column, and the findings strip then
+  says it reads a name nothing provides.
+
+  The other direction is offered rather than done. A column that reads a name no
+  element in the model answers to now carries a repair that draws that input data into
+  the graph and connects it — typed as the column that asked for it, and taken back by
+  one undo. It stays a button because a name typed into a table is also exactly what a
+  typo looks like.
+
+
+- **The shop works on a phone.** Below 860px every view of the shop is one column
+  wide. The catalogue shows the column you have reached, and a stepper above it goes
+  back and names the path so far. The basket stacks each offering over its own
+  services and options. My orders is a list of cards, with each position's tasks,
+  and the form to answer one, at the card's width. The buttons grow to a fingertip's
+  size. A wide screen keeps its layout. Before this, a phone showed about one and a
+  half of the catalogue's four columns, and an order's tasks sat past the right edge
+  of the screen
+  ([ADR-0417](docs/adr/0417-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md)).
+
+- **Tasks works on a phone.** Below the same 860px the inbox and Start show the list
+  or the open task, not both, and a task opens with a button back to the list. The
+  folders become a row of chips, and a task's fields put their label above the value.
+  An access review row is a card with its two answers under it. The top bar keeps its
+  icons on screen and scrolls the view names instead. Between 861px and 1180px the
+  inbox keeps its three panes at narrower widths. Before this, a phone showed the
+  folders and part of the list, and the task itself was past the right edge
+  ([ADR-0417](docs/adr/0417-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md)).
+
+- **A decision service's name can be moved out of the way, and the fold switch is
+  in the box.** DMN requires the name inside the shape and says nothing about where,
+  and its own figures disagree: one draws it centred at the top, three at the top
+  left. Whichever corner an editor picks is wrong for some diagram — the name lands
+  on a decision, or on an arrow crossing the border. So it starts at the top left
+  and a grab handle over it drags it anywhere inside the box, above the dividing
+  line, where DMN puts the name alongside the decisions the service publishes.
+
+  Where you put it is written to the place DMN keeps it, the shape's label bounds,
+  so it survives a save and means the same thing to another tool. Nothing is written
+  until you move it. Those bounds were already read and already ignored as a
+  position, so a file that arrived with the name placed drew it in the corner
+  anyway; now it is drawn where it says.
+
+  Folding a decision service away moved off the context menu and into the box: a
+  plus at the bottom edge while the definition is folded away, a minus while it is
+  shown, in the same place either way — where a collapsed sub-process carries its
+  own, and where a reader looks for it.
+
+### Added
+
+- **A decision service's name box can be resized, and its name is never cut in half.**
+  Moving the name was half the answer: where it goes decides what it collides with,
+  and how wide it is decides whether it reads at all. A grip on each corner of the
+  selected name now drags its box wider, narrower, taller or shorter, holding the
+  opposite corner still; the result stays inside the service and above the dividing
+  line, and is written to the same place DMN keeps the name's position, so it
+  survives a save.
+
+  Underneath was a defect the size made visible. Dragging a name once came back with
+  the word broken across two lines — "MyServic" over "e" — because the box was
+  measured to the text's own width and the layout wants a hair more than that before
+  it calls a line a fit. The box is rounded up now, and never narrower than the
+  name's longest word, so a name that wraps wraps between words. There is no size at
+  which a word is cut in half.
+
 ### Fixed
+
+- **A right withdrawn in an access review leaves the inventory.** Withdrawing a
+  right an order granted started the product's deprovisioning with the product and
+  the holder only. A process that finds what it provisioned by the order found
+  nothing, and it could not report the line returned, so the right stayed in the
+  inventory and the next campaign asked about it again. A withdrawal of an ordered
+  right now goes back through its order, as a return does: the line is returning,
+  and the process starts with the order, the position and the reason. A line the
+  order will not give back, because it is already going back or something still
+  needs it, is refused and the row stays unanswered, instead of a second
+  deprovisioning running beside the first. Rights without an order are unchanged
+  ([ADR-0418](docs/adr/0418-a-withdrawn-ordered-right-goes-back-through-its-order.md)).
+
+- **A decision service's border no longer ends up over the arrows crossing it,
+  whatever you did to it.** This was fixed twice before, once for drawing a service
+  and once for moving one, and reported a third time. Each fix was a rule about one
+  gesture, and there are more gestures than anyone can list — so the third report was
+  answered differently. The rule is now asserted where the drawing order is actually
+  decided, on every change, rather than at each gesture that might disturb it. It
+  therefore holds for gestures nobody thought of, including ones added later. A
+  newly drawn service still starts at the very back, behind any service already
+  there, so that two overlapping boxes do not hide each other's decisions.
+
+- **Access review and Reconciliation open again.** Both pages showed an error card,
+  "gen is not defined", instead of their rows. The router handed each a check
+  for whether a later navigation had replaced it, over a value neither route had
+  set, and the page's first use of that check threw. Both routes now set it, as the
+  routes beside them already did.
+
+- **A task's checkbox in the shop is a checkbox again.** A task answered inside an
+  order row drew its checkbox as wide as the table cell, with the label pushed off the
+  end. The orders table's field rule reached the task form's inputs too; it now styles
+  the filter row only.
+
+- **Withdrawing an order stops the processes already working it.** A cancelled
+  position's approval was cancelled with it, and nothing else. But a position reads
+  pending until its provisioning reports, so it can be withdrawn while that process
+  is running — and its step stayed open under the cancelled order, in somebody's
+  inbox and in the shop ("enter the address for the new account" beneath a line that
+  says Cancelled). Withdrawing an order, or one position of it, now cancels every
+  still-running instance the order recorded on that position. Cancelling stops the
+  work; what the process already did in a target system is not undone.
+
+- **A task a model assigns to the person who ordered is now theirs to answer.** A
+  model assigns a task with an expression, and the variable it has for a person is
+  usually an id: an order carries its orderer and its recipient as principal ids
+  (`usr_…`). A task assigned `assignee="=orderer"` was created, listed under the order in the
+  shop — and refused to the orderer, because the check compared the assignee with
+  the username alone. Only operators and administrators could answer it. The check
+  now accepts either spelling, the username or the principal id, which is what the
+  mail directory already accepted when it decides whom a notification reaches: the
+  people a mail about a task reaches and the people who may act on it have to be
+  the same set. The shop names such an assignee by display name rather than by id.
+  The "Assigned to me" folder still matches usernames only.
+
+- **Moving a decision service hid the arrows crossing it, and left its name behind.**
+  The box around a decision service is a background — arrows are meant to cross its
+  border — and a newly drawn one already went behind what was there. Moving one did
+  not: the library underneath moves a shape by taking it out of the diagram and
+  putting it back, and putting it back with nothing said about where means at the
+  end, which is on top. A stored file therefore drew correctly right up to the moment
+  you nudged the box, at which point the arrow crossing its border disappeared
+  underneath it.
+
+  The name had the matching problem. Where you put it is recorded in diagram
+  coordinates, which is the right place for it and is also why it stopped being true
+  the moment the box moved: nothing kept the two in step, so dragging the box left
+  the name standing where it was. The further the box travelled, the further outside
+  it the name sat — and DMN says the name is displayed *inside* the shape. Resizing
+  had the mirror image: the name stayed put while the box shrank past it.
+
+  It took the tool strip with it, which looked like a third, unrelated fault and was
+  this one: the strip is placed from the element's *drawn* extent, and a name drawn
+  outside the box stretches that extent to cover both, so the strip opened beside the
+  stray name rather than beside the service.
+
+  The name now keeps its place in the box: a move carries it along, a resize carries
+  it with whichever corner you dragged and pulls it back inside only when it no
+  longer fits, and one undo takes the whole gesture back. Folding remembers where the
+  name was, for the same reason it already remembers the dividing line, and gives it
+  back when you unfold — even if you dragged the folded box across the canvas first.
+
+- **A decision service drawn around an existing arrow hid it.** The box around a
+  decision service is a background: DMN encloses the decisions it names with it, and
+  arrows are meant to cross its border — which only reads as a diagram if the border
+  is behind them. The library underneath draws in the order things were added, so a
+  box drawn *after* an arrow was drawn on top of it, and the arrow simply vanished
+  inside the box with nothing on the canvas to say where it had gone.
+
+  Opening a stored file was never affected, because a stored file is read in an order
+  that puts every decision service first. Only drawing one by hand was — which is the
+  case where it is hardest to tell whether the editor lost the arrow or you did.
+
+  A newly drawn decision service now goes behind what is already there. What it holds
+  stays in front of it, because its decisions belong to it.
+
+- **A decision service lost its decisions — three different ways — and a requirement
+  drawn from one required nothing.** The box around a decision service is drawn as a
+  container, which is what paints it beneath what it holds and what carries its
+  decisions when you move it. The library underneath reads a container as an owner,
+  and DMN says the opposite: *"decision services are defined as overlays and
+  therefore do not encapsulate the decisions within them"* (DMN 1.5 §6.2.5). Three
+  places took the owner reading literally.
+
+  Folding a service and unfolding it again handed its decisions back to the diagram
+  instead of to the box. The box was then a rectangle standing behind them rather
+  than one holding them, and the next drag moved it and left every decision where it
+  was — which is what a reader reported, and what the screenshots showed. Dragging a
+  *folded* service took nothing with it, because a folded service holds nothing on
+  the canvas: its decisions, the edges between them and the size and divider it is
+  restored to are parked in a record. Unfolding put all of it back where it was
+  folded, so the drag was silently undone. And deleting a service deleted its
+  decisions, their logic and the requirements between them out of the model: a
+  four-decision file came back holding two.
+
+  Separately, the two ways a decision service is invoked — by a decision, and by a
+  business knowledge model — were drawable and produced nothing. The reference was
+  written under a property name nobody declared, so the knowledge requirement was
+  saved without a target and required nothing at all.
+
+  Each decision now keeps the box it was folded out of, a folded service takes its
+  record along and gives it back where you dropped it, deleting a service leaves
+  every decision where it was drawn, and a requirement drawn from a service names
+  it.
+
+- **The portal's process link asked a search that did not come back.** Pressing
+  "View the process" on an order wrote "Wird abgefragt …" under it, and nothing else
+  happened, ever. The link looked the instance up with a search that named no
+  process definition, and such a search reads every instance on the server and every
+  variable of each. On an installation of any size it does not answer in any time a
+  reader waits, and the page had no bound on how long it would wait for it.
+
+  The lookup now names the fulfilment process's definitions, newest version first,
+  and each search reads that definition's own index — the fulfilment instances,
+  which are one per order. An order placed before the last redeploy is still found,
+  under the version it started on. And the lookup gives up after twenty seconds
+  and says so beside the order, rather than leaving "Asking …" standing as if an
+  answer were on its way.
+
+- **The basket said what was ordered and not what belonged to what.** It drew three
+  columns — offering, service, optional — each a flat list stacked on its own. A
+  row's height in one column had nothing to do with its height in the next, so with
+  two offerings in the basket a service sat beside whichever offering happened to
+  share its line: a laptop's hardware beside a monitor, the laptop's sleeve on the
+  monitor's line. The relation the reader needed was the one thing three independent
+  lists cannot draw.
+
+  Every offering is now one line of the grid, and its services and options are the
+  cells of that line. The grid makes a line as tall as its tallest cell, so the next
+  offering starts below the previous one's last service rather than beside its
+  third, and a rule under each line tells two offerings apart. The column names
+  stay once, at the top.
+
+  Which offering a row belongs to is read off the same containment the level is,
+  up through what includes it and what offers it. A part two products share — one
+  case for two phones — lands under whichever of them is in this basket, not under
+  the first one the release happens to list. A taken option whose offering is not in
+  the basket keeps a line of its own rather than disappearing, because a position
+  nobody can see is one nobody can take out.
+
+- **A decision was listed under the name of whichever decision happened to come
+  first in its file, not under the name of the file.** A DMN model is one artifact:
+  Atlas stores it under one handle, lists it as one row, publishes it as one thing —
+  and it may hold several decisions. Everywhere else that name is read off
+  `<definitions name>`: the model upload, the import, the model listing and the
+  decision's documentation record. Two paths took the first `<decision name>`
+  instead — the draft listing, and the decision editor's Save to model. So a model
+  called "Kreditpruefung" whose first decision is "Bonitaet" appeared in the Explorer
+  as "Bonitaet" while the editor's own header said "Kreditpruefung", and reordering
+  the decisions inside the file renamed the artifact. Worse, the editor's save
+  mirrors a name change onto the reference: because the two readings differed, every
+  save of an untouched model silently renamed its row. Both paths now read the
+  model's own name, falling back to a decision's name and then its id only while a
+  model being drafted has not named itself yet.
+
+  Existing rows are not rewritten — a stored name is data, and this changes how a
+  new one is derived. A row showing a decision's name corrects itself the next time
+  the model is saved from the editor, or immediately if the name is edited by hand.
+
+- **A catalogue kept in `de-DE` and `en-EN` would have ignored the language switch,
+  for the same reason `de; en` did.** The portal narrows a browser's language to its
+  base — `de-CH` becomes `de` — because its own words live in a message catalogue
+  keyed that way. A product's texts are keyed by whatever the *catalogue* declares,
+  and `de-DE`, `en-GB` and `pt-BR` are all correct and all invisible to a lookup for
+  `de`, `en`, `pt`. Every name would have been stored under a key nothing on the page
+  asks for, the reader would have been shown whatever value came first, and the
+  switch would have done nothing — with the new language-tag check waving it through,
+  because `de-DE` **is** a tag. A text is selected by a tag's language now, the exact
+  tag winning over a regional one where a catalogue carries both.
+
+  The Console's language box is also cut on commas, semicolons **and** whitespace. A
+  tag can contain none of the three, so all three are separators and none is
+  ambiguous — and a maintainer who types `de-DE; en-EN; fr-FR` gets three languages
+  instead of one refusal naming a tag they never meant to write.
+
+  What this bought on its own: nothing a reader could see, for the languages the
+  page did not yet speak. A catalogue could declare `fr-FR` and its products carry
+  French, and no locale on that page selected it. The entry below — the portal's own
+  words in French and Italian — is what turned this correction into four working
+  languages rather than two.
 
 - **A catalogue could be saved with a language that is not a language, and every
   product in it then ignored the language switch.** Found in a live installation: a
@@ -272,6 +614,29 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The portal is called the shop — at a new address and under a new API path.**
+  **Breaking** for anything that called the page's API directly. The page where
+  people browse their catalogue and order is now the *Shop*: in the menu, in its
+  title, in the handbook, in the Console's catalogue screens, in the API and MCP
+  descriptions, and in the mails the shipped approval processes send ("Ihr Shop").
+
+  - The page moved from `/portal.html` to `/shop.html`. The old address answers
+    with a permanent redirect, query kept, because it sits in bookmarks and mails a
+    rename cannot reach.
+  - The five routes the page reads moved from `/api/v1/portal/…` to
+    `/api/v1/shop/…` (`catalog`, `favourites`, `favourites/{itemId}` for PUT and
+    DELETE, `orders/{id}/lines/{position}/progress`). The old paths are not kept:
+    the page was their only reader.
+  - The shipped system processes are named `Shop: …` instead of `Portal: …`, so
+    they deploy as a new version on the next start. Running instances finish on
+    the version they started on.
+
+  Deliberately unchanged, because renaming them would break what is already
+  deployed or stored rather than what anybody reads: the process variable
+  `portalBaseUrl` every approval model builds its links from, the stored language
+  and theme a browser remembers for the page, and the decision records written
+  under the old name.
+
 - **The Workers view says what a worker asks for, not only what it has been given.**
   Each worker's `types` counts the jobs it has *leased*, so a worker that is connected
   and polling a queue with no work in it looked exactly like a worker that is not
@@ -281,6 +646,59 @@ _Changed_ / _Removed_ for each version.
   would call a healthy idle installation broken.
 
 ### Added
+
+- **An order in the shop says whom each position waits for, and whoever holds the task answers it there.** An order's row said "Wartet" and not on whom: a line manager's
+  approval, a group in IT and a process nobody has modelled yet all read the same.
+  Under each position the shop now lists the open tasks of the processes working it
+  and whom each waits for — for an approval by the rule the line is approved under
+  (a named person, a group, the line manager). Whoever may work a task opens its own
+  form in the row, prefilled, and completes it there. The orderer and the recipient
+  see their orders' tasks; whoever holds a task of somebody else's order — the line
+  manager who has to approve it — sees that order too, marked as one to handle.
+
+  And for whom, by name. An approval said "For usr_7f3a…", in Tasks and in the
+  heading of the shipped approval form, which asked the approver to know a key.
+  Both now name the recipient and the orderer; the order and the process still keep
+  ids, and the name is resolved when the approval is read.
+
+  Found without searching. Every API start of a process now answers with the
+  `instanceKey` it created, and a start whose variables name an order and a position
+  is recorded on that position (`instances`); the shop reads the tasks of exactly
+  those instances through `GET /api/v1/shop/tasks`. Orders placed before this carry
+  no recorded instances and show no tasks.
+
+- **The portal speaks French and Italian.** It had German and English, so a catalogue
+  kept in French or Italian carried translations that no reader could ever select: the
+  switch will not offer a language the page cannot render whole, and the page could
+  not render those. All 148 interface strings now exist in four languages, which is
+  what makes `de`, `fr`, `it` and `en` real choices for a catalogue rather than keys
+  in a map.
+
+  Written by the author of this change and **not yet read by a native speaker** of
+  either language. The register is formal throughout, as the German is, and the terms
+  follow the German source rather than inventing a vocabulary — but a review by
+  somebody who reads the language daily is worth having before this reaches the people
+  it is for.
+
+- **The portal's language switch offers the languages the catalogue is kept in.** It
+  offered this page's own two, always. So a catalogue kept only in German carried an
+  EN button that turned the navigation English and left every product name,
+  description and heading German — a half-translated screen the portal offered
+  itself, which is the state it refuses to reach by guessing at the browser. And a
+  catalogue kept in a third language had no button for it at all.
+
+  The switch is now the catalogue's declared languages, narrowed to the ones this
+  page can actually render, and it is not drawn at all where that leaves one: a
+  control with a single position says something can be changed and then cannot. The
+  choice a visitor arrives with — from the address, from this browser, from their own
+  list — settles onto one of the catalogue's tags once it is known, preferring the
+  same language in another tag before falling back to the catalogue's first.
+
+  The narrowing is the cost and it is deliberate: a catalogue may be kept in French,
+  and until the portal's own words are French too, an FR button would promise a
+  French page and deliver half of one. A reader whose browser is English, meeting a
+  German-only catalogue, now gets a German page rather than English navigation beside
+  German products.
 
 - **A credential minted for reading another Atlas can now actually read it.** Two installations
   pointed at each other found two defects in the credential reach released with the estate, both

@@ -1,0 +1,18 @@
+{
+  "tags": ["Modeler", "Decisions"],
+  "title": {
+    "en": "A decision service's border stays behind the arrows crossing it",
+    "de": "Der Rand eines Decision Service bleibt hinter den Pfeilen, die ihn kreuzen"
+  },
+  "summary": {
+    "en": "This was fixed twice before — once for drawing a decision service, once for moving one — and reported a third time. Each fix was a rule about one gesture, and there are more gestures than anyone can list: every one that is missed is a diagram with an arrow hidden under a box, found by whoever drew it. The third report was answered differently. The rule is now asserted where the drawing order is actually decided, on every change, instead of at each gesture that might disturb it, so it holds for gestures nobody thought of — including ones added later. Nothing can ask for a decision service to be drawn on top any more, because there is no diagram in which that is what the notation means. A newly drawn service still starts at the very back, behind any service already there, so two overlapping boxes do not hide each other's decisions.",
+    "de": "Das war bereits zweimal korrigiert — einmal für das Zeichnen eines Decision Service, einmal für das Verschieben — und wurde ein drittes Mal gemeldet. Jede Korrektur war eine Regel für eine Geste, und es gibt mehr Gesten, als sich aufzählen lassen: Jede übersehene ist ein Diagramm mit einem Pfeil, der unter einem Kasten verschwindet, gefunden von dem, der es gezeichnet hat. Die dritte Meldung wurde anders beantwortet. Die Regel wird jetzt dort durchgesetzt, wo die Zeichenreihenfolge tatsächlich entschieden wird — bei jeder Änderung —, statt bei jeder Geste, die sie stören könnte. Sie gilt damit auch für Gesten, an die niemand gedacht hat, einschliesslich später hinzugekommener. Ein Decision Service kann nicht mehr nach vorn geholt werden, weil es kein Diagramm gibt, in dem das der Bedeutung der Notation entspräche. Ein neu gezeichneter Service beginnt weiterhin ganz hinten, hinter einem bereits vorhandenen, damit zwei überlappende Kästen nicht gegenseitig ihre Decisions verdecken."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

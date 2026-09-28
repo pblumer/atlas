@@ -63,6 +63,12 @@ var wantPublicRoutes = []string{
 	"POST /oauth/token",
 	"GET /api/v1/oauth/authorize-context",
 
+	// The shop's former address, answered with a redirect to /shop.html and
+	// nothing else. Public for the reason the page it leads to is: the page is a
+	// static asset, and a redirect that asked for a session first would send a
+	// signed-out bookmark to the login screen instead of to the shop's own sign-in.
+	"GET /portal.html",
+
 	// The embedded web UI. Static assets; the login screen has to load.
 	"/",
 }

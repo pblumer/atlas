@@ -177,7 +177,11 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 			return
 		}
 	}
-	activateInstance(c, c.NewKey(), instanceSeed{
+	key := c.NewKey()
+	if c.cmd.Created != nil {
+		*c.cmd.Created = key
+	}
+	activateInstance(c, key, instanceSeed{
 		Instance:      c.cmd.Value.process,
 		Vars:          c.cmd.StartVars,
 		StartElements: c.cmd.StartElements,

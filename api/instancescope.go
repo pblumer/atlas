@@ -197,6 +197,15 @@ func (s *Server) taskFieldsFor(pr *httpapi.Principal, piKey uint64) (map[string]
 // holdsTask reports whether the caller holds a user task: they are its assignee, or
 // it is unclaimed and names a candidate group they belong to.
 //
+// An assignee is the caller's username or their principal id. Claiming writes a
+// username, but a model's assignment expression writes whatever it evaluates to,
+// and the variable a model has for a person is usually an id — the orderer and
+// the recipient of an order are both carried as one. A task assigned "=orderer"
+// that its orderer could not answer would be held by nobody but operators, and
+// the mail directory already reaches a person by either spelling
+// ([mailDirectory.Recipients]); the people a notification reaches and the people
+// who may act on the task have to be the same set.
+//
 // **The candidate-group rule is a decision this change had to make.** A BPMN
 // candidate group is free text in the model, and Atlas has never defined its
 // relationship to an identity group — ADR-0042 listed exactly this ("authorization
@@ -210,7 +219,8 @@ func (s *Server) taskFieldsFor(pr *httpapi.Principal, piKey uint64) (map[string]
 // A claimed task grants nothing to the group: once somebody holds it, it is theirs.
 func (s *Server) holdsTask(pr *httpapi.Principal, assignee, candidateGroups string) bool {
 	if assignee != "" {
-		return pr.Username != "" && strings.EqualFold(assignee, pr.Username)
+		return (pr.Username != "" && strings.EqualFold(assignee, pr.Username)) ||
+			(pr.UserID != "" && assignee == pr.UserID)
 	}
 	wanted := strings.Split(candidateGroups, ",")
 	// Ids first, and all of them, before any store read: a modeller who wrote group

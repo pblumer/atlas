@@ -856,6 +856,24 @@ type readyLine struct {
 	ApprovalProcess string `json:"approvalProcess"`
 }
 
+// RecordInstance notes, on the order itself, that an instance was started to work
+// one of its positions. found is false for an order this server does not hold —
+// not an error: a process may carry an orderId that names nothing here.
+func (s *Service) RecordInstance(orderID, ref string, inst LineInstance) (found bool, err error) {
+	s.loop.Do(func() {
+		var got Order
+		if got, found, err = s.store.Get(orderID); err != nil || !found {
+			return
+		}
+		var next Order
+		if next, err = RecordInstance(got, ref, inst); err != nil {
+			return
+		}
+		err = s.store.Save(next)
+	})
+	return found, err
+}
+
 // reportReq is one line's provisioning outcome.
 type reportReq struct {
 	Status LineStatus `json:"status"`

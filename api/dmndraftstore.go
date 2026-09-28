@@ -25,7 +25,8 @@ type dmnDraft struct {
 	// draft is minted a key of its own, prefixed dmnDraftIDPrefix, which the two
 	// spaces cannot collide across.
 	ID string `json:"id"`
-	// Name is the decision name read out of the XML, for the listing.
+	// Name is what the model calls itself, read out of the XML for the listing: the
+	// <definitions name>, falling back to a decision's name while the model has none.
 	Name string `json:"name"`
 	// RefID is the reference this draft edits; empty for a decision that is not in
 	// the model yet. When set it equals ID — it is carried explicitly so a reader

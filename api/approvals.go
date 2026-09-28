@@ -70,6 +70,12 @@ type approvalResp struct {
 	VariantID  string `json:"variantId,omitempty"`
 	Recipient  string `json:"recipient,omitempty"`
 	Orderer    string `json:"orderer,omitempty"`
+	// RecipientName and OrdererName are the two principals as a person reads them,
+	// resolved from the directory when the approval is read — never stored. The
+	// order and the process keep ids (ADR-0314); an approver deciding "for
+	// usr_7f3a…" is reading a key, and the question the screen asks is for whom.
+	RecipientName string `json:"recipientName,omitempty"`
+	OrdererName   string `json:"ordererName,omitempty"`
 	// Texts is the ordered product's name per language, as the release froze it. An
 	// approver deciding "vpn-zugang" is reading an id; this is the same product in
 	// words somebody chose.
@@ -242,6 +248,10 @@ func (s *Server) approvalOf(rv *state.ReadView, tr taskResp) (approvalResp, bool
 		VariantID: firstNonEmpty(vars["variantId"], line.VariantID),
 		Recipient: vars["recipient"], Orderer: vars["orderer"], Price: line.Price,
 	}
+	// Named from the order rather than from the process's variables: the order is
+	// the record of who ordered for whom, and a model may pass either on in any shape.
+	a.RecipientName = s.principalName(firstNonEmpty(ord.Recipient, a.Recipient))
+	a.OrdererName = s.principalName(firstNonEmpty(ord.Orderer, a.Orderer))
 	if as, ok := ord.AssignmentFor(line.Key()); ok {
 		a.Assignment = &as
 	}

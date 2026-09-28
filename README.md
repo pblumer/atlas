@@ -128,7 +128,7 @@ Coverage is a **checkable claim, not a vibe**: the [conformance suite](conforman
 atlas mcp --server http://localhost:8080          # --token, or ATLAS_TOKEN, when the server requires a login
 ```
 
-Atlas ships a [Model Context Protocol](https://modelcontextprotocol.io) adapter over its own HTTP API ([ADR-0016](docs/adr/0016-mcp-server-over-http-api.md)): 128 tools covering projects and drafts, BPMN and DMN deployment, instance lifecycle, task claiming and completion, incident resolution, runtime inspection, the business-architecture registry that says what a process is *for*, and the self-service portal's product catalogue. An agent can author a process, deploy it, start it, work its user tasks and read back the timeline — through exactly the surface a human uses. The Modeler also carries an in-canvas AI copilot ([ADR-0032](docs/adr/0032-modeler-ai-copilot.md)), and processes can call an agent as a task ([ADR-0117](docs/adr/0117-ai-agent-task.md)).
+Atlas ships a [Model Context Protocol](https://modelcontextprotocol.io) adapter over its own HTTP API ([ADR-0016](docs/adr/0016-mcp-server-over-http-api.md)): 128 tools covering projects and drafts, BPMN and DMN deployment, instance lifecycle, task claiming and completion, incident resolution, runtime inspection, the business-architecture registry that says what a process is *for*, and the self-service shop's product catalogue. An agent can author a process, deploy it, start it, work its user tasks and read back the timeline — through exactly the surface a human uses. The Modeler also carries an in-canvas AI copilot ([ADR-0032](docs/adr/0032-modeler-ai-copilot.md)), and processes can call an agent as a task ([ADR-0117](docs/adr/0117-ai-agent-task.md)).
 
 ## Running it for real
 

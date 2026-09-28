@@ -2,7 +2,7 @@
   "components": [
     {
       "type": "text",
-      "text": "## Genehmigung\n\nBestellt für **{{recipient}}**",
+      "text": "=\"## Genehmigung\\n\\nBestellt für **\" + (if recipientName != null then recipientName else if recipient != null then recipient else \"\") + \"**\"",
       "id": "kopf"
     },
     { "type": "textfield", "key": "itemId", "label": "Leistung", "disabled": true, "id": "leistung" },

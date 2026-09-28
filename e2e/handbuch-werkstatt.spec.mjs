@@ -236,7 +236,7 @@ test("the welcome chapter offers every app and both portal surfaces", async ({ p
   // of the shell — which is also why it was reachable by nobody until it was taught
   // here.
   for (const route of ["/#/console", "/#/modeler", "/#/tasks", "/#/operations",
-    "/#/panorama/starmap", "/#/data", "/portal.html", "/#/catalog"]) {
+    "/#/panorama/starmap", "/#/data", "/shop.html", "/#/catalog"]) {
     await expect(cards.locator(`a[href="${route}"]`)).toHaveCount(1);
   }
 });

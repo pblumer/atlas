@@ -6998,6 +6998,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             <h3>Decision inputs</h3>
             <p class="muted" style="font-size:12px">Each row feeds one decision input. Pick a variable from the list or type any FEEL expression over the instance's variables. Leave a row's name blank to drop it.</p>
             <div id="dmn-inputs">${inputs.map((p, i) => decisionInputRowHTML(i, p.source, p.target)).join("")}${decisionInputRowHTML(inputs.length, "", "")}</div>
+            <div id="dmn-inputs-drift" class="dmn-drift" hidden></div>
             <datalist id="dmn-vars-dl">${varOpts}</datalist>
             <datalist id="dmn-inputs-dl">${inNameOpts}</datalist>`;
         } else if (t === "bpmn:UserTask") {
@@ -7907,6 +7908,53 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
 
     const fdecision = body.querySelector("#f-decisionid");
     const fresultvar = body.querySelector("#f-resultvar");
+    // What the picked decision says it is given, once the catalog has answered. Null
+    // until then, and null for a decision typed in by hand that the catalog does not
+    // know — in both cases there is nothing to compare against and nothing is said.
+    let declaredInputs = null;
+    // renderDecisionDrift says where this task's input mapping and the decision's own
+    // inputs disagree.
+    //
+    // It is the same drift the decision editor reports one level down, at the place it
+    // does the most damage. Inside a model a name that nothing provides does not
+    // deploy; here it does. A business rule task may map whatever it likes — the
+    // mapping is FEEL over the instance's variables, and the engine has no way to know
+    // that "amount" was meant to be "amount due" — so an input the decision declares
+    // and the task never maps arrives null, every rule that tests it falls through,
+    // and the process carries on with whatever the table's last row says. That is a
+    // wrong answer, not a failure, and nothing downstream distinguishes them.
+    //
+    // A note and not a refusal: a decision may legitimately be given fewer inputs than
+    // it declares (a table that tests only some of them), and an expression may
+    // legitimately feed a name the catalog does not list for a decision addressed by
+    // hand. Said once, next to the rows, where it can be acted on.
+    const renderDecisionDrift = () => {
+      const note = body.querySelector("#dmn-inputs-drift");
+      if (!note) return;
+      const wrap = body.querySelector("#dmn-inputs");
+      if (!declaredInputs || !wrap) { note.hidden = true; note.innerHTML = ""; return; }
+      const mapped = new Set([...wrap.querySelectorAll(".dmn-input-row")]
+        .map((row) => (row.querySelector(".dmn-in-target").value || "").trim())
+        .filter(Boolean));
+      const declared = new Set(declaredInputs.map((i) => i.name).filter(Boolean));
+      const missing = [...declared].filter((n) => !mapped.has(n));
+      const extra = [...mapped].filter((n) => !declared.has(n));
+      const parts = [];
+      if (missing.length) {
+        parts.push(`The decision reads ${missing.map((n) => `<b>${esc(n)}</b>`).join(", ")}, and `
+          + `no row feeds ${missing.length > 1 ? "them" : "it"}. `
+          + `${missing.length > 1 ? "They arrive" : "It arrives"} empty, and the rules that `
+          + `test ${missing.length > 1 ? "them" : "it"} do not match.`);
+      }
+      if (extra.length) {
+        parts.push(`${extra.map((n) => `<b>${esc(n)}</b>`).join(", ")} `
+          + `${extra.length > 1 ? "are" : "is"} fed and the decision does not declare `
+          + `${extra.length > 1 ? "them" : "it"}. `
+          + `${extra.length > 1 ? "They are" : "It is"} ignored.`);
+      }
+      note.hidden = parts.length === 0;
+      note.innerHTML = parts.map((t) => `<p>${t}</p>`).join("");
+    };
     const fbinding = body.querySelector("#f-brt-binding");
     const fbrtretries = body.querySelector("#f-brt-retries");
     // currentBinding preserves the decision binding (ADR-0063) across every save of
@@ -8012,25 +8060,54 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         };
         take(scoped, true);
         take((all || []).filter((d) => !inProject.has(decKey(d))), false);
+        // noteFor says what an author has to know about an entry before picking it,
+        // in one line beside the name.
+        //
+        // Two of the three cost something if they are missing. "not deployed" means
+        // the decision is in the model, the task saves, and the deploy preflight
+        // refuses it later — about a decision picked minutes ago. "internal to X"
+        // means the pick reaches past a decision service into one of its workings:
+        // it runs and answers correctly, which is exactly why nothing else will ever
+        // mention it, and the service's author has lost the freedom the interface
+        // exists to give them (DMN §10.4).
+        const noteFor = (d, service) => {
+          const notes = [];
+          if (d.service) notes.push("decision service");
+          else if (service && service.internal) notes.push(`internal to ${service.name} — bypasses it`);
+          else if (service) notes.push("published by " + service.name);
+          if (!d.deployed) notes.push("not deployed");
+          return notes.join(" · ");
+        };
         const optionFor = (d, note) => {
           const label = note ? `${d.name} — ${note}` : d.name;
           return `<option value="${esc(d.id)}" data-key="${esc(decKey(d))}"${d.id === cur ? " selected" : ""}>${esc(label)}</option>`;
         };
-        // Within a file: the published interfaces, then the decisions. A decision a
-        // service is made of says which one. Calling it works and answers correctly,
-        // which is why it needs saying — it reaches past the interface the service
-        // exists to be, and ties this task to an arrangement the service was meant to
-        // stay free to change (DMN §10.4).
+        // Within a file: the published interfaces, then the decisions that are
+        // somebody's to call, then the workings of a service last.
+        //
+        // The order is the recommendation. All three are selectable, because refusing
+        // one here would refuse nothing — the decision id on a task is a free-text
+        // field and the picker is a convenience, so a ban in the dropdown moves the
+        // practice from visible to invisible rather than stopping it. What the order
+        // and the note do instead is make the boundary-respecting pick the easy one,
+        // and leave the other reading as what it is.
         const groupFor = (f) => {
           const services = f.items.filter((d) => d.service);
           const decisions = f.items.filter((d) => !d.service);
-          const inside = new Map();
+          const belongsTo = new Map(); // decision id → { name, internal }
           for (const s of services) {
-            for (const m of s.members || []) if (!inside.has(m)) inside.set(m, s.name);
+            const internal = new Set(s.internal || []);
+            for (const m of s.members || []) {
+              if (!belongsTo.has(m)) belongsTo.set(m, { name: s.name, internal: internal.has(m) });
+            }
           }
+          const isInternal = (d) => !!(belongsTo.get(d.id) || {}).internal;
           const opts = services
-            .map((d) => optionFor(d, "decision service"))
-            .concat(decisions.map((d) => optionFor(d, inside.has(d.id) ? "inside " + inside.get(d.id) : "")));
+            .map((d) => optionFor(d, noteFor(d)))
+            .concat(decisions.filter((d) => !isInternal(d))
+              .map((d) => optionFor(d, noteFor(d, belongsTo.get(d.id)))))
+            .concat(decisions.filter(isInternal)
+              .map((d) => optionFor(d, noteFor(d, belongsTo.get(d.id)))));
           const where = f.deployed
             ? " — deployed only"
             : !f.mine && projectId ? " — other application" : "";
@@ -8047,6 +8124,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (curDec && dl && Array.isArray(curDec.inputs) && curDec.inputs.length) {
           dl.innerHTML = curDec.inputs.map((inp) => `<option value="${esc(inp.name)}"></option>`).join("");
         }
+        // The catalog is also what makes the drift note possible: it is the only place
+        // that says what the decision is given, derived from its requirements graph.
+        declaredInputs = (curDec && Array.isArray(curDec.inputs)) ? curDec.inputs : null;
+        renderDecisionDrift();
       }).catch(() => { /* leave the placeholder; manual entry still works */ });
 
       // applyPick sets the decision id + result variable and auto-fills the input
@@ -8161,6 +8242,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         const source = row.querySelector(".dmn-in-source");
         target.addEventListener("change", saveInputs);
         source.addEventListener("change", saveInputs);
+        // The note is about the names in the rows, so it follows the typing rather than
+        // the save: a row edited and not yet committed is exactly when it is useful.
+        target.addEventListener("input", renderDecisionDrift);
         target.addEventListener("input", () => {
           const rows = [...inputsWrap.querySelectorAll(".dmn-input-row")];
           if (row === rows[rows.length - 1] && target.value.trim() !== "") {

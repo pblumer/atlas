@@ -19,7 +19,7 @@ import (
 
 // TestTheCellWrapsWhateverTrailsIt.
 func TestTheCellWrapsWhateverTrailsIt(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function cell(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function cell(", "\n}")
 	if !strings.Contains(body, "class: 'trail'") {
 		t.Error("the cell hands a trail straight through, so whether the icons wrap " +
 			"depends on what each of seven callers happened to pass")
@@ -33,7 +33,7 @@ func TestTheCellWrapsWhateverTrailsIt(t *testing.T) {
 // icons inside *it* are inline again — so they wrap exactly as before, under a
 // class that says they do not.
 func TestNoTrailBuildsItsOwnBareSpan(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	if strings.Contains(src, "trail: el('span', {},") {
 		t.Error("a trail builds its own bare span, which becomes one flex item inside " +
 			"the wrapper and lets its icons wrap again")
@@ -42,7 +42,7 @@ func TestNoTrailBuildsItsOwnBareSpan(t *testing.T) {
 
 // TestTheTrailIsAFlexItemThatDoesNotShrink.
 func TestTheTrailIsAFlexItemThatDoesNotShrink(t *testing.T) {
-	css := readWeb(t, "portal.html")
+	css := readWeb(t, "shop.html")
 	rule := ""
 	if at := strings.Index(css, ".cell .trail"); at >= 0 {
 		if end := strings.Index(css[at:], "}"); end >= 0 {
@@ -50,7 +50,7 @@ func TestTheTrailIsAFlexItemThatDoesNotShrink(t *testing.T) {
 		}
 	}
 	if rule == "" {
-		t.Fatal("portal.html declares no .cell .trail rule; the wrapper exists and " +
+		t.Fatal("shop.html declares no .cell .trail rule; the wrapper exists and " +
 			"nothing styles it, which is the same wrapping with an extra element")
 	}
 	for _, want := range []struct{ decl, why string }{

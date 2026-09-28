@@ -48,6 +48,7 @@ var continuationCarries = map[string]string{
 	"Manual":        "external",
 	"RetryBackoff":  "external",
 	"LeaseFor":      "external",
+	"Created":       "external", // a caller's pointer, set only on an API start
 }
 
 // schedulingIsDurable reports whether a queued command must survive a restart.

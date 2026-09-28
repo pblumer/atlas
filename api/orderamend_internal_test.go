@@ -21,10 +21,10 @@ import (
 // have the same rule holding in one screen and not the other — with the refusal
 // arriving only after somebody pressed the button.
 func TestThePortalOffersNoWithdrawalTheServerWouldRefuse(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	start := strings.Index(src, "function withdrawable(")
 	if start < 0 {
-		t.Fatal("portal.js has no withdrawable(); if the per-position withdrawal moved, " +
+		t.Fatal("shop.js has no withdrawable(); if the per-position withdrawal moved, " +
 			"this test now passes vacuously and says so instead")
 	}
 	body := src[start : start+strings.Index(src[start:], "\n}")]
@@ -54,10 +54,10 @@ func TestThePortalOffersNoWithdrawalTheServerWouldRefuse(t *testing.T) {
 // held. A page that offered it for a running line would produce the one refusal
 // that cannot be explained to somebody standing in front of it.
 func TestThePortalOffersCorrectionWhereTheServerAllowsIt(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	start := strings.Index(src, "function correctable(")
 	if start < 0 {
-		t.Fatal("portal.js has no correctable(); if it moved, this test now checks " +
+		t.Fatal("shop.js has no correctable(); if it moved, this test now checks " +
 			"nothing and says so instead")
 	}
 	body := src[start : start+strings.Index(src[start:], "\n}")]
@@ -89,10 +89,10 @@ func TestThePortalOffersCorrectionWhereTheServerAllowsIt(t *testing.T) {
 // typing "Muster" into the person filter would empty a cost centre somebody is in
 // the middle of fixing, with nothing on screen saying anything was lost.
 func TestACorrectionInFlightSurvivesTheOrdersFilter(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	start := strings.Index(src, "function repaintOrderRows(")
 	if start < 0 {
-		t.Fatal("portal.js has no repaintOrderRows(); if it moved, this test now checks " +
+		t.Fatal("shop.js has no repaintOrderRows(); if it moved, this test now checks " +
 			"nothing and says so instead")
 	}
 	body := src[start : start+strings.Index(src[start:], "\n}")]
@@ -112,9 +112,9 @@ func TestACorrectionInFlightSurvivesTheOrdersFilter(t *testing.T) {
 // item id would put what somebody is correcting into what they are about to buy —
 // silently, and in the direction that places an order with the wrong figures.
 func TestACorrectionAndABasketDoNotShareOneSetOfAnswers(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	if !strings.Contains(src, "function amendKey(") {
-		t.Fatal("portal.js has no amendKey(); a correction and a basket would share one " +
+		t.Fatal("shop.js has no amendKey(); a correction and a basket would share one " +
 			"bucket of answers keyed by item id")
 	}
 	// Inside the panel, not merely somewhere in the file: saveDetails names the same
@@ -122,7 +122,7 @@ func TestACorrectionAndABasketDoNotShareOneSetOfAnswers(t *testing.T) {
 	// keying by item — which is what breaking it showed.
 	start := strings.Index(src, "function detailsPanel(")
 	if start < 0 {
-		t.Fatal("portal.js has no detailsPanel(); if it moved, this test now checks " +
+		t.Fatal("shop.js has no detailsPanel(); if it moved, this test now checks " +
 			"nothing and says so instead")
 	}
 	panel := src[start : start+strings.Index(src[start:], "\n}")]

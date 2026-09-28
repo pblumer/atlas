@@ -20,7 +20,7 @@ import (
 
 // TestEveryLineRouteNamesThePosition.
 func TestEveryLineRouteNamesThePosition(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	if strings.Contains(src, "encodeURIComponent(line.itemId)") {
 		t.Error("a line route still names the product, which an order carrying two " +
 			"positions of it answers with a refusal")
@@ -35,7 +35,7 @@ func TestEveryLineRouteNamesThePosition(t *testing.T) {
 // The editing key is an identity like any other: two rows sharing one would open
 // one another's panel and save one another's answers.
 func TestThePositionBeingEditedIsOneRow(t *testing.T) {
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, "shop.js")
 	for _, shape := range []string{"${o.id}|${l.itemId}", "${order.id}|${line.itemId}"} {
 		if strings.Contains(src, shape) {
 			t.Errorf("the row being edited is keyed by %q, so two positions of one "+
@@ -49,7 +49,7 @@ func TestThePositionBeingEditedIsOneRow(t *testing.T) {
 // Written out rather than delegated, because there is nowhere to delegate it to —
 // and written to be recognisable beside the Go it mirrors.
 func TestTheKeyIsTheSameRuleTheServerUses(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function lineKey(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function lineKey(", "\n}")
 	if !strings.Contains(body, "line.itemId") {
 		t.Error("the key is not built from the product")
 	}
@@ -65,7 +65,7 @@ func TestTheKeyIsTheSameRuleTheServerUses(t *testing.T) {
 // it, and the catalogue holds a name somebody wrote for exactly this purpose. The
 // shape belongs there too, now that two positions can differ by nothing else.
 func TestThePositionListNamesTheProduct(t *testing.T) {
-	body := webRegion(t, readWeb(t, "portal.js"), "function orderRowBodies(", "\n}")
+	body := webRegion(t, readWeb(t, "shop.js"), "function orderRowBodies(", "\n}")
 	if strings.Contains(body, "' ', l.itemId, ' \\u2014 '") {
 		t.Error("the position list prints the product id where the catalogue has a name")
 	}

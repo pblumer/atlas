@@ -1,0 +1,26 @@
+{
+  "tags": [
+    "Service catalogue",
+    "Shop"
+  ],
+  "title": {
+    "en": "The shop shows whom an order waits for",
+    "de": "Der Shop zeigt, auf wen ein Auftrag wartet"
+  },
+  "summary": {
+    "en": "An order's row said \"Waiting\" and not on whom. Under each position the shop now lists the open tasks of the processes working it and whom each waits for — for an approval, the named person, the group or the line manager. Whoever may work a task opens its form right in the row and completes it there. The orderer and the recipient see their orders' tasks; a line manager who has to approve an order sees that order too, marked as one to handle. Orders placed before this update show no tasks. Approvals, in Tasks and in the approval form, now name the recipient and the orderer instead of showing their account ids.",
+    "de": "In der Zeile eines Auftrags stand «Wartet», aber nicht, auf wen. Unter jeder Position zeigt der Shop jetzt die offenen Aufgaben der Prozesse, die sie bearbeiten, und auf wen jede wartet – bei einer Genehmigung die festgelegte Person, die Gruppe oder die vorgesetzte Person. Wer eine Aufgabe bearbeiten darf, öffnet ihr Formular direkt in der Zeile und schliesst sie dort ab. Besteller und Empfänger sehen die Aufgaben ihrer Aufträge; eine vorgesetzte Person, die einen Auftrag genehmigen muss, sieht diesen Auftrag ebenfalls, gekennzeichnet als zu bearbeiten. Aufträge von vor diesem Update zeigen keine Aufgaben. Genehmigungen nennen in Tasks und im Genehmigungsformular Empfänger und Besteller jetzt mit Namen statt mit ihrer Benutzerkennung."
+  },
+  "tutorial": {
+    "en": [
+      "Order a product that needs an approval.",
+      "Open \"My orders\": under the position stands the approval and whom it waits for.",
+      "Sign in as the approver, open \"My orders\", press \"Work on it\" on the task and complete it."
+    ],
+    "de": [
+      "Ein Produkt bestellen, das eine Genehmigung braucht.",
+      "«Meine Aufträge» öffnen: Unter der Position steht die Genehmigung und auf wen sie wartet.",
+      "Als genehmigende Person anmelden, «Meine Aufträge» öffnen, bei der Aufgabe «Erledigen» wählen und abschliessen."
+    ]
+  }
+}

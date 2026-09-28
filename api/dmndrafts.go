@@ -35,11 +35,20 @@ func toDmnDraftResp(d dmnDraft) dmnDraftResp {
 	return dmnDraftResp{ID: d.ID, Name: d.Name, RefID: d.RefID, ModelRef: d.ModelRef, ProjectID: d.ProjectID, SavedAt: d.SavedAt}
 }
 
-// decisionIdentity reads the name a DMN model gives its first decision, falling
-// back to the model's own name. It is a plain attribute read, not a compile: a
-// draft is stored whether or not it is a valid model, so nothing here may depend on
-// it being one.
-func decisionIdentity(body []byte) string {
+// dmnModelName reads the name a DMN model gives itself — the <definitions name>,
+// which is the file, and which is what every other path here already calls a model
+// by: the upload, the import, the model listing and the documentation record all
+// take it. The artifact a draft holds is the file, not a decision inside it, and a
+// file may hold several; naming it after whichever decision happens to come first
+// makes the listing disagree with the editor's own header and renames the artifact
+// when somebody reorders the model.
+//
+// A decision's name, then its id, remain as fallbacks, because a model being drafted
+// may not have named itself yet and something is better to show than nothing.
+//
+// It is a plain attribute read, not a compile: a draft is stored whether or not it
+// is a valid model, so nothing here may depend on it being one.
+func dmnModelName(body []byte) string {
 	var d struct {
 		Name      string `xml:"name,attr"`
 		Decisions []struct {
@@ -50,6 +59,9 @@ func decisionIdentity(body []byte) string {
 	if err := xml.Unmarshal(body, &d); err != nil {
 		return ""
 	}
+	if n := strings.TrimSpace(d.Name); n != "" {
+		return n
+	}
 	for _, dec := range d.Decisions {
 		if n := strings.TrimSpace(dec.Name); n != "" {
 			return n
@@ -58,7 +70,7 @@ func decisionIdentity(body []byte) string {
 			return n
 		}
 	}
-	return strings.TrimSpace(d.Name)
+	return ""
 }
 
 // handleSaveDmnDraft stores decision work in progress. Body:
@@ -183,7 +195,7 @@ func (s *Server) handleSaveDmnDraft(w http.ResponseWriter, r *http.Request) {
 		modelRef = existing.ModelRef
 	}
 	rec := dmnDraft{
-		ID: id, Name: decisionIdentity([]byte(modelXML)), RefID: refID, ModelRef: modelRef,
+		ID: id, Name: dmnModelName([]byte(modelXML)), RefID: refID, ModelRef: modelRef,
 		ProjectID: projectID, OwnerID: ownerID, SavedAt: time.Now().Unix(), XML: modelXML,
 	}
 	var (

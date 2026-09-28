@@ -1,7 +1,7 @@
 // Package mcp is Atlas's Model Context Protocol server: it lets an AI agent
 // drive a running Atlas server through tools — deploy a BPMN model, manage
 // design-time projects and artifacts, start an instance, complete human tasks,
-// inspect live runtime state, and maintain the self-service portal's product
+// inspect live runtime state, and maintain the self-service shop's product
 // catalogue.
 //
 // # Shape: an adapter over the HTTP API, on two transports
