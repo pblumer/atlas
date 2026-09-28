@@ -6,6 +6,9 @@
 *.dylib
 /bin/
 /dist/
+# `go build ./cmd/atlas` in the repository root writes the binary here, next to
+# the sources. It was committed that way once and shipped in two source archives.
+/atlas
 
 # Test and coverage
 *.test
