@@ -1,0 +1,25 @@
+{
+  "tags": [
+    "Handbook",
+    "Modeler"
+  ],
+  "link": {
+    "label": "ADR-0215",
+    "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0215-modeler-playground.md"
+  },
+  "title": {
+    "en": "Test a process the way you test code — the handbook now shows how",
+    "de": "Einen Prozess testen wie Code – das Handbuch zeigt jetzt, wie"
+  },
+  "summary": {
+    "en": "The Playground can do more than show a report: it holds a run to expectations, checks every case against a rule of your own, keeps a run as the baseline for the next one, and replays the whole scenario from the command line, where a missed expectation fails the build. The handbook's test chapter now explains all of it, in German and English — including the trap you are likely to meet first: a rule with a typo that selects no case still counts as passed.",
+    "de": "Der Playground kann mehr als einen Bericht zeigen: Er prüft einen Lauf gegen Erwartungen, hält jeden Fall an eine eigene Regel, bewahrt einen Lauf als Baseline für den nächsten auf und spielt das ganze Szenario über die Kommandozeile ab, wo eine verfehlte Erwartung den Build rot färbt. Das Testkapitel des Handbuchs erklärt das jetzt vollständig, auf Deutsch und Englisch – samt dem Stolperstein, auf den man zuerst trifft: Eine Regel mit Tippfehler, die keinen Fall auswählt, gilt trotzdem als erfüllt."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

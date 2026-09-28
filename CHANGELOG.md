@@ -27,6 +27,25 @@ _Changed_ / _Removed_ for each version.
   same as `frozenDecisions`. Deploying the process again is what makes it follow;
   nothing is converted on its own.
 
+- **The handbook teaches a process test that can fail a build.** The Playground could
+  hold a run to expectations, judge every case against a FEEL rule, keep a baseline, and
+  replay all of it from `atlas playground` with an exit status a pipeline acts on
+  (ADR-0215) — and the test chapter described none of it. It stopped at the report, a
+  page a person has to read.
+
+  It now carries four sections under a new `#szenarien` anchor: expectations as the
+  verdict a machine can act on; per-case rules, with the two traps a reader meets first
+  (a rule whose `when` matches no case passes, and `end` and `durationSeconds` shadow
+  variables of the same name); scenarios and baselines; and the runner in a pipeline —
+  its flags, its three exit statuses, a failing run's output, and the upload-then-run
+  sequence with an API token. Every command and every line of output in it was run
+  against a local instance before it was written down.
+
+  The flag table is held to the runner's own flag set, in both directions, and the
+  exit status the chapter names to `exitScenarioFailed`, by
+  `cmd/atlas/playgroundhandbook_test.go`; a new flag that nobody documents fails the
+  build.
+
 - **A business rule task can be bound to one deployed version of a decision.** The
   binding field offers *Latest — newest version when the task runs*, *Version — a
   deployed version you choose* with the list of deployed versions, and *Deployment — the
