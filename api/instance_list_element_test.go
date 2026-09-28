@@ -182,3 +182,142 @@ func equalKeys(a, b []uint64) bool {
 	}
 	return true
 }
+
+// listedRows decodes an instance listing into its keys and states, in the order
+// returned — for the history filters, whose rows may be running or finished.
+func listedRows(t *testing.T, body []byte) (keys []uint64, states []string) {
+	t.Helper()
+	var rows []struct {
+		Key   uint64 `json:"key"`
+		State string `json:"state"`
+	}
+	if err := json.Unmarshal(listRows(t, body), &rows); err != nil {
+		t.Fatalf("decode instances: %v (%s)", err, body)
+	}
+	for _, r := range rows {
+		keys = append(keys, r.Key)
+		states = append(states, r.State)
+	}
+	return keys, states
+}
+
+// TestListInstancesThatLeftAnElement covers the history half of the Operations filter:
+// ?at=passed lists the instances a token completed the element in and moved on from,
+// ?at=cancelled the ones cancelled there, and ?at=live (the default) the ones sitting
+// there now — the instances behind the gray, the amber and the green count
+// (ADR-draft-instances-that-left-an-element).
+func TestListInstancesThatLeftAnElement(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", forkedWaitBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v (%s)", err, body)
+	}
+	for _, branch := range []string{"left", "right", "left"} {
+		payload := fmt.Sprintf(`{"variables":{"branch":%q}}`, branch)
+		if code, b := doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key), payload, "application/json"); code != http.StatusOK {
+			t.Fatalf("create instance on %s: status=%d body=%s", branch, code, b)
+		}
+	}
+	list := func(query string) ([]uint64, []string) {
+		t.Helper()
+		code, body := doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/instances?process=%d&%s", dep.Key, query), "", "")
+		if code != http.StatusOK {
+			t.Fatalf("GET %s: status=%d body=%s", query, code, body)
+		}
+		return listedRows(t, body)
+	}
+	all, _ := list("state=active")
+	if len(all) != 3 {
+		t.Fatalf("unfiltered listing = %v, want three instances", all)
+	}
+	newest, middle, oldest := all[0], all[1], all[2] // left, right, left
+
+	// Every instance got through the start event and the gateway; nobody sits there.
+	for _, el := range []string{"start", "choose"} {
+		if got, _ := list("element=" + el + "&at=passed"); !equalKeys(got, all) {
+			t.Errorf("passed %s = %v, want every instance %v", el, got, all)
+		}
+		if got, _ := list("element=" + el + "&at=live"); len(got) != 0 {
+			t.Errorf("live on %s = %v, want none", el, got)
+		}
+	}
+	// Nobody has left the timers yet: two sit on "left", and none completed it.
+	if got, _ := list("element=left&at=passed"); len(got) != 0 {
+		t.Errorf("passed left before anything left it = %v, want none", got)
+	}
+
+	// Cancel the oldest instance while its token sits on "left".
+	if code, b := doReq(t, ts, http.MethodDelete, fmt.Sprintf("/api/v1/instances/%d", oldest), "", ""); code != http.StatusOK && code != http.StatusNoContent {
+		t.Fatalf("cancel: status=%d body=%s", code, b)
+	}
+	keys, states := list("element=left&at=cancelled")
+	if !equalKeys(keys, []uint64{oldest}) {
+		t.Fatalf("cancelled at left = %v, want %v", keys, []uint64{oldest})
+	}
+	// A history row is whatever the instance is now — here, finished — and the listing
+	// says so rather than presenting it as running.
+	if states[0] == "active" {
+		t.Errorf("the cancelled instance is listed as %q, want its terminal state", states[0])
+	}
+	if got, _ := list("element=left"); !equalKeys(got, []uint64{newest}) {
+		t.Errorf("live on left after the cancel = %v, want %v", got, []uint64{newest})
+	}
+	if got, _ := list("element=right&at=cancelled"); len(got) != 0 {
+		t.Errorf("cancelled at right = %v, want none (%d is still waiting there)", got, middle)
+	}
+
+	// Paging: capped, and resumed through a bare-key cursor with no half named — the
+	// index lists running and finished instances in one order.
+	res, err := http.Get(ts.URL + fmt.Sprintf("/api/v1/instances?process=%d&element=choose&at=passed&limit=2", dep.Key))
+	if err != nil {
+		t.Fatalf("GET capped page: %v", err)
+	}
+	facts := readPage(t, res)
+	res.Body.Close()
+	if !facts.Truncated || facts.NextCursor == "" {
+		t.Fatalf("capped page says truncated=%v cursor=%q, want true and a cursor", facts.Truncated, facts.NextCursor)
+	}
+	if got, _ := list("element=choose&at=passed&before=" + facts.NextCursor); !equalKeys(got, []uint64{oldest}) {
+		t.Errorf("next page = %v, want %v", got, []uint64{oldest})
+	}
+}
+
+// TestListInstancesThatLeftAnElementRejectsBadRequests pins what ?at= refuses rather
+// than quietly answering something else.
+func TestListInstancesThatLeftAnElementRejectsBadRequests(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", forkedWaitBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v (%s)", err, body)
+	}
+	for _, q := range []string{
+		"at=bogus&element=left",                    // not a relation to an element
+		"at=passed",                                // asks about an element and names none
+		"at=live",                                  // likewise
+		"at=passed&element=left&state=active",      // the index is not split into halves
+		"at=cancelled&element=left&state=finished", // likewise
+		"at=passed&element=left&before=nope",       // a cursor is an instance key
+		"at=passed&element=nope",                   // an element the version does not define
+	} {
+		code, body := doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/instances?process=%d&%s", dep.Key, q), "", "")
+		if code != http.StatusBadRequest {
+			t.Errorf("GET instances?%s = %d, want 400 (%s)", q, code, body)
+		}
+	}
+	// The live filter keeps the shape it had: at=live is the default spelled out.
+	if code, body := doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/instances?process=%d&element=left&at=live&state=active", dep.Key), "", ""); code != http.StatusOK {
+		t.Errorf("at=live with a half = %d, want 200 (%s)", code, body)
+	}
+}

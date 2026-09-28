@@ -226,3 +226,58 @@ func TestListInstancesEmptyPageIsAnEmptyList(t *testing.T) {
 		t.Errorf("empty page = %s, want an empty items array on a page that says it is complete", text)
 	}
 }
+
+// TestListInstancesForwardsAt covers the history question over MCP: "which instances
+// completed this task" and "which were cancelled at it" reach the engine as ?at=, so an
+// agent reads the element's own index rather than sieving the version's history
+// (ADR-draft-instances-that-left-an-element).
+func TestListInstancesForwardsAt(t *testing.T) {
+	for _, at := range []string{"live", "passed", "cancelled"} {
+		t.Run(at, func(t *testing.T) {
+			var gotQuery url.Values
+			backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotQuery = r.URL.Query()
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"items":[],"total":0,"totalExact":false,"truncated":false}`))
+			}))
+			defer backend.Close()
+
+			text, isErr := toolText(t, result(t, callToolAgainstBackend(t, backend, "atlas_list_instances", map[string]any{
+				"process": 7, "element": "Eintritt_verbuchen", "at": at, "before": "281474976710660",
+			})))
+			if isErr {
+				t.Fatalf("atlas_list_instances returned tool error: %s", text)
+			}
+			if got := gotQuery.Get("at"); got != at {
+				t.Errorf("at query = %q, want %q", got, at)
+			}
+			if got := gotQuery.Get("element"); got != "Eintritt_verbuchen" {
+				t.Errorf("element query = %q, want the BPMN element id", got)
+			}
+			if got := gotQuery.Get("before"); got != "281474976710660" {
+				t.Errorf("before query = %q, want the cursor verbatim", got)
+			}
+		})
+	}
+}
+
+// TestListInstancesRefusesAtWithoutElement: 'at' says what is asked of an element, so
+// without one it is refused at the tool boundary, with the reason in the answer.
+func TestListInstancesRefusesAtWithoutElement(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("the tool called the server for a request it should have refused: %s", r.URL)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer backend.Close()
+
+	text, isErr := toolText(t, result(t, callToolAgainstBackend(t, backend, "atlas_list_instances", map[string]any{
+		"process": 7, "at": "passed",
+	})))
+	if !isErr {
+		t.Fatalf("at without element = %q, want a tool error", text)
+	}
+	if !strings.Contains(text, "element") {
+		t.Errorf("the refusal %q does not say what is missing", text)
+	}
+}

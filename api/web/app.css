@@ -1876,6 +1876,25 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .var-panel .vp-archive-note { font-size: 12px; line-height: 1.5; }
 /* "Load more" walks the newest-first cursor into older instances. */
 .var-panel .vp-more { display: flex; justify-content: center; margin-top: 8px; }
+/* A filtered panel lists one section per switched-on legend count — sitting here now,
+   cancelled here, completed here and moved on (ADR-draft-instances-that-left-an-element).
+   The heading carries the count's own colour as a dot rather than as a badge: a badge
+   with a number in it would invite comparing the section's instance count with the
+   diagram's token count, which are different numbers on purpose. */
+.var-panel .vp-sect + .vp-sect { margin-top: 10px; }
+.var-panel .vp-sect-head {
+  display: flex; align-items: center; gap: 6px; margin: 4px 0 6px;
+  font-size: 12px; font-weight: 600; color: var(--text);
+}
+.var-panel .vp-sect-n { color: var(--muted); font-weight: 400; }
+.var-panel .vp-sect-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; background: var(--ok); }
+.var-panel .vp-sect-dot.history { background: var(--muted); }
+.var-panel .vp-sect-dot.cancelled { background: var(--warn); }
+.var-panel .vp-sect-empty, .var-panel .vp-sect-none { margin: 0; font-size: 12px; }
+.var-panel.side .vp-sect-head { padding: 0 14px; }
+.var-panel.side .vp-sect .vp-insts { padding: 0 14px 4px; }
+.var-panel.side .vp-sect-empty, .var-panel.side .vp-sect-none { padding: 0 14px; }
+.var-panel.side .vp-sect:first-of-type { padding-top: 8px; }
 
 /* Copy buttons: one per scalar field, per JSON card, and a "Copy all" in the head.
    A brief green check confirms the write (the ::after swaps in on .copied). Shared

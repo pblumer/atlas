@@ -214,6 +214,15 @@ func listInstancesPath(args map[string]any) (string, error) {
 		}
 		q.Set("element", element)
 	}
+	// 'at' is what is asked of the element, so it means nothing without one. Refused
+	// here for the reason 'element' without 'process' is: the reason belongs in the
+	// tool's own answer, not in an HTTP 400 relayed from the server.
+	if at := optString(args, "at"); at != "" {
+		if q.Get("element") == "" {
+			return "", fmt.Errorf("argument \"at\" requires \"element\": it says what is asked of an element, and names none")
+		}
+		q.Set("at", at)
+	}
 	if state := optString(args, "state"); state != "" {
 		q.Set("state", state)
 	}

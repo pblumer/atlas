@@ -40,6 +40,12 @@ type instanceListQuery struct {
 	// it requires ?process= — an element id means nothing without the version that
 	// defines it, and the index it reads is keyed by that pair.
 	element string
+	// departed is what ?at= asks of the element instead of "who is sitting here":
+	// zero for at=live (the default), otherwise the instances a token completed the
+	// element in and moved on from (at=passed) or was cancelled at (at=cancelled) —
+	// the gray and the amber count on the diagram
+	// (ADR-draft-instances-that-left-an-element).
+	departed state.Departure
 }
 
 // parseInstanceListQuery reads the query string, reporting the first thing wrong
@@ -86,22 +92,49 @@ func parseInstanceListQuery(q map[string][]string) (instanceListQuery, error) {
 	default:
 		return out, errors.New(`invalid state (want "active", "finished" or "all")`)
 	}
+	if out.element = get("element"); out.element != "" && !out.hasDef {
+		return out, errors.New("element requires process=<definition key>: a BPMN element id is only meaningful within the version that defines it")
+	}
+	// What is asked of the element. "live" is the question the filter has always put;
+	// the other two are the history, and each reads an index of its own.
+	switch at := get("at"); at {
+	case "", "live":
+	case "passed", "cancelled":
+		out.departed = state.DepartedCompleted
+		if at == "cancelled" {
+			out.departed = state.DepartedCancelled
+		}
+	default:
+		return out, errors.New(`invalid at (want "live", "passed" or "cancelled")`)
+	}
+	if get("at") != "" && out.element == "" {
+		return out, errors.New("at requires element=<bpmn element id>: it says what is asked of an element, and names none")
+	}
+	if out.departed != 0 && out.state != "" {
+		// Not a filter it could apply for free: the index holds running and finished
+		// instances side by side, so narrowing it to one would read past the other —
+		// a page that costs the history rather than the page.
+		return out, errors.New("state cannot narrow at=passed or at=cancelled: an instance that left an element may since have finished or not, and the index lists both in one order")
+	}
 	before := get("before")
 	if before != "" {
-		if out.state == "" {
+		// A departure index is in instance-key order, like the active half, so its
+		// cursor is a bare key and no half needs naming.
+		half := out.state
+		if out.departed != 0 {
+			half = "active"
+		}
+		if half == "" {
 			return out, errors.New("before requires state=active or state=finished (the two halves are ordered differently, so one cursor cannot address both)")
 		}
 		var err error
-		if out.beforeDoneAt, out.beforeKey, err = parseInstanceCursor(out.state, before); err != nil {
+		if out.beforeDoneAt, out.beforeKey, err = parseInstanceCursor(half, before); err != nil {
 			return out, err
 		}
 		out.hasBefore = true
 	}
 	if out.hasBefore && !out.hasDef {
 		return out, errors.New("before requires process=<definition key>: the cursor addresses a position in one definition's index, and that index is what makes the page cost the page rather than the store")
-	}
-	if out.element = get("element"); out.element != "" && !out.hasDef {
-		return out, errors.New("element requires process=<definition key>: a BPMN element id is only meaningful within the version that defines it")
 	}
 	return out, nil
 }
@@ -339,14 +372,14 @@ func listInstancesOnElement(rv *state.ReadView, defs defIndex, q instanceListQue
 	if !ok {
 		return page, fmt.Errorf("%w: %q", errNoSuchElement, q.element)
 	}
-	if q.state == "finished" {
+	if q.departed == 0 && q.state == "finished" {
 		// A token exists only in a running instance, so this half is empty by
 		// construction rather than by a cap.
 		page.countedBy(0)
 		return page, nil
 	}
 	rows := []instanceResp{}
-	err := rv.InstancesOnElementDesc(q.defKey, elementId, q.beforeKey, func(key uint64, v *model.ProcessInstanceValue) error {
+	collect := func(key uint64, v *model.ProcessInstanceValue) error {
 		if len(rows) >= q.limit {
 			page.truncated = true
 			return errListTruncated
@@ -357,18 +390,29 @@ func listInstancesOnElement(rv *state.ReadView, defs defIndex, q instanceListQue
 		}
 		rows = append(rows, r)
 		return nil
-	})
+	}
+	var err error
+	if q.departed != 0 {
+		// The history: the instances behind the gray or the amber count on the shape,
+		// running or finished, off the element's own departure index.
+		err = rv.InstancesDepartedElementDesc(q.departed, q.defKey, elementId, q.beforeKey, collect)
+	} else {
+		err = rv.InstancesOnElementDesc(q.defKey, elementId, q.beforeKey, collect)
+	}
 	if err = unlessTruncated(err); err != nil {
 		return page, err
 	}
 	page.rows = rows
 	// No counter answers "how many instances hold a token on this element" — the
 	// piByEl index is a position list, not a tally — so this page reports what it saw.
+	// The same is true of the departure indexes, and there the badge on the shape is
+	// not that number either: it counts tokens, a loop's several times, and keeps
+	// counting instances retention has since deleted.
 	page.floorFromRows()
-	// The index is in instance-key order, so a capped page resumes exactly where the
-	// active half's does — and only when a half was named, since that is the only
-	// shape ?before= is accepted in.
-	if q.state == "active" && page.truncated && len(rows) > 0 {
+	// Every one of these indexes is in instance-key order, so a capped page resumes
+	// exactly where the active half's does — for the live filter only when a half was
+	// named, since that is the only shape ?before= is accepted in there.
+	if (q.departed != 0 || q.state == "active") && page.truncated && len(rows) > 0 {
 		page.nextCursor = formatInstanceCursor("active", rows[len(rows)-1])
 	}
 	return page, nil

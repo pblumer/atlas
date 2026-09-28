@@ -9889,11 +9889,11 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         <span id="legend-armed" hidden title="An event-based gateway arms every branch at once, so the engine parks a token on each of them and none on the gateway. The wait is one race however many branches it has, so it is counted once — on the gateway.">
           <span class="legend-swatch armed" style="margin-left:12px"></span> armed branch of an event gateway</span>
         <span class="legend-swatch incident" style="margin-left:12px"></span> parked on an incident
-        <button type="button" class="legend-toggle" data-badge="passed" aria-pressed="true" style="margin-left:16px" title="Show or hide the gray counts on the diagram">
+        <button type="button" class="legend-toggle" data-badge="passed" aria-pressed="true" style="margin-left:16px" title="Show or hide the gray counts on the diagram — and, with an element clicked, the instances that completed it and moved on">
           <span class="token-badge history">N</span> completed here and moved on</button>
-        <button type="button" class="legend-toggle" data-badge="cancelled" aria-pressed="true" style="margin-left:10px" title="Show or hide the amber counts on the diagram">
+        <button type="button" class="legend-toggle" data-badge="cancelled" aria-pressed="true" style="margin-left:10px" title="Show or hide the amber counts on the diagram — and, with an element clicked, the instances cancelled at it">
           <span class="token-badge cancelled">N</span> cancelled here</button>
-        <button type="button" class="legend-toggle" data-badge="live" aria-pressed="true" style="margin-left:10px" title="Show or hide the green counts on the diagram">
+        <button type="button" class="legend-toggle" data-badge="live" aria-pressed="true" style="margin-left:10px" title="Show or hide the green counts on the diagram — and, with an element clicked, the instances sitting on it now">
           <span class="token-badge">N</span> tokens here now</button>
         <span style="flex:1"></span>
         <span class="muted">Polling every 1.5s</span>
@@ -9928,11 +9928,22 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   // because a browser with site data blocked throws on the very first `localStorage`
   // touch, and this one happens before the diagram is imported: unguarded, it would cost
   // that browser the whole view to remember a preference. There it simply starts on.
+  //
+  // With an element clicked, the same three switches also say which instances the panel
+  // lists for it: the ones sitting there now, the ones cancelled there, the ones that
+  // completed it and moved on — each a section of its own, for exactly the counts that
+  // are on (ADR-draft-instances-that-left-an-element). One control for both, because the
+  // question is one question: a count on the shape and the instances behind it. Hiding a
+  // number and still being handed its rows, or the reverse, is the mismatch this avoids.
   const badgeKey = (kind) => `atlas.live.badge.${kind}`;
   const badgeShown = (kind) => {
     try { return localStorage.getItem(badgeKey(kind)) !== "0"; } catch { return true; }
   };
   const canvasBox = root.querySelector("#canvas");
+  // onBadgesChanged is how a switch reaches the instance panel. The panel's state is
+  // declared once the diagram has loaded, so until then there is nothing to tell — and a
+  // click on the legend while the view is still loading only switches the diagram.
+  let onBadgesChanged = null;
   for (const toggle of root.querySelectorAll(".legend-toggle[data-badge]")) {
     const kind = toggle.dataset.badge;
     const apply = (on) => {
@@ -9944,6 +9955,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       const on = toggle.getAttribute("aria-pressed") !== "true";
       apply(on);
       try { localStorage.setItem(badgeKey(kind), on ? "1" : "0"); } catch { /* not storable */ }
+      if (onBadgesChanged) onBadgesChanged(kind, on);
     });
   }
 
@@ -10032,6 +10044,28 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   // diagram keeps showing the version's aggregate tokens, because the question the
   // filter answers is about the instance list beside it.
   let elementFilter = "";
+  // What a filtered panel lists about the element, one section per legend switch that is
+  // on, in this order: who is sitting there now first — the question an operator most
+  // often clicks with, and the one a long history must not bury — then who was cancelled
+  // there, then who completed it and moved on (ADR-draft-instances-that-left-an-element).
+  // Each section pages on its own cursor, like the two halves of the unfiltered list.
+  const FILTER_KINDS = ["live", "cancelled", "passed"];
+  const sections = {
+    live: { pages: 1, more: false, rows: [] },
+    cancelled: { pages: 1, more: false, rows: [] },
+    passed: { pages: 1, more: false, rows: [] },
+  };
+  // The kinds the panel is listing: the switched-on ones, read at each refresh so the
+  // rows on screen and the sections they are drawn under always come from one reading.
+  // Read off the canvas, where the switch is applied, rather than from the browser's
+  // storage: where storage is blocked a switch still works for the page it is on, and
+  // the list has to follow the diagram there too.
+  let listedKinds = [];
+  const switchedOnKinds = () => FILTER_KINDS.filter((k) => !canvasBox.classList.contains(`badges-hide-${k}`));
+  // sectionsRead numbers each reading of a filtered panel, so an answer overtaken by a
+  // newer one — a poll in flight when a legend switch was thrown — is dropped rather than
+  // briefly putting back a section the operator just switched off.
+  let sectionsRead = 0;
   // The variables panel's collapse control, wired further down. A filter's whole
   // answer is in that panel, so setting one opens it.
   let varsPanelCtl = null;
@@ -10071,15 +10105,24 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   // pages each half off that definition's own index (newest first), so a page costs
   // the page; `Load more` walks the cursor, and the search box below reaches
   // anything the first page does not show.
-  async function loadHalf(state, cursor) {
-    const q = `/api/v1/instances?process=${encodeURIComponent(key)}&state=${state}&limit=${PANEL_PAGE}` +
+  //
+  // `at` is what a filtered listing asks of the element: "live" is the half named by
+  // `state`; "passed" and "cancelled" are the element's history, one index each, holding
+  // running and finished instances in one order — so they name no half.
+  async function loadHalf(state, cursor, at = "live") {
+    const history = at !== "live";
+    const q = `/api/v1/instances?process=${encodeURIComponent(key)}` +
+      (history ? "" : `&state=${state}`) + `&limit=${PANEL_PAGE}` +
       (cursor ? `&before=${encodeURIComponent(cursor)}` : "") +
-      (elementFilter ? `&element=${encodeURIComponent(elementFilter)}` : "");
+      (elementFilter ? `&element=${encodeURIComponent(elementFilter)}` : "") +
+      (history ? `&at=${at}` : "");
     // The page, its cap and its cursor all come off the body now
     // (ADR-0378).
     const page = await api("GET", q);
     return {
-      rows: ((page && page.items) || []).filter((r) => r.processDefKey === key),
+      // A history row keeps the definition the instance runs under now, which after a
+      // migration is not this one — and it still went through this version's element.
+      rows: ((page && page.items) || []).filter((r) => history || r.processDefKey === key),
       more: !!(page && page.truncated),
       cursor: (page && page.nextCursor) || "",
       // page.total is deliberately not read here. The panel's "80 of 150" already comes
@@ -10099,7 +10142,8 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     // signature: otherwise the picker would keep the "80 of 80" it was first built
     // with while the panel beside it says "80 of 150".
     const total = Math.max(runningCount + finishedCount, instances.length);
-    const sig = instances.map((r) => `${r.key}:${r.state}`).join(",") + `|${searchQuery}|${elementFilter}|${total}`;
+    const sig = instances.map((r) => `${r.key}:${r.state}`).join(",") +
+      `|${searchQuery}|${elementFilter}|${listedKinds.join("+")}|${listedAll()}|${total}`;
     if (sig === instSig) return;
     instSig = sig;
     // Drop a selection that no longer exists (e.g. its definition was deleted).
@@ -10121,17 +10165,19 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
 
   // listedAll reports whether the panel is showing everything there is, so the
   // header can say "12" rather than the needlessly alarming "12 of 12".
-  const listedAll = () => !moreActive && !moreFinished;
+  const listedAll = () => elementFilter
+    ? listedKinds.every((k) => !sections[k].more)
+    : !moreActive && !moreFinished;
 
   // loadPages walks up to `pages` pages of one half from the newest, following the
   // cursor the server hands back. Re-reading from the top rather than appending is
   // what keeps an expanded panel *live*: every listed row is refetched each poll, so
   // an instance that finishes while the operator is looking at it changes on screen.
-  async function loadPages(state, pages) {
+  async function loadPages(state, pages, at = "live") {
     const rows = [];
     let cursor = "", more = false;
     for (let i = 0; i < pages; i++) {
-      const p = await loadHalf(state, cursor);
+      const p = await loadHalf(state, cursor, at);
       rows.push(...p.rows);
       more = p.more;
       cursor = p.cursor;
@@ -10142,19 +10188,45 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
 
   async function refreshInstances() {
     if (searchQuery) return; // a search owns the list until it is cleared
+    if (elementFilter) return refreshSections();
     let active, done;
     try {
-      // A token exists only in a running instance, so a filtered listing has no
-      // finished half to read — asking for one would be a request per poll whose
-      // answer is always empty.
       [active, done] = await Promise.all([
         loadPages("active", activePages),
-        elementFilter ? Promise.resolve({ rows: [], more: false }) : loadPages("finished", finishedPages),
+        loadPages("finished", finishedPages),
       ]);
     } catch { return; } // transient; the picker just keeps its current options
     moreActive = active.more;
     moreFinished = done.more;
     applyInstances(active.rows.concat(done.rows));
+  }
+
+  // refreshSections reads a filtered panel: one listing per switched-on kind, each as
+  // deep as its own "Load more" has taken it. The live one asks for the active half only —
+  // a token exists only in a running instance, so a finished half would be a request per
+  // poll whose answer is always empty — and the two history ones ask their own indexes.
+  //
+  // The picker above the diagram gets the union, each instance once: it is a way to
+  // select an instance, and one that is sitting on the task and also completed it on an
+  // earlier pass of a loop is still one instance to select.
+  async function refreshSections() {
+    const kinds = switchedOnKinds();
+    const read = ++sectionsRead, filter = elementFilter;
+    let results;
+    try {
+      results = await Promise.all(kinds.map((k) =>
+        k === "live" ? loadPages("active", sections.live.pages) : loadPages(null, sections[k].pages, k)));
+    } catch { return; } // transient; the panel keeps what it showed
+    if (read !== sectionsRead || filter !== elementFilter) return; // a newer reading owns the panel
+    for (const k of FILTER_KINDS) {
+      const i = kinds.indexOf(k);
+      sections[k].rows = i < 0 ? [] : results[i].rows;
+      sections[k].more = i < 0 ? false : results[i].more;
+    }
+    listedKinds = kinds;
+    const seen = new Set();
+    applyInstances(kinds.flatMap((k) => sections[k].rows).filter((r) =>
+      seen.has(r.key) ? false : (seen.add(r.key), true)));
   }
 
   // elementLabel names a diagram element the way the operator sees it: its label if
@@ -10183,6 +10255,8 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     selected = "all";
     activePages = finishedPages = 1;
     moreActive = moreFinished = false;
+    for (const k of FILTER_KINDS) sections[k] = { pages: 1, more: false, rows: [] };
+    listedKinds = [];
     instSig = "";
     instances = [];
     // A selection was made against the previous list, so it does not survive a change
@@ -10204,13 +10278,34 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     if (setElementFilter(id)) await poll();
   }
 
+  // A legend switch thrown while an element is filtered changes which sections the panel
+  // lists, so it re-reads at once rather than on the next tick. A section switched off
+  // starts again from its newest page when it comes back: the depth it had been loaded
+  // to belonged to a list the operator put away.
+  onBadgesChanged = async (kind, on) => {
+    if (!on && sections[kind]) sections[kind] = { pages: 1, more: false, rows: [] };
+    if (!elementFilter) return;
+    instSig = "";
+    await refreshInstances();
+    renderVariables();
+  };
+
   // loadMore deepens whichever half still has more, then re-reads. It goes through
   // the same path the poll does, so the rows in front of the operator and the rows
   // just added are one consistent listing rather than two spliced together.
-  async function loadMore() {
+  //
+  // Under an element filter each section has its own button, and `kind` names the one
+  // that was pressed: a long history must not be deepened because the operator asked
+  // for more of the instances sitting on the task, nor the reverse.
+  async function loadMore(kind) {
     let deepened = false;
-    if (moreActive && activePages < PANEL_MAX_PAGES) { activePages++; deepened = true; }
-    if (moreFinished && finishedPages < PANEL_MAX_PAGES) { finishedPages++; deepened = true; }
+    if (elementFilter) {
+      const s = sections[kind];
+      if (s && s.more && s.pages < PANEL_MAX_PAGES) { s.pages++; deepened = true; }
+    } else {
+      if (moreActive && activePages < PANEL_MAX_PAGES) { activePages++; deepened = true; }
+      if (moreFinished && finishedPages < PANEL_MAX_PAGES) { finishedPages++; deepened = true; }
+    }
     if (!deepened) return;
     instSig = ""; // the set grew; force the picker to rebuild
     await refreshInstances();
@@ -10418,6 +10513,56 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     return head + matches.map((d, i) => decCard(d, i)).join("");
   }
 
+  // SECTION says, per kind, how a filtered panel heads that kind's section and what it
+  // says when the section is empty — in the legend's own words and colours, so the switch
+  // that put a section there is recognisable in it.
+  //
+  // The two history sections say "on this server" and their titles say why: the count on
+  // the diagram counts tokens — a loop's several times — and keeps counting instances
+  // history retention has since removed, while a section lists each instance once and
+  // only the ones this server still holds. Without that, a gray 2 000 000 over a section
+  // of fifty rows and a "Load more" reads as a list that lost most of its rows.
+  const SECTION = {
+    live: {
+      dot: "live", head: "Sitting here now",
+      title: "Instances whose token is on this element right now — the green count.",
+      empty: (el) => `No instance is sitting on ${el} right now.`,
+    },
+    cancelled: {
+      dot: "cancelled", head: "Cancelled here",
+      title: "Instances a token was cancelled at this element in — the amber count. That count is of tokens and still includes instances history retention has removed; this list shows each instance once, and only those this server still holds.",
+      empty: (el) => `No instance on this server was cancelled at ${el}.`,
+    },
+    passed: {
+      dot: "history", head: "Completed here and moved on",
+      title: "Instances a token completed this element in and moved on from — the gray count. That count is of tokens and still includes instances history retention has removed; this list shows each instance once, and only those this server still holds.",
+      empty: (el) => `No instance on this server has completed ${el} and moved on.`,
+    },
+  };
+
+  // filterSectionsHTML renders a filtered panel's sections, one per switched-on legend
+  // count, each with its own "Load more". `list` renders a section's rows as the panel's
+  // instance cards.
+  function filterSectionsHTML(list) {
+    const el = esc(elementLabel(elementFilter));
+    if (!listedKinds.length) {
+      return `<p class="muted vp-sect-none">All three counts are switched off in the legend under the diagram, so there is nothing to list for ${el}. Switch one on to see the instances behind it.</p>`;
+    }
+    return listedKinds.map((k) => {
+      const s = sections[k], sec = SECTION[k];
+      const count = s.more ? `${s.rows.length}+` : String(s.rows.length);
+      const more = !s.more
+        ? ""
+        : s.pages >= PANEL_MAX_PAGES
+          ? `<div class="vp-more"><span class="muted">Showing the newest ${s.rows.length}. Use the search above to reach a specific instance.</span></div>`
+          : `<div class="vp-more"><button class="btn ghost sm" type="button" data-load-more="${k}" title="Load the next page of older instances in this section">Load more</button></div>`;
+      return `<section class="vp-sect" data-kind="${k}">
+        <div class="vp-sect-head" title="${esc(sec.title)}"><span class="vp-sect-dot ${sec.dot}"></span>${sec.head} <span class="vp-sect-n">(${count})</span></div>
+        ${s.rows.length ? list(s.rows) : `<p class="muted vp-sect-empty">${sec.empty(el)}</p>`}${more}
+      </section>`;
+    }).join("");
+  }
+
   // renderVariables shows the selected instance's variables with the shared
   // polished renderer (scalars as fields, JSON as collapsible highlighted cards),
   // or — for "All instances" — a compact per-instance overview table. When the
@@ -10476,7 +10621,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       // outlines the element as well, but the panel is where the rows are, and a
       // filter you cannot see is a filter you think is an empty process.
       const filterRow = elementFilter
-        ? `<div class="vp-filter" title="Only instances whose token is sitting on this element right now. Click the process background — or this chip's × — to list every instance again.">
+        ? `<div class="vp-filter" title="The instances behind this element's counts — sitting on it now, cancelled at it, completed it and moved on — for whichever of the three the legend under the diagram has switched on. Click the process background — or this chip's × — to list every instance again.">
              <span class="vp-filter-k">on</span>
              <b>${esc(elementLabel(elementFilter))}</b>
              <button class="btn ghost sm" type="button" data-filter-clear title="Show every instance of this version again">&times;</button>
@@ -10511,16 +10656,8 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       const emptyNote = searchQuery
         ? `<p class="muted" style="margin:0">No instance of this version matches “${esc(searchQuery)}”.</p>` +
           (archiveNote ? `<p class="muted vp-archive-note" style="margin:6px 0 0">${esc(archiveNote)}</p>` : "")
-        : elementFilter
-          // An empty filtered list is a fact about right now, not about the process:
-          // tokens have very likely been through here, and the diagram's gray count
-          // beside the shape is saying so. Say which of the two this is.
-          ? `<p class="muted" style="margin:0">No instance is sitting on ${esc(elementLabel(elementFilter))} right now.</p>`
-          : `<p class="muted" style="margin:0">No instances yet — start one to see its variables here.</p>`;
-      html = !instances.length
-        ? `<div class="vp-head"><span class="vp-title">${elementFilter ? title : "Variables"}</span></div>${filterRow}${searchRow}${emptyNote}`
-        : `${head}${filterRow}${searchRow}
-        <div class="vp-insts${selectMode ? " picking" : ""}">${instances.map((r) => {
+        : `<p class="muted" style="margin:0">No instances yet — start one to see its variables here.</p>`;
+      const list = (rows) => `<div class="vp-insts${selectMode ? " picking" : ""}">${rows.map((r) => {
           const ts = tasksFor(r.key);
           const active = r.state === "active";
           const on = scopeAllActive ? active : picked.has(r.key);
@@ -10541,7 +10678,16 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
             ${instanceMeta(r)}
             <div class="vp-inst-vars">${varChips(r.variables)}</div>
           </div>`;
-        }).join("")}</div>${more}`;
+        }).join("")}</div>`;
+      // A filtered panel is its sections, each with its own heading and its own "none":
+      // an empty section is a fact about that one question, and the other two may well
+      // have answers — so the panel never collapses into one "nothing here".
+      html = elementFilter
+        ? `${head}${filterRow}${searchRow}${filterSectionsHTML(list)}`
+        : !instances.length
+          ? `<div class="vp-head"><span class="vp-title">Variables</span></div>${filterRow}${searchRow}${emptyNote}`
+          : `${head}${filterRow}${searchRow}
+        ${list(instances)}${more}`;
     } else {
       const inst = instances.find((r) => String(r.key) === selected);
       if (!inst) {
@@ -10899,7 +11045,8 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       return;
     }
     if (t.closest("[data-term-go]")) { await runTerminate(); return; }
-    if (t.closest("[data-load-more]")) { await loadMore(); return; }
+    const moreBtn = t.closest("[data-load-more]");
+    if (moreBtn) { await loadMore(moreBtn.dataset.loadMore); return; }
     if (t.closest("[data-search-clear]")) { await runInstanceSearch(""); return; }
     if (t.closest("[data-filter-clear]")) { await applyFilterChange(""); return; }
   });

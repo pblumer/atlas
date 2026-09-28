@@ -247,7 +247,10 @@ func runtimeTools() []Tool {
 				"whose token is sitting on that BPMN element id right now — the \"who is stuck on this task?\" " +
 				"question, answered from the element's own index rather than by reading through the version; it needs " +
 				"'process' (an element id is only meaningful within the version defining it) and lists live instances " +
-				"only, since a finished instance holds no token. Returns {items, total, totalExact, truncated, " +
+				"only, since a finished instance holds no token. 'at' asks the element's history instead: \"passed\" " +
+				"lists the instances a token completed that element in and moved on from, \"cancelled\" the ones " +
+				"cancelled there — running or finished, newest first, off indexes of their own; \"live\" is the " +
+				"default. With 'at' set to passed or cancelled 'state' is refused and 'before' needs no 'state'. Returns {items, total, totalExact, truncated, " +
 				"nextCursor} like atlas_list_tasks: hand nextCursor back as 'before' for the next, older page. " +
 				"'total' is how many there are and 'totalExact' whether that is the population or merely what this " +
 				"page saw — exact wherever a maintained counter knows it, which is one definition's halves and the " +
@@ -263,12 +266,13 @@ func runtimeTools() []Tool {
 						"description": "Optional process definition key (from atlas_list_processes): narrows to that version and reads its index.",
 					},
 					"element": stringProp("Optional BPMN element id (as written in the model, e.g. \"Eintritt_verbuchen\"): lists only the instances whose token is sitting on that element right now. Requires 'process'."),
+					"at":      stringProp("Optional, with 'element': what is asked of it — \"live\" (the default: whose token is sitting there now), \"passed\" (whose token completed it and moved on) or \"cancelled\" (whose token was cancelled there)."),
 					"state":   stringProp("Optional half to list: \"active\", \"finished\" or \"all\" (the default). A single half is what a cursor can page."),
 					"limit": map[string]any{
 						"type":        "integer",
 						"description": "Optional maximum rows to return (default 1000, max 10000).",
 					},
-					"before": stringProp("Optional cursor: the nextCursor of a previous page, passed back verbatim, to fetch the next (older) page. Requires 'process' and a single 'state' — the two halves are ordered differently, so one cursor cannot address both."),
+					"before": stringProp("Optional cursor: the nextCursor of a previous page, passed back verbatim, to fetch the next (older) page. Requires 'process' and a single 'state' — the two halves are ordered differently, so one cursor cannot address both — except under 'at' passed or cancelled, whose index is one order."),
 				},
 			},
 			Handler: func(c *Client, args map[string]any) (string, error) {

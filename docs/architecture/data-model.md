@@ -170,6 +170,8 @@ The log is the truth; the state store is a fast, queryable materialization. Stat
 el:<elementInstanceKey>          → ElementInstanceValue       (primary state)
 elByProc:<procInstKey>:<elKey>   → nil                        (elements of an instance, for termination)
 piByEl:<procDefKey>:<elementId>:<piKey>:<elKey> → nil         (the instances a token is sitting on an element in)
+piDoneAtEl:<procDefKey>:<elementId>:<piKey> → nil             (the instances a token completed an element in)
+piCancAtEl:<procDefKey>:<elementId>:<piKey> → nil             (the instances a token was cancelled at an element in)
 job:<jobKey>                     → JobValue
 jobActivatable:<jobType>:<key>   → nil                        (open jobs per type, worker polling)
 timer:<dueDate>:<timerKey>       → TimerValue                 (sorted by due date → range scan)
@@ -202,6 +204,16 @@ same element (a loop, a multi-instance activity) are adjacent and collapse to on
 row. It is written and dropped by exactly the two calls that move the ADR-0080
 live-token counter, so the count badged on a shape and the rows the filter lists
 are two readings of one fact.
+
+`piDoneAtEl` and `piCancAtEl` are the same question put to the shape's history: which
+instances had a token complete this element and move on, and which had one cancelled
+here — the rows behind the gray and the amber count
+([ADR-draft-instances-that-left-an-element](../adr/draft-instances-that-left-an-element.md)).
+They are written when a token completes or is terminated, keyed without the element
+instance so a loop leaving the same element again rewrites one entry, and they list
+running and finished instances in one instance-key order. Unlike `piByEl` they grow
+with history rather than with the live population, which is why history retention
+drops an instance's entries with it.
 
 The two `…ByDef` indexes are the same idea for the operator's question. Without them, "show me this version's instances" is a walk of every instance in the store filtered by definition, and "the ten most recently finished" is that walk plus an in-memory sort. With the definition key as the prefix each is a bounded range scan, and putting `completedAt` ahead of the instance key in the history index makes *completion order* the scan order — walked backwards, it is "most recently finished first" without sorting anything. Both entries are valueless: the key is the whole fact, and the instance's own record holds the rest.
 

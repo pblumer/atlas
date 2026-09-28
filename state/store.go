@@ -126,6 +126,14 @@ func Open(dir string, opts ...Option) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("state: backfill element-token index: %w", err)
 	}
+	// Which instances completed an element, and which were cancelled at it, is the
+	// history counterpart of the index above and newer still. It reads empty rather than
+	// low for the same reason, and it is seeded from the per-instance visit and
+	// termination counters — after the index above, whose live tokens it subtracts.
+	if err := s.backfillDepartureIndexIfNeeded(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("state: backfill element-departure index: %w", err)
+	}
 	return s, nil
 }
 
@@ -909,6 +917,108 @@ func (s *Store) backfillElementTokenIndexIfNeeded() error {
 	return b.Commit(pebble.Sync)
 }
 
+const metaElementDepartureIndexV1 = "element_departure_index_v1"
+
+// departureBackfillChunk is how many index entries the departure backfill writes per
+// batch. The other seedings commit one batch, because what they write is bounded by the
+// live population; this one is bounded by the history, which on a long-running version
+// is millions of (instance, element) pairs — one batch of those would hold the whole
+// index in memory at once.
+const departureBackfillChunk = 50_000
+
+// backfillDepartureIndexIfNeeded seeds the two departure indexes — which instances
+// completed an element and moved on, which were cancelled at it — from the history a
+// store already holds, the first time it gains them
+// (ADR-draft-instances-that-left-an-element).
+//
+// A missing index would not read low here either, it would read *empty*: an operator
+// clicking a task two million tokens went through would be told that none did. The
+// per-instance counters have recorded every visit and every cancellation all along
+// (ADR-0022, ADR-0249), so nothing is lost; only the element-major direction is.
+//
+// Cancelled is read straight off the termination counter: any count there is a token
+// cancelled at that element. Completed is the subtraction the diagram's gray badge makes
+// — visits, less the cancelled, less the tokens still sitting there — so the backfilled
+// index names exactly the instances behind the number the shape shows. That is also its
+// one imprecision, and the badge's: a token migrated to another version mid-task counts
+// as having moved on from the version it left (ADR-0162). From here on the engine writes
+// each entry at the completion or termination itself, which knows better.
+//
+// The entries are valueless and a repeated write is the key already there, so a crash
+// between chunks leaves a partial index that the next open — finding no marker — simply
+// writes again. The marker goes in the last batch, which is synced.
+func (s *Store) backfillDepartureIndexIfNeeded() error {
+	if _, ok, err := getCopy(s.db, keyMeta(metaElementDepartureIndexV1)); err != nil || ok {
+		return err
+	}
+
+	type instElem struct {
+		def, pi uint64
+		el      int32
+	}
+	// Tokens still on an element are part of its visit count and have not left it. The
+	// piByEl index is keyed [cf][procDefKey:8][elementId:4][piKey:8][elKey:8], one entry
+	// per token, so counting its entries is counting them.
+	live := map[instElem]int64{}
+	if err := s.scanPrefix([]byte{byte(cfInstanceByElement)}, func(k, _ []byte) error {
+		def := binary.BigEndian.Uint64(k[1:9])
+		el := int32(binary.BigEndian.Uint32(k[9:13]))
+		live[instElem{def, instanceFromElementIndexKey(k), el}]++
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	b := s.db.NewBatch()
+	pending := 0
+	set := func(key []byte) error {
+		if err := b.Set(key, nil, nil); err != nil {
+			return err
+		}
+		if pending++; pending < departureBackfillChunk {
+			return nil
+		}
+		if err := b.Commit(pebble.NoSync); err != nil {
+			return err
+		}
+		_ = b.Close()
+		b, pending = s.db.NewBatch(), 0
+		return nil
+	}
+	defer func() { _ = b.Close() }()
+
+	// The per-instance history counters share one layout:
+	// [cf][procDefKey:8][piKey:8][elementId:4], the value the count.
+	historyKey := func(k []byte) instElem {
+		return instElem{binary.BigEndian.Uint64(k[1:9]), binary.BigEndian.Uint64(k[9:17]), elementIdFromVisitKey(k)}
+	}
+	cancelled := map[instElem]int64{}
+	if err := s.scanPrefix([]byte{byte(cfElementTermination)}, func(k, raw []byte) error {
+		n := decodeCounter(raw)
+		if n <= 0 {
+			return nil
+		}
+		ie := historyKey(k)
+		cancelled[ie] += n
+		return set(keyDeparture(cfInstanceCancelledAtEl, ie.def, ie.el, ie.pi))
+	}); err != nil {
+		return err
+	}
+	if err := s.scanPrefix([]byte{byte(cfElementVisit)}, func(k, raw []byte) error {
+		ie := historyKey(k)
+		if decodeCounter(raw)-cancelled[ie]-live[ie] <= 0 {
+			return nil
+		}
+		return set(keyDeparture(cfInstanceCompletedAtEl, ie.def, ie.el, ie.pi))
+	}); err != nil {
+		return err
+	}
+	if err := b.Set(keyMeta(metaElementDepartureIndexV1), []byte{1}, nil); err != nil {
+		return err
+	}
+	return b.Commit(pebble.Sync)
+}
+
 // InjectCorruptProcessInstance writes an undecodable record under a process
 // instance's key. It is a test/tooling affordance only — it lets a caller in another
 // package exercise the decode-error path of the active-instance scan
@@ -1069,6 +1179,44 @@ func (q queries) InstancesOnElementDesc(procDefKey uint64, elementId int32, befo
 			return err
 		}
 		return fn(key, v.(*model.ProcessInstanceValue))
+	})
+}
+
+// InstancesDepartedElementDesc calls fn with every instance of one definition that a
+// token left the given element from in the given way — completed there and moved on, or
+// cancelled there — in DESCENDING instance-key order, newest first, starting just below
+// `before`; before == 0 starts from the newest.
+//
+// It is [queries.InstancesOnElementDesc] for the history: that one answers "who is
+// sitting on this task", this one "who got through it" and "who was cancelled at it" —
+// the instances behind the gray and the amber count on the shape. It reads the
+// departure index, so the cost is the page it yields plus one point read per row, not
+// the version's history (ADR-draft-instances-that-left-an-element).
+//
+// The instance is yielded whether it is still running or has finished, since a token
+// that completed a task says nothing about whether the instance has ended since, and its
+// record is read from whichever family holds it. An entry whose instance is in neither
+// is skipped rather than reported: retention purges the instance's entries with it, and
+// what remains is an instance migrated away and purged under its later version, whose
+// earlier history nothing names any more.
+func (q queries) InstancesDepartedElementDesc(how Departure, procDefKey uint64, elementId int32, before uint64, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
+	cf, ok := how.family()
+	if !ok {
+		return fmt.Errorf("state: unknown element departure %d", how)
+	}
+	lo := departurePrefix(cf, procDefKey, elementId)
+	hi := prefixEnd(lo)
+	if before != 0 {
+		// UpperBound is exclusive, so this starts strictly below the named instance.
+		hi = keyDeparture(cf, procDefKey, elementId, before)
+	}
+	return q.scanRangeDesc(lo, hi, func(k, _ []byte) error {
+		key := trailingKey(k)
+		v, found, err := q.ProcessInstance(key)
+		if err != nil || !found {
+			return err
+		}
+		return fn(key, v)
 	})
 }
 

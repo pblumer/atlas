@@ -67,6 +67,27 @@
       const ON_AUSTRITT = [inst(1002, [{ name: "identityId", value: "MT-58500", kind: "string" }])];
       const ALL_ACTIVE = [ON_EINTRITT[0], ON_AUSTRITT[0], ON_EINTRITT[1]];
 
+      // The history the element's two departure indexes answer with
+      // (ADR-draft-instances-that-left-an-element): instances a token completed an
+      // element in and moved on from, and instances cancelled at one — running or
+      // finished, newest first. 990 went all the way through; 980 was cancelled while it
+      // sat on "eintritt"; 1002 got through "eintritt" and sits on "austritt" now.
+      const done = (key, state) => ({
+        key, processDefKey: DEF, state, createdAt: 1_600_000_000_000_000_000,
+        completedAt: 1_600_000_100_000_000_000, variables: [],
+      });
+      const I990 = done(990, "completed"), I980 = done(980, "terminated");
+      const PASSED = {
+        start: [ON_EINTRITT[0], ON_AUSTRITT[0], ON_EINTRITT[1], I990, I980],
+        eintritt: [ON_AUSTRITT[0], I990],
+        austritt: [I990],
+        end: [I990],
+      };
+      const CANCELLED = { eintritt: [I980] };
+      // A page size small enough to page: "start" is answered two rows at a time, so a
+      // spec can prove each section has a cursor of its own.
+      const HISTORY_PAGE = 2;
+
       // Every /api/v1/instances URL the view asked for, oldest first.
       window.__instanceCalls = [];
 
@@ -84,7 +105,18 @@
         const q = new URLSearchParams(url.slice(url.indexOf("?") + 1));
         const element = q.get("element");
         const state = q.get("state");
+        const at = q.get("at");
         if (!element) return page(state === "finished" ? [] : ALL_ACTIVE);
+        if (at === "passed" || at === "cancelled") {
+          // One index, one order, one bare-key cursor — and no half to name.
+          const all = ((at === "passed" ? PASSED : CANCELLED)[element] || []);
+          const before = Number(q.get("before") || 0);
+          const rest = before ? all.filter((r) => r.key < before) : all;
+          if (element !== "start") return page(rest);
+          const items = rest.slice(0, HISTORY_PAGE);
+          const truncated = rest.length > HISTORY_PAGE;
+          return page(items, { truncated, totalExact: false, ...(truncated ? { nextCursor: String(items[items.length - 1].key) } : {}) });
+        }
         // A token lives only in a running instance, so a filtered finished half is empty.
         if (state === "finished") return page([]);
         if (element === "eintritt") return page(ON_EINTRITT);

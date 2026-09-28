@@ -1,0 +1,29 @@
+{
+  "tags": ["Operations"],
+  "title": {
+    "en": "A click on a task now lists who got through it and who was cancelled there",
+    "de": "Ein Klick auf einen Task zeigt jetzt auch, wer ihn durchlaufen hat und wer dort abgebrochen wurde"
+  },
+  "summary": {
+    "en": "In a version's live view, clicking a task used to list only the instances sitting on it right now. A task that two million tokens had passed through, with none waiting, answered with an empty list. Now the list beside the diagram has one section for each count the legend under the diagram has switched on: the instances sitting on the task now, the ones cancelled there, and the ones that completed it and moved on — in that order, each with its own Load more. Switch a count off in the legend and its section goes with it. The numbers on the diagram and in the list are not meant to match: the diagram counts tokens, a loop several times, and keeps counting instances that history retention has deleted; the list shows each instance once, and only while this server still holds it.",
+    "de": "Bisher zeigte ein Klick auf einen Task in der Live-Ansicht einer Version nur die Instanzen, die gerade dort stehen. Ein Task, den zwei Millionen Token durchlaufen hatten und auf dem niemand wartete, lieferte eine leere Liste. Jetzt hat die Liste neben dem Diagramm einen Abschnitt für jede Zahl, die in der Legende unter dem Diagramm eingeschaltet ist: die Instanzen, die jetzt auf dem Task stehen, die dort abgebrochenen und die, die ihn abgeschlossen haben und weitergegangen sind — in dieser Reihenfolge, jeder mit eigenem Load more. Schalten Sie eine Zahl in der Legende aus, verschwindet auch ihr Abschnitt. Die Zahlen am Diagramm und in der Liste sollen nicht übereinstimmen: Das Diagramm zählt Token, eine Schleife mehrfach, und zählt auch Instanzen weiter, die die History-Retention gelöscht hat; die Liste zeigt jede Instanz einmal und nur, solange dieser Server sie noch hält."
+  },
+  "tutorial": {
+    "en": [
+      "Open Operations, pick a process and open its live view.",
+      "Click a task that tokens have passed through. The list on the right shows up to three sections: Sitting here now, Cancelled here, Completed here and moved on.",
+      "In the legend under the diagram, click “completed here and moved on” to switch it off: the gray numbers leave the diagram and that section leaves the list.",
+      "Click the process background, or the × on the chip, to list every instance again."
+    ],
+    "de": [
+      "Öffnen Sie Operations, wählen Sie einen Prozess und öffnen Sie seine Live-Ansicht.",
+      "Klicken Sie auf einen Task, den Token durchlaufen haben. Rechts erscheinen bis zu drei Abschnitte: Sitting here now, Cancelled here, Completed here and moved on.",
+      "Klicken Sie in der Legende unter dem Diagramm auf „completed here and moved on“, um es auszuschalten: Die grauen Zahlen verschwinden aus dem Diagramm und der Abschnitt aus der Liste.",
+      "Ein Klick auf den Prozesshintergrund oder auf das × im Chip zeigt wieder alle Instanzen."
+    ]
+  },
+  "try": {
+    "label": { "en": "Open Operations", "de": "Operations öffnen" },
+    "route": "#/operations"
+  }
+}

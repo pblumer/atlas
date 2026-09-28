@@ -12,6 +12,38 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **Clicking an element in Operations lists every instance behind its counts.** A shape
+  in the live view carries up to three numbers — completed here and moved on (gray),
+  cancelled here (amber), sitting here now (green) — and a click listed only the instances
+  behind the green one. A task reading "1 976 430" in gray and nothing else answered the
+  click with *"no instance is sitting on it right now"*: true, and no help to an operator
+  asking which instances took that branch, or which were cancelled at it.
+
+  The panel now lists one section per count the legend under the diagram has switched on,
+  in a fixed order — *sitting here now* first, so a long history never buries the
+  instances the click was built to find, then *cancelled here*, then *completed here and
+  moved on* — each with its own **Load more**. The legend's three switches, which already
+  took a count off the diagram, now take its section off the list too, at once. The
+  numbers differ on purpose, and the section titles say so: the diagram counts tokens, a
+  loop's several times, and keeps counting instances history retention has since removed;
+  a section lists each instance once, and only while this server holds it.
+
+  It costs the page shown, like the live filter. Scanning the per-instance history
+  counters for the element would read a version's whole history on every 1.5-second poll,
+  so two new indexes (`piDoneAtEl` and `piCancAtEl`, keyed
+  `<procDefKey>:<elementId>:<piKey>`) are written from `applyToState` when a token
+  completes or is terminated, dropped by history retention with the instance, and seeded
+  once at open from the visit and termination counters — by the same subtraction the gray
+  badge makes, so an upgraded store lists the instances behind the numbers it already
+  shows.
+
+  `GET /api/v1/instances` gains `?at=live|passed|cancelled` beside `?element=` (the
+  history takes no `?state=` and pages on a bare instance key), and `atlas_list_instances`
+  (MCP) gains `at`
+  ([ADR-draft-instances-that-left-an-element](docs/adr/draft-instances-that-left-an-element.md)).
+
 ## [0.7.0] — 2026-09-28
 
 **This release is about what an organisation offers, and who holds it.** Atlas gains a

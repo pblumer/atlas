@@ -54,6 +54,8 @@ const (
 	cfInstanceByElement      columnFamily = 0x29 // piByEl:<procDefKey>:<elementId>:<piKey>:<elKey> → nil
 	cfEntitlement            columnFamily = 0x2A // ent:<principal>:0x00:<itemId> → EntitlementValue (ADR-0312)
 	cfEntitlementHistory     columnFamily = 0x2B // entHist:<principal>:0x00:<endedAt>:<itemId> → EntitlementHistoryValue (ADR-0346)
+	cfInstanceCompletedAtEl  columnFamily = 0x2C // piDoneAtEl:<procDefKey>:<elementId>:<piKey> → nil (ADR-draft-instances-that-left-an-element)
+	cfInstanceCancelledAtEl  columnFamily = 0x2D // piCancAtEl:<procDefKey>:<elementId>:<piKey> → nil (ADR-draft-instances-that-left-an-element)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -206,6 +208,49 @@ func instanceByElementPrefix(procDefKey uint64, elementId int32) []byte {
 // instance's own record holds everything a reader goes on to show.
 func keyInstanceByElement(procDefKey uint64, elementId int32, piKey, elKey uint64) []byte {
 	return appendBE64(appendBE64(instanceByElementPrefix(procDefKey, elementId), piKey), elKey)
+}
+
+// Departure is how a token left an element: completed there and handed on to what
+// follows, or cancelled there — the gray and the amber count on the Operations
+// diagram. Each has an index of its own, keyed the way piByEl is, so "which instances
+// completed this task" and "which were cancelled at it" are prefix scans of the element
+// rather than a walk of the version's history (ADR-draft-instances-that-left-an-element).
+type Departure uint8
+
+const (
+	// DepartedCompleted is a token that completed on the element and moved on.
+	DepartedCompleted Departure = iota + 1
+	// DepartedCancelled is a token that was terminated on the element: the losing
+	// branch of an event-based gateway, an activity interrupted by a boundary event, a
+	// scope torn down around it.
+	DepartedCancelled
+)
+
+// family names the column family a departure is indexed in, and reports a value that
+// is neither — a caller's mistake, refused rather than read as an empty answer.
+func (d Departure) family() (columnFamily, bool) {
+	switch d {
+	case DepartedCompleted:
+		return cfInstanceCompletedAtEl, true
+	case DepartedCancelled:
+		return cfInstanceCancelledAtEl, true
+	}
+	return 0, false
+}
+
+// departurePrefix is one element of one definition in one departure index: every
+// instance a token left that element from, in that way.
+func departurePrefix(cf columnFamily, procDefKey uint64, elementId int32) []byte {
+	return appendBE32(appendBE64([]byte{byte(cf)}, procDefKey), uint32(elementId))
+}
+
+// keyDeparture keys one instance under the (definition, element) a token of it left.
+// Unlike piByEl there is no element-instance key at the end: the fact recorded is that
+// this instance left here this way, and a loop that leaves the element five times is
+// still one instance to list — so the fifth write lands on the key the first one made.
+// The instance key trails, so walking the range backwards yields instances newest first.
+func keyDeparture(cf columnFamily, procDefKey uint64, elementId int32, piKey uint64) []byte {
+	return appendBE64(departurePrefix(cf, procDefKey, elementId), piKey)
 }
 
 // instanceFromElementIndexKey extracts the process instance key from a piByEl

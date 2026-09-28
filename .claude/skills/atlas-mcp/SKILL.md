@@ -36,7 +36,7 @@ Bearer` header.
 | `atlas_process_runtime` | `key` | per-element token and visit counts |
 | `atlas_call_activities` | none | every call activity across deployed processes, with its called process id, binding, propagation, any per-server target override (redirect/pin/disable, ADR-0105), and how it currently resolves here |
 | `atlas_collaboration_runtime` | `key` | a collaboration's live pools, tokens, and message flows |
-| `atlas_list_instances` | `process?`, `element?`, `state?`, `limit?`, `before?` | a page of instances; `element` narrows to the ones whose token is sitting on that BPMN element right now (ADR-0261) |
+| `atlas_list_instances` | `process?`, `element?`, `at?`, `state?`, `limit?`, `before?` | a page of instances; `element` narrows to the ones whose token is sitting on that BPMN element right now (ADR-0261); `at` = `passed` / `cancelled` lists instead the ones whose token completed it and moved on, or was cancelled there, running or finished (`live` is the default; no `state` with those two) |
 | `atlas_instances_summary` | none | per-definition active/completed counts |
 | `atlas_search_instances` | `q` | instances matching a variable query (`name=value` or free text) |
 | `atlas_instance_variables` | `key` | one instance's variables as a typed object |

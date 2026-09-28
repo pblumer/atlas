@@ -2,6 +2,48 @@
   "generatedAt": "2026-09-28",
   "entries": [
     {
+      "id": "clicking-an-element-in-operations-lists-every-instance-behin",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A click on a task now lists who got through it and who was cancelled there",
+        "de": "Ein Klick auf einen Task zeigt jetzt auch, wer ihn durchlaufen hat und wer dort abgebrochen wurde"
+      },
+      "summary": {
+        "en": "In a version's live view, clicking a task used to list only the instances sitting on it right now. A task that two million tokens had passed through, with none waiting, answered with an empty list. Now the list beside the diagram has one section for each count the legend under the diagram has switched on: the instances sitting on the task now, the ones cancelled there, and the ones that completed it and moved on — in that order, each with its own Load more. Switch a count off in the legend and its section goes with it. The numbers on the diagram and in the list are not meant to match: the diagram counts tokens, a loop several times, and keeps counting instances that history retention has deleted; the list shows each instance once, and only while this server still holds it.",
+        "de": "Bisher zeigte ein Klick auf einen Task in der Live-Ansicht einer Version nur die Instanzen, die gerade dort stehen. Ein Task, den zwei Millionen Token durchlaufen hatten und auf dem niemand wartete, lieferte eine leere Liste. Jetzt hat die Liste neben dem Diagramm einen Abschnitt für jede Zahl, die in der Legende unter dem Diagramm eingeschaltet ist: die Instanzen, die jetzt auf dem Task stehen, die dort abgebrochenen und die, die ihn abgeschlossen haben und weitergegangen sind — in dieser Reihenfolge, jeder mit eigenem Load more. Schalten Sie eine Zahl in der Legende aus, verschwindet auch ihr Abschnitt. Die Zahlen am Diagramm und in der Liste sollen nicht übereinstimmen: Das Diagramm zählt Token, eine Schleife mehrfach, und zählt auch Instanzen weiter, die die History-Retention gelöscht hat; die Liste zeigt jede Instanz einmal und nur, solange dieser Server sie noch hält."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Operations, pick a process and open its live view.",
+          "Click a task that tokens have passed through. The list on the right shows up to three sections: Sitting here now, Cancelled here, Completed here and moved on.",
+          "In the legend under the diagram, click “completed here and moved on” to switch it off: the gray numbers leave the diagram and that section leaves the list.",
+          "Click the process background, or the × on the chip, to list every instance again."
+        ],
+        "de": [
+          "Öffnen Sie Operations, wählen Sie einen Prozess und öffnen Sie seine Live-Ansicht.",
+          "Klicken Sie auf einen Task, den Token durchlaufen haben. Rechts erscheinen bis zu drei Abschnitte: Sitting here now, Cancelled here, Completed here and moved on.",
+          "Klicken Sie in der Legende unter dem Diagramm auf „completed here and moved on“, um es auszuschalten: Die grauen Zahlen verschwinden aus dem Diagramm und der Abschnitt aus der Liste.",
+          "Ein Klick auf den Prozesshintergrund oder auf das × im Chip zeigt wieder alle Instanzen."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "a-deployment-target-can-name-a-second-credential-for-reading",
       "version": "0.7.0",
       "date": "2026-09-28",
@@ -324,24 +366,6 @@
           "«Meine Aufträge» öffnen: Unter der Position steht die Genehmigung und auf wen sie wartet.",
           "Als genehmigende Person anmelden, «Meine Aufträge» öffnen, bei der Aufgabe «Erledigen» wählen und abschliessen."
         ]
-      }
-    },
-    {
-      "id": "the-portal-speaks-french-and-italian",
-      "version": "0.7.0",
-      "date": "2026-09-28",
-      "category": "Added",
-      "title": {
-        "en": "The portal speaks French and Italian.",
-        "de": "The portal speaks French and Italian."
-      },
-      "summary": {
-        "en": "It had German and English, so a catalogue kept in French or Italian carried translations that no reader could ever select: the switch will not offer a language the page cannot render whole, and the page could not render those.",
-        "de": "It had German and English, so a catalogue kept in French or Italian carried translations that no reader could ever select: the switch will not offer a language the page cannot render whole, and the page could not render those."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
       }
     }
   ]

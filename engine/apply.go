@@ -165,6 +165,18 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// cancelled) does not — nothing downstream ever activates from it. The replay
 			// fold needs to tell them apart, so each gets its own action code (ADR-0136).
 			action := state.ReplayCompleted
+			// Which instances left this element, and how, indexed by the element: the
+			// rows behind the diagram's gray and amber counts, so a click on a shape can
+			// list the instances that got through it or were cancelled at it without
+			// walking the version's history (ADR-draft-instances-that-left-an-element).
+			// Derived from the event payload alone, so replay rebuilds it (I4).
+			how := state.DepartedCompleted
+			if h.Intent == model.IntentTerminated {
+				how = state.DepartedCancelled
+			}
+			if err := tx.RecordDeparture(how, v.element.ProcessDefKey, v.element.ElementId, v.element.ProcessInstanceKey); err != nil {
+				return err
+			}
 			if h.Intent == model.IntentTerminated {
 				action = state.ReplayTerminated
 				// Retain the cancellation as its own counter, per instance and per

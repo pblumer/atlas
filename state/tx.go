@@ -3,6 +3,8 @@ package state
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
+	"slices"
 
 	"github.com/cockroachdb/pebble"
 
@@ -498,6 +500,11 @@ func (t *Tx) PurgeInstanceHistory(piKey, procDefKey uint64, purgeDueDate int64) 
 		if err := t.b.Delete(keyVariableIndex(e.name, e.text, piKey), nil); err != nil {
 			return err
 		}
+	}
+	// The same holds for the departure indexes, which are keyed by element: left
+	// behind, a purged instance would still be offered as having completed a task.
+	if err := t.dropDepartures(piKey, procDefKey); err != nil {
+		return err
 	}
 	for _, prefix := range [][]byte{
 		// The terminal history record is a full key, a strict prefix of no other, so a
@@ -1204,6 +1211,85 @@ func (t *Tx) RecordElementVisit(procDefKey, piKey uint64, elementId int32) error
 func (t *Tx) RecordElementTermination(procDefKey, piKey uint64, elementId int32) error {
 	t.scratch = appendCounter(t.scratch[:0], 1)
 	return t.b.Merge(keyElementTermination(procDefKey, piKey, elementId), t.scratch, nil)
+}
+
+// RecordDeparture indexes an instance under the (definition, element) a token of it
+// just left, and how it left: completed and handed on, or cancelled there. It is the
+// element-major direction of the two counters above — they say how many tokens left an
+// element and are read per instance; this says which instances did and is read per
+// element, which is the question an operator puts by clicking a shape
+// (ADR-draft-instances-that-left-an-element).
+//
+// Called from applyToState on an element instance's completion or termination, from
+// the event payload alone, so replay rebuilds it (I4/I6). The entry is valueless and
+// keyed without the element instance, so a loop leaving the same element again rewrites
+// the key it already wrote rather than adding one: the index sizes with the (instance,
+// element) pairs a history has, not with how often a token went round.
+func (t *Tx) RecordDeparture(how Departure, procDefKey uint64, elementId int32, piKey uint64) error {
+	cf, ok := how.family()
+	if !ok {
+		return fmt.Errorf("state: unknown element departure %d", how)
+	}
+	return t.b.Set(keyDeparture(cf, procDefKey, elementId, piKey), nil, nil)
+}
+
+// dropDepartures deletes a purged instance's entries from both departure indexes. The
+// entries are keyed by element first, so no prefix over the instance reaches them; they
+// are named one by one from the elements the instance is on record as having touched —
+// its visit counters under the definition it ends on, and the element ids its lifecycle
+// trail recorded (which include a token completed after a migration, whose visit was
+// counted under the version it started on). Both are the instance's own rows, read
+// before the prefix deletes below take them, so the cost is the instance's size.
+//
+// Deleting an absent key is a no-op, so an element that has no entry — or a trail id
+// from another version, after a migration — costs a delete and changes nothing.
+func (t *Tx) dropDepartures(piKey, procDefKey uint64) error {
+	seen := map[int32]bool{}
+	collect := func(prefix []byte, elementId func(k, v []byte) (int32, error)) error {
+		iter, err := t.b.NewIter(&pebble.IterOptions{LowerBound: prefix, UpperBound: prefixEnd(prefix)})
+		if err != nil {
+			return err
+		}
+		for iter.First(); iter.Valid(); iter.Next() {
+			id, err := elementId(iter.Key(), iter.Value())
+			if err != nil {
+				_ = iter.Close()
+				return err
+			}
+			seen[id] = true
+		}
+		err = iter.Error()
+		if cerr := iter.Close(); err == nil {
+			err = cerr
+		}
+		return err
+	}
+	if err := collect(elementVisitInstancePrefix(procDefKey, piKey), func(k, _ []byte) (int32, error) {
+		return elementIdFromVisitKey(k), nil
+	}); err != nil {
+		return err
+	}
+	if err := collect(elementReplayInstancePrefix(piKey), func(_, v []byte) (int32, error) {
+		r, err := decodeElementReplay(v)
+		return r.ElementID, err
+	}); err != nil {
+		return err
+	}
+	// In element order rather than map order: the result would be the same either way,
+	// but a fold that replays identically should not have to be argued to.
+	ids := make([]int32, 0, len(seen))
+	for id := range seen {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	for _, id := range ids {
+		for _, cf := range []columnFamily{cfInstanceCompletedAtEl, cfInstanceCancelledAtEl} {
+			if err := t.b.Delete(keyDeparture(cf, procDefKey, id, piKey), nil); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // --- Message-flow history ---

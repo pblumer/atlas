@@ -6900,14 +6900,27 @@ atlas worker --connector mssql</code></pre>
           den Prozess statt auf ein Element, bei einer Kollaboration auf den Pool – zeigt wieder alle. Die
           grüne Zahl am Element sagt <i>wie viele</i> warten; ein Klick sagt <i>welche</i>. Das gilt für jedes
           Element, auf dem ein Token stehen kann, nicht nur für User-Tasks, und es kostet nur die angezeigte
-          Seite – auch bei hunderttausenden Instanzen.</li>
+          Seite – auch bei hunderttausenden Instanzen. Dasselbe gilt für die <b>Geschichte</b> des Elements:
+          Die Liste zeigt einen Abschnitt pro Zahl, die in der Legende unter dem Diagramm eingeschaltet ist –
+          <i>Sitting here now</i> (grün), <i>Cancelled here</i> (orange, abgebrochen) und <i>Completed here
+          and moved on</i> (grau, abgeschlossen und weitergegangen), immer in dieser Reihenfolge und jeder mit
+          eigenem <b>Load more</b>. Schaltest du eine Zahl in der Legende aus, verschwindet auch ihr
+          Abschnitt. Die Zahlen am Diagramm und in der Liste sind bewusst verschieden: Das Diagramm zählt
+          <i>Token</i> (eine Schleife mehrfach) und behält Instanzen, die die History-Retention schon gelöscht
+          hat; die Liste zeigt jede <i>Instanz</i> einmal und nur, solange sie auf diesem Server liegt.</li>
         <li data-l="en"><b>Who is sitting here?</b> – in a version's <b>live view</b> the diagram is the
           query: <b>click an element</b> and the list on the right shows exactly the instances whose token is
           sitting there. Clicking another element switches to it; clicking beside them – on the process rather
           than an element, or on the pool in a collaboration – lists every instance again. The green count on
           the element says <i>how many</i> are waiting; a click says <i>which ones</i>. It works for every
           element a token can rest on, not only user tasks, and it costs the page you are shown – at hundreds
-          of thousands of instances too.</li>
+          of thousands of instances too. The same goes for the element's <b>history</b>: the list shows one
+          section per count switched on in the legend under the diagram – <i>Sitting here now</i> (green),
+          <i>Cancelled here</i> (amber) and <i>Completed here and moved on</i> (gray), always in that order and
+          each with its own <b>Load more</b>. Switch a count off in the legend and its section goes too. The
+          numbers on the diagram and in the list differ on purpose: the diagram counts <i>tokens</i> (a loop
+          several times) and keeps instances history retention has already removed; the list shows each
+          <i>instance</i> once, and only while this server still holds it.</li>
         <li data-l="de"><b><a href="/#/operations/incidents">Incidents</a></b> – wenn ein Token nicht weiterkommt
           (Job fehlgeschlagen, Ausdrucksfehler, fehlende Variable), entsteht ein <b>Incident</b>. Du behebst die
           Ursache und löst ihn auf – die Instanz läuft weiter. Du musst dafür nicht in die Liste: das steckengebliebene
