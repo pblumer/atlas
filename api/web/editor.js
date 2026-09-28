@@ -525,7 +525,7 @@ function decCard(d, i) {
   // address an evaluation that does not exist. The viewer wiring the click supplies
   // the instance it belongs to.
   return `<div class="dec-card2">
-    <div class="dec-card2-h"><b>${esc(d.decisionId)}</b>${when ? ` <span class="muted">${esc(when)}</span>` : ""}</div>
+    <div class="dec-card2-h"><b>${esc(d.decisionId)}</b>${decVersionChip(d)}${when ? ` <span class="muted">${esc(when)}</span>` : ""}</div>
     <div class="dec-sect2"><span class="dec-sect2-l">Inputs</span>${pills}</div>
     <div class="dec-sect2"><span class="dec-sect2-l">Result</span>${result}</div>
     <div class="dec-sect2"><span class="dec-sect2-l"></span>
@@ -533,6 +533,22 @@ function decCard(d, i) {
         title="Open this decision's requirements graph with this case drawn on it">How this was decided &rarr;</button>
     </div>
   </div>`;
+}
+
+// decVersionChip names the deployed version that answered, when the evaluation
+// record carries it (ADR-0423): which
+// version ran is what latest decides when the task runs, and without it an operator
+// sees a table and cannot tell which one. An evaluation recorded before the key was
+// shows nothing rather than a guess; one answered by the model deployed with the
+// process says so.
+function decVersionChip(d) {
+  if (d && d.decisionVersion) {
+    return ` <span class="res-rule" title="Decision deployment ${esc(String(d.decisionKey || ""))}">v${esc(String(d.decisionVersion))}</span>`;
+  }
+  if (d && d.decisionKey) {
+    return ` <span class="muted" title="The model deployed together with the process answered">model deployed with the process</span>`;
+  }
+  return "";
 }
 
 // renderVarsBody lays out a variable list: scalars as a labeled field grid, JSON
@@ -2839,6 +2855,26 @@ function upsertExt(modeler, element, type, props) {
   }
   Object.assign(node, props);
   modeling.updateProperties(element, { extensionElements: ext });
+}
+
+// calledDecisionVersion reads the atlas:version a business rule task's
+// zeebe:calledDecision names ("" when none). The attribute is Atlas's own, so bpmn-js
+// keeps it among the element's unknown attributes rather than as a property
+// (ADR-0423).
+function calledDecisionVersion(cd) {
+  if (!cd) return "";
+  const v = typeof cd.get === "function" ? cd.get("atlas:version") : (cd.$attrs && cd.$attrs["atlas:version"]);
+  return v ? String(v) : "";
+}
+
+// setCalledDecisionVersion writes atlas:version on the task's zeebe:calledDecision,
+// or removes it when version is "", through the modeling API so it takes part in
+// undo/redo like every other edit here.
+function setCalledDecisionVersion(modeler, element, version) {
+  const cd = findExt(element.businessObject, "zeebe:CalledDecision");
+  if (!cd || calledDecisionVersion(cd) === (version || "")) return;
+  cd.set("atlas:version", version || undefined);
+  modeler.get("modeling").updateProperties(element, { extensionElements: element.businessObject.extensionElements });
 }
 
 // removeExt drops an element's extension element of `type`, if present, through
@@ -6973,13 +7009,27 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               <datalist id="dl-connector"></datalist></label>
               <p class="muted" id="nt-connector" style="font-size:12px"></p>`;
           }
-          const binding = cd.bindingType === "deployment" ? "deployment" : "latest";
+          // Three bindings (ADR-0423): the
+          // newest version when the task runs, one deployed version the author picks
+          // (atlas:version), or the model deployed with the process. A binding this
+          // panel does not offer — Camunda's versionTag — is shown as it is and kept,
+          // rather than rewritten to latest on the next save; the deploy refuses it.
+          const pinnedVersion = calledDecisionVersion(cd);
+          const binding = pinnedVersion ? "version"
+            : cd.bindingType === "deployment" ? "deployment"
+            : (cd.bindingType && cd.bindingType !== "latest") ? cd.bindingType
+            : "latest";
+          const unknownBinding = !["latest", "version", "deployment"].includes(binding);
           const bindingField = mode === "local" ? `
             <label class="field"><span>Binding</span>
               <select id="f-brt-binding">
-                <option value="latest" ${binding === "latest" ? "selected" : ""}>Latest — newest deployed version</option>
-                <option value="deployment" ${binding === "deployment" ? "selected" : ""}>Deployment — pinned to this deploy</option>
-              </select></label>` : "";
+                <option value="latest" ${binding === "latest" ? "selected" : ""}>Latest — newest version when the task runs</option>
+                <option value="version" ${binding === "version" ? "selected" : ""}>Version — a deployed version you choose</option>
+                <option value="deployment" ${binding === "deployment" ? "selected" : ""}>Deployment — the model deployed with this process</option>
+                ${unknownBinding ? `<option value="${esc(binding)}" selected>${esc(binding)} — not supported, the deploy refuses it</option>` : ""}
+              </select></label>
+            <label class="field" id="f-brt-version-wrap"${binding === "version" ? "" : " hidden"}><span>Version</span>
+              <select id="f-brt-version"><option value="${esc(pinnedVersion)}">${pinnedVersion ? "v" + esc(pinnedVersion) : "— choose a deployed version —"}</option></select></label>` : "";
           html += `<label class="field"><span>Decision</span>
               <select id="f-decision-pick"><option value="">${cd.decisionId ? esc(cd.decisionId) + " (current)" : "— choose a decision —"}</option></select></label>
             <div style="display:flex; gap:8px; margin:-4px 0 6px">
@@ -6990,7 +7040,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               <input type="text" id="f-decisionid" value="${esc(cd.decisionId || "")}" placeholder="pick a decision above" readonly title="Set by the decision picked above — no need to type it"/></label>
             <label class="field"><span>Result variable</span>
               <input type="text" id="f-resultvar" value="${esc(cd.resultVariable || "")}" placeholder="dish"/></label>${bindingField}
-            <p class="muted" style="font-size:12px">Pick a decision to auto-fill its id, inputs and result variable. <b>Latest</b> evaluates the newest deployed version; <b>Deployment</b> pins to the version deployed with this process.</p>
+            <p class="muted" style="font-size:12px">Pick a decision to auto-fill its id, inputs and result variable. <b>Latest</b> evaluates the newest deployed version each time the task runs, so a newly deployed version takes effect without redeploying the process. <b>Version</b> evaluates the version you choose, whatever is deployed after it; it is an Atlas setting, and Camunda ignores it and runs the newest. <b>Deployment</b> evaluates the model deployed together with this process.</p>
             <h3>Failure handling</h3>
             <label class="field"><span>Retries</span>
               <input type="number" id="f-brt-retries" min="1" step="1" value="${esc(cd.retries || "")}" placeholder="3"/></label>
@@ -7956,10 +8006,43 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       note.innerHTML = parts.map((t) => `<p>${t}</p>`).join("");
     };
     const fbinding = body.querySelector("#f-brt-binding");
+    const fversion = body.querySelector("#f-brt-version");
+    const fversionWrap = body.querySelector("#f-brt-version-wrap");
     const fbrtretries = body.querySelector("#f-brt-retries");
     // currentBinding preserves the decision binding (ADR-0063) across every save of
-    // the called decision, so editing the id/result variable never drops it.
-    const currentBinding = () => (fbinding && fbinding.value === "deployment") ? "deployment" : "latest";
+    // the called decision, so editing the id/result variable never drops it. A fixed
+    // version is written as atlas:version beside a latest bindingType, which is what
+    // a Camunda engine reads; a binding the panel does not offer is written back as
+    // it was found.
+    const currentBinding = () => {
+      const v = fbinding ? fbinding.value : "latest";
+      if (v === "version") return "latest";
+      return v || "latest";
+    };
+    const currentVersion = () => (fbinding && fbinding.value === "version" && fversion && fversion.value) || "";
+    // fillVersions lists the deployed versions of the chosen decision, newest first,
+    // keeping the one the task already names even when it is no longer deployed —
+    // the deploy then says so, which is better than the panel quietly changing it.
+    const fillVersions = async () => {
+      if (!fversion) return;
+      const id = (fdecision.value || "").trim();
+      const keep = fversion.value;
+      let rows = [];
+      if (id) {
+        try { rows = (await api("GET", `/api/v1/decision-deployments?decisionId=${encodeURIComponent(id)}`)) || []; } catch { rows = []; }
+      }
+      const opts = [`<option value="">— choose a deployed version —</option>`];
+      const seen = new Set();
+      for (const r of rows) {
+        const v = String(r.version || "");
+        if (!v || seen.has(v)) continue;
+        seen.add(v);
+        opts.push(`<option value="${esc(v)}">v${esc(v)}${r.current ? " — current" : ""}</option>`);
+      }
+      if (keep && !seen.has(keep)) opts.push(`<option value="${esc(keep)}">v${esc(keep)} — not deployed</option>`);
+      fversion.innerHTML = opts.join("");
+      fversion.value = keep;
+    };
     const calledDecisionProps = () => ({
       decisionId: (fdecision.value || "").trim(),
       resultVariable: (fresultvar.value || "").trim(),
@@ -7971,10 +8054,21 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     });
     const saveDecision = () => savePreservingPanel(() => {
       upsertExt(modeler, element, "zeebe:CalledDecision", calledDecisionProps());
+      setCalledDecisionVersion(modeler, element, currentVersion());
     });
     if (fdecision) fdecision.addEventListener("change", saveDecision);
     if (fresultvar) fresultvar.addEventListener("change", saveDecision);
-    if (fbinding) fbinding.addEventListener("change", saveDecision);
+    if (fbinding) {
+      fbinding.addEventListener("change", () => {
+        if (fversionWrap) fversionWrap.hidden = fbinding.value !== "version";
+        if (fbinding.value === "version") fillVersions();
+        saveDecision();
+      });
+    }
+    if (fversion) {
+      fversion.addEventListener("change", saveDecision);
+      if (fbinding && fbinding.value === "version") fillVersions();
+    }
     if (fbrtretries) fbrtretries.addEventListener("change", saveDecision);
 
     // Evaluation mode: local (embedded DMN) vs a temis worker (central). The
@@ -8142,6 +8236,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           if (p.target) prev[p.target] = (p.source || "").replace(/^=\s*/, "");
         }
         savePreservingPanel(() => {
+          const previousId = (fdecision.value || "").trim();
           upsertExt(modeler, element, "zeebe:CalledDecision", {
             // Picking a decision fills in the id and result variable; everything else
             // the task already carries (binding, retry budget) survives the pick.
@@ -8149,6 +8244,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             decisionId: d.id,
             resultVariable: (fresultvar.value || "").trim() || (d.output && d.output.name) || d.id,
           });
+          // A version belongs to the decision it was chosen for: a different decision
+          // starts without one, and the panel asks for it again.
+          if (d.id !== previousId) setCalledDecisionVersion(modeler, element, "");
           const rows = (d.inputs || []).map((inp) => ({ target: inp.name, source: prev[inp.name] || inp.name }));
           saveDecisionInputs(modeler, element, rows);
         });

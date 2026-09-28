@@ -31,6 +31,173 @@
       }
     },
     {
+      "id": "a-business-rule-task-can-be-bound-to-one-deployed-version-of",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Bind a task to one version of a decision",
+        "de": "Einen Task an eine Version einer Decision binden"
+      },
+      "summary": {
+        "en": "A business rule task can now be bound to one deployed version of its decision. The binding field in the Modeler offers three choices: the newest version each time the task runs, a deployed version you pick from a list, or the model deployed together with the process. A chosen version is checked when the process is deployed: if it is not deployed, the deploy is refused and says which versions exist, and the task never runs a different version. A version a task is bound to cannot be deleted. The choice is an Atlas setting; a Camunda engine ignores it and runs the newest version, and the panel says so.",
+        "de": "Ein Business Rule Task lässt sich jetzt an eine bestimmte deployte Version seiner Decision binden. Das Feld „Binding“ im Modeler bietet drei Möglichkeiten: die neueste Version bei jeder Ausführung, eine deployte Version aus einer Liste oder das Modell, das mit dem Prozess deployt wurde. Eine gewählte Version wird beim Deploy des Prozesses geprüft: Ist sie nicht deployt, wird der Deploy abgewiesen und nennt die vorhandenen Versionen, und der Task führt nie eine andere Version aus. Eine Version, an die ein Task gebunden ist, lässt sich nicht löschen. Die Wahl ist eine Atlas-Einstellung; eine Camunda-Engine ignoriert sie und führt die neueste Version aus, was das Feld auch sagt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Decisions",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "an-evaluation-says-which-version-answered",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "See which decision version answered",
+        "de": "Sehen, welche Decision-Version geantwortet hat"
+      },
+      "summary": {
+        "en": "Each decision evaluation now records which deployed version of the decision answered. Operations shows it as a version chip on the instance's decision card and in a decision's list of evaluations, and \"How this was decided\" draws the rules of that version rather than whatever is deployed today. Before, you could see the rules that fired but not which version they came from. Evaluations recorded before this change show no version rather than a guess.",
+        "de": "Jede Auswertung einer Decision hält jetzt fest, welche deployte Version geantwortet hat. Operations zeigt sie als Versionsangabe auf der Decision-Karte einer Instanz und in der Liste der Auswertungen einer Decision, und „How this was decided“ zeichnet die Regeln genau dieser Version statt der heute deployten. Bisher sah man die Regeln, die gegriffen haben, aber nicht, aus welcher Version sie stammten. Auswertungen von vor dieser Änderung zeigen keine Version an statt einer Vermutung."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Decisions",
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the decisions",
+          "de": "Decisions öffnen"
+        },
+        "route": "#/operations/decisions"
+      }
+    },
+    {
+      "id": "a-business-rule-task-bound-to-latest-runs-the-newest-decisio",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Latest means the newest version when the task runs",
+        "de": "„Latest“ heisst: die neueste Version, wenn der Task läuft"
+      },
+      "summary": {
+        "en": "A business rule task bound to \"Latest\" now evaluates the newest deployed version of its decision each time it runs, as the Modeler always said and as in Camunda. Until now \"Latest\" was fixed when the process was deployed: a process deployed while a decision was at version 1 kept evaluating version 1 after versions 2 and 3 were deployed, until the process itself was deployed again. Processes already deployed keep the version they were deployed with until they are deployed again, so nothing changes under a running process without a deploy. To keep a process on one version on purpose, bind it to that version.",
+        "de": "Ein Business Rule Task mit der Bindung „Latest“ wertet jetzt bei jeder Ausführung die neueste deployte Version seiner Decision aus, so wie es der Modeler immer beschrieben hat und wie in Camunda. Bisher wurde „Latest“ beim Deploy des Prozesses festgelegt: Ein Prozess, der deployt wurde, als eine Decision bei Version 1 stand, wertete auch nach dem Deploy von Version 2 und 3 weiterhin Version 1 aus, bis der Prozess selbst neu deployt wurde. Bereits deployte Prozesse behalten ihre Version, bis sie neu deployt werden; unter einem laufenden Prozess ändert sich also nichts ohne Deploy. Wer einen Prozess bewusst auf einer Version halten will, bindet ihn an diese Version."
+      },
+      "link": {
+        "label": "ADR-0319",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0319-durable-versioned-decision-deployments.md"
+      },
+      "tags": [
+        "Decisions",
+        "Engine"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "camunda-s-versiontag-binding-is-refused-instead-of-read-as-l",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A versionTag binding is refused, not silently ignored",
+        "de": "Eine Bindung per versionTag wird abgewiesen statt still ignoriert"
+      },
+      "summary": {
+        "en": "Camunda lets a business rule task bind a decision by version tag. Atlas does not support that, and it used to treat such a task as \"Latest\" without a word, so a model that pinned a tag ran whatever version was newest. The Modeler also rewrote the binding to \"Latest\" on the next save. Deploying such a model is now refused and names the task, and the Modeler shows the binding as it is and keeps it. A process already deployed with one keeps running as before.",
+        "de": "Camunda erlaubt, einen Business Rule Task per Version-Tag an eine Decision zu binden. Atlas unterstützt das nicht und behandelte einen solchen Task bisher kommentarlos wie „Latest“: Ein Modell, das einen Tag festlegte, führte die jeweils neueste Version aus. Der Modeler schrieb die Bindung ausserdem beim nächsten Speichern auf „Latest“ um. Der Deploy eines solchen Modells wird jetzt abgewiesen und nennt den Task, und der Modeler zeigt die Bindung unverändert an und behält sie bei. Ein bereits deployter Prozess mit einer solchen Bindung läuft weiter wie bisher."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Decisions",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "the-decision-registry-is-safe-to-read-while-a-decision-is-de",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Deploying a decision while tasks evaluate is safe",
+        "de": "Ein Decision-Deploy während laufender Auswertungen ist sicher"
+      },
+      "summary": {
+        "en": "Business rule tasks are evaluated in the background while the engine may be deploying a new decision version at the same moment. The two touched the same internal tables without coordination; the Go race detector reported it, and in the worst case the server could stop. The tables are now protected, and evaluations still run in parallel.",
+        "de": "Business Rule Tasks werden im Hintergrund ausgewertet, während die Engine gleichzeitig eine neue Decision-Version deployen kann. Beide griffen ohne Abstimmung auf dieselben internen Tabellen zu; der Race-Detector von Go hat das gemeldet, und im schlimmsten Fall konnte der Server stehen bleiben. Die Tabellen sind jetzt geschützt, und Auswertungen laufen weiterhin parallel."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Decisions",
+        "Engine"
+      ]
+    },
+    {
+      "id": "a-decision-service-refuses-a-wrongly-typed-input-as-its-deci",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A decision service refuses a wrongly-typed input",
+        "de": "Ein Decision Service weist eine falsch typisierte Eingabe ab"
+      },
+      "summary": {
+        "en": "A business rule task that sends an input of the wrong type to a decision fails into an incident that names the input. The same task pointed at the decision service over that decision used to get a silent answer from the catch-all row instead, because the engine published no input schema for a service and there was nothing to check against. A service now publishes what its caller supplies — the input data read behind its interface and the results of its input decisions, each with its declared type — and is refused by the same rule. The schema also reaches an input decision the conversion could not see before: one declared as a date and sent as text now arrives as a date rather than as a string. The retained evaluations of the one deployed service were checked against the new rule first; none would have been refused.",
+        "de": "Ein Business Rule Task, der einer Decision eine Eingabe vom falschen Typ schickt, endet in einem Incident, der die Eingabe benennt. Derselbe Task, auf den Decision Service über dieser Decision gerichtet, bekam bisher stattdessen still die Antwort der Catch-all-Zeile, weil die Engine für einen Service kein Eingabeschema veröffentlichte und es nichts gab, wogegen geprüft werden konnte. Ein Service veröffentlicht jetzt, was sein Aufrufer liefert — die Input Data, die hinter seiner Schnittstelle gelesen werden, und die Ergebnisse seiner Input-Decisions, jeweils mit deklariertem Typ — und wird nach derselben Regel abgewiesen. Das Schema erreicht auch eine Input-Decision, die die Umwandlung bisher nicht sah: Eine als Datum deklarierte und als Text gesendete kommt jetzt als Datum an statt als Zeichenkette. Die aufbewahrten Auswertungen des einen deployten Service wurden vorher gegen die neue Regel geprüft; keine wäre abgewiesen worden."
+      },
+      "link": {
+        "label": "ADR-0419",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0419-a-declared-type-is-honoured-at-the-decision-boundary.md"
+      },
+      "tags": [
+        "Decisions",
+        "Engine"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the incidents",
+          "de": "Incidents öffnen"
+        },
+        "route": "#/operations/incidents"
+      }
+    },
+    {
       "id": "the-handbook-counted-what-it-no-longer-had-thirty-examples-n",
       "version": "Unreleased",
       "date": null,
@@ -143,188 +310,6 @@
       "summary": {
         "en": "Trying a decision meant answering, in a plain text box, a question the model had already answered: which spelling of a date this input wants, whether the boolean is true or TRUE or 1. The declared type is part of the description the panel is built from, so the panel now uses it. A boolean is a list, with a blank entry — an input nobody set is missing, not false, and the two do not evaluate the same. A date gets a calendar, a time gets a clock, a number gets a spinner, and a duration keeps a text field with the shape of the answer in the placeholder, because browsers have no control for one. What each field sends is unchanged, and deliberately so: the value a process variable would carry, so a decision tried here still sees exactly what it would see at runtime.",
         "de": "Eine Decision auszuprobieren hiess bisher, in einem einfachen Textfeld eine Frage zu beantworten, die das Modell längst beantwortet hatte: welche Schreibweise eines Datums diese Eingabe erwartet, ob der Boolean true oder TRUE oder 1 lautet. Der deklarierte Typ steht in der Beschreibung, aus der das Panel gebaut wird — und wird jetzt auch verwendet. Ein Boolean ist eine Auswahlliste, mit einem leeren Eintrag: Eine Eingabe, die niemand gesetzt hat, fehlt, sie ist nicht false, und beides wird unterschiedlich ausgewertet. Ein Datum bekommt einen Kalender, eine Zeit eine Uhr, eine Zahl ein Zahlenfeld, und eine Dauer behält ein Textfeld mit der Form der Antwort im Platzhalter, weil Browser dafür kein Bedienelement kennen. Was die Felder senden, bleibt unverändert, und zwar bewusst: genau den Wert, den auch eine Prozessvariable trägt, damit eine hier getestete Decision dasselbe sieht wie zur Laufzeit."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-decision-says-where-its-diagram-and-its-logic-disagree-and",
-      "version": "0.7.0",
-      "date": "2026-09-28",
-      "category": "Added",
-      "title": {
-        "en": "A decision's diagram and its logic are kept in step",
-        "de": "Diagramm und Logik einer Decision bleiben beieinander"
-      },
-      "summary": {
-        "en": "Draw an arrow saying a decision needs an input, and its table gains the column that reads it — named and typed like the element it comes from, as part of the same step, so one undo takes the arrow and the column back together. Nothing is written when the table already reads that name: it is a default you can change, not a rule. That transcription — drawing the arrow, then opening the table and typing the same name again — is where the diagram and the logic used to start differing. Where they already differ, the findings strip under the canvas says so: a decision that reads a name nothing gives it (the one case the engine refuses outright, so it never deploys) and a decision given something it never reads (which deploys, runs, and which nothing else would ever mention — the diagram claims a dependency the decision does not have, and the diagram is what gets reviewed). The second offers to write the missing column for you. The same check reaches the process: a business rule task now says where its input mapping and the decision's own inputs disagree. An input the decision reads and no row feeds arrives empty, every rule that tests it falls through, and the process carries on with whatever the table's last row says — a wrong answer rather than a failure, which nothing downstream can tell apart.",
-        "de": "Zeichnen Sie einen Pfeil, der besagt, dass eine Decision eine Eingabe benötigt, erhält ihre Tabelle die Spalte, die diese liest — benannt und typisiert wie das Element, aus dem sie stammt, im selben Schritt, sodass ein einziges Rückgängig Pfeil und Spalte gemeinsam zurücknimmt. Nichts wird geschrieben, wenn die Tabelle diesen Namen bereits liest: Es ist eine Vorgabe, die Sie ändern können, keine Regel. Genau diese Übertragung — erst den Pfeil zeichnen, dann die Tabelle öffnen und denselben Namen noch einmal tippen — war die Stelle, an der Diagramm und Logik auseinanderzulaufen begannen. Wo sie bereits auseinanderlaufen, sagt es die Befundleiste unter der Zeichenfläche: eine Decision, die einen Namen liest, den ihr nichts gibt (der eine Fall, den die Engine rundweg ablehnt, der also gar nicht deployt), und eine Decision, der etwas gegeben wird, das sie nie liest (das deployt und läuft und das sonst nirgends erwähnt würde — das Diagramm behauptet eine Abhängigkeit, die die Decision nicht hat, und das Diagramm ist das, was geprüft wird). Der zweite Befund bietet an, die fehlende Spalte für Sie zu schreiben. Dieselbe Prüfung reicht bis in den Prozess: Ein Business Rule Task sagt jetzt, wo seine Eingabezuordnung und die Eingaben der Decision nicht zusammenpassen. Eine Eingabe, die die Decision liest und die keine Zeile speist, kommt leer an, jede Regel, die sie prüft, greift nicht, und der Prozess läuft mit dem weiter, was die letzte Zeile der Tabelle sagt — eine falsche Antwort statt eines Fehlers, und die beiden sind nachgelagert nicht zu unterscheiden."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-decision-s-input-columns-follow-the-graph-they-come-from-a",
-      "version": "0.7.0",
-      "date": "2026-09-28",
-      "category": "Added",
-      "title": {
-        "en": "A decision's columns follow the diagram, and nothing is thrown away unasked",
-        "de": "Die Spalten einer Decision folgen dem Diagramm, und nichts wird ungefragt verworfen"
-      },
-      "summary": {
-        "en": "Drawing an arrow already wrote the column that reads it. But a diagram is edited after it is drawn, and those edits went nowhere: rename an input and its column went on reading a name that no longer existed, change its type and the column kept the old one, delete the arrow and the column was left reading a name nothing provides — a model that will not deploy, found out much later and phrased as a FEEL variable. Renames and type changes now follow by themselves, inside the same step you made, so one undo takes the whole change back. That includes the case where the diagram and the engine quietly disagreed: an element that declares a variable is read by that variable's name and not by its label, so renaming an input in the properties panel used to move the label alone — the picture said one thing, the engine read another, and nothing reported it because the model still deployed. Removing an arrow asks first. The column it fed owns a cell in every rule, and each of those cells is something somebody wrote, so taking the column away takes logic with it. You are asked once per action, however many arrows it removes, and one undo puts the arrow and its columns back together; refuse, and the column stays and the findings strip says it reads a name nothing provides. The other direction is offered rather than done: a column reading a name no element answers to now carries a button that draws that input into the diagram and connects it, typed as the column that asked for it. It stays a button because a name typed into a table is also exactly what a typo looks like.",
-        "de": "Einen Pfeil zu zeichnen schrieb bereits die Spalte, die ihn liest. Ein Diagramm wird aber weiterbearbeitet, nachdem es gezeichnet wurde, und diese Änderungen liefen ins Leere: Wurde eine Eingabe umbenannt, las ihre Spalte weiter einen Namen, den es nicht mehr gab; wurde ihr Typ geändert, behielt die Spalte den alten; wurde der Pfeil gelöscht, blieb eine Spalte zurück, die einen Namen liest, den nichts liefert — ein Modell, das nicht deployt, bemerkt viel später und formuliert als FEEL-Variable. Umbenennungen und Typänderungen werden jetzt von selbst nachgeführt, im selben Schritt, den Sie gemacht haben, sodass ein einziges Rückgängig die ganze Änderung zurücknimmt. Dazu gehört der Fall, in dem Diagramm und Engine stillschweigend auseinanderliefen: Ein Element, das eine Variable deklariert, wird über deren Namen gelesen und nicht über seine Beschriftung — eine Eingabe im Eigenschaftenpanel umzubenennen bewegte bisher nur die Beschriftung. Das Bild sagte das eine, die Engine las das andere, und gemeldet wurde es nicht, weil das Modell weiterhin deployte. Das Entfernen eines Pfeils fragt zuerst nach. Die Spalte, die er gespeist hat, besitzt in jeder Regel eine Zelle, und jede dieser Zellen hat jemand geschrieben — die Spalte zu entfernen nimmt also Logik mit. Gefragt werden Sie einmal pro Aktion, unabhängig davon, wie viele Pfeile sie entfernt, und ein Rückgängig bringt Pfeil und Spalten gemeinsam zurück; lehnen Sie ab, bleibt die Spalte stehen, und die Befundleiste sagt, dass sie einen Namen liest, den nichts liefert. Die Gegenrichtung wird angeboten statt ausgeführt: Eine Spalte, die einen Namen liest, auf den kein Element hört, trägt jetzt eine Schaltfläche, die genau diese Eingabe ins Diagramm zeichnet und verbindet — typisiert wie die Spalte, die danach verlangt hat. Es bleibt eine Schaltfläche, weil ein in eine Tabelle getippter Name genauso aussieht wie ein Tippfehler."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "the-shop-works-on-a-phone",
-      "version": "0.7.0",
-      "date": "2026-09-28",
-      "category": "Added",
-      "title": {
-        "en": "The shop works on a phone",
-        "de": "Der Shop funktioniert auf dem Handy"
-      },
-      "summary": {
-        "en": "Below 860px every view of the shop is one column wide. The catalogue shows the column you have reached, and a stepper above it goes back and names the path so far. The basket stacks each offering over its own services and options. My orders is a list of cards, with each position's tasks, and the form to answer one, at the card's width. The buttons grow to a fingertip's size. A wide screen keeps its layout.",
-        "de": "Unter 860 px Breite ist jede Ansicht des Shops einspaltig. Der Katalog zeigt die Spalte, bei der man gerade ist; eine Leiste darüber führt zurück und nennt den bisherigen Weg. Der Warenkorb zeigt jedes Angebot mit seinen Services und Optionen darunter. «Meine Aufträge» ist eine Liste von Karten, mit den Aufgaben jeder Position und dem Formular zu ihrer Erledigung in der Breite der Karte. Die Schaltflächen sind gross genug für den Finger. Auf breiten Bildschirmen bleibt die bisherige Darstellung."
-      },
-      "link": {
-        "label": "ADR-0417",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0417-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md"
-      },
-      "tags": [
-        "Shop"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the shop on a phone, or narrow the browser window below 860px.",
-          "In the catalogue, choose a category, a group and a product; use Back to return.",
-          "Under My orders, open a task with Work on it and answer it in the card."
-        ],
-        "de": [
-          "Den Shop auf dem Handy öffnen oder das Browserfenster schmaler als 860 px machen.",
-          "Im Katalog eine Kategorie, eine Gruppe und ein Produkt wählen; mit «Zurück» geht es zurück.",
-          "Unter «Meine Aufträge» eine Aufgabe mit «Erledigen» öffnen und in der Karte erledigen."
-        ]
-      }
-    },
-    {
-      "id": "tasks-works-on-a-phone",
-      "version": "0.7.0",
-      "date": "2026-09-28",
-      "category": "Added",
-      "title": {
-        "en": "Tasks works on a phone",
-        "de": "Tasks funktioniert auf dem Handy"
-      },
-      "summary": {
-        "en": "Below 860px the inbox and Start show the list or the open task, not both, and a task opens with a button back to the list. The folders become a row of chips, and a task's fields put their label above the value. An access review row is a card with its two answers under it. The top bar keeps its icons on screen and scrolls the view names instead. Between 861px and 1180px the inbox keeps its three panes at narrower widths.",
-        "de": "Unter 860 px Breite zeigen Posteingang und «Start» entweder die Liste oder die geöffnete Aufgabe, nicht beides; eine Aufgabe öffnet sich mit einer Schaltfläche zurück zur Liste. Die Ordner werden zu einer Reihe von Chips, und die Felder einer Aufgabe zeigen die Beschriftung über dem Wert. Eine Zeile der Rezertifizierung ist eine Karte mit den beiden Antworten darunter. Die obere Leiste behält ihre Symbole im Bild und lässt stattdessen die Ansichtsnamen seitlich scrollen. Zwischen 861 px und 1180 px behält der Posteingang seine drei Bereiche in schmaleren Breiten."
-      },
-      "link": {
-        "label": "ADR-0417",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0417-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md"
-      },
-      "tags": [
-        "Tasks"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Tasks on a phone, or narrow the browser window below 860px.",
-          "Open a task from the list; use Back to the list to return.",
-          "Under Access review, answer a row with Still needed or Withdraw… in its card."
-        ],
-        "de": [
-          "Tasks auf dem Handy öffnen oder das Browserfenster schmaler als 860 px machen.",
-          "Eine Aufgabe in der Liste öffnen; mit «Back to the list» geht es zurück.",
-          "Unter «Access review» eine Zeile in ihrer Karte mit «Still needed» oder «Withdraw…» beantworten."
-        ]
-      }
-    },
-    {
-      "id": "a-decision-service-s-name-can-be-moved-out-of-the-way-and-th",
-      "version": "0.7.0",
-      "date": "2026-09-28",
-      "category": "Added",
-      "title": {
-        "en": "Move a decision service's name, and fold it from the box",
-        "de": "Namen eines Decision Service verschieben, Einklappen direkt in der Box"
-      },
-      "summary": {
-        "en": "DMN requires a decision service's name inside the shape and says nothing about where — and its own figures disagree, one drawing it centred at the top and three at the top left. Whichever corner an editor picks is wrong for some diagram: the name lands on a decision, or on an arrow crossing the border. So it starts at the top left, and a grab handle over it drags it anywhere inside the box, above the dividing line — where DMN puts the name, alongside the decisions the service publishes. Where you put it is stored as the shape's label bounds, DMN's own place for it, so it survives a save and means the same thing to another tool; nothing is written until you move it. Folding the service away has moved too: from the context menu into the box, as a plus at the bottom edge while the definition is hidden and a minus while it is shown, in the same place either way.",
-        "de": "DMN verlangt den Namen eines Decision Service innerhalb der Form und sagt nichts darüber, wo — und die eigenen Abbildungen widersprechen sich: eine zeichnet ihn oben mittig, drei oben links. Welche Ecke ein Editor auch wählt, für irgendein Diagramm ist sie falsch: Der Name landet auf einer Decision oder auf einem Pfeil, der den Rand kreuzt. Er beginnt deshalb oben links, und ein Griff über dem Namen zieht ihn an jede Stelle innerhalb der Box, oberhalb der Trennlinie — dorthin, wo DMN den Namen zusammen mit den veröffentlichten Decisions verortet. Die gewählte Stelle wird als Label-Bounds der Form gespeichert, also dort, wo DMN sie vorsieht; sie übersteht das Speichern und bedeutet für ein anderes Werkzeug dasselbe. Geschrieben wird erst, wenn Sie den Namen bewegen. Auch das Einklappen ist umgezogen: vom Kontextmenü in die Box, als Plus am unteren Rand bei verborgener Definition und als Minus bei sichtbarer — beides an derselben Stelle."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-decision-service-s-name-box-can-be-resized-and-its-name-is",
-      "version": "0.7.0",
-      "date": "2026-09-28",
-      "category": "Added",
-      "title": {
-        "en": "The name of a decision service has a size you can set",
-        "de": "Der Name eines Decision Service hat eine Grösse, die Sie festlegen"
-      },
-      "summary": {
-        "en": "Moving the name was half the answer: where it goes decides what it collides with, and how wide it is decides whether it reads at all. A grip on each corner of the selected name now drags its box wider, narrower, taller or shorter, holding the opposite corner still. The box stays inside the service and above the dividing line, and the size is written to the same place DMN keeps the name's position, so it survives a save and means the same thing to another tool. Underneath was a fault the size made visible: dragging a name once brought it back with the word broken across two lines — \"MyServic\" over \"e\" — because the box was measured to the text's own width and the layout wants a hair more than that before it calls a line a fit. The box is rounded up now, and never narrower than the name's longest word, so a name that wraps wraps between words. There is no size at which a word is cut in half.",
-        "de": "Das Verschieben des Namens war die halbe Antwort: Wohin er geht, entscheidet, womit er kollidiert; wie breit er ist, entscheidet, ob er überhaupt lesbar ist. An jeder Ecke des ausgewählten Namens sitzt jetzt ein Griff, der seinen Kasten breiter, schmaler, höher oder niedriger zieht, während die gegenüberliegende Ecke stehen bleibt. Der Kasten bleibt innerhalb des Service und oberhalb der Trennlinie, und die Grösse wird dorthin geschrieben, wo DMN auch die Position des Namens führt — sie übersteht damit ein Speichern und bedeutet für ein anderes Werkzeug dasselbe. Darunter lag ein Fehler, den die Grösse sichtbar machte: Ein einmal verschobener Name kam mit einem über zwei Zeilen zerschnittenen Wort zurück — «MyServic» über «e» — weil der Kasten auf die Breite des Textes selbst gemessen wurde und das Layout eine Spur mehr verlangt, bevor es eine Zeile als passend ansieht. Der Kasten wird jetzt aufgerundet und ist nie schmaler als das längste Wort des Namens. Ein Name, der umbricht, bricht damit zwischen Wörtern um; es gibt keine Grösse, bei der ein Wort zerschnitten wird."
       },
       "link": {
         "label": "Changelog",

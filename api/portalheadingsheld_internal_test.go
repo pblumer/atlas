@@ -49,6 +49,9 @@ func TestWhatSomebodyHoldsIsFiledUnderTheHeadingTheyOrderedItUnder(t *testing.T)
 	// bare search for the field also matches the label. Blind it out, or the guard
 	// can never go green.
 	view = strings.ReplaceAll(view, "t('col.category')", "t(<the column head>)")
+	// The same for the page's own selection: the heading chosen is state.category,
+	// shared with the catalogue, and reading it is not reading a product's field.
+	view = strings.ReplaceAll(view, "state.category", "state.<the heading chosen>")
 	for _, field := range []string{".category", ".productGroup"} {
 		if strings.Contains(view, field) {
 			t.Errorf("the services view still reads %s itself; the heading of a held "+
@@ -56,8 +59,12 @@ func TestWhatSomebodyHoldsIsFiledUnderTheHeadingTheyOrderedItUnder(t *testing.T)
 				"came to disagree", field)
 		}
 	}
-	for _, want := range []string{"headingsHeld(rel, by, ids, 'category')",
-		"headingsHeld(rel, by, ids, 'productGroup')"} {
+	// Built from the products the held positions resolve to (a held service is
+	// listed under its product), and the group column from those of them under the
+	// heading chosen — the cascade the catalogue draws, read over what this person
+	// holds.
+	for _, want := range []string{"headingsHeld(rel, by, offerings, 'category')",
+		"headingsHeld(rel, by, inCat, 'productGroup')"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the services view does not build a column with %s, so this guard "+
 				"has lost its subject", want)

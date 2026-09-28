@@ -3471,10 +3471,14 @@ function renderServices() {
   // assembled from orders would start losing services on the ninetieth day.
   const lineOf = grantingLines(state.orders, state.meID);
 
-  const row = (id) => {
+  // A held position: its name, the give-back where an order still allows one, and
+  // its information. `open` makes the name the way into the next column, as the
+  // catalogue's product column does.
+  const row = (id, open) => {
     const found = lineOf.get(id);
     const can = found && returnable(found.order, found.line);
     return cell({
+      ...(open || {}),
       text: textOf((by[id] || {}).texts, id),
       trail: [
         can
@@ -3497,30 +3501,104 @@ function renderServices() {
   // other two about a product that has no parts.
   const at = (level) => ids.filter((id) => levelOf(rel, id) === level);
 
+  // And read the way the catalogue is read: a cascade, where choosing a heading
+  // narrows the groups, choosing a group narrows the products, and choosing a
+  // product shows what is behind it. The four columns used to be four independent
+  // lists, so a service sat beside whichever product happened to share its line
+  // and nothing on the screen said which one it belonged to.
+  //
+  // Each held service hangs under the held product it came with — ownerAmong, the
+  // basket's rule, so a case offered by two phones sits under the phone this
+  // person has. A service whose product they do not hold still gets its product
+  // as a line, shown without a give-back, because it is how the service is found.
+  const held = at('offering');
+  const ownerOf = ownerAmong(rel, new Set(held));
+  const services = at('service');
+  const productOf = (id) => ownerOf(id) || rootOf(rel, id);
+  const offerings = [...new Set([...held, ...services.map(productOf)])];
+
+  // The same position the catalogue stands at — category, group, product and the
+  // column a narrow screen shows — so a heading chosen in one screen is the heading
+  // the other opens on, and somebody switching between "what can I order" and
+  // "what do I have" keeps their place.
+  const where = {
+    heading: state.category, group: state.group, offering: state.offering, step: state.step,
+  };
+  const choose = (next) => {
+    if ('heading' in next) state.category = next.heading;
+    if ('group' in next) state.group = next.group;
+    if ('offering' in next) state.offering = next.offering;
+    if ('step' in next) state.step = next.step;
+    state.info = '';
+    render();
+  };
+  const inCat = offerings.filter((id) => where.heading === null || filedUnder(by[id], 'category') === where.heading);
+  const inGroup = inCat.filter((id) => where.group === null || filedUnder(by[id], 'productGroup') === where.group);
+  const sortByName = (list) => [...list].sort((a, b) =>
+    textOf((by[a] || {}).texts, a).localeCompare(textOf((by[b] || {}).texts, b), locale));
+
+  const productCell = (id) => {
+    const open = {
+      open: where.offering === id,
+      onOpen: () => choose({ offering: where.offering === id ? '' : id, step: where.offering === id ? 2 : 3 }),
+    };
+    return held.includes(id)
+      ? row(id, open)
+      : cell({ ...open, text: textOf((by[id] || {}).texts, id), trail: infoButton(id) });
+  };
+
   return el('div', {},
-    // No data-step: nothing in these columns is chosen, so a narrow screen stacks
-    // them rather than stepping through them (ADR-0417).
-    el('div', { class: 'cascade' },
+    where.step > 0
+      ? el('div', { class: 'stepper' },
+        el('button', {
+          class: 'secondary step-back',
+          onclick: () => choose({ step: Math.max(0, where.step - 1) }),
+        }, `\u2039 ${t('step.back')}`))
+      : null,
+    el('div', { class: 'cascade', 'data-step': String(where.step) },
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.category')),
+        cell({
+          text: t('cat.all'),
+          open: where.heading === null,
+          onOpen: () => choose({ heading: null, group: null, offering: '', step: 1 }),
+        }),
         // The headings of what this person actually holds, not the whole
         // catalogue's: this screen answers "what do I have", and a heading with
         // nothing of theirs under it would be a column of other people's shelves.
-        headingsHeld(rel, by, ids, 'category')
-          .map((c) => cell({ text: c.text || t('cat.none') }))),
-      // The product group beside the heading, read off what this person holds for
-      // the same reason the heading is: this screen answers "what do I have".
+        headingsHeld(rel, by, offerings, 'category').map((c) => cell({
+          text: c.text || t('cat.none'),
+          open: where.heading === c.key,
+          onOpen: () => choose({ heading: where.heading === c.key ? null : c.key, group: null, offering: '', step: 1 }),
+        }))),
+      // The product group beside the heading, read off what this person holds under
+      // the heading chosen, for the same reason the heading is.
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.group')),
-        headingsHeld(rel, by, ids, 'productGroup')
-          .map((g) => cell({ text: g.text || t('group.none') }))),
+        cell({
+          text: t('group.all'),
+          open: where.group === null,
+          onOpen: () => choose({ group: null, offering: '', step: 2 }),
+        }),
+        headingsHeld(rel, by, inCat, 'productGroup').map((g) => cell({
+          text: g.text || t('group.none'),
+          open: where.group === g.key,
+          onOpen: () => choose({ group: where.group === g.key ? null : g.key, offering: '', step: 2 }),
+        }))),
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.offering')),
-        at('offering').map(row)),
+        sortByName(inGroup).map(productCell)),
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.service')),
-        at('service').map(row))),
+        where.offering ? services.filter((id) => productOf(id) === where.offering).map((id) => row(id)) : [])),
     state.info && by[state.info] ? el('div', { style: 'margin-top:16px' }, infoPanel(rel, by[state.info])) : null);
+}
+
+// filedUnder is the key one product is filed under for one of the two heading
+// fields, trimmed — the same reading headingsOf groups by, so a product and the
+// heading it is listed under cannot disagree about a space.
+function filedUnder(item, field) {
+  return ((item || {})[field] || '').trim();
 }
 
 // The brand mark, and the order it is looked for in: the catalogue's own, then

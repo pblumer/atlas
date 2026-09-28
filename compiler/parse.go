@@ -3101,6 +3101,43 @@ type xmlCalledDecision struct {
 	ResultVariable string `xml:"resultVariable,attr"`
 	Retries        string `xml:"retries,attr"`
 	BindingType    string `xml:"bindingType,attr"`
+	// VersionTag is Camunda's tag for a versionTag binding. Atlas reads it only to
+	// say it is not supported.
+	VersionTag string `xml:"versionTag,attr"`
+	// Version is atlas:version, the deployed version of the decision the task
+	// evaluates (ADR-0423). A Camunda engine
+	// ignores the attribute and runs latest.
+	Version string `xml:"version,attr"`
+}
+
+// calledDecisionBinding maps a business rule task's zeebe:calledDecision to its
+// compiled binding and, for a fixed version, the version it names.
+//
+// Unlike [decisionBinding], which call activities still use, it does not fold
+// `versionTag` into latest: a model that pins a tag and runs whatever is newest is
+// the silent wrong answer this binding exists to end, so the tag is kept apart and
+// the deploy refuses it (checkDecisionBindings). atlas:version must be a positive
+// whole number, and it cannot be combined with bindingType="deployment" or
+// "versionTag", which name a different model.
+func calledDecisionBinding(taskId string, cd xmlCalledDecision) (DecisionBinding, int32, error) {
+	if v := strings.TrimSpace(cd.Version); v != "" {
+		n, err := strconv.ParseInt(v, 10, 32)
+		if err != nil || n < 1 {
+			return 0, 0, fmt.Errorf("compiler: business rule task %q: version %q is not a deployed version number (1, 2, 3, …)", taskId, cd.Version)
+		}
+		if bt := strings.TrimSpace(cd.BindingType); bt != "" && bt != "latest" {
+			return 0, 0, fmt.Errorf("compiler: business rule task %q: version %d cannot be combined with bindingType %q; remove one of the two", taskId, n, bt)
+		}
+		return BindingVersion, int32(n), nil
+	}
+	switch strings.TrimSpace(cd.BindingType) {
+	case "deployment":
+		return BindingDeployment, 0, nil
+	case "versionTag":
+		return BindingVersionTag, 0, nil
+	default:
+		return BindingLatest, 0, nil
+	}
 }
 
 // decisionBinding maps a zeebe:calledDecision bindingType to a compiled binding

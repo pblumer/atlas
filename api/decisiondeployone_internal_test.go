@@ -169,10 +169,11 @@ func TestDeployingTheSameDecisionAgainVersionsIt(t *testing.T) {
 		t.Fatalf("second deploy = %+v, want v2 under a new key (v1 was %+v)", v2, v1)
 	}
 
-	// A process deployed before does not move (ADR-0319's deploy-time pinning); one
-	// deployed after resolves latest to the new version.
-	if got := runAndReadVerdict(t, x, procA, "proc-a"); got != "approve" {
-		t.Fatalf("A after v2 was deployed: verdict = %q, want approve (still v1)", got)
+	// Latest is the newest version when the task runs, so a process deployed before
+	// follows the new version as one deployed after does
+	// (ADR-0423).
+	if got := runAndReadVerdict(t, x, procA, "proc-a"); got != "vip" {
+		t.Fatalf("A after v2 was deployed: verdict = %q, want vip (the newest version)", got)
 	}
 	procB := deployProcess(t, x, eligibilityProcess("proc-b", "latest"))
 	if got := runAndReadVerdict(t, x, procB, "proc-b"); got != "vip" {

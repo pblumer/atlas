@@ -1026,6 +1026,18 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 			}
 		}
 	}
+	// Resolve every fixed decision version the model names before anything is
+	// written, so a version that is not deployed refuses the whole model instead of
+	// leaving the processes before it deployed
+	// (ADR-0423).
+	versionPins := make([]map[compiler.DecisionVersionRef]uint64, len(deployables))
+	for i := range deployables {
+		pins, err := s.resolveVersionPins(deployables[i].Process)
+		if err != nil {
+			return nil, err, nil
+		}
+		versionPins[i] = pins
+	}
 	// Spend the keys ParseAll just handed out, durably, before any record claims one
 	// (ADR-0339). ParseAll assigned
 	// s.nextKey+i, so this reserves exactly that span and leaves the counter past it.
@@ -1049,11 +1061,10 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 			name = deployables[i].ProcessName
 		}
 
-		// Resolve every latest-bound decision reference to an exact decision
-		// deployment, now, once (ADR-0319).
-		// After this the definition names a concrete model and nothing about which
-		// version it runs is decided again — not on the worker, not on replay (I5/I6).
-		pins := s.pinDecisions(cp)
+		// Latest is settled when the job is worked, and the evaluation records the
+		// deployment that answered; a fixed version was resolved above
+		// (ADR-0423).
+		cp.ResolveLatestAtRuntime(versionPins[i])
 
 		if err := s.deploys.Save(persistedDeployment{
 			Key:              key,
@@ -1065,8 +1076,8 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 			DeployedBy:       deployedBy,
 			XML:              string(body),
 			DMNXMLs:          dmnStrings,
-			BindingPolicy:    bindingPinned,
-			DecisionBindings: pins,
+			BindingPolicy:    bindingRuntime,
+			DecisionBindings: persistedVersionPins(versionPins[i]),
 		}); err != nil {
 			return deployed, nil, err
 		}
@@ -3712,6 +3723,12 @@ type decisionEvaluationView struct {
 	Inputs     json.RawMessage `json:"inputs"`
 	Outputs    json.RawMessage `json:"outputs"`
 	Trace      json.RawMessage `json:"trace,omitempty"`
+	// DecisionKey and DecisionVersion say which deployment answered and which
+	// version of the decision that is — absent for an evaluation recorded before
+	// the key was, and the version absent for a model bundled with the process
+	// (ADR-0423).
+	DecisionKey     uint64 `json:"decisionKey,omitempty"`
+	DecisionVersion int32  `json:"decisionVersion,omitempty"`
 }
 
 // rawJSONOr returns s as raw JSON, or fallback when s is empty — so a view field
@@ -3743,11 +3760,13 @@ func (s *Server) handleInstanceDecisions(w http.ResponseWriter, r *http.Request)
 	s.do(func() {
 		scanErr = s.store.DecisionEvaluationHistory(key, func(ts int64, _ uint64, v *model.DecisionEvaluationValue) error {
 			view := decisionEvaluationView{
-				At:         ts,
-				AtKey:      strconv.FormatInt(ts, 10),
-				DecisionID: v.DecisionId,
-				Inputs:     rawJSONOr(v.InputsJSON, "{}"),
-				Outputs:    rawJSONOr(v.OutputsJSON, "{}"),
+				At:              ts,
+				AtKey:           strconv.FormatInt(ts, 10),
+				DecisionID:      v.DecisionId,
+				Inputs:          rawJSONOr(v.InputsJSON, "{}"),
+				Outputs:         rawJSONOr(v.OutputsJSON, "{}"),
+				DecisionKey:     v.DecisionKey,
+				DecisionVersion: s.decisionVersionOf(v.DecisionKey, v.DecisionId),
 			}
 			if v.TraceJSON != "" {
 				view.Trace = json.RawMessage(v.TraceJSON)
@@ -3792,6 +3811,9 @@ type decisionGraphView struct {
 	Trace      json.RawMessage `json:"trace,omitempty"`
 	Nodes      []dmn.GraphNode `json:"nodes"`
 	Edges      []dmn.GraphEdge `json:"edges"`
+	// DecisionKey and DecisionVersion as on decisionEvaluationView.
+	DecisionKey     uint64 `json:"decisionKey,omitempty"`
+	DecisionVersion int32  `json:"decisionVersion,omitempty"`
 }
 
 // handleInstanceDecisionGraph serves one of an instance's decision evaluations —
@@ -3826,13 +3848,15 @@ func (s *Server) handleInstanceDecisionGraph(w http.ResponseWriter, r *http.Requ
 				return nil
 			}
 			view := &decisionGraphView{
-				At:         ts,
-				AtKey:      strconv.FormatInt(ts, 10),
-				DecisionID: v.DecisionId,
-				Inputs:     rawJSONOr(v.InputsJSON, "{}"),
-				Outputs:    rawJSONOr(v.OutputsJSON, "{}"),
-				Nodes:      []dmn.GraphNode{},
-				Edges:      []dmn.GraphEdge{},
+				At:              ts,
+				AtKey:           strconv.FormatInt(ts, 10),
+				DecisionID:      v.DecisionId,
+				Inputs:          rawJSONOr(v.InputsJSON, "{}"),
+				Outputs:         rawJSONOr(v.OutputsJSON, "{}"),
+				Nodes:           []dmn.GraphNode{},
+				Edges:           []dmn.GraphEdge{},
+				DecisionKey:     v.DecisionKey,
+				DecisionVersion: s.decisionVersionOf(v.DecisionKey, v.DecisionId),
 			}
 			if v.TraceJSON != "" {
 				view.Trace = json.RawMessage(v.TraceJSON)
@@ -3840,7 +3864,13 @@ func (s *Server) handleInstanceDecisionGraph(w http.ResponseWriter, r *http.Requ
 			if d, ok := s.deployments[v.ProcessDefKey]; ok {
 				view.ElementID = d.cp.ElementBpmnId(v.ElementId)
 			}
-			if g, ok := s.dmnRegistry.Graph(v.ProcessDefKey, v.DecisionId); ok {
+			// The graph of the model that answered, when the record says which one did;
+			// otherwise the process's own model, as before the key was recorded.
+			graphKey := v.ProcessDefKey
+			if v.DecisionKey != 0 {
+				graphKey = v.DecisionKey
+			}
+			if g, ok := s.dmnRegistry.Graph(graphKey, v.DecisionId); ok {
 				view.ModelName, view.Nodes, view.Edges = g.ModelName, g.Nodes, g.Edges
 			}
 			view.Service = s.dmnRegistry.IsService(v.ProcessDefKey, v.DecisionId)

@@ -178,6 +178,9 @@ type decisionEvaluationRow struct {
 	Inputs      json.RawMessage `json:"inputs"`
 	Outputs     json.RawMessage `json:"outputs"`
 	Trace       json.RawMessage `json:"trace,omitempty"`
+	// DecisionKey and DecisionVersion as on decisionEvaluationView.
+	DecisionKey     uint64 `json:"decisionKey,omitempty"`
+	DecisionVersion int32  `json:"decisionVersion,omitempty"`
 }
 
 // handleDecisionEvaluations returns every retained evaluation of one decision id,
@@ -196,11 +199,13 @@ func (s *Server) handleDecisionEvaluations(w http.ResponseWriter, r *http.Reques
 				return nil
 			}
 			row := decisionEvaluationRow{
-				At:          ts,
-				AtKey:       strconv.FormatInt(ts, 10),
-				InstanceKey: v.ProcessInstanceKey,
-				Inputs:      rawJSONOr(v.InputsJSON, "{}"),
-				Outputs:     rawJSONOr(v.OutputsJSON, "{}"),
+				At:              ts,
+				AtKey:           strconv.FormatInt(ts, 10),
+				InstanceKey:     v.ProcessInstanceKey,
+				Inputs:          rawJSONOr(v.InputsJSON, "{}"),
+				Outputs:         rawJSONOr(v.OutputsJSON, "{}"),
+				DecisionKey:     v.DecisionKey,
+				DecisionVersion: s.decisionVersionOf(v.DecisionKey, id),
 			}
 			if v.TraceJSON != "" {
 				row.Trace = json.RawMessage(v.TraceJSON)

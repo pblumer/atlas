@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Decisions",
+    "Engine"
+  ],
+  "title": {
+    "en": "Latest means the newest version when the task runs",
+    "de": "„Latest“ heisst: die neueste Version, wenn der Task läuft"
+  },
+  "summary": {
+    "en": "A business rule task bound to \"Latest\" now evaluates the newest deployed version of its decision each time it runs, as the Modeler always said and as in Camunda. Until now \"Latest\" was fixed when the process was deployed: a process deployed while a decision was at version 1 kept evaluating version 1 after versions 2 and 3 were deployed, until the process itself was deployed again. Processes already deployed keep the version they were deployed with until they are deployed again, so nothing changes under a running process without a deploy. To keep a process on one version on purpose, bind it to that version.",
+    "de": "Ein Business Rule Task mit der Bindung „Latest“ wertet jetzt bei jeder Ausführung die neueste deployte Version seiner Decision aus, so wie es der Modeler immer beschrieben hat und wie in Camunda. Bisher wurde „Latest“ beim Deploy des Prozesses festgelegt: Ein Prozess, der deployt wurde, als eine Decision bei Version 1 stand, wertete auch nach dem Deploy von Version 2 und 3 weiterhin Version 1 aus, bis der Prozess selbst neu deployt wurde. Bereits deployte Prozesse behalten ihre Version, bis sie neu deployt werden; unter einem laufenden Prozess ändert sich also nichts ohne Deploy. Wer einen Prozess bewusst auf einer Version halten will, bindet ihn an diese Version."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Decisions",
+    "Operations"
+  ],
+  "title": {
+    "en": "See which decision version answered",
+    "de": "Sehen, welche Decision-Version geantwortet hat"
+  },
+  "summary": {
+    "en": "Each decision evaluation now records which deployed version of the decision answered. Operations shows it as a version chip on the instance's decision card and in a decision's list of evaluations, and \"How this was decided\" draws the rules of that version rather than whatever is deployed today. Before, you could see the rules that fired but not which version they came from. Evaluations recorded before this change show no version rather than a guess.",
+    "de": "Jede Auswertung einer Decision hält jetzt fest, welche deployte Version geantwortet hat. Operations zeigt sie als Versionsangabe auf der Decision-Karte einer Instanz und in der Liste der Auswertungen einer Decision, und „How this was decided“ zeichnet die Regeln genau dieser Version statt der heute deployten. Bisher sah man die Regeln, die gegriffen haben, aber nicht, aus welcher Version sie stammten. Auswertungen von vor dieser Änderung zeigen keine Version an statt einer Vermutung."
+  },
+  "try": {
+    "label": {
+      "en": "Open the decisions",
+      "de": "Decisions öffnen"
+    },
+    "route": "#/operations/decisions"
+  }
+}

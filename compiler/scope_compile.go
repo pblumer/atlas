@@ -344,7 +344,14 @@ func registerScope(
 			}
 			node, err = b.AddTemisDecisionTask(tc.Connector, brt.CalledDecision.DecisionId, brt.CalledDecision.ResultVariable, inputs, mappings, retries)
 		} else {
-			node, err = b.AddBusinessRuleTaskMapped(brt.CalledDecision.DecisionId, brt.CalledDecision.ResultVariable, inputs, mappings, retries, decisionBinding(brt.CalledDecision.BindingType))
+			binding, version, berr := calledDecisionBinding(brt.Id, brt.CalledDecision)
+			if berr != nil {
+				return berr
+			}
+			node, err = b.addBusinessRuleTask("", brt.CalledDecision.DecisionId, brt.CalledDecision.ResultVariable, inputs, mappings, retries, binding)
+			if err == nil && version > 0 {
+				b.businessRuleTasks[len(b.businessRuleTasks)-1].Version = version
+			}
 		}
 		if err != nil {
 			return err

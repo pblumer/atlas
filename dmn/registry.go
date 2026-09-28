@@ -35,6 +35,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	tdmn "github.com/pblumer/temis/dmn"
 )
@@ -52,10 +53,17 @@ import (
 //     and versioned, under a key of its own
 //     (ADR-0319).
 //
-// A Registry is safe for concurrent evaluation once populated. Populate it (via
-// Deploy / DeployDecision) before the processes that use it start running.
+// A Registry is read and written concurrently, and says so rather than assuming
+// otherwise. It is populated at runtime — every decision deploy registers a model
+// on the run loop — while business rule tasks are evaluated off it, by job handlers
+// running outside the loop (job.Runner.Work). Its indexes are therefore behind a
+// read–write lock. A compiled model is immutable, so the lock covers the lookup and
+// not the evaluation: a reader takes what it needs and evaluates after letting go.
 type Registry struct {
 	engine *tdmn.Engine
+	// mu guards the four indexes below; the engine and every compiled model need no
+	// guard.
+	mu sync.RWMutex
 	// definitions maps a deployment key to the compiled DMN models registered under
 	// it. A process may reference decisions from several models (its business rule
 	// tasks are not confined to one), so each key holds a list, appended to by Deploy
@@ -174,13 +182,29 @@ func (r *Registry) Reload(defKey uint64, dmnXML []byte) (string, error) {
 // pointer only pre-pinning definitions read (ADR-0063). Shared by Deploy, Reload
 // and registerDecision so every accepted model is indexed identically.
 func (r *Registry) register(defKey uint64, defs *tdmn.Definitions, src []byte) registered {
+	reg := r.prepare(defs, src)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.index(defKey, reg)
+	return reg
+}
+
+// prepare works out everything about a model that needs its document, outside the
+// lock: describing its services and drawing its graph read the XML, and nobody
+// waiting to evaluate should wait for that.
+func (r *Registry) prepare(defs *tdmn.Definitions, src []byte) registered {
 	reg := registered{defs: defs, services: describeServices(defs, src), graph: modelGraph(r.engine, defs, src)}
 	reg.names = append(addressableDecisions(defs), serviceNames(reg.services)...)
+	return reg
+}
+
+// index records a prepared model under its key and as the newest model providing
+// every name it answers to. The caller holds mu for writing.
+func (r *Registry) index(defKey uint64, reg registered) {
 	r.definitions[defKey] = append(r.definitions[defKey], reg)
 	for _, id := range reg.names {
 		r.latest[id] = reg
 	}
-	return reg
 }
 
 // DeployDecision compiles a DMN model published as a decision deployment — a
@@ -228,7 +252,12 @@ func (r *Registry) ReloadDecision(key uint64, dmnXML []byte) (string, error) {
 // model, and as the newest deployed version of every decision it declares. Shared
 // by DeployDecision and ReloadDecision so both index identically.
 func (r *Registry) registerDecision(key uint64, defs *tdmn.Definitions, src []byte) {
-	reg := r.register(key, defs, src)
+	reg := r.prepare(defs, src)
+	// One critical section for both halves, so no reader sees the model under its key
+	// without it also being the newest version of its decisions.
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.index(key, reg)
 	r.decisionKeys[key] = true
 	for _, id := range reg.names {
 		r.latestDecision[id] = key
@@ -254,6 +283,8 @@ func (r *Registry) registerDecision(key uint64, defs *tdmn.Definitions, src []by
 // Removing a key that is not a decision deployment — a process's bundled model, or
 // nothing at all — is a no-op, so an unknown key is not an error here.
 func (r *Registry) UndeployDecision(key uint64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if !r.decisionKeys[key] {
 		return
 	}
@@ -293,8 +324,18 @@ func (r *Registry) UndeployDecision(key uint64) {
 // It reads registry state, so it runs on the registry's owning goroutine — the
 // run loop — the same discipline as Deploy.
 func (r *Registry) LatestDecisionKey(decisionId string) (uint64, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	key, ok := r.latestDecision[decisionId]
 	return key, ok
+}
+
+// Provides reports whether a model registered under the key provides the decision
+// — for a process deployment, whether the process carries its own copy of it.
+func (r *Registry) Provides(defKey uint64, decisionId string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return regProviding(r.definitions[defKey], decisionId) != nil
 }
 
 // LatestDecisionIDs returns the set of decision ids that have a decision
@@ -308,6 +349,8 @@ func (r *Registry) LatestDecisionKey(decisionId string) (uint64, bool) {
 // reads registry state, so it runs on the registry's owning goroutine — the run
 // loop — and the caller hands the answer to the off-loop preflight.
 func (r *Registry) LatestDecisionIDs() map[string]bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	out := make(map[string]bool, len(r.latestDecision))
 	for id := range r.latestDecision {
 		out[id] = true
@@ -351,6 +394,8 @@ func regProviding(list []registered, decisionId string) *registered {
 // longer addressable any other way. The second return is false when nothing on this
 // server provides the decision at all.
 func (r *Registry) Graph(defKey uint64, decisionId string) (ModelGraph, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	if reg := regProviding(r.definitions[defKey], decisionId); reg != nil {
 		return reg.graph, true
 	}
@@ -367,6 +412,8 @@ func (r *Registry) Graph(defKey uint64, decisionId string) (ModelGraph, bool) {
 // no rule trace (ADR-0398), and "no rules were recorded" and "no rules ran" are
 // not the same thing to say to somebody asking how a case was decided.
 func (r *Registry) IsService(defKey uint64, decisionId string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	reg := regProviding(r.definitions[defKey], decisionId)
 	if reg == nil {
 		if latest, ok := r.latest[decisionId]; ok {
@@ -400,7 +447,9 @@ func (r *Registry) Evaluate(ctx context.Context, defKey uint64, decisionId strin
 // record of the evaluation. Tracing runs off the processor goroutine, so its extra
 // allocation is not on any hot path (temis's WithTrace, ADR-0013/WP-51).
 func (r *Registry) EvaluateTraced(ctx context.Context, defKey uint64, decisionId string, in map[string]any) (map[string]any, []byte, error) {
+	r.mu.RLock()
 	list, ok := r.definitions[defKey]
+	r.mu.RUnlock()
 	if !ok || len(list) == 0 {
 		return nil, nil, fmt.Errorf("dmn: no model deployed for def %d", defKey)
 	}
@@ -421,7 +470,9 @@ func (r *Registry) EvaluateLatest(ctx context.Context, decisionId string, in map
 
 // EvaluateLatestTraced is EvaluateLatest plus the temis trace (see EvaluateTraced).
 func (r *Registry) EvaluateLatestTraced(ctx context.Context, decisionId string, in map[string]any) (map[string]any, []byte, error) {
+	r.mu.RLock()
 	reg, ok := r.latest[decisionId]
+	r.mu.RUnlock()
 	if !ok {
 		return nil, nil, fmt.Errorf("dmn: no model deployed providing decision %q", decisionId)
 	}
@@ -450,6 +501,8 @@ type DeployedDecision struct {
 // run on the registry's owning goroutine (the run loop), the same single-writer
 // discipline as Deploy. Results are sorted by decision id for a stable picker.
 func (r *Registry) DeployedDecisions() []DeployedDecision {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	out := make([]DeployedDecision, 0, len(r.latest))
 	for id, reg := range r.latest {
 		// A decision service is offered beside the decisions, because a business rule
@@ -500,8 +553,13 @@ func evalDecision(ctx context.Context, defs *tdmn.Definitions, decisionId string
 	// accepted under either spelling, so a task deployed before temis told the two
 	// apart still finds its input (names.go).
 	aliased := aliasedInputs(nodes, in)
-	if err := refuseTypeMismatch(defs, decisionId, aliased, where); err != nil {
-		return nil, nil, err
+	// The decision resolved a few lines up, so an error here cannot be "no such
+	// decision" in practice; treating it as nothing to check keeps a future engine
+	// change from turning a working evaluation into a failed job.
+	if probs, verr := defs.ValidateReachableInput(decisionId, tdmn.Input(aliased)); verr == nil {
+		if err := refuseTypeMismatch(probs, fmt.Sprintf("evaluate %q in %s", decisionId, where)); err != nil {
+			return nil, nil, err
+		}
 	}
 	res, err := dec.Evaluate(ctx, tdmn.Input(aliased), tdmn.WithTrace())
 	if err != nil {
@@ -565,14 +623,15 @@ func evalDecision(ctx context.Context, defs *tdmn.Definitions, decisionId string
 // Every mismatch is named rather than only the first, so an operator reading an
 // incident sees the whole picture instead of fixing one input and meeting the
 // next.
-func refuseTypeMismatch(defs *tdmn.Definitions, decisionId string, in map[string]any, where string) error {
-	probs, err := defs.ValidateReachableInput(decisionId, tdmn.Input(in))
-	if err != nil {
-		// The decision was resolved a few lines up, so this cannot be "no such
-		// decision" in practice; treating it as "nothing to check" keeps a future
-		// engine change from turning a working evaluation into a failed job.
-		return nil
-	}
+//
+// A decision service is refused by the same rule, against the schema it now
+// publishes (temis ADR-0042): the input data read behind its interface and the
+// results of its input decisions, each with its declared type. One asymmetry
+// remains and is the engine's, not this function's: temis's service evaluation
+// does not refuse a *missing* input the way a decision's does, so for a service
+// the MISSING_INPUT argument above is not redundancy but a gap, left for the same
+// record that would take up VALUE_NOT_ALLOWED.
+func refuseTypeMismatch(probs []tdmn.InputProblem, what string) error {
 	var bad []string
 	for _, p := range probs {
 		if p.Code != "TYPE_MISMATCH" {
@@ -583,7 +642,7 @@ func refuseTypeMismatch(defs *tdmn.Definitions, decisionId string, in map[string
 	if len(bad) == 0 {
 		return nil
 	}
-	return fmt.Errorf("dmn: evaluate %q in %s: %s", decisionId, where, strings.Join(bad, "; "))
+	return fmt.Errorf("dmn: %s: %s", what, strings.Join(bad, "; "))
 }
 
 // evalService evaluates a decision service — DMN's published interface over part
@@ -612,7 +671,14 @@ func refuseTypeMismatch(defs *tdmn.Definitions, decisionId string, in map[string
 // rules, and the surfaces say so.
 func evalService(ctx context.Context, defs *tdmn.Definitions, svc *tdmn.CompiledService, name string, in map[string]any, where string) (map[string]any, []byte, error) {
 	nodes := defs.Graph().Nodes
-	res, err := svc.Evaluate(ctx, tdmn.Input(aliasedInputs(nodes, in)), tdmn.WithTrace())
+	aliased := aliasedInputs(nodes, in)
+	// Refused like a decision (ADR-0419): a task that names the service must not
+	// get a silent catch-all answer for the input that would fail the task naming
+	// the decision behind it.
+	if err := refuseTypeMismatch(svc.ValidateInput(tdmn.Input(aliased)), fmt.Sprintf("evaluate service %q in %s", name, where)); err != nil {
+		return nil, nil, err
+	}
+	res, err := svc.Evaluate(ctx, tdmn.Input(aliased), tdmn.WithTrace())
 	if err != nil {
 		return nil, nil, fmt.Errorf("dmn: evaluate service %q in %s: %w", name, where, err)
 	}

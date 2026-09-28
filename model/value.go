@@ -703,6 +703,12 @@ type DecisionEvaluationValue struct {
 	InputsJSON         string // canonical JSON object: the decision's input context
 	OutputsJSON        string // canonical JSON object: the decision's outputs (name → value)
 	TraceJSON          string // temis trace JSON (which rules fired); "" when none
+	// DecisionKey is the deployment whose model answered: a decision deployment, or
+	// the process's own key for a bundled model. It is what makes the version that
+	// ran a fact in the log once latest is resolved when the job is worked
+	// (ADR-0423). An appended field: a
+	// record written before it ends after TraceJSON and reads 0, "not recorded".
+	DecisionKey uint64
 }
 
 func (*DecisionEvaluationValue) ValueType() ValueType { return VTDecisionEvaluation }
@@ -715,7 +721,8 @@ func (v *DecisionEvaluationValue) encode(dst []byte) []byte {
 	dst = appendString(dst, v.DecisionId)
 	dst = appendString(dst, v.InputsJSON)
 	dst = appendString(dst, v.OutputsJSON)
-	return appendString(dst, v.TraceJSON)
+	dst = appendString(dst, v.TraceJSON)
+	return binary.LittleEndian.AppendUint64(dst, v.DecisionKey)
 }
 
 func (v *DecisionEvaluationValue) decode(src []byte) error {
@@ -742,11 +749,15 @@ func (v *DecisionEvaluationValue) decode(src []byte) error {
 		return err
 	}
 	v.OutputsJSON = outputs
-	trace, _, err := readString(rest)
+	trace, rest, err := readString(rest)
 	if err != nil {
 		return err
 	}
 	v.TraceJSON = trace
+	// DecisionKey is appended: a record written before it ends here.
+	if len(rest) >= 8 {
+		v.DecisionKey = binary.LittleEndian.Uint64(rest)
+	}
 	return nil
 }
 
