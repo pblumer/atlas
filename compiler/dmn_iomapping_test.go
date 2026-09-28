@@ -151,3 +151,56 @@ func TestBusinessRuleTaskBinding(t *testing.T) {
 		t.Errorf("deployment binding = %d, want BindingDeployment", b)
 	}
 }
+
+// TestBusinessRuleTaskVersionBinding covers the two bindings
+// ADR-draft-a-business-rule-task-chooses-its-decision-version adds on the compiler side: a
+// fixed version (atlas:version), read onto the detail, and Camunda's versionTag, which
+// used to be read as latest and is now refused.
+func TestBusinessRuleTaskVersionBinding(t *testing.T) {
+	parse := func(attrs string) (*CompiledProcess, error) {
+		bpmn := `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0">
+		  <process id="p" isExecutable="true"><startEvent id="s"/>
+		  <businessRuleTask id="d"><extensionElements><calledDecision decisionId="Dish"` + attrs + `/></extensionElements></businessRuleTask>
+		  <endEvent id="e"/><sequenceFlow id="f1" sourceRef="s" targetRef="d"/><sequenceFlow id="f2" sourceRef="d" targetRef="e"/></process></definitions>`
+		return Parse(1, 1, strings.NewReader(bpmn))
+	}
+	detail := func(cp *CompiledProcess) *BusinessRuleTaskDetail {
+		for i := 0; i < len(cp.nodes); i++ {
+			if cp.nodes[i].Type == TypeBusinessRuleTask {
+				return cp.BusinessRuleTask(cp.nodes[i].Detail)
+			}
+		}
+		t.Fatal("no business rule task compiled")
+		return nil
+	}
+
+	for _, attrs := range []string{` atlas:version="3"`, ` bindingType="latest" atlas:version="3"`} {
+		cp, err := parse(attrs)
+		if err != nil {
+			t.Fatalf("Parse(%s): %v", attrs, err)
+		}
+		if d := detail(cp); d.Binding != BindingVersion || d.Version != 3 {
+			t.Errorf("Parse(%s): binding %v version %d, want version 3", attrs, d.Binding, d.Version)
+		}
+		if refs := cp.VersionBoundDecisions(); len(refs) != 1 || refs[0] != (DecisionVersionRef{DecisionID: "Dish", Version: 3}) {
+			t.Errorf("Parse(%s): VersionBoundDecisions = %+v, want Dish v3", attrs, refs)
+		}
+		if got := cp.LatestBoundDecisions(); len(got) != 0 {
+			t.Errorf("Parse(%s): LatestBoundDecisions = %v, want none — a fixed version is not latest", attrs, got)
+		}
+		if got := cp.BundleBoundDecisions(); len(got) != 0 {
+			t.Errorf("Parse(%s): BundleBoundDecisions = %v, want none — it needs no model bundled", attrs, got)
+		}
+	}
+
+	for _, bad := range []struct{ attrs, want string }{
+		{` atlas:version="0"`, "not a deployed version number"},
+		{` atlas:version="v3"`, "not a deployed version number"},
+		{` bindingType="deployment" atlas:version="3"`, "cannot be combined"},
+		{` bindingType="versionTag" versionTag="2027"`, "versionTag"},
+	} {
+		if _, err := parse(bad.attrs); err == nil || !strings.Contains(err.Error(), bad.want) {
+			t.Errorf("Parse(%s) = %v, want a refusal mentioning %q", bad.attrs, err, bad.want)
+		}
+	}
+}

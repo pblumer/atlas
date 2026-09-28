@@ -377,6 +377,7 @@ type BusinessRuleTaskDetail struct {
 	Connector     int32 // interned temis worker name → index, -1 = local (in-engine)
 	Retries       int32
 	Binding       DecisionBinding        // how the decision model is resolved (ADR-0063)
+	Version       int32                  // the decision version a BindingVersion task names; 0 otherwise
 	InputMappings []DecisionInputMapping // variable-driven inputs, evaluated off the hot path
 }
 
@@ -389,10 +390,23 @@ type DecisionBinding int32
 const (
 	// BindingLatest evaluates the newest deployed version of the decision (the
 	// default, matching Camunda). It is zero so an unset binding means "latest".
+	// When "newest" is settled depends on the deployment's binding policy: when the
+	// job is worked for a definition deployed from ADR-draft-a-business-rule-task-chooses-its-decision-version
+	// on, at deploy time for one deployed under ADR-0319.
 	BindingLatest DecisionBinding = iota
 	// BindingDeployment evaluates the decision snapshotted with this process's own
 	// deployment (the ADR-0014 behavior): pinned and reproducible.
 	BindingDeployment
+	// BindingVersion evaluates the one deployed version of the decision the task
+	// names (atlas:version), resolved to its decision deployment when the process is
+	// deployed (ADR-draft-a-business-rule-task-chooses-its-decision-version).
+	BindingVersion
+	// BindingVersionTag is Camunda's `versionTag` binding, which Atlas does not
+	// support: a version cannot carry a tag here. It is kept apart rather than read
+	// as latest, so the deploy can refuse it instead of running whatever is newest;
+	// a definition already deployed with it keeps evaluating the newest version, as
+	// it always has.
+	BindingVersionTag
 )
 
 // String renders a binding as the lower-case token used on the wire and in the
@@ -404,6 +418,10 @@ func (b DecisionBinding) String() string {
 		return "latest"
 	case BindingDeployment:
 		return "deployment"
+	case BindingVersion:
+		return "version"
+	case BindingVersionTag:
+		return "versionTag"
 	default:
 		return fmt.Sprintf("DecisionBinding(%d)", int32(b))
 	}
@@ -1401,6 +1419,13 @@ type CompiledProcess struct {
 	// activation (ADR-0063).
 	decisionPins    map[string]uint64
 	decisionsPinned bool
+	// latestAtRuntime is the binding policy of a definition deployed from
+	// ADR-draft-a-business-rule-task-chooses-its-decision-version on: its latest-bound tasks
+	// evaluate the newest decision deployment when their job is worked, and nothing
+	// about them is pinned. versionPins is the decision deployment each
+	// version-bound reference resolved to at deploy time, under the same policy.
+	latestAtRuntime bool
+	versionPins     map[DecisionVersionRef]uint64
 }
 
 // Node returns the node with the given ElementId.
@@ -2096,7 +2121,9 @@ func (p *CompiledProcess) LatestBoundDecisions() []string {
 			continue
 		}
 		detail := p.BusinessRuleTask(p.nodes[i].Detail)
-		if detail.Connector >= 0 || detail.Binding != BindingLatest {
+		// A versionTag binding is refused at deploy, but a definition deployed with
+		// one before that is still loaded, and it has always resolved as latest.
+		if detail.Connector >= 0 || (detail.Binding != BindingLatest && detail.Binding != BindingVersionTag) {
 			continue
 		}
 		id := p.Intern(detail.DecisionId)
@@ -2126,7 +2153,7 @@ func (p *CompiledProcess) BundleBoundDecisions() []string {
 			continue
 		}
 		detail := p.BusinessRuleTask(p.nodes[i].Detail)
-		if detail.Connector >= 0 || detail.Binding == BindingLatest {
+		if detail.Connector >= 0 || detail.Binding != BindingDeployment {
 			continue
 		}
 		id := p.Intern(detail.DecisionId)
@@ -2151,6 +2178,61 @@ func (p *CompiledProcess) BundleBoundDecisions() []string {
 func (p *CompiledProcess) PinDecisions(pins map[string]uint64) {
 	p.decisionPins = pins
 	p.decisionsPinned = true
+}
+
+// DecisionVersionRef names one deployed version of a decision: what a
+// version-bound business rule task evaluates.
+type DecisionVersionRef struct {
+	DecisionID string
+	Version    int32
+}
+
+// VersionBoundDecisions returns the distinct (decision, version) pairs this
+// process's local, version-bound business rule tasks name, in node order — the
+// references a deploy resolves to exact decision deployments
+// (ADR-draft-a-business-rule-task-chooses-its-decision-version).
+func (p *CompiledProcess) VersionBoundDecisions() []DecisionVersionRef {
+	var out []DecisionVersionRef
+	seen := map[DecisionVersionRef]bool{}
+	for i := range p.nodes {
+		if p.nodes[i].Type != TypeBusinessRuleTask {
+			continue
+		}
+		detail := p.BusinessRuleTask(p.nodes[i].Detail)
+		if detail.Connector >= 0 || detail.Binding != BindingVersion {
+			continue
+		}
+		ref := DecisionVersionRef{DecisionID: p.Intern(detail.DecisionId), Version: detail.Version}
+		if ref.DecisionID != "" && !seen[ref] {
+			seen[ref] = true
+			out = append(out, ref)
+		}
+	}
+	return out
+}
+
+// ResolveLatestAtRuntime marks this definition as deployed under the runtime
+// policy: its latest-bound tasks evaluate the newest decision deployment when the
+// job is worked, and pins records the decision deployment each version-bound
+// reference resolved to
+// (ADR-draft-a-business-rule-task-chooses-its-decision-version). Like PinDecisions it
+// mutates the compiled process and must be called before the processor sees it.
+func (p *CompiledProcess) ResolveLatestAtRuntime(pins map[DecisionVersionRef]uint64) {
+	p.latestAtRuntime = true
+	p.versionPins = pins
+}
+
+// LatestAtRuntime reports whether this definition's latest-bound tasks resolve
+// the newest decision deployment when their job is worked.
+func (p *CompiledProcess) LatestAtRuntime() bool { return p.latestAtRuntime }
+
+// VersionPinnedKey returns the decision deployment a version-bound task naming
+// this decision and version evaluates, and ok=false when the deploy recorded none.
+// A caller must not fall back to another version on false: a task that names v2
+// and runs v3 is the answer this binding exists to rule out.
+func (p *CompiledProcess) VersionPinnedKey(decisionId string, version int32) (uint64, bool) {
+	key, ok := p.versionPins[DecisionVersionRef{DecisionID: decisionId, Version: version}]
+	return key, ok
 }
 
 // DecisionsPinned reports whether this definition resolved its latest-bound

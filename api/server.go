@@ -214,6 +214,12 @@ type Server struct {
 	// counterpart of versions above.
 	decisionDeploys  *decisionStore
 	decisionVersions map[string]int32
+	// decisionVersionKeys maps a decision id and version to the decision deployment
+	// holding it — what a fixed-version business rule task resolves to at deploy
+	// time, and how an evaluation's recorded key is read back as a version
+	// (ADR-draft-a-business-rule-task-chooses-its-decision-version). It follows the records
+	// exactly as decisionVersions does.
+	decisionVersionKeys map[string]map[int32]uint64
 	// keySpace is the durable floor under nextKey: the highest definition key this
 	// installation has ever issued. Without it the counter is rebuilt from the
 	// surviving records, and deleting the highest-keyed one hands its key — and the
@@ -1419,13 +1425,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 
 		// Its own group: gofmt aligns a literal's contiguous run, and folding these
 		// into the one above would rewrite every line of it for no change in meaning.
-		decisionDeploys:  decisionDeploys,
-		keySpace:         keySpace,
-		decisionVersions: map[string]int32{},
-		jobTypes:         jobTypes,
-		workers:          newWorkerRegistry(nil),
-		breakers:         newWorkerBreakers(nil),
-		gateResume:       map[int32]uint64{},
+		decisionDeploys:     decisionDeploys,
+		keySpace:            keySpace,
+		decisionVersions:    map[string]int32{},
+		decisionVersionKeys: map[string]map[int32]uint64{},
+		jobTypes:            jobTypes,
+		workers:             newWorkerRegistry(nil),
+		breakers:            newWorkerBreakers(nil),
+		gateResume:          map[int32]uint64{},
 		// Created unconditionally, not with a worker registry: AD is worker-only
 		// (ADR-0206), so this server never holds a mock
 		// directory of its own and is only ever the place the workers' reports land.
@@ -2804,8 +2811,11 @@ func (s *Server) restoreDeployment(rec persistedDeployment) error {
 	// (ADR-0319), before the processor sees
 	// it. A record with no policy marker predates deploy-time pinning, so it is
 	// deliberately left unpinned and keeps resolving latest at task activation.
-	if rec.BindingPolicy == bindingPinned {
+	switch rec.BindingPolicy {
+	case bindingPinned:
 		cp.PinDecisions(rec.decisionPins())
+	case bindingRuntime:
+		cp.ResolveLatestAtRuntime(rec.versionPins())
 	}
 	// Re-resolve the job types the same way the original deploy did. The registry
 	// is durable and never recycles an index, so this lands on exactly the indices
@@ -2900,6 +2910,7 @@ func (s *Server) restoreDecisionDeployment(rec persistedDecision) error {
 			s.decisionVersions[d.ID] = d.Version
 		}
 	}
+	s.indexDecisionVersions(rec)
 	if rec.Key >= s.nextKey {
 		s.nextKey = rec.Key + 1
 	}

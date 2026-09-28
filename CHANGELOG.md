@@ -12,7 +12,57 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **A business rule task can be bound to one deployed version of a decision.** The
+  binding field offers *Latest — newest version when the task runs*, *Version — a
+  deployed version you choose* with the list of deployed versions, and *Deployment — the
+  model deployed with this process*. A chosen version is written as `atlas:version` and
+  resolved when the process is deployed; a version that is not deployed refuses the
+  deploy and names the ones that are, and the task never runs another version. A decision
+  deployment a task is bound to cannot be deleted. `atlas:version` is Atlas's own
+  attribute: a Camunda engine ignores it and runs the newest version, and the panel says
+  so.
+
+- **An evaluation says which version answered.** The retained decision evaluation now
+  carries the deployment whose model answered; Operations shows it as `v3` on the
+  instance's decision card and in a decision's evaluation list, and the requirements
+  graph behind "How this was decided" is drawn from that model rather than from whatever
+  the process resolves to today. Evaluations recorded before this show no version rather
+  than a guess.
+
+### Changed
+
+- **A business rule task bound to latest runs the newest decision version when it runs.**
+  Since ADR-0319, "latest" was settled once, when the *process* was deployed, and frozen:
+  a process deployed while a decision stood at v1 went on evaluating v1 after v2 and v3
+  were deployed, until somebody redeployed the process. The Modeler said the opposite —
+  *Latest — newest deployed version* — and nothing on any surface said which version had
+  answered. On the running instance a process deployed at v1 answered `andere zahl` for
+  the input 3 while v3, which has a rule for 3, was the current version.
+
+  Latest now means what the Modeler says and what it means in Camunda: the newest decision
+  deployment when the task's job is worked, falling back to the model deployed with the
+  process when the decision was never deployed on its own. The choice is made once, on the
+  worker, and the evaluation records which deployment answered, so a replay reads it
+  instead of choosing again. Definitions already deployed keep what they were deployed
+  with: one written under ADR-0319 keeps its frozen version until it is redeployed, and
+  one written before that keeps resolving as it always has.
+
 ### Fixed
+
+- **Camunda's `versionTag` binding is refused instead of read as latest.** A model that
+  bound a business rule task to a version tag ran whatever version was newest, without a
+  word, and the Modeler rewrote the binding to latest on the next save. The deploy now
+  refuses it and names the task, and the Modeler shows and keeps the binding as it found
+  it. A definition already deployed with one keeps loading and keeps its behaviour.
+
+- **The decision registry is safe to read while a decision is deployed.** Business rule
+  tasks are evaluated by job handlers outside the run loop, while a decision deploy
+  writes the registry's indexes on it; the race detector reported a data race between
+  the two, and a Go map read during a write can end the process. The indexes are behind a
+  read–write lock now. A compiled model is immutable, so evaluation itself runs outside
+  the lock.
 
 - **A decision service refuses a wrongly-typed input, as its decision does.** A business
   rule task that names a decision with an input of the wrong type fails into an incident

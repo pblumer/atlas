@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -63,6 +64,28 @@ func eligibilityProcess(processID, binding string) string {
     <businessRuleTask id="decide">
       <extensionElements>
         <calledDecision decisionId="eligibility" resultVariable="verdict" bindingType="` + binding + `"/>
+        <decisionInput name="amount" value="250"/>
+      </extensionElements>
+    </businessRuleTask>
+    <userTask id="wait"/>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="decide"/>
+    <sequenceFlow id="f2" sourceRef="decide" targetRef="wait"/>
+    <sequenceFlow id="f3" sourceRef="wait" targetRef="e"/>
+  </process>
+</definitions>`
+}
+
+// eligibilityProcessAt is eligibilityProcess bound to one deployed version of the
+// decision with atlas:version, rather than to latest
+// (ADR-draft-a-business-rule-task-chooses-its-decision-version).
+func eligibilityProcessAt(processID string, version int) string {
+	return `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0">
+  <process id="` + processID + `" isExecutable="true">
+    <startEvent id="s"/>
+    <businessRuleTask id="decide">
+      <extensionElements>
+        <calledDecision decisionId="eligibility" resultVariable="verdict" atlas:version="` + strconv.Itoa(version) + `"/>
         <decisionInput name="amount" value="250"/>
       </extensionElements>
     </businessRuleTask>
@@ -306,64 +329,123 @@ func TestDecisionOnlyApplicationSurvivesRestart(t *testing.T) {
 	}
 }
 
-// TestLatestBindingFreezesAtDeployTime is the version-pinning regression, end to
-// end and across a restart. It is the whole of issue #915's "exact version
-// binding" scenario:
+// TestLatestFollowsTheNewestVersionWhenTheTaskRuns is the binding the product owner
+// chose on 2026-09-28, end to end and across a restart
+// (ADR-draft-a-business-rule-task-chooses-its-decision-version):
 //
-//	publish eligibility v1 → deploy Process A (latest)      → A sees v1
-//	publish eligibility v2 → Process A, again               → A still sees v1
-//	                         deploy Process B (latest)      → B sees v2
-//	restart                                                 → A sees v1, B sees v2
-func TestLatestBindingFreezesAtDeployTime(t *testing.T) {
+//	publish eligibility v1 → deploy A (latest), C (version 1) → A, C see v1
+//	publish eligibility v2 → A, again                         → A sees v2
+//	                         C, again                         → C still sees v1
+//	restart                                                   → A sees v2, C sees v1
+//
+// It replaces the test that asserted ADR-0319's freeze at deploy time; that
+// behaviour survives only for records written under it, and
+// TestARecordFrozenAtDeployTimeKeepsItsVersion holds it there.
+func TestLatestFollowsTheNewestVersionWhenTheTaskRuns(t *testing.T) {
 	dir := t.TempDir()
 	first := bootDecisionStack(t, dir)
 
 	appID, v1 := publishDecisionApp(t, first.x, "Order Management", "eligibility", eligibilityDMN("approve"))
 
 	procA := deployProcess(t, first.x, eligibilityProcess("proc-a", "latest"))
+	procC := deployProcess(t, first.x, eligibilityProcessAt("proc-c", 1))
 	if got := runAndReadVerdict(t, first.x, procA, "proc-a"); got != "approve" {
 		t.Fatalf("A on v1: verdict = %q, want approve", got)
 	}
+	if got := runAndReadVerdict(t, first.x, procC, "proc-c"); got != "approve" {
+		t.Fatalf("C on v1: verdict = %q, want approve", got)
+	}
 
-	// Edit the decision and publish the application again: a second version of the
-	// same decision id, under a new runtime key.
 	uploadModel(t, first.x, "eligibility", eligibilityDMN("vip"))
 	v2 := publishApp(t, first.x, appID)
 	if v2.Decisions[0].Version != 2 || v2.Decisions[0].Key == v1.Decisions[0].Key {
 		t.Fatalf("second publish = %+v, want v2 under a new key (v1 was %+v)", v2.Decisions[0], v1.Decisions[0])
 	}
 
-	// The already-deployed process does not move. This is the defect the record
-	// exists for: before it, publishing v2 silently re-pointed Process A.
-	if got := runAndReadVerdict(t, first.x, procA, "proc-a"); got != "approve" {
-		t.Fatalf("A after v2 was published: verdict = %q, want approve (still v1)", got)
+	// The process bound to latest follows without being redeployed. This is what the
+	// author expected and ADR-0319 did not do.
+	if got := runAndReadVerdict(t, first.x, procA, "proc-a"); got != "vip" {
+		t.Fatalf("A after v2 was published: verdict = %q, want vip (the newest version)", got)
+	}
+	// The process bound to version 1 does not.
+	if got := runAndReadVerdict(t, first.x, procC, "proc-c"); got != "approve" {
+		t.Fatalf("C after v2 was published: verdict = %q, want approve (version 1)", got)
 	}
 
-	// A process deployed now resolves latest to v2, once, and keeps it.
-	procB := deployProcess(t, first.x, eligibilityProcess("proc-b", "latest"))
-	if got := runAndReadVerdict(t, first.x, procB, "proc-b"); got != "vip" {
-		t.Fatalf("B on v2: verdict = %q, want vip", got)
-	}
-
-	// The bindings are on disk, not in memory: a restart changes neither.
 	first.shutdown()
 	second := bootDecisionStack(t, dir)
 	defer second.shutdown()
 
-	if got := runAndReadVerdict(t, second.x, procA, "proc-a"); got != "approve" {
-		t.Fatalf("A after restart: verdict = %q, want approve (v1)", got)
+	if got := runAndReadVerdict(t, second.x, procA, "proc-a"); got != "vip" {
+		t.Fatalf("A after restart: verdict = %q, want vip (v2)", got)
 	}
-	if got := runAndReadVerdict(t, second.x, procB, "proc-b"); got != "vip" {
-		t.Fatalf("B after restart: verdict = %q, want vip (v2)", got)
+	if got := runAndReadVerdict(t, second.x, procC, "proc-c"); got != "approve" {
+		t.Fatalf("C after restart: verdict = %q, want approve (v1)", got)
 	}
 
-	// Both versions stay deployed and addressable; only the newer is current.
 	rows := listDecisionDeployments(t, second.x, "?decisionId=eligibility")
 	if len(rows) != 2 {
 		t.Fatalf("listing = %+v, want both versions", rows)
 	}
 	if !rows[0].Current || rows[0].Version != 2 || rows[1].Current || rows[1].Version != 1 {
 		t.Fatalf("listing = %+v, want v2 current and v1 superseded", rows)
+	}
+}
+
+// TestARecordFrozenAtDeployTimeKeepsItsVersion: a definition deployed under
+// ADR-0319 carries bindingPolicy "pinned" and the key its latest resolved to. It was
+// deployed with that promise and keeps it after this change — redeploying the
+// process is what moves it to the runtime policy.
+func TestARecordFrozenAtDeployTimeKeepsItsVersion(t *testing.T) {
+	dir := t.TempDir()
+	first := bootDecisionStack(t, dir)
+	appID, v1 := publishDecisionApp(t, first.x, "Order Management", "eligibility", eligibilityDMN("approve"))
+	procKey := deployProcess(t, first.x, eligibilityProcess("orders", "latest"))
+	first.shutdown()
+
+	freezeDeployment(t, dir, procKey, "eligibility", v1.Decisions[0].Key)
+
+	second := bootDecisionStack(t, dir)
+	uploadModel(t, second.x, "eligibility", eligibilityDMN("vip"))
+	publishApp(t, second.x, appID)
+	if got := runAndReadVerdict(t, second.x, procKey, "orders"); got != "approve" {
+		t.Fatalf("frozen definition after v2: verdict = %q, want approve (the version it was frozen to)", got)
+	}
+	second.shutdown()
+
+	third := bootDecisionStack(t, dir)
+	defer third.shutdown()
+	if got := runAndReadVerdict(t, third.x, procKey, "orders"); got != "approve" {
+		t.Fatalf("frozen definition after restart: verdict = %q, want approve", got)
+	}
+}
+
+// freezeDeployment rewrites a stored deployment record as one ADR-0319 wrote:
+// bindingPolicy "pinned" and the latest reference resolved to a key. Editing the
+// JSON is the point, as in agePinnedDeployment: it produces the bytes an older
+// Atlas wrote.
+func freezeDeployment(t *testing.T, dir string, key uint64, decisionID string, decisionKey uint64) {
+	t.Helper()
+	path := filepath.Join(dir, "deployments", fmt.Sprintf("%d.json", key))
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read deployment record: %v", err)
+	}
+	var rec map[string]any
+	if err := json.Unmarshal(raw, &rec); err != nil {
+		t.Fatalf("decode deployment record: %v", err)
+	}
+	if rec["bindingPolicy"] != bindingRuntime {
+		t.Fatalf("deployment %d was written with policy %v, want %q — the record under test is not the new shape", key, rec["bindingPolicy"], bindingRuntime)
+	}
+	rec["bindingPolicy"] = bindingPinned
+	rec["decisionBindings"] = []map[string]any{{"decisionId": decisionID, "key": decisionKey}}
+	out, err := json.Marshal(rec)
+	if err != nil {
+		t.Fatalf("encode deployment record: %v", err)
+	}
+	if err := os.WriteFile(path, out, 0o644); err != nil {
+		t.Fatalf("write deployment record: %v", err)
 	}
 }
 
