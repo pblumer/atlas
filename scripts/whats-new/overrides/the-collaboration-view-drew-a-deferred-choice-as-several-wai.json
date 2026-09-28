@@ -1,0 +1,15 @@
+{
+  "title": {
+    "en": "The collaboration view counts, and a race in it is one wait",
+    "de": "Die Kollaborations-Ansicht zählt, und ein Rennen darin ist ein Warten"
+  },
+  "summary": {
+    "en": "When one process waits for another's reply — or gives up after a timeout — the collaboration view showed both of those waits in green and the gateway in front of them grey, with no numbers anywhere. It read like two separate waits, and you could not see which of the two had actually happened. It now shows what the live view shows: one count on the gateway for the instances still waiting, the reply and the timeout outlined dashed, and on each branch how often it came first (grey) and how often it lost (amber). The three counts can be switched on and off in the legend, and they stay the way you left them in the live view too. The same diagram in the live view and the replay also had one of the two branches counted twice when the reply arrived from another pool; that is fixed as well.",
+    "de": "Wenn ein Prozess auf die Antwort eines anderen wartet — oder nach einem Timeout aufgibt —, zeigte die Kollaborations-Ansicht beide Warten grün und das Gateway davor grau, und nirgends eine Zahl. Das las sich wie zwei getrennte Warten, und man sah nicht, welches der beiden Ereignisse tatsächlich eingetreten war. Jetzt zeigt sie, was die Live-Ansicht zeigt: eine Zahl am Gateway für die Instanzen, die noch warten, Antwort und Timeout gestrichelt umrandet, und an jedem Zweig, wie oft er zuerst kam (grau) und wie oft er verloren hat (bernstein). Die drei Zahlen lassen sich in der Legende ein- und ausschalten und bleiben auch in der Live-Ansicht so, wie man sie verlassen hat. Im selben Diagramm zählten Live-Ansicht und Replay einen der beiden Zweige doppelt, wenn die Antwort aus einem anderen Pool kam; das ist ebenfalls behoben."
+  },
+  "tags": ["Operations"],
+  "try": {
+    "label": { "en": "Open Operations", "de": "Operations öffnen" },
+    "route": "#/operations"
+  }
+}

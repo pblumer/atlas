@@ -12,6 +12,34 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The collaboration view drew a deferred choice as several waits, and counted nothing
+  at all.** It is the third runtime view, and the last one still drawing the picture
+  [ADR-0249](docs/adr/0249-overlay-cancelled-tokens.md) retired: two states per shape and
+  no numbers, so an event-based gateway waiting for the other pool's reply read as N
+  concurrent waits — every armed branch green, the gateway not — and which event had
+  actually won could not be read anywhere. A collaboration is where that construct is
+  drawn most often, so it was the view where the misreading mattered most
+  ([#802](https://github.com/pblumer/atlas/issues/802)).
+
+  It now draws what the live view draws, from the same code rather than a copy of it: each
+  shape's history split into **gray = completed here and moved on** and **amber =
+  cancelled here** beside the green live count, the three counts switchable from the
+  legend (the same remembered switches as the live view — which counts you read is about
+  how you read a diagram, not about which view it is in), and a race counted once on its
+  gateway with its armed branches outlined dashed. The legend uses the live view's words;
+  "passed through", which named completed and cancelled as one fact, is gone.
+
+  Testing that view turned up a second fault, and it was not the collaboration view's
+  alone. A catch joins its gateway's race only when the gateway is its sole way in — and
+  "way in" was counted over every connection the diagram lists, message flows included. A
+  message flow brings a catch its message, never a token; but in a collaboration the reply
+  catch of "wait for the reply, or time out" always has one coming in, so it fell out of
+  its race and counted the same wait a second time beside the gateway. The live view of a
+  pool's process and the replay use the same rule and drew the same half-folded race.
+  Only sequence flows count now, in all three.
+
 ## [0.7.0] — 2026-09-28
 
 **This release is about what an organisation offers, and who holds it.** Atlas gains a

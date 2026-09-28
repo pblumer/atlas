@@ -98,7 +98,7 @@
 
       const api = async (method, url) => {
         if (/\/instances\/\d+\/timeline$/.test(url)) return TIMELINE;
-        if (/\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (/\/processes\/[\w-]+\/xml$/.test(url)) return window.__xml || XML;
         if (url.includes("/runtime")) {
           return { elements: [
             { elementId: "start", visits: 1, tokens: 0, incidents: 0 },
@@ -115,6 +115,13 @@
       };
 
       window.__mount = () => mountInstanceReplay(view, { api, toast: noop, key: "281474976723211" });
+      // The same frames on the collaboration the race is usually drawn in, where the reply
+      // catch has a message flow coming in (collaboration-race.bpmn). Every element the
+      // frames name is in it, so only the diagram changes.
+      window.__mountCollab = async () => {
+        window.__xml = await (await fetch("/collaboration-race.bpmn")).text();
+        return mountInstanceReplay(view, { api, toast: noop, key: "281474976723211" });
+      };
       window.__ready = true;
     </script>
   </body>

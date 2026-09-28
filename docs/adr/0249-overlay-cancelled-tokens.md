@@ -14,6 +14,17 @@
 > (ADR-0110) is drawn as the one wait it is: the live count sits on the gateway, and its
 > armed branches are drawn armed instead of each repeating that same count.
 
+> **Amended 2026-09-28: the collaboration view draws it too, and "sole way in" means a
+> sequence flow.** The collaboration view (ADR-0038) was the last runtime view on the old
+> picture — two states, no counts, a race drawn as N waits. It now draws the three counts
+> and the collapsed race from the same helpers as the live view (#802). Testing it there
+> showed the grouping rule below had been read too wide: "a catch joins its gateway's
+> group only when that gateway is its sole incoming flow" was checked over every
+> connection the diagram lists, message flows included, so in a collaboration the reply
+> catch — which always has a message flow coming in — fell out of its race in all three
+> views. The rule meant sequence flows, the only thing a token travels along, and is now
+> implemented that way.
+>
 > **Amended 2026-09-07: the step replay draws the race the same way.** This record left
 > the single-instance replay (ADR-0046/0151) drawing a race as one token per armed
 > branch, on the grounds that it replays literal history — and the two views then
@@ -175,11 +186,12 @@ Chosen: **option 1**, in two halves that stand on their own.
   - ~~The step-by-step instance replay (ADR-0046/0151) still shows a race as one token per
     armed branch — there that is the literal history it is replaying, but the two views now
     describe the same moment differently.~~ **Done**, see the amendment above.
-  - The **collaboration overlay** (ADR-0038) is the third runtime view and the one still
+  - ~~The **collaboration overlay** (ADR-0038) is the third runtime view and the one still
     drawing the old picture: it carries `terminated` and draws neither that count nor any
     other — it has no per-element badges at all — and it does not collapse a race either,
     so an event gateway between two pools is drawn as N waits, which is what this record
-    exists to stop ([#802](https://github.com/pblumer/atlas/issues/802)).
+    exists to stop.~~ **Done** ([#802](https://github.com/pblumer/atlas/issues/802)), see
+    the amendment above.
   - The **playground's own heat map** still reads visits only, so it cannot tell a branch
     that completed from one that was cancelled either
     ([#803](https://github.com/pblumer/atlas/issues/803)).

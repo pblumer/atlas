@@ -1,0 +1,108 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas collaboration overlay e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountCollaboration against a mock `api`
+         serving a two-pool collaboration (ADR-0038) whose customer pool waits at an
+         event-based gateway for the provider's reply or a timeout (ADR-0110). It is the
+         shape a deferred choice takes most often in practice — the wait is on the other
+         pool's message — and this view drew it the way ADR-0249 retired elsewhere: a
+         green outline on every armed branch, none on the gateway, and no counts at all.
+         Three instances reached the gateway: two are still racing, one was decided by
+         the reply. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+      .djs-palette { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountCollaboration } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+
+      // The two-pool model lives beside this page as a plain .bpmn, because the live view
+      // and the replay are tested against the very same diagram: a deferred choice whose
+      // reply arrives over a message flow (collaboration-race.bpmn).
+      const XML = await (await fetch("/collaboration-race.bpmn")).text();
+
+      // Three customers asked. The provider answered one of them, so that race was
+      // decided by the reply and its timer branch was cancelled; the other two are still
+      // racing, each holding a token on *both* branches, which is what the engine stores.
+      // The two branches therefore have identical visits and identical live tokens and
+      // differ only in `terminated` — the number that says which event actually came.
+      const ELEMENTS = [
+        { elementId: "start", type: "bpmn:StartEvent", tokens: 0, visits: 3, terminated: 0, incidents: 0 },
+        { elementId: "ask", type: "bpmn:SendTask", tokens: 0, visits: 3, terminated: 0, incidents: 0 },
+        { elementId: "gw", type: "bpmn:EventBasedGateway", tokens: 0, visits: 3, terminated: 0, incidents: 0 },
+        { elementId: "reply", type: "bpmn:IntermediateCatchEvent", tokens: 2, visits: 3, terminated: 0, incidents: 0 },
+        { elementId: "timeout", type: "bpmn:IntermediateCatchEvent", tokens: 2, visits: 3, terminated: 1, incidents: 0 },
+        { elementId: "end_reply", type: "bpmn:EndEvent", tokens: 0, visits: 1, terminated: 0, incidents: 0 },
+        { elementId: "a_start", type: "bpmn:StartEvent", tokens: 0, visits: 3, terminated: 0, incidents: 0 },
+        { elementId: "a_work", type: "bpmn:UserTask", tokens: 2, visits: 3, terminated: 0, incidents: 0 },
+        { elementId: "a_end", type: "bpmn:EndEvent", tokens: 0, visits: 1, terminated: 0, incidents: 0 },
+      ];
+      const POOLS = [
+        { key: 11, processId: "kunde", name: "Kunde", version: 1 },
+        { key: 12, processId: "anbieter", name: "Anbieter", version: 1 },
+      ];
+
+      // A test swaps the runtime between polls and counts them, to prove the counts are
+      // rebuilt from each response rather than piled on top of the last one.
+      window.__runtime = { pools: POOLS, instances: 4, tokens: 6, elements: ELEMENTS, messageFlows: [] };
+      window.__polls = 0;
+      const api = async (method, url) => {
+        if (/\/collaborations\/\d+\/runtime$/.test(url)) { window.__polls++; return window.__runtime; }
+        if (/\/processes\/\d+\/xml$/.test(url)) return window.__xml;
+        return {};
+      };
+
+      // A second collaboration with no deferred choice in it: the "armed" legend entry is
+      // read off the model, so a diagram that cannot show one must not explain one.
+      const PLAIN_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_plain" targetNamespace="http://atlas/bpmn">
+  <bpmn:collaboration id="pcollab">
+    <bpmn:participant id="pp_a" name="Eins" processRef="pa"/>
+    <bpmn:participant id="pp_b" name="Zwei" processRef="pb"/>
+  </bpmn:collaboration>
+  <bpmn:process id="pa" isExecutable="true">
+    <bpmn:startEvent id="pa_start"><bpmn:outgoing>pa1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:userTask id="pa_task" name="Arbeiten"><bpmn:incoming>pa1</bpmn:incoming></bpmn:userTask>
+    <bpmn:sequenceFlow id="pa1" sourceRef="pa_start" targetRef="pa_task"/>
+  </bpmn:process>
+  <bpmn:process id="pb" isExecutable="true">
+    <bpmn:startEvent id="pb_start"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="PD"><bpmndi:BPMNPlane id="PP" bpmnElement="pcollab">
+    <bpmndi:BPMNShape id="pp_a_di" bpmnElement="pp_a" isHorizontal="true"><dc:Bounds x="100" y="60" width="500" height="180"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="pa_start_di" bpmnElement="pa_start"><dc:Bounds x="160" y="132" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="pa_task_di" bpmnElement="pa_task"><dc:Bounds x="260" y="110" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="pa1_di" bpmnElement="pa1"><di:waypoint x="196" y="150"/><di:waypoint x="260" y="150"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNShape id="pp_b_di" bpmnElement="pp_b" isHorizontal="true"><dc:Bounds x="100" y="280" width="500" height="140"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="pb_start_di" bpmnElement="pb_start"><dc:Bounds x="160" y="332" width="36" height="36"/></bpmndi:BPMNShape>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+      const PLAIN_RUNTIME = {
+        pools: [{ key: 21, processId: "pa", name: "Eins", version: 1 }, { key: 22, processId: "pb", name: "Zwei", version: 1 }],
+        instances: 1, tokens: 1, messageFlows: [],
+        elements: [
+          { elementId: "pa_start", type: "bpmn:StartEvent", tokens: 0, visits: 1, terminated: 0, incidents: 0 },
+          { elementId: "pa_task", type: "bpmn:UserTask", tokens: 1, visits: 1, terminated: 0, incidents: 0 },
+        ],
+      };
+
+      window.__mountRace = () => { window.__xml = XML; return mountCollaboration(view, { api, toast: noop, key: 11 }); };
+      window.__mountPlain = () => {
+        window.__xml = PLAIN_XML;
+        window.__runtime = PLAIN_RUNTIME;
+        return mountCollaboration(view, { api, toast: noop, key: 21 });
+      };
+      window.__ready = true;
+    </script>
+  </body>
+</html>

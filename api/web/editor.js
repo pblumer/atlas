@@ -9707,14 +9707,23 @@ function wireCalleeNavigation(root, modeler, api, toast, identity, saveDraft) {
 // one reachable from somewhere else as well carries tokens that are not part of the race,
 // and keeps its own count. Returns each gateway's armed branches
 // (ADR-0249).
+//
+// "Way in" means a sequence flow — the only thing a token travels along. bpmn-js lists
+// every connection an element has, message flows included, and a message flow brings a
+// catch its *message*, never a token. Counting it made the reply catch of every "wait for
+// the reply, or time out" drawn as a collaboration look reachable from elsewhere: it fell
+// out of the race and counted the same wait a second time beside the gateway — in the
+// very diagram a deferred choice is most often drawn in (issue #802).
 function eventGatewayRaces(registry) {
   const members = new Map(); // gateway id → [armed catch id]
+  const sequence = (c) => c.type === "bpmn:SequenceFlow";
   for (const el of registry.getAll()) {
     const bo = el.businessObject;
     if (el.labelTarget || !bo || bo.$type !== "bpmn:EventBasedGateway") continue;
     const armed = (el.outgoing || [])
+      .filter(sequence)
       .map((f) => f.target)
-      .filter((t) => t && (t.incoming || []).length === 1)
+      .filter((t) => t && (t.incoming || []).filter(sequence).length === 1)
       .map((t) => t.id);
     if (armed.length) members.set(el.id, armed);
   }
@@ -9799,6 +9808,115 @@ function tokenBadgesHTML(e, { tokens = e.tokens, green = null } = {}) {
     (cancelled > 0 ? `<div class="token-badge cancelled" title="${fmtCount(cancelled)} token(s) cancelled here — a losing event-gateway branch, an interrupted activity, or a scope torn down">${fmtCount(cancelled)}</div>` : "") +
     (green !== null ? green : tokens > 0 ? `<div class="token-badge" title="${fmtCount(tokens)} live token(s)">${fmtCount(tokens)}</div>` : "") +
     `</div>`;
+}
+
+// --- What every runtime overlay draws (ADR-0249) ---
+//
+// The live view and the collaboration view read the same runtime rows — per element,
+// live tokens, visits and cancellations — and have to draw them the same way, or a
+// deferred choice reads as one wait in one view and as N in the other. That is exactly
+// how the collaboration view was left behind when the live view learnt the rule
+// (issue #802), so the rule lives here, once, and both call it. The replay draws
+// individual tokens rather than counts and applies the same rule to them in
+// collapseRaces.
+
+// runtimeRaces finds the deferred choices that are live in one runtime response. A race
+// is one wait, so its count moves onto the event-based gateway and its armed branches
+// are marked armed instead of each repeating the same number (ADR-0110). The count is
+// the smallest over the armed branches, so a branch that also carries tokens from
+// elsewhere cannot inflate it. `gateways` is eventGatewayRaces(registry) — read off the
+// diagram, not the tokens.
+function runtimeRaces(gateways, elements) {
+  const byId = new Map((elements || []).map((e) => [e.elementId, e]));
+  const races = new Map(); // gateway id → { waiting, armed }
+  for (const [gw, armed] of gateways) {
+    const waiting = Math.min(...armed.map((id) => (byId.get(id) || {}).tokens || 0));
+    if (waiting > 0) races.set(gw, { waiting, armed });
+  }
+  const armedNow = new Map(); // armed catch id → its gateway, while that race is live
+  for (const [gw, race] of races) for (const id of race.armed) armedNow.set(id, gw);
+  return { races, armedNow };
+}
+
+// runtimeMark says how one runtime row is drawn: its live count (a gateway's includes
+// the race the engine parked on its branches), whether it is an armed branch, the marker
+// its shape gets, and its count badges. null for an element no token has reached.
+//
+// Each shape is in one of three states: green where a token is now, dashed green where
+// it is an armed branch of a live race, gray where tokens have only passed through.
+// Together they show the flow distribution even once every instance has finished. An
+// armed branch shows no live count of its own — the tokens on it are the gateway's race,
+// already counted there — but keeps its gray and amber counts: how often this branch won
+// and lost is exactly what the diagram could not say before.
+function runtimeMark(e, { races, armedNow }) {
+  const race = races.get(e.elementId);
+  const tokens = e.tokens + (race ? race.waiting : 0);
+  const armed = armedNow.has(e.elementId);
+  if (!(tokens > 0) && !(e.visits > 0)) return null;
+  return {
+    tokens,
+    armed,
+    marker: armed ? "atlas-armed" : tokens > 0 ? "atlas-active" : "atlas-visited",
+    badges: tokenBadgesHTML(e, { tokens, green: armed ? "" : null }),
+  };
+}
+
+// The legend's "armed" entry. It says once what the dashed outline means rather than
+// beside every branch of every race, and it starts hidden: a view shows it only for a
+// diagram that has an event gateway in it (read off the model, not the tokens, so it
+// does not blink in and out as races are decided).
+const LEGEND_ARMED_HTML = `<span id="legend-armed" hidden title="An event-based gateway arms every branch at once, so the engine parks a token on each of them and none on the gateway. The wait is one race however many branches it has, so it is counted once — on the gateway.">
+          <span class="legend-swatch armed" style="margin-left:12px"></span> armed branch of an event gateway</span>`;
+
+// The legend's three count samples, which are also switches (wireBadgeToggles).
+const LEGEND_COUNTS_HTML = `<button type="button" class="legend-toggle" data-badge="passed" aria-pressed="true" style="margin-left:16px" title="Show or hide the gray counts on the diagram">
+          <span class="token-badge history">N</span> completed here and moved on</button>
+        <button type="button" class="legend-toggle" data-badge="cancelled" aria-pressed="true" style="margin-left:10px" title="Show or hide the amber counts on the diagram">
+          <span class="token-badge cancelled">N</span> cancelled here</button>
+        <button type="button" class="legend-toggle" data-badge="live" aria-pressed="true" style="margin-left:10px" title="Show or hide the green counts on the diagram">
+          <span class="token-badge">N</span> tokens here now</button>`;
+
+// wireBadgeToggles makes the legend's three count badges switches as well as a key: each
+// one takes its own number off every shape and puts it back. Which counts an operator
+// wants on the diagram depends on the question being asked — "where is work sitting
+// right now" wants the green ones alone, "which branch does this process actually take"
+// wants the gray history without live counts crowding the same corner — and the three
+// badges side by side are exactly what makes a busy diagram hard to read either way.
+//
+// Hiding is a class on the canvas rather than a flag the badge markup reads, because the
+// poll rebuilds every count from scratch 1.5 seconds from now: a state the renderer has
+// to remember would blink back the moment the next runtime arrives. The legend's own
+// samples stay lit whatever the diagram shows — they are the switch, not a reading of
+// it, and the pressed state says which way it is thrown.
+//
+// Each switch is remembered in the browser (localStorage), and it is one switch for
+// every view that draws these counts: which counts you read is about how *you* read a
+// diagram, not about this process or this view — so a reload, a version switch, the
+// next definition or the collaboration it belongs to should not put back the numbers
+// you just took off. It is applied before the first poll, so a count switched off stays
+// off rather than flashing on once. Reads and writes are guarded because a browser with
+// site data blocked throws on the very first `localStorage` touch, and this one happens
+// before the diagram is imported: unguarded, it would cost that browser the whole view
+// to remember a preference. There it simply starts on.
+function wireBadgeToggles(root) {
+  const badgeKey = (kind) => `atlas.live.badge.${kind}`;
+  const badgeShown = (kind) => {
+    try { return localStorage.getItem(badgeKey(kind)) !== "0"; } catch { return true; }
+  };
+  const canvasBox = root.querySelector("#canvas");
+  for (const toggle of root.querySelectorAll(".legend-toggle[data-badge]")) {
+    const kind = toggle.dataset.badge;
+    const apply = (on) => {
+      toggle.setAttribute("aria-pressed", String(on));
+      canvasBox.classList.toggle(`badges-hide-${kind}`, !on);
+    };
+    apply(badgeShown(kind));
+    toggle.addEventListener("click", () => {
+      const on = toggle.getAttribute("aria-pressed") !== "true";
+      apply(on);
+      try { localStorage.setItem(badgeKey(kind), on ? "1" : "0"); } catch { /* not storable */ }
+    });
+  }
 }
 
 // mountLive renders a deployed process read-only and overlays runtime state,
@@ -9886,15 +10004,9 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       <div class="problems">
         <span class="legend-swatch live"></span> token here now
         <span class="legend-swatch history" style="margin-left:12px"></span> visited
-        <span id="legend-armed" hidden title="An event-based gateway arms every branch at once, so the engine parks a token on each of them and none on the gateway. The wait is one race however many branches it has, so it is counted once — on the gateway.">
-          <span class="legend-swatch armed" style="margin-left:12px"></span> armed branch of an event gateway</span>
+        ${LEGEND_ARMED_HTML}
         <span class="legend-swatch incident" style="margin-left:12px"></span> parked on an incident
-        <button type="button" class="legend-toggle" data-badge="passed" aria-pressed="true" style="margin-left:16px" title="Show or hide the gray counts on the diagram">
-          <span class="token-badge history">N</span> completed here and moved on</button>
-        <button type="button" class="legend-toggle" data-badge="cancelled" aria-pressed="true" style="margin-left:10px" title="Show or hide the amber counts on the diagram">
-          <span class="token-badge cancelled">N</span> cancelled here</button>
-        <button type="button" class="legend-toggle" data-badge="live" aria-pressed="true" style="margin-left:10px" title="Show or hide the green counts on the diagram">
-          <span class="token-badge">N</span> tokens here now</button>
+        ${LEGEND_COUNTS_HTML}
         <span style="flex:1"></span>
         <span class="muted">Polling every 1.5s</span>
       </div>
@@ -9907,45 +10019,10 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     if (next && next !== key) location.hash = `#/operations/p/${next}`;
   });
 
-  // The legend's three count badges are switches as well as a key: each one takes its
-  // own number off every shape and puts it back. Which counts an operator wants on the
-  // diagram depends on the question being asked — "where is work sitting right now"
-  // wants the green ones alone, "which branch does this process actually take" wants the
-  // gray history without live counts crowding the same corner — and the three badges
-  // side by side are exactly what makes a busy diagram hard to read either way.
-  //
-  // Hiding is a class on the canvas rather than a flag the badge markup reads, because
-  // the poll rebuilds every overlay from scratch 1.5 seconds from now: a state the
-  // renderer has to remember would blink back the moment the next runtime arrives. The
-  // legend's own samples stay lit whatever the diagram shows — they are the switch, not
-  // a reading of it, and the pressed state says which way it is thrown.
-  //
-  // Each switch is remembered in the browser (localStorage), like this view's variables
-  // panel beside it: which counts you read is about how *you* read a diagram, not about
-  // this process — so a reload, a version switch or the next definition should not put
-  // back the numbers you just took off. It is applied before the first poll, so a count
-  // switched off stays off rather than flashing on once. Reads and writes are guarded
-  // because a browser with site data blocked throws on the very first `localStorage`
-  // touch, and this one happens before the diagram is imported: unguarded, it would cost
-  // that browser the whole view to remember a preference. There it simply starts on.
-  const badgeKey = (kind) => `atlas.live.badge.${kind}`;
-  const badgeShown = (kind) => {
-    try { return localStorage.getItem(badgeKey(kind)) !== "0"; } catch { return true; }
-  };
+  // The legend's three count badges are switches as well as a key, remembered per
+  // browser and shared with every view that draws these counts (wireBadgeToggles).
+  wireBadgeToggles(root);
   const canvasBox = root.querySelector("#canvas");
-  for (const toggle of root.querySelectorAll(".legend-toggle[data-badge]")) {
-    const kind = toggle.dataset.badge;
-    const apply = (on) => {
-      toggle.setAttribute("aria-pressed", String(on));
-      canvasBox.classList.toggle(`badges-hide-${kind}`, !on);
-    };
-    apply(badgeShown(kind));
-    toggle.addEventListener("click", () => {
-      const on = toggle.getAttribute("aria-pressed") !== "true";
-      apply(on);
-      try { localStorage.setItem(badgeKey(kind), on ? "1" : "0"); } catch { /* not storable */ }
-    });
-  }
 
   let lib;
   try {
@@ -10656,40 +10733,19 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       arr.push(inc);
       incidentsByElement.set(inc.elementId, arr);
     }
-    // A deferred choice is one wait, so it is drawn once: the race count moves onto its
-    // event-based gateway, and its armed branches are marked armed instead of each
-    // repeating the same number (ADR-0110, ADR-0249). The
-    // count is the smallest of the armed branches, so a branch that also carries tokens
-    // from elsewhere cannot inflate it.
-    const byId = new Map((rt.elements || []).map((e) => [e.elementId, e]));
+    // A deferred choice is one wait, so it is drawn once — on its gateway, with its armed
+    // branches outlined rather than counted (runtimeRaces, ADR-0249).
     const gateways = eventGatewayRaces(registry);
-    // The legend carries "armed" only where the diagram can show one — it is read off
-    // the model, not the tokens, so it does not blink in and out as races are decided.
     const armedLegend = root.querySelector("#legend-armed");
     if (armedLegend) armedLegend.hidden = gateways.size === 0;
-    const races = new Map(); // gateway id → tokens waiting in its race
-    for (const [gw, armed] of gateways) {
-      const waiting = Math.min(...armed.map((id) => (byId.get(id) || {}).tokens || 0));
-      if (waiting > 0) races.set(gw, { waiting, armed });
-    }
-    const armedNow = new Map(); // armed catch id → its gateway, while that race is live
-    for (const [gw, race] of races) for (const id of race.armed) armedNow.set(id, gw);
+    const raceState = runtimeRaces(gateways, rt.elements);
 
-    // Each element is drawn in one of two states: green if it holds a live token
-    // right now, gray if tokens have only passed through it (history). Together
-    // they show the flow distribution even once every instance has finished — a
-    // gray trail with green where tokens are still alive.
     for (const e of rt.elements) {
       const shape = registry.get(e.elementId);
       if (!shape) continue;
-      // The gateway carries its race's tokens even though the engine parked them on the
-      // branches; an armed branch is drawn armed, and its count is the gateway's to show.
-      const race = races.get(e.elementId);
-      const tokens = e.tokens + (race ? race.waiting : 0);
-      const armed = armedNow.has(e.elementId);
-      const live = tokens > 0;
-      if (!live && !(e.visits > 0)) continue;
-      const marker = armed ? "atlas-armed" : live ? "atlas-active" : "atlas-visited";
+      const mark = runtimeMark(e, raceState);
+      if (!mark) continue;
+      const { tokens, marker } = mark;
       canvas.addMarker(e.elementId, marker);
       marked.push([e.elementId, marker]);
       // A parked element is drawn red over its live-token green, and says why: the
@@ -10720,16 +10776,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
           html: `<div class="incident-badge" role="img" aria-label="${esc(what)}" title="${esc(what)}${sample}">&#9888;${many}</div>`,
         });
       }
-      // An armed branch shows no live count of its own: the tokens on it are the
-      // gateway's race, already counted there, and a number here would be that same
-      // wait read a second time. Its dashed outline says it is armed, and the legend
-      // says what that means — once, rather than beside every branch of every race.
-      // Its gray and amber counts stay: how often this branch won and lost is exactly
-      // what the diagram could not say before.
-      overlays.add(e.elementId, "tokens", {
-        position: badgeSpot(shape, "br"),
-        html: tokenBadgesHTML(e, { tokens, green: armed ? "" : null }),
-      });
+      overlays.add(e.elementId, "tokens", { position: badgeSpot(shape, "br"), html: mark.badges });
       // A user-task element holding a token gets a clickable "Open" badge: one task
       // waiting → straight to its form, several → the inbox, where the operator picks.
       //
@@ -11302,13 +11349,18 @@ export async function mountCollaboration(root, { api, toast, key }) {
       <div class="editor-body"><div id="canvas"></div></div>
       <div class="flow-log" id="flow-log"></div>
       <div class="problems">
-        <span class="legend-swatch live"></span> live token
-        <span class="legend-swatch history" style="margin-left:12px"></span> passed through
+        <span class="legend-swatch live"></span> token here now
+        <span class="legend-swatch history" style="margin-left:12px"></span> visited
+        ${LEGEND_ARMED_HTML}
         <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--accent);margin:0 4px 0 12px;vertical-align:middle"></span> message flow
+        ${LEGEND_COUNTS_HTML}
         <span style="flex:1"></span>
         <span class="muted">Live tokens poll every 1.5s</span>
       </div>
     </div>`;
+
+  // The count switches are the live view's own, remembered across both (wireBadgeToggles).
+  wireBadgeToggles(root);
 
   let lib;
   try {
@@ -11335,6 +11387,7 @@ export async function mountCollaboration(root, { api, toast, key }) {
 
   const canvas = viewer.get("canvas");
   const registry = viewer.get("elementRegistry");
+  const overlays = viewer.get("overlays");
   drawImplBadges(viewer); // static type icons; this view never clears overlays
   drawDataStateLabels(viewer); // [state] captions, static for the same reason
   // A pool's call activity drills in like everywhere else (ADR-0076). This view has no
@@ -11360,8 +11413,16 @@ export async function mountCollaboration(root, { api, toast, key }) {
   const logEl = root.querySelector("#flow-log");
   const speedSel = root.querySelector("#speed");
 
+  // The deferred choices on this diagram, across every pool. A collaboration is where an
+  // event gateway most often stands — a pool waiting for the other one's reply, or a
+  // timeout — so this is the view where drawing its race as N waits was most misleading.
+  // Read once: the diagram does not change under a mounted view.
+  const gateways = eventGatewayRaces(registry);
+  root.querySelector("#legend-armed").hidden = gateways.size === 0;
+
   let flows = [];    // message-flow timeline, oldest first
   let marked = [];   // token markers to clear on the next poll
+  let counts = [];   // count-badge overlay ids to take down on the next poll
   let playing = false;
   let playhead = 0;  // number of messages delivered so far (0..flows.length)
   let animToken = 0; // bumped to supersede an in-flight animation
@@ -11483,17 +11544,27 @@ export async function mountCollaboration(root, { api, toast, key }) {
       titleEl.textContent = rt.pools.map((p) => p.name || p.processId).join(" ⇄ ");
     }
     instEl.textContent = fmtCount(rt.instances);
-    // Merged token overlay across all pools: green where a token is now, gray where
-    // one has passed through — the same two-state heatmap the live view draws.
+    // Merged overlay across all pools, drawn by the live view's own rule (runtimeMark):
+    // green where a token is now, gray where tokens have passed through, each shape's
+    // history split into completed and cancelled, and a deferred choice drawn once — on
+    // its gateway, with its armed branches outlined rather than counted (ADR-0249).
+    //
+    // This view draws its type icons once and never clears its overlays, so the counts
+    // are taken down by id before they are put back; clearing them all would take the
+    // icons with them, and not clearing them would pile a new set on every poll.
     for (const [id, m] of marked) canvas.removeMarker(id, m);
     marked = [];
+    for (const id of counts) { try { overlays.remove(id); } catch { /* gone */ } }
+    counts = [];
+    const raceState = runtimeRaces(gateways, rt.elements);
     for (const e of rt.elements || []) {
-      if (!registry.get(e.elementId)) continue;
-      const live = e.tokens > 0;
-      if (!live && !(e.visits > 0)) continue;
-      const marker = live ? "atlas-active" : "atlas-visited";
-      canvas.addMarker(e.elementId, marker);
-      marked.push([e.elementId, marker]);
+      const shape = registry.get(e.elementId);
+      if (!shape) continue;
+      const mark = runtimeMark(e, raceState);
+      if (!mark) continue;
+      canvas.addMarker(e.elementId, mark.marker);
+      marked.push([e.elementId, mark.marker]);
+      counts.push(overlays.add(e.elementId, "tokens", { position: badgeSpot(shape, "br"), html: mark.badges }));
     }
     // Rebuild the timeline only when the message set grows, so a poll never
     // disturbs the operator's current scrub position mid-replay.

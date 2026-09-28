@@ -10,13 +10,13 @@
 // cancelled on a branch from the ones that completed there.
 import { test, expect } from "@playwright/test";
 
-const open = async (page) => {
+const open = async (page, mount = "__mountLive") => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.__errors = errors;
   await page.goto("/event-gateway-overlay-harness.html");
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
-  await page.evaluate(() => window.__mountLive());
+  await page.evaluate((m) => window[m](), mount);
 };
 
 const badges = (page, id, cls = "") =>
@@ -90,5 +90,22 @@ test("tells the branch that won from the branch that was cancelled", async ({ pa
   // A plain element is unaffected: the end event the winner reached keeps its history.
   await expect(badges(page, "end_reply")).toHaveText(["1"]);
   await expect(shape(page, "end_reply")).toHaveClass(/atlas-visited/);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a reply that arrives over a message flow is still an armed branch", async ({ page }) => {
+  // The same race, drawn as the collaboration it usually is: the reply catch has a message
+  // flow coming in from the other pool. bpmn-js lists that among the catch's incoming
+  // connections, and the race used to count it as a second way in — so the reply fell
+  // out of the race and showed the gateway's "2" a second time beside it. A message flow
+  // brings a message, never a token (issue #802).
+  await open(page, "__mountLiveCollab");
+
+  await expect(shape(page, "gw")).toHaveClass(/atlas-active/);
+  await expect(badges(page, "gw")).toHaveText(["1", "2"]);
+  for (const id of ["reply", "timeout"]) {
+    await expect(shape(page, id)).toHaveClass(/atlas-armed/);
+    await expect(badges(page, id).filter({ hasText: /^2$/ })).toHaveCount(0);
+  }
   expect(page.__errors).toEqual([]);
 });

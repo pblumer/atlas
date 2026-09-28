@@ -2,6 +2,34 @@
   "generatedAt": "2026-09-28",
   "entries": [
     {
+      "id": "the-collaboration-view-drew-a-deferred-choice-as-several-wai",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The collaboration view counts, and a race in it is one wait",
+        "de": "Die Kollaborations-Ansicht zählt, und ein Rennen darin ist ein Warten"
+      },
+      "summary": {
+        "en": "When one process waits for another's reply — or gives up after a timeout — the collaboration view showed both of those waits in green and the gateway in front of them grey, with no numbers anywhere. It read like two separate waits, and you could not see which of the two had actually happened. It now shows what the live view shows: one count on the gateway for the instances still waiting, the reply and the timeout outlined dashed, and on each branch how often it came first (grey) and how often it lost (amber). The three counts can be switched on and off in the legend, and they stay the way you left them in the live view too. The same diagram in the live view and the replay also had one of the two branches counted twice when the reply arrived from another pool; that is fixed as well.",
+        "de": "Wenn ein Prozess auf die Antwort eines anderen wartet — oder nach einem Timeout aufgibt —, zeigte die Kollaborations-Ansicht beide Warten grün und das Gateway davor grau, und nirgends eine Zahl. Das las sich wie zwei getrennte Warten, und man sah nicht, welches der beiden Ereignisse tatsächlich eingetreten war. Jetzt zeigt sie, was die Live-Ansicht zeigt: eine Zahl am Gateway für die Instanzen, die noch warten, Antwort und Timeout gestrichelt umrandet, und an jedem Zweig, wie oft er zuerst kam (grau) und wie oft er verloren hat (bernstein). Die drei Zahlen lassen sich in der Legende ein- und ausschalten und bleiben auch in der Live-Ansicht so, wie man sie verlassen hat. Im selben Diagramm zählten Live-Ansicht und Replay einen der beiden Zweige doppelt, wenn die Antwort aus einem anderen Pool kam; das ist ebenfalls behoben."
+      },
+      "link": {
+        "label": "ADR-0249",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0249-overlay-cancelled-tokens.md"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "a-deployment-target-can-name-a-second-credential-for-reading",
       "version": "0.7.0",
       "date": "2026-09-28",
@@ -324,24 +352,6 @@
           "«Meine Aufträge» öffnen: Unter der Position steht die Genehmigung und auf wen sie wartet.",
           "Als genehmigende Person anmelden, «Meine Aufträge» öffnen, bei der Aufgabe «Erledigen» wählen und abschliessen."
         ]
-      }
-    },
-    {
-      "id": "the-portal-speaks-french-and-italian",
-      "version": "0.7.0",
-      "date": "2026-09-28",
-      "category": "Added",
-      "title": {
-        "en": "The portal speaks French and Italian.",
-        "de": "The portal speaks French and Italian."
-      },
-      "summary": {
-        "en": "It had German and English, so a catalogue kept in French or Italian carried translations that no reader could ever select: the switch will not offer a language the page cannot render whole, and the page could not render those.",
-        "de": "It had German and English, so a catalogue kept in French or Italian carried translations that no reader could ever select: the switch will not offer a language the page cannot render whole, and the page could not render those."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
       }
     }
   ]

@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_collab" targetNamespace="http://atlas/bpmn">
+  <bpmn:message id="Msg_ask" name="anfrage"/>
+  <bpmn:message id="Msg_reply" name="antwort"/>
+  <bpmn:collaboration id="collab">
+    <bpmn:participant id="p_kunde" name="Kunde" processRef="kunde"/>
+    <bpmn:participant id="p_anbieter" name="Anbieter" processRef="anbieter"/>
+    <bpmn:messageFlow id="mf_ask" sourceRef="ask" targetRef="a_start"/>
+    <bpmn:messageFlow id="mf_reply" sourceRef="a_end" targetRef="reply"/>
+  </bpmn:collaboration>
+  <bpmn:process id="kunde" name="Kunde" isExecutable="true">
+    <bpmn:startEvent id="start"><bpmn:outgoing>f1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:sendTask id="ask" name="Anfrage senden"><bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing></bpmn:sendTask>
+    <bpmn:eventBasedGateway id="gw" name="nächstes Ereignis">
+      <bpmn:incoming>f2</bpmn:incoming><bpmn:outgoing>f3</bpmn:outgoing><bpmn:outgoing>f4</bpmn:outgoing>
+    </bpmn:eventBasedGateway>
+    <bpmn:intermediateCatchEvent id="reply" name="Antwort">
+      <bpmn:incoming>f3</bpmn:incoming><bpmn:outgoing>f5</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="med" messageRef="Msg_reply"/>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="timeout" name="Timeout">
+      <bpmn:incoming>f4</bpmn:incoming><bpmn:outgoing>f6</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="ted"><bpmn:timeDuration>PT30S</bpmn:timeDuration></bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:endEvent id="end_reply"><bpmn:incoming>f5</bpmn:incoming></bpmn:endEvent>
+    <bpmn:endEvent id="end_timeout"><bpmn:incoming>f6</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="ask"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="ask" targetRef="gw"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="gw" targetRef="reply"/>
+    <bpmn:sequenceFlow id="f4" sourceRef="gw" targetRef="timeout"/>
+    <bpmn:sequenceFlow id="f5" sourceRef="reply" targetRef="end_reply"/>
+    <bpmn:sequenceFlow id="f6" sourceRef="timeout" targetRef="end_timeout"/>
+  </bpmn:process>
+  <bpmn:process id="anbieter" name="Anbieter" isExecutable="true">
+    <bpmn:startEvent id="a_start" name="Anfrage erhalten"><bpmn:outgoing>a1</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="med_a" messageRef="Msg_ask"/></bpmn:startEvent>
+    <bpmn:userTask id="a_work" name="Bearbeiten"><bpmn:incoming>a1</bpmn:incoming><bpmn:outgoing>a2</bpmn:outgoing></bpmn:userTask>
+    <bpmn:endEvent id="a_end" name="Antwort senden"><bpmn:incoming>a2</bpmn:incoming>
+      <bpmn:messageEventDefinition id="med_b" messageRef="Msg_reply"/></bpmn:endEvent>
+    <bpmn:sequenceFlow id="a1" sourceRef="a_start" targetRef="a_work"/>
+    <bpmn:sequenceFlow id="a2" sourceRef="a_work" targetRef="a_end"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="collab">
+    <bpmndi:BPMNShape id="p_kunde_di" bpmnElement="p_kunde" isHorizontal="true"><dc:Bounds x="100" y="60" width="760" height="300"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="start_di" bpmnElement="start"><dc:Bounds x="160" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="ask_di" bpmnElement="ask"><dc:Bounds x="240" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="gw_di" bpmnElement="gw"><dc:Bounds x="400" y="175" width="50" height="50"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="reply_di" bpmnElement="reply"><dc:Bounds x="530" y="102" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="timeout_di" bpmnElement="timeout"><dc:Bounds x="530" y="262" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="end_reply_di" bpmnElement="end_reply"><dc:Bounds x="660" y="102" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="end_timeout_di" bpmnElement="end_timeout"><dc:Bounds x="660" y="262" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="196" y="200"/><di:waypoint x="240" y="200"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="340" y="200"/><di:waypoint x="400" y="200"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><di:waypoint x="425" y="175"/><di:waypoint x="425" y="120"/><di:waypoint x="530" y="120"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4"><di:waypoint x="425" y="225"/><di:waypoint x="425" y="280"/><di:waypoint x="530" y="280"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f5_di" bpmnElement="f5"><di:waypoint x="566" y="120"/><di:waypoint x="660" y="120"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f6_di" bpmnElement="f6"><di:waypoint x="566" y="280"/><di:waypoint x="660" y="280"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNShape id="p_anbieter_di" bpmnElement="p_anbieter" isHorizontal="true"><dc:Bounds x="100" y="420" width="760" height="200"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="a_start_di" bpmnElement="a_start"><dc:Bounds x="272" y="502" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="a_work_di" bpmnElement="a_work"><dc:Bounds x="380" y="480" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="a_end_di" bpmnElement="a_end"><dc:Bounds x="530" y="502" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="a1_di" bpmnElement="a1"><di:waypoint x="308" y="520"/><di:waypoint x="380" y="520"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="a2_di" bpmnElement="a2"><di:waypoint x="480" y="520"/><di:waypoint x="530" y="520"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="mf_ask_di" bpmnElement="mf_ask"><di:waypoint x="290" y="240"/><di:waypoint x="290" y="502"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="mf_reply_di" bpmnElement="mf_reply"><di:waypoint x="548" y="502"/><di:waypoint x="548" y="138"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>

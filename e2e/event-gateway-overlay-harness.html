@@ -159,7 +159,18 @@
       };
       const plainApiRaw = async (method, url, body) => ({ data: await plainApi(method, url, body), headers: new Headers() });
 
+      // The same race drawn as a two-pool collaboration (collaboration-race.bpmn), which is
+      // also what the live view of a pool's process shows: the reply catch has a message
+      // flow coming in from the other pool. That is not a way in for a token, and it must
+      // not take the reply out of its race.
+      const collabApi = async (method, url, body) => {
+        if (/\/processes\/\d+\/xml$/.test(url)) return (await fetch("/collaboration-race.bpmn")).text();
+        return api(method, url, body);
+      };
+      const collabApiRaw = async (method, url, body) => ({ data: await collabApi(method, url, body), headers: new Headers() });
+
       window.__mountLive = () => mountLive(view, { api, apiRaw, toast: noop, key: DEF });
+      window.__mountLiveCollab = () => mountLive(view, { api: collabApi, apiRaw: collabApiRaw, toast: noop, key: DEF });
       window.__mountPlain = () => mountLive(view, { api: plainApi, apiRaw: plainApiRaw, toast: noop, key: PLAIN });
       window.__ready = true;
     </script>

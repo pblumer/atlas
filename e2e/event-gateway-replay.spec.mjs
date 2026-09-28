@@ -111,3 +111,25 @@ test("a frame with no race is untouched by the rule", async ({ page }) => {
   await expect(chips(page).first()).not.toContainText("waiting for the first");
   expect(page.__errors).toEqual([]);
 });
+
+test("folds the reply's token into the race even though a message flow leads into it", async ({ page }) => {
+  // The beforeEach mounted the single-pool diagram; remount on the collaboration, where
+  // the reply catch also has a message flow coming in. Counted as a second way in, it
+  // took the reply out of the race: only the timer's fork folded onto the gateway and
+  // the reply kept a dot of its own — two dots for one wait (issue #802).
+  await page.evaluate(() => window.__mountCollab());
+  await expect(page.locator("#history-list .ops-hrow").first()).toBeVisible();
+  await atFrame(page, 5);
+
+  // The gateway's box in collaboration-race.bpmn is x 400..450.
+  const xs = await dotXs(page);
+  expect(xs.length, "one token dot for one race").toBe(1);
+  expect(xs[0]).toBeGreaterThanOrEqual(400);
+  expect(xs[0]).toBeLessThanOrEqual(450);
+  for (const id of ["reply", "timeout"]) {
+    await expect(shape(page, id)).toHaveClass(/atlas-armed/);
+  }
+  await expect(chips(page)).toHaveCount(1);
+  await expect(chips(page).first()).toContainText("waiting for the first of 2 events");
+  expect(page.__errors).toEqual([]);
+});
