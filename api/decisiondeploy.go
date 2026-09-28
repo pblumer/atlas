@@ -231,8 +231,9 @@ type deployedDecisionResp struct {
 	// version stays deployed and addressable: processes pinned to it keep running
 	// against exactly it, which is the point of the whole record.
 	Current bool `json:"current"`
-	// PinnedBy are the deployed process definitions that resolved a latest-bound
-	// reference to this deployment's key. It is what stops it being deleted
+	// PinnedBy are the deployed process definitions that hold this deployment's key:
+	// a latest-bound reference frozen on it at deploy, or a task naming its version —
+	// each entry's Binding says which. It is what stops it being deleted
 	// (ADR-0336), so it is reported before the act
 	// rather than only in the refusal after it. Filled by the listing; absent on the
 	// rows a deploy echoes back, which are new and can be pinned by nothing.

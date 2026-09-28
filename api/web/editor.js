@@ -22,6 +22,7 @@ import { migrateInstanceFlow } from "./migrationdialog.js";
 import { formFieldKeys, formFieldTypes, loadFormViewer, withLoadDeadline } from "./formviewer.js";
 import { attachCollab } from "./collab.js";
 import { collectDocumentation, exportDocumentation } from "./process-doc.js";
+import { frozenMark } from "./frozen-decisions.js";
 import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
 import { openDecisionGraph } from "./decision-graph.js";
 // Documentation prose is Markdown (ADR-0250). The replay
@@ -672,6 +673,27 @@ function editorCrumbs(project, current) {
     `<span class="crumb-current">${esc(current)}</span></nav>`;
 }
 
+// markFrozenDeployment appends the frozen-decision mark to the crumbs of a deployed
+// definition opened in the Modeler. Best-effort: a listing that cannot be read costs
+// the mark, never the editor.
+async function markFrozenDeployment(root, api, key, gen) {
+  let here = null;
+  try {
+    const procs = await api("GET", "/api/v1/processes");
+    here = (procs || []).find((x) => String(x.key) === String(key)) || null;
+  } catch { return; }
+  if (gen !== generation) return; // navigated away while asking
+  const frozen = frozenMark(here);
+  const crumbs = root.querySelector(".editor-bar .crumbs");
+  if (!frozen || !crumbs || crumbs.querySelector(".frozen-mark")) return;
+  const pill = document.createElement("span");
+  pill.className = `pill${frozen.behind ? " warn" : ""} frozen-mark`;
+  pill.style.marginLeft = "8px";
+  pill.title = frozen.title;
+  pill.textContent = frozen.label;
+  crumbs.appendChild(pill);
+}
+
 // The editor bar carries what the author reaches for constantly and a menu for the rest
 // (ADR-0229, revised in one part by ADR-0240). It used to
 // carry seven buttons in one weight, which said that re-flowing the diagram and shipping
@@ -831,6 +853,13 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
     }
   } catch (e) {
     toast("could not open diagram: " + e.message, "err");
+  }
+  // A deployment whose latest-bound decisions were frozen when it was deployed says
+  // so beside its name (ADR-0423). The binding field on its tasks reads what a deploy
+  // from here will do, which is not what this deployment does — and Deploy, on this
+  // bar, is the remedy.
+  if (key != null && draftId == null) {
+    markFrozenDeployment(root, api, key, gen);
   }
 
   // identity.draftId is the draft this editing session addresses — the id the diagram
@@ -9924,11 +9953,19 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   // reader would otherwise compare the picture against a printed copy and conclude
   // that the process was redeployed.
   let layoutNote = "";
+  // And the mark on a definition whose latest-bound decisions were frozen when it was
+  // deployed (ADR-0423): what its instances evaluate is not what the binding reads,
+  // and this is the view somebody opens to find out why an instance decided as it did.
+  let frozenNote = "";
   try {
     const procs = await api("GET", "/api/v1/processes");
     const here = procs.find((x) => x.key === key);
     if (here) {
       procName = here.name || here.processId;
+      const frozen = frozenMark(here);
+      if (frozen) {
+        frozenNote = ` <span class="pill${frozen.behind ? " warn" : ""} frozen-mark" title="${esc(frozen.title)}">${esc(frozen.label)}</span>`;
+      }
       if (here.diagramUpdatedAt) {
         const when = new Date(here.diagramUpdatedAt * 1000).toLocaleString();
         layoutNote = `<span class="muted live-layout-note" title="Only the drawing was changed — the process, its version and its instances are the deployed ones${
@@ -9951,7 +9988,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     <div class="editor live">
       <div class="editor-bar">
         <a class="btn neutral" href="#/operations">&larr; Instances</a>
-        <span class="crumbs" style="margin-left:8px">Live &middot; <b>${esc(procName)}</b>${layoutNote}</span>
+        <span class="crumbs" style="margin-left:8px">Live &middot; <b>${esc(procName)}</b>${layoutNote}${frozenNote}</span>
         <label class="bar-select"><span>Version</span>
           <select id="version-sel">${versionOptions}</select></label>
         <label class="bar-select"><span>Instance</span>

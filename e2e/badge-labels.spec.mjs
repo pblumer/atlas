@@ -163,3 +163,15 @@ test("the live view says when a diagram was adjusted after it was deployed", asy
   await expect(note).toHaveAttribute("title", /the process, its version and its instances are the deployed ones/);
   await expect(note).toHaveAttribute("title", /adjusted by u-patrick/);
 });
+
+test("the live view marks a definition whose decision was frozen when it was deployed", async ({ page }) => {
+  // This is the view somebody opens to find out why an instance decided as it did,
+  // and the binding on the task reads latest while the definition runs an older
+  // version (ADR-0423).
+  const mark = page.locator(".crumbs .frozen-mark");
+  await expect(mark).toBeVisible();
+  await expect(mark).toHaveText("Decision frozen · newer deployed");
+  await expect(mark).toHaveClass(/\bwarn\b/);
+  await expect(mark).toHaveAttribute("title", /freigabe runs v1, the newest is v3/);
+  await expect(mark).toHaveAttribute("title", /Deploy the process again/);
+});

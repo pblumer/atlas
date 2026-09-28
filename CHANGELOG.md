@@ -14,6 +14,19 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A process still frozen on an old decision version says so.** A process deployed
+  while latest was settled at deploy time keeps evaluating the decision version that was
+  newest then, although its binding reads latest — the case of the instance that
+  answered `andere zahl` with v3 deployed. Such a definition is now marked where its
+  owner meets it: its row on the Modeler home, the deployment opened in the Modeler, and
+  its live view in Operations, each naming the version it runs and the newest one, as a
+  warning once a newer version is deployed. Deploying a decision names the processes
+  that will not follow it, a decision's version list says of each process holding a
+  version whether it froze it or chose it, and the editor's version chip no longer
+  claims every deployed process keeps its version. `GET /api/v1/processes` reports the
+  same as `frozenDecisions`. Deploying the process again is what makes it follow;
+  nothing is converted on its own.
+
 - **The handbook teaches a process test that can fail a build.** The Playground could
   hold a run to expectations, judge every case against a FEEL rule, keep a baseline, and
   replay all of it from `atlas playground` with an exit status a pipeline acts on

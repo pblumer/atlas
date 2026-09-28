@@ -34,6 +34,7 @@
 import { renderTrace, fmtVal as traceValue } from "./dmn-trace.js";
 import { collectDecisionDocumentation, exportDecisionDocumentation } from "./decision-doc.js";
 import { attachCollab } from "./collab.js";
+import { frozenBehindOn, frozenDeployNotice } from "./frozen-decisions.js";
 import { dmnSurface } from "./dmn-collab.js";
 import { informationRequirementFindings, knowledgeModelFindings } from "./dmn-warnings.js";
 import {
@@ -1515,8 +1516,10 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
     deployedChip.hidden = false;
     deployedChip.textContent = `Deployed v${row.version} · key ${row.key}`;
     deployedChip.title = `“${id}” is deployed as version ${row.version} under definition key ${row.key}`
-      + ` — what a process deployed from now on binds to. Deploying again makes a new version;`
-      + ` processes already deployed keep the version they were pinned to.`;
+      + ` — what a business rule task bound to latest evaluates when it runs. Deploying again makes a`
+      + ` new version, which those tasks then evaluate; a task bound to a version keeps the one it`
+      + ` names, and a process deployed while latest was frozen at deploy time keeps the one it was`
+      + ` frozen on until it is deployed again.`;
   }
 
   // refreshDeployed asks what the decision currently on screen is deployed at. It is
@@ -1574,6 +1577,15 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         if (!modelRef) {
           toast && toast("Deployed — but this decision is not in the model yet, so a business rule task bound to “deployment” cannot use it. Press “Save to model” to make it referenceable.", "warn");
         }
+        // The deploy is when the author expects every latest-bound task to change its
+        // answer, so it is where the processes that will not are named: definitions
+        // deployed while latest was frozen at deploy time (ADR-0423).
+        // Best-effort — the deploy has happened either way.
+        try {
+          const procs = await api("GET", "/api/v1/processes");
+          const notice = frozenDeployNotice(frozenBehindOn(procs, rows.map((r) => r.decisionId)));
+          if (notice && gen === generation) toast && toast(notice, "warn");
+        } catch { /* the listing is not worth failing a deploy that succeeded */ }
       } catch (e) {
         statusEl.textContent = "";
         toast && toast("Deploy failed: " + e.message, "err");

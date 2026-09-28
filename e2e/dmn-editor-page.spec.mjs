@@ -40,7 +40,7 @@ const STORED_XML = `<?xml version="1.0" encoding="UTF-8"?>
 // `taken` makes the model upload answer 409 the way the server does when the handle
 // a decision would land on is already somebody else's (ADR-0222), unless the request
 // says the author chose to replace it.
-function installMock(page, { refs = [], drafts = [], taken = false, deployed = [], trial = null, docs = [], storedXml = STORED_XML, decisions = null } = {}) {
+function installMock(page, { refs = [], drafts = [], taken = false, deployed = [], trial = null, docs = [], storedXml = STORED_XML, decisions = null, processes = [] } = {}) {
   const uploads = [];
   const created = [];
   const patched = [];
@@ -61,6 +61,9 @@ function installMock(page, { refs = [], drafts = [], taken = false, deployed = [
     }
     if (path === "/api/v1/applications") {
       return route.fulfill({ json: [{ id: "app-1", name: "Order Management", myRole: "owner" }] });
+    }
+    if (path === "/api/v1/processes" && request.method() === "GET") {
+      return route.fulfill({ json: processes });
     }
     if (path === "/api/v1/dmnrefs" && request.method() === "GET") {
       return route.fulfill({ json: refs });
@@ -502,6 +505,30 @@ test("a decision that is in the model deploys with its reference and handle, and
   // confirmation.
   await expect(page.locator("#toast")).toContainText("deployed as version 1");
   await expect(page.locator("#toast")).not.toContainText("not in the model yet");
+});
+
+test("a deploy names the deployed processes that will not follow it", async ({ page }) => {
+  // Orders was deployed while latest was frozen at deploy time (ADR-0423): it keeps
+  // evaluating v1 whatever is deployed here. Billing follows latest and is not named.
+  installMock(page, {
+    refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }],
+    deployed: [{ key: 4, decisionId: "Decision_stored", version: 1, current: true }],
+    processes: [
+      { key: 20, processId: "orders", name: "Orders", version: 2,
+        frozenDecisions: [{ decisionId: "Decision_stored", key: 4, version: 1, latestKey: 7, latestVersion: 2, behind: true }] },
+      { key: 21, processId: "billing", name: "Billing", version: 1 },
+    ],
+  });
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  await page.locator("#dmn-deploy").click();
+  await expect(page.locator("#dmn-status")).toHaveText("Deployed v2 · key 7");
+  await expect(page.locator("#toast")).toContainText(
+    "One deployed process does not follow this version: Orders v2 (Decision_stored runs v1, the newest is v2)");
+  await expect(page.locator("#toast")).not.toContainText("Billing");
+  // And the chip no longer promises what ADR-0319 did: latest follows the version.
+  await expect(page.locator("#dmn-deployed-chip")).toHaveAttribute("title", /what a business rule task bound to latest evaluates when it runs/);
 });
 
 test("the bar says which version a decision is deployed at the moment it opens", async ({ page }) => {

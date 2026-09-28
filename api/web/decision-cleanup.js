@@ -26,7 +26,11 @@
 export function versionDeleteState(row, rows) {
   const pins = (row && row.pinnedBy) || [];
   if (pins.length) {
-    const who = pins.map((p) => p.processId || `#${p.key}`).join(", ");
+    const who = pins.map((p) => {
+      const name = p.processId || `#${p.key}`;
+      const how = holderNote(p).label;
+      return how ? `${name} (${how})` : name;
+    }).join(", ");
     return {
       deletable: false,
       why: `Held by ${who} — ${pins.length === 1 ? "that process" : "those processes"} pinned this version when deployed`,
@@ -40,4 +44,30 @@ export function versionDeleteState(row, rows) {
     };
   }
   return { deletable: true, why: "" };
+}
+
+// holderNote says how one definition in a version's `pinnedBy` holds it, because the
+// two ways are released differently (ADR-0423):
+//
+//   - binding "latest": a definition deployed under ADR-0319 froze its latest-bound
+//     task on this version. It is not what its author chose; deploying the process
+//     again gives it a definition that follows each decision version, and the old
+//     one keeps holding this version until it is undeployed;
+//   - binding "version": the task names this version (atlas:version) on purpose, and
+//     only changing the task releases it.
+//
+// A listing from a server that does not say which gets the sentence it always had.
+export function holderNote(p) {
+  const who = `${(p && p.processId) || `#${p && p.key}`} v${(p && p.version) || "?"}`;
+  if (p && p.binding === "latest") {
+    return {
+      label: "frozen",
+      title: `${who} froze latest on this version when it was deployed, and keeps evaluating it. ` +
+        "Deploy the process again to have it follow each new version; this definition holds the version until it is undeployed.",
+    };
+  }
+  if (p && p.binding === "version") {
+    return { label: "fixed", title: `${who} names this version: its business rule task evaluates exactly this one` };
+  }
+  return { label: "", title: `${who} pinned this version at deploy time` };
 }

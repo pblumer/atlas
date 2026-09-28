@@ -169,10 +169,56 @@ evaluation.
   and the fixed-version binding is the way out of it. Three binding policies exist
   on disk where two did. `atlas:version` is not portable.
 - **Follow-ups / risks to watch:** a definition pinned under ADR-0319 needs a
-  redeploy to follow new versions, and nothing tells its owner; the process document
+  redeploy to follow new versions, and nothing tells its owner (addressed by the
+  amendment below); the process document
   still shows the newest deployed version for every business rule task, which is
   wrong for one bound to a version; setting a tag on a decision version would make
   `versionTag` supportable.
+
+## Amendment (2026-09-28): a frozen definition is marked
+
+The first follow-up above left the owner of a definition deployed under ADR-0319 with
+no way to find out that it does not do what its binding reads, short of reading an
+evaluation's version. The case is not hypothetical: the definition whose instance
+answered `andere zahl` with v3 deployed is one.
+
+**What is marked.** A definition whose record carries `bindingPolicy: "pinned"` and a
+key for a latest-bound decision. `GET /api/v1/processes` reports it as
+`frozenDecisions`: per decision, the key and version the tasks evaluate (no version
+when ADR-0319 froze the model bundled with the process), the key and version latest
+resolves to now — the newest decision deployment, which is what a task on a
+definition deployed today evaluates — and `behind` when the two differ. The field is
+absent on every other definition. A runtime-policy definition follows latest. A
+record written before ADR-0319 resolves the newest registered model at activation
+([ADR-0063](0063-dmn-decision-binding.md)), so it follows new versions too — through
+a lookup that can also land on a model bundled with another process, a difference
+this does not mark. And a reference the frozen record holds no key for resolves at
+activation, as the worker does.
+
+`pinnedBy` on the decision-deployment listing now carries each holder's `binding`:
+`latest` for a reference frozen on that deployment, `version` for a task that names
+it. The two are released differently — deploying the process again gives new
+instances a definition that follows latest, while only changing the task releases a
+chosen version — and a delete refusal is only useful if it says which.
+
+**Where it is said.** Where an owner meets the definition: its row on the Modeler
+home, the crumbs of the deployment opened in the Modeler (whose binding field reads
+what a deploy from there will do) and in the Operations live view (where somebody
+asks why an instance decided as it did), and the holder list of a decision's
+versions. And at the moment the discrepancy is made: after a decision deploy, the
+decision editor names the newest version of each process frozen on that decision
+that will not follow it. The mark is a warning only when `behind`; a definition
+frozen on what is still the newest version is marked without one.
+
+**Steelman of converting instead of marking.** Reloading a `pinned` record as
+`runtime` would make every definition do what the Modeler says, with nothing for an
+owner to do, and replay is not at risk: the evaluation is off the loop and its key is
+recorded ([ADR-0066](0066-decision-evaluation-records.md)). It is still not done. It
+changes what a deployed definition evaluates — and what its running instances answer
+at their next business rule task — without anybody deploying anything, which is
+exactly what ADR-0319 promised its definitions and what this record kept for them.
+The owner can make that change by deploying the process again; the mark exists so
+that they know to.
 
 ## Links
 
