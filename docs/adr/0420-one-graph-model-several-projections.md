@@ -1,4 +1,4 @@
-# ADR-DRAFT: One graph model, several projections, and a successor view built beside the starmap
+# ADR-0420: One graph model, several projections, and a successor view built beside the starmap
 
 - **Status:** Proposed
 - **Implementation:** Not started
