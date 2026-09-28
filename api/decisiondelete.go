@@ -56,6 +56,7 @@ func (s *Server) handleDeleteDecisionDeployment(w http.ResponseWriter, r *http.R
 		found      bool
 		pins       []decisionPinRef
 		superseded []string
+		stranded   []decisionPinRef
 		loadErr    error
 		persistErr error
 	)
@@ -74,6 +75,9 @@ func (s *Server) handleDeleteDecisionDeployment(w http.ResponseWriter, r *http.R
 			return
 		}
 		if superseded = currentVersionsWithHistory(rec, all); len(superseded) > 0 {
+			return
+		}
+		if stranded = s.definitionsStrandedBy(rec, all); len(stranded) > 0 {
 			return
 		}
 		if loadErr = s.decisionDeploys.Delete(decisionKeyName(key)); loadErr != nil {
@@ -99,6 +103,9 @@ func (s *Server) handleDeleteDecisionDeployment(w http.ResponseWriter, r *http.R
 		return
 	case len(pins) > 0:
 		httpapi.Error(w, http.StatusConflict, pinnedRefusal(key, pins))
+		return
+	case len(stranded) > 0:
+		httpapi.Error(w, http.StatusConflict, strandedRefusal(key, stranded))
 		return
 	case len(superseded) > 0:
 		httpapi.Error(w, http.StatusConflict, fmt.Sprintf(
@@ -139,8 +146,79 @@ func (s *Server) definitionsPinnedTo(key uint64) []decisionPinRef {
 				})
 			}
 		}
+		// A fixed version is as pinned as a frozen latest: the task names exactly this
+		// deployment and nothing else will do
+		// (ADR-draft-a-business-rule-task-chooses-its-decision-version).
+		for _, ref := range d.cp.VersionBoundDecisions() {
+			if pinned, ok := d.cp.VersionPinnedKey(ref.DecisionID, ref.Version); ok && pinned == key {
+				out = append(out, decisionPinRef{
+					Key: d.Key, ProcessID: d.ProcessID, Name: d.Name, Version: d.Version, DecisionID: ref.DecisionID,
+				})
+			}
+		}
 	}
 	return out
+}
+
+// definitionsStrandedBy is the guard the runtime policy needs on top of the pins
+// (ADR-draft-a-business-rule-task-chooses-its-decision-version): which deployed
+// definitions would be left with a latest-bound task that nothing can answer.
+//
+// Under that policy latest is the newest decision deployment when the job is
+// worked, else the model bundled with the process. Deleting a version while an
+// older one survives is already refused by currentVersionsWithHistory, so the only
+// delete that changes what latest resolves to is the one that removes a decision's
+// last deployment — and it strands a definition only when that definition carries
+// no copy of the decision itself.
+func (s *Server) definitionsStrandedBy(rec persistedDecision, all []persistedDecision) []decisionPinRef {
+	remaining := map[string]bool{}
+	for _, other := range all {
+		if other.Key == rec.Key {
+			continue
+		}
+		for _, d := range other.Decisions {
+			remaining[d.ID] = true
+		}
+	}
+	going := map[string]bool{}
+	for _, d := range rec.Decisions {
+		if !remaining[d.ID] {
+			going[d.ID] = true
+		}
+	}
+	if len(going) == 0 {
+		return nil
+	}
+	var out []decisionPinRef
+	for _, defKey := range s.order {
+		d := s.deployments[defKey]
+		if d == nil || d.cp == nil || !d.cp.LatestAtRuntime() {
+			continue
+		}
+		for _, id := range d.cp.LatestBoundDecisions() {
+			if going[id] && !s.dmnRegistry.Provides(d.Key, id) {
+				out = append(out, decisionPinRef{
+					Key: d.Key, ProcessID: d.ProcessID, Name: d.Name, Version: d.Version, DecisionID: id,
+				})
+			}
+		}
+	}
+	return out
+}
+
+// strandedRefusal names the definitions a delete would leave with nothing to
+// evaluate.
+func strandedRefusal(key uint64, stranded []decisionPinRef) string {
+	names := make([]string, 0, len(stranded))
+	for _, p := range stranded {
+		names = append(names, fmt.Sprintf("%s v%d (key %d, decision %s)", p.ProcessID, p.Version, p.Key, p.DecisionID))
+	}
+	return fmt.Sprintf(
+		"decision deployment %d is the last deployed version of a decision that %s as latest, with no copy bundled: %v. Deleting it would leave a business rule task that cannot evaluate — deploy another version first, or undeploy %s",
+		key,
+		plural(len(stranded), "a deployed process evaluates", "deployed processes evaluate"),
+		names,
+		plural(len(stranded), "that definition", "those definitions"))
 }
 
 // pinnedRefusal names the definitions rather than counting them, so the operator
@@ -204,6 +282,7 @@ func currentVersionsWithHistory(rec persistedDecision, all []persistedDecision) 
 // after a delete must be the same one minted after a delete and a reboot.
 func (s *Server) recountDecisionVersions(all []persistedDecision, removed uint64) {
 	next := map[string]int32{}
+	s.decisionVersionKeys = map[string]map[int32]uint64{}
 	for _, rec := range all {
 		if rec.Key == removed {
 			continue
@@ -213,6 +292,7 @@ func (s *Server) recountDecisionVersions(all []persistedDecision, removed uint64
 				next[d.ID] = d.Version
 			}
 		}
+		s.indexDecisionVersions(rec)
 	}
 	s.decisionVersions = next
 }

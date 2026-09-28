@@ -113,6 +113,14 @@ const (
 	// write to either leaves the other as it was, and two things drift apart under one
 	// name while every expression in the model quietly means just one of them.
 	RuleVariableShadowsDataObject = "variable.shadows-data-object"
+
+	// RuleDecisionVersionTag marks a business rule task bound with Camunda's
+	// `versionTag`, which Atlas cannot honour: a decision version carries no tag
+	// here. It used to be read as latest, so a model that pinned a tag ran whatever
+	// was newest. A deploy refuses it; a definition already deployed with one is
+	// brought back on reload and keeps the behaviour it had (ADR-0177,
+	// ADR-draft-a-business-rule-task-chooses-its-decision-version).
+	RuleDecisionVersionTag = "decision.version-tag"
 )
 
 // Rule slugs for whole-model dry-run findings that [ValidateModel] raises outside
@@ -172,6 +180,27 @@ func Validate(cp *CompiledProcess) []Problem {
 	ps = append(ps, checkDottedTargets(cp)...)
 	ps = append(ps, checkVariableShadowsDataObject(cp)...)
 	ps = append(ps, checkAgentTools(cp)...)
+	ps = append(ps, checkDecisionBindings(cp)...)
+	return ps
+}
+
+// checkDecisionBindings refuses a local business rule task bound with `versionTag`
+// (RuleDecisionVersionTag). A central decision resolves through its worker, which
+// has no binding here, so only local tasks are checked.
+func checkDecisionBindings(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	for id := range cp.nodes {
+		if cp.nodes[id].Type != TypeBusinessRuleTask {
+			continue
+		}
+		d := cp.BusinessRuleTask(cp.nodes[id].Detail)
+		if d.Connector >= 0 || d.Binding != BindingVersionTag {
+			continue
+		}
+		ps = append(ps, problem(cp, int32(id), SeverityError, RuleDecisionVersionTag,
+			fmt.Sprintf("%s binds decision %q by versionTag, which Atlas does not support; bind it to Latest, to a deployed version (atlas:version), or to Deployment",
+				describeNode(cp, int32(id)), cp.Intern(d.DecisionId))))
+	}
 	return ps
 }
 

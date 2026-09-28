@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/pblumer/atlas/compiler"
 
@@ -25,40 +26,93 @@ import (
 // single-writer state (I3). The compiling and validating that precedes it happens
 // off the loop, in the bundle's preflight.
 
-// pinDecisions resolves every latest-bound decision reference of a freshly
-// compiled definition to an exact decision deployment, records the answer on the
-// definition, and returns it for the durable deployment record.
+// resolveVersionPins resolves every fixed-version reference in a compiled process
+// to the decision deployment holding that version, before anything is written
+// (ADR-draft-a-business-rule-task-chooses-its-decision-version). A version that is not
+// deployed refuses the deploy and names what is: a task that names v4 of a decision
+// that stands at v3 must not deploy, and certainly must not run v3.
 //
-// The rule, per reference:
-//
-//  1. the newest *decision deployment* providing that decision id, if there is one;
-//  2. otherwise this process deployment's own key — the model bundled with it.
-//
-// Case 2 is what keeps a process whose decision was never published on its own
-// behaving as it always has: `latest` and `deployment` then name the same model,
-// the equivalence ADR-0063 already noted for a decision deployed once.
-//
-// It must run on the run loop (it reads the registry) and before the definition is
-// handed to the processor, which is where deployModel calls it.
-func (s *Server) pinDecisions(cp *compiler.CompiledProcess) []persistedDecisionBinding {
-	refs := cp.LatestBoundDecisions()
+// Latest-bound references are not resolved here any more: under the runtime policy
+// they are settled when the job is worked, and the evaluation records which
+// deployment answered. It reads run-loop state, so it runs on the loop.
+func (s *Server) resolveVersionPins(cp *compiler.CompiledProcess) (map[compiler.DecisionVersionRef]uint64, error) {
+	refs := cp.VersionBoundDecisions()
 	if len(refs) == 0 {
-		// Still a pinned deployment: the policy is the deployment's, not the map's.
-		cp.PinDecisions(nil)
+		return nil, nil
+	}
+	pins := make(map[compiler.DecisionVersionRef]uint64, len(refs))
+	for _, ref := range refs {
+		key, ok := s.decisionVersionKeys[ref.DecisionID][ref.Version]
+		if !ok {
+			return nil, fmt.Errorf("process %q binds decision %q to version %d, which is not deployed; deployed versions: %s",
+				cp.BpmnProcessId, ref.DecisionID, ref.Version, s.deployedVersionsText(ref.DecisionID))
+		}
+		pins[ref] = key
+	}
+	return pins, nil
+}
+
+// persistedVersionPins is the record form of resolveVersionPins' answer, in a
+// stable order so the same deploy writes the same record.
+func persistedVersionPins(pins map[compiler.DecisionVersionRef]uint64) []persistedDecisionBinding {
+	if len(pins) == 0 {
 		return nil
 	}
-	pins := make(map[string]uint64, len(refs))
-	out := make([]persistedDecisionBinding, 0, len(refs))
-	for _, id := range refs {
-		key, ok := s.dmnRegistry.LatestDecisionKey(id)
-		if !ok {
-			key = cp.Key
-		}
-		pins[id] = key
-		out = append(out, persistedDecisionBinding{DecisionID: id, Key: key})
+	out := make([]persistedDecisionBinding, 0, len(pins))
+	for ref, key := range pins {
+		out = append(out, persistedDecisionBinding{DecisionID: ref.DecisionID, Key: key, Version: ref.Version})
 	}
-	cp.PinDecisions(pins)
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].DecisionID != out[j].DecisionID {
+			return out[i].DecisionID < out[j].DecisionID
+		}
+		return out[i].Version < out[j].Version
+	})
 	return out
+}
+
+// deployedVersionsText lists the deployed versions of a decision for a refusal,
+// or says there are none.
+func (s *Server) deployedVersionsText(decisionId string) string {
+	vs := make([]int, 0, len(s.decisionVersionKeys[decisionId]))
+	for v := range s.decisionVersionKeys[decisionId] {
+		vs = append(vs, int(v))
+	}
+	if len(vs) == 0 {
+		return "none"
+	}
+	sort.Ints(vs)
+	parts := make([]string, len(vs))
+	for i, v := range vs {
+		parts[i] = "v" + strconv.Itoa(v)
+	}
+	return strings.Join(parts, ", ")
+}
+
+// indexDecisionVersions records a decision deployment's versions in
+// decisionVersionKeys.
+func (s *Server) indexDecisionVersions(rec persistedDecision) {
+	for _, d := range rec.Decisions {
+		if s.decisionVersionKeys[d.ID] == nil {
+			s.decisionVersionKeys[d.ID] = map[int32]uint64{}
+		}
+		s.decisionVersionKeys[d.ID][d.Version] = rec.Key
+	}
+}
+
+// decisionVersionOf reads back which version of a decision a deployment key
+// holds, 0 when the key is not a decision deployment of it — a model bundled with
+// a process, or an evaluation recorded before the key was.
+func (s *Server) decisionVersionOf(key uint64, decisionId string) int32 {
+	if key == 0 {
+		return 0
+	}
+	for v, k := range s.decisionVersionKeys[decisionId] {
+		if k == key {
+			return v
+		}
+	}
+	return 0
 }
 
 // decisionDeployment is one DMN model about to be deployed as a decision: what the
@@ -130,6 +184,7 @@ func (s *Server) deployDecisions(models []decisionDeployment, appID, deployedBy 
 		if err := s.dmnRegistry.DeployDecision(rec.Key, []byte(models[i].xml)); err != nil {
 			return nil, fmt.Errorf("register decision %s: %w", rec.ResourceName, err)
 		}
+		s.indexDecisionVersions(rec)
 	}
 	return recs, nil
 }

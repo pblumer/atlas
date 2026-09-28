@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/pblumer/atlas/compiler"
 	"strconv"
 
 	"github.com/pblumer/atlas/api/sidecar"
@@ -80,12 +81,22 @@ type persistedDeployment struct {
 // deployment resolved its latest-bound decision references at deploy time.
 const bindingPinned = "pinned"
 
+// bindingRuntime is the [persistedDeployment.BindingPolicy] value of every
+// deployment written from ADR-draft-a-business-rule-task-chooses-its-decision-version on:
+// its latest-bound tasks evaluate the newest decision deployment when the job is
+// worked, and DecisionBindings carries only the fixed versions its tasks name.
+const bindingRuntime = "runtime"
+
 // persistedDecisionBinding is one resolved decision reference: the decision id a
 // latest-bound business rule task names, and the decision deployment whose model
 // it evaluates for as long as this definition exists.
 type persistedDecisionBinding struct {
 	DecisionID string `json:"decisionId"`
 	Key        uint64 `json:"key"`
+	// Version is the decision version a version-bound task names (atlas:version),
+	// set only on a runtime-policy record. A pinned record's bindings are latest
+	// references and carry none.
+	Version int32 `json:"version,omitempty"`
 }
 
 // decisionPins turns the record's resolved bindings into the map a compiled
@@ -97,7 +108,26 @@ func (d persistedDeployment) decisionPins() map[string]uint64 {
 	}
 	out := make(map[string]uint64, len(d.DecisionBindings))
 	for _, b := range d.DecisionBindings {
+		if b.Version != 0 {
+			continue // a fixed version, not a latest pin
+		}
 		out[b.DecisionID] = b.Key
+	}
+	return out
+}
+
+// versionPins turns the record's fixed-version bindings into the map a compiled
+// process under the runtime policy is given, or nil when it carries none.
+func (d persistedDeployment) versionPins() map[compiler.DecisionVersionRef]uint64 {
+	var out map[compiler.DecisionVersionRef]uint64
+	for _, b := range d.DecisionBindings {
+		if b.Version == 0 {
+			continue
+		}
+		if out == nil {
+			out = map[compiler.DecisionVersionRef]uint64{}
+		}
+		out[compiler.DecisionVersionRef{DecisionID: b.DecisionID, Version: b.Version}] = b.Key
 	}
 	return out
 }

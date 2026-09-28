@@ -118,17 +118,17 @@ func TestAPinnedDecisionDeploymentIsRefused(t *testing.T) {
 	}
 }
 
-// TestASupersededVersionIsAsPinnedAsACurrentOne: a definition deployed while v1 was
-// newest stays pinned to v1 after v2 ships. Deleting v1 "because v2 exists" is
-// exactly the mistake the versioning was built to prevent.
+// TestASupersededVersionIsAsPinnedAsACurrentOne: a definition bound to version 1
+// stays on v1 after v2 ships. Deleting v1 "because v2 exists" is exactly the
+// mistake the versioning was built to prevent.
 func TestASupersededVersionIsAsPinnedAsACurrentOne(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	x := deployTestHarness{t, srv.Handler()}
 	first := deployOneDecision(t, x, "", eligibilityDMN("approve"))
-	defKey := deployProcess(t, x, eligibilityProcess("orders", "latest"))
+	defKey := deployProcess(t, x, eligibilityProcessAt("orders", 1))
 	second := deployOneDecision(t, x, "", eligibilityDMN("vip"))
 
-	// The process is pinned to v1 and keeps answering v1, whatever v2 says.
+	// The process is bound to v1 and keeps answering v1, whatever v2 says.
 	if got := runAndReadVerdict(t, x, defKey, "orders"); got != "approve" {
 		t.Fatalf("verdict = %q, want the pinned version, not the newest", got)
 	}
@@ -300,7 +300,7 @@ func TestTheVersionListingSaysWhatIsPinnedToEachVersion(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	x := deployTestHarness{t, srv.Handler()}
 	first := deployOneDecision(t, x, "", eligibilityDMN("approve"))
-	defKey := deployProcess(t, x, eligibilityProcess("orders", "latest"))
+	defKey := deployProcess(t, x, eligibilityProcessAt("orders", 1))
 	second := deployOneDecision(t, x, "", eligibilityDMN("vip"))
 
 	rows := listDecisionDeployments(t, x, "?decisionId=eligibility")

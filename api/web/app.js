@@ -7454,7 +7454,7 @@ async function viewDecisionDetail(id) {
         return `<tr>
           <td class="muted" data-sort="${r.at || 0}">${esc(fmtNano(r.at))}</td>
           <td><a href="#/operations/i/${r.instanceKey}" title="Replay this instance step by step">&#9654; ${r.instanceKey}</a></td>
-          <td class="muted">${esc(r.elementId || "—")}</td>
+          <td class="muted">${esc(r.elementId || "—")}${r.decisionVersion ? ` <span class="res-rule" title="The deployed version that answered">v${esc(String(r.decisionVersion))}</span>` : ""}</td>
           <td>${pills}</td>
           <td>${result}</td>
           <td class="row-actions"><button type="button" class="dec-open" data-decat="${esc(r.atKey || String(r.at))}"

@@ -4,7 +4,7 @@
 
 *model.CompensableValue: ElementId, ElementInstanceKey, HandlerNode, ProcessDefKey, ProcessInstanceKey, ScopeKey, Seq
 *model.DataObjectValue: Bool, Kind, Name, ProducerKey, ScopeKey, State, Text
-*model.DecisionEvaluationValue: DecisionId, ElementId, ElementInstanceKey, InputsJSON, OutputsJSON, ProcessDefKey, ProcessInstanceKey, TraceJSON
+*model.DecisionEvaluationValue: DecisionId, DecisionKey, ElementId, ElementInstanceKey, InputsJSON, OutputsJSON, ProcessDefKey, ProcessInstanceKey, TraceJSON
 *model.ElementInstanceValue: AttachedToKey, BpmnElementType, ElementId, EventGatewayKey, FlowScopeKey, MultiInstance, ParentTokenID, ProcessDefKey, ProcessInstanceKey, SourceFlowId, TokenID
 *model.InboundDeliveryValue: SourceID, SourceSeq
 *model.IncidentValue: ElementId, ElementInstanceKey, JobKey, Message, ProcessInstanceKey, RaisedAt, Reason
