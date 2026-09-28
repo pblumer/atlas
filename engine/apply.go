@@ -232,6 +232,14 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// activatable-index write is idempotent and keyed on the job having retries
 			// left and nothing holding it, so a still-retryable job stays open while an
 			// exhausted, backing-off or leased one parks off the index (ADR-0042/0061).
+			//
+			// Creation stamps when the job opened from this event's header timestamp, the
+			// same way an instance's CreatedAt is set: replay reads the identical header,
+			// so it rebuilds the identical value (I4/I6). The re-puts carry it on the job
+			// value they copied from state.
+			if h.Intent == model.IntentJobCreated {
+				v.job.CreatedAt = h.Timestamp
+			}
 			if err := tx.PutJob(h.Key, &v.job); err != nil {
 				return err
 			}

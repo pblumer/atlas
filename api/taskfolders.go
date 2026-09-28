@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"sort"
 	"strconv"
@@ -43,10 +44,92 @@ var maxFolderScan = 20000
 // snapshot's copy of it, rather than the two growing separate copies of the walk.
 type taskDefLookup func(defKey uint64) (processID, processName string, cp *compiler.CompiledProcess, ok bool)
 
-// elementReader is the one read enriching a task makes beyond the job itself.
+// elementReader is what enriching a task reads beyond the job itself.
 // Both *state.Store and *state.ReadView satisfy it.
 type elementReader interface {
 	GetElementInstance(key uint64) (*model.ElementInstanceValue, bool, error)
+	// ElementReplayHistory answers when a job written before it carried its own
+	// creation stamp was opened (see activatedAt).
+	ElementReplayHistory(piKey uint64, fn func(ts int64, pos uint64, v state.ElementReplayValue) error) error
+	// VisibleVariablesOfScope is read only when a caller asks for a task's content.
+	VisibleVariablesOfScope(scope uint64, fn func(v *model.VariableValue) error) error
+}
+
+// wantsTaskContent reports whether a task listing was asked to carry each task's
+// content (?content=1). Off by default: the rows every other caller reads stay the
+// size and the cost they were.
+func wantsTaskContent(r *http.Request) bool {
+	v := strings.TrimSpace(r.URL.Query().Get("content"))
+	return v == "1" || v == "true"
+}
+
+// errFound stops a scan that has what it came for.
+var errFound = errors.New("found")
+
+// activatedAt is when the element a job waits on was activated, in unix nanos, or 0
+// when the instance's history does not say. It is the fallback for a job written
+// before the job recorded its own creation time: a user task's job is created in the
+// same batch its element activates, so the two instants are the same moment. The
+// scan is over one instance's token history and stops at the match, and it is only
+// taken for those older jobs, so it fades out as they are completed.
+func activatedAt(r elementReader, jv *model.JobValue) int64 {
+	var at int64
+	err := r.ElementReplayHistory(jv.ProcessInstanceKey, func(ts int64, _ uint64, v state.ElementReplayValue) error {
+		if v.ElementInstanceKey == jv.ElementInstanceKey && v.Action == state.ReplayActivated {
+			at = ts
+			return errFound
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, errFound) {
+		return 0
+	}
+	return at
+}
+
+// The bounds on what taskContent returns per task. A task's content is for finding
+// it, not for reading it — the form does that — so a long value is cut and a scope
+// with many variables contributes its first few.
+const (
+	maxTaskContentValues = 40
+	maxTaskContentLen    = 200
+)
+
+// taskContent is the short text and number values visible at a task's scope: the
+// task's own variables and those of every enclosing scope up to the instance, the
+// same set its form is filled from. The inbox's filter matches against them, so a
+// person can find "every task about this recipient" by the recipient rather than by
+// a task name that is the same on every row.
+//
+// It returns what the viewer's form would already show them for the tasks they may
+// see, so it widens what a list row says, not who may read it.
+func taskContent(r elementReader, tr taskResp) []string {
+	scope := tr.ElementInstanceKey
+	if scope == 0 {
+		scope = tr.ProcessInstanceKey
+	}
+	var out []string
+	err := r.VisibleVariablesOfScope(scope, func(v *model.VariableValue) error {
+		if v.Kind != model.VarString && v.Kind != model.VarNumber {
+			return nil
+		}
+		text := strings.TrimSpace(v.Text)
+		if text == "" {
+			return nil
+		}
+		if len(text) > maxTaskContentLen {
+			text = strings.ToValidUTF8(text[:maxTaskContentLen], "")
+		}
+		out = append(out, text)
+		if len(out) >= maxTaskContentValues {
+			return errFound
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, errFound) {
+		return nil
+	}
+	return out
 }
 
 // deploymentMeta reads the loop-owned deployment registry. Only call it on the
@@ -112,6 +195,16 @@ func taskPriorityOf(tr taskResp) int32 {
 // ([taskfolder.Matcher.NeedsInstance]).
 func (s *Server) visitOpenTasks(before uint64, needInstance bool,
 	visit func(jobKey uint64, tr taskResp, ft taskfolder.Task) bool) (budgetHit bool, err error) {
+	return s.visitOpenTasksIn(before, needInstance, func(_ *state.ReadView, jobKey uint64, tr taskResp, ft taskfolder.Task) bool {
+		return visit(jobKey, tr, ft)
+	})
+}
+
+// visitOpenTasksIn is [Server.visitOpenTasks] with the snapshot the walk reads, for a
+// visitor that reads more about the tasks it keeps (a page asking for their content)
+// and should not pay for that on the tasks it skips.
+func (s *Server) visitOpenTasksIn(before uint64, needInstance bool,
+	visit func(rv *state.ReadView, jobKey uint64, tr taskResp, ft taskfolder.Task) bool) (budgetHit bool, err error) {
 	scanned := 0
 	err = s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
 		def := defsMeta(defs)
@@ -133,7 +226,7 @@ func (s *Server) visitOpenTasks(before uint64, needInstance bool,
 					ft.InstanceCreatedAt = pi.CreatedAt / int64(time.Millisecond)
 				}
 			}
-			if !visit(jobKey, tr, ft) {
+			if !visit(rv, jobKey, tr, ft) {
 				return errListTruncated
 			}
 			return nil
@@ -215,7 +308,7 @@ func (s *Server) listTasksForFolder(w http.ResponseWriter, r *http.Request, fold
 		return
 	}
 	now := time.Now()
-	s.pageOpenTasks(w, limit, before, matcher.NeedsInstance(), func(tr taskResp, ft taskfolder.Task) bool {
+	s.pageOpenTasks(w, limit, before, matcher.NeedsInstance(), wantsTaskContent(r), func(tr taskResp, ft taskfolder.Task) bool {
 		return s.taskVisibleTo(viewer, tr) && matcher.Match(ft, viewer, now)
 	})
 }
@@ -224,8 +317,8 @@ func (s *Server) listTasksForFolder(w http.ResponseWriter, r *http.Request, fold
 // task: the same page, cap and cursor, walked off the loop because it has to skip
 // what [Server.taskVisibleTo] withholds, exactly as a folder skips what its rule
 // does not select.
-func (s *Server) listVisibleTasks(w http.ResponseWriter, viewer taskfolder.User, limit int, before uint64) {
-	s.pageOpenTasks(w, limit, before, false, func(tr taskResp, _ taskfolder.Task) bool {
+func (s *Server) listVisibleTasks(w http.ResponseWriter, viewer taskfolder.User, limit int, before uint64, content bool) {
+	s.pageOpenTasks(w, limit, before, false, content, func(tr taskResp, _ taskfolder.Task) bool {
 		return s.taskVisibleTo(viewer, tr)
 	})
 }
@@ -233,12 +326,12 @@ func (s *Server) listVisibleTasks(w http.ResponseWriter, viewer taskfolder.User,
 // pageOpenTasks writes one newest-first page of the open user tasks keep selects.
 // It keeps the page cap, the truncation flag and the cursor the unfiltered listing
 // uses, so a filtered list pages exactly like "All tasks" does.
-func (s *Server) pageOpenTasks(w http.ResponseWriter, limit int, before uint64, needInstance bool,
+func (s *Server) pageOpenTasks(w http.ResponseWriter, limit int, before uint64, needInstance, content bool,
 	keep func(tr taskResp, ft taskfolder.Task) bool) {
 	tasks := []taskResp{}
 	var nextCursor uint64
 	full := false
-	budgetHit, scanErr := s.visitOpenTasks(before, needInstance, func(jobKey uint64, tr taskResp, ft taskfolder.Task) bool {
+	budgetHit, scanErr := s.visitOpenTasksIn(before, needInstance, func(rv *state.ReadView, jobKey uint64, tr taskResp, ft taskfolder.Task) bool {
 		if !keep(tr, ft) {
 			// A skipped task still advances the cursor: the next page must resume
 			// after everything this one looked at, not after the last row it kept.
@@ -248,6 +341,9 @@ func (s *Server) pageOpenTasks(w http.ResponseWriter, limit int, before uint64, 
 		if len(tasks) >= limit {
 			full = true
 			return false
+		}
+		if content {
+			tr.Content = taskContent(rv, tr)
 		}
 		tasks = append(tasks, tr)
 		nextCursor = jobKey

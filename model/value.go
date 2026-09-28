@@ -146,6 +146,12 @@ type JobValue struct {
 	// record written before it decodes to "", and a reader falls back to the model's
 	// own value for those.
 	CandidateGroups string
+	// CreatedAt is the unix-nano instant the job was created — when a user task was
+	// opened, which the inbox shows on every row. It is the JobCreated event's header
+	// timestamp, stamped by applyToState and carried by every later re-put of the job,
+	// so replay rebuilds it identically (I4/I6). Append-compatible: a record written
+	// before it decodes to 0, read as "not recorded".
+	CreatedAt int64
 }
 
 const jobSize = 8 + 8 + 4 + 4 + 8
@@ -162,7 +168,8 @@ func (v *JobValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.RetryDueDate))
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.LeaseExpiresAt))
 	dst = binary.LittleEndian.AppendUint64(dst, v.LeaseEpoch)
-	return appendString(dst, v.CandidateGroups)
+	dst = appendString(dst, v.CandidateGroups)
+	return binary.LittleEndian.AppendUint64(dst, uint64(v.CreatedAt))
 }
 
 func (v *JobValue) decode(src []byte) error {
@@ -191,11 +198,15 @@ func (v *JobValue) decode(src []byte) error {
 		v.LeaseEpoch = binary.LittleEndian.Uint64(rest[16:])
 	}
 	if len(rest) > 24 {
-		groups, _, err := readString(rest[24:])
+		groups, tail, err := readString(rest[24:])
 		if err != nil {
 			return err
 		}
 		v.CandidateGroups = groups
+		// CreatedAt follows the groups; a record written before it ends here.
+		if len(tail) >= 8 {
+			v.CreatedAt = int64(binary.LittleEndian.Uint64(tail))
+		}
 	}
 	return nil
 }
