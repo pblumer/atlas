@@ -172,5 +172,6 @@ func (p *Processor) collectionCeiling() int64 {
 func (p *Processor) tooLargeVariableMessage(name string, size, ceiling int64) string {
 	return "the value written to \"" + name + "\" is " + strconv.FormatInt(size, 10) +
 		" bytes, and the limit is " + strconv.FormatInt(ceiling, 10) +
-		". Check what produced it, then resolve to write it again"
+		". Check what produced it. Resolving this incident does not write it again, so the " +
+		"limit has to be raised before the work that produces a value this large runs"
 }
