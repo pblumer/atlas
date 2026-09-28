@@ -1,170 +1,10 @@
 {
-  "generatedAt": "2026-09-09",
+  "generatedAt": "2026-09-28",
   "entries": [
     {
-      "id": "a-refused-write-s-incident-no-longer-tells-you-to-resolve-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A refused write's incident no longer tells you to resolve it",
-        "de": "Der Incident einer abgelehnten Schreiboperation empfiehlt nicht mehr das Auflösen"
-      },
-      "summary": {
-        "en": "When a value is larger than its variable or collection budget, the element stops with an incident. That incident used to say \"resolve to write it again\", but resolving does not write the value: the incident disappears and the element stays where it stopped, now with no incident at all. The message now says so, and that the limit has to be raised before the work producing such a value runs. Making resolve continue the element is tracked in issue #1123.",
-        "de": "Ist ein Wert grösser als das Budget für eine Variable oder eine Sammlung, hält das Element mit einem Incident an. Dieser Incident empfahl bisher, ihn aufzulösen, damit der Wert geschrieben wird. Das Auflösen schreibt den Wert jedoch nicht: Der Incident verschwindet, und das Element bleibt stehen, danach ganz ohne Incident. Die Meldung sagt das jetzt und weist darauf hin, dass das Limit erhöht werden muss, bevor die Arbeit läuft, die einen solchen Wert erzeugt. Dass das Auflösen das Element fortsetzt, wird in Issue #1123 verfolgt."
-      },
-      "link": {
-        "label": "ADR-0294",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0294-a-variable-is-a-record.md"
-      },
-      "tags": [
-        "Engine",
-        "Operations"
-      ]
-    },
-    {
-      "id": "a-loop-whose-collection-outgrew-its-budget-while-it-filled-f",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A loop no longer loses its collected results without saying so",
-        "de": "Ein Loop verliert seine gesammelten Ergebnisse nicht mehr stillschweigend"
-      },
-      "summary": {
-        "en": "A multi-instance loop whose collected output grew past ATLAS_LIMIT_COLLECTION while it ran finished without the collection, and at the instance's root without an incident, so the process carried on as if the loop had produced nothing. The round that would take the collection past its budget now stops with an incident naming the collection and the size it would have reached, as it did in 0.6.0. Resolving that incident does not run the round again yet — it did not in 0.6.0 either — so the limit has to fit a loop before the loop runs.",
-        "de": "Ein Multi-Instance-Loop, dessen gesammelte Ausgabe während des Laufs über ATLAS_LIMIT_COLLECTION wuchs, wurde ohne die Sammlung abgeschlossen, auf oberster Ebene der Instanz sogar ohne Incident, und der Prozess lief weiter, als hätte der Loop nichts geliefert. Die Runde, welche die Sammlung über das Budget bringen würde, hält jetzt mit einem Incident an, der die Sammlung und die erreichte Grösse nennt, wie schon in 0.6.0. Das Auflösen dieses Incidents führt die Runde noch nicht erneut aus, auch in 0.6.0 nicht; das Limit muss deshalb zum Loop passen, bevor er läuft."
-      },
-      "link": {
-        "label": "ADR-0296",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0296-a-loop-records-its-element.md"
-      },
-      "tags": [
-        "Engine",
-        "Multi-instance"
-      ]
-    },
-    {
-      "id": "a-declared-type-now-reaches-a-decision-built-on-other-decisi",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A declared type reaches a decision built on other decisions",
-        "de": "Ein deklarierter Typ erreicht auch eine aufbauende Decision"
-      },
-      "summary": {
-        "en": "The engine converted an input by what the decision being evaluated declares itself. For a decision whose requirements are other decisions — the shape a well-factored model has at the top, and where a business rule task usually points — that is nothing at all, so nothing was converted. A date reached the decision that declares it as the text it was sent as, the comparison was null, and a decision table cannot tell null from false. The same sub-decision evaluated on its own was right, which is what made it so hard to see: the wrong answer appeared levels above its cause, with no diagnostic and no trace entry. A decision service inherited the correction, because its working set is built from its output decisions — and that set was empty for exactly the services that encapsulate something. Not everything moved: a service converts its inputs now but still does not refuse a wrongly-typed one, because the engine publishes no input schema for a service, so the same value is refused when a task names the decision and answered silently when it names the service over it.",
-        "de": "Die Engine hat eine Eingabe nach dem umgewandelt, was die ausgewertete Decision selbst deklariert. Bei einer Decision, deren Anforderungen andere Decisions sind — die Form, die ein sauber geschichtetes Modell oben hat, und wohin ein Business Rule Task in aller Regel zeigt —, ist das gar nichts, also wurde nichts umgewandelt. Ein Datum erreichte die Decision, die es deklariert, als die Zeichenkette, als die es gesendet wurde; der Vergleich war null, und eine Entscheidungstabelle kann null nicht von false unterscheiden. Dieselbe Sub-Decision allein ausgewertet war richtig — deshalb war es so schwer zu sehen: Die falsche Antwort erschien Ebenen über ihrer Ursache, ohne Diagnose und ohne Trace-Eintrag. Ein Decision Service hat die Korrektur geerbt, weil seine Arbeitsmenge aus seinen Output-Decisions gebildet wird — und diese Menge war für genau jene Services leer, die etwas kapseln. Nicht alles hat sich mitbewegt: Ein Service wandelt seine Eingaben jetzt um, verweigert eine falsch typisierte aber weiterhin nicht, weil die Engine für einen Service kein Eingabeschema veröffentlicht. Derselbe Wert wird also verweigert, wenn ein Task die Decision benennt, und still beantwortet, wenn er den Service darüber benennt."
-      },
-      "link": {
-        "label": "ADR-0419",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0419-a-declared-type-is-honoured-at-the-decision-boundary.md"
-      },
-      "tags": [
-        "Decisions",
-        "Engine"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "deploying-one-decision-now-versions-its-decision-service-too",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Deploying one decision versions its decision service too",
-        "de": "Ein Einzel-Deploy versioniert auch den Decision Service"
-      },
-      "summary": {
-        "en": "The Deploy button in the decision editor recorded a version for each decision in the model, but none for the decision service over them. Nothing broke at runtime, because a service is resolved either way and the newly deployed model evaluated correctly. What broke was everything built on the deployment record: the version list, the deployed-version chip in the editor, and the answer to which version a business rule task is pinned to all went on naming a superseded version, with nothing to suggest they were wrong. Publishing the whole application always recorded it correctly, so the same model deployed both ways told two different stories. The single-decision deploy now follows the same rule the application publish already stated: a decision service is published and versioned like a decision, because it is what a task names.",
-        "de": "Die Deploy-Schaltfläche im Decision-Editor hat für jede Decision des Modells eine Version aufgezeichnet, für den Decision Service darüber jedoch keine. Zur Laufzeit ist nichts ausgefallen, weil ein Service ohnehin aufgelöst wird und das neu deploytete Modell korrekt ausgewertet hat. Ausgefallen ist alles, was auf dem Deployment-Datensatz aufsetzt: Die Versionsliste, der Versions-Chip im Editor und die Antwort darauf, an welche Version ein Business Rule Task gebunden ist, nannten weiterhin eine abgelöste Version — ohne jeden Hinweis darauf, dass sie falsch lagen. Beim Publizieren der ganzen Applikation war der Eintrag immer korrekt; dasselbe Modell erzählte über die zwei Wege also zwei verschiedene Geschichten. Der Einzel-Deploy hält sich jetzt an dieselbe Regel, die das Applikations-Deploy bereits formuliert: Ein Decision Service wird wie eine Decision publiziert und versioniert, weil er das ist, was ein Task benennt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Decisions",
-        "Deployments"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Decisions",
-          "de": "Decisions öffnen"
-        },
-        "route": "#/operations/decisions"
-      }
-    },
-    {
-      "id": "a-business-rule-task-refuses-a-wrongly-typed-input-instead-o",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "A wrongly-typed input stops the task instead of answering wrongly",
-        "de": "Eine falsch typisierte Eingabe hält den Task an, statt falsch zu antworten"
-      },
-      "summary": {
-        "en": "A variable of the wrong type is not an error in FEEL. A \"500\" where the model declares number made every comparison against it null, so no rule matched, the catch-all row answered, and the token carried on with a plausible wrong result. Nothing downstream could tell it from a right one: no diagnostic, no trace entry, no incident — only a process that went the other way. Now the evaluation is refused before it runs. The job fails, its retries run out, and the incident carries the mismatch, naming every wrongly-typed input rather than only the first; retry behaviour is otherwise unchanged. Only a type mismatch is refused: an input the decision does not declare is still ignored, because a task's mapping may legitimately carry a row the decision never reads, and a missing required input is still refused by the engine itself with a better message. Nothing deployed here changes behaviour, and that was measured rather than assumed: all 495 retained evaluations across 11 decisions were checked, and not one value contradicts its declared type. Where such a mapping does exist, this is a behaviour change on processes already running — the task stops instead of passing a wrong value on, all at once at upgrade. A decision service is not covered yet, nor is a null where a type is declared.",
-        "de": "Ein Wert mit falschem Typ ist in FEEL kein Fehler. Ein \"500\" dort, wo das Modell number deklariert, machte jeden Vergleich damit zu null: Keine Zeile traf zu, die Auffangzeile antwortete, und das Token lief mit einem plausiblen falschen Ergebnis weiter. Nachgelagert war das von einem richtigen nicht zu unterscheiden — keine Diagnose, kein Trace-Eintrag, kein Incident, nur ein Prozess, der den anderen Weg genommen hat. Jetzt wird die Auswertung vorher verweigert. Der Job scheitert, seine Wiederholungen laufen aus, und der Incident trägt den Konflikt; er benennt jede falsch typisierte Eingabe und nicht nur die erste. Am Wiederholungsverhalten ändert sich sonst nichts. Geprüft wird, was ein Task tatsächlich sendet: die Blatt-Eingaben des gesamten Anforderungsgraphen der Decision, nicht nur die direkt deklarierten — damit ist auch eine Decision abgedeckt, die auf anderen Decisions aufbaut. Verweigert wird ausschliesslich ein Typkonflikt: Eine Eingabe, die die Decision nicht deklariert, wird weiterhin ignoriert, weil das Mapping eines Tasks berechtigterweise eine Zeile führen kann, die die Decision nie liest; eine fehlende Pflichteingabe verweigert die Engine weiterhin selbst, mit der besseren Meldung. An nichts hier Deploytem ändert sich das Verhalten, und das wurde gemessen statt angenommen: Alle 495 aufbewahrten Auswertungen über 11 Decisions wurden geprüft, und kein einziger Wert widerspricht seinem deklarierten Typ. Wo ein solches Mapping besteht, ist es für bereits laufende Prozesse eine Verhaltensänderung: Der Task bleibt stehen, statt einen falschen Wert weiterzureichen — auf einmal, beim Upgrade. Noch nicht abgedeckt sind ein Decision Service und ein Null-Wert dort, wo ein Typ deklariert ist."
-      },
-      "link": {
-        "label": "ADR-0419",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0419-a-declared-type-is-honoured-at-the-decision-boundary.md"
-      },
-      "tags": [
-        "Decisions",
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Incidents",
-          "de": "Incidents öffnen"
-        },
-        "route": "#/operations/incidents"
-      }
-    },
-    {
-      "id": "a-decision-s-date-inputs-are-dates-again-adr-0419",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A decision's date inputs are dates again",
-        "de": "Datums-Eingaben einer Decision sind wieder Datumswerte"
-      },
-      "summary": {
-        "en": "An element that declares typeRef=\"date\" was handed its value as a plain string, because JSON has no date and nothing between the two consulted the declaration. A decision table column typed date whose rule read `< date(\"2026-01-01\")` therefore matched nothing: the catch-all row answered, with no diagnostic, no trace entry and no error — a wrong answer that nothing downstream could tell from a right one, in the test panel and, through the same evaluation path, in a running business rule task. The fix is in the engine rather than here: temis now converts an input by the type the model declares, in ISO 8601 and nothing else (a locale-dependent spelling would mean guessing between 03.04.2026 and 04.03.2026), reports a string the type cannot be made from as a type mismatch instead of passing it through, and names a value by its FEEL type rather than its Go type. Nothing deployed here changes behaviour, and that was measured rather than assumed: across all 12 registered model handles and all 19 decisions on the running instance, every declared input type is string, number, or undeclared — not one date, time or duration.",
-        "de": "Ein Element mit typeRef=\"date\" bekam seinen Wert als schlichte Zeichenkette, weil JSON kein Datum kennt und nichts dazwischen die Deklaration gelesen hat. Eine als date typisierte Tabellenspalte, deren Regel `< date(\"2026-01-01\")` lautete, traf deshalb nie zu: Die Auffangzeile antwortete — ohne Diagnose, ohne Trace-Eintrag, ohne Fehler. Eine falsche Antwort, die nachgelagert von einer richtigen nicht zu unterscheiden war, im Testpanel wie über denselben Auswertungspfad in einem laufenden Business Rule Task. Der Fix liegt in der Engine und nicht hier: temis wandelt eine Eingabe jetzt nach dem im Modell deklarierten Typ um, ausschliesslich in ISO 8601 (eine gebietsabhängige Schreibweise hiesse, zwischen 03.04.2026 und 04.03.2026 zu raten), meldet eine Zeichenkette, aus der sich der Typ nicht bilden lässt, als Typkonflikt statt sie durchzureichen, und benennt einen Wert über seinen FEEL-Typ statt über seinen Go-Typ. An nichts Deploytem ändert sich das Verhalten, und das wurde gemessen statt angenommen: Über alle 12 registrierten Modell-Handles und alle 19 Decisions der laufenden Instanz ist jeder deklarierte Eingabetyp string, number oder gar nicht deklariert — kein einziges Datum, keine Zeit, keine Dauer."
-      },
-      "link": {
-        "label": "ADR-0419",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0419-a-declared-type-is-honoured-at-the-decision-boundary.md"
-      },
-      "tags": [
-        "Decisions",
-        "Engine"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
       "id": "a-deployment-target-can-name-a-second-credential-for-reading",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.7.0",
+      "date": "2026-09-28",
       "category": "Added",
       "title": {
         "en": "A deployment target can name one credential for publishing and one for reading",
@@ -176,7 +16,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
       },
       "tags": [
         "Operations",
@@ -185,8 +25,8 @@
     },
     {
       "id": "the-decision-picker-tells-a-decision-service-s-answer-from-i",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.7.0",
+      "date": "2026-09-28",
       "category": "Added",
       "title": {
         "en": "The picker tells a decision service's answer from its workings",
@@ -198,7 +38,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
       },
       "tags": [
         "Modeler",
@@ -214,8 +54,8 @@
     },
     {
       "id": "the-decision-picker-says-when-a-decision-is-not-deployed",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.7.0",
+      "date": "2026-09-28",
       "category": "Added",
       "title": {
         "en": "The decision picker says when a decision is not deployed yet",
@@ -227,7 +67,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
       },
       "tags": [
         "Modeler",
@@ -243,8 +83,8 @@
     },
     {
       "id": "the-test-panel-s-fields-follow-the-type-the-decision-declare",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.7.0",
+      "date": "2026-09-28",
       "category": "Added",
       "title": {
         "en": "Testing a decision offers the right field for each input",
@@ -256,7 +96,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
       },
       "tags": [
         "Modeler",
@@ -272,8 +112,8 @@
     },
     {
       "id": "a-decision-says-where-its-diagram-and-its-logic-disagree-and",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.7.0",
+      "date": "2026-09-28",
       "category": "Added",
       "title": {
         "en": "A decision's diagram and its logic are kept in step",
@@ -285,7 +125,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
       },
       "tags": [
         "Modeler",
@@ -301,8 +141,8 @@
     },
     {
       "id": "a-decision-s-input-columns-follow-the-graph-they-come-from-a",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.7.0",
+      "date": "2026-09-28",
       "category": "Added",
       "title": {
         "en": "A decision's columns follow the diagram, and nothing is thrown away unasked",
@@ -314,7 +154,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
       },
       "tags": [
         "Modeler",
@@ -326,6 +166,182 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
+      }
+    },
+    {
+      "id": "the-shop-works-on-a-phone",
+      "version": "0.7.0",
+      "date": "2026-09-28",
+      "category": "Added",
+      "title": {
+        "en": "The shop works on a phone",
+        "de": "Der Shop funktioniert auf dem Handy"
+      },
+      "summary": {
+        "en": "Below 860px every view of the shop is one column wide. The catalogue shows the column you have reached, and a stepper above it goes back and names the path so far. The basket stacks each offering over its own services and options. My orders is a list of cards, with each position's tasks, and the form to answer one, at the card's width. The buttons grow to a fingertip's size. A wide screen keeps its layout.",
+        "de": "Unter 860 px Breite ist jede Ansicht des Shops einspaltig. Der Katalog zeigt die Spalte, bei der man gerade ist; eine Leiste darüber führt zurück und nennt den bisherigen Weg. Der Warenkorb zeigt jedes Angebot mit seinen Services und Optionen darunter. «Meine Aufträge» ist eine Liste von Karten, mit den Aufgaben jeder Position und dem Formular zu ihrer Erledigung in der Breite der Karte. Die Schaltflächen sind gross genug für den Finger. Auf breiten Bildschirmen bleibt die bisherige Darstellung."
+      },
+      "link": {
+        "label": "ADR-0417",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0417-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md"
+      },
+      "tags": [
+        "Shop"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the shop on a phone, or narrow the browser window below 860px.",
+          "In the catalogue, choose a category, a group and a product; use Back to return.",
+          "Under My orders, open a task with Work on it and answer it in the card."
+        ],
+        "de": [
+          "Den Shop auf dem Handy öffnen oder das Browserfenster schmaler als 860 px machen.",
+          "Im Katalog eine Kategorie, eine Gruppe und ein Produkt wählen; mit «Zurück» geht es zurück.",
+          "Unter «Meine Aufträge» eine Aufgabe mit «Erledigen» öffnen und in der Karte erledigen."
+        ]
+      }
+    },
+    {
+      "id": "tasks-works-on-a-phone",
+      "version": "0.7.0",
+      "date": "2026-09-28",
+      "category": "Added",
+      "title": {
+        "en": "Tasks works on a phone",
+        "de": "Tasks funktioniert auf dem Handy"
+      },
+      "summary": {
+        "en": "Below 860px the inbox and Start show the list or the open task, not both, and a task opens with a button back to the list. The folders become a row of chips, and a task's fields put their label above the value. An access review row is a card with its two answers under it. The top bar keeps its icons on screen and scrolls the view names instead. Between 861px and 1180px the inbox keeps its three panes at narrower widths.",
+        "de": "Unter 860 px Breite zeigen Posteingang und «Start» entweder die Liste oder die geöffnete Aufgabe, nicht beides; eine Aufgabe öffnet sich mit einer Schaltfläche zurück zur Liste. Die Ordner werden zu einer Reihe von Chips, und die Felder einer Aufgabe zeigen die Beschriftung über dem Wert. Eine Zeile der Rezertifizierung ist eine Karte mit den beiden Antworten darunter. Die obere Leiste behält ihre Symbole im Bild und lässt stattdessen die Ansichtsnamen seitlich scrollen. Zwischen 861 px und 1180 px behält der Posteingang seine drei Bereiche in schmaleren Breiten."
+      },
+      "link": {
+        "label": "ADR-0417",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0417-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md"
+      },
+      "tags": [
+        "Tasks"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Tasks on a phone, or narrow the browser window below 860px.",
+          "Open a task from the list; use Back to the list to return.",
+          "Under Access review, answer a row with Still needed or Withdraw… in its card."
+        ],
+        "de": [
+          "Tasks auf dem Handy öffnen oder das Browserfenster schmaler als 860 px machen.",
+          "Eine Aufgabe in der Liste öffnen; mit «Back to the list» geht es zurück.",
+          "Unter «Access review» eine Zeile in ihrer Karte mit «Still needed» oder «Withdraw…» beantworten."
+        ]
+      }
+    },
+    {
+      "id": "a-decision-service-s-name-can-be-moved-out-of-the-way-and-th",
+      "version": "0.7.0",
+      "date": "2026-09-28",
+      "category": "Added",
+      "title": {
+        "en": "Move a decision service's name, and fold it from the box",
+        "de": "Namen eines Decision Service verschieben, Einklappen direkt in der Box"
+      },
+      "summary": {
+        "en": "DMN requires a decision service's name inside the shape and says nothing about where — and its own figures disagree, one drawing it centred at the top and three at the top left. Whichever corner an editor picks is wrong for some diagram: the name lands on a decision, or on an arrow crossing the border. So it starts at the top left, and a grab handle over it drags it anywhere inside the box, above the dividing line — where DMN puts the name, alongside the decisions the service publishes. Where you put it is stored as the shape's label bounds, DMN's own place for it, so it survives a save and means the same thing to another tool; nothing is written until you move it. Folding the service away has moved too: from the context menu into the box, as a plus at the bottom edge while the definition is hidden and a minus while it is shown, in the same place either way.",
+        "de": "DMN verlangt den Namen eines Decision Service innerhalb der Form und sagt nichts darüber, wo — und die eigenen Abbildungen widersprechen sich: eine zeichnet ihn oben mittig, drei oben links. Welche Ecke ein Editor auch wählt, für irgendein Diagramm ist sie falsch: Der Name landet auf einer Decision oder auf einem Pfeil, der den Rand kreuzt. Er beginnt deshalb oben links, und ein Griff über dem Namen zieht ihn an jede Stelle innerhalb der Box, oberhalb der Trennlinie — dorthin, wo DMN den Namen zusammen mit den veröffentlichten Decisions verortet. Die gewählte Stelle wird als Label-Bounds der Form gespeichert, also dort, wo DMN sie vorsieht; sie übersteht das Speichern und bedeutet für ein anderes Werkzeug dasselbe. Geschrieben wird erst, wenn Sie den Namen bewegen. Auch das Einklappen ist umgezogen: vom Kontextmenü in die Box, als Plus am unteren Rand bei verborgener Definition und als Minus bei sichtbarer — beides an derselben Stelle."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-decision-service-s-name-box-can-be-resized-and-its-name-is",
+      "version": "0.7.0",
+      "date": "2026-09-28",
+      "category": "Added",
+      "title": {
+        "en": "The name of a decision service has a size you can set",
+        "de": "Der Name eines Decision Service hat eine Grösse, die Sie festlegen"
+      },
+      "summary": {
+        "en": "Moving the name was half the answer: where it goes decides what it collides with, and how wide it is decides whether it reads at all. A grip on each corner of the selected name now drags its box wider, narrower, taller or shorter, holding the opposite corner still. The box stays inside the service and above the dividing line, and the size is written to the same place DMN keeps the name's position, so it survives a save and means the same thing to another tool. Underneath was a fault the size made visible: dragging a name once brought it back with the word broken across two lines — \"MyServic\" over \"e\" — because the box was measured to the text's own width and the layout wants a hair more than that before it calls a line a fit. The box is rounded up now, and never narrower than the name's longest word, so a name that wraps wraps between words. There is no size at which a word is cut in half.",
+        "de": "Das Verschieben des Namens war die halbe Antwort: Wohin er geht, entscheidet, womit er kollidiert; wie breit er ist, entscheidet, ob er überhaupt lesbar ist. An jeder Ecke des ausgewählten Namens sitzt jetzt ein Griff, der seinen Kasten breiter, schmaler, höher oder niedriger zieht, während die gegenüberliegende Ecke stehen bleibt. Der Kasten bleibt innerhalb des Service und oberhalb der Trennlinie, und die Grösse wird dorthin geschrieben, wo DMN auch die Position des Namens führt — sie übersteht damit ein Speichern und bedeutet für ein anderes Werkzeug dasselbe. Darunter lag ein Fehler, den die Grösse sichtbar machte: Ein einmal verschobener Name kam mit einem über zwei Zeilen zerschnittenen Wort zurück — «MyServic» über «e» — weil der Kasten auf die Breite des Textes selbst gemessen wurde und das Layout eine Spur mehr verlangt, bevor es eine Zeile als passend ansieht. Der Kasten wird jetzt aufgerundet und ist nie schmaler als das längste Wort des Namens. Ein Name, der umbricht, bricht damit zwischen Wörtern um; es gibt keine Grösse, bei der ein Wort zerschnitten wird."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "an-order-in-the-shop-says-whom-each-position-waits-for-and-w",
+      "version": "0.7.0",
+      "date": "2026-09-28",
+      "category": "Added",
+      "title": {
+        "en": "The shop shows whom an order waits for",
+        "de": "Der Shop zeigt, auf wen ein Auftrag wartet"
+      },
+      "summary": {
+        "en": "An order's row said \"Waiting\" and not on whom. Under each position the shop now lists the open tasks of the processes working it and whom each waits for — for an approval, the named person, the group or the line manager. Whoever may work a task opens its form right in the row and completes it there. The orderer and the recipient see their orders' tasks; a line manager who has to approve an order sees that order too, marked as one to handle. Orders placed before this update show no tasks. Approvals, in Tasks and in the approval form, now name the recipient and the orderer instead of showing their account ids.",
+        "de": "In der Zeile eines Auftrags stand «Wartet», aber nicht, auf wen. Unter jeder Position zeigt der Shop jetzt die offenen Aufgaben der Prozesse, die sie bearbeiten, und auf wen jede wartet – bei einer Genehmigung die festgelegte Person, die Gruppe oder die vorgesetzte Person. Wer eine Aufgabe bearbeiten darf, öffnet ihr Formular direkt in der Zeile und schliesst sie dort ab. Besteller und Empfänger sehen die Aufgaben ihrer Aufträge; eine vorgesetzte Person, die einen Auftrag genehmigen muss, sieht diesen Auftrag ebenfalls, gekennzeichnet als zu bearbeiten. Aufträge von vor diesem Update zeigen keine Aufgaben. Genehmigungen nennen in Tasks und im Genehmigungsformular Empfänger und Besteller jetzt mit Namen statt mit ihrer Benutzerkennung."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
+      },
+      "tags": [
+        "Service catalogue",
+        "Shop"
+      ],
+      "tutorial": {
+        "en": [
+          "Order a product that needs an approval.",
+          "Open \"My orders\": under the position stands the approval and whom it waits for.",
+          "Sign in as the approver, open \"My orders\", press \"Work on it\" on the task and complete it."
+        ],
+        "de": [
+          "Ein Produkt bestellen, das eine Genehmigung braucht.",
+          "«Meine Aufträge» öffnen: Unter der Position steht die Genehmigung und auf wen sie wartet.",
+          "Als genehmigende Person anmelden, «Meine Aufträge» öffnen, bei der Aufgabe «Erledigen» wählen und abschliessen."
+        ]
+      }
+    },
+    {
+      "id": "the-portal-speaks-french-and-italian",
+      "version": "0.7.0",
+      "date": "2026-09-28",
+      "category": "Added",
+      "title": {
+        "en": "The portal speaks French and Italian.",
+        "de": "The portal speaks French and Italian."
+      },
+      "summary": {
+        "en": "It had German and English, so a catalogue kept in French or Italian carried translations that no reader could ever select: the switch will not offer a language the page cannot render whole, and the page could not render those.",
+        "de": "It had German and English, so a catalogue kept in French or Italian carried translations that no reader could ever select: the switch will not offer a language the page cannot render whole, and the page could not render those."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
       }
     }
   ]

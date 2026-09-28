@@ -12,122 +12,85 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
-### Fixed
+## [0.7.0] — 2026-09-28
 
-- **A refused write's incident no longer tells you to resolve it.** A value past its
-  variable or collection budget ([ADR-0294](docs/adr/0294-a-variable-is-a-record.md))
-  parks its element with an incident, and the incident
-  said: *check what produced it, then resolve to write it again*. Resolving does not write
-  it again. Nothing re-runs the refused write, so the incident is deleted and the element
-  stays where it stopped — now with no incident at all, which is harder to find than the
-  refusal was. Measured for a job's result and for a loop's round; on v0.6.0 the loop
-  behaved the same way. The message now says that resolving does not write the value,
-  and that the limit has to be raised before the work that produces such a value runs.
-  Making resolve resume the element needs a decision about where a refused value is
-  kept until then, and is tracked in
-  [issue #1123](https://github.com/pblumer/atlas/issues/1123).
+**This release is about what an organisation offers, and who holds it.** Atlas gains a
+self-service catalogue: products with their variants, an approval rule and the processes
+that provision and revoke them, published as frozen releases. People order in the
+**shop** from the one catalogue their groups reach — in German, English, French or
+Italian, and on a phone. An approval is an ordinary user task, decided in the Tasks inbox.
+What was provisioned becomes an **inventory** of what each person holds, kept as engine
+state of its own so that retention cannot delete it; it can be reconciled against what a
+target system actually says, recertified by asking whether somebody still needs it, and
+ended by date. Accounts and groups can be mirrored from a Microsoft Entra tenant. About a
+hundred of this release's 250 entries are this one line of work, which is why several of
+them rename or remove things that never shipped in a release — the portal became the shop,
+and its approval page folded into the inbox.
 
-- **A loop whose collection outgrew its budget while it filled finished without it.**
-  Since a loop records one element per round rather than the whole list
-  ([ADR-0296](docs/adr/0296-a-loop-records-its-element.md)), nothing measured the list
-  against `ATLAS_LIMIT_COLLECTION` while it filled. The promotion that measured it at the
-  end refused it, ignored its own refusal and completed the loop: the collection was
-  gone, and for a loop at the instance's root the incident went with the element that
-  carried it. The process carried on with the collection unset. v0.6.0 parked the round
-  that took the list past its budget, and that is what happens again: each round measures
-  the list its element produces before the element is recorded, and the incident names
-  the collection and the size it would have reached. The log still carries one element
-  per round. The measure is taken in memory, and a list is only re-serialised for it
-  when it is within one element of its budget, so a loop that ends exactly at the budget
-  still completes. ADR-0296 is amended to say so. Resolving the incident does not run the
-  round again yet — it did not in 0.6.0 either — so the budget has to fit a loop before
-  the loop runs.
+**Decisions are deployment artifacts of their own.** Publishing deploys a DMN model as a
+versioned decision deployment, and a process resolves `latest` once, when it is deployed,
+instead of whenever a token arrives — so publishing a new decision no longer changes
+processes that are already running. The decision editor is a page of the Modeler with
+drafts, a test panel and single-decision deploy; it opens DMN 1.5 models, and it draws,
+folds and lays out decision services, which a business rule task can now call. At the
+boundary, a business rule task refuses an input whose type contradicts the decision's
+declaration, rather than letting every comparison against it go null and the catch-all
+row answer.
 
-- **A declared type now reaches a decision built on other decisions (ADR-0419).** The
-  engine converted an input by what the decision being evaluated declares *itself*.
-  For a decision whose requirements are other decisions — the shape a well-factored
-  model has at the top, and where a business rule task usually points — that is
-  nothing at all, so nothing was converted. A `date` reached the decision that
-  declares it as the text it was sent as, the comparison was null, and a decision
-  table cannot tell null from false. The same sub-decision evaluated on its own was
-  right, which is what made it so hard to see: the wrong answer appeared levels above
-  its cause, with no diagnostic and no trace entry.
+**The architecture around the processes has a model of its own.** Business capabilities and
+value streams are drawn and kept in one register, with service levels that are measured
+rather than only declared. The information model can be read off the processes instead of
+typed in beside them, and Atlas reports the difference between what the processes build and
+what the model plans. The Starmap sizes the estate by load, by incidents or by how long they
+have stood, draws a Product Map beside it, and a new estate view takes in every configured
+deployment target.
 
-  Carried by the engine bump. A decision service inherited the correction, because
-  its working set is built from its output decisions — and that set was empty for
-  exactly the services that encapsulate something.
+**And fewer failures stay silent or stall everything else.** A server whose store had grown
+froze for seconds at a time, on a cadence: publishing a checkpoint and resolving the WAL
+compaction cut read the whole store while holding the run loop. That work now runs off it
+([ADR-0382](docs/adr/0382-whole-store-reads-leave-the-writer.md)). A stored
+definition that a newer compiler rule would refuse no longer stops the server from starting.
+An outage now trips a breaker at the worker instead of an incident at every token, an
+incident flood is read by cause and cleared in one action, and a model fix reaches an
+instance whose tokens cannot be carried across by continuing it in a new one. Completing,
+claiming or releasing a user task now requires holding it — in 0.6.0 any signed-in account
+could decide any task by its key. Personal data can be declared per process and erased by
+destroying one key per data subject, and model-authored scripts no longer see the server's
+credentials.
 
-  Not everything moved: a service converts its inputs now but still does not refuse a
-  wrongly-typed one, because the engine publishes no input schema for a service. The
-  same value is refused when a task names the decision and answered silently when it
-  names the service over it. That is asserted rather than left to be rediscovered.
+**Read this before upgrading from 0.6.0.** These act on an existing installation:
 
-- **Deploying one decision now versions its decision service too.** The Deploy button
-  in the decision editor — and the single-decision deploy behind it — recorded a
-  version for each decision in the model but none for the decision service over them.
-  Nothing broke at runtime, because a service is resolved either way and the new model
-  evaluated correctly; what broke was every surface built on the deployment record. The
-  version list, the editor's deployed-version chip and the answer to "which version is
-  this task pinned to" all went on naming a superseded version, with nothing to suggest
-  they were wrong. Publishing the whole application always did it correctly, so a model
-  deployed both ways told two different stories.
-
-### Changed
-
-- **A business rule task refuses a wrongly-typed input instead of answering wrongly
-  (ADR-0419).** A variable of the wrong type is not an error in FEEL. A `"500"` where the
-  model declares `number` made every comparison against it null, so no rule matched, the
-  catch-all row answered, and the token carried on with a plausible wrong result. Nothing
-  downstream could tell it from a right one: no diagnostic, no trace entry, no incident —
-  only a process that went the other way.
-
-  Now the evaluation is refused before it runs. The job fails, its retries run out, and
-  the incident carries the mismatch, naming every wrongly-typed input rather than only
-  the first. Retry behaviour is unchanged.
-
-  The check covers the inputs a task actually sends — the leaf inputs of the decision's
-  whole requirements graph, not just the ones it declares directly. That matters for any
-  model with a top decision built on other decisions: such a decision declares no inputs
-  of its own, so a narrower check would pass every value it is sent without looking at
-  one, which is exactly where a business rule task usually points.
-
-  Only a type mismatch is refused. An input the decision does not declare is still
-  ignored, because a task's io-mapping may legitimately carry a row the decision never
-  reads; a missing required input is still refused by the engine itself, with a better
-  message; and an out-of-range value is a question for its own record.
-
-  **Nothing here changes behaviour, and that was measured rather than assumed.** Every
-  retained evaluation of every deployed decision — 495 across 11 decisions — was run
-  through the same check: not one value contradicts its declared type, so not one would
-  have been refused. The measurement also confirmed the narrow scope: one decision is
-  supplied two inputs its model does not declare, and both of its evaluations would have
-  failed had an undeclared input been refused too.
-
-  For an installation that does have such a mapping, this is still a behaviour change on
-  processes already running: the task stops instead of passing a wrong value on, all at
-  once, at upgrade. Two cases stay uncovered — a decision **service**, because the engine
-  publishes no input schema for one yet, and a `null` where a type is declared, which is
-  a question about an absent variable rather than a wrongly typed one.
-
-### Fixed
-
-- **A decision's date inputs are dates again (ADR-0419).** A DMN element that declares
-  `typeRef="date"` was handed its value as a plain string, because JSON has no date and
-  nothing between the two consulted the declaration. A decision table column typed
-  `date` whose rule read `< date("2026-01-01")` therefore matched nothing: the catch-all
-  row answered, with no diagnostic, no trace entry and no error. A wrong answer that
-  nothing downstream could tell from a right one — in the test panel and, through the
-  same evaluation path, in a running business rule task.
-
-  The fix is in the engine, not here: temis now converts an input by the type the model
-  declares (ISO 8601 and nothing else — a locale-dependent spelling would mean guessing
-  between 03.04.2026 and 04.03.2026), reports a string the type cannot be made from as a
-  type mismatch instead of passing it through, and names a FEEL value by its FEEL type
-  rather than its Go type. Atlas carries it by the module bump.
-
-  **Nothing deployed here changes behaviour, and that was measured rather than assumed:**
-  across all 12 registered model handles and all 19 decisions on the running instance,
-  every declared input type is `string`, `number`, or undeclared — not one temporal type.
+- A breaking API change: `GET /api/v1/tasks`, `/instances`, `/instances/search`,
+  `/incidents` and `/audit` answer with `{items, total, totalExact, truncated, nextCursor}`
+  instead of a bare array, and the `X-*-Truncated` and `X-*-Next-Cursor` headers are gone.
+  **Every client of these endpoints has to change.**
+- A user task the model addressed is completed, claimed or released only by whoever holds
+  it, an operator or an administrator; anybody else gets **403**.
+- The shipped user-management processes named their mail worker after a person; every
+  process Atlas ships now names **`mail`**. Configure a mail worker under that name. The
+  shipped processes deploy as new versions on the first start, and instances already running
+  stay on the version — and the worker name — they started with.
+- A business rule task whose input contradicts the type its decision declares now stops with
+  an incident instead of answering, on instances already running too.
+- A BPMN deploy refuses a FEEL call to a function that does not exist (`is defined` is the
+  usual one). A definition stored before still loads and runs as it did and says so in the
+  log (`deployment.reloaded_with_problems`); redeploying it needs the expression fixed.
+- A process deployed before keeps resolving a decision's `latest` version when the task
+  activates; redeploying it pins the version at deploy time.
+- A value past its variable or collection budget now parks its element with an incident
+  instead of letting it complete without the value. Resolving that incident does not write
+  the value again (issue #1123): raise `ATLAS_LIMIT_VARIABLE` or `ATLAS_LIMIT_COLLECTION`
+  before the work runs.
+- A model-authored script starts from an allowlisted environment, so a script that read a
+  variable from the server's environment no longer sees it.
+- The state store's block cache now defaults to 64 MB and its write buffer to 16 MB
+  (`--state-cache-mb`, `--state-memtable-mb`; 0 restores Pebble's defaults), which costs
+  resident memory on a small machine.
+- No upgrade grants the new `productmanager` role; somebody has to be given it before a
+  catalogue can be maintained.
+- Treat the upgrade as one-way. 0.7.0 writes records 0.6.x has no replay rule for — a
+  loop's element, an entitlement — so take a backup before upgrading and restore it, rather
+  than starting 0.6.x on a data directory 0.7.0 has written.
 
 ### Added
 
@@ -273,8 +236,6 @@ _Changed_ / _Removed_ for each version.
   shown, in the same place either way — where a collapsed sub-process carries its
   own, and where a reader looks for it.
 
-### Added
-
 - **A decision service's name box can be resized, and its name is never cut in half.**
   Moving the name was half the answer: where it goes decides what it collides with,
   and how wide it is decides whether it reads at all. A grip on each corner of the
@@ -289,499 +250,6 @@ _Changed_ / _Removed_ for each version.
   it calls a line a fit. The box is rounded up now, and never narrower than the
   name's longest word, so a name that wraps wraps between words. There is no size at
   which a word is cut in half.
-
-### Fixed
-
-- **A right withdrawn in an access review leaves the inventory.** Withdrawing a
-  right an order granted started the product's deprovisioning with the product and
-  the holder only. A process that finds what it provisioned by the order found
-  nothing, and it could not report the line returned, so the right stayed in the
-  inventory and the next campaign asked about it again. A withdrawal of an ordered
-  right now goes back through its order, as a return does: the line is returning,
-  and the process starts with the order, the position and the reason. A line the
-  order will not give back, because it is already going back or something still
-  needs it, is refused and the row stays unanswered, instead of a second
-  deprovisioning running beside the first. Rights without an order are unchanged
-  ([ADR-0418](docs/adr/0418-a-withdrawn-ordered-right-goes-back-through-its-order.md)).
-
-- **A decision service's border no longer ends up over the arrows crossing it,
-  whatever you did to it.** This was fixed twice before, once for drawing a service
-  and once for moving one, and reported a third time. Each fix was a rule about one
-  gesture, and there are more gestures than anyone can list — so the third report was
-  answered differently. The rule is now asserted where the drawing order is actually
-  decided, on every change, rather than at each gesture that might disturb it. It
-  therefore holds for gestures nobody thought of, including ones added later. A
-  newly drawn service still starts at the very back, behind any service already
-  there, so that two overlapping boxes do not hide each other's decisions.
-
-- **Access review and Reconciliation open again.** Both pages showed an error card,
-  "gen is not defined", instead of their rows. The router handed each a check
-  for whether a later navigation had replaced it, over a value neither route had
-  set, and the page's first use of that check threw. Both routes now set it, as the
-  routes beside them already did.
-
-- **A task's checkbox in the shop is a checkbox again.** A task answered inside an
-  order row drew its checkbox as wide as the table cell, with the label pushed off the
-  end. The orders table's field rule reached the task form's inputs too; it now styles
-  the filter row only.
-
-- **Withdrawing an order stops the processes already working it.** A cancelled
-  position's approval was cancelled with it, and nothing else. But a position reads
-  pending until its provisioning reports, so it can be withdrawn while that process
-  is running — and its step stayed open under the cancelled order, in somebody's
-  inbox and in the shop ("enter the address for the new account" beneath a line that
-  says Cancelled). Withdrawing an order, or one position of it, now cancels every
-  still-running instance the order recorded on that position. Cancelling stops the
-  work; what the process already did in a target system is not undone.
-
-- **A task a model assigns to the person who ordered is now theirs to answer.** A
-  model assigns a task with an expression, and the variable it has for a person is
-  usually an id: an order carries its orderer and its recipient as principal ids
-  (`usr_…`). A task assigned `assignee="=orderer"` was created, listed under the order in the
-  shop — and refused to the orderer, because the check compared the assignee with
-  the username alone. Only operators and administrators could answer it. The check
-  now accepts either spelling, the username or the principal id, which is what the
-  mail directory already accepted when it decides whom a notification reaches: the
-  people a mail about a task reaches and the people who may act on it have to be
-  the same set. The shop names such an assignee by display name rather than by id.
-  The "Assigned to me" folder still matches usernames only.
-
-- **Moving a decision service hid the arrows crossing it, and left its name behind.**
-  The box around a decision service is a background — arrows are meant to cross its
-  border — and a newly drawn one already went behind what was there. Moving one did
-  not: the library underneath moves a shape by taking it out of the diagram and
-  putting it back, and putting it back with nothing said about where means at the
-  end, which is on top. A stored file therefore drew correctly right up to the moment
-  you nudged the box, at which point the arrow crossing its border disappeared
-  underneath it.
-
-  The name had the matching problem. Where you put it is recorded in diagram
-  coordinates, which is the right place for it and is also why it stopped being true
-  the moment the box moved: nothing kept the two in step, so dragging the box left
-  the name standing where it was. The further the box travelled, the further outside
-  it the name sat — and DMN says the name is displayed *inside* the shape. Resizing
-  had the mirror image: the name stayed put while the box shrank past it.
-
-  It took the tool strip with it, which looked like a third, unrelated fault and was
-  this one: the strip is placed from the element's *drawn* extent, and a name drawn
-  outside the box stretches that extent to cover both, so the strip opened beside the
-  stray name rather than beside the service.
-
-  The name now keeps its place in the box: a move carries it along, a resize carries
-  it with whichever corner you dragged and pulls it back inside only when it no
-  longer fits, and one undo takes the whole gesture back. Folding remembers where the
-  name was, for the same reason it already remembers the dividing line, and gives it
-  back when you unfold — even if you dragged the folded box across the canvas first.
-
-- **A decision service drawn around an existing arrow hid it.** The box around a
-  decision service is a background: DMN encloses the decisions it names with it, and
-  arrows are meant to cross its border — which only reads as a diagram if the border
-  is behind them. The library underneath draws in the order things were added, so a
-  box drawn *after* an arrow was drawn on top of it, and the arrow simply vanished
-  inside the box with nothing on the canvas to say where it had gone.
-
-  Opening a stored file was never affected, because a stored file is read in an order
-  that puts every decision service first. Only drawing one by hand was — which is the
-  case where it is hardest to tell whether the editor lost the arrow or you did.
-
-  A newly drawn decision service now goes behind what is already there. What it holds
-  stays in front of it, because its decisions belong to it.
-
-- **A decision service lost its decisions — three different ways — and a requirement
-  drawn from one required nothing.** The box around a decision service is drawn as a
-  container, which is what paints it beneath what it holds and what carries its
-  decisions when you move it. The library underneath reads a container as an owner,
-  and DMN says the opposite: *"decision services are defined as overlays and
-  therefore do not encapsulate the decisions within them"* (DMN 1.5 §6.2.5). Three
-  places took the owner reading literally.
-
-  Folding a service and unfolding it again handed its decisions back to the diagram
-  instead of to the box. The box was then a rectangle standing behind them rather
-  than one holding them, and the next drag moved it and left every decision where it
-  was — which is what a reader reported, and what the screenshots showed. Dragging a
-  *folded* service took nothing with it, because a folded service holds nothing on
-  the canvas: its decisions, the edges between them and the size and divider it is
-  restored to are parked in a record. Unfolding put all of it back where it was
-  folded, so the drag was silently undone. And deleting a service deleted its
-  decisions, their logic and the requirements between them out of the model: a
-  four-decision file came back holding two.
-
-  Separately, the two ways a decision service is invoked — by a decision, and by a
-  business knowledge model — were drawable and produced nothing. The reference was
-  written under a property name nobody declared, so the knowledge requirement was
-  saved without a target and required nothing at all.
-
-  Each decision now keeps the box it was folded out of, a folded service takes its
-  record along and gives it back where you dropped it, deleting a service leaves
-  every decision where it was drawn, and a requirement drawn from a service names
-  it.
-
-- **The portal's process link asked a search that did not come back.** Pressing
-  "View the process" on an order wrote "Wird abgefragt …" under it, and nothing else
-  happened, ever. The link looked the instance up with a search that named no
-  process definition, and such a search reads every instance on the server and every
-  variable of each. On an installation of any size it does not answer in any time a
-  reader waits, and the page had no bound on how long it would wait for it.
-
-  The lookup now names the fulfilment process's definitions, newest version first,
-  and each search reads that definition's own index — the fulfilment instances,
-  which are one per order. An order placed before the last redeploy is still found,
-  under the version it started on. And the lookup gives up after twenty seconds
-  and says so beside the order, rather than leaving "Asking …" standing as if an
-  answer were on its way.
-
-- **The basket said what was ordered and not what belonged to what.** It drew three
-  columns — offering, service, optional — each a flat list stacked on its own. A
-  row's height in one column had nothing to do with its height in the next, so with
-  two offerings in the basket a service sat beside whichever offering happened to
-  share its line: a laptop's hardware beside a monitor, the laptop's sleeve on the
-  monitor's line. The relation the reader needed was the one thing three independent
-  lists cannot draw.
-
-  Every offering is now one line of the grid, and its services and options are the
-  cells of that line. The grid makes a line as tall as its tallest cell, so the next
-  offering starts below the previous one's last service rather than beside its
-  third, and a rule under each line tells two offerings apart. The column names
-  stay once, at the top.
-
-  Which offering a row belongs to is read off the same containment the level is,
-  up through what includes it and what offers it. A part two products share — one
-  case for two phones — lands under whichever of them is in this basket, not under
-  the first one the release happens to list. A taken option whose offering is not in
-  the basket keeps a line of its own rather than disappearing, because a position
-  nobody can see is one nobody can take out.
-
-- **A decision was listed under the name of whichever decision happened to come
-  first in its file, not under the name of the file.** A DMN model is one artifact:
-  Atlas stores it under one handle, lists it as one row, publishes it as one thing —
-  and it may hold several decisions. Everywhere else that name is read off
-  `<definitions name>`: the model upload, the import, the model listing and the
-  decision's documentation record. Two paths took the first `<decision name>`
-  instead — the draft listing, and the decision editor's Save to model. So a model
-  called "Kreditpruefung" whose first decision is "Bonitaet" appeared in the Explorer
-  as "Bonitaet" while the editor's own header said "Kreditpruefung", and reordering
-  the decisions inside the file renamed the artifact. Worse, the editor's save
-  mirrors a name change onto the reference: because the two readings differed, every
-  save of an untouched model silently renamed its row. Both paths now read the
-  model's own name, falling back to a decision's name and then its id only while a
-  model being drafted has not named itself yet.
-
-  Existing rows are not rewritten — a stored name is data, and this changes how a
-  new one is derived. A row showing a decision's name corrects itself the next time
-  the model is saved from the editor, or immediately if the name is edited by hand.
-
-- **A catalogue kept in `de-DE` and `en-EN` would have ignored the language switch,
-  for the same reason `de; en` did.** The portal narrows a browser's language to its
-  base — `de-CH` becomes `de` — because its own words live in a message catalogue
-  keyed that way. A product's texts are keyed by whatever the *catalogue* declares,
-  and `de-DE`, `en-GB` and `pt-BR` are all correct and all invisible to a lookup for
-  `de`, `en`, `pt`. Every name would have been stored under a key nothing on the page
-  asks for, the reader would have been shown whatever value came first, and the
-  switch would have done nothing — with the new language-tag check waving it through,
-  because `de-DE` **is** a tag. A text is selected by a tag's language now, the exact
-  tag winning over a regional one where a catalogue carries both.
-
-  The Console's language box is also cut on commas, semicolons **and** whitespace. A
-  tag can contain none of the three, so all three are separators and none is
-  ambiguous — and a maintainer who types `de-DE; en-EN; fr-FR` gets three languages
-  instead of one refusal naming a tag they never meant to write.
-
-  What this bought on its own: nothing a reader could see, for the languages the
-  page did not yet speak. A catalogue could declare `fr-FR` and its products carry
-  French, and no locale on that page selected it. The entry below — the portal's own
-  words in French and Italian — is what turned this correction into four working
-  languages rather than two.
-
-- **A catalogue could be saved with a language that is not a language, and every
-  product in it then ignored the language switch.** Found in a live installation: a
-  catalogue was saved with the single language tag `de; en`. The list is read
-  comma-separated and the separator typed was the one the heading fields had just
-  been given. Every layer then behaved correctly and the result was total: the
-  product form drew **one** box labelled `de; en`, both names were typed into it, and
-  the portal — looking up `texts['de']` and `texts['en']` — found neither and fell
-  through to the first value it had. The language switch did nothing at all, for
-  every product in that catalogue, in both languages, with no screen anywhere saying
-  why. It was reported weeks later, two screens away from its cause.
-
-  A language tag is now checked where it is written and nowhere else: `de`, `en`,
-  `de-CH`, `zh-Hans`. Not at publish and not on any read, because the installation
-  that already carries a bad tag has to be able to open the catalogue and correct it
-  — refusing on the way out would lock it out of its own fix. Nothing is normalised
-  either: `de; en` has two readings and only the maintainer knows which, and guessing
-  is the same silent helpfulness that hid the defect. A repeated tag is refused too,
-  for its own reason — two boxes writing one key, where the second silently wins and
-  the first looks ignored.
-
-- **The Console asks for each language in its own box, side by side.** The name, the
-  description and the two headings. It replaces the semicolon-separated single box
-  shipped the day before, which was compact and was a trap: which word was French was
-  a thing to count out against a list on another screen, and the separator leaked one
-  screen up — which is the entry above. A row of labelled boxes counts nothing and
-  hides nothing, and a catalogue that adds a fifth language grows a fifth box.
-
-  The orderable shapes follow, as a grid: one row per shape, a narrow box for the id
-  that never changes and one box per language beside it. That replaces a textarea
-  with a syntax of its own (`gross = de:Gross | en:Large`) — better than the
-  semicolons, because it *named* each language instead of making it a position to
-  count, and still a syntax somebody had to be taught, in a form where every other
-  text is a box. Clearing the id removes a shape; two blank rows are drawn under the
-  ones that exist, and a button adds more. The cost is named rather than hidden: a
-  textarea can be pasted into and a grid cannot.
-
-- **Saving a product from a catalogue that only offers it no longer takes it away
-  from whoever maintains it.** A product is referenced by catalogues and edited
-  through exactly one, and the server treats a save naming a different home as a
-  deliberate move — it checks the caller may edit both sides, and moves it. The
-  Console was walking through that gate by accident: the product form sent the
-  catalogue being *viewed* as the home on every save. So opening a product from a
-  catalogue that merely offers it and pressing save moved it, silently, and from then
-  on its boxes were drawn from the new home's languages. It is asked now, and only
-  where there is something to ask; cancelling keeps the home and still saves the edit.
-
-- **The product-capture example runs.** It shipped in the shape that could never
-  execute — plain service tasks of a job type nothing serves, with the target and the
-  HTTP method in task headers no worker receives — and its README instructed a setup
-  step that cannot be carried out, because there is no `rest` Worker Type to configure.
-  Its tokens parked without failing, so nothing anywhere said so.
-
-  Its nine calls are `<atlas:restConnector>` tasks now, on the reserved job type the
-  engine serves itself. Nothing to configure for them. Two things the example does
-  need, and both are real: a start form asks for this Atlas's address once, because a
-  hand-started model has nobody to hand it one — the shipped fulfilment process gets
-  the same variable from the server, which starts it — and the operator's API token
-  under `ATLAS_CONNECTOR_ATLAS_TOKEN`, without which the first call answers 401 and
-  raises an incident rather than parking.
-
-  The payloads are one input mapping per JSON key, because a connector task sends its
-  activity-local scope: a single expression targeting `body` would have nested the
-  whole payload one level under that name. The guard that holds those payloads to
-  their shapes — flat edges, trimmed keywords, every field present in a full replace —
-  now assembles the body exactly as the connector does instead of reading one
-  expression.
-
-- **A folded decision service showed neither what it is given nor what it gives.**
-  Folding one took away every arrow that touched a decision inside it, which is right
-  for the arrows drawn between those decisions and wrong for the ones reaching in from
-  outside. The input data a decision inside the service needs, and the decision outside
-  that the service answers to, are requirements of the *service* — DMN derives exactly
-  those from the crossings — and with their arrows gone the input data sat unattached
-  in the corner of the diagram while the folded box looked like it took nothing and
-  gave nothing. Those arrows now end on the box, which is the only thing a reader of a
-  folded diagram can see. Nothing about the model moves: the requirement still belongs
-  to the decision that states it.
-
-  Unfolding did not put the service back either. Its box was recomputed from where its
-  decisions sit plus a margin, and for decisions drawn *inside* a larger box that comes
-  out smaller than the box was — so a service came back cramped, with its name clipped
-  behind a decision. The line dividing its two compartments came back worse than
-  recomputed: folding squeezes it into the small box, and afterwards there is nothing
-  left to work it out from. Both are now noted when the service is folded and restored
-  when it is unfolded, beside the decision positions that already were.
-
-- **An attribute the editor could not read survived only by being ignored.** DMN 1.5 lets
-  an author say that Input Data is to be drawn as the paper sheet symbol rather than the
-  backwards compatible oval. The editor's descriptor had that flag typed as an association
-  to a UML Standard Profile stereotype — an artefact of the OMG's own XMI export rather
-  than anything the schema means. So the editor looked for a child element no document has,
-  called the real attribute unknown, and left it unclaimed. Nothing was lost: an attribute
-  nothing claims is written back as it was found. But nothing could read it either, and a
-  warning with no loss behind it is exactly the kind that gets dismissed.
-
-  It is a boolean attribute now, declared in both of the places DMN 1.5 names it, because
-  the specification does not agree with itself here. The normative XSD carries it on
-  `DMNDiagram` and nowhere else; Table 97 lists it among the `DMNShape` attributes and
-  describes it per shape. Neither reading is a misreading and documents exist both ways, so
-  a reader of either spelling keeps what its author wrote. Nothing on screen changes — an
-  Input Data element is still drawn as an oval — and the round-trip guard that holds the
-  shipped editor to what it loses and what it complains about now records neither.
-
-- **The shipped fulfilment and approval processes could never run.** They do all their
-  work by calling Atlas's own API, and for four releases those calls were authored as
-  plain service tasks of a job type named `rest`, carrying their target and method in
-  task headers. Three things were wrong with that at once, and none of them is visible
-  from the model: `rest` is not a reserved job type (the REST one is
-  `io.atlas.http.rest`), so nothing leases it; a leased job carries no task headers at
-  all, so the target and the verb reached nobody; and the remedy both the models and
-  the product-capture example instruct — configure "a worker of type `rest` named
-  `atlas`" under Console → Workers — cannot be carried out, because there is no such
-  Worker Type to configure.
-
-  What that produced is the worst failure available: the tokens **park**. Parked work
-  is waiting, not failed — no retry is spent, no incident is raised, nothing turns red.
-  On the installation that reported it, fourteen orders stood at "Wartet" for weeks
-  with twelve jobs parked, zero incidents, zero open tasks, and a clean approver
-  report.
-
-  The calls are now real `<atlas:restConnector>` tasks, which compile to the reserved
-  REST job type the engine serves itself — and which the shipped `rest` worker serves
-  where an operator has offloaded the kind. Nothing to configure either way. They are
-  told where Atlas is through a new `atlasApiBase` start variable, set from the same
-  address the server hands its supervised workers and passed on to every process the
-  orchestration starts. `portalBaseUrl` is deliberately not reused for it: that one is
-  the operator's external origin *or empty*, and a request built on an empty base is
-  this same silent failure in a new place.
-
-  One operator step remains and it is one that exists: an API token with the `operator`
-  role, named by the models as a secret reference and read from
-  `ATLAS_CONNECTOR_ATLAS_TOKEN`. That obligation was always documented. The difference
-  is that its mechanism is real, and that a missing token now fails the call loudly
-  instead of parking it.
-
-  `examples/produkt-erfassung` still carries the old shape — it is started by hand
-  rather than by the portal, so it has no `atlasApiBase` and needs its own answer for
-  where Atlas is. Its README says so now instead of instructing the setup step that
-  cannot be carried out.
-- **Saving a product said "apiBytes is not defined" and quietly left the product
-  offered by nothing.** The catalogue screen hands its event handlers a bag of what
-  the shell owns — the API caller, the byte uploader, the toast. The product form's
-  save reached for the byte uploader to put the picture up, and the bag it was
-  called with did not carry it. The name resolved to nothing, and not at load, where
-  review would have caught it, but on the press that reached the line.
-
-  What the message named was the picture. What it cost was the offering: the record
-  was already written, and the step after the picture is the one that tells the
-  catalogue to offer a new product — so the save ended with the product stored, the
-  catalogue unchanged, and a product that is offered by nobody, which is invisible
-  on every screen its maintainer has. The picture step now goes last, after the
-  offering, because it is the step whose failure can be afforded: losing a picture
-  costs one upload and is visibly missing.
-
-- **The portal's link into an order's process answered where nobody was looking.**
-  Pressing "Prozess ansehen" searches for the fulfilment orchestration and opens it.
-  Both ways that search can come back without one — nothing started or nothing left
-  — wrote their answer above the table, so an order further down the page produced a
-  message off-screen and a button that read as broken. The answer is now under the
-  button that asked for it.
-
-  And one of those two was not a message at all. The instance search falls back to
-  the exported event log when this server's own index has nothing, marking what it
-  answers with: those rows describe an instance the server no longer holds. The link
-  followed one like any other, into a replay view that could only say "Could not
-  load this instance's replay." It is now said here, in words that name the cause
-  this server is actually certain of.
-
-- **A folded decision service stays folded.** `EnsureDiagram` lays a model's whole
-  graph out afresh whenever its diagram covers only some of the nodes, on the reasoning
-  that a partial diagram is the residue of a tool that drew what it could. A collapsed
-  decision service looks exactly like that from the outside and is the opposite: DMN
-  draws one by leaving its definition out of the view, so a diagram missing exactly its
-  members is a diagram somebody arranged that way. Re-laying it unfolded the fold on
-  every read, which meant a fold could never survive being saved. The exception is
-  narrow — a collapsed service's own members and nothing else; the service still needs
-  its own shape, because one with no box at all is the residue the rule exists for.
-
-- **A decision service is offered where the author looks for it.** The Modeler's
-  decision picker is built from two lists: what an application's DMN references offer,
-  and — as a fallback — what the engine has deployed. Describing a reference returned
-  only its decisions, never the decision services, so a service could reach the picker
-  only by the second route: with no model handle, and therefore in no application. The
-  one thing a business rule task is meant to call sat under "other decisions", below
-  every decision it is made of.
-
-  A task addresses either with the same one string, so a catalog that carries one has
-  to carry the other. It now does, and the list is cut up the way an author reads it:
-  one group per decision file, this application's files first, and inside a file the
-  published interfaces before the decisions. A decision a service is made of says which
-  one — calling it works and answers correctly, which is exactly why it is worth
-  saying, because it reaches past the interface the service exists to be. An input
-  decision carries no such marker: that is the boundary the caller supplies, and it
-  sits outside the service rather than within it.
-
-- **A product's description was stored, frozen into the release and never shown.** The
-  portal asked for it in the language the *page* is read in — German or English, taken
-  from the browser — and treated a missing key as no description at all. But publishing
-  guarantees a description in every language the **catalogue** declares, and those are
-  different lists. A catalogue offered in German and French is complete by that rule and
-  had nothing whatever to say to a reader whose browser is English: two descriptions
-  written, neither on screen, and no rule anywhere broken.
-
-  The reader's own language is still asked for first — that is what makes the choice a
-  choice once more than one exists — and the other languages are reached after it. A
-  paragraph somebody has to translate is worse than one they read and better than the
-  blank they were getting. A key that is present and blank is not taken as an answer,
-  because that is the shape a half-filled form leaves behind and it would end the search
-  before the language that does say something.
-
-  The picture needed no change and is shown beside it, where the catalogue carries one.
-
-- **The info button on the basket did nothing.** Every row there drew it, it responded,
-  and nothing opened: the button sets which product to explain and the *view* has to
-  draw the panel, and the basket made the first statement without the second. The
-  catalogue page and "my services" had both. So on the one screen where somebody decides
-  whether to actually order the thing, the price, the approval rule, the description and
-  the picture were unreachable — a row was a name and two buttons, and the name was all
-  they had.
-
-  Guarded per view rather than per file from now on: `infoPanel` appears three times, so
-  a search across the page would have found it however many views had forgotten it.
-
-- **A decision service that answers with nothing is refused rather than deployed.**
-  DMN gives a decision service one or more output decisions: they are what it returns,
-  and the whole reason to address a service instead of the decision inside it. Atlas
-  accepted one with none. It compiled, it was listed, the decision picker offered it, a
-  business rule task called it — and the task completed with the variable it was to
-  fill still unset. No error, in the engine or in the log; the process simply carried
-  on past a decision that was never made.
-
-  That is not hypothetical. A service's membership lives in its references and its
-  picture in the diagram, nothing in the format holds the two in step, and an editor
-  that rewrote the picture wrote the interface away with it. Every check between there
-  and the disk said the model was fine.
-
-  The check now runs where a model arrives and where a deploy asks whether one is
-  sound, and it names the service rather than the file, so an author knows which box
-  to fix. A model already stored with the fault reads as invalid in the model list and
-  cannot be deployed until it is repaired. Work in progress is unaffected: an
-  unfinished service belongs in a draft, which is saved without this gate.
-
-### Removed
-
-- **The two links on a portal order's position rows.** A position row offered "Wo
-  steht das?" — the step that position is sitting on — and a link into the
-  position's own process instance. Both are gone at the request of the people the
-  page is for: the status beside the position's name answers the same question out
-  of the order's own record, one column over and without a press. Withdrawing a
-  position and correcting its details stay; they act on the position rather than
-  look at a process.
-
-  `GET /api/v1/portal/orders/{id}/lines/{position}/progress` is unchanged. It is API
-  surface with callers that are not this page, and a screen that stopped drawing a
-  button for a route is not a reason to withdraw the route.
-
-### Changed
-
-- **The portal is called the shop — at a new address and under a new API path.**
-  **Breaking** for anything that called the page's API directly. The page where
-  people browse their catalogue and order is now the *Shop*: in the menu, in its
-  title, in the handbook, in the Console's catalogue screens, in the API and MCP
-  descriptions, and in the mails the shipped approval processes send ("Ihr Shop").
-
-  - The page moved from `/portal.html` to `/shop.html`. The old address answers
-    with a permanent redirect, query kept, because it sits in bookmarks and mails a
-    rename cannot reach.
-  - The five routes the page reads moved from `/api/v1/portal/…` to
-    `/api/v1/shop/…` (`catalog`, `favourites`, `favourites/{itemId}` for PUT and
-    DELETE, `orders/{id}/lines/{position}/progress`). The old paths are not kept:
-    the page was their only reader.
-  - The shipped system processes are named `Shop: …` instead of `Portal: …`, so
-    they deploy as a new version on the next start. Running instances finish on
-    the version they started on.
-
-  Deliberately unchanged, because renaming them would break what is already
-  deployed or stored rather than what anybody reads: the process variable
-  `portalBaseUrl` every approval model builds its links from, the stored language
-  and theme a browser remembers for the page, and the decision records written
-  under the old name.
-
-- **The Workers view says what a worker asks for, not only what it has been given.**
-  Each worker's `types` counts the jobs it has *leased*, so a worker that is connected
-  and polling a queue with no work in it looked exactly like a worker that is not
-  there. Every poll now records the job type it asked for, productive or not, and the
-  row carries it as `serves`. Without that, "is anybody serving this job type?" is
-  unanswerable for every quiet queue — and the fulfilment report added in this release
-  would call a healthy idle installation broken.
-
-### Added
 
 - **An order in the shop says whom each position waits for, and whoever holds the task answers it there.** An order's row said "Wartet" and not on whom: a line manager's
   approval, a group in IT and a process nobody has modelled yet all read the same.
@@ -1097,8 +565,6 @@ _Changed_ / _Removed_ for each version.
   every caller believe it answered the cheaper question. §5 now carries the table, the cause
   and the distinction, and W1's own comment claiming the same thing is corrected.
 
-### Added
-
 - **Personal data can be erased: a declared variable is enciphered under its data subject's own key, and destroying that key makes every copy unreadable.**
   A process names the variables that hold personal data and the one variable holding the id
   of the person they are about — `atlas:personal="vorname,nachname"` and
@@ -1178,47 +644,6 @@ _Changed_ / _Removed_ for each version.
   engine.
 
   Nothing changes for a process that declares nothing, which is every existing model.
-
-### Changed
-
-- **The Account-Bestellung example builds its UPN in the worker, and lost a gateway doing
-  it.** It is the proof the personal-data rule needed: the example took a first and last
-  name from a public form and built a UPN, a mailNickname and a display name out of them,
-  in one script and three output mappings the engine evaluated. All four moved into the
-  create-user task's own attributes expression. It deploys, and **no exception to the rule
-  was needed** — which is what its record could not establish against any process that
-  existed.
-
-  The cost is stated rather than quietly absorbed: a fail-closed gateway used to check the
-  computed UPN against `jml-test-*@contoso.com` before any write, and there is no such
-  process variable any more. The test-object boundary is now the `jml-test-` literal inside
-  the connector's attributes expression — in the model, visible in review, but structural
-  instead of checked at runtime. Here that is a small loss, because the gateway was
-  checking a value the same process had built two steps earlier; where a derived value
-  arrives from outside the process, it would not be.
-
-### Fixed
-
-- **Renaming a catalogue, or changing the languages it is offered in, failed with
-  "list is not a function".** Both go through one form on the catalogue detail
-  screen, and neither reached the server: the save threw before it got there.
-
-  `catalog-admin.js` has a `list` helper that splits a comma-separated field into
-  trimmed entries, and the save calls it for the languages. A hundred lines above,
-  inside the same function, a DOM element had been bound as
-  `const list = view.querySelector(".product-list")` — which shadowed the helper for
-  the whole of it. The save called an HTML element, and the submit handler caught the
-  `TypeError` and showed its message as a toast.
-
-  That last part is why it was hard to place. A page that cannot run reported itself
-  as a refusal, so the message read like the server rejecting the rename rather than
-  like the screen being broken. The element is named `listEl` now.
-
-  Three guards drive the real detail view: what a rename sends, that the languages
-  arrive as a trimmed list, and that a working save reports nothing. Each fails when
-  the shadowing is put back.
-
-### Added
 
 - **The catalogue screen now says what the portal is actually offering.** A catalogue
   and its portal are two different things on purpose: the portal reads a **release** —
@@ -1435,8 +860,6 @@ _Changed_ / _Removed_ for each version.
   now carries the numbers, what they cost in pages, and the two ways out — without picking
   one, because nothing depends on it until a walk is wired.
 
-### Added
-
 - **A process definition and a deployment of it are two different things.** The starmap's
   `process` node has been both at once: what a model *is* — process id and version — and
   the fact that this server holds it, with instances, counters and a state. That is
@@ -1459,69 +882,6 @@ _Changed_ / _Removed_ for each version.
   Nothing on a single-server picture looks different yet. What changed is that the
   identity underneath it is now the one an estate can be drawn in, and that features
   stop accumulating on the conflated form — see [ADR-0401](docs/adr/0401-graph-identity-across-several-logs.md).
-
-### Fixed
-
-- **A decision service can be laid out and wired up.** Dragging one on the canvas was
-  refused outright — the cursor went red and the box stayed where the import had put
-  it — which is the one thing a diagram carrying several services cannot do without.
-  When it did move, the modeler re-decided which compartment each of its decisions
-  belongs to, and for a decision drawn outside the box, which an imported model may
-  well have, the divider travelling past it turned the service's output decision into
-  an internal one: the service silently lost the interface it publishes. A decision
-  service also could not be connected to anything. DMN makes one an invocable, like a
-  knowledge model, so a decision invokes it through a knowledge requirement; a model
-  that already said so opened and drew correctly, but the connection could not be made
-  by hand. All three are fixed, and the eleven connections the specification permits
-  between DRD elements are now each covered by a test.
-
-  The notation itself is held to the specification as well, in both pictures Atlas
-  draws. Input data is a stadium at any size rather than only at the default one; a
-  decision service carries the heavy border the specification asks for; and an element
-  is drawn under the text its diagram gives it rather than its own name, where the two
-  differ. In the decision graph window a knowledge model was drawn as a parallelogram
-  instead of a rectangle with two corners cut off, and a knowledge requirement ended in
-  the filled arrowhead that belongs to an information requirement — the two say
-  different things, and the arrowhead is half of what says which.
-
-### Fixed
-
-- **A decision graph is drawn the way DMN draws one.** The DRD notation is not
-  styling: the shape is how a reader tells one kind of node from another. A decision
-  is a plain rectangle, input data a stadium with fully rounded ends, a business
-  knowledge model a rectangle with two corners cut off, and a decision service a
-  rounded rectangle with its name in the top right. Atlas drew decisions and
-  knowledge models with rounded corners, which made a decision read as an input
-  datum or a service, and drew a decision service square-cornered with its name
-  centred over whatever it contains. Both pictures now follow the notation, so a
-  model opened in Atlas looks like the same model opened anywhere else.
-
-  The modeler follows too: the vendored dmn-js carries the same correction, and a
-  decision service that declares itself collapsed is now drawn as one — name over a
-  plus marker, no divider, nothing nested inside a box the document says is closed —
-  instead of looking expanded.
-
-### Fixed
-
-- **A decision service survives Auto-layout.** Atlas generates a DMN model's diagram
-  when one is missing and redraws it on request, but the generator only knew decisions,
-  input data and knowledge models. A decision service — the box drawn around part of the
-  graph, split by a divider line into what the service returns and what it works out
-  internally — was not drawn at all. Auto-layout therefore deleted the box, and the
-  modeler, which reads a service's membership back out of where its decisions sit,
-  concluded the service had no members and wrote that into the model on the next save.
-  The result was a service with no output decision: still deployable, still callable,
-  and returning nothing, with no incident and no validation error to show for it. One
-  click was enough, and only the stored XML showed the damage.
-
-  The generator now draws the service around the decisions it publishes and encapsulates,
-  with the divider between them, and a model whose service is undrawn is laid out afresh
-  instead of being handed to the modeler half-finished. The bundled modeler treats the box
-  as a container too: it is drawn beneath what it holds rather than over it, and moving it
-  carries its decisions with it. A decision the service names as its input boundary stays
-  outside the box, where DMN puts it.
-
-### Added
 
 - **Eine Entscheidung hinter einer Schnittstelle zeigt jetzt auch ihre Regeln.** Ein
   Business-Rule-Task kann einen **Decision Service** aufrufen — DMN's veröffentlichte
@@ -1611,9 +971,10 @@ _Changed_ / _Removed_ for each version.
   decisions, nothing else from the graph behind it.
 
   Two things are worth knowing. A service evaluation records its inputs and outputs but
-  no trace, because the engine offers none for a service. And the editor still cannot
-  *draw* a decision service — a model that has one comes from the temis Modeler, from
-  Camunda, or from hand-written XML.
+  no trace, because the engine offers none for a service. And when this landed the
+  editor could not yet *draw* a decision service, so a model that had one came from the
+  temis Modeler, from Camunda, or from hand-written XML; it can now (see *The decision
+  editor draws decision services* below).
 - **An incompatibility can be declared on the screen that declares everything else
   about a catalogue.** A product may exclude another — the clerk who may create a
   supplier must not also approve payments to it — and the record has carried that
@@ -2115,27 +1476,1951 @@ _Changed_ / _Removed_ for each version.
   would hand back a value a few hundred nanoseconds off and be told its own read was
   stale.
 
-### Removed
+- **An «enumeration»'s literals are shaded by use too, read through the lifecycles that
+  borrow them.** The class diagram can say which members a deployed process names; a literal
+  was left unshaded, because no process ever names one. What a process names is a *state* — a
+  `<dataState>` on a write — and a literal becomes a state only where some class's lifecycle
+  takes its states from that enumeration. A literal's rename is that state's rename, which is
+  what makes the two the same string rather than two that happen to match.
 
-- **The standalone approval page.** It existed because the Console is an operator's
-  instrument and most approvers are not operators — right about the people, and wrong
-  about what followed from it: an approval *is* an ordinary user task and the inbox
-  never filtered those out, so the rows were always there. The page did not spare
-  anybody the Console; it was a second place to take one decision, and the two drifted
-  over whether a rejection needs a reason.
+  So the question is asked of the classes that borrow it. A literal is bright where a deployed
+  process moves such a class into that state, and faint where none does — which is the reading
+  people want from a state machine: the states nothing has ever reached.
 
-  The decision is in the inbox now (see the entry above). What stays is the page's
-  **address**: every approval notification ever sent links to `/genehmigung.html` with
-  the order line in its query, and a mail cannot be recalled — so it forwards, handing
-  that line to the inbox, which resolves it against the approvals the reader holds. The
-  three shipped approval models link into the inbox from now on, and the menu entry
-  under Tasks is gone: it led to a redirect back into the screen it sat under.
+  It is asked only where it can be answered. An enumeration nothing borrows from, or one whose
+  borrowers no deployed process uses, is left unshaded: "no process reaches this state" and "no
+  process was in a position to" are different claims, and fading a state machine nothing drives
+  would report the second as the first.
 
-  **What is lost is the brand.** The page wore the catalogue's colours, because an
-  approver decides on that customer's behalf; the Console wears nobody's, so the block
-  names the catalogue in words instead. Information kept, presentation dropped.
+- **A face can come from the directory, and it arrives the way every other directory
+  fact does.** A tenant that already holds a photo for everybody should not be asked
+  to collect them a second time. The constraint that shaped this is not about
+  pictures: **Atlas holds no tenant credential** and must not start holding one, so
+  the mirror *pulls* — a process reads Graph through the Entra worker and reports
+  what it read, and nothing in the server calls Graph.
+
+  The worker gained one operation, **`get-user-photo`**, and with it the ability to
+  read bytes at all: every Graph call Atlas had returned JSON, and a photo does not.
+  The change is one field on the request rather than a second method on the client,
+  because what differs is a property of *the request*. The result reaches a process
+  as `{contentType, data}` with the data base64 — a process variable is FEEL, and
+  FEEL has no bytes — and `null` where there is no photo, so a model asks whether
+  there is one instead of comparing an empty string.
+
+  **A 404 is an answer, not a failure**, and that is the one place in this worker
+  where a non-2xx is not an error. Graph answers 404 both for a person with no photo
+  and for an id that is not anybody's, and its error code distinguishing them is not
+  something to hang a directory run on. The trade is stated rather than hidden: a
+  mistyped id reads as "no photo", where the other way round every person without
+  one would fail a job — in a tenant where most have none, an incident queue nobody
+  can read. It is confined to binary requests and held by a test, because the day it
+  leaks into the JSON path is the day a failed directory read looks like an empty
+  one. A body past the limit is **refused rather than cut short**: the magic is at
+  the front, so half a JPEG passes every format check and is still broken.
+
+  The synchronisation message carries the pictures in a field of its own — not on the
+  user object, which is documented as one object from `/users/delta` and would have
+  been a small lie in the file where a reader most needs to know what came from
+  where. **Removal is explicit**, because the absence of an entry has to keep meaning
+  "not fetched": without a way to say "there is none", a photo deleted in the tenant
+  would stay on the account for ever.
+
+  **A mirror does not overwrite a choice.** A picture somebody uploaded is left where
+  it is, in both directions — the directory may replace or remove what the directory
+  gave, and neither what a person picked for themselves. The run counts how often it
+  stood back rather than writing a line per person; what is surprising, bytes that
+  are not a picture, is a note, and it never costs the account the rest of its page.
+
+  The account carries a **fingerprint** of its picture, and that is what keeps
+  "unchanged" true. The mirror decides an account unchanged by comparing the record
+  before and after; a photo that changed while the record did not would be planned as
+  unchanged and written anyway, which breaks the one rule that makes the reporting
+  mode worth reading — the plan says what the apply does. It also makes the write
+  idempotent, so a process that fetches photos every run does not report a change on
+  every account for ever.
+
+- **A person can have a face.** Atlas showed people as strings: an approval said
+  `usr_4be5b4ad`, the portal's corner drew an empty circle, and a recipient picked
+  out of the directory was a name in a list of names. That is fine while somebody
+  works with three colleagues, and it stops being fine first exactly where the
+  mistake is expensive — ordering in somebody else's name, deciding somebody else's
+  request.
+
+  An account now carries a **picture**: `PUT /api/v1/users/{id}/avatar` takes the
+  bytes, `GET` serves them to anybody signed in, `DELETE` takes them away. It is
+  shown in the portal's corner beside whoever the order is for, and in the
+  console's user administration, where it is also uploaded and removed.
+
+  **Set by the account itself or by an administrator — not by an operator.** An
+  operator runs what is deployed, and changing the face a colleague wears to
+  everybody else is not running anything. Read by everybody signed in, which is the
+  point of having one: it is read beside a name in a task list, an approval and a
+  recipient picker, by colleagues rather than by administrators, and it discloses
+  less than the principals directory the same caller already reads.
+
+  **Stored beside the account record**, and two things follow without anybody
+  arranging them: a snapshot that carries the accounts carries their pictures, and
+  deleting an account deletes its picture — in the store rather than in a handler,
+  so every deletion path does it. Ids are assigned, so a file left behind is not
+  untidy but wrong: the next account handed that id would inherit a stranger's
+  face.
+
+  **PNG or JPEG, and deliberately not SVG.** A brand mark may be a vector — it is
+  drawn, it is scaled, a designer delivers one — and the serve headers make a
+  hostile one inert. A photograph has no such reason: it comes from a camera or
+  from a directory, and both give raster bytes. Accepting a document format with
+  scripting in it, in the one place where the uploader is *every account* rather
+  than an administrator, would be widening the surface for nothing. So the image
+  package now has a set per surface over one content check: which types a surface
+  takes is a policy and the surfaces differ, while whether bytes really are the
+  type they claim has one answer everywhere.
+
+  The account records **where the picture came from** — uploaded, or from the
+  directory — because nothing in a JPEG says who chose it, and that is exactly what
+  somebody looking at a wrong picture needs: whether to change it here or in the
+  directory. The directory half is not in this change: the photo will arrive the
+  way every other directory fact arrives, read through the Entra worker by a
+  process and reported here, because Atlas holds no tenant credential and must not
+  start holding one for a picture.
+
+
+- **The decision editor says when a knowledge model is never invoked, or invoked without
+  being required.** A knowledge model is a reusable FEEL function, and DMN says the
+  decision invoking one declares a knowledge requirement for it — the arrow the
+  requirements graph draws. temis does not enforce that: a decision whose expression calls
+  a knowledge model by name evaluates correctly with no arrow at all. Both of the
+  disagreements that follow deploy, run, and are reported by nothing.
+
+  A knowledge model nothing invokes is dead weight. The model is valid, its decisions
+  deploy, the engine never complains — so there is no later moment at which anybody finds
+  out, and on the canvas it looks exactly like one that is called: the only difference is
+  an arrow that is not there. A decision that calls one without requiring it is worse in a
+  quieter way. It runs, and draws a graph that omits the dependency — and the graph is
+  what gets reviewed, and what goes into the decision's published documentation.
+
+  The editor now says both, while the model is on screen: a strip under the canvas naming
+  what is wrong and what follows from it, and a warning badge on the shape in the
+  requirements graph. Clicking a finding goes to its element, from a decision's own view
+  as well — back to the graph first, since pointing at a shape in a view that does not
+  draw it would point at nothing. Both are warnings and never errors, because each
+  describes a model that deploys and runs, and both are biased towards silence: an
+  invocation is anything that reads as the knowledge model's name followed by an open
+  parenthesis in any other element's expression, so an unusual way of calling one costs a
+  missed warning rather than a false one. A warning an author learns to ignore is worse
+  than no warning.
+
+  The second finding carries its repair: **Draw the requirement** draws the missing edge
+  from the knowledge model to the decision that calls it. It is offered only there, because
+  only there is the fix determinate — which decision ought to call an uninvoked knowledge
+  model is the author's to decide, and a button that guessed would be writing their model
+  for them. dmn-js's own rules are asked whether the connection may be made rather than the
+  element being constructed, so the button cannot force a connection the palette would
+  refuse, and says why when it is refused. What it draws is left selected *and* the canvas
+  is given focus, which is both ways of taking it back within reach: the connection's
+  context pad has one entry, the bin, and Ctrl+Z works. The focus is the part that is not
+  obvious — dmn-js binds its keyboard to the canvas SVG rather than to the document, so a
+  button in the strip below the canvas has to hand focus back, or the author's first
+  Ctrl+Z would go nowhere and they would reasonably conclude the edit could not be undone.
+  Clicking a finding to jump to its element hands focus back for the same reason.
+
+- **The class diagram can say which members anything actually uses.** Where a business object
+  is used has been readable since **Data › Business objects** arrived — one class at a time,
+  on a page of its own. The question is asked on the class diagram, with the member under the
+  cursor and the decision half made, and getting the answer meant leaving the drawing, finding
+  the class in a list and coming back. Most people do not take that trip, so the reading
+  existed and the decision was still taken blind.
+
+  A control beside zoom and undo shades the drawing from that same reading. A member some
+  deployed process names comes forward; one none of them names recedes; a class used by no
+  deployed process and by nothing in the model either is faint as a whole.
+
+  What it will not claim is the more important half. Faint means *nothing names it*, not
+  *nothing uses it*: a read takes the whole object, and what an expression then reads out of
+  it is not a fact of the model — the legend says so in those words, on screen for as long as
+  the shading is. A business key is never faint, because no write ever names one and it is
+  what every store lookup and cross-process correlation resolves against. An «enumeration» is
+  not faint for having no process use, because most of them are declared by no data object at
+  all. And a name the reading has never seen — a class added since, or renamed a moment ago —
+  is left exactly as it was drawn, so a rename is not a scare about a member nothing had said
+  anything about.
+
+  Off until it is asked for: every attribute is unused the moment it is typed, and a canvas
+  that greys out new work is one people turn off.
+
+- **The class canvas judges the model while it is being edited, not when it is saved.** The
+  Problems panel showed the findings of the *last save*. So every edit that broke the model —
+  a store left naming a class that was renamed away, an attribute typed with something that is
+  gone, a lifecycle whose states drifted from the enumeration they came from, a business object
+  switched to a kind that cannot be stored — was silent while it was being made, and the
+  refusal arrived afterwards, naming an edit whoever made it had stopped thinking about.
+
+  The panel is live now. Every change is judged as it is made, and the bar and the marks on the
+  drawing say so at once. That closes the category rather than one edit at a time, which is how
+  the three known cases had been treated.
+
+  The rules are served, not copied into the browser. `POST /api/v1/infomodel/validate` judges a
+  document the caller is holding and stores nothing — no saved revision, no application scope,
+  and an invalid document is an answer carrying findings rather than an error, because a model
+  mid-edit is *expected* to be invalid. Two copies of a rule set are two rule sets, and the copy
+  the author sees is the one that would drift from the one Save enforces. The same route is an
+  MCP tool, `atlas_validate_information_model`, so an agent can check a model it is composing
+  before writing it anywhere.
+
+  When the server cannot answer, the last verdict stands rather than the bar going blank: a
+  stale finding is closer to the truth than a clean bill of health nobody checked.
+
+- **An approver decides a request once, instead of deciding it twelve times.** An
+  approval in Atlas is one user task per order line — the approval process is
+  started multi-instance from the order's ready lines, so a workplace ordered as
+  twelve products is twelve process instances and twelve tasks. That shape is
+  right and is unchanged: a line is what gets provisioned, refused, escalated,
+  reassigned and returned, and each of those needs its own instance.
+
+  What was wrong was the surface. The approver of a twelve-line workplace pressed
+  Genehmigen twelve times, read the same recipient twelve times, and on a refusal
+  typed the same reason twelve times. A person doing the same thing for the fourth
+  time is no longer reading it: a surface producing twelve identical clicks has not
+  obtained twelve judgements, it has obtained one and a habit.
+
+  The decision card for a position that is part of a larger request now names **the
+  rest of the request** — each position with its price, not a count, because the
+  thing being agreed to is "I have seen what is in this request" — and offers one
+  checkbox. Ticked, one call decides all of that order's open approvals the caller
+  holds, with one reason, and **each is still completed as its own task**, because
+  each is still its own process instance and each still has to act on what it was
+  told. The count moves onto the buttons, since the button is the last thing
+  somebody reads before the decision is irreversible. A request with one position
+  gets no checkbox and still takes the single-task route.
+
+  **The record is read as one decision, not counted as twelve.** Twelve completions
+  in the same second by the same person on the same order with the same reason are
+  the legible signature of one collective decision — where twelve clicks a minute
+  apart, from somebody who stopped reading after the third, look like twelve
+  examinations and are indistinguishable from them.
+
+  **There is no atomicity and the page says so.** Nothing spans twelve process
+  instances, and a completion that went through has already handed its answer to
+  its process, which may have started provisioning. So the answer is per line:
+  what was decided, and what was not with the reason for each, named on screen.
+  "Eleven of twelve" is a number nobody can act on; "the laptop is still open
+  because it was decided in another tab" is.
+
+  Refused, on the server and not only in the browser: keys from more than one order
+  (one reason cannot cover two people's requests), a refusal with no reason, and
+  more than a hundred keys — which is not a resource limit but a statement about
+  what one decision can plausibly be. The gate is the approval list's and has no
+  operator bypass: an operator who must step in does it on the task itself, where
+  the record says an operator did.
+
+- **A product says what kind of thing it is, and the portal's first column finally
+  carries data.** The portal's cascade has drawn four columns since the layout
+  landed — Kategorie, Bundle, Angebot, Service. The first one was filled with the
+  catalogue's own name and a note reading *"Atlas has no category level above the
+  bundle today"*: a placeholder telling the truth, because there was nowhere for a
+  product to say what kind of thing it was. A catalogue of eight products does not
+  need headings. A catalogue of two hundred is unusable without them.
+
+  A product now carries a **category**, and it is a **plain string the maintainer
+  types** while they have the product open, offered back through a list of the
+  headings already in the catalogue so the second product is spelled like the
+  first. The column shows **Alle** above the headings, so it is never a dead end;
+  the headings alphabetically, by the locale's own rule; and **Ohne Kategorie**
+  last, appearing only when something is in it — a heading for nothing is a heading
+  nobody can use, and hiding uncategorised products instead would lose them. The
+  services view groups what a person already holds by the same headings, so "where
+  do I find this" has one answer on both sides of the portal. Publishing refuses a
+  category that is present and **blank**, because blank is the bucket's own value
+  and a product that meant to say something and lost it would be invisible against
+  one that never said anything.
+
+  **A heading, not an entity, and the three costs are stated rather than hidden.**
+  Nothing in Atlas branches on a category — no rule, no approval, no eligibility,
+  no process binding reads it; it is a way of *looking* at a release. Every property
+  that would justify an entity is a property something else would need, and no such
+  something exists. So: the headings have **no ordering of their own** (a rank on a
+  category is the entity this refused, arriving through the back door, and a test
+  holds the sort against it); they are **not translated**, unlike every other text
+  on a product, which is a genuine regression against the rest of the surface; and
+  **two spellings are two categories**, recorded as a deliberate non-check so that
+  the day it becomes intolerable, the reason it was tolerable is on file.
+
+- **A product can say what it costs, and the approver sees it.** There was **no price
+  field anywhere in Atlas** — not on a product, not on an order line, not on the
+  approval surface — so an approver was asked to approve a laptop without being told
+  what it cost.
+
+  A product now carries a price, and it is a **string written as the catalogue's
+  maintainer wants it read**: `CHF 1'200.–`, `49.– / Monat`, `ab 10 Stück CHF 39.–`,
+  `im Grundpaket enthalten`. None of those is a number, and every one of them is an
+  answer an approver can act on.
+
+  **Displayed and never computed, on purpose.** A number invites a total; a total
+  invites two products in different currencies; that invites a rate and an effective
+  date. Every one of those belongs to an installation's finance rules, and a catalogue
+  storing a number would have started deciding them by implication before anybody had
+  chosen. The cost is stated rather than hidden: **nothing adds these up.** That is
+  survivable because one approval decides one line, so the one figure it shows is the
+  one figure it needs — and a test asserts that no page parses a price into a number,
+  because a single `Number(price)` somewhere is the whole money model, invented without
+  being chosen.
+
+  **It is frozen like a rule although it is not one.** Nothing branches on a price, and
+  it travels into the release and onto the order line anyway, for the sentence that
+  governs the approval rule and the ceiling beside it: an approver saw a figure and
+  decided on it, and a catalogue edit next week must not make the record show a
+  different one. The approval surface therefore reads it **from the order line** — the
+  line is the order's own record of what was decided on, and reading from the catalogue
+  would give the same answer today and a different one the day somebody edits a price,
+  which is exactly when it matters and nobody is looking.
+
+  Publishing refuses one thing: a price that is present and blank. That is worse than
+  saying nothing, because the portal renders an empty field where a figure belongs and
+  a reader cannot tell "we do not say" from "somebody left it blank" — so the portal
+  says the first out loud instead. It shows on the product's details, on the approval
+  panel, and on the approval **row**, because a list of forty is scanned rather than
+  opened one at a time.
+
+- **One position can be withdrawn on its own, and its details corrected.** The story
+  asks to modify or delete positions directly. Deleting existed only for a **whole
+  order**, so somebody who no longer wanted the second screen had to take the laptop
+  back with it — the per-line transition had been in the package since it was written,
+  with nothing calling it. Modifying did not exist at all.
+
+  **"Modify" is two different acts, and treating them as one is how a record starts
+  lying.**
+
+  Changing *what is held* — another product, another variant — is **not offered**. A
+  line that was provisioned and then quietly became a different product leaves the
+  access record unable to answer what somebody had and when, which is the one question
+  it exists for. The honest path already exists: give it back, order the other thing,
+  and the record carries both with the dates that make it readable.
+
+  Correcting *what was recorded about it* — the answers to the product's configuration
+  form — **is** offered, and what it may do is asked of the status machine that already
+  decides what can still change, rather than decided a second time beside it:
+
+  - A position **not yet attempted** is simply corrected. No amendment is recorded:
+    nothing was delivered under the old answers, and recording one would tell a reader
+    that something had been.
+  - A position the recipient **already holds** is corrected *and the correction is
+    recorded* — what the answers said before, who changed them, when, and why. The
+    laptop is at the wrong site and correcting the record does not move it; an
+    overwrite would leave the order saying something that was never true of the
+    delivery, and a reader could not tell the corrected record from an accurate one.
+    The amendments are a list and not a slot, because details having been wrong twice
+    is a different fact from their having been wrong once.
+  - A position **being provisioned now** is refused, and the refusal says to wait. A
+    process has the line, which is a conversation with a system Atlas does not control.
+  - A **rejected, cancelled or abandoned** position is refused: a closed record of a
+    request that produced nothing.
+
+  Whether a field is required is still the form's own statement, not a second copy of
+  that rule in the order service.
+
+  **A position its whole always carries cannot be withdrawn on its own.** The basket
+  will not let anybody deselect an integral part — a workplace is not a workplace
+  without its account — and a rule enforced when ordering and not afterwards is not a
+  rule. The order could not tell, because it carries the precedence graph and not the
+  composition one, so the line now carries that too, frozen at placement like every
+  other statement about the release. The refusal names what carries the part, because
+  the answer somebody needs is "take back the workplace instead".
+
+- **A product can ask the orderer for what its name does not say.** A laptop is not
+  fully described by being a laptop: somebody has to say which cost centre it is booked
+  to and which site it goes to. Nothing could hold that — a product declared no fields
+  and an order line carried no values — so every order needing more than a product name
+  finished as a phone call, and the answer lived in whatever the caller wrote down.
+  Variants do not solve it: a variant is a fixed shape chosen in advance, and a cost
+  centre is not one of a list.
+
+  A product now names **one Atlas form**. The basket renders it — the last screen before
+  an order exists, and the one that already shows what will actually be provisioned —
+  and the answers travel with the order line, beside the id of the form they answered.
+
+  **A form id and not a field list of its own**, because Atlas already has forms: a
+  definition, an editor, a generator, a renderer, and two surfaces rendering them. A
+  second way to declare "these are the fields somebody fills in" would be a second thing
+  to author, a second thing to render, and a second set of types, validation rules and
+  localisation to keep level with the first — behind on the day it shipped. The
+  catalogue names an id and interprets nothing; which questions there are, which are
+  required and what counts as valid stay the form's own statements, checked by the form
+  runtime before anything is sent.
+
+  **The release freezes the id and the line freezes the answers.** A release freezes
+  *rules* — the approval, the ceiling, the bindings — because a rule relaxed next week
+  must not change what somebody was held to this week. A form is not a rule: what has to
+  survive is what was answered, and "cost centre 4711" stays true whatever the form does
+  afterwards. Copying the schema into every release would put a rendering artifact inside
+  a design-time model that has kept rendering out of itself, and send it to every browser
+  that opens the portal.
+
+  Answers are keyed by item, because two laptops in one basket are two cost centres and a
+  flat map would keep one of them. Two things are refused rather than dropped, both
+  because the alternative is an order that silently loses something somebody typed:
+  answers for a product the order does not carry (a stale basket), and answers for a
+  product that asks nothing (nothing would read them). A form left *unanswered* is not
+  refused there — that is the form's own rule, and a second copy of it in the order
+  service would be wrong the first time somebody marks a field optional.
+
+  The product editor offers the forms that exist, never free text — the same rule the
+  process bindings follow, because a product bound to a form nobody wrote is a basket the
+  orderer cannot get past, found by them rather than by whoever bound it.
+
+
+- **A catalogue's appearance is set on the screen that fills it.** A catalogue has carried
+  its own colour, typeface and brand mark since it was built — the portal and the approval
+  page paint themselves from it — and no screen offered any of it. The one thing that makes
+  a catalogue somebody *else's* was reachable only by whoever was willing to write JSON by
+  hand, which is the exact state the authoring page exists to end.
+
+  An accent colour with a picker beside the field, the four typefaces the binary ships, and
+  a brand mark uploaded and removed with a preview. Empty means the catalogue wears the
+  instance's appearance, and a button says so in those words.
+
+  The typefaces are a list and not a URL, as the server has it: a web font would reach a
+  third party on every portal page load, carrying the visitor's address there — an outbound
+  dependency on pages that must render when nothing else is reachable. A test holds the four
+  on screen against the four the server ships, in both directions: an option the server
+  refuses is a control that cannot work, and one it accepts but the page omits is a
+  capability lost to a forgotten line.
+
+  Administration and not catalogue maintenance, like the server has it: an editor may change
+  what a catalogue offers and not whose it looks like. The form is drawn for an administrator
+  only, because offering one that always ends in 403 is its own kind of lie.
+
+- **The recipient of an order is picked, not typed — and the field is only shown to
+  accounts that may use it.** Ordering in somebody else's name became a first-class
+  screen gated on the operator role, and the field it goes through took a free string
+  and offered no help finding one. The comment above it said a picker would mean
+  shipping an organisation chart.
+
+  **That was wrong, and it is worth saying so rather than quietly changing it.** Atlas
+  already serves exactly this list, to any authenticated caller, at
+  `GET /api/v1/principals` — the directory every member and assignee picker in the
+  product reads. It carries a type, an opaque id and a display name, and deliberately
+  nothing else: no address, no roles, no reporting line. There is no hierarchy in it to
+  disclose, and a hierarchy is what an organisation chart is.
+
+  The field now suggests from that list as somebody types, shows the person's name, and
+  sends the id — a display name is not something the server can resolve, and an id is
+  not something a person can check. Typing over a picked name un-picks it, or the order
+  would be placed for whoever was chosen before under a name no longer on screen. Free
+  text still resolves, by principal id, username, directory id or mail address.
+
+  Groups are in that directory and are not offered here: an entitlement is held by a
+  person, so a group would be a recipient the server refuses after the basket is
+  already full.
+
+  **The scope is the role and not an "area of responsibility"**, and that is settled
+  rather than left open: an area of responsibility means a reporting line, and Atlas
+  has no reporting line. The `superior` approval kind has the caller name the superior
+  precisely because a directory lookup belongs to a modelled process and not to the
+  engine. Scoping a person search to a hierarchy would mean inventing the hierarchy
+  first, and an invented hierarchy decides who may act in whose name.
+
+  **The page also learns who is reading it.** It fetched a catalogue, a release, orders,
+  the inventory and favourites and never asked what the account may do, so the recipient
+  field was drawn for every visitor and answered 403 for almost all of them — which
+  reads as a permission that failed rather than one they never had.
+
+- **A catalogue can be searched, and by words it does not display.** The portal browsed
+  and did not find. Four columns cascade from the catalogue to the individual service,
+  which works for somebody who knows roughly where a thing sits and is useless to
+  everybody else — the cascade shows what a thing is *part of*, and that is exactly the
+  knowledge the searcher does not have. "Power BI Pro" sits two levels under "Productivity
+  Enabling", and nobody looking for a reporting tool has a reason to open either.
+
+  A product now carries **keywords**: the synonym, the abbreviation, the vendor's own
+  term, the name of the thing it replaced. They are searched together with every name the
+  item carries, and a publish refuses a blank one — an empty string is contained in every
+  query, so one product holding one would surface for everything anybody typed.
+
+  **The list is flat and not per locale**, unlike every other text on an item. A synonym
+  list is for finding, not for displaying; nothing renders it; and a searcher's language is
+  not the catalogue's. Somebody reading a German catalogue types "laptop" as readily as
+  "Notebook", and "M365" belongs to no language at all. For the same reason the search
+  reads *every* locale's name rather than the one on screen: refusing to match a word the
+  catalogue itself carries would be the search failing at its only job.
+
+  **A query replaces the cascade rather than filtering it.** Filtering the four columns
+  was the obvious shape and is the wrong one — a match three levels deep would leave an
+  empty column on screen and the person would conclude the catalogue does not carry it.
+  So the columns are replaced by a flat list, and each hit says the path it sits on: the
+  answer is both *what* and *where*. Choosing a hit opens the cascade at that item rather
+  than ordering from a list that does not show what the thing comes with.
+
+  The search runs in the browser over the release the page already fetched. Not for speed:
+  a route would re-send data the page has, an index would be a second copy of the
+  catalogue to keep true, and — the part that matters — a server-side search would need
+  its own audience filter, correct forever, in a second place. The page can only search
+  what it was given, and it was given exactly one catalogue.
+
+- **The approval list can be searched and ordered.** It rendered every open approval in
+  whatever order the endpoint returned — newest first — which is fine at three and a wall at
+  forty. The story asks for what a wall needs.
+
+  A search field, a sort control and a count. Deliberately **not** a table with a filter per
+  column, for the reason [ADR-0311](docs/adr/0311-portal-approval-page.md) gives: the common
+  approver is a line manager who decides perhaps four times a year, and a page that grew into
+  a console is one they will ask a colleague to operate. One field matches across the product,
+  the recipient, the orderer, the order id and the catalogue, because somebody looking for
+  "the laptop for Ada" does not know which column they are searching.
+
+  **Oldest first is now the default**, which changes what the page did. What has waited
+  longest is what nobody has looked at — the argument the recertification campaign and the
+  conflict report each make about their own lists.
+
+  Age is the job key, because a user task carries no created-at and the approvals endpoint
+  already pages by it; a clock reading taken in the browser would be a number nobody can
+  check. A row shows a due date where the model set one and *passed on* where an assignment
+  record exists — and says nothing where it does not, because that absence is the answer
+  "nobody has had to chase this".
+
+  Due dates sort ahead of everything undated: a task somebody put a deadline on is a different
+  thing from one nobody did, and sorting the undated in among them would bury the deadlines.
+
+- **The catalogue can now be read backwards.** Every question it answered ran forwards: a
+  product names what it contains, what it needs, what it excludes. That is the question an
+  *order* asks, and the portal, the basket and the fulfilment schedule are all built on it.
+
+  The person who **maintains** a service asks the opposite, and could not ask it at all. Where
+  is this used, and integrally or optionally? **What needs it** — nobody reading the VPN's own
+  page learns that the laptop cannot be provisioned without it. What may it never be held
+  with? How many people have it, and did this portal grant them or merely find them? A product
+  manager about to retire a service, rebind its provisioning or move it between catalogues had
+  no way to find out what they were about to break.
+
+  `GET /api/v1/catalog-products/{id}/usage` answers all of it out of the edges every release
+  already froze. **No new data, no migration**: the answer has been in the store since the
+  first release was published, with nothing to ask it.
+
+  Merged across catalogues, because a service does not belong to one — the same product
+  carried by two of them is one thing somebody is about to change, and a per-catalogue answer
+  would let them fix one estate and break another. Composition and aggregation stay apart,
+  because retiring an integral part changes what the whole *is* and retiring an optional one
+  does not.
+
+  **Holders are counted and never named.** A list of the people holding one service is the
+  inventory filtered to the interesting part. The count is broken down by origin, because that
+  decides what can be done: an ordered right can be returned through its order, an adopted or
+  legacy one cannot.
+
+  It is an **MCP tool** (`atlas_product_usage`), unlike every other read this line of work
+  added — those were withheld because they are other people's access, and this one names no
+  person at all.
+
+  An unknown product answers 404 rather than an empty report: "nothing uses this" and "this
+  does not exist" are different answers, and an empty one reads as *safe to retire*.
+
+- **Products can be marked as favourites.** The smallest measure in the plan, and the one
+  whose two decisions are the kind that get made by accident.
+
+  **A favourite is a bookmark and never an entitlement.** It stores a product id and nothing
+  else — no release, no catalogue, no variant. It says "show me this again", not "I may have
+  this", and everything deciding whether the person may still *order* it is asked at read time
+  by the routes that already decide it.
+
+  The tidier-looking alternative is a trap: validating a mark against the caller's catalogue
+  at write time would mean a catalogue reassignment starts **refusing** marks the person
+  already has, and a withdrawn product makes an existing list unwritable — the list would
+  break on exactly the events it should survive. Marks that no longer resolve are counted
+  rather than hidden, because a star that stopped appearing with no word looks like the page
+  lost it.
+
+  **Yours only, with no `?principal=`.** Every other portal read has one for an operator
+  administering an estate. Nothing needs to see what another person bookmarked, and a
+  parameter nobody needs is a surface to keep closed.
+
+  One product per call rather than a list per call: a replace-the-list write would silently
+  drop whatever a second tab marked in between. Marking what is already marked writes nothing,
+  so a star pressed twice does not churn a stored file, and the list is sorted on write so the
+  stored bytes are a function of the set rather than of the order somebody pressed things in.
+
+  In the portal it is a filter over the columns and not a fourth destination — a favourite is
+  still a product in the catalogue, and a separate screen would hide what it is part of. A
+  bundle is kept when something under it is marked, or starring a service would hide the way
+  to reach it.
+
+- **A product can now say who may receive it.** A catalogue carries an audience and that gate
+  is fail-closed — but it was the *only* gate: whoever was in a catalogue's audience could
+  order anything in it, and the sole thing between a person and domain administration was an
+  approval rule, which says *who decides* rather than *who may ask*.
+
+  "Put it in a stricter catalogue" is the obvious workaround and does not work, for a reason
+  written into the design: **a person sees exactly one catalogue**, the highest-ranked one
+  their groups reach. A second, stricter catalogue does not restrict a product — it hides it
+  behind the shop that person already has. A product offered to part of a catalogue's audience
+  could not be expressed at all, short of duplicating the whole catalogue per audience.
+
+  `eligible` on a product names the groups whose members may receive it, frozen into the
+  release like the ceiling and the approval rule beside it. **It narrows; it never replaces.**
+  An item naming no group inherits the catalogue's restriction rather than removing one, which
+  is why the first test in the file is the one proving an unrestricted product still works.
+
+  **Checked against the recipient, never the orderer.** An order has two people, and the
+  question is who ends up holding the thing. Checking the caller would refuse a manager
+  ordering a workplace for a new hire — the ordinary case — and would equally let an eligible
+  manager order a restricted product *for* somebody who may not have it.
+
+  A refusal over an integral part names the product that carries it: a `composition` part is
+  never deselectable, so "you may not receive a licence" about a licence nobody chose reads as
+  a bug rather than as a rule. 403 and not 409 — a conflict is a state of the estate that
+  giving something back would resolve, this is a statement about who the recipient is.
+
+  Publishing refuses a blank group id and deliberately **not** an eligible list disjoint from
+  the catalogue's audience: one person is in many groups at once, and being reached through one
+  while being eligible through another is the ordinary way this is used.
+
+- **A hold that ends now leaves a record that it existed.** The inventory is present tense by
+  construction — a grant writes a row, a revocation deletes it — and the order behind a right
+  is deleted by retention long before the right ends, which is why the inventory is engine
+  state at all. Put those two facts together and a third follows that nothing had a place for:
+  when a right ends, *everything* about it goes, and the estate can no longer say whether the
+  person ever held the thing, under whose approval, or for how long.
+
+  It got worse as detection got better. Every finding the last three slices added is about a
+  **held** right, and every remedy ends the hold — so "this person held `create-supplier` and
+  `approve-payment` together for six months" is a finding that ceases to exist the moment
+  anybody acts on it. **The remedy destroyed the evidence of the problem**, and an estate that
+  remembers only the mistakes nobody fixed has the record backwards.
+
+  Closing a hold now writes a row into a new engine-state column family, in the same
+  transaction that deletes the live entitlement. It **copies** the hold rather than referring
+  to it, because there is nothing left to refer to.
+
+  **The reason it ended changes what the row means.** A `returned` hold is evidence the person
+  *had* the access; a `corrected` one — reconciliation found the target system did not have it
+  — is evidence only that Atlas *claimed* they did, which is all `handleRevokeDiscrepancy`
+  ever decided. Writing the second as the first would assert, in a record kept for years, that
+  somebody had access nobody can show they had. Every row carries the word and the flag.
+
+  `GET /api/v1/entitlements/history` lists what has ended, and `?at=` answers the question an
+  access review actually asks — what the record said on a given day, drawn from the ended holds
+  *and* from what is still held. It is not an MCP tool: an assistant that could read it would
+  assemble a person's whole access biography in one call, and `?at=` reconstructs a past day.
+
+  The fold reads the hold through its own transaction rather than taking a frozen copy, which
+  stays inside I4/I6 — those require determinism, not the absence of reads — and is what makes
+  a double revocation write one row instead of two. `Line.ReturnedBy` joins `DecidedBy` and
+  `AbandonedBy`, recorded when a return is *asked for*: what completes one is a deprovisioning
+  process, and naming that as the decider would attribute a decision to a robot.
+
+  This is the first slice in this line of work that needs **no modelled process at all** — the
+  record accrues as a consequence of what the portal already does.
+
+- **The catalogue can now say what must never be held together.** Everything the portal had
+  learned about access was **detective or temporal**: the commissioning load records what was
+  there, reconciliation checks whether the record is true, recertification asks whether it is
+  justified, an expiry ends it by itself. All four look at one right at a time, and all four
+  look *after*. None could express the oldest control in access governance — the clerk who
+  may create a supplier must not also approve payments to it.
+
+  A catalogue declares it as a third edge kind, `excludes`, beside structure and precedence.
+  It is the **only symmetric** kind — "A must not be held with B" is exactly the reverse — so
+  publishing writes **both directions** into the release. A release recording one would make
+  every reader responsible for knowing which, and a reader that got it wrong would find half
+  the violations and report the estate as half clean, silently. Publishing refuses an item
+  that excludes itself.
+
+  **An order that would create a forbidden combination is refused at placement**, against
+  what the recipient already holds and against the rest of the same basket. Detecting instead
+  would let the combination exist for as long as detection takes, which is a detective
+  control with extra steps. The refusal names both items and which side is already held.
+
+  `GET /api/v1/conflicts` reports who already holds one, against the **current** release —
+  and that is the deliberate opposite of the expiry ceiling, which never reaches a right
+  granted before it was declared. An expiry is part of what was granted; an incompatibility
+  is a statement about what may coexist now, so declaring a rule surfaces its violations the
+  same day.
+
+  **A conflict has no culprit**, and that is why nothing here acts: it is a fact about a
+  pair, no rule can say which half is wrong, and an automatic remedy would have to choose —
+  taking away the right the person actually needs while leaving the other. The remedy is an
+  order's return or an access review, both of which already exist and both of which record
+  who decided. This is the first slice in this line of work that adds no new way to take
+  access away. `examples/unvereinbarkeit.bpmn` is the modelled process.
+
+- **A reminder can now ask what is waiting for somebody else.** The portal asks people for
+  three different things — decide an order line, answer a recertification row, do a task —
+  and none of it happens while nobody opens Atlas and looks. A campaign of five hundred rows
+  across forty managers, with nobody told, closes with four hundred and eighty undecided:
+  each correctly recorded as *not certified*, and useless.
+
+  The gap was sharper than "there is no notification". Atlas could already send mail — a
+  modelled process carries a mail task, `to=` names a principal or a group, and the address
+  is resolved in the server at the moment of sending, so it never enters a variable, an
+  order or the event log. **What was missing is that every route answering "what is waiting"
+  answers only for the caller**, and a reminder process is not the person it is reminding.
+
+  `GET /api/v1/pending-work` answers the caller's own; `?principal=` answers somebody
+  else's and is the **operator's**, because a portal where any user can enumerate any other
+  user's pending work has turned an inbox into an organisation chart with workloads
+  attached. A reminder's token carries the new `reminders` scope, which reaches exactly that
+  one route — it cannot read an inventory, run a comparison or decide anything.
+
+  **One wrong reminder costs more than ten right ones earn**, so nothing is listed that the
+  person cannot act on right now: not a row in a campaign that has closed, not one somebody
+  already decided, not an approval that has escalated away. It counts as well as lists,
+  because the first decision a reminder makes is whether to send at all. **Atlas does not
+  send** — `examples/erinnerung/` does, one mail per person rather than one per row.
+
+- **A right can now end by itself.** Everything the portal grants, it granted forever — which
+  nobody notices on the day it is built, and which is why the commissioning load,
+  reconciliation and recertification all exist: three controls that find access which should
+  not be there, *after* it is there. Recertification in particular is the manual compensation
+  for a missing expiry, paid for in the scarcest resource in the system, a line manager's
+  attention. **A question that did not need to be asked is worth more than a better way of
+  asking it.**
+
+  A product declares a ceiling with `maxDays`, it travels into the order line frozen from the
+  release — like the provisioning process, the deprovisioning process and the approval rule
+  already do — and a grant made under it carries an end. Products without one grant
+  open-ended rights, which is every product until somebody sets a ceiling.
+
+  **An expiry is not a removal.** The day after the end the target system still has the
+  membership and nothing has run; all that is true is that Atlas said the access should have
+  ended. So an expired right stays **held** and is reported overdue — dropping the record
+  when a clock ticks would make Atlas assert that somebody does not have access they
+  demonstrably do, which is the direction of wrongness that corrupts the evidence.
+
+  `GET /api/v1/entitlements/expiring` answers what is due within a window and what is past
+  its end. The removing is done by a modelled process returning the **order line**, which is
+  a stronger mechanism than either sibling can use: only an ordered right ever carries an
+  end, so an expiring right always has an order behind it, and a return revokes by the
+  release it was placed against, frozen when it was placed. A right whose order has since
+  been deleted by retention cannot be returned at all, and those are counted apart as
+  `unendable` — a number that never moves has to say why rather than look like a backlog.
+
+  **The ceiling never reaches an adopted or legacy right.** A commissioning load records a
+  found right's start as the moment it was *found*, so a ceiling measured from it would
+  schedule an entire estate to expire on the anniversary of the day somebody switched the
+  portal on. `examples/befristung.bpmn` is the modelled process, and a recertification row
+  whose right ends by itself now says so — those are questions that did not need asking.
+
+- **A business object says where it is used.** The information model gave a data object's
+  `itemSubjectRef` a type to resolve against, and every reading built on it since has run
+  from the process outwards. The vocabulary itself had none: somebody about to rename
+  `Order.total`, retire an enumeration literal or drop a state could see what an Order *is*
+  and nothing whatever about what the change would break.
+
+  **Data › Business objects** is the vocabulary read as a vocabulary — every class of every
+  information model you can see, business objects, value types and enumerations together, in
+  the console's shared sort-and-filter table. One list across applications, because two
+  applications each modelling an `Order` is the failure the information model exists to
+  prevent, one level up, and a per-model view cannot show it. Each row carries what the class
+  holds — its members, its business key, its states — and how much of the estate depends on
+  it.
+
+  Opening one answers the question a change actually asks. Every deployed process that
+  declares a data object of that class, and **every element that reads it, writes it, writes
+  one member of it, moves it into a state, or names the store it is kept in** — with the
+  element, the member and the state named, so the answer is precise enough to act on. Beside
+  it, the model's own uses: an attribute typed with it, an association, a lifecycle taking its
+  states from it, a store holding it. Those are listed apart rather than added in, because an
+  «enumeration» is normally declared by no data object at all — a reading that counted only
+  processes would report the vocabulary's most shared elements as dead, and somebody would
+  eventually act on that.
+
+  Two things it deliberately does not do. It does not guess: a data object with no declared
+  type is not read as a use of the class its name resembles, because an inference in a list
+  somebody is about to act on is worse than a gap. And it reads only what this installation
+  runs — the deployed, active, latest version of each process — so a Modeler draft is not in
+  it, which the page says where it makes the claim rather than leaving it to be assumed.
+  `GET /api/v1/infomodel/classes` and `GET /api/v1/infomodel/models/{id}/usage?class=Order`
+  serve both readings; both are computed on every call and stored nowhere. Both are MCP tools
+  too — `atlas_class_catalog` and `atlas_class_usage` — because an agent proposing a rename is
+  exactly the caller that cannot otherwise see what it would break.
+- **An incident flood is read by cause, and cleared in one action.** Every incident surface
+  built so far answers "what is stuck here" one incident at a time, which is the right size
+  until a worker stops answering: then every instance that reaches its task parks, and a few
+  thousand incidents are one cause with one fix that the product treats as a few thousand
+  problems. The list returned rows — megabytes of near-identical JSON per refresh, thousands
+  of DOM rows in a table that filters in the browser — and clearing them was one dialog per
+  incident.
+
+  `GET /api/v1/incidents/summary` answers instead in **one line per cause**: the (definition,
+  element, kind) triple, with how many tokens are behind it, the window it has been running,
+  a representative message, and the worker the parked task resolves through — so the fix is
+  reachable from the cause and not only from a row. Its size is the number of causes, not the
+  number of incidents.
+
+  `POST /api/v1/incidents/resolve` is the matching action, in the shape bulk termination
+  settled (ADR-0090): an explicit set of ticked keys, or a scope — `processDefKey`,
+  `processInstanceKey`, `elementId` (or `elementIndex`, for a group whose definition is
+  no longer deployed and so resolves to no id), `type`, `message` — resolved in bounded batches
+  (`remaining=true` → repeat). A scope must name at least one selector; resolving every
+  incident on the server is asked for deliberately with `{"type":"job"}` rather than by
+  leaving a field out. The listing gained `?element=`, `?elementIndex=`, `?type=` and `?message=` and evaluates
+  the **same selector**, so what an operator reads and what the action touches cannot
+  disagree. Both tools exist over MCP too (`atlas_incident_summary`,
+  `atlas_resolve_incidents`).
+
+  **Operations → Incidents** opens on those causes, with *Resolve all*, the worker fix and a
+  scoped row page beside each; the rows keep every per-incident way out and gain tick-boxes
+  for a hand-picked set. Repairing the worker from a cause retries the whole cause, because
+  the fix was to the thing all of them share. The Instances overview reads its Incidents
+  column from the summary — the same column, from a couple of hundred bytes instead of
+  megabytes.
+
+- **The third question about somebody's access can now be asked.** Ordering answers *may they
+  have it*; reconciliation answers *do they actually have it*; nothing asked *do they still
+  need it*. That third one is not the smaller sibling of the other two — a right that was
+  properly approved, properly provisioned and is correctly recorded can still be wrong, and
+  in most estates it is the dominant way wrong access accumulates. People change roles and
+  keep what the old one needed. Nobody granted anything improperly; nobody removed anything
+  either, because removing is somebody's job and therefore nobody's.
+
+  `POST /api/v1/recertification` turns what the inventory records into questions, each
+  addressed to the person who can judge it. **Who reviews is named by the caller**, because
+  Atlas does not resolve line managers — a directory lookup belongs to a modelled process,
+  exactly as it does for the `superior` approval rule. A holder nobody names gives an
+  *unassigned* row, which lands with the campaign's owner rather than stopping the campaign.
+
+  The whole design is a refusal to make a signature cheap. **There is no way to answer more
+  than one row** — not in the screen and not in the API — because a campaign answered in bulk
+  is an attestation with no reading behind it, which is worse than none: an auditor believes
+  it. **Silence is never a decision**: a campaign closes with unanswered rows in it and they
+  stay unanswered, so `undecided` is a first-class count rather than a remainder. There is no
+  auto-revoke at the deadline, and no re-grant — granting is ordering, and ordering carries
+  the approval rule.
+
+  Each row carries what the reviewer was shown, frozen: origin, order, how long it has been
+  held, and whether an open reconciliation finding disputes it. Certifying a disputed right
+  is signing a statement about something two systems currently disagree about, so it is
+  marked — and marked rather than refused, because one finding must not block a campaign over
+  an estate. Withdrawing a right runs the product's own deprovisioning process, never a
+  direct worker call. `examples/rezertifizierung.bpmn` is the modelled process, and **Tasks →
+  Access review** is where somebody answers — Tasks rather than Operations, because the
+  reviewer is a line manager who has never opened Operations.
+
+- **A deployed decision version can now be removed, and so can a model file nothing
+  points at.** Both stores only ever grew: every Deploy in the decision editor minted a
+  version carrying the full DMN source, and every upload left a file behind.
+  [ADR-0329](docs/adr/0329-a-decision-deployment-is-not-deletable.md) had written the
+  rule such a delete would need before any route existed; this is that route, with that
+  rule.
+
+  `DELETE /api/v1/decision-deployments/{key}` refuses while a deployed process is
+  **pinned** to the key — it resolved a `latest`-bound reference to that exact version
+  and carries no copy of the model, and a pin outlives the instances that used it, so
+  "no running instances" is not the test. It also refuses the **current** version of a
+  decision that still has older versions behind it: removing it would send the next
+  deploy quietly back a version, and free a version number the surviving records no
+  longer account for. Removing a version history therefore goes oldest first, and the
+  refusal says which of the two it is. The registry's "newest model providing this
+  decision" pointers are rebuilt from the survivors in deployment order, so what the
+  server answers after a delete and what it answers after a reboot cannot diverge.
+
+  `DELETE /api/v1/dmn-models/{ref}` refuses while any DMN reference points at the
+  handle, because that would leave them unresolved. A decision deployment's `modelRef`
+  does **not** block it: that field is provenance, the record carries its own XML, and
+  the decision keeps evaluating after the file is gone.
+
+  Operations' decision page gains a **Deployed versions** table listing every version
+  with what is pinned to it — the first answer anywhere to "what is using this version"
+  — and offers Delete on the ones that may go. Not assigned gains Delete on an
+  unreferenced model. `atlas_delete_decision_deployment` is the MCP counterpart, so the
+  tool count is now 107. ([issue #919](https://github.com/pblumer/atlas/issues/919))
+
+- **The inventory can now be checked rather than trusted.** An entitlement asserts that a
+  right exists in another system — an assertion Atlas cannot guarantee, because target
+  systems are changed from outside it. So it decays silently, and an inventory nobody
+  checks is a list of things that were once true.
+
+  `POST /api/v1/reconciliation` compares one reading of one target system against the
+  inventory and finds both directions: rights held that nothing here granted, and rights
+  recorded that the target system does not have. The second is the one that corrupts the
+  evidence, because an inventory wrong that way answers "who had access when" with a
+  confident falsehood.
+
+  The whole design hangs on one required field. A commissioning load reports what it
+  *found* and never what it did not; reconciliation reads absence as a finding, which
+  makes the same silence dangerous. So a run names what it read **completely**, and
+  outside that scope nothing is concluded — a right outside it is not missing, it is
+  unexamined. There is no default: "nothing" is useless and "everything" is a guess that
+  turns a truncated read into a report that the estate has lost its access.
+
+  The scope has **two axes**, and one run may use both: `refs` names references read
+  whole, `subjects` names the people whose holdings were read whole. The second is what
+  answers an offboarding — *is this person out of everything?* — which a group listing
+  structurally cannot: you would have to reconcile every group in the system and observe
+  the person's absence from all of them. A subject-scoped run is confined to the system it
+  names, so a leaver check against Active Directory never reports somebody's Jira rights
+  as missing, and a subject that resolves to no account is reported rather than counted
+  clean — **the absence of an account is not the absence of access**. The clean result
+  gets its own sentence in the report, because a verification that returns nothing
+  otherwise looks exactly like a run that did nothing.
+
+  It records **transitions, not samples**: ten runs over one disagreement make one record,
+  and the run where it goes away closes it. Nothing is ever acted on automatically — adopt
+  (`origin: adopted`, the first writer that origin has had), deprovision through the
+  product's own process, or revoke the record are three separate calls by a person, and
+  none of them is reachable with the worker credential that may run the comparison.
+  `examples/abgleich.bpmn` is the nightly modelled process and
+  `examples/austrittspruefung.bpmn` the leaver check, and **Operations → Reconciliation**
+  is where somebody reads a finding before acting on it — the three actions are not
+  guarded alike, because adopt and revoke are recoverable and deprovisioning is not.
+
+- **The inventory is taken before it is enforced.** `model.OriginLegacy` has existed since
+  the portal's three models were decided and has had no writer, which meant the inventory
+  could only ever contain what Atlas itself had granted. On the day an installation goes
+  live that is nothing, while reality is full — so the reconciliation that comes next would
+  report every privilege in the estate as a discrepancy, each carrying an executable
+  "remove it in the target system".
+
+  `POST /api/v1/inventory-load` takes the rights one reading of one target system found
+  and records them as pre-existing. It resolves both halves itself: the subject against the
+  mirrored accounts, the right against the new `targets` on a catalogue product — what that
+  product is called in AD, in Entra, in Jira. That join is data rather than something a
+  worker does, because the load's output is evidence somebody has to be able to disagree
+  with: the report says *Alice is in `CN=VPN-Users`, and the catalogue says that group is
+  VPN access*, not merely that Alice holds VPN access.
+
+  It writes nothing unless `apply` is true, so an omitted field reports. It never writes
+  over a right an order granted, never moves the start date of one it already recorded, and
+  only ever adds — a right a batch does not mention is not revoked, because a batch is one
+  system's partial answer. What it cannot attribute it names: subjects with no account, and
+  `unmapped`, the rights the estate grants that no product claims, most-held first. That
+  last list is the one nothing could produce before. `examples/bestandsaufnahme.bpmn` is the
+  modelled process, deliberately without a timer — a commissioning load is an act somebody
+  performs, not a schedule.
+
+- **Atlas keeps its accounts and groups from a Microsoft Entra tenant, and the first run
+  writes nothing.** An account only ever came into being when somebody signed in through
+  OIDC, so a fresh installation starts with an almost empty user store — and the next
+  piece of work, taking an inventory of the rights that already exist, has to attribute
+  every right it finds to an account that is not there.
+
+  Atlas now reads the directory rather than waiting to be told about it. A scheduled
+  process (`examples/entra-verzeichnis-abgleich.bpmn`, timer start `R/PT1H`) runs the
+  Entra Worker's `delta-users` and `delta-groups` change-tracking queries and reports what
+  changed to `POST /api/v1/directory-sync`, which creates accounts, updates them, merges
+  the directory onto an account that already existed, and disables the people who have
+  left. `GET /api/v1/directory-sync` says where the next run resumes from. Nothing is
+  published outbound and there is no inbound provisioning endpoint: the decision record
+  carries the argument against SCIM, and against reading it as an oversight.
+
+  **The first run reports and writes nothing**, because an empty cursor enumerates the
+  whole tenant against an empty store and a defect there reaches everybody at once. It is
+  not a preview with an implementation of its own — the same code decides in both modes
+  and only the last step, the write, is skipped — the cursor does not move, so the run may
+  be repeated as often as somebody likes, and the report gives counts for the expected and
+  whole lines for the notable: merges, disables, refusals, memberships that cannot yet be
+  resolved. The mode is a field of the message spelled `apply`, so an omission reports
+  rather than provisions, and every report that wrote nothing says so and why.
+
+  Disabling somebody is not only a record: the run that writes it also ends their live
+  sessions, revokes their standing OAuth grants, and pushes every mirrored group
+  membership it changed into the sessions that are already open — a session carries the
+  group ids it was opened with, so without that half a mirror would be a quieter way to
+  disable somebody than the administration button that says so.
+
+  An account mirrored onto one a federated login created keeps both identities: Entra's
+  ID-token `sub` is pairwise per application and is therefore never the directory object
+  id, so the object id lives in a new `directoryId` field and the pairwise subject stays
+  where a sign-in looks for it. A created account holds `user` and nothing else, from a
+  literal that no input reaches; existing roles are never widened or narrowed; and the
+  last enabled administrator is never disabled. A mirrored group keeps the directory's own
+  member ids beside the translated ones, so a membership that arrives before its account
+  resolves on a later run instead of being lost. The credential the process carries is an
+  API token of the new `directory` scope, which reaches those two routes and nothing else
+  — it cannot deploy — and both routes refuse outright on a server running without
+  authentication. Three budgets bound the message, the batch and the report
+  (`ATLAS_LIMIT_DIRECTORY_SYNC`, `_DIRECTORY_OBJECTS`, `_DIRECTORY_REPORT`).
+  ([ADR-0332](docs/adr/0332-entra-directory-provisioning.md))
+
+- **A relationship is drawn from the class it starts at, the way a sequence flow is.**
+  Selecting a class on the information model's canvas now opens the little menu beside
+  it that the BPMN modeler has had all along: the relationship kinds that class could
+  actually reach something with, and a bin. Drag one onto the class at the other end and
+  the line is drawn.
+
+  Drawing used to be a mode. The kind was armed in the palette, and the next two classes
+  clicked became its ends — which had to be entered before the classes were looked at,
+  remembered between the two clicks, and aimed from a convention nothing on screen
+  stated. Which end a composition's diamond goes on is the question the notation turns
+  on, and it was answered by the order somebody happened to click.
+
+  The subset now answers under the pointer rather than after the drop: a target that
+  cannot take this kind of relationship never lights, and the question asked is the
+  narrow one — not whether two classes may relate, but whether they may relate *like
+  this*. A drop on a refused target still says why, in the same words the deploy would
+  use. The BPMN modeler drops such a gesture in silence; this canvas has explained the
+  notation at that exact moment since the palette did the drawing.
+
+  The armed palette mode still works. It is the only way to draw a relationship without
+  a pointer that can drag, and removing it is a separate decision.
+  ([ADR-0352](docs/adr/0352-draw-a-relationship-from-the-class-it-starts-at.md),
+  [ADR-0237](docs/adr/0237-class-canvas-on-diagram-js.md))
+- **An «enumeration» now says which values a member may take, and is drawn as part of the
+  class diagram.** Four questions an author answers while drawing a write arrow have the
+  same shape, and only three of them were asked that way: which class is this data
+  object, which state does the write move it into, which member does it target — and
+  then, in free text, what goes in. Where the member's type is an «enumeration», the
+  model has already written down the complete list of values it may hold. The write row
+  offers them, and a value that is computed still takes any FEEL expression, because a
+  picker that cannot be left would be lying about what the field is.
+
+  At deploy, a value that is **constant** is checked against the literals, and one that
+  is none of them is a warning worded like the unknown-state warning, for the same
+  reason: a model that is merely behind its process is not broken. Constant means an
+  expression that reads no variable — the inputs decide, not what an evaluation happens
+  to return, because `=if x then "approved" else "approvd"` with `x` unbound hands back a
+  perfectly concrete else branch that the process may never write.
+
+  On the class diagram, an «enumeration» that types an attribute is joined to the class
+  that uses it, derived and never authored, the way a data store's line and the
+  `«lifecycle»` line already are. Until now it was the one box that floated: the
+  compartment said `status : Lebenszustand` and nothing held the two together. One line
+  per pair, labelled with the attributes that justify it, and none where the `«lifecycle»`
+  line already joins them — a derived line is routed straight, so a second would be drawn
+  on the first. A straight line's label also moved to its midpoint, where it was landing
+  on the target box.
+  ([ADR-0351](docs/adr/0351-an-enumeration-says-which-values-a-member-may-take.md),
+  [ADR-0306](docs/adr/0306-a-lifecycle-may-take-its-states-from-an-enumeration.md))
+
+- **A self-service catalogue: people order from it, an approval decides, and an inventory
+  records what they hold.** Atlas had no catalogue to order from and no record of what
+  anybody had been given. Three models now carry it, kept apart because they diverge the
+  moment somebody orders
+  ([ADR-0312](docs/adr/0312-portal-catalogue-order-inventory.md)). A **catalogue** is
+  design-time and versioned: products with their variants, an approval rule, the processes
+  that provision and deprovision them, and what contains and requires what. Publishing
+  checks it and freezes a **release**, or answers **422** with every problem at once. An
+  **order** (`/api/v1/orders`) is placed against one frozen release, and a line that needs
+  approval goes through one of three shipped approval processes — a named person, a group,
+  or the orderer's superior. A provisioned line becomes an **entitlement** held by its
+  recipient: engine state of its own rather than a variable of the order, so retention
+  cannot delete the evidence that somebody holds a privilege. `GET /api/v1/inventory`
+  reads it.
+
+  People order in what is now the **shop** (`/shop.html`, in the app menu; it arrived as
+  the portal, and the rename is under *Changed*). It shows the one catalogue a person's
+  groups reach — a catalogue's rank decides when several do — in that catalogue's own
+  theme ([ADR-0316](docs/adr/0316-portal-theme-per-catalogue.md)). An approval is an
+  ordinary user task and is decided in the Tasks inbox. A catalogue is maintained on the
+  **Catalogue** screen (`#/catalog`) by the new `productmanager` role together with
+  editor rights on that catalogue; the role is grantable like the other roles, and **no
+  upgrade grants it**
+  ([ADR-0315](docs/adr/0315-portal-roles-and-responsibilities.md)). Changing who
+  maintains a catalogue is its owner's or an administrator's decision. The many entries
+  about the catalogue, the shop, orders and the inventory elsewhere in this section are
+  what was built on this.
+
+- **A user task's assignee and candidate groups may be expressions.** Both attributes
+  were read as literal text, so a value beginning with `=` addressed a user or a group of
+  that literal name — nobody. A leading `=` now makes it FEEL, evaluated when the task
+  activates and frozen onto the job, so recovery replays the answer rather than
+  evaluating it again. An expression that does not compile refuses the deployment; one
+  whose result is empty or not a string parks the element with an incident, and resolving
+  it re-runs the activation. It never creates a task addressed to nobody
+  ([ADR-0318](docs/adr/0318-user-task-assignment-expressions.md)).
+
+- **The decision editor draws decision services.** A decision service — DMN's interface
+  over part of a decision graph, naming what it returns and what it works out internally
+  — could sit in a model Atlas deployed, but the editor had no shape for one: a model
+  carrying one came from the temis Modeler, from Camunda or from hand-written XML. The
+  vendored editor is now built from a fork of dmn-js that draws it, as a box with a
+  divider line: what the service returns above, what it works out internally below.
+  Dragging the divider moves a decision from one side to the other, one undo restores
+  exactly the membership that was there, and both the membership and the divider survive
+  a save and a reopen. Calling a service from a business rule task, folding one away and
+  laying one out are entries of their own in this section, and so are the defects that
+  drawing them on real models turned up.
+
+- **A write arrow can set several members of a data object at once.** A step that
+  captures a form's worth of fields writes them from one arrow with a row per field,
+  rather than one arrow per field. BPMN always allowed this — a data association carries
+  `assignment [0..*]` — and Atlas read one and silently dropped the rest, so a model
+  another tool wrote deployed and quietly did something other than what it said.
+
+  The writes are applied in the order they are listed and recorded as **one** change to
+  the object, not one per field: an activity that fills in a record did one thing, and a
+  timeline showing four half-built identities would be an artefact of how the write was
+  compiled rather than something that happened. Order is load-bearing and falls out of
+  that: two writes to the same member mean the later one, and a member write after a
+  whole-object write on the same arrow lands on the new value.
+
+  This is also the way out of the trade-off the previous release left standing. Writing
+  the whole object from one FEEL expression drew well and told the model nothing — the
+  members inside an expression cannot be read at deploy time, so the write went
+  unchecked and the class derived as having none. Named on their own rows, every member
+  is a static fact again: checked against the class, listed in the derived model, and
+  compared rather than excluded by the difference reading.
+  ([ADR-0350](docs/adr/0350-a-write-arrow-may-set-several-members.md),
+  [ADR-0060](docs/adr/0060-field-level-data-object-writes.md))
+
+- **A process document now shows the decision behind each business rule task.** The
+  document already set a script task's source and a sequence flow's FEEL condition
+  verbatim, under the rule that the prose says what a step is for and the code says
+  what it runs. A business rule task is the one element whose behaviour lives entirely
+  outside the diagram, and it was the one the document said least about.
+
+  Each such section now carries what the diagram holds — the decision id, the binding
+  and what it means, the result variable, and the inputs the task feeds in — and, below
+  it, the decision's own rule table, drawn by the same renderer the decision document
+  uses. The rules are read from the model behind the decision's reference where there
+  is one, and otherwise from its deployment, with the document naming which. A task
+  evaluated by a temis Worker says so and names the worker rather than implying it
+  holds the rules; a decision that cannot be read costs its table, not the export.
+
+  `GET /api/v1/decision-deployments/{key}/xml` is widened from `operator` to any
+  signed-in identity for this, matching `GET /api/v1/processes/{key}/xml`, which is
+  already open to any identity and carries strictly more.
+  ([issue #919](https://github.com/pblumer/atlas/issues/919))
+
+- **A decision is published as its own document, and two people can edit one together.**
+  The last two things a diagram had and a decision did not.
+
+  **Documentation.** A decision table is the business rule — the thing a compliance
+  officer signs off and an auditor asks about — and it was readable only inside Atlas.
+  The editor's `⋯` menu now publishes it as a structured PDF: the requirements graph,
+  then every decision with its prose, the input data it reads with declared types, and
+  its rule table set as a real table (hit policy, columns, one row per rule, each rule's
+  own annotation below it). A decision whose logic is a literal expression shows the
+  expression. Versions are numbered per decision, immutable, and shareable through a
+  revocable public link — [ADR-0143](docs/adr/0143-process-documentation-export.md)'s
+  design for a second artifact kind. The version line is about sign-off rather than
+  about what is running: a business rule is usually approved *before* it is deployed,
+  which is when the deployment record ([ADR-0319](docs/adr/0319-durable-versioned-decision-deployments.md))
+  does not exist yet.
+
+  **Co-editing.** A decision draft now holds a live session
+  ([ADR-0140](docs/adr/0140-live-collaborative-modeling-sessions.md)): who else is here,
+  what they are looking at, and a lock so two people cannot overwrite each other. The
+  rule needed an answer dmn-js forced: a decision-table view is a grid, and a rule, a
+  cell or a column has no id a session could name. **So the lock is the decision** — in
+  the requirements graph that is literally ADR-0140's per-element rule, and opening a
+  decision's table claims that decision. Two people can work on two decisions of one
+  model at once; two cannot fill in one table together, and the editor says which it is.
+  The session handlers are now parameterised by subject rather than copied, so a third
+  artifact with a draft costs a binding rather than an implementation.
+  ([ADR-0324](docs/adr/0324-decision-documentation.md),
+  [ADR-0323](docs/adr/0323-co-editing-a-decision.md),
+  [issue #919](https://github.com/pblumer/atlas/issues/919))
+
+- **A decision can be tried against sample inputs, and a DMN model with no diagram now
+  renders.** Two gaps closed in the decision editor, both of which made it a worse place
+  to work than the diagram editor beside it.
+
+  **Test.** A decision table is a program, and the first question its author asks is
+  whether it does what they meant. Answering it meant saving the decision, deploying it,
+  deploying a process with a business rule task that calls it, starting an instance and
+  reading the result off it — five steps, three of them about processes, to answer a
+  question about one table. The bar now carries **Test**: fill in the inputs, press Run,
+  and see what came back together with the rule matrix saying which rules fired and why —
+  the same matrix Operations draws for a decision a running process evaluated, because it
+  is now literally the same renderer. The model tried is the one on screen, compiled for
+  that one call and thrown away: no key, no record, no registry entry, nothing to clean
+  up, and a decision that is stored nowhere yet can be tried like any other.
+  `atlas_try_decision` exposes the same act over MCP.
+
+  **A diagram for models that have none.** Almost every DMN model that reaches Atlas
+  carries no `DMNDI` — an agent writing a decision table over MCP writes logic, not a
+  picture, and so does temis, and so does a hand. dmn-js needs one to draw anything, so
+  such a model opened in the editor showed a single box: the input data and the arrows
+  between were silently absent, and the graph could not be seen or rewired. Worse, saving
+  from that state wrote back a diagram covering only what had been drawn, so one visit
+  to the editor left the model rendering worse than it was found. Atlas now completes a
+  DMN model's diagram on the way to the editor, the way it has always done for a
+  layout-less BPMN model, and **Auto-layout** in the new `⋯` menu re-flows the whole
+  requirements graph on request. One generator serves both the editor and the read-only
+  DRG viewer, so the same model is drawn the same way in both. **Export XML** is in that
+  menu too.
+  ([ADR-0326](docs/adr/0326-trying-a-decision-before-it-runs.md),
+  [ADR-0325](docs/adr/0325-dmn-diagram-is-completed-on-read.md),
+  [ADR-0124](docs/adr/0124-server-side-diagram-auto-layout.md),
+  [issue #919](https://github.com/pblumer/atlas/issues/919))
+
+- **A single decision can be deployed from its editor, and the editor says which version
+  is running.** A decision reached the engine through one door: the application's
+  **Publish**, which ships everything the application holds. An author who had just
+  finished a decision and wanted to see it evaluate had to publish other people's drafts
+  with it, give every other decision in the application a new version, and mint a release
+  nobody had asked for. A single diagram has had its own **Deploy** since the beginning;
+  a single decision had none.
+
+  The decision editor's bar now carries **Deploy** beside the two save verbs, and a chip
+  saying which version this decision is deployed at and under which key — the answer to
+  "is what I am looking at what is running", which until now meant leaving for
+  Operations. Deploy ships what is on screen through the very function an application
+  publish calls: one durable record, written before anything is registered, carrying its
+  own DMN source, versioned per decision id, and taking the `latest` pointer a process
+  deployed afterwards binds to. Nothing about the storage model or the binding rules
+  changes — this adds a caller to that path, not a variant of it.
+
+  The three verbs stay distinct, which is the point: **Save** keeps your draft,
+  **Save to model** writes what every reference resolves, **Deploy** changes what the
+  engine evaluates. A decision that has never been written to the model can still be
+  deployed — the record carries its own source — and the editor says plainly that no
+  business rule task can name it until it is in the model. `atlas_deploy_decision`
+  exposes the same act over MCP, and the deployed-decision listing is now readable by
+  any signed-in identity, as the deployed-process listing already was.
+  ([ADR-0322](docs/adr/0322-deploying-one-decision.md),
+  [ADR-0319](docs/adr/0319-durable-versioned-decision-deployments.md),
+  [issue #919](https://github.com/pblumer/atlas/issues/919))
+
+- **A decision has a draft, so saving it is no longer the same as writing the model
+  everything resolves.** The decision editor's Save wrote `eligibility.dmn` itself — the
+  model the business-rule-task picker resolves, the model another application's
+  reference may point at, and the model the next Publish ships. There was nowhere to put
+  an unfinished decision, and pressing Save had consequences an author could not see:
+  one half-typed FEEL expression refused a *colleague's* publish of that application,
+  with a message about a decision they had never touched; a table whose output column was
+  still called `result` offered `result` to the next business rule task that adopted it;
+  and the first save of a second decision named *Eligibility* quietly became
+  `eligibility-2.dmn` with its own reference, leaving two rows with the same name.
+
+  The editor now carries the BPMN editor's pairing: **Save** keeps a draft — your work,
+  which nothing else resolves — and **Save to model** writes the handle every reference,
+  every picker and the next Publish resolve. A draft lives in a store of its own, filed
+  into its application, and exists only while it differs from the model: writing the
+  model clears it. A decision that has one is marked **Draft** in the application's
+  artifact list, and a decision that has *only* a draft is listed as its own row saying
+  it is not in the model yet, because a publish ships the model and does not carry it.
+  **Discard draft** goes back to the stored model.
+
+  Writing the model no longer forks a copy either: a handle another decision already
+  holds is refused, named, and offered as a deliberate replacement, the same rule drafts
+  and forms have had since ids became identity. An import, a source-tree apply and the
+  MCP authoring tools are untouched — they never claimed to be editing one decision, and
+  keep the plain upsert.
+  ([ADR-0321](docs/adr/0321-decision-drafts.md),
+  [ADR-0222](docs/adr/0222-artifact-id-renames.md),
+  [issue #919](https://github.com/pblumer/atlas/issues/919))
+
+- **A data object's state is on the diagram, and says whether anything acts on it.** A
+  `<dataObjectReference>` carries a data state — the `[ARCHIVIERT]` BPMN writes under
+  the box — and Atlas has read it end to end since ADR-0053: the compiler interns it, the
+  engine advances the object into it, and the Operations replay shows every transition.
+  The one place it was missing is the place a model is read. bpmn-js parses `<dataState>`
+  and draws nothing with it, and the properties panel has been able to *edit* the state
+  all along, so a diagram could carry a lifecycle no view showed. In the identity example
+  that meant six boxes reading `identitaet` and nine reading `services`, identical to the
+  eye, with the one thing that tells them apart held back in a side panel.
+
+  The state is now written under the object's name, in square brackets, on the Modeler
+  canvas and in all four read-only views. It rides under the *label* rather than the
+  symbol, so it stays with the name wherever an author drags it, and it follows the name
+  live as the state is typed, cleared or undone.
+
+  **It is drawn with its role, because the same string means two different things.** A
+  state on a box a write points at is the target state the compiler puts on the
+  `DataOutputAssociation`: the engine advances the object into it, the transition lands
+  in the log with its attribution, and `CheckDataFlow` matches it against the class's
+  lifecycle (ADR-0259). A state on a box that is only *read* is dropped — "its state
+  ignored on a read" — so it never reaches the compiled model, no engine acts on it, and
+  no check can reach it, not even the typo check that exists for exactly this mistake.
+  Drawing both the same way would have the diagram claim something the model does not do,
+  so the second is set back and its hover title says why. Same notation, same place, one
+  of them quieter — which is the honest rendering of what Atlas will actually do with it.
+
+- **The decision editor is a page of the Modeler, not a window over one.** A decision
+  used to be edited in a modal overlay. That fitted what a decision was when the editor
+  was built: a reference to a model file some process happened to use, stepped into from
+  the business-rule-task picker and stepped back out of. Since a decision became a
+  durable, versioned artifact published in its own right, an overlay costs four things a
+  page gives for nothing — a decision had no address to bookmark or send, the browser's
+  back button dismissed the editor and dropped the edit, saving was indistinguishable
+  from publishing the model every reference resolves to, and publishing was somewhere
+  else entirely.
+
+  A decision is now edited at `#/modeler/dmn/new` or `#/modeler/dmn/e/{ref}`, in the
+  chrome the BPMN and form editors wear: a breadcrumb back to the application by name,
+  the same tab strip (the DRG overview and each decision's own table), a model-handle
+  chip, a status line and **Save**. Save stays on the page and moves the URL onto the
+  decision it just wrote, so a second Save updates it rather than creating a second one.
+  The labels are English, like the rest of the Modeler — the overlay was German only,
+  and so was the starter model it seeded.
+
+  **Authoring a decision from a business rule task still takes one button.** It now
+  leaves the diagram instead of covering it: the diagram is saved as a draft first (the
+  rule the call-activity drill-down already used), and what the editor saved is adopted
+  by the task on the way back — decision id, input mappings and result variable filled
+  in, exactly as before. A deployed definition opened read-only has no draft to return
+  to, so it asks before leaving and the decision is picked afterwards.
+  ([ADR-0320](docs/adr/0320-the-decision-editor-is-a-page.md),
+  [issue #919](https://github.com/pblumer/atlas/issues/919))
+
+- **A DMN decision is a durable, versioned deployment artifact, and a deployed process is
+  frozen to the version it was deployed against.** A decision used to exist only as a
+  model bundled into some process's deployment. An application whose only artifact was
+  `eligibility.dmn` therefore published *successfully* and deployed nothing at all — the
+  bundle deploy iterated BPMN drafts and collected the models those drafts referenced, so
+  with no draft there was no loop iteration, no registry entry, and nothing on disk. After
+  a restart there was still nothing.
+
+  Publishing an application now deploys its DMN models as **decision deployments**:
+  durable records in a new `decisions/` store, keyed from the same definition key space
+  process definitions come from, versioned per decision id, and carrying the validated DMN
+  source plus its checksum. No compiled temis structure is persisted — the registry is
+  rebuilt by compiling the stored source again at startup, off the processor and before
+  the loop serves traffic. `GET /api/v1/decision-deployments` lists them and
+  `.../{key}/xml` serves the exact source a running process evaluates, which is not the
+  same thing as the model file behind a handle: that file is edited in place.
+
+  **`latest` binding is now resolved when the process is deployed, not when a token
+  arrives.** It was a lookup on the worker against a pointer every deploy overwrote, which
+  meant publishing a new decision silently changed the behaviour of processes already
+  running — and meant a version was being chosen outside the log, which a replay has no
+  way to reproduce. A deployment now resolves each `latest` reference once, to the newest
+  decision deployment providing it (or, when the decision was never published on its own,
+  to the model bundled with the process), and stores the answer in its record. The runtime
+  makes no version choice at all, and neither does recovery.
+
+  `deployment` binding is unchanged. **Deployments written before this keep their old
+  behaviour**: a record with no binding-policy marker still resolves `latest` at
+  activation, exactly as it was deployed to, and nothing on disk changes meaning under an
+  upgrade. Redeploying the process is what moves it to the pinned policy.
+
+  An application release now names the decisions it shipped alongside its processes, and
+  an application can be built from decisions with no BPMN in it at all — "Create new →
+  Decision (DMN)" authors one in the embedded editor and files it under the application.
+  ([ADR-0319](docs/adr/0319-durable-versioned-decision-deployments.md),
+  [issue #915](https://github.com/pblumer/atlas/issues/915))
+
+- **A capability's service levels are measured, not only declared.** Every KPI and SLA
+  on a business capability was prose the API labelled as a declaration, because nothing
+  computed one. `GET /api/v1/capabilities/{key}/measurement?windowDays=N` now returns,
+  per realising process, how often each end event fired, how often a token was
+  cancelled, the cycle time over the window, and each declared SLA's attainment.
+
+  **The window is required, and that is a measured finding rather than a preference.**
+  The decision record behind the register carried an open question — whether this is
+  computable at volume without the OpenSearch exporter, which not every installation
+  runs — and required that it be answered by measurement. It was. The per-element
+  counters are flat: a thousandfold population leaves them in microseconds, and at
+  10 000 instances the outcome distribution is *faster* than at 1 000. The instance walk
+  is linear, costing 1.24 seconds over 100 000 finished instances. So an unbounded
+  reading is not offered: `windowDays` is required and at most 400, which is generous
+  enough for an annual SLA and small enough that seconds of waiting cannot be asked for
+  by accident. The exporter is an optimisation for unbounded historical analysis, not a
+  prerequisite.
+
+  **The response mixes two kinds of number on purpose and says which is which.** The
+  counts come from maintained counters and are all-time — a counter holds a total, not
+  a series — while the cycle time is windowed. Both are integers on a screen, so the
+  body carries a sentence for each basis rather than leaving a client to assume.
+
+  **An SLA is measured only where it carries a number.** The new optional
+  `thresholdSeconds` sits beside the prose threshold rather than replacing it: "within
+  five business days" is what the business agreed, and no parser should decide what a
+  business day means at your installation. One without it is listed under `notMeasured`
+  with the remedy — and every KPI is listed there too, because which recorded figure
+  "disburse within three days" refers to is a judgement, and a guess would put a number
+  somebody acts on under a name nobody authored.
+
+  Two kinds of absence stay distinct, as in the gap report: a realisation you may not
+  see is restricted, one this server does not deploy is not deployed, and neither is
+  zero-filled. An SLA over a window that held no case is not 100% attained and not 0%.
+
+  This is the one read in the area that runs off the run loop, because it is the one
+  whose work grows with the instance population.
+
+- **Per-phase duration was measured and left out, for a different reason than
+  expected.** It went into the measurement as the candidate for omission, on the
+  reasoning that its cost scales with the length of the process while cycle time's does
+  not. A second benchmark axis — the same population over processes of 1, 10 and 30
+  tasks — refuted that: a thirtyfold longer process costs it 1.4× more, and its ratio to
+  its own control *falls* from 2.4× to 1.9×. Within an instance the cost is the seek to
+  the prefix, not the walk under it.
+
+  So it is not omitted for cost. It is omitted because a phase is a span between two
+  points a reader names, and the register has no field naming them; offering the
+  duration between two element ids a caller passes in would be a process-analytics
+  endpoint wearing a capability's name. The cost question is settled and the modelling
+  question is not.
+
+- **Atlas now reads the difference between what your processes build and what your model
+  plans.** [ADR-0301](docs/adr/0301-derive-the-model-from-the-processes.md) settled that
+  Atlas holds two statements about the same subject and must not merge them: the derived
+  model is what is *built*, the authored one is what is *wanted*, and their difference is
+  the work not yet done. It then stopped, because it could not settle the shape and
+  because it named a blocker — a comparison "needs a stable identity for a derived class
+  across two derivations, which nothing yet provides".
+
+  That blocker belonged to a *reconciliation*, which has to remember which change you
+  rejected last time. This reading remembers nothing: both sides are computed fresh and
+  compared by name, so there is no identity to keep across anything. And the names are
+  already the mechanism — `itemSubjectRef` resolves a class by name, a write path names a
+  member, and a lifecycle state's name **is** its identity because it is the string every
+  process writes.
+
+  **Data → Planned against built** shows two lists, never blended, because a reader acts
+  on them differently. *Planned, not built* is in the model and in no process: the
+  backlog, a decision taken and not yet implemented, and explicitly not a defect —
+  `data.unreachable-state` already reported exactly one case of this, and this generalises
+  it to members, states, transitions and whole classes. *Built, not described* is in the
+  processes and in no model, which usually means write it down and occasionally means a
+  process is doing something nobody agreed to.
+
+  **What it never compares is the half that makes it trustworthy**, and it is said where
+  it lists rather than in a footnote: the business key, attribute types and multiplicity,
+  which states are final, associations and documentation. Derivation cannot see any of
+  them ([ADR-0301](docs/adr/0301-derive-the-model-from-the-processes.md) §2), so a
+  difference there would be a fact about derivation rather than about your system — and
+  every one would sit on every class for ever. A short list is therefore not a clean bill,
+  and the screen says so.
+
+  Two more silences for the same reason. An «enumeration» is never reported as unbuilt: it
+  is machinery of the model — an attribute's type, or the states a lifecycle takes
+  ([ADR-0306](docs/adr/0306-a-lifecycle-may-take-its-states-from-an-enumeration.md)) — and
+  no process carries one. And an application that models nothing produces no findings at
+  all, rather than a wall of rows that are only the absence of a document nobody has
+  started.
+
+  Also readable as `GET /api/v1/infomodel/difference?applicationId=…` and as the MCP tool
+  `atlas_model_difference`. Nothing is written to either model.
+
+- **A drawing and the capability register are now one architecture.** Panorama holds an
+  architect's ArchiMate model; the register holds what has to be done, with an owner, a
+  scope and SLAs. Draw *Underwrite a loan*, file a capability keyed `loan-underwriting`,
+  and nothing connected them but the fact that somebody wrote a similar phrase twice —
+  and renaming either end lost even that, silently and in the direction of still looking
+  right.
+
+  Two binding keys close it: `atlas.capabilityKey` on an ArchiMate `Capability` and
+  `atlas.valueStreamKey` on a `ValueStream`. They are ordinary ArchiMate properties, so
+  a bound model stays a standard model and the binding travels with it into any
+  conformant tool. What travels is the record's **key** and nothing else: the name is
+  resolved by the server on every read, so a drawing cannot go stale about the register,
+  and a binding whose record was deleted reads as *missing* rather than as a name that
+  quietly stopped matching.
+
+  The key rather than an opaque id, which is the opposite of every other binding here.
+  Those carry an id because the resource's own name is mutable; a capability's key is
+  not — it is the filename on disk, it is not renameable in place, and it is what an
+  export carries — so it is the stable identifier the rule asks for.
+
+  **Each key is refused on the other's element.** A `Capability` and a `ValueStream` are
+  both strategy-layer behaviour elements binding a key from the same register, which
+  makes them the pair a later edit is likeliest to treat as interchangeable and the pair
+  where doing so would be least visible: both keys would still resolve, against a
+  register holding both.
+
+  Every signed-in caller may resolve one, unlike every other binding, and that is the
+  register's own rule rather than a shortcut. A capability says what the organisation
+  must be able to do and nothing about what this server runs. What *is* scoped are the
+  processes it names as realisations, and those are resolved elsewhere, through their
+  own sharing scope.
+
+- **A value stream is an element you can draw.** ArchiMate's `ValueStream` was accepted
+  by Panorama's validator and absent from its palette, so a model containing value
+  streams could be opened, edited around, and never added to — the worst of the three
+  states an element can be in, because reading works and nothing looks broken.
+
+  It is authorable now, on the strategy layer with a behaviour aspect, where the
+  standard puts it and where `Capability` already sat. The relationship matrix is
+  predicates over layer and aspect rather than a table of type pairs, so it inherits
+  exactly the rules a capability has and none were touched; a test holds the two to that
+  equivalence across every relationship and every partner, in both directions.
+
+- **A write into a data object now offers the members its class declares.** A data
+  output association writes one member of a structured object — `customer.name`
+  ([ADR-0060](docs/adr/0060-data-object-write-paths.md)) — and the path was free text.
+  `customer.nmae` deploys, runs, and writes a member nobody will ever read. The class the
+  object's type points at already declares what its members *are*, so the field now asks
+  the same question the class picker and the data-state picker ask, the same way: a list,
+  with an escape for a member nothing models yet.
+
+  Each entry carries what the model says about it — the type, the multiplicity where it
+  is not one, and the key mark on an attribute that is part of the business key. Where a
+  member's own type is another class in the model, that class's members are offered one
+  level down as `customer.name`, because a dotted path is exactly the case where the
+  first segment is structured and something else says what is inside it. One level and no
+  further: below that the model repeats itself, and a picker that walks it forever is one
+  nobody can read. An **untyped** member offers nothing inside it, because nothing knows.
+
+  A path the class does not declare is kept and named rather than dropped — a diagram is
+  routinely drawn before the model catches up — and it comes back in the list saying it
+  is not a member of that class, instead of looking like any other entry.
+
+  **What this is not:** a data object is not a process variable. Nothing binds one into
+  the FEEL scope, so these members say what the write *target* is shaped like and nothing
+  about what the expression above them can read. The panel says so where it matters,
+  beside the field that takes a FEEL expression, because a member list read as a variable
+  list is exactly the wrong lesson to take from it.
+
+- **A milestone is an element you can draw now.** BPMN's marker for a point on the path
+  where no work sits is a **none intermediate throw event**: an intermediate throw event
+  with no event definition, named after the point it marks. *Identity verification
+  started* is one — the work is what follows it, so there is no task there to record.
+  Atlas refused it, and refused it at Deploy rather than at author time: the Modeler drew
+  one, validated it and said nothing, because the element was never in the list of things
+  bpmn-js can draw that the engine cannot run.
+
+  It compiles. It waits for nothing and needs no worker, so its execution is the same as
+  having drawn nothing at all — and that is not what it is for. What it produces is the
+  record: the per-definition visit counters count it, the instance's step trail carries it
+  in order, and the Operations overlay lights it up. That is the whole difference between
+  a milestone and a label on a sequence flow, and it is what makes "when did this case
+  reach verification" answerable per case rather than only where a task happens to sit.
+
+  It is a node type of its own rather than a reused undefined task or link throw, because
+  everything that reads a compiled node back reads its type — the overlay, the step
+  replay, the process documentation, a migration plan matching elements across versions.
+  A milestone stored as a task would be drawn and described as a task.
+
+  **Making the empty case compile did not make the wrong case compile.** "No event
+  definition this compiler implements" and "no event definition at all" used to be one
+  state, and both were refused; with the second one compiling, the first would have become
+  a pass-through that silently does nothing the model asked for. A throw event carrying a
+  timer — which BPMN allows only on a catch — would have run straight through instead of
+  waiting. So an unmatched `*EventDefinition` child is now refused by name, and by its
+  suffix rather than by a list of the five that are wrong today, because such a list goes
+  stale silently and in the direction of accepting something.
+
+- **A capability record now says when somebody last read it and meant it.** The gap
+  report checks a realisation against what is deployed, because that is a fact Atlas can
+  see. The rest of a capability — who owns it, what it is and is not responsible for,
+  what it has promised — is prose about people and promises, and Atlas took all of it on
+  trust. A map whose realisations are green and whose owners left two years ago is worse
+  than no map: it is confidently wrong in exactly the fields somebody escalates against.
+
+  Both records now carry a confirmation: when, by whom, who they asked, and one line on
+  what the review found. `POST /api/v1/capabilities/{key}/confirmation` is the only
+  thing that sets it, and creating a record counts, because writing something down is an
+  assertion.
+
+  **No edit sets it** — not even one that rewrites the owner or an SLA. If saving
+  refreshed the date, fixing a typo in the summary would assert that every field had
+  been re-checked, which is precisely the lie the mechanism exists to prevent, made
+  automatic and leaving no diff in which anybody could have noticed it. For the same
+  reason there is no bulk confirm.
+
+  The confirmation also records **who was asked**. The confirmer is almost never the
+  owner, because the owner is free text precisely to accommodate people with no Atlas
+  account — so without that field the map confirms itself and a reader cannot tell that
+  from a review the owner sat in. Leaving it empty is a legitimate confirmation and a
+  weaker one, and the record says which. A self-confirmation is shown beside it and
+  never reported: in a four-person installation the architect is the only person who
+  *can* confirm, and a report that fires on the normal case stops being read.
+
+  A confirmation stays fresh for twelve months, the interval this repository already
+  uses for the two other things it dates and cannot verify. Unlike those, it is
+  configurable — `PUT /api/v1/settings/confirmation`, admin only — because those govern
+  content here and this governs a customer's map reviewed on their own cadence. Setting
+  it to something nothing outlives does silence the check, and that is allowed and made
+  legible instead: it is one visible number, and every report says which interval it
+  applied.
+
+  What lapses becomes two new gap findings and a `?stale=true` listing — the review
+  backlog, the exact twin of `?realized=false`, the automation one. A stale record is
+  flagged everywhere it is read and never withheld, because hiding it would make the map
+  least useful at the moment it most needs attention. Both are also MCP tools, whose
+  descriptions say in as many words that only what was actually re-read may be
+  confirmed.
+
+  Nine of the report's ten findings are facts Atlas checked. These two are not, and the
+  report does not pretend otherwise: the only honest thing it can say about prose is
+  that nobody has stood behind it lately.
+
+- **Atlas now holds what the organisation must be able to do, not only what it runs.** A
+  deployed process could be found by its name and by nothing else: not by the business
+  capability it realises, not by who owns that capability, and not by what would stall
+  without it. The answer to all three lived in a slide deck, if anywhere.
+
+  Two design-time records close that, following the business architecture of Ruecker
+  and Strauch's *Enterprise Process Orchestration*. A **business capability** says what
+  has to be done, independently of how — its scope (including what it is explicitly
+  *not* responsible for), its input and output, its business owner, the resources it
+  draws on, what it requires from other capabilities, and the KPIs and SLAs it is held
+  to. A **value stream** is the ordered activity that meets a customer need, its stages
+  naming the capabilities that perform them.
+
+  A capability says how it is currently done in one of four ways: an executable process
+  here, a Worker, a purchased system, or a person. The last two are the point. A map
+  that could only record what Atlas already runs would tell you nothing the deployment
+  list does not, and `GET /api/v1/capabilities?realized=false` — everything nothing
+  currently automates — is the adoption backlog the whole thing exists to shrink.
+
+  Nothing about a realisation is stored beyond a portable key. Whether the process still
+  exists, at which version, with how many instances running, is resolved every time you
+  read, so the record cannot go stale about the installation. **Coverage** answers that
+  for one capability, along with what it depends on, what each of those has promised, who
+  depends on it, and which value-stream stages it performs.
+
+  The reverse direction is computed and never stored. `GET
+  /api/v1/business-architecture/gaps` compares the map against what this server actually
+  runs: capabilities nothing realises, realisations pointing at what is not here,
+  deployed processes no capability claims, stages with no capability, dependencies naming
+  no capability, and — the one worth the most — a call activity crossing from one
+  capability's process into another's that the caller never declared. It is a comparison
+  and never a merge: the method's black box is normally a service task, so a declared
+  dependency with no call activity is the ordinary case and raises nothing. Two things it
+  refuses to report: a purchased system or a person, which Atlas cannot see and will not
+  call a defect, and anything outside your sharing scope, which reads as restricted
+  rather than missing — with a count, so a clean report can be told from a blind one.
+
+  Capabilities are a **flat, tagged list**, and the record has no parent field. That is
+  the method's own advice and it is now structural: an "end-to-end" capability is
+  regularly invoked from inside another one, so any tree is wrong from some direction,
+  and a test asserts the field's absence rather than a comment asking for it. There is
+  one identity, the key, and it is also the filename — the map reads on disk as
+  `capabilities/loan-underwriting.json` and diffs like source. The price, stated in the
+  refusal that enforces it, is that a key cannot be renamed in place.
+
+  Both stores are design-time, so the existing export and restore already carry the map
+  between installations. The whole surface is available as MCP tools as well, because an
+  agent that deploys a process has no other way to say what the process is for.
+
+  Every KPI and SLA in the registry is a **declaration**. Atlas computes none of them,
+  and the coverage answer says so in a field rather than letting a client render a goal
+  as an achievement. The data to compute them is already there; whether it can be
+  aggregated at the volumes this is aimed at is an open question the decision record
+  carries, and measurement is a separate slice.
+
+  The method and how to work it are in `docs/architecture/business-architecture.md`,
+  including two things checking it against the tree turned up: a **none intermediate
+  throw event** — the method's milestone marker — does not compile, and Atlas's
+  Prometheus surface is operational rather than business-level, so a KPI dashboard
+  planned against `/metrics` will not find what it needs.
+
+- **A lifecycle can now take its states from an «enumeration» you already wrote.**
+  [ADR-0259](docs/adr/0259-data-object-lifecycle.md) gave a class a state machine, and it
+  was written against a real model that already had one — drawn as an enumeration. That
+  model is the whole problem: its author had written the five states of an identity as
+  literals, with a paragraph of documentation on each, *because that was the only place
+  the states could be written down at all*. Adding a lifecycle beside it made the model
+  say the same five strings twice, with nothing connecting them and nothing noticing when
+  they drifted.
+
+  A business object's lifecycle now names an enumeration in the same model, and that
+  enumeration's literals **are** its states. The name of a state is written in one place.
+  Everything an enumeration cannot hold stays on the lifecycle, which is most of what a
+  lifecycle is for: which state instances are created in, which end the life, what may
+  follow what, and where each sits on the canvas.
+
+  Renaming a literal renames the state and rewrites every transition that names it —
+  which is exactly what renaming a state already does, because a state's name *is* the
+  string every process writes. Removing a literal removes the state and the arrows
+  touching it. Adding a state on the lifecycle sheet writes the literal, since that is
+  where the names live. On a lifecycle fed this way the state's name is shown read-only
+  and says where it is renamed, rather than taking an edit and dropping it.
+
+  **The class diagram finally shows the tie**: a dashed `«lifecycle»` line from the class
+  to the enumeration. It is derived from the reference and never drawn by hand — the same
+  construction as a data store's line to its class, for the same reason. A class and an
+  enumeration do not *relate*; one *takes its states from* the other, so the relationship
+  rules are untouched and nothing that counts relationships counts it.
+
+  The server refuses the three ways a document can contradict itself here: a reference to
+  a class that is not there, a reference to something that is not an enumeration, and a
+  state the enumeration does not declare. A literal with no state yet is *not* refused —
+  a machine half drawn is the normal condition, and that is incompleteness rather than a
+  contradiction. A lifecycle that names no enumeration behaves exactly as it did before.
+
+- **General-purpose scripts now have an opt-in, fail-closed OS sandbox.**
+  `--script-sandbox=strict` (or `ATLAS_SCRIPT_SANDBOX=strict`) gives every
+  PowerShell, Python and JavaScript execution private scratch, restricts file reads
+  and execution to the installed runtime with Linux Landlock, and denies creation
+  of network and Unix-domain sockets with seccomp. Atlas checks for Landlock ABI 3+
+  before starting a strict server or worker; it never silently falls back. The
+  initial default is `off`, deliberately, so upgrading does not break deployed
+  scripts that intentionally use mounted files or services. Independently of that
+  setting, a script timeout on Unix now kills the interpreter's complete process
+  group, so a spawned child cannot survive its timed-out parent.
+  ([ADR-0303](docs/adr/0303-script-sandbox-isolation.md))
+
+- **The Console landing page says what Atlas is, in both languages**: the dashboard
+  opened on "Welcome to Atlas" and three steps — it told a newcomer what to click, not
+  what they are running. A **Key features / Kernmerkmale** tile now sits below the
+  dashboard's own tiles: sixteen short entries (one binary, durability, the compiler,
+  throughput, the Modeler, token visibility, Panorama, human work, DMN, the information
+  model, checkable BPMN coverage, integrations, agents, operations, deployment, licence), collapsible and carrying the
+  same EN/DE toggle as What's New. The copy is a static asset
+  (`api/web/key-features.json`, guarded by a test) rather than markup, and the landing
+  page's two bilingual sections now share one language setting, so it is never half
+  English and half German.
+
+  A tile that enumerates what a product *is* goes stale the way the handbook's
+  screenshots do — silently, because the page still renders and the capability nobody
+  mentioned is simply absent. So the file carries a `reviewedThrough` marker naming the
+  newest `### Added` bullet it has been held against, and `go test ./api` fails while
+  bullets sit above it. The question a feature has to answer is one line long — does
+  this change what Atlas is? — and the usual answer is no, which moves the marker and
+  writes nothing. What the marker buys is that it is asked by the person who knows the
+  feature rather than by nobody.
+
+- **`/metrics` says whether workers are pulling, and how much work is parked.**
+  `atlas_jobs_activated_total` counts leases taken, so a queue nobody pulls from no longer
+  looks like one being worked through. `atlas_jobs_lease_timeouts_total` counts leases
+  that elapsed with no report — the only trace of a worker that took a job and vanished,
+  which the failure counter never sees. `atlas_open_incidents` is the number of tokens
+  parked on an unresolved incident, read from the stored incidents when `/metrics` is
+  scraped ([ADR-0142](docs/adr/0142-prometheus-metrics.md)).
+
+- **The information model can now be read off the processes instead of typed in beside
+  them.** [ADR-0230](docs/adr/0230-process-information-model.md) and
+  [ADR-0259](docs/adr/0259-data-object-lifecycle.md) both run in one direction: a person
+  models the vocabulary, and the processes are checked against it. Neither record priced
+  what that puts in front of the first user, which is a blank page — until classes exist,
+  the Modeler's class picker is empty, the data-state field is free text, and the Problems
+  panel reports nothing because there is nothing to report against. Meanwhile the engine
+  already knew most of it: a data object declares a name and often a type, every data
+  output association names the path it writes (`customer.name`), every data object may
+  carry a data state, and the compiled graph already says which writes can follow which.
+
+  **Data → As built** draws what an application's processes actually carry. A class per
+  data object, named by its `itemSubjectRef` or, failing that, by the object itself; a
+  member per write path; and, per class, the state machine its data states imply, with a
+  transition wherever the compiled graph says one write can precede another. It is a read
+  over the newest active version of each of the application's processes — the same set
+  the deploy checks assemble — so it costs a request and no storage, and it is drawn on
+  the same two canvases the authored model and the run-time overlay use, in their
+  read-only mode.
+
+  The two readings are deliberately different statements rather than two copies of one.
+  What is derived is what is **built**; what somebody models by hand is what is
+  **wanted**. Neither is written into the other, because the point is not to make them
+  agree — their difference is the work not yet done. A `cancelled` state in the model that
+  no process ever writes is a backlog item, which is the same fact `data.unreachable-state`
+  reports from the other side.
+
+  What derivation cannot see is said above the drawing rather than under it, because a
+  derived picture mistaken for a complete one is worse than no picture. No derived class
+  carries a business key — nothing in BPMN says which attribute identifies a thing, and
+  it is the one fact every cross-process capability rests on, so it stays the first thing
+  to add by hand. Attributes are untyped, since a FEEL expression's result type is not a
+  static fact of the model. Per class it also says when the name came from the data object
+  rather than a declared type, which is the case most likely to be spelled wrongly, and
+  when a dotted write path proved a member has members of its own that nothing in BPMN
+  names. Nothing on the view is editable: it is evidence about the processes, not a
+  document about the business.
+
+  Also readable as `GET /api/v1/infomodel/derived?applicationId=…` and, for agents, as the
+  MCP tool `atlas_derived_information_model`.
+
+- **A lifecycle that is ahead of the processes that write it now says so.** A class can
+  declare that an order may be `cancelled`; whether anything ever cancels one is a
+  question about the *application*, not about any one process, so it could not be asked
+  where the other two lifecycle checks live — `CheckDataFlow` reads one compiled process
+  at a time, and "nothing ever writes this" is false until every process has been looked
+  at. Asking it there would mean either passing the other processes into a per-process
+  check, where the same finding repeats once per process and is attached to whichever one
+  happened to be deployed, or answering it wrong.
+
+  It is asked once, of the set: the newest version of each of the application's
+  processes, minus the deactivated ones, plus whatever is being deployed or drawn right
+  now — so the process that finally cancels an order clears the finding as it arrives
+  rather than one deploy later. The result is one sentence per class naming every state
+  nothing reaches, carrying no element, because it is a fact about the model rather than
+  about any element of any process. Like its two siblings it is a warning and refuses
+  nothing: a lifecycle is routinely drawn before the process that will write it.
+
+  The state instances are created in counts as reached, since every instance begins
+  there — so a data object that carries no data state at all leaves the lifecycle's own
+  starting state unreached, which is worth saying because the remedy is one field in the
+  Modeler. A class no process handles is not reported at all: that is a lifecycle drawn
+  before its processes, which is the normal order of work rather than a defect
+  (`data.unreachable-state`, ADR-0259).
+
+- **An OpenAPI document can configure the task that calls it.** `atlas openapi-template
+  --spec petstore.yaml --out ./packages` writes one element-template package per
+  operation, in the shape the repository catalog already uses
+  ([ADR-0300](docs/adr/0300-openapi-element-templates.md)).
+
+  It is the reader behind `atlas mock-openapi` pointed the other way: the same document
+  that makes an API answer now also fills in the task that calls it. Method is fixed to
+  the operation's; the URL is the document's server plus the path, literal where there
+  is nothing to substitute and a FEEL expression where there is —
+  `="https://api.digitalocean.com/v2/droplets/" + string(droplet_id)` — with the
+  description naming each variable the process must hold. A URL that carries no host is
+  called out, including the relative-server case (`/api/v3`) that looks filled in and is
+  not.
+
+  What the document cannot decide stays empty: headers, authentication and the
+  credential reference. Security schemes are deliberately not mapped onto Atlas's auth
+  types, because the useful ones need a token endpoint and a client id that live on the
+  server, and a guess there is a wrong answer wearing a filled-in field.
+
+  **What you can do with the result today is limited, and the command says so where it
+  writes them.** Applying a template to a task is
+  [ADR-0212](docs/adr/0212-element-template-applier.md), which is not built, and a
+  running server's catalog is compiled in — so these are files to commit or to keep,
+  not to install.
+
+- **An instance's data objects are drawn on the lifecycle their class declares.** The
+  state trail was already on disk — every durable write, with the element that made it
+  — and the state machine was already in the information model. Nothing read them
+  against each other, so the question *where has this order got to, and what moved it
+  there* meant reading a list of writes and holding the machine in your head.
+
+  The replay's **Data** tab gained a third reading beside List and Diagram. It draws
+  the whole declared machine — including the ways out this instance never took, because
+  a picture of only what happened answers a different question — with the states this
+  datum has been through filled in, the one it is in now ringed, and each edge it
+  travelled carrying the BPMN element that moved it along. That last part is the thing
+  no class diagram can say, and the reason to draw this rather than list the trail.
+
+  The half worth the whole feature is what it says when something is wrong. A move the
+  machine does not join is drawn as what it is — dashed, apart, and never mistakable
+  for something the model says — and named in words underneath with the element that
+  made it. A state the class never declared is named too, since it cannot be drawn.
+  Together they are the run-time twin of the `data.illegal-transition` and
+  `data.unknown-state` deploy checks, and they catch what those cannot see: an instance
+  that started before the lifecycle was drawn, and a process the check never ran
+  against. Where two transitions join the same pair of states the trail cannot tell
+  them apart — it records states, not transition ids — so both are marked and the
+  panel says so rather than picking one.
+
+  This adds no event, no record type and no migration, and touches nothing in
+  `applyToState`: it is a read over what the log already said. `GET
+  /api/v1/instances/{key}/lifecycle` serves it, and `atlas_instance_lifecycle` puts the
+  same answer in front of an agent (ADR-0259).
+- **The deploy says when a searchable declaration cannot be honoured.** The Modeler marks
+  such a name while it is typed, but a model deployed from a pipeline or over the API
+  never passes through the Modeler, and `atlas:searchable` is accepted whatever it names:
+  the search then stays empty forever with nothing saying why. The deploy response now
+  carries the same reading, beside the worker and namespace warnings it already gives —
+  never a refusal, because a model is routinely deployed before the rest of its world
+  exists. It reads the model's own bytes rather than the compiled process, so it counts
+  writers generically, by attribute: every Worker Type, script and decision writes into a
+  `resultVariable`, including the kinds added after this was written. A name the model
+  itself declares as a JSON start variable is reported for any process, because the
+  declaration settles it. A name nothing in the model produces is reported only where the
+  model has stated its inputs — it declares start variables and links no form, whose
+  fields are a separate resource this cannot read — and the sentence says plainly that a
+  worker's own output or a write through the variables API makes it fine.
+
+- **A searchable declaration that indexes nothing now says so.** `atlas:searchable` names
+  variables, and nothing checked that the model writes any: a typo, or a name holding
+  JSON, is accepted by the deploy and then answers an empty search forever, with no screen
+  saying why. The field now paints a chip per declared name, read against the same static
+  analysis the Variables panel uses. Red where the model settles it — a repeated name the
+  deploy refuses, or a name the model itself says holds a structured value, which the
+  index cannot hold. Amber where it is a question rather than a verdict: nothing in the
+  diagram writes that name, which is usually a typo but not always, because a worker's
+  output or the variables API can write a name the diagram never mentions. Each chip
+  carries the reason as its tooltip, and they are painted as the name is typed.
+
+- **A migration now re-indexes what its target declares.** [ADR-0244](docs/adr/0244-searchable-variables.md)
+  argued that a declared searchable variable needs no backfill, and for the case it looked
+  at that holds: the attribute postdates every definition that could lack it. It missed the
+  one way an instance changes version after it has written values — migration
+  ([ADR-0162](docs/adr/0162-process-instance-migration.md)). An instance started on a
+  version that declares nothing and migrated onto one that declares `identityId` held a
+  value stamped "not indexed", so the version-scoped search — which for a declared name is
+  answered from the index alone — returned nothing for an instance the engine was holding.
+  A wrong answer, not a slow one, and a silent one.
+
+  A migration now emits one membership correction per variable whose answer differs under
+  the target's declaration, in both directions: a name the target declares and the source
+  did not is added, one it no longer declares is dropped. The comparison happens at command
+  time against the compiled process — the fold cannot ask one anything, which is ADR-0244's
+  own finding — so what reaches the log is the answer, and a replay rebuilds the identical
+  index. A migration between two versions that declare the same names emits nothing.
+
+  For the instances migrated before this,
+  **`POST /api/v1/processes/{key}/reindex-instances`** (admin, `?limit=`, default 500, max
+  5000) queues the same correction for a bounded batch of a definition's running instances
+  and reports what that definition declares. It is idempotent: an instance already in step
+  emits no events at all, so running it twice writes nothing the second time. Running
+  instances only — a finished instance's membership can no longer change through any normal
+  path, and reaching into the history family from a command handler was not worth it for a
+  strictly historical case.
+  ([ADR-0295](docs/adr/0295-migration-reindexes-searchable-variables.md))
+
+- **The Modeler can now say what a process is found by.** `atlas:searchable`
+  ([ADR-0244](docs/adr/0244-searchable-variables.md)) turns an operator's value search
+  into a seek, but it shipped as an attribute with no field and no moddle property, so
+  the only way to declare a searchable variable was to hand-edit the exported XML
+  outside the tool. The process properties now carry a **Searchable variables** field
+  beside the two TTLs, validated the way they are: a nameless entry or a name given
+  twice is what the deploy refuses, so the panel says so while authoring and still
+  stores what was typed rather than dropping the author's value.
+
+  What was missing was never the round trip — moddle keeps an attribute it has no
+  property for in `$attrs` and writes it back, so a hand-authored declaration was
+  invisible rather than lost. It was that nothing could *read or write* it: the panel
+  reads `rootBo.searchable` and writes through `updateProperties`, and both go through
+  moddle's properties. A drift test now fails for any future `<bpmn:process>` attribute
+  the compiler reads that `atlas-moddle.json` does not declare, so the next one cannot
+  ship unauthorable (`api/moddle_drift_test.go`, `e2e/searchable-modeler.spec.mjs`).
 
 ### Changed
+
+- **A business rule task refuses a wrongly-typed input instead of answering wrongly
+  (ADR-0419).** A variable of the wrong type is not an error in FEEL. A `"500"` where the
+  model declares `number` made every comparison against it null, so no rule matched, the
+  catch-all row answered, and the token carried on with a plausible wrong result. Nothing
+  downstream could tell it from a right one: no diagnostic, no trace entry, no incident —
+  only a process that went the other way.
+
+  Now the evaluation is refused before it runs. The job fails, its retries run out, and
+  the incident carries the mismatch, naming every wrongly-typed input rather than only
+  the first. Retry behaviour is unchanged.
+
+  The check covers the inputs a task actually sends — the leaf inputs of the decision's
+  whole requirements graph, not just the ones it declares directly. That matters for any
+  model with a top decision built on other decisions: such a decision declares no inputs
+  of its own, so a narrower check would pass every value it is sent without looking at
+  one, which is exactly where a business rule task usually points.
+
+  Only a type mismatch is refused. An input the decision does not declare is still
+  ignored, because a task's io-mapping may legitimately carry a row the decision never
+  reads; a missing required input is still refused by the engine itself, with a better
+  message; and an out-of-range value is a question for its own record.
+
+  **Nothing here changes behaviour, and that was measured rather than assumed.** Every
+  retained evaluation of every deployed decision — 495 across 11 decisions — was run
+  through the same check: not one value contradicts its declared type, so not one would
+  have been refused. The measurement also confirmed the narrow scope: one decision is
+  supplied two inputs its model does not declare, and both of its evaluations would have
+  failed had an undeclared input been refused too.
+
+  For an installation that does have such a mapping, this is still a behaviour change on
+  processes already running: the task stops instead of passing a wrong value on, all at
+  once, at upgrade. Two cases stay uncovered — a decision **service**, because the engine
+  publishes no input schema for one yet, and a `null` where a type is declared, which is
+  a question about an absent variable rather than a wrongly typed one.
+
+- **The portal is called the shop — at a new address and under a new API path.**
+  **Breaking** for anything that called the page's API directly. The page where
+  people browse their catalogue and order is now the *Shop*: in the menu, in its
+  title, in the handbook, in the Console's catalogue screens, in the API and MCP
+  descriptions, and in the mails the shipped approval processes send ("Ihr Shop").
+
+  - The page moved from `/portal.html` to `/shop.html`. The old address answers
+    with a permanent redirect, query kept, because it sits in bookmarks and mails a
+    rename cannot reach.
+  - The five routes the page reads moved from `/api/v1/portal/…` to
+    `/api/v1/shop/…` (`catalog`, `favourites`, `favourites/{itemId}` for PUT and
+    DELETE, `orders/{id}/lines/{position}/progress`). The old paths are not kept:
+    the page was their only reader.
+  - The shipped system processes are named `Shop: …` instead of `Portal: …`, so
+    they deploy as a new version on the next start. Running instances finish on
+    the version they started on.
+
+  Deliberately unchanged, because renaming them would break what is already
+  deployed or stored rather than what anybody reads: the process variable
+  `portalBaseUrl` every approval model builds its links from, the stored language
+  and theme a browser remembers for the page, and the decision records written
+  under the old name.
+
+- **The Workers view says what a worker asks for, not only what it has been given.**
+  Each worker's `types` counts the jobs it has *leased*, so a worker that is connected
+  and polling a queue with no work in it looked exactly like a worker that is not
+  there. Every poll now records the job type it asked for, productive or not, and the
+  row carries it as `serves`. Without that, "is anybody serving this job type?" is
+  unanswerable for every quiet queue — and the fulfilment report added in this release
+  would call a healthy idle installation broken.
+
+- **The Account-Bestellung example builds its UPN in the worker, and lost a gateway doing
+  it.** It is the proof the personal-data rule needed: the example took a first and last
+  name from a public form and built a UPN, a mailNickname and a display name out of them,
+  in one script and three output mappings the engine evaluated. All four moved into the
+  create-user task's own attributes expression. It deploys, and **no exception to the rule
+  was needed** — which is what its record could not establish against any process that
+  existed.
+
+  The cost is stated rather than quietly absorbed: a fail-closed gateway used to check the
+  computed UPN against `jml-test-*@contoso.com` before any write, and there is no such
+  process variable any more. The test-object boundary is now the `jml-test-` literal inside
+  the connector's attributes expression — in the model, visible in review, but structural
+  instead of checked at runtime. Here that is a small loss, because the gateway was
+  checking a value the same process had built two steps earlier; where a derived value
+  arrives from outside the process, it would not be.
 
 - **Every process Atlas ships names one mail worker, and it is called `mail`.** The
   platform processes (ADR-0122) addressed their mail tasks to two different workers,
@@ -2507,7 +3792,870 @@ _Changed_ / _Removed_ for each version.
   fourth place to go. At the end it reads as what it is: part of the corner that is
   about the reader rather than about what they are reading.
 
+- **A mail task may name a person or a group instead of an address.** A `to`, `cc` or
+  `bcc` entry without an `@` was handed to the mail server as it stood, to be rejected
+  there. It is now looked up in this server's directory when the mail is sent and
+  replaced by the address of the account it names, or of every member of the group it
+  names. An entry that matches nobody fails the job with a message naming it, instead of a
+  notification going quietly to nobody.
+
+- **The class canvas's palette is drawn in the notation now, not in Unicode.** Its marks
+  were characters — `▭` for a business object, `▢` for a value type, `☰` for an
+  enumeration, `◇` and `◆` for the two kinds of whole. That was a defensible trade when
+  there was nothing to vendor: bpmn-js ships an icon font for BPMN's shapes and there is
+  no UML equivalent, and four kilobytes of font for eight marks buys little. What it cost
+  was that a palette entry looked like whatever the reader's system had for that
+  codepoint, and that the three classifiers were three near-identical rectangles.
+
+  Each entry is now a miniature of the shape the click produces, drawn as inline SVG in
+  the stylesheet. No font, no image files, nothing to fetch — the same reasoning that
+  keeps the canvases buildless ([ADR-0012](docs/adr/0012-web-ui-app-shell.md)). There is
+  no official UML icon set to take: the standard fixes the shapes on the *diagram* and
+  says nothing about a toolbar, so the miniatures are drawn from the notation itself.
+
+  The entries split in two, and the split is what each entry *is* rather than a
+  preference. A classifier is a button — one click adds one, it has no state — so it
+  carries its kind in colour: a business object with the key knocked out of its name
+  compartment, because identity is what makes it one; a value type with that compartment
+  empty, because nothing identifies it; an «enumeration» whose body is a list of literals
+  rather than rows of attributes; a data store as its cylinder. A relationship is a
+  *mode*: one of them is armed while the next two clicks draw that line, and the armed
+  entry has to be recoloured to say so — which a baked-in colour cannot do. So the four
+  relationships and the two tools are stencils that take the palette's own colour, and
+  they keep lighting on hover and reversing out of the accent when armed.
+
+- **A refused write through MCP now says why, not just that.** A validation refusal has
+  always carried every reason at once — an author fixing a form should not make one round
+  trip per mistake — but the MCP client read only the one-line summary out of it. So an
+  agent saving an information model got "the model is not valid" and nothing else. It has
+  no form to read the details out of, so it retried blind, which is the failure mode the
+  tool surface exists to avoid. The shared client now appends the findings to the message,
+  reading both shapes in use, and skips a finding it cannot parse rather than losing the
+  whole refusal to one odd entry.
+
+- **The Console landing page carries the brand mark.** "Welcome to Atlas" opened on a
+  bare heading, so the one page a newcomer lands on was the one page that showed no
+  mark at all — the glyph sat in the top bar above it and nowhere in the card itself.
+  The heading now leads with the same `.mark` box the bar uses, at 48px. It is the
+  shared box rather than a copy of the glyph, so an organisation that has uploaded its
+  own logo (ADR-0148) sees that logo here too, and a later upload or removal repaints
+  this mark along with every other one. The logo setting names the landing page along
+  with the top bar and the login screen, so what it promises is what it does.
+
+- **The Starmap reads its structure once for everybody, and everybody's health for
+  themselves.** With every open Starmap now re-reading itself, the cost of deriving one
+  scaled with the audience: a landscape is built on the engine's run loop — the single
+  writer — and costs a directory listing and a JSON decode per record across four
+  stores, plus a walk of every compiled process. Twenty tabs is one operations team,
+  and it was twenty of those readings, competing for the loop that executes process
+  instances.
+
+  The server now holds that reading for **30 seconds** — the view's own re-read floor,
+  deliberately: a shorter one bounds nothing, because readers do not poll in step. What
+  it holds is the whole design:
+
+  - **Health is never cached.** Parked work, incident ages, running instances, which
+    workers have polled — all read fresh on every request. They are what an operator
+    opens the view for, and they are engine point reads rather than disk. A status view
+    that made trouble wait out a timer would be saving the wrong cost.
+  - **Visibility is never cached.** Every access decision is made on the request, from
+    the request. The held reading carries the *inputs* a decision is made from and
+    never a decision, so one person's landscape can never be served to another.
+
+  Deploying a process, writing a call override and creating a deployment target drop
+  the reading at once — those are the changes somebody makes and then immediately looks
+  for on this picture. A new application or worker appears within the 30 seconds, and
+  the picture says how old it is while it waits: the landscape is dated by when its
+  *structure* was read, not by when the answer was served, so the freshness line is
+  true of a cached answer as much as a fresh one (ADR-0211 §7).
+
+- **The Starmap says when it was read, and keeps itself true.** Everything on that
+  canvas has a shelf life — the severity badges are an observation, the incident counts
+  move as an operator works through them, and the three new weightings below are live
+  quantities, one of them measured against a clock. A landscape opened at nine and
+  still open at eleven showed two-hour-old numbers with nothing on the page saying so,
+  which is the failure the export's stamp already exists to prevent, happening on the
+  screen the stamp is copied from.
+
+  The observation time is now on the page beside the node count (**"observed 4 min
+  ago"**), rewritten every ten seconds, and a **Live** switch beside it — on by
+  default — re-reads the landscape from the server while the view is open.
+
+  The cadence is paced by what the picture costs rather than by a constant: the mesh is
+  derived on the engine's run loop, so the interval is a twentieth of what the last
+  derive actually took, floored at 30 seconds and ceilinged at 5 minutes. A landscape
+  that derives in 40 ms is re-read on the floor; one that takes four seconds backs off
+  to well over a minute by itself. Nothing is asked behind a hidden tab, or while a
+  node is being dragged. A refusal keeps the picture, says **"could not re-read"**, and
+  backs off to the ceiling — a server that is down does not want thirty requests a
+  minute from every open tab. The filter, the drilldown, the selection, the pins and
+  the zoom all survive a re-read. Turning Live off stops it; turning it back on asks at
+  once rather than waiting out another interval (ADR-0211 §7).
+
+- **The Starmap can be sized by what is running on it, by what is stuck on it, or by
+  how long it has been stuck.** The instance counts were a checkbox beside the Notation
+  picker — an overlay ticked onto
+  whatever was on screen — and that offered a picture with no reading. Size on the
+  Starmap is one channel and it already carried connectivity, so a landscape with the
+  box ticked had radii meaning structure while its labels meant load, and the one
+  question somebody ticks it to ask, *where is the work*, was the one it could not
+  answer.
+
+  The checkbox is gone. The Notation picker now offers two **heatmaps** beside *Atlas
+  (derived)* and the two projections, because every entry there decides how the
+  landscape is drawn and only one of them can be chosen at a time:
+
+  - **Instances (heatmap)** — *where is the work.* A node's size is what is running on
+    it: capacity, reading a load test, finding the process actually carrying the estate.
+  - **Incidents (heatmap)** — *where is it stuck.* A node's size is how many unresolved
+    incidents the engine holds against it. The severity badges already said **which**
+    nodes have a finding; what they could not say is how much is parked behind each,
+    and a process holding four hundred stuck tokens wore the same badge as one holding
+    a single retry. The badge stays the classification; the size is now the magnitude.
+  - **Incident age (heatmap)** — *how long has it been stuck.* A node's size is how long
+    its earliest unresolved incident has been standing. This is the one that changes a
+    decision: four hundred incidents from the last five minutes is a worker that has
+    just fallen over and drains itself once somebody restarts it, and three standing
+    since Friday is a process nobody is coming back to. The count ranks those the wrong
+    way round, every time.
+
+  For the third one the mesh payload carries a new fact: **`oldestIncident`**, the
+  moment a node's earliest unresolved incident was raised. The oldest rather than the
+  newest, because that is the age of the *problem* — a process where one token parked
+  on Friday and three hundred piled up behind it has been stuck since Friday. It is
+  absent, never zero, where there is nothing to date, including an incident raised
+  before the engine recorded the moment: "not known" and "raised at the epoch" are
+  different facts, and a zero would draw the process as the oldest trouble on the
+  estate. A collapsed application carries the earliest of the processes it stands for.
+  Collecting it costs nothing — the incident scan already reads every record, and the
+  raise time is a field on the record it is reading.
+
+  The panel states the exact age for whichever node is selected (**"Oldest still parked
+  5 d ago"**), which is the number a circle cannot give.
+
+  On any of them the size is a **ratio scale**. A node carrying nothing sits at a floor;
+  a node carrying the least the weighting counts — one running instance, one incident, a
+  minute stuck — is already a clear step above it; and from there the size grows with
+  each *tenfold*, so equal steps of size are equal multiples of the tally and the largest
+  node on the landscape is the largest circle. That is the question a heatmap is opened
+  with: an estate's instance counts run from one to several thousand, and what an
+  operator wants of a circle is how many times, not how much.
+
+  The key **draws** that scale rather than only describing it: a row of reference
+  circles — nothing at all, then the tallies the scale is marked at, up to the busiest
+  node — each at the size a node carrying that much is drawn. They come out of the same
+  arithmetic the nodes did, so a circle in the key is the circle on the picture, and
+  the row travels into an exported file as well, where there is no key to scroll to.
+
+  Each circle is also a **filter**. Click the one marked 100 and the picture narrows to
+  the nodes running between a hundred and the next mark, with their neighbours kept for
+  context exactly as a search keeps them; click it again to widen. It combines with the
+  search box rather than replacing it — a term and a band together show what matches
+  both — and a saved view remembers which band it was looking at.
+
+  Every node keeps a **floor**, whatever its tally, so nothing drops off the picture: an
+  idle process, a worker, a decision and an application whose load sits on the processes
+  it holds are all still nodes somebody can see and click, and "nothing here" stays
+  distinguishable from "not on this server". On the incident picture that also makes the
+  good news legible — a flat landscape is the answer, and the key says so rather than
+  leaving you to wonder whether anything was measured. Kind is unaffected: it was never
+  carried by size alone, and shape and colour still carry it.
+
+  The reference is the largest node on the **whole** landscape rather than on what the
+  filter has left on screen, so narrowing to two nodes cannot swell the smaller of them
+  into the worst thing on the estate — and it is named in the key and in the export's
+  stamp, because an area with no stated reference is a decoration rather than a
+  quantity. A saved view stored while the counts were a switch reopens as the weighting
+  it stood for.
+
+  **The ranking column follows the weighting too.** It ranks by blast radius on the
+  derived drawing, as it always has; with a heatmap on it ranks by the same quantity
+  the canvas is sized by, so the largest circle and the first row are the same node.
+  Two orderings on one screen, with nothing on it saying they answer different
+  questions, is a contradiction a reader cannot resolve. It is not a re-listing of the
+  picture: a circle gives neither the exact number — nobody reads 41 against 38 off two
+  areas — nor the name, which zoomed out is not painted at all. The blast radius stays
+  as the second number on each row, which is what turns a count into a priority: forty
+  incidents on a leaf process is a contained problem, twelve on something two hundred
+  things need is an outage (ADR-0211 §6, §8).
+
+- **A Worker Type's setup folds away once you have set it up.** The section that says
+  where a type's work runs and what has to exist at the provider stood open above the
+  fields. That is right the first time and wrong every time after: on a 270-pixel panel
+  it is most of a screen, and an author who has already configured the type scrolls past
+  all of it to reach the field they came for. It is a group now — the chevron, the title
+  and the collapse memory that Operation, Failure handling and the mapping lists already
+  have, and *Collapse all* reaches it like the rest.
+
+  It does not simply start folded, which would undo what it is for. It opens by itself
+  when this server has **no** Worker of that type configured *and* the type names one at
+  all — someone meeting a type they have not set up. A type that configures nothing (a
+  REST call, a mockup, user provisioning) has a setup worth one read, so it starts
+  folded. An explicit toggle beats both and survives the next selection, because one
+  title serves every Worker Type: not wanting to read it is a statement about the
+  section, not about Jira.
+
+- **A refused variable write now stops what comes next, instead of only saying so.**
+  The variable and collection budgets refuse a value past their ceiling and raise an
+  incident on the element that produced it. That was half a refusal: terminating an
+  element clears the incident it carries, so a site that refused a write and then let
+  its element finish left nothing behind at all — not the value, and not the report.
+  The run looked successful, and the only evidence was a variable that was not there.
+
+  Every site at which a model's or a worker's value becomes a variable now answers
+  what happens next, and each answer follows from that site's own semantics. A message
+  or signal catch does not complete, because its subscription is already correlated
+  and neither is delivered twice. A call activity does not resume without the result
+  it called for, because the child instance is already gone. An output mapping does
+  not let its activity finish having promoted nothing, and keeps the activity's local
+  scope — that is where the raw result the mapping reads still is. An input mapping
+  stops the behaviour *before* it runs, rather
+  than handing a worker a job missing what the model promised it.
+
+  **Upgrade note:** an instance whose write is refused now stays where it is, with an
+  incident naming the variable and both sizes. Before this, such an instance could
+  complete as though nothing had happened. Resolving the incident does **not** retry the
+  write, whatever this entry said when it landed: nothing re-runs a refused write, so the
+  incident is deleted and the element stays where it stopped. That is measured for a
+  job's result and for a loop's round, and the other sites go through the same resume
+  path. Raise `ATLAS_LIMIT_VARIABLE` / `ATLAS_LIMIT_COLLECTION` before the work runs;
+  making resolve resume the element is
+  [issue #1123](https://github.com/pblumer/atlas/issues/1123).
+
+### Removed
+
+- **The two links on a portal order's position rows.** A position row offered "Wo
+  steht das?" — the step that position is sitting on — and a link into the
+  position's own process instance. Both are gone at the request of the people the
+  page is for: the status beside the position's name answers the same question out
+  of the order's own record, one column over and without a press. Withdrawing a
+  position and correcting its details stay; they act on the position rather than
+  look at a process.
+
+  `GET /api/v1/shop/orders/{id}/lines/{position}/progress` is unchanged by this — it
+  was under `/api/v1/portal/…` when this was written, and moved with the rename under
+  *Changed*. It is API surface with callers that are not this page, and a screen that
+  stopped drawing a button for a route is not a reason to withdraw the route.
+
+- **The standalone approval page.** It existed because the Console is an operator's
+  instrument and most approvers are not operators — right about the people, and wrong
+  about what followed from it: an approval *is* an ordinary user task and the inbox
+  never filtered those out, so the rows were always there. The page did not spare
+  anybody the Console; it was a second place to take one decision, and the two drifted
+  over whether a rejection needs a reason.
+
+  The decision is in the inbox now (see the entry above). What stays is the page's
+  **address**: every approval notification ever sent links to `/genehmigung.html` with
+  the order line in its query, and a mail cannot be recalled — so it forwards, handing
+  that line to the inbox, which resolves it against the approvals the reader holds. The
+  three shipped approval models link into the inbox from now on, and the menu entry
+  under Tasks is gone: it led to a redirect back into the screen it sat under.
+
+  **What is lost is the brand.** The page wore the catalogue's colours, because an
+  approver decides on that customer's behalf; the Console wears nobody's, so the block
+  names the catalogue in words instead. Information kept, presentation dropped.
+
 ### Fixed
+
+- **A refused write's incident no longer tells you to resolve it.** A value past its
+  variable or collection budget ([ADR-0294](docs/adr/0294-a-variable-is-a-record.md))
+  parks its element with an incident, and the incident
+  said: *check what produced it, then resolve to write it again*. Resolving does not write
+  it again. Nothing re-runs the refused write, so the incident is deleted and the element
+  stays where it stopped — now with no incident at all, which is harder to find than the
+  refusal was. Measured for a job's result and for a loop's round; on v0.6.0 the loop
+  behaved the same way. The message now says that resolving does not write the value,
+  and that the limit has to be raised before the work that produces such a value runs.
+  Making resolve resume the element needs a decision about where a refused value is
+  kept until then, and is tracked in
+  [issue #1123](https://github.com/pblumer/atlas/issues/1123).
+
+- **A loop whose collection outgrew its budget while it filled finished without it.**
+  Since a loop records one element per round rather than the whole list
+  ([ADR-0296](docs/adr/0296-a-loop-records-its-element.md)), nothing measured the list
+  against `ATLAS_LIMIT_COLLECTION` while it filled. The promotion that measured it at the
+  end refused it, ignored its own refusal and completed the loop: the collection was
+  gone, and for a loop at the instance's root the incident went with the element that
+  carried it. The process carried on with the collection unset. v0.6.0 parked the round
+  that took the list past its budget, and that is what happens again: each round measures
+  the list its element produces before the element is recorded, and the incident names
+  the collection and the size it would have reached. The log still carries one element
+  per round. The measure is taken in memory, and a list is only re-serialised for it
+  when it is within one element of its budget, so a loop that ends exactly at the budget
+  still completes. ADR-0296 is amended to say so. Resolving the incident does not run the
+  round again yet — it did not in 0.6.0 either — so the budget has to fit a loop before
+  the loop runs.
+
+- **Giving a right back found the oldest order for the product, not the viewer's own.**
+  "Meine Leistungen" looked up the order line behind each held right by product id
+  alone. Orders arrive newest first and each later line overwrote the earlier one, so
+  the oldest order won — including one placed for somebody else, or one whose line was
+  cancelled or refused — and the give-back button disappeared from a right the viewer
+  held through a newer order. The line used now is the newest one that is still held and
+  whose order names the viewer as recipient, and a source guard holds both conditions.
+
+- **A declared type now reaches a decision built on other decisions (ADR-0419).** The
+  engine converted an input by what the decision being evaluated declares *itself*.
+  For a decision whose requirements are other decisions — the shape a well-factored
+  model has at the top, and where a business rule task usually points — that is
+  nothing at all, so nothing was converted. A `date` reached the decision that
+  declares it as the text it was sent as, the comparison was null, and a decision
+  table cannot tell null from false. The same sub-decision evaluated on its own was
+  right, which is what made it so hard to see: the wrong answer appeared levels above
+  its cause, with no diagnostic and no trace entry.
+
+  Carried by the engine bump. A decision service inherited the correction, because
+  its working set is built from its output decisions — and that set was empty for
+  exactly the services that encapsulate something.
+
+  Not everything moved: a service converts its inputs now but still does not refuse a
+  wrongly-typed one, because the engine publishes no input schema for a service. The
+  same value is refused when a task names the decision and answered silently when it
+  names the service over it. That is asserted rather than left to be rediscovered.
+
+- **Deploying one decision now versions its decision service too.** The Deploy button
+  in the decision editor — and the single-decision deploy behind it — recorded a
+  version for each decision in the model but none for the decision service over them.
+  Nothing broke at runtime, because a service is resolved either way and the new model
+  evaluated correctly; what broke was every surface built on the deployment record. The
+  version list, the editor's deployed-version chip and the answer to "which version is
+  this task pinned to" all went on naming a superseded version, with nothing to suggest
+  they were wrong. Publishing the whole application always did it correctly, so a model
+  deployed both ways told two different stories.
+
+- **A decision's date inputs are dates again (ADR-0419).** A DMN element that declares
+  `typeRef="date"` was handed its value as a plain string, because JSON has no date and
+  nothing between the two consulted the declaration. A decision table column typed
+  `date` whose rule read `< date("2026-01-01")` therefore matched nothing: the catch-all
+  row answered, with no diagnostic, no trace entry and no error. A wrong answer that
+  nothing downstream could tell from a right one — in the test panel and, through the
+  same evaluation path, in a running business rule task.
+
+  The fix is in the engine, not here: temis now converts an input by the type the model
+  declares (ISO 8601 and nothing else — a locale-dependent spelling would mean guessing
+  between 03.04.2026 and 04.03.2026), reports a string the type cannot be made from as a
+  type mismatch instead of passing it through, and names a FEEL value by its FEEL type
+  rather than its Go type. Atlas carries it by the module bump.
+
+  **Nothing deployed here changes behaviour, and that was measured rather than assumed:**
+  across all 12 registered model handles and all 19 decisions on the running instance,
+  every declared input type is `string`, `number`, or undeclared — not one temporal type.
+
+- **A right withdrawn in an access review leaves the inventory.** Withdrawing a
+  right an order granted started the product's deprovisioning with the product and
+  the holder only. A process that finds what it provisioned by the order found
+  nothing, and it could not report the line returned, so the right stayed in the
+  inventory and the next campaign asked about it again. A withdrawal of an ordered
+  right now goes back through its order, as a return does: the line is returning,
+  and the process starts with the order, the position and the reason. A line the
+  order will not give back, because it is already going back or something still
+  needs it, is refused and the row stays unanswered, instead of a second
+  deprovisioning running beside the first. Rights without an order are unchanged
+  ([ADR-0418](docs/adr/0418-a-withdrawn-ordered-right-goes-back-through-its-order.md)).
+
+- **A decision service's border no longer ends up over the arrows crossing it,
+  whatever you did to it.** This was fixed twice before, once for drawing a service
+  and once for moving one, and reported a third time. Each fix was a rule about one
+  gesture, and there are more gestures than anyone can list — so the third report was
+  answered differently. The rule is now asserted where the drawing order is actually
+  decided, on every change, rather than at each gesture that might disturb it. It
+  therefore holds for gestures nobody thought of, including ones added later. A
+  newly drawn service still starts at the very back, behind any service already
+  there, so that two overlapping boxes do not hide each other's decisions.
+
+- **Access review and Reconciliation open again.** Both pages showed an error card,
+  "gen is not defined", instead of their rows. The router handed each a check
+  for whether a later navigation had replaced it, over a value neither route had
+  set, and the page's first use of that check threw. Both routes now set it, as the
+  routes beside them already did.
+
+- **A task's checkbox in the shop is a checkbox again.** A task answered inside an
+  order row drew its checkbox as wide as the table cell, with the label pushed off the
+  end. The orders table's field rule reached the task form's inputs too; it now styles
+  the filter row only.
+
+- **Withdrawing an order stops the processes already working it.** A cancelled
+  position's approval was cancelled with it, and nothing else. But a position reads
+  pending until its provisioning reports, so it can be withdrawn while that process
+  is running — and its step stayed open under the cancelled order, in somebody's
+  inbox and in the shop ("enter the address for the new account" beneath a line that
+  says Cancelled). Withdrawing an order, or one position of it, now cancels every
+  still-running instance the order recorded on that position. Cancelling stops the
+  work; what the process already did in a target system is not undone.
+
+- **A task a model assigns to the person who ordered is now theirs to answer.** A
+  model assigns a task with an expression, and the variable it has for a person is
+  usually an id: an order carries its orderer and its recipient as principal ids
+  (`usr_…`). A task assigned `assignee="=orderer"` was created, listed under the order in the
+  shop — and refused to the orderer, because the check compared the assignee with
+  the username alone. Only operators and administrators could answer it. The check
+  now accepts either spelling, the username or the principal id, which is what the
+  mail directory already accepted when it decides whom a notification reaches: the
+  people a mail about a task reaches and the people who may act on it have to be
+  the same set. The shop names such an assignee by display name rather than by id.
+  The "Assigned to me" folder still matches usernames only.
+
+- **Moving a decision service hid the arrows crossing it, and left its name behind.**
+  The box around a decision service is a background — arrows are meant to cross its
+  border — and a newly drawn one already went behind what was there. Moving one did
+  not: the library underneath moves a shape by taking it out of the diagram and
+  putting it back, and putting it back with nothing said about where means at the
+  end, which is on top. A stored file therefore drew correctly right up to the moment
+  you nudged the box, at which point the arrow crossing its border disappeared
+  underneath it.
+
+  The name had the matching problem. Where you put it is recorded in diagram
+  coordinates, which is the right place for it and is also why it stopped being true
+  the moment the box moved: nothing kept the two in step, so dragging the box left
+  the name standing where it was. The further the box travelled, the further outside
+  it the name sat — and DMN says the name is displayed *inside* the shape. Resizing
+  had the mirror image: the name stayed put while the box shrank past it.
+
+  It took the tool strip with it, which looked like a third, unrelated fault and was
+  this one: the strip is placed from the element's *drawn* extent, and a name drawn
+  outside the box stretches that extent to cover both, so the strip opened beside the
+  stray name rather than beside the service.
+
+  The name now keeps its place in the box: a move carries it along, a resize carries
+  it with whichever corner you dragged and pulls it back inside only when it no
+  longer fits, and one undo takes the whole gesture back. Folding remembers where the
+  name was, for the same reason it already remembers the dividing line, and gives it
+  back when you unfold — even if you dragged the folded box across the canvas first.
+
+- **A decision service drawn around an existing arrow hid it.** The box around a
+  decision service is a background: DMN encloses the decisions it names with it, and
+  arrows are meant to cross its border — which only reads as a diagram if the border
+  is behind them. The library underneath draws in the order things were added, so a
+  box drawn *after* an arrow was drawn on top of it, and the arrow simply vanished
+  inside the box with nothing on the canvas to say where it had gone.
+
+  Opening a stored file was never affected, because a stored file is read in an order
+  that puts every decision service first. Only drawing one by hand was — which is the
+  case where it is hardest to tell whether the editor lost the arrow or you did.
+
+  A newly drawn decision service now goes behind what is already there. What it holds
+  stays in front of it, because its decisions belong to it.
+
+- **A decision service lost its decisions — three different ways — and a requirement
+  drawn from one required nothing.** The box around a decision service is drawn as a
+  container, which is what paints it beneath what it holds and what carries its
+  decisions when you move it. The library underneath reads a container as an owner,
+  and DMN says the opposite: *"decision services are defined as overlays and
+  therefore do not encapsulate the decisions within them"* (DMN 1.5 §6.2.5). Three
+  places took the owner reading literally.
+
+  Folding a service and unfolding it again handed its decisions back to the diagram
+  instead of to the box. The box was then a rectangle standing behind them rather
+  than one holding them, and the next drag moved it and left every decision where it
+  was — which is what a reader reported, and what the screenshots showed. Dragging a
+  *folded* service took nothing with it, because a folded service holds nothing on
+  the canvas: its decisions, the edges between them and the size and divider it is
+  restored to are parked in a record. Unfolding put all of it back where it was
+  folded, so the drag was silently undone. And deleting a service deleted its
+  decisions, their logic and the requirements between them out of the model: a
+  four-decision file came back holding two.
+
+  Separately, the two ways a decision service is invoked — by a decision, and by a
+  business knowledge model — were drawable and produced nothing. The reference was
+  written under a property name nobody declared, so the knowledge requirement was
+  saved without a target and required nothing at all.
+
+  Each decision now keeps the box it was folded out of, a folded service takes its
+  record along and gives it back where you dropped it, deleting a service leaves
+  every decision where it was drawn, and a requirement drawn from a service names
+  it.
+
+- **The portal's process link asked a search that did not come back.** Pressing
+  "View the process" on an order wrote "Wird abgefragt …" under it, and nothing else
+  happened, ever. The link looked the instance up with a search that named no
+  process definition, and such a search reads every instance on the server and every
+  variable of each. On an installation of any size it does not answer in any time a
+  reader waits, and the page had no bound on how long it would wait for it.
+
+  The lookup now names the fulfilment process's definitions, newest version first,
+  and each search reads that definition's own index — the fulfilment instances,
+  which are one per order. An order placed before the last redeploy is still found,
+  under the version it started on. And the lookup gives up after twenty seconds
+  and says so beside the order, rather than leaving "Asking …" standing as if an
+  answer were on its way.
+
+- **The basket said what was ordered and not what belonged to what.** It drew three
+  columns — offering, service, optional — each a flat list stacked on its own. A
+  row's height in one column had nothing to do with its height in the next, so with
+  two offerings in the basket a service sat beside whichever offering happened to
+  share its line: a laptop's hardware beside a monitor, the laptop's sleeve on the
+  monitor's line. The relation the reader needed was the one thing three independent
+  lists cannot draw.
+
+  Every offering is now one line of the grid, and its services and options are the
+  cells of that line. The grid makes a line as tall as its tallest cell, so the next
+  offering starts below the previous one's last service rather than beside its
+  third, and a rule under each line tells two offerings apart. The column names
+  stay once, at the top.
+
+  Which offering a row belongs to is read off the same containment the level is,
+  up through what includes it and what offers it. A part two products share — one
+  case for two phones — lands under whichever of them is in this basket, not under
+  the first one the release happens to list. A taken option whose offering is not in
+  the basket keeps a line of its own rather than disappearing, because a position
+  nobody can see is one nobody can take out.
+
+- **A decision was listed under the name of whichever decision happened to come
+  first in its file, not under the name of the file.** A DMN model is one artifact:
+  Atlas stores it under one handle, lists it as one row, publishes it as one thing —
+  and it may hold several decisions. Everywhere else that name is read off
+  `<definitions name>`: the model upload, the import, the model listing and the
+  decision's documentation record. Two paths took the first `<decision name>`
+  instead — the draft listing, and the decision editor's Save to model. So a model
+  called "Kreditpruefung" whose first decision is "Bonitaet" appeared in the Explorer
+  as "Bonitaet" while the editor's own header said "Kreditpruefung", and reordering
+  the decisions inside the file renamed the artifact. Worse, the editor's save
+  mirrors a name change onto the reference: because the two readings differed, every
+  save of an untouched model silently renamed its row. Both paths now read the
+  model's own name, falling back to a decision's name and then its id only while a
+  model being drafted has not named itself yet.
+
+  Existing rows are not rewritten — a stored name is data, and this changes how a
+  new one is derived. A row showing a decision's name corrects itself the next time
+  the model is saved from the editor, or immediately if the name is edited by hand.
+
+- **A catalogue kept in `de-DE` and `en-EN` would have ignored the language switch,
+  for the same reason `de; en` did.** The portal narrows a browser's language to its
+  base — `de-CH` becomes `de` — because its own words live in a message catalogue
+  keyed that way. A product's texts are keyed by whatever the *catalogue* declares,
+  and `de-DE`, `en-GB` and `pt-BR` are all correct and all invisible to a lookup for
+  `de`, `en`, `pt`. Every name would have been stored under a key nothing on the page
+  asks for, the reader would have been shown whatever value came first, and the
+  switch would have done nothing — with the new language-tag check waving it through,
+  because `de-DE` **is** a tag. A text is selected by a tag's language now, the exact
+  tag winning over a regional one where a catalogue carries both.
+
+  The Console's language box is also cut on commas, semicolons **and** whitespace. A
+  tag can contain none of the three, so all three are separators and none is
+  ambiguous — and a maintainer who types `de-DE; en-EN; fr-FR` gets three languages
+  instead of one refusal naming a tag they never meant to write.
+
+  What this bought on its own: nothing a reader could see, for the languages the
+  page did not yet speak. A catalogue could declare `fr-FR` and its products carry
+  French, and no locale on that page selected it. The entry below — the portal's own
+  words in French and Italian — is what turned this correction into four working
+  languages rather than two.
+
+- **A catalogue could be saved with a language that is not a language, and every
+  product in it then ignored the language switch.** Found in a live installation: a
+  catalogue was saved with the single language tag `de; en`. The list is read
+  comma-separated and the separator typed was the one the heading fields had just
+  been given. Every layer then behaved correctly and the result was total: the
+  product form drew **one** box labelled `de; en`, both names were typed into it, and
+  the portal — looking up `texts['de']` and `texts['en']` — found neither and fell
+  through to the first value it had. The language switch did nothing at all, for
+  every product in that catalogue, in both languages, with no screen anywhere saying
+  why. It was reported weeks later, two screens away from its cause.
+
+  A language tag is now checked where it is written and nowhere else: `de`, `en`,
+  `de-CH`, `zh-Hans`. Not at publish and not on any read, because the installation
+  that already carries a bad tag has to be able to open the catalogue and correct it
+  — refusing on the way out would lock it out of its own fix. Nothing is normalised
+  either: `de; en` has two readings and only the maintainer knows which, and guessing
+  is the same silent helpfulness that hid the defect. A repeated tag is refused too,
+  for its own reason — two boxes writing one key, where the second silently wins and
+  the first looks ignored.
+
+- **The Console asks for each language in its own box, side by side.** The name, the
+  description and the two headings. It replaces the semicolon-separated single box
+  shipped the day before, which was compact and was a trap: which word was French was
+  a thing to count out against a list on another screen, and the separator leaked one
+  screen up — which is the entry above. A row of labelled boxes counts nothing and
+  hides nothing, and a catalogue that adds a fifth language grows a fifth box.
+
+  The orderable shapes follow, as a grid: one row per shape, a narrow box for the id
+  that never changes and one box per language beside it. That replaces a textarea
+  with a syntax of its own (`gross = de:Gross | en:Large`) — better than the
+  semicolons, because it *named* each language instead of making it a position to
+  count, and still a syntax somebody had to be taught, in a form where every other
+  text is a box. Clearing the id removes a shape; two blank rows are drawn under the
+  ones that exist, and a button adds more. The cost is named rather than hidden: a
+  textarea can be pasted into and a grid cannot.
+
+- **Saving a product from a catalogue that only offers it no longer takes it away
+  from whoever maintains it.** A product is referenced by catalogues and edited
+  through exactly one, and the server treats a save naming a different home as a
+  deliberate move — it checks the caller may edit both sides, and moves it. The
+  Console was walking through that gate by accident: the product form sent the
+  catalogue being *viewed* as the home on every save. So opening a product from a
+  catalogue that merely offers it and pressing save moved it, silently, and from then
+  on its boxes were drawn from the new home's languages. It is asked now, and only
+  where there is something to ask; cancelling keeps the home and still saves the edit.
+
+- **The product-capture example runs.** It shipped in the shape that could never
+  execute — plain service tasks of a job type nothing serves, with the target and the
+  HTTP method in task headers no worker receives — and its README instructed a setup
+  step that cannot be carried out, because there is no `rest` Worker Type to configure.
+  Its tokens parked without failing, so nothing anywhere said so.
+
+  Its nine calls are `<atlas:restConnector>` tasks now, on the reserved job type the
+  engine serves itself. Nothing to configure for them. Two things the example does
+  need, and both are real: a start form asks for this Atlas's address once, because a
+  hand-started model has nobody to hand it one — the shipped fulfilment process gets
+  the same variable from the server, which starts it — and the operator's API token
+  under `ATLAS_CONNECTOR_ATLAS_TOKEN`, without which the first call answers 401 and
+  raises an incident rather than parking.
+
+  The payloads are one input mapping per JSON key, because a connector task sends its
+  activity-local scope: a single expression targeting `body` would have nested the
+  whole payload one level under that name. The guard that holds those payloads to
+  their shapes — flat edges, trimmed keywords, every field present in a full replace —
+  now assembles the body exactly as the connector does instead of reading one
+  expression.
+
+- **A folded decision service showed neither what it is given nor what it gives.**
+  Folding one took away every arrow that touched a decision inside it, which is right
+  for the arrows drawn between those decisions and wrong for the ones reaching in from
+  outside. The input data a decision inside the service needs, and the decision outside
+  that the service answers to, are requirements of the *service* — DMN derives exactly
+  those from the crossings — and with their arrows gone the input data sat unattached
+  in the corner of the diagram while the folded box looked like it took nothing and
+  gave nothing. Those arrows now end on the box, which is the only thing a reader of a
+  folded diagram can see. Nothing about the model moves: the requirement still belongs
+  to the decision that states it.
+
+  Unfolding did not put the service back either. Its box was recomputed from where its
+  decisions sit plus a margin, and for decisions drawn *inside* a larger box that comes
+  out smaller than the box was — so a service came back cramped, with its name clipped
+  behind a decision. The line dividing its two compartments came back worse than
+  recomputed: folding squeezes it into the small box, and afterwards there is nothing
+  left to work it out from. Both are now noted when the service is folded and restored
+  when it is unfolded, beside the decision positions that already were.
+
+- **An attribute the editor could not read survived only by being ignored.** DMN 1.5 lets
+  an author say that Input Data is to be drawn as the paper sheet symbol rather than the
+  backwards compatible oval. The editor's descriptor had that flag typed as an association
+  to a UML Standard Profile stereotype — an artefact of the OMG's own XMI export rather
+  than anything the schema means. So the editor looked for a child element no document has,
+  called the real attribute unknown, and left it unclaimed. Nothing was lost: an attribute
+  nothing claims is written back as it was found. But nothing could read it either, and a
+  warning with no loss behind it is exactly the kind that gets dismissed.
+
+  It is a boolean attribute now, declared in both of the places DMN 1.5 names it, because
+  the specification does not agree with itself here. The normative XSD carries it on
+  `DMNDiagram` and nowhere else; Table 97 lists it among the `DMNShape` attributes and
+  describes it per shape. Neither reading is a misreading and documents exist both ways, so
+  a reader of either spelling keeps what its author wrote. Nothing on screen changes — an
+  Input Data element is still drawn as an oval — and the round-trip guard that holds the
+  shipped editor to what it loses and what it complains about now records neither.
+
+- **The shipped fulfilment and approval processes could never run.** They do all their
+  work by calling Atlas's own API, and for four releases those calls were authored as
+  plain service tasks of a job type named `rest`, carrying their target and method in
+  task headers. Three things were wrong with that at once, and none of them is visible
+  from the model: `rest` is not a reserved job type (the REST one is
+  `io.atlas.http.rest`), so nothing leases it; a leased job carries no task headers at
+  all, so the target and the verb reached nobody; and the remedy both the models and
+  the product-capture example instruct — configure "a worker of type `rest` named
+  `atlas`" under Console → Workers — cannot be carried out, because there is no such
+  Worker Type to configure.
+
+  What that produced is the worst failure available: the tokens **park**. Parked work
+  is waiting, not failed — no retry is spent, no incident is raised, nothing turns red.
+  On the installation that reported it, fourteen orders stood at "Wartet" for weeks
+  with twelve jobs parked, zero incidents, zero open tasks, and a clean approver
+  report.
+
+  The calls are now real `<atlas:restConnector>` tasks, which compile to the reserved
+  REST job type the engine serves itself — and which the shipped `rest` worker serves
+  where an operator has offloaded the kind. Nothing to configure either way. They are
+  told where Atlas is through a new `atlasApiBase` start variable, set from the same
+  address the server hands its supervised workers and passed on to every process the
+  orchestration starts. `portalBaseUrl` is deliberately not reused for it: that one is
+  the operator's external origin *or empty*, and a request built on an empty base is
+  this same silent failure in a new place.
+
+  One operator step remains and it is one that exists: an API token with the `operator`
+  role, named by the models as a secret reference and read from
+  `ATLAS_CONNECTOR_ATLAS_TOKEN`. That obligation was always documented. The difference
+  is that its mechanism is real, and that a missing token now fails the call loudly
+  instead of parking it.
+
+  `examples/produkt-erfassung` still carries the old shape — it is started by hand
+  rather than by the portal, so it has no `atlasApiBase` and needs its own answer for
+  where Atlas is. Its README says so now instead of instructing the setup step that
+  cannot be carried out.
+- **Saving a product said "apiBytes is not defined" and quietly left the product
+  offered by nothing.** The catalogue screen hands its event handlers a bag of what
+  the shell owns — the API caller, the byte uploader, the toast. The product form's
+  save reached for the byte uploader to put the picture up, and the bag it was
+  called with did not carry it. The name resolved to nothing, and not at load, where
+  review would have caught it, but on the press that reached the line.
+
+  What the message named was the picture. What it cost was the offering: the record
+  was already written, and the step after the picture is the one that tells the
+  catalogue to offer a new product — so the save ended with the product stored, the
+  catalogue unchanged, and a product that is offered by nobody, which is invisible
+  on every screen its maintainer has. The picture step now goes last, after the
+  offering, because it is the step whose failure can be afforded: losing a picture
+  costs one upload and is visibly missing.
+
+- **The portal's link into an order's process answered where nobody was looking.**
+  Pressing "Prozess ansehen" searches for the fulfilment orchestration and opens it.
+  Both ways that search can come back without one — nothing started or nothing left
+  — wrote their answer above the table, so an order further down the page produced a
+  message off-screen and a button that read as broken. The answer is now under the
+  button that asked for it.
+
+  And one of those two was not a message at all. The instance search falls back to
+  the exported event log when this server's own index has nothing, marking what it
+  answers with: those rows describe an instance the server no longer holds. The link
+  followed one like any other, into a replay view that could only say "Could not
+  load this instance's replay." It is now said here, in words that name the cause
+  this server is actually certain of.
+
+- **A folded decision service stays folded.** `EnsureDiagram` lays a model's whole
+  graph out afresh whenever its diagram covers only some of the nodes, on the reasoning
+  that a partial diagram is the residue of a tool that drew what it could. A collapsed
+  decision service looks exactly like that from the outside and is the opposite: DMN
+  draws one by leaving its definition out of the view, so a diagram missing exactly its
+  members is a diagram somebody arranged that way. Re-laying it unfolded the fold on
+  every read, which meant a fold could never survive being saved. The exception is
+  narrow — a collapsed service's own members and nothing else; the service still needs
+  its own shape, because one with no box at all is the residue the rule exists for.
+
+- **A decision service is offered where the author looks for it.** The Modeler's
+  decision picker is built from two lists: what an application's DMN references offer,
+  and — as a fallback — what the engine has deployed. Describing a reference returned
+  only its decisions, never the decision services, so a service could reach the picker
+  only by the second route: with no model handle, and therefore in no application. The
+  one thing a business rule task is meant to call sat under "other decisions", below
+  every decision it is made of.
+
+  A task addresses either with the same one string, so a catalog that carries one has
+  to carry the other. It now does, and the list is cut up the way an author reads it:
+  one group per decision file, this application's files first, and inside a file the
+  published interfaces before the decisions. A decision a service is made of says which
+  one — calling it works and answers correctly, which is exactly why it is worth
+  saying, because it reaches past the interface the service exists to be. An input
+  decision carries no such marker: that is the boundary the caller supplies, and it
+  sits outside the service rather than within it.
+
+- **A product's description was stored, frozen into the release and never shown.** The
+  portal asked for it in the language the *page* is read in — German or English, taken
+  from the browser — and treated a missing key as no description at all. But publishing
+  guarantees a description in every language the **catalogue** declares, and those are
+  different lists. A catalogue offered in German and French is complete by that rule and
+  had nothing whatever to say to a reader whose browser is English: two descriptions
+  written, neither on screen, and no rule anywhere broken.
+
+  The reader's own language is still asked for first — that is what makes the choice a
+  choice once more than one exists — and the other languages are reached after it. A
+  paragraph somebody has to translate is worse than one they read and better than the
+  blank they were getting. A key that is present and blank is not taken as an answer,
+  because that is the shape a half-filled form leaves behind and it would end the search
+  before the language that does say something.
+
+  The picture needed no change and is shown beside it, where the catalogue carries one.
+
+- **The info button on the basket did nothing.** Every row there drew it, it responded,
+  and nothing opened: the button sets which product to explain and the *view* has to
+  draw the panel, and the basket made the first statement without the second. The
+  catalogue page and "my services" had both. So on the one screen where somebody decides
+  whether to actually order the thing, the price, the approval rule, the description and
+  the picture were unreachable — a row was a name and two buttons, and the name was all
+  they had.
+
+  Guarded per view rather than per file from now on: `infoPanel` appears three times, so
+  a search across the page would have found it however many views had forgotten it.
+
+- **A decision service that answers with nothing is refused rather than deployed.**
+  DMN gives a decision service one or more output decisions: they are what it returns,
+  and the whole reason to address a service instead of the decision inside it. Atlas
+  accepted one with none. It compiled, it was listed, the decision picker offered it, a
+  business rule task called it — and the task completed with the variable it was to
+  fill still unset. No error, in the engine or in the log; the process simply carried
+  on past a decision that was never made.
+
+  That is not hypothetical. A service's membership lives in its references and its
+  picture in the diagram, nothing in the format holds the two in step, and an editor
+  that rewrote the picture wrote the interface away with it. Every check between there
+  and the disk said the model was fine.
+
+  The check now runs where a model arrives and where a deploy asks whether one is
+  sound, and it names the service rather than the file, so an author knows which box
+  to fix. A model already stored with the fault reads as invalid in the model list and
+  cannot be deployed until it is repaired. Work in progress is unaffected: an
+  unfinished service belongs in a draft, which is saved without this gate.
+
+- **Renaming a catalogue, or changing the languages it is offered in, failed with
+  "list is not a function".** Both go through one form on the catalogue detail
+  screen, and neither reached the server: the save threw before it got there.
+
+  `catalog-admin.js` has a `list` helper that splits a comma-separated field into
+  trimmed entries, and the save calls it for the languages. A hundred lines above,
+  inside the same function, a DOM element had been bound as
+  `const list = view.querySelector(".product-list")` — which shadowed the helper for
+  the whole of it. The save called an HTML element, and the submit handler caught the
+  `TypeError` and showed its message as a toast.
+
+  That last part is why it was hard to place. A page that cannot run reported itself
+  as a refusal, so the message read like the server rejecting the rename rather than
+  like the screen being broken. The element is named `listEl` now.
+
+  Three guards drive the real detail view: what a rename sends, that the languages
+  arrive as a trimmed list, and that a working save reports nothing. Each fails when
+  the shadowing is put back.
+
+- **A decision service can be laid out and wired up.** Dragging one on the canvas was
+  refused outright — the cursor went red and the box stayed where the import had put
+  it — which is the one thing a diagram carrying several services cannot do without.
+  When it did move, the modeler re-decided which compartment each of its decisions
+  belongs to, and for a decision drawn outside the box, which an imported model may
+  well have, the divider travelling past it turned the service's output decision into
+  an internal one: the service silently lost the interface it publishes. A decision
+  service also could not be connected to anything. DMN makes one an invocable, like a
+  knowledge model, so a decision invokes it through a knowledge requirement; a model
+  that already said so opened and drew correctly, but the connection could not be made
+  by hand. All three are fixed, and the eleven connections the specification permits
+  between DRD elements are now each covered by a test.
+
+  The notation itself is held to the specification as well, in both pictures Atlas
+  draws. Input data is a stadium at any size rather than only at the default one; a
+  decision service carries the heavy border the specification asks for; and an element
+  is drawn under the text its diagram gives it rather than its own name, where the two
+  differ. In the decision graph window a knowledge model was drawn as a parallelogram
+  instead of a rectangle with two corners cut off, and a knowledge requirement ended in
+  the filled arrowhead that belongs to an information requirement — the two say
+  different things, and the arrowhead is half of what says which.
+
+- **A decision graph is drawn the way DMN draws one.** The DRD notation is not
+  styling: the shape is how a reader tells one kind of node from another. A decision
+  is a plain rectangle, input data a stadium with fully rounded ends, a business
+  knowledge model a rectangle with two corners cut off, and a decision service a
+  rounded rectangle with its name in the top right. Atlas drew decisions and
+  knowledge models with rounded corners, which made a decision read as an input
+  datum or a service, and drew a decision service square-cornered with its name
+  centred over whatever it contains. Both pictures now follow the notation, so a
+  model opened in Atlas looks like the same model opened anywhere else.
+
+  The modeler follows too: the vendored dmn-js carries the same correction, and a
+  decision service that declares itself collapsed is now drawn as one — name over a
+  plus marker, no divider, nothing nested inside a box the document says is closed —
+  instead of looking expanded.
+
+- **A decision service survives Auto-layout.** Atlas generates a DMN model's diagram
+  when one is missing and redraws it on request, but the generator only knew decisions,
+  input data and knowledge models. A decision service — the box drawn around part of the
+  graph, split by a divider line into what the service returns and what it works out
+  internally — was not drawn at all. Auto-layout therefore deleted the box, and the
+  modeler, which reads a service's membership back out of where its decisions sit,
+  concluded the service had no members and wrote that into the model on the next save.
+  The result was a service with no output decision: still deployable, still callable,
+  and returning nothing, with no incident and no validation error to show for it. One
+  click was enough, and only the stored XML showed the damage.
+
+  The generator now draws the service around the decisions it publishes and encapsulates,
+  with the divider between them, and a model whose service is undrawn is laid out afresh
+  instead of being handed to the modeler half-finished. The bundled modeler treats the box
+  as a container too: it is drawn beneath what it holds rather than over it, and moving it
+  carries its decisions with it. A decision the service names as its input boundary stays
+  outside the box, where DMN puts it.
 
 - **The rule that fired is green, like the conditions that held.** The rule matrix
   marked a satisfied condition green and the rule that carried the result blue, which
@@ -3204,6 +5352,18 @@ _Changed_ / _Removed_ for each version.
   into a toolchain cache. The JavaScript half of that proof had therefore never run. It
   runs now, and a second guard reads the allowlist directly, so the rule no longer
   depends on where a host happens to keep its binaries.
+
+- **A DMN 1.5 model opens in the decision editor, with its diagram, and is saved back as
+  1.5.** A model in the DMN 1.5 namespace — what the temis Modeler and other current tools
+  write — deployed, evaluated and rendered in the read-only view, and the decision editor
+  refused it with "failed to parse document as <dmn:Definitions>", because it read every
+  model as DMN 1.3. It now takes the version from the document's own namespace, and the
+  diagram Atlas generates for a model — when it is opened, and on Auto-layout — is written
+  in that version's DMNDI namespace too, so the model opens with its layout. A model
+  opened as 1.5 is saved as 1.5, a 1.3 model stays 1.3, and a new decision still starts
+  as 1.3. A tool that reads diagrams Atlas generated can no longer assume the 1.3 DMNDI
+  namespace ([ADR-0379](docs/adr/0379-dmn-version-follows-the-document.md)).
+
 - **A knowledge model's expression opened unstyled.** dmn-js does not show a business
   knowledge model in the literal-expression view a decision's expression opens in. A
   knowledge model is a FEEL *function* — it has an expression language, formal parameters
@@ -3326,1042 +5486,12 @@ _Changed_ / _Removed_ for each version.
   colleague's name for something the colleague is perfectly entitled to. What is wrong there
   is the name on the order, not the product.
 
-### Added
-
-- **An «enumeration»'s literals are shaded by use too, read through the lifecycles that
-  borrow them.** The class diagram can say which members a deployed process names; a literal
-  was left unshaded, because no process ever names one. What a process names is a *state* — a
-  `<dataState>` on a write — and a literal becomes a state only where some class's lifecycle
-  takes its states from that enumeration. A literal's rename is that state's rename, which is
-  what makes the two the same string rather than two that happen to match.
-
-  So the question is asked of the classes that borrow it. A literal is bright where a deployed
-  process moves such a class into that state, and faint where none does — which is the reading
-  people want from a state machine: the states nothing has ever reached.
-
-  It is asked only where it can be answered. An enumeration nothing borrows from, or one whose
-  borrowers no deployed process uses, is left unshaded: "no process reaches this state" and "no
-  process was in a position to" are different claims, and fading a state machine nothing drives
-  would report the second as the first.
-
-- **A face can come from the directory, and it arrives the way every other directory
-  fact does.** A tenant that already holds a photo for everybody should not be asked
-  to collect them a second time. The constraint that shaped this is not about
-  pictures: **Atlas holds no tenant credential** and must not start holding one, so
-  the mirror *pulls* — a process reads Graph through the Entra worker and reports
-  what it read, and nothing in the server calls Graph.
-
-  The worker gained one operation, **`get-user-photo`**, and with it the ability to
-  read bytes at all: every Graph call Atlas had returned JSON, and a photo does not.
-  The change is one field on the request rather than a second method on the client,
-  because what differs is a property of *the request*. The result reaches a process
-  as `{contentType, data}` with the data base64 — a process variable is FEEL, and
-  FEEL has no bytes — and `null` where there is no photo, so a model asks whether
-  there is one instead of comparing an empty string.
-
-  **A 404 is an answer, not a failure**, and that is the one place in this worker
-  where a non-2xx is not an error. Graph answers 404 both for a person with no photo
-  and for an id that is not anybody's, and its error code distinguishing them is not
-  something to hang a directory run on. The trade is stated rather than hidden: a
-  mistyped id reads as "no photo", where the other way round every person without
-  one would fail a job — in a tenant where most have none, an incident queue nobody
-  can read. It is confined to binary requests and held by a test, because the day it
-  leaks into the JSON path is the day a failed directory read looks like an empty
-  one. A body past the limit is **refused rather than cut short**: the magic is at
-  the front, so half a JPEG passes every format check and is still broken.
-
-  The synchronisation message carries the pictures in a field of its own — not on the
-  user object, which is documented as one object from `/users/delta` and would have
-  been a small lie in the file where a reader most needs to know what came from
-  where. **Removal is explicit**, because the absence of an entry has to keep meaning
-  "not fetched": without a way to say "there is none", a photo deleted in the tenant
-  would stay on the account for ever.
-
-  **A mirror does not overwrite a choice.** A picture somebody uploaded is left where
-  it is, in both directions — the directory may replace or remove what the directory
-  gave, and neither what a person picked for themselves. The run counts how often it
-  stood back rather than writing a line per person; what is surprising, bytes that
-  are not a picture, is a note, and it never costs the account the rest of its page.
-
-  The account carries a **fingerprint** of its picture, and that is what keeps
-  "unchanged" true. The mirror decides an account unchanged by comparing the record
-  before and after; a photo that changed while the record did not would be planned as
-  unchanged and written anyway, which breaks the one rule that makes the reporting
-  mode worth reading — the plan says what the apply does. It also makes the write
-  idempotent, so a process that fetches photos every run does not report a change on
-  every account for ever.
-
-- **A person can have a face.** Atlas showed people as strings: an approval said
-  `usr_4be5b4ad`, the portal's corner drew an empty circle, and a recipient picked
-  out of the directory was a name in a list of names. That is fine while somebody
-  works with three colleagues, and it stops being fine first exactly where the
-  mistake is expensive — ordering in somebody else's name, deciding somebody else's
-  request.
-
-  An account now carries a **picture**: `PUT /api/v1/users/{id}/avatar` takes the
-  bytes, `GET` serves them to anybody signed in, `DELETE` takes them away. It is
-  shown in the portal's corner beside whoever the order is for, and in the
-  console's user administration, where it is also uploaded and removed.
-
-  **Set by the account itself or by an administrator — not by an operator.** An
-  operator runs what is deployed, and changing the face a colleague wears to
-  everybody else is not running anything. Read by everybody signed in, which is the
-  point of having one: it is read beside a name in a task list, an approval and a
-  recipient picker, by colleagues rather than by administrators, and it discloses
-  less than the principals directory the same caller already reads.
-
-  **Stored beside the account record**, and two things follow without anybody
-  arranging them: a snapshot that carries the accounts carries their pictures, and
-  deleting an account deletes its picture — in the store rather than in a handler,
-  so every deletion path does it. Ids are assigned, so a file left behind is not
-  untidy but wrong: the next account handed that id would inherit a stranger's
-  face.
-
-  **PNG or JPEG, and deliberately not SVG.** A brand mark may be a vector — it is
-  drawn, it is scaled, a designer delivers one — and the serve headers make a
-  hostile one inert. A photograph has no such reason: it comes from a camera or
-  from a directory, and both give raster bytes. Accepting a document format with
-  scripting in it, in the one place where the uploader is *every account* rather
-  than an administrator, would be widening the surface for nothing. So the image
-  package now has a set per surface over one content check: which types a surface
-  takes is a policy and the surfaces differ, while whether bytes really are the
-  type they claim has one answer everywhere.
-
-  The account records **where the picture came from** — uploaded, or from the
-  directory — because nothing in a JPEG says who chose it, and that is exactly what
-  somebody looking at a wrong picture needs: whether to change it here or in the
-  directory. The directory half is not in this change: the photo will arrive the
-  way every other directory fact arrives, read through the Entra worker by a
-  process and reported here, because Atlas holds no tenant credential and must not
-  start holding one for a picture.
-
-
-- **The decision editor says when a knowledge model is never invoked, or invoked without
-  being required.** A knowledge model is a reusable FEEL function, and DMN says the
-  decision invoking one declares a knowledge requirement for it — the arrow the
-  requirements graph draws. temis does not enforce that: a decision whose expression calls
-  a knowledge model by name evaluates correctly with no arrow at all. Both of the
-  disagreements that follow deploy, run, and are reported by nothing.
-
-  A knowledge model nothing invokes is dead weight. The model is valid, its decisions
-  deploy, the engine never complains — so there is no later moment at which anybody finds
-  out, and on the canvas it looks exactly like one that is called: the only difference is
-  an arrow that is not there. A decision that calls one without requiring it is worse in a
-  quieter way. It runs, and draws a graph that omits the dependency — and the graph is
-  what gets reviewed, and what goes into the decision's published documentation.
-
-  The editor now says both, while the model is on screen: a strip under the canvas naming
-  what is wrong and what follows from it, and a warning badge on the shape in the
-  requirements graph. Clicking a finding goes to its element, from a decision's own view
-  as well — back to the graph first, since pointing at a shape in a view that does not
-  draw it would point at nothing. Both are warnings and never errors, because each
-  describes a model that deploys and runs, and both are biased towards silence: an
-  invocation is anything that reads as the knowledge model's name followed by an open
-  parenthesis in any other element's expression, so an unusual way of calling one costs a
-  missed warning rather than a false one. A warning an author learns to ignore is worse
-  than no warning.
-
-  The second finding carries its repair: **Draw the requirement** draws the missing edge
-  from the knowledge model to the decision that calls it. It is offered only there, because
-  only there is the fix determinate — which decision ought to call an uninvoked knowledge
-  model is the author's to decide, and a button that guessed would be writing their model
-  for them. dmn-js's own rules are asked whether the connection may be made rather than the
-  element being constructed, so the button cannot force a connection the palette would
-  refuse, and says why when it is refused. What it draws is left selected *and* the canvas
-  is given focus, which is both ways of taking it back within reach: the connection's
-  context pad has one entry, the bin, and Ctrl+Z works. The focus is the part that is not
-  obvious — dmn-js binds its keyboard to the canvas SVG rather than to the document, so a
-  button in the strip below the canvas has to hand focus back, or the author's first
-  Ctrl+Z would go nowhere and they would reasonably conclude the edit could not be undone.
-  Clicking a finding to jump to its element hands focus back for the same reason.
-
-- **The class diagram can say which members anything actually uses.** Where a business object
-  is used has been readable since **Data › Business objects** arrived — one class at a time,
-  on a page of its own. The question is asked on the class diagram, with the member under the
-  cursor and the decision half made, and getting the answer meant leaving the drawing, finding
-  the class in a list and coming back. Most people do not take that trip, so the reading
-  existed and the decision was still taken blind.
-
-  A control beside zoom and undo shades the drawing from that same reading. A member some
-  deployed process names comes forward; one none of them names recedes; a class used by no
-  deployed process and by nothing in the model either is faint as a whole.
-
-  What it will not claim is the more important half. Faint means *nothing names it*, not
-  *nothing uses it*: a read takes the whole object, and what an expression then reads out of
-  it is not a fact of the model — the legend says so in those words, on screen for as long as
-  the shading is. A business key is never faint, because no write ever names one and it is
-  what every store lookup and cross-process correlation resolves against. An «enumeration» is
-  not faint for having no process use, because most of them are declared by no data object at
-  all. And a name the reading has never seen — a class added since, or renamed a moment ago —
-  is left exactly as it was drawn, so a rename is not a scare about a member nothing had said
-  anything about.
-
-  Off until it is asked for: every attribute is unused the moment it is typed, and a canvas
-  that greys out new work is one people turn off.
-
-- **The class canvas judges the model while it is being edited, not when it is saved.** The
-  Problems panel showed the findings of the *last save*. So every edit that broke the model —
-  a store left naming a class that was renamed away, an attribute typed with something that is
-  gone, a lifecycle whose states drifted from the enumeration they came from, a business object
-  switched to a kind that cannot be stored — was silent while it was being made, and the
-  refusal arrived afterwards, naming an edit whoever made it had stopped thinking about.
-
-  The panel is live now. Every change is judged as it is made, and the bar and the marks on the
-  drawing say so at once. That closes the category rather than one edit at a time, which is how
-  the three known cases had been treated.
-
-  The rules are served, not copied into the browser. `POST /api/v1/infomodel/validate` judges a
-  document the caller is holding and stores nothing — no saved revision, no application scope,
-  and an invalid document is an answer carrying findings rather than an error, because a model
-  mid-edit is *expected* to be invalid. Two copies of a rule set are two rule sets, and the copy
-  the author sees is the one that would drift from the one Save enforces. The same route is an
-  MCP tool, `atlas_validate_information_model`, so an agent can check a model it is composing
-  before writing it anywhere.
-
-  When the server cannot answer, the last verdict stands rather than the bar going blank: a
-  stale finding is closer to the truth than a clean bill of health nobody checked.
-
-- **An approver decides a request once, instead of deciding it twelve times.** An
-  approval in Atlas is one user task per order line — the approval process is
-  started multi-instance from the order's ready lines, so a workplace ordered as
-  twelve products is twelve process instances and twelve tasks. That shape is
-  right and is unchanged: a line is what gets provisioned, refused, escalated,
-  reassigned and returned, and each of those needs its own instance.
-
-  What was wrong was the surface. The approver of a twelve-line workplace pressed
-  Genehmigen twelve times, read the same recipient twelve times, and on a refusal
-  typed the same reason twelve times. A person doing the same thing for the fourth
-  time is no longer reading it: a surface producing twelve identical clicks has not
-  obtained twelve judgements, it has obtained one and a habit.
-
-  The decision card for a position that is part of a larger request now names **the
-  rest of the request** — each position with its price, not a count, because the
-  thing being agreed to is "I have seen what is in this request" — and offers one
-  checkbox. Ticked, one call decides all of that order's open approvals the caller
-  holds, with one reason, and **each is still completed as its own task**, because
-  each is still its own process instance and each still has to act on what it was
-  told. The count moves onto the buttons, since the button is the last thing
-  somebody reads before the decision is irreversible. A request with one position
-  gets no checkbox and still takes the single-task route.
-
-  **The record is read as one decision, not counted as twelve.** Twelve completions
-  in the same second by the same person on the same order with the same reason are
-  the legible signature of one collective decision — where twelve clicks a minute
-  apart, from somebody who stopped reading after the third, look like twelve
-  examinations and are indistinguishable from them.
-
-  **There is no atomicity and the page says so.** Nothing spans twelve process
-  instances, and a completion that went through has already handed its answer to
-  its process, which may have started provisioning. So the answer is per line:
-  what was decided, and what was not with the reason for each, named on screen.
-  "Eleven of twelve" is a number nobody can act on; "the laptop is still open
-  because it was decided in another tab" is.
-
-  Refused, on the server and not only in the browser: keys from more than one order
-  (one reason cannot cover two people's requests), a refusal with no reason, and
-  more than a hundred keys — which is not a resource limit but a statement about
-  what one decision can plausibly be. The gate is the approval list's and has no
-  operator bypass: an operator who must step in does it on the task itself, where
-  the record says an operator did.
-
-- **A product says what kind of thing it is, and the portal's first column finally
-  carries data.** The portal's cascade has drawn four columns since the layout
-  landed — Kategorie, Bundle, Angebot, Service. The first one was filled with the
-  catalogue's own name and a note reading *"Atlas has no category level above the
-  bundle today"*: a placeholder telling the truth, because there was nowhere for a
-  product to say what kind of thing it was. A catalogue of eight products does not
-  need headings. A catalogue of two hundred is unusable without them.
-
-  A product now carries a **category**, and it is a **plain string the maintainer
-  types** while they have the product open, offered back through a list of the
-  headings already in the catalogue so the second product is spelled like the
-  first. The column shows **Alle** above the headings, so it is never a dead end;
-  the headings alphabetically, by the locale's own rule; and **Ohne Kategorie**
-  last, appearing only when something is in it — a heading for nothing is a heading
-  nobody can use, and hiding uncategorised products instead would lose them. The
-  services view groups what a person already holds by the same headings, so "where
-  do I find this" has one answer on both sides of the portal. Publishing refuses a
-  category that is present and **blank**, because blank is the bucket's own value
-  and a product that meant to say something and lost it would be invisible against
-  one that never said anything.
-
-  **A heading, not an entity, and the three costs are stated rather than hidden.**
-  Nothing in Atlas branches on a category — no rule, no approval, no eligibility,
-  no process binding reads it; it is a way of *looking* at a release. Every property
-  that would justify an entity is a property something else would need, and no such
-  something exists. So: the headings have **no ordering of their own** (a rank on a
-  category is the entity this refused, arriving through the back door, and a test
-  holds the sort against it); they are **not translated**, unlike every other text
-  on a product, which is a genuine regression against the rest of the surface; and
-  **two spellings are two categories**, recorded as a deliberate non-check so that
-  the day it becomes intolerable, the reason it was tolerable is on file.
-
-- **A product can say what it costs, and the approver sees it.** There was **no price
-  field anywhere in Atlas** — not on a product, not on an order line, not on the
-  approval surface — so an approver was asked to approve a laptop without being told
-  what it cost.
-
-  A product now carries a price, and it is a **string written as the catalogue's
-  maintainer wants it read**: `CHF 1'200.–`, `49.– / Monat`, `ab 10 Stück CHF 39.–`,
-  `im Grundpaket enthalten`. None of those is a number, and every one of them is an
-  answer an approver can act on.
-
-  **Displayed and never computed, on purpose.** A number invites a total; a total
-  invites two products in different currencies; that invites a rate and an effective
-  date. Every one of those belongs to an installation's finance rules, and a catalogue
-  storing a number would have started deciding them by implication before anybody had
-  chosen. The cost is stated rather than hidden: **nothing adds these up.** That is
-  survivable because one approval decides one line, so the one figure it shows is the
-  one figure it needs — and a test asserts that no page parses a price into a number,
-  because a single `Number(price)` somewhere is the whole money model, invented without
-  being chosen.
-
-  **It is frozen like a rule although it is not one.** Nothing branches on a price, and
-  it travels into the release and onto the order line anyway, for the sentence that
-  governs the approval rule and the ceiling beside it: an approver saw a figure and
-  decided on it, and a catalogue edit next week must not make the record show a
-  different one. The approval surface therefore reads it **from the order line** — the
-  line is the order's own record of what was decided on, and reading from the catalogue
-  would give the same answer today and a different one the day somebody edits a price,
-  which is exactly when it matters and nobody is looking.
-
-  Publishing refuses one thing: a price that is present and blank. That is worse than
-  saying nothing, because the portal renders an empty field where a figure belongs and
-  a reader cannot tell "we do not say" from "somebody left it blank" — so the portal
-  says the first out loud instead. It shows on the product's details, on the approval
-  panel, and on the approval **row**, because a list of forty is scanned rather than
-  opened one at a time.
-
-- **One position can be withdrawn on its own, and its details corrected.** The story
-  asks to modify or delete positions directly. Deleting existed only for a **whole
-  order**, so somebody who no longer wanted the second screen had to take the laptop
-  back with it — the per-line transition had been in the package since it was written,
-  with nothing calling it. Modifying did not exist at all.
-
-  **"Modify" is two different acts, and treating them as one is how a record starts
-  lying.**
-
-  Changing *what is held* — another product, another variant — is **not offered**. A
-  line that was provisioned and then quietly became a different product leaves the
-  access record unable to answer what somebody had and when, which is the one question
-  it exists for. The honest path already exists: give it back, order the other thing,
-  and the record carries both with the dates that make it readable.
-
-  Correcting *what was recorded about it* — the answers to the product's configuration
-  form — **is** offered, and what it may do is asked of the status machine that already
-  decides what can still change, rather than decided a second time beside it:
-
-  - A position **not yet attempted** is simply corrected. No amendment is recorded:
-    nothing was delivered under the old answers, and recording one would tell a reader
-    that something had been.
-  - A position the recipient **already holds** is corrected *and the correction is
-    recorded* — what the answers said before, who changed them, when, and why. The
-    laptop is at the wrong site and correcting the record does not move it; an
-    overwrite would leave the order saying something that was never true of the
-    delivery, and a reader could not tell the corrected record from an accurate one.
-    The amendments are a list and not a slot, because details having been wrong twice
-    is a different fact from their having been wrong once.
-  - A position **being provisioned now** is refused, and the refusal says to wait. A
-    process has the line, which is a conversation with a system Atlas does not control.
-  - A **rejected, cancelled or abandoned** position is refused: a closed record of a
-    request that produced nothing.
-
-  Whether a field is required is still the form's own statement, not a second copy of
-  that rule in the order service.
-
-  **A position its whole always carries cannot be withdrawn on its own.** The basket
-  will not let anybody deselect an integral part — a workplace is not a workplace
-  without its account — and a rule enforced when ordering and not afterwards is not a
-  rule. The order could not tell, because it carries the precedence graph and not the
-  composition one, so the line now carries that too, frozen at placement like every
-  other statement about the release. The refusal names what carries the part, because
-  the answer somebody needs is "take back the workplace instead".
-
-- **A product can ask the orderer for what its name does not say.** A laptop is not
-  fully described by being a laptop: somebody has to say which cost centre it is booked
-  to and which site it goes to. Nothing could hold that — a product declared no fields
-  and an order line carried no values — so every order needing more than a product name
-  finished as a phone call, and the answer lived in whatever the caller wrote down.
-  Variants do not solve it: a variant is a fixed shape chosen in advance, and a cost
-  centre is not one of a list.
-
-  A product now names **one Atlas form**. The basket renders it — the last screen before
-  an order exists, and the one that already shows what will actually be provisioned —
-  and the answers travel with the order line, beside the id of the form they answered.
-
-  **A form id and not a field list of its own**, because Atlas already has forms: a
-  definition, an editor, a generator, a renderer, and two surfaces rendering them. A
-  second way to declare "these are the fields somebody fills in" would be a second thing
-  to author, a second thing to render, and a second set of types, validation rules and
-  localisation to keep level with the first — behind on the day it shipped. The
-  catalogue names an id and interprets nothing; which questions there are, which are
-  required and what counts as valid stay the form's own statements, checked by the form
-  runtime before anything is sent.
-
-  **The release freezes the id and the line freezes the answers.** A release freezes
-  *rules* — the approval, the ceiling, the bindings — because a rule relaxed next week
-  must not change what somebody was held to this week. A form is not a rule: what has to
-  survive is what was answered, and "cost centre 4711" stays true whatever the form does
-  afterwards. Copying the schema into every release would put a rendering artifact inside
-  a design-time model that has kept rendering out of itself, and send it to every browser
-  that opens the portal.
-
-  Answers are keyed by item, because two laptops in one basket are two cost centres and a
-  flat map would keep one of them. Two things are refused rather than dropped, both
-  because the alternative is an order that silently loses something somebody typed:
-  answers for a product the order does not carry (a stale basket), and answers for a
-  product that asks nothing (nothing would read them). A form left *unanswered* is not
-  refused there — that is the form's own rule, and a second copy of it in the order
-  service would be wrong the first time somebody marks a field optional.
-
-  The product editor offers the forms that exist, never free text — the same rule the
-  process bindings follow, because a product bound to a form nobody wrote is a basket the
-  orderer cannot get past, found by them rather than by whoever bound it.
-
-
-- **A catalogue's appearance is set on the screen that fills it.** A catalogue has carried
-  its own colour, typeface and brand mark since it was built — the portal and the approval
-  page paint themselves from it — and no screen offered any of it. The one thing that makes
-  a catalogue somebody *else's* was reachable only by whoever was willing to write JSON by
-  hand, which is the exact state the authoring page exists to end.
-
-  An accent colour with a picker beside the field, the four typefaces the binary ships, and
-  a brand mark uploaded and removed with a preview. Empty means the catalogue wears the
-  instance's appearance, and a button says so in those words.
-
-  The typefaces are a list and not a URL, as the server has it: a web font would reach a
-  third party on every portal page load, carrying the visitor's address there — an outbound
-  dependency on pages that must render when nothing else is reachable. A test holds the four
-  on screen against the four the server ships, in both directions: an option the server
-  refuses is a control that cannot work, and one it accepts but the page omits is a
-  capability lost to a forgotten line.
-
-  Administration and not catalogue maintenance, like the server has it: an editor may change
-  what a catalogue offers and not whose it looks like. The form is drawn for an administrator
-  only, because offering one that always ends in 403 is its own kind of lie.
-
-- **The recipient of an order is picked, not typed — and the field is only shown to
-  accounts that may use it.** Ordering in somebody else's name became a first-class
-  screen gated on the operator role, and the field it goes through took a free string
-  and offered no help finding one. The comment above it said a picker would mean
-  shipping an organisation chart.
-
-  **That was wrong, and it is worth saying so rather than quietly changing it.** Atlas
-  already serves exactly this list, to any authenticated caller, at
-  `GET /api/v1/principals` — the directory every member and assignee picker in the
-  product reads. It carries a type, an opaque id and a display name, and deliberately
-  nothing else: no address, no roles, no reporting line. There is no hierarchy in it to
-  disclose, and a hierarchy is what an organisation chart is.
-
-  The field now suggests from that list as somebody types, shows the person's name, and
-  sends the id — a display name is not something the server can resolve, and an id is
-  not something a person can check. Typing over a picked name un-picks it, or the order
-  would be placed for whoever was chosen before under a name no longer on screen. Free
-  text still resolves, by principal id, username, directory id or mail address.
-
-  Groups are in that directory and are not offered here: an entitlement is held by a
-  person, so a group would be a recipient the server refuses after the basket is
-  already full.
-
-  **The scope is the role and not an "area of responsibility"**, and that is settled
-  rather than left open: an area of responsibility means a reporting line, and Atlas
-  has no reporting line. The `superior` approval kind has the caller name the superior
-  precisely because a directory lookup belongs to a modelled process and not to the
-  engine. Scoping a person search to a hierarchy would mean inventing the hierarchy
-  first, and an invented hierarchy decides who may act in whose name.
-
-  **The page also learns who is reading it.** It fetched a catalogue, a release, orders,
-  the inventory and favourites and never asked what the account may do, so the recipient
-  field was drawn for every visitor and answered 403 for almost all of them — which
-  reads as a permission that failed rather than one they never had.
-
-- **A catalogue can be searched, and by words it does not display.** The portal browsed
-  and did not find. Four columns cascade from the catalogue to the individual service,
-  which works for somebody who knows roughly where a thing sits and is useless to
-  everybody else — the cascade shows what a thing is *part of*, and that is exactly the
-  knowledge the searcher does not have. "Power BI Pro" sits two levels under "Productivity
-  Enabling", and nobody looking for a reporting tool has a reason to open either.
-
-  A product now carries **keywords**: the synonym, the abbreviation, the vendor's own
-  term, the name of the thing it replaced. They are searched together with every name the
-  item carries, and a publish refuses a blank one — an empty string is contained in every
-  query, so one product holding one would surface for everything anybody typed.
-
-  **The list is flat and not per locale**, unlike every other text on an item. A synonym
-  list is for finding, not for displaying; nothing renders it; and a searcher's language is
-  not the catalogue's. Somebody reading a German catalogue types "laptop" as readily as
-  "Notebook", and "M365" belongs to no language at all. For the same reason the search
-  reads *every* locale's name rather than the one on screen: refusing to match a word the
-  catalogue itself carries would be the search failing at its only job.
-
-  **A query replaces the cascade rather than filtering it.** Filtering the four columns
-  was the obvious shape and is the wrong one — a match three levels deep would leave an
-  empty column on screen and the person would conclude the catalogue does not carry it.
-  So the columns are replaced by a flat list, and each hit says the path it sits on: the
-  answer is both *what* and *where*. Choosing a hit opens the cascade at that item rather
-  than ordering from a list that does not show what the thing comes with.
-
-  The search runs in the browser over the release the page already fetched. Not for speed:
-  a route would re-send data the page has, an index would be a second copy of the
-  catalogue to keep true, and — the part that matters — a server-side search would need
-  its own audience filter, correct forever, in a second place. The page can only search
-  what it was given, and it was given exactly one catalogue.
-
-- **The approval list can be searched and ordered.** It rendered every open approval in
-  whatever order the endpoint returned — newest first — which is fine at three and a wall at
-  forty. The story asks for what a wall needs.
-
-  A search field, a sort control and a count. Deliberately **not** a table with a filter per
-  column, for the reason [ADR-0311](docs/adr/0311-portal-approval-page.md) gives: the common
-  approver is a line manager who decides perhaps four times a year, and a page that grew into
-  a console is one they will ask a colleague to operate. One field matches across the product,
-  the recipient, the orderer, the order id and the catalogue, because somebody looking for
-  "the laptop for Ada" does not know which column they are searching.
-
-  **Oldest first is now the default**, which changes what the page did. What has waited
-  longest is what nobody has looked at — the argument the recertification campaign and the
-  conflict report each make about their own lists.
-
-  Age is the job key, because a user task carries no created-at and the approvals endpoint
-  already pages by it; a clock reading taken in the browser would be a number nobody can
-  check. A row shows a due date where the model set one and *passed on* where an assignment
-  record exists — and says nothing where it does not, because that absence is the answer
-  "nobody has had to chase this".
-
-  Due dates sort ahead of everything undated: a task somebody put a deadline on is a different
-  thing from one nobody did, and sorting the undated in among them would bury the deadlines.
-
-### Fixed
-
 - **Two pages rendered the literal word "null".** `render()` passed `cond ? node : null` to
   `replaceChildren`, which — unlike the `el()` helper beside it — turns a non-node argument
   into a *text* node. The approval page has three such slots (an error, a stale link, a
   truncation notice) and none is usually filled, so an ordinary load showed `nullnullnull`
   above the list and `null` below it; the portal showed one under its header. Both have
   carried it since they were written. A `paint()` helper filters, in both.
-
-- **The catalogue can now be read backwards.** Every question it answered ran forwards: a
-  product names what it contains, what it needs, what it excludes. That is the question an
-  *order* asks, and the portal, the basket and the fulfilment schedule are all built on it.
-
-  The person who **maintains** a service asks the opposite, and could not ask it at all. Where
-  is this used, and integrally or optionally? **What needs it** — nobody reading the VPN's own
-  page learns that the laptop cannot be provisioned without it. What may it never be held
-  with? How many people have it, and did this portal grant them or merely find them? A product
-  manager about to retire a service, rebind its provisioning or move it between catalogues had
-  no way to find out what they were about to break.
-
-  `GET /api/v1/catalog-products/{id}/usage` answers all of it out of the edges every release
-  already froze. **No new data, no migration**: the answer has been in the store since the
-  first release was published, with nothing to ask it.
-
-  Merged across catalogues, because a service does not belong to one — the same product
-  carried by two of them is one thing somebody is about to change, and a per-catalogue answer
-  would let them fix one estate and break another. Composition and aggregation stay apart,
-  because retiring an integral part changes what the whole *is* and retiring an optional one
-  does not.
-
-  **Holders are counted and never named.** A list of the people holding one service is the
-  inventory filtered to the interesting part. The count is broken down by origin, because that
-  decides what can be done: an ordered right can be returned through its order, an adopted or
-  legacy one cannot.
-
-  It is an **MCP tool** (`atlas_product_usage`), unlike every other read this line of work
-  added — those were withheld because they are other people's access, and this one names no
-  person at all.
-
-  An unknown product answers 404 rather than an empty report: "nothing uses this" and "this
-  does not exist" are different answers, and an empty one reads as *safe to retire*.
-
-- **Products can be marked as favourites.** The smallest measure in the plan, and the one
-  whose two decisions are the kind that get made by accident.
-
-  **A favourite is a bookmark and never an entitlement.** It stores a product id and nothing
-  else — no release, no catalogue, no variant. It says "show me this again", not "I may have
-  this", and everything deciding whether the person may still *order* it is asked at read time
-  by the routes that already decide it.
-
-  The tidier-looking alternative is a trap: validating a mark against the caller's catalogue
-  at write time would mean a catalogue reassignment starts **refusing** marks the person
-  already has, and a withdrawn product makes an existing list unwritable — the list would
-  break on exactly the events it should survive. Marks that no longer resolve are counted
-  rather than hidden, because a star that stopped appearing with no word looks like the page
-  lost it.
-
-  **Yours only, with no `?principal=`.** Every other portal read has one for an operator
-  administering an estate. Nothing needs to see what another person bookmarked, and a
-  parameter nobody needs is a surface to keep closed.
-
-  One product per call rather than a list per call: a replace-the-list write would silently
-  drop whatever a second tab marked in between. Marking what is already marked writes nothing,
-  so a star pressed twice does not churn a stored file, and the list is sorted on write so the
-  stored bytes are a function of the set rather than of the order somebody pressed things in.
-
-  In the portal it is a filter over the columns and not a fourth destination — a favourite is
-  still a product in the catalogue, and a separate screen would hide what it is part of. A
-  bundle is kept when something under it is marked, or starring a service would hide the way
-  to reach it.
-
-- **A product can now say who may receive it.** A catalogue carries an audience and that gate
-  is fail-closed — but it was the *only* gate: whoever was in a catalogue's audience could
-  order anything in it, and the sole thing between a person and domain administration was an
-  approval rule, which says *who decides* rather than *who may ask*.
-
-  "Put it in a stricter catalogue" is the obvious workaround and does not work, for a reason
-  written into the design: **a person sees exactly one catalogue**, the highest-ranked one
-  their groups reach. A second, stricter catalogue does not restrict a product — it hides it
-  behind the shop that person already has. A product offered to part of a catalogue's audience
-  could not be expressed at all, short of duplicating the whole catalogue per audience.
-
-  `eligible` on a product names the groups whose members may receive it, frozen into the
-  release like the ceiling and the approval rule beside it. **It narrows; it never replaces.**
-  An item naming no group inherits the catalogue's restriction rather than removing one, which
-  is why the first test in the file is the one proving an unrestricted product still works.
-
-  **Checked against the recipient, never the orderer.** An order has two people, and the
-  question is who ends up holding the thing. Checking the caller would refuse a manager
-  ordering a workplace for a new hire — the ordinary case — and would equally let an eligible
-  manager order a restricted product *for* somebody who may not have it.
-
-  A refusal over an integral part names the product that carries it: a `composition` part is
-  never deselectable, so "you may not receive a licence" about a licence nobody chose reads as
-  a bug rather than as a rule. 403 and not 409 — a conflict is a state of the estate that
-  giving something back would resolve, this is a statement about who the recipient is.
-
-  Publishing refuses a blank group id and deliberately **not** an eligible list disjoint from
-  the catalogue's audience: one person is in many groups at once, and being reached through one
-  while being eligible through another is the ordinary way this is used.
-
-- **A hold that ends now leaves a record that it existed.** The inventory is present tense by
-  construction — a grant writes a row, a revocation deletes it — and the order behind a right
-  is deleted by retention long before the right ends, which is why the inventory is engine
-  state at all. Put those two facts together and a third follows that nothing had a place for:
-  when a right ends, *everything* about it goes, and the estate can no longer say whether the
-  person ever held the thing, under whose approval, or for how long.
-
-  It got worse as detection got better. Every finding the last three slices added is about a
-  **held** right, and every remedy ends the hold — so "this person held `create-supplier` and
-  `approve-payment` together for six months" is a finding that ceases to exist the moment
-  anybody acts on it. **The remedy destroyed the evidence of the problem**, and an estate that
-  remembers only the mistakes nobody fixed has the record backwards.
-
-  Closing a hold now writes a row into a new engine-state column family, in the same
-  transaction that deletes the live entitlement. It **copies** the hold rather than referring
-  to it, because there is nothing left to refer to.
-
-  **The reason it ended changes what the row means.** A `returned` hold is evidence the person
-  *had* the access; a `corrected` one — reconciliation found the target system did not have it
-  — is evidence only that Atlas *claimed* they did, which is all `handleRevokeDiscrepancy`
-  ever decided. Writing the second as the first would assert, in a record kept for years, that
-  somebody had access nobody can show they had. Every row carries the word and the flag.
-
-  `GET /api/v1/entitlements/history` lists what has ended, and `?at=` answers the question an
-  access review actually asks — what the record said on a given day, drawn from the ended holds
-  *and* from what is still held. It is not an MCP tool: an assistant that could read it would
-  assemble a person's whole access biography in one call, and `?at=` reconstructs a past day.
-
-  The fold reads the hold through its own transaction rather than taking a frozen copy, which
-  stays inside I4/I6 — those require determinism, not the absence of reads — and is what makes
-  a double revocation write one row instead of two. `Line.ReturnedBy` joins `DecidedBy` and
-  `AbandonedBy`, recorded when a return is *asked for*: what completes one is a deprovisioning
-  process, and naming that as the decider would attribute a decision to a robot.
-
-  This is the first slice in this line of work that needs **no modelled process at all** — the
-  record accrues as a consequence of what the portal already does.
-
-- **The catalogue can now say what must never be held together.** Everything the portal had
-  learned about access was **detective or temporal**: the commissioning load records what was
-  there, reconciliation checks whether the record is true, recertification asks whether it is
-  justified, an expiry ends it by itself. All four look at one right at a time, and all four
-  look *after*. None could express the oldest control in access governance — the clerk who
-  may create a supplier must not also approve payments to it.
-
-  A catalogue declares it as a third edge kind, `excludes`, beside structure and precedence.
-  It is the **only symmetric** kind — "A must not be held with B" is exactly the reverse — so
-  publishing writes **both directions** into the release. A release recording one would make
-  every reader responsible for knowing which, and a reader that got it wrong would find half
-  the violations and report the estate as half clean, silently. Publishing refuses an item
-  that excludes itself.
-
-  **An order that would create a forbidden combination is refused at placement**, against
-  what the recipient already holds and against the rest of the same basket. Detecting instead
-  would let the combination exist for as long as detection takes, which is a detective
-  control with extra steps. The refusal names both items and which side is already held.
-
-  `GET /api/v1/conflicts` reports who already holds one, against the **current** release —
-  and that is the deliberate opposite of the expiry ceiling, which never reaches a right
-  granted before it was declared. An expiry is part of what was granted; an incompatibility
-  is a statement about what may coexist now, so declaring a rule surfaces its violations the
-  same day.
-
-  **A conflict has no culprit**, and that is why nothing here acts: it is a fact about a
-  pair, no rule can say which half is wrong, and an automatic remedy would have to choose —
-  taking away the right the person actually needs while leaving the other. The remedy is an
-  order's return or an access review, both of which already exist and both of which record
-  who decided. This is the first slice in this line of work that adds no new way to take
-  access away. `examples/unvereinbarkeit.bpmn` is the modelled process.
-
-- **A reminder can now ask what is waiting for somebody else.** The portal asks people for
-  three different things — decide an order line, answer a recertification row, do a task —
-  and none of it happens while nobody opens Atlas and looks. A campaign of five hundred rows
-  across forty managers, with nobody told, closes with four hundred and eighty undecided:
-  each correctly recorded as *not certified*, and useless.
-
-  The gap was sharper than "there is no notification". Atlas could already send mail — a
-  modelled process carries a mail task, `to=` names a principal or a group, and the address
-  is resolved in the server at the moment of sending, so it never enters a variable, an
-  order or the event log. **What was missing is that every route answering "what is waiting"
-  answers only for the caller**, and a reminder process is not the person it is reminding.
-
-  `GET /api/v1/pending-work` answers the caller's own; `?principal=` answers somebody
-  else's and is the **operator's**, because a portal where any user can enumerate any other
-  user's pending work has turned an inbox into an organisation chart with workloads
-  attached. A reminder's token carries the new `reminders` scope, which reaches exactly that
-  one route — it cannot read an inventory, run a comparison or decide anything.
-
-  **One wrong reminder costs more than ten right ones earn**, so nothing is listed that the
-  person cannot act on right now: not a row in a campaign that has closed, not one somebody
-  already decided, not an approval that has escalated away. It counts as well as lists,
-  because the first decision a reminder makes is whether to send at all. **Atlas does not
-  send** — `examples/erinnerung/` does, one mail per person rather than one per row.
-
-- **A right can now end by itself.** Everything the portal grants, it granted forever — which
-  nobody notices on the day it is built, and which is why the commissioning load,
-  reconciliation and recertification all exist: three controls that find access which should
-  not be there, *after* it is there. Recertification in particular is the manual compensation
-  for a missing expiry, paid for in the scarcest resource in the system, a line manager's
-  attention. **A question that did not need to be asked is worth more than a better way of
-  asking it.**
-
-  A product declares a ceiling with `maxDays`, it travels into the order line frozen from the
-  release — like the provisioning process, the deprovisioning process and the approval rule
-  already do — and a grant made under it carries an end. Products without one grant
-  open-ended rights, which is every product until somebody sets a ceiling.
-
-  **An expiry is not a removal.** The day after the end the target system still has the
-  membership and nothing has run; all that is true is that Atlas said the access should have
-  ended. So an expired right stays **held** and is reported overdue — dropping the record
-  when a clock ticks would make Atlas assert that somebody does not have access they
-  demonstrably do, which is the direction of wrongness that corrupts the evidence.
-
-  `GET /api/v1/entitlements/expiring` answers what is due within a window and what is past
-  its end. The removing is done by a modelled process returning the **order line**, which is
-  a stronger mechanism than either sibling can use: only an ordered right ever carries an
-  end, so an expiring right always has an order behind it, and a return revokes by the
-  release it was placed against, frozen when it was placed. A right whose order has since
-  been deleted by retention cannot be returned at all, and those are counted apart as
-  `unendable` — a number that never moves has to say why rather than look like a backlog.
-
-  **The ceiling never reaches an adopted or legacy right.** A commissioning load records a
-  found right's start as the moment it was *found*, so a ceiling measured from it would
-  schedule an entire estate to expire on the anniversary of the day somebody switched the
-  portal on. `examples/befristung.bpmn` is the modelled process, and a recertification row
-  whose right ends by itself now says so — those are questions that did not need asking.
-
-- **A business object says where it is used.** The information model gave a data object's
-  `itemSubjectRef` a type to resolve against, and every reading built on it since has run
-  from the process outwards. The vocabulary itself had none: somebody about to rename
-  `Order.total`, retire an enumeration literal or drop a state could see what an Order *is*
-  and nothing whatever about what the change would break.
-
-  **Data › Business objects** is the vocabulary read as a vocabulary — every class of every
-  information model you can see, business objects, value types and enumerations together, in
-  the console's shared sort-and-filter table. One list across applications, because two
-  applications each modelling an `Order` is the failure the information model exists to
-  prevent, one level up, and a per-model view cannot show it. Each row carries what the class
-  holds — its members, its business key, its states — and how much of the estate depends on
-  it.
-
-  Opening one answers the question a change actually asks. Every deployed process that
-  declares a data object of that class, and **every element that reads it, writes it, writes
-  one member of it, moves it into a state, or names the store it is kept in** — with the
-  element, the member and the state named, so the answer is precise enough to act on. Beside
-  it, the model's own uses: an attribute typed with it, an association, a lifecycle taking its
-  states from it, a store holding it. Those are listed apart rather than added in, because an
-  «enumeration» is normally declared by no data object at all — a reading that counted only
-  processes would report the vocabulary's most shared elements as dead, and somebody would
-  eventually act on that.
-
-  Two things it deliberately does not do. It does not guess: a data object with no declared
-  type is not read as a use of the class its name resembles, because an inference in a list
-  somebody is about to act on is worse than a gap. And it reads only what this installation
-  runs — the deployed, active, latest version of each process — so a Modeler draft is not in
-  it, which the page says where it makes the claim rather than leaving it to be assumed.
-  `GET /api/v1/infomodel/classes` and `GET /api/v1/infomodel/models/{id}/usage?class=Order`
-  serve both readings; both are computed on every call and stored nowhere. Both are MCP tools
-  too — `atlas_class_catalog` and `atlas_class_usage` — because an agent proposing a rename is
-  exactly the caller that cannot otherwise see what it would break.
-- **An incident flood is read by cause, and cleared in one action.** Every incident surface
-  built so far answers "what is stuck here" one incident at a time, which is the right size
-  until a worker stops answering: then every instance that reaches its task parks, and a few
-  thousand incidents are one cause with one fix that the product treats as a few thousand
-  problems. The list returned rows — megabytes of near-identical JSON per refresh, thousands
-  of DOM rows in a table that filters in the browser — and clearing them was one dialog per
-  incident.
-
-  `GET /api/v1/incidents/summary` answers instead in **one line per cause**: the (definition,
-  element, kind) triple, with how many tokens are behind it, the window it has been running,
-  a representative message, and the worker the parked task resolves through — so the fix is
-  reachable from the cause and not only from a row. Its size is the number of causes, not the
-  number of incidents.
-
-  `POST /api/v1/incidents/resolve` is the matching action, in the shape bulk termination
-  settled (ADR-0090): an explicit set of ticked keys, or a scope — `processDefKey`,
-  `processInstanceKey`, `elementId` (or `elementIndex`, for a group whose definition is
-  no longer deployed and so resolves to no id), `type`, `message` — resolved in bounded batches
-  (`remaining=true` → repeat). A scope must name at least one selector; resolving every
-  incident on the server is asked for deliberately with `{"type":"job"}` rather than by
-  leaving a field out. The listing gained `?element=`, `?elementIndex=`, `?type=` and `?message=` and evaluates
-  the **same selector**, so what an operator reads and what the action touches cannot
-  disagree. Both tools exist over MCP too (`atlas_incident_summary`,
-  `atlas_resolve_incidents`).
-
-  **Operations → Incidents** opens on those causes, with *Resolve all*, the worker fix and a
-  scoped row page beside each; the rows keep every per-incident way out and gain tick-boxes
-  for a hand-picked set. Repairing the worker from a cause retries the whole cause, because
-  the fix was to the thing all of them share. The Instances overview reads its Incidents
-  column from the summary — the same column, from a couple of hundred bytes instead of
-  megabytes.
-
-- **The third question about somebody's access can now be asked.** Ordering answers *may they
-  have it*; reconciliation answers *do they actually have it*; nothing asked *do they still
-  need it*. That third one is not the smaller sibling of the other two — a right that was
-  properly approved, properly provisioned and is correctly recorded can still be wrong, and
-  in most estates it is the dominant way wrong access accumulates. People change roles and
-  keep what the old one needed. Nobody granted anything improperly; nobody removed anything
-  either, because removing is somebody's job and therefore nobody's.
-
-  `POST /api/v1/recertification` turns what the inventory records into questions, each
-  addressed to the person who can judge it. **Who reviews is named by the caller**, because
-  Atlas does not resolve line managers — a directory lookup belongs to a modelled process,
-  exactly as it does for the `superior` approval rule. A holder nobody names gives an
-  *unassigned* row, which lands with the campaign's owner rather than stopping the campaign.
-
-  The whole design is a refusal to make a signature cheap. **There is no way to answer more
-  than one row** — not in the screen and not in the API — because a campaign answered in bulk
-  is an attestation with no reading behind it, which is worse than none: an auditor believes
-  it. **Silence is never a decision**: a campaign closes with unanswered rows in it and they
-  stay unanswered, so `undecided` is a first-class count rather than a remainder. There is no
-  auto-revoke at the deadline, and no re-grant — granting is ordering, and ordering carries
-  the approval rule.
-
-  Each row carries what the reviewer was shown, frozen: origin, order, how long it has been
-  held, and whether an open reconciliation finding disputes it. Certifying a disputed right
-  is signing a statement about something two systems currently disagree about, so it is
-  marked — and marked rather than refused, because one finding must not block a campaign over
-  an estate. Withdrawing a right runs the product's own deprovisioning process, never a
-  direct worker call. `examples/rezertifizierung.bpmn` is the modelled process, and **Tasks →
-  Access review** is where somebody answers — Tasks rather than Operations, because the
-  reviewer is a line manager who has never opened Operations.
-
-- **A deployed decision version can now be removed, and so can a model file nothing
-  points at.** Both stores only ever grew: every Deploy in the decision editor minted a
-  version carrying the full DMN source, and every upload left a file behind.
-  [ADR-0329](docs/adr/0329-a-decision-deployment-is-not-deletable.md) had written the
-  rule such a delete would need before any route existed; this is that route, with that
-  rule.
-
-  `DELETE /api/v1/decision-deployments/{key}` refuses while a deployed process is
-  **pinned** to the key — it resolved a `latest`-bound reference to that exact version
-  and carries no copy of the model, and a pin outlives the instances that used it, so
-  "no running instances" is not the test. It also refuses the **current** version of a
-  decision that still has older versions behind it: removing it would send the next
-  deploy quietly back a version, and free a version number the surviving records no
-  longer account for. Removing a version history therefore goes oldest first, and the
-  refusal says which of the two it is. The registry's "newest model providing this
-  decision" pointers are rebuilt from the survivors in deployment order, so what the
-  server answers after a delete and what it answers after a reboot cannot diverge.
-
-  `DELETE /api/v1/dmn-models/{ref}` refuses while any DMN reference points at the
-  handle, because that would leave them unresolved. A decision deployment's `modelRef`
-  does **not** block it: that field is provenance, the record carries its own XML, and
-  the decision keeps evaluating after the file is gone.
-
-  Operations' decision page gains a **Deployed versions** table listing every version
-  with what is pinned to it — the first answer anywhere to "what is using this version"
-  — and offers Delete on the ones that may go. Not assigned gains Delete on an
-  unreferenced model. `atlas_delete_decision_deployment` is the MCP counterpart, so the
-  tool count is now 107. ([issue #919](https://github.com/pblumer/atlas/issues/919))
-
-- **The inventory can now be checked rather than trusted.** An entitlement asserts that a
-  right exists in another system — an assertion Atlas cannot guarantee, because target
-  systems are changed from outside it. So it decays silently, and an inventory nobody
-  checks is a list of things that were once true.
-
-  `POST /api/v1/reconciliation` compares one reading of one target system against the
-  inventory and finds both directions: rights held that nothing here granted, and rights
-  recorded that the target system does not have. The second is the one that corrupts the
-  evidence, because an inventory wrong that way answers "who had access when" with a
-  confident falsehood.
-
-  The whole design hangs on one required field. A commissioning load reports what it
-  *found* and never what it did not; reconciliation reads absence as a finding, which
-  makes the same silence dangerous. So a run names what it read **completely**, and
-  outside that scope nothing is concluded — a right outside it is not missing, it is
-  unexamined. There is no default: "nothing" is useless and "everything" is a guess that
-  turns a truncated read into a report that the estate has lost its access.
-
-  The scope has **two axes**, and one run may use both: `refs` names references read
-  whole, `subjects` names the people whose holdings were read whole. The second is what
-  answers an offboarding — *is this person out of everything?* — which a group listing
-  structurally cannot: you would have to reconcile every group in the system and observe
-  the person's absence from all of them. A subject-scoped run is confined to the system it
-  names, so a leaver check against Active Directory never reports somebody's Jira rights
-  as missing, and a subject that resolves to no account is reported rather than counted
-  clean — **the absence of an account is not the absence of access**. The clean result
-  gets its own sentence in the report, because a verification that returns nothing
-  otherwise looks exactly like a run that did nothing.
-
-  It records **transitions, not samples**: ten runs over one disagreement make one record,
-  and the run where it goes away closes it. Nothing is ever acted on automatically — adopt
-  (`origin: adopted`, the first writer that origin has had), deprovision through the
-  product's own process, or revoke the record are three separate calls by a person, and
-  none of them is reachable with the worker credential that may run the comparison.
-  `examples/abgleich.bpmn` is the nightly modelled process and
-  `examples/austrittspruefung.bpmn` the leaver check, and **Operations → Reconciliation**
-  is where somebody reads a finding before acting on it — the three actions are not
-  guarded alike, because adopt and revoke are recoverable and deprovisioning is not.
-
-- **The inventory is taken before it is enforced.** `model.OriginLegacy` has existed since
-  the portal's three models were decided and has had no writer, which meant the inventory
-  could only ever contain what Atlas itself had granted. On the day an installation goes
-  live that is nothing, while reality is full — so the reconciliation that comes next would
-  report every privilege in the estate as a discrepancy, each carrying an executable
-  "remove it in the target system".
-
-  `POST /api/v1/inventory-load` takes the rights one reading of one target system found
-  and records them as pre-existing. It resolves both halves itself: the subject against the
-  mirrored accounts, the right against the new `targets` on a catalogue product — what that
-  product is called in AD, in Entra, in Jira. That join is data rather than something a
-  worker does, because the load's output is evidence somebody has to be able to disagree
-  with: the report says *Alice is in `CN=VPN-Users`, and the catalogue says that group is
-  VPN access*, not merely that Alice holds VPN access.
-
-  It writes nothing unless `apply` is true, so an omitted field reports. It never writes
-  over a right an order granted, never moves the start date of one it already recorded, and
-  only ever adds — a right a batch does not mention is not revoked, because a batch is one
-  system's partial answer. What it cannot attribute it names: subjects with no account, and
-  `unmapped`, the rights the estate grants that no product claims, most-held first. That
-  last list is the one nothing could produce before. `examples/bestandsaufnahme.bpmn` is the
-  modelled process, deliberately without a timer — a commissioning load is an act somebody
-  performs, not a schedule.
-
-- **Atlas keeps its accounts and groups from a Microsoft Entra tenant, and the first run
-  writes nothing.** An account only ever came into being when somebody signed in through
-  OIDC, so a fresh installation starts with an almost empty user store — and the next
-  piece of work, taking an inventory of the rights that already exist, has to attribute
-  every right it finds to an account that is not there.
-
-  Atlas now reads the directory rather than waiting to be told about it. A scheduled
-  process (`examples/entra-verzeichnis-abgleich.bpmn`, timer start `R/PT1H`) runs the
-  Entra Worker's `delta-users` and `delta-groups` change-tracking queries and reports what
-  changed to `POST /api/v1/directory-sync`, which creates accounts, updates them, merges
-  the directory onto an account that already existed, and disables the people who have
-  left. `GET /api/v1/directory-sync` says where the next run resumes from. Nothing is
-  published outbound and there is no inbound provisioning endpoint: the decision record
-  carries the argument against SCIM, and against reading it as an oversight.
-
-  **The first run reports and writes nothing**, because an empty cursor enumerates the
-  whole tenant against an empty store and a defect there reaches everybody at once. It is
-  not a preview with an implementation of its own — the same code decides in both modes
-  and only the last step, the write, is skipped — the cursor does not move, so the run may
-  be repeated as often as somebody likes, and the report gives counts for the expected and
-  whole lines for the notable: merges, disables, refusals, memberships that cannot yet be
-  resolved. The mode is a field of the message spelled `apply`, so an omission reports
-  rather than provisions, and every report that wrote nothing says so and why.
-
-  Disabling somebody is not only a record: the run that writes it also ends their live
-  sessions, revokes their standing OAuth grants, and pushes every mirrored group
-  membership it changed into the sessions that are already open — a session carries the
-  group ids it was opened with, so without that half a mirror would be a quieter way to
-  disable somebody than the administration button that says so.
-
-  An account mirrored onto one a federated login created keeps both identities: Entra's
-  ID-token `sub` is pairwise per application and is therefore never the directory object
-  id, so the object id lives in a new `directoryId` field and the pairwise subject stays
-  where a sign-in looks for it. A created account holds `user` and nothing else, from a
-  literal that no input reaches; existing roles are never widened or narrowed; and the
-  last enabled administrator is never disabled. A mirrored group keeps the directory's own
-  member ids beside the translated ones, so a membership that arrives before its account
-  resolves on a later run instead of being lost. The credential the process carries is an
-  API token of the new `directory` scope, which reaches those two routes and nothing else
-  — it cannot deploy — and both routes refuse outright on a server running without
-  authentication. Three budgets bound the message, the batch and the report
-  (`ATLAS_LIMIT_DIRECTORY_SYNC`, `_DIRECTORY_OBJECTS`, `_DIRECTORY_REPORT`).
-  ([ADR-0332](docs/adr/0332-entra-directory-provisioning.md))
-
-- **A relationship is drawn from the class it starts at, the way a sequence flow is.**
-  Selecting a class on the information model's canvas now opens the little menu beside
-  it that the BPMN modeler has had all along: the relationship kinds that class could
-  actually reach something with, and a bin. Drag one onto the class at the other end and
-  the line is drawn.
-
-  Drawing used to be a mode. The kind was armed in the palette, and the next two classes
-  clicked became its ends — which had to be entered before the classes were looked at,
-  remembered between the two clicks, and aimed from a convention nothing on screen
-  stated. Which end a composition's diamond goes on is the question the notation turns
-  on, and it was answered by the order somebody happened to click.
-
-  The subset now answers under the pointer rather than after the drop: a target that
-  cannot take this kind of relationship never lights, and the question asked is the
-  narrow one — not whether two classes may relate, but whether they may relate *like
-  this*. A drop on a refused target still says why, in the same words the deploy would
-  use. The BPMN modeler drops such a gesture in silence; this canvas has explained the
-  notation at that exact moment since the palette did the drawing.
-
-  The armed palette mode still works. It is the only way to draw a relationship without
-  a pointer that can drag, and removing it is a separate decision.
-  ([ADR-0352](docs/adr/0352-draw-a-relationship-from-the-class-it-starts-at.md),
-  [ADR-0237](docs/adr/0237-class-canvas-on-diagram-js.md))
-- **An «enumeration» now says which values a member may take, and is drawn as part of the
-  class diagram.** Four questions an author answers while drawing a write arrow have the
-  same shape, and only three of them were asked that way: which class is this data
-  object, which state does the write move it into, which member does it target — and
-  then, in free text, what goes in. Where the member's type is an «enumeration», the
-  model has already written down the complete list of values it may hold. The write row
-  offers them, and a value that is computed still takes any FEEL expression, because a
-  picker that cannot be left would be lying about what the field is.
-
-  At deploy, a value that is **constant** is checked against the literals, and one that
-  is none of them is a warning worded like the unknown-state warning, for the same
-  reason: a model that is merely behind its process is not broken. Constant means an
-  expression that reads no variable — the inputs decide, not what an evaluation happens
-  to return, because `=if x then "approved" else "approvd"` with `x` unbound hands back a
-  perfectly concrete else branch that the process may never write.
-
-  On the class diagram, an «enumeration» that types an attribute is joined to the class
-  that uses it, derived and never authored, the way a data store's line and the
-  `«lifecycle»` line already are. Until now it was the one box that floated: the
-  compartment said `status : Lebenszustand` and nothing held the two together. One line
-  per pair, labelled with the attributes that justify it, and none where the `«lifecycle»`
-  line already joins them — a derived line is routed straight, so a second would be drawn
-  on the first. A straight line's label also moved to its midpoint, where it was landing
-  on the target box.
-  ([ADR-0351](docs/adr/0351-an-enumeration-says-which-values-a-member-may-take.md),
-  [ADR-0306](docs/adr/0306-a-lifecycle-may-take-its-states-from-an-enumeration.md))
-- **A write arrow can set several members of a data object at once.** A step that
-  captures a form's worth of fields writes them from one arrow with a row per field,
-  rather than one arrow per field. BPMN always allowed this — a data association carries
-  `assignment [0..*]` — and Atlas read one and silently dropped the rest, so a model
-  another tool wrote deployed and quietly did something other than what it said.
-
-  The writes are applied in the order they are listed and recorded as **one** change to
-  the object, not one per field: an activity that fills in a record did one thing, and a
-  timeline showing four half-built identities would be an artefact of how the write was
-  compiled rather than something that happened. Order is load-bearing and falls out of
-  that: two writes to the same member mean the later one, and a member write after a
-  whole-object write on the same arrow lands on the new value.
-
-  This is also the way out of the trade-off the previous release left standing. Writing
-  the whole object from one FEEL expression drew well and told the model nothing — the
-  members inside an expression cannot be read at deploy time, so the write went
-  unchecked and the class derived as having none. Named on their own rows, every member
-  is a static fact again: checked against the class, listed in the derived model, and
-  compared rather than excluded by the difference reading.
-  ([ADR-0350](docs/adr/0350-a-write-arrow-may-set-several-members.md),
-  [ADR-0060](docs/adr/0060-field-level-data-object-writes.md))
-
-### Fixed
 
 - **An operations number is a counter or a walk, never the length of a page.** The live
   diagram's wrong incident counts had a shape worth searching for: a list is fetched
@@ -4529,6 +5659,15 @@ _Changed_ / _Removed_ for each version.
   before until its next deploy — the information was never written down.
   ([issue #919](https://github.com/pblumer/atlas/issues/919))
 
+- **Renaming a class a data store holds no longer leaves the information model
+  unsaveable.** A store names its class by name, and the class diagram carried a rename
+  into the attributes typed with that class and into the lifecycles that borrow its
+  states, but not into the store. The store was left naming a class nothing declared, Save
+  was refused with `store-unknown-class`, and the way out was to rename the class back by
+  hand. A rename now reaches the store too. A delete cannot be followed that way, so
+  deleting a class a store holds now names that store before the delete is confirmed,
+  instead of the refusal arriving at the next save.
+
 - **Deleting a DMN reference now says what it would break.** The confirm read "Delete
   this DMN reference? The temis model itself is not affected" — true, and not the
   thing a reader needs. What a reference decides is not the file on disk; it is
@@ -4621,8 +5760,10 @@ _Changed_ / _Removed_ for each version.
   What scoping does not repair is that finding your own instance by elimination is still
   a guess when two callers start the same definition at once. Closing that means the
   start answering with the key it minted, which is a change to the engine's command path
-  rather than to a page, and is tracked in
-  [issue #933](https://github.com/pblumer/atlas/issues/933).
+  rather than to a page, and was tracked in
+  [issue #933](https://github.com/pblumer/atlas/issues/933). A start now does answer
+  with it, as `instanceKey` (see *An order in the shop says whom each position waits
+  for* above).
 - **PowerShell runs under `--script-sandbox=strict`, and a profile that cannot start an
   enabled interpreter refuses to boot.** The strict allowlist admitted the installed
   runtimes, the loader and trust files, and a private scratch directory — everything
@@ -4855,987 +5996,44 @@ _Changed_ / _Removed_ for each version.
   ([ADR-0301](docs/adr/0301-derive-the-model-from-the-processes.md),
   [ADR-0310](docs/adr/0310-read-the-difference-between-what-is-built-and-what-is-planned.md))
 
-### Added
-
-- **A process document now shows the decision behind each business rule task.** The
-  document already set a script task's source and a sequence flow's FEEL condition
-  verbatim, under the rule that the prose says what a step is for and the code says
-  what it runs. A business rule task is the one element whose behaviour lives entirely
-  outside the diagram, and it was the one the document said least about.
-
-  Each such section now carries what the diagram holds — the decision id, the binding
-  and what it means, the result variable, and the inputs the task feeds in — and, below
-  it, the decision's own rule table, drawn by the same renderer the decision document
-  uses. The rules are read from the model behind the decision's reference where there
-  is one, and otherwise from its deployment, with the document naming which. A task
-  evaluated by a temis Worker says so and names the worker rather than implying it
-  holds the rules; a decision that cannot be read costs its table, not the export.
-
-  `GET /api/v1/decision-deployments/{key}/xml` is widened from `operator` to any
-  signed-in identity for this, matching `GET /api/v1/processes/{key}/xml`, which is
-  already open to any identity and carries strictly more.
-  ([issue #919](https://github.com/pblumer/atlas/issues/919))
-
-- **A decision is published as its own document, and two people can edit one together.**
-  The last two things a diagram had and a decision did not.
-
-  **Documentation.** A decision table is the business rule — the thing a compliance
-  officer signs off and an auditor asks about — and it was readable only inside Atlas.
-  The editor's `⋯` menu now publishes it as a structured PDF: the requirements graph,
-  then every decision with its prose, the input data it reads with declared types, and
-  its rule table set as a real table (hit policy, columns, one row per rule, each rule's
-  own annotation below it). A decision whose logic is a literal expression shows the
-  expression. Versions are numbered per decision, immutable, and shareable through a
-  revocable public link — [ADR-0143](docs/adr/0143-process-documentation-export.md)'s
-  design for a second artifact kind. The version line is about sign-off rather than
-  about what is running: a business rule is usually approved *before* it is deployed,
-  which is when the deployment record ([ADR-0319](docs/adr/0319-durable-versioned-decision-deployments.md))
-  does not exist yet.
-
-  **Co-editing.** A decision draft now holds a live session
-  ([ADR-0140](docs/adr/0140-live-collaborative-modeling-sessions.md)): who else is here,
-  what they are looking at, and a lock so two people cannot overwrite each other. The
-  rule needed an answer dmn-js forced: a decision-table view is a grid, and a rule, a
-  cell or a column has no id a session could name. **So the lock is the decision** — in
-  the requirements graph that is literally ADR-0140's per-element rule, and opening a
-  decision's table claims that decision. Two people can work on two decisions of one
-  model at once; two cannot fill in one table together, and the editor says which it is.
-  The session handlers are now parameterised by subject rather than copied, so a third
-  artifact with a draft costs a binding rather than an implementation.
-  ([ADR-0324](docs/adr/0324-decision-documentation.md),
-  [ADR-0323](docs/adr/0323-co-editing-a-decision.md),
-  [issue #919](https://github.com/pblumer/atlas/issues/919))
-
-- **A decision can be tried against sample inputs, and a DMN model with no diagram now
-  renders.** Two gaps closed in the decision editor, both of which made it a worse place
-  to work than the diagram editor beside it.
-
-  **Test.** A decision table is a program, and the first question its author asks is
-  whether it does what they meant. Answering it meant saving the decision, deploying it,
-  deploying a process with a business rule task that calls it, starting an instance and
-  reading the result off it — five steps, three of them about processes, to answer a
-  question about one table. The bar now carries **Test**: fill in the inputs, press Run,
-  and see what came back together with the rule matrix saying which rules fired and why —
-  the same matrix Operations draws for a decision a running process evaluated, because it
-  is now literally the same renderer. The model tried is the one on screen, compiled for
-  that one call and thrown away: no key, no record, no registry entry, nothing to clean
-  up, and a decision that is stored nowhere yet can be tried like any other.
-  `atlas_try_decision` exposes the same act over MCP.
-
-  **A diagram for models that have none.** Almost every DMN model that reaches Atlas
-  carries no `DMNDI` — an agent writing a decision table over MCP writes logic, not a
-  picture, and so does temis, and so does a hand. dmn-js needs one to draw anything, so
-  such a model opened in the editor showed a single box: the input data and the arrows
-  between were silently absent, and the graph could not be seen or rewired. Worse, saving
-  from that state wrote back a diagram covering only what had been drawn, so one visit
-  to the editor left the model rendering worse than it was found. Atlas now completes a
-  DMN model's diagram on the way to the editor, the way it has always done for a
-  layout-less BPMN model, and **Auto-layout** in the new `⋯` menu re-flows the whole
-  requirements graph on request. One generator serves both the editor and the read-only
-  DRG viewer, so the same model is drawn the same way in both. **Export XML** is in that
-  menu too.
-  ([ADR-0326](docs/adr/0326-trying-a-decision-before-it-runs.md),
-  [ADR-0325](docs/adr/0325-dmn-diagram-is-completed-on-read.md),
-  [ADR-0124](docs/adr/0124-server-side-diagram-auto-layout.md),
-  [issue #919](https://github.com/pblumer/atlas/issues/919))
-
-- **A single decision can be deployed from its editor, and the editor says which version
-  is running.** A decision reached the engine through one door: the application's
-  **Publish**, which ships everything the application holds. An author who had just
-  finished a decision and wanted to see it evaluate had to publish other people's drafts
-  with it, give every other decision in the application a new version, and mint a release
-  nobody had asked for. A single diagram has had its own **Deploy** since the beginning;
-  a single decision had none.
-
-  The decision editor's bar now carries **Deploy** beside the two save verbs, and a chip
-  saying which version this decision is deployed at and under which key — the answer to
-  "is what I am looking at what is running", which until now meant leaving for
-  Operations. Deploy ships what is on screen through the very function an application
-  publish calls: one durable record, written before anything is registered, carrying its
-  own DMN source, versioned per decision id, and taking the `latest` pointer a process
-  deployed afterwards binds to. Nothing about the storage model or the binding rules
-  changes — this adds a caller to that path, not a variant of it.
-
-  The three verbs stay distinct, which is the point: **Save** keeps your draft,
-  **Save to model** writes what every reference resolves, **Deploy** changes what the
-  engine evaluates. A decision that has never been written to the model can still be
-  deployed — the record carries its own source — and the editor says plainly that no
-  business rule task can name it until it is in the model. `atlas_deploy_decision`
-  exposes the same act over MCP, and the deployed-decision listing is now readable by
-  any signed-in identity, as the deployed-process listing already was.
-  ([ADR-0322](docs/adr/0322-deploying-one-decision.md),
-  [ADR-0319](docs/adr/0319-durable-versioned-decision-deployments.md),
-  [issue #919](https://github.com/pblumer/atlas/issues/919))
-
-- **A decision has a draft, so saving it is no longer the same as writing the model
-  everything resolves.** The decision editor's Save wrote `eligibility.dmn` itself — the
-  model the business-rule-task picker resolves, the model another application's
-  reference may point at, and the model the next Publish ships. There was nowhere to put
-  an unfinished decision, and pressing Save had consequences an author could not see:
-  one half-typed FEEL expression refused a *colleague's* publish of that application,
-  with a message about a decision they had never touched; a table whose output column was
-  still called `result` offered `result` to the next business rule task that adopted it;
-  and the first save of a second decision named *Eligibility* quietly became
-  `eligibility-2.dmn` with its own reference, leaving two rows with the same name.
-
-  The editor now carries the BPMN editor's pairing: **Save** keeps a draft — your work,
-  which nothing else resolves — and **Save to model** writes the handle every reference,
-  every picker and the next Publish resolve. A draft lives in a store of its own, filed
-  into its application, and exists only while it differs from the model: writing the
-  model clears it. A decision that has one is marked **Draft** in the application's
-  artifact list, and a decision that has *only* a draft is listed as its own row saying
-  it is not in the model yet, because a publish ships the model and does not carry it.
-  **Discard draft** goes back to the stored model.
-
-  Writing the model no longer forks a copy either: a handle another decision already
-  holds is refused, named, and offered as a deliberate replacement, the same rule drafts
-  and forms have had since ids became identity. An import, a source-tree apply and the
-  MCP authoring tools are untouched — they never claimed to be editing one decision, and
-  keep the plain upsert.
-  ([ADR-0321](docs/adr/0321-decision-drafts.md),
-  [ADR-0222](docs/adr/0222-artifact-id-renames.md),
-  [issue #919](https://github.com/pblumer/atlas/issues/919))
-
-- **A data object's state is on the diagram, and says whether anything acts on it.** A
-  `<dataObjectReference>` carries a data state — the `[ARCHIVIERT]` BPMN writes under
-  the box — and Atlas has read it end to end since ADR-0053: the compiler interns it, the
-  engine advances the object into it, and the Operations replay shows every transition.
-  The one place it was missing is the place a model is read. bpmn-js parses `<dataState>`
-  and draws nothing with it, and the properties panel has been able to *edit* the state
-  all along, so a diagram could carry a lifecycle no view showed. In the identity example
-  that meant six boxes reading `identitaet` and nine reading `services`, identical to the
-  eye, with the one thing that tells them apart held back in a side panel.
-
-  The state is now written under the object's name, in square brackets, on the Modeler
-  canvas and in all four read-only views. It rides under the *label* rather than the
-  symbol, so it stays with the name wherever an author drags it, and it follows the name
-  live as the state is typed, cleared or undone.
-
-  **It is drawn with its role, because the same string means two different things.** A
-  state on a box a write points at is the target state the compiler puts on the
-  `DataOutputAssociation`: the engine advances the object into it, the transition lands
-  in the log with its attribution, and `CheckDataFlow` matches it against the class's
-  lifecycle (ADR-0259). A state on a box that is only *read* is dropped — "its state
-  ignored on a read" — so it never reaches the compiled model, no engine acts on it, and
-  no check can reach it, not even the typo check that exists for exactly this mistake.
-  Drawing both the same way would have the diagram claim something the model does not do,
-  so the second is set back and its hover title says why. Same notation, same place, one
-  of them quieter — which is the honest rendering of what Atlas will actually do with it.
-
-- **The decision editor is a page of the Modeler, not a window over one.** A decision
-  used to be edited in a modal overlay. That fitted what a decision was when the editor
-  was built: a reference to a model file some process happened to use, stepped into from
-  the business-rule-task picker and stepped back out of. Since a decision became a
-  durable, versioned artifact published in its own right, an overlay costs four things a
-  page gives for nothing — a decision had no address to bookmark or send, the browser's
-  back button dismissed the editor and dropped the edit, saving was indistinguishable
-  from publishing the model every reference resolves to, and publishing was somewhere
-  else entirely.
-
-  A decision is now edited at `#/modeler/dmn/new` or `#/modeler/dmn/e/{ref}`, in the
-  chrome the BPMN and form editors wear: a breadcrumb back to the application by name,
-  the same tab strip (the DRG overview and each decision's own table), a model-handle
-  chip, a status line and **Save**. Save stays on the page and moves the URL onto the
-  decision it just wrote, so a second Save updates it rather than creating a second one.
-  The labels are English, like the rest of the Modeler — the overlay was German only,
-  and so was the starter model it seeded.
-
-  **Authoring a decision from a business rule task still takes one button.** It now
-  leaves the diagram instead of covering it: the diagram is saved as a draft first (the
-  rule the call-activity drill-down already used), and what the editor saved is adopted
-  by the task on the way back — decision id, input mappings and result variable filled
-  in, exactly as before. A deployed definition opened read-only has no draft to return
-  to, so it asks before leaving and the decision is picked afterwards.
-  ([ADR-0320](docs/adr/0320-the-decision-editor-is-a-page.md),
-  [issue #919](https://github.com/pblumer/atlas/issues/919))
-
-- **A DMN decision is a durable, versioned deployment artifact, and a deployed process is
-  frozen to the version it was deployed against.** A decision used to exist only as a
-  model bundled into some process's deployment. An application whose only artifact was
-  `eligibility.dmn` therefore published *successfully* and deployed nothing at all — the
-  bundle deploy iterated BPMN drafts and collected the models those drafts referenced, so
-  with no draft there was no loop iteration, no registry entry, and nothing on disk. After
-  a restart there was still nothing.
-
-  Publishing an application now deploys its DMN models as **decision deployments**:
-  durable records in a new `decisions/` store, keyed from the same definition key space
-  process definitions come from, versioned per decision id, and carrying the validated DMN
-  source plus its checksum. No compiled temis structure is persisted — the registry is
-  rebuilt by compiling the stored source again at startup, off the processor and before
-  the loop serves traffic. `GET /api/v1/decision-deployments` lists them and
-  `.../{key}/xml` serves the exact source a running process evaluates, which is not the
-  same thing as the model file behind a handle: that file is edited in place.
-
-  **`latest` binding is now resolved when the process is deployed, not when a token
-  arrives.** It was a lookup on the worker against a pointer every deploy overwrote, which
-  meant publishing a new decision silently changed the behaviour of processes already
-  running — and meant a version was being chosen outside the log, which a replay has no
-  way to reproduce. A deployment now resolves each `latest` reference once, to the newest
-  decision deployment providing it (or, when the decision was never published on its own,
-  to the model bundled with the process), and stores the answer in its record. The runtime
-  makes no version choice at all, and neither does recovery.
-
-  `deployment` binding is unchanged. **Deployments written before this keep their old
-  behaviour**: a record with no binding-policy marker still resolves `latest` at
-  activation, exactly as it was deployed to, and nothing on disk changes meaning under an
-  upgrade. Redeploying the process is what moves it to the pinned policy.
-
-  An application release now names the decisions it shipped alongside its processes, and
-  an application can be built from decisions with no BPMN in it at all — "Create new →
-  Decision (DMN)" authors one in the embedded editor and files it under the application.
-  ([ADR-0319](docs/adr/0319-durable-versioned-decision-deployments.md),
-  [issue #915](https://github.com/pblumer/atlas/issues/915))
-
-- **A capability's service levels are measured, not only declared.** Every KPI and SLA
-  on a business capability was prose the API labelled as a declaration, because nothing
-  computed one. `GET /api/v1/capabilities/{key}/measurement?windowDays=N` now returns,
-  per realising process, how often each end event fired, how often a token was
-  cancelled, the cycle time over the window, and each declared SLA's attainment.
-
-  **The window is required, and that is a measured finding rather than a preference.**
-  The decision record behind the register carried an open question — whether this is
-  computable at volume without the OpenSearch exporter, which not every installation
-  runs — and required that it be answered by measurement. It was. The per-element
-  counters are flat: a thousandfold population leaves them in microseconds, and at
-  10 000 instances the outcome distribution is *faster* than at 1 000. The instance walk
-  is linear, costing 1.24 seconds over 100 000 finished instances. So an unbounded
-  reading is not offered: `windowDays` is required and at most 400, which is generous
-  enough for an annual SLA and small enough that seconds of waiting cannot be asked for
-  by accident. The exporter is an optimisation for unbounded historical analysis, not a
-  prerequisite.
-
-  **The response mixes two kinds of number on purpose and says which is which.** The
-  counts come from maintained counters and are all-time — a counter holds a total, not
-  a series — while the cycle time is windowed. Both are integers on a screen, so the
-  body carries a sentence for each basis rather than leaving a client to assume.
-
-  **An SLA is measured only where it carries a number.** The new optional
-  `thresholdSeconds` sits beside the prose threshold rather than replacing it: "within
-  five business days" is what the business agreed, and no parser should decide what a
-  business day means at your installation. One without it is listed under `notMeasured`
-  with the remedy — and every KPI is listed there too, because which recorded figure
-  "disburse within three days" refers to is a judgement, and a guess would put a number
-  somebody acts on under a name nobody authored.
-
-  Two kinds of absence stay distinct, as in the gap report: a realisation you may not
-  see is restricted, one this server does not deploy is not deployed, and neither is
-  zero-filled. An SLA over a window that held no case is not 100% attained and not 0%.
-
-  This is the one read in the area that runs off the run loop, because it is the one
-  whose work grows with the instance population.
-
-- **Per-phase duration was measured and left out, for a different reason than
-  expected.** It went into the measurement as the candidate for omission, on the
-  reasoning that its cost scales with the length of the process while cycle time's does
-  not. A second benchmark axis — the same population over processes of 1, 10 and 30
-  tasks — refuted that: a thirtyfold longer process costs it 1.4× more, and its ratio to
-  its own control *falls* from 2.4× to 1.9×. Within an instance the cost is the seek to
-  the prefix, not the walk under it.
-
-  So it is not omitted for cost. It is omitted because a phase is a span between two
-  points a reader names, and the register has no field naming them; offering the
-  duration between two element ids a caller passes in would be a process-analytics
-  endpoint wearing a capability's name. The cost question is settled and the modelling
-  question is not.
-
-- **Atlas now reads the difference between what your processes build and what your model
-  plans.** [ADR-0301](docs/adr/0301-derive-the-model-from-the-processes.md) settled that
-  Atlas holds two statements about the same subject and must not merge them: the derived
-  model is what is *built*, the authored one is what is *wanted*, and their difference is
-  the work not yet done. It then stopped, because it could not settle the shape and
-  because it named a blocker — a comparison "needs a stable identity for a derived class
-  across two derivations, which nothing yet provides".
-
-  That blocker belonged to a *reconciliation*, which has to remember which change you
-  rejected last time. This reading remembers nothing: both sides are computed fresh and
-  compared by name, so there is no identity to keep across anything. And the names are
-  already the mechanism — `itemSubjectRef` resolves a class by name, a write path names a
-  member, and a lifecycle state's name **is** its identity because it is the string every
-  process writes.
-
-  **Data → Planned against built** shows two lists, never blended, because a reader acts
-  on them differently. *Planned, not built* is in the model and in no process: the
-  backlog, a decision taken and not yet implemented, and explicitly not a defect —
-  `data.unreachable-state` already reported exactly one case of this, and this generalises
-  it to members, states, transitions and whole classes. *Built, not described* is in the
-  processes and in no model, which usually means write it down and occasionally means a
-  process is doing something nobody agreed to.
-
-  **What it never compares is the half that makes it trustworthy**, and it is said where
-  it lists rather than in a footnote: the business key, attribute types and multiplicity,
-  which states are final, associations and documentation. Derivation cannot see any of
-  them ([ADR-0301](docs/adr/0301-derive-the-model-from-the-processes.md) §2), so a
-  difference there would be a fact about derivation rather than about your system — and
-  every one would sit on every class for ever. A short list is therefore not a clean bill,
-  and the screen says so.
-
-  Two more silences for the same reason. An «enumeration» is never reported as unbuilt: it
-  is machinery of the model — an attribute's type, or the states a lifecycle takes
-  ([ADR-0306](docs/adr/0306-a-lifecycle-may-take-its-states-from-an-enumeration.md)) — and
-  no process carries one. And an application that models nothing produces no findings at
-  all, rather than a wall of rows that are only the absence of a document nobody has
-  started.
-
-  Also readable as `GET /api/v1/infomodel/difference?applicationId=…` and as the MCP tool
-  `atlas_model_difference`. Nothing is written to either model.
-
-- **A drawing and the capability register are now one architecture.** Panorama holds an
-  architect's ArchiMate model; the register holds what has to be done, with an owner, a
-  scope and SLAs. Draw *Underwrite a loan*, file a capability keyed `loan-underwriting`,
-  and nothing connected them but the fact that somebody wrote a similar phrase twice —
-  and renaming either end lost even that, silently and in the direction of still looking
-  right.
-
-  Two binding keys close it: `atlas.capabilityKey` on an ArchiMate `Capability` and
-  `atlas.valueStreamKey` on a `ValueStream`. They are ordinary ArchiMate properties, so
-  a bound model stays a standard model and the binding travels with it into any
-  conformant tool. What travels is the record's **key** and nothing else: the name is
-  resolved by the server on every read, so a drawing cannot go stale about the register,
-  and a binding whose record was deleted reads as *missing* rather than as a name that
-  quietly stopped matching.
-
-  The key rather than an opaque id, which is the opposite of every other binding here.
-  Those carry an id because the resource's own name is mutable; a capability's key is
-  not — it is the filename on disk, it is not renameable in place, and it is what an
-  export carries — so it is the stable identifier the rule asks for.
-
-  **Each key is refused on the other's element.** A `Capability` and a `ValueStream` are
-  both strategy-layer behaviour elements binding a key from the same register, which
-  makes them the pair a later edit is likeliest to treat as interchangeable and the pair
-  where doing so would be least visible: both keys would still resolve, against a
-  register holding both.
-
-  Every signed-in caller may resolve one, unlike every other binding, and that is the
-  register's own rule rather than a shortcut. A capability says what the organisation
-  must be able to do and nothing about what this server runs. What *is* scoped are the
-  processes it names as realisations, and those are resolved elsewhere, through their
-  own sharing scope.
-
-- **A value stream is an element you can draw.** ArchiMate's `ValueStream` was accepted
-  by Panorama's validator and absent from its palette, so a model containing value
-  streams could be opened, edited around, and never added to — the worst of the three
-  states an element can be in, because reading works and nothing looks broken.
-
-  It is authorable now, on the strategy layer with a behaviour aspect, where the
-  standard puts it and where `Capability` already sat. The relationship matrix is
-  predicates over layer and aspect rather than a table of type pairs, so it inherits
-  exactly the rules a capability has and none were touched; a test holds the two to that
-  equivalence across every relationship and every partner, in both directions.
-
-- **A write into a data object now offers the members its class declares.** A data
-  output association writes one member of a structured object — `customer.name`
-  ([ADR-0060](docs/adr/0060-data-object-write-paths.md)) — and the path was free text.
-  `customer.nmae` deploys, runs, and writes a member nobody will ever read. The class the
-  object's type points at already declares what its members *are*, so the field now asks
-  the same question the class picker and the data-state picker ask, the same way: a list,
-  with an escape for a member nothing models yet.
-
-  Each entry carries what the model says about it — the type, the multiplicity where it
-  is not one, and the key mark on an attribute that is part of the business key. Where a
-  member's own type is another class in the model, that class's members are offered one
-  level down as `customer.name`, because a dotted path is exactly the case where the
-  first segment is structured and something else says what is inside it. One level and no
-  further: below that the model repeats itself, and a picker that walks it forever is one
-  nobody can read. An **untyped** member offers nothing inside it, because nothing knows.
-
-  A path the class does not declare is kept and named rather than dropped — a diagram is
-  routinely drawn before the model catches up — and it comes back in the list saying it
-  is not a member of that class, instead of looking like any other entry.
-
-  **What this is not:** a data object is not a process variable. Nothing binds one into
-  the FEEL scope, so these members say what the write *target* is shaped like and nothing
-  about what the expression above them can read. The panel says so where it matters,
-  beside the field that takes a FEEL expression, because a member list read as a variable
-  list is exactly the wrong lesson to take from it.
-
-- **A milestone is an element you can draw now.** BPMN's marker for a point on the path
-  where no work sits is a **none intermediate throw event**: an intermediate throw event
-  with no event definition, named after the point it marks. *Identity verification
-  started* is one — the work is what follows it, so there is no task there to record.
-  Atlas refused it, and refused it at Deploy rather than at author time: the Modeler drew
-  one, validated it and said nothing, because the element was never in the list of things
-  bpmn-js can draw that the engine cannot run.
-
-  It compiles. It waits for nothing and needs no worker, so its execution is the same as
-  having drawn nothing at all — and that is not what it is for. What it produces is the
-  record: the per-definition visit counters count it, the instance's step trail carries it
-  in order, and the Operations overlay lights it up. That is the whole difference between
-  a milestone and a label on a sequence flow, and it is what makes "when did this case
-  reach verification" answerable per case rather than only where a task happens to sit.
-
-  It is a node type of its own rather than a reused undefined task or link throw, because
-  everything that reads a compiled node back reads its type — the overlay, the step
-  replay, the process documentation, a migration plan matching elements across versions.
-  A milestone stored as a task would be drawn and described as a task.
-
-  **Making the empty case compile did not make the wrong case compile.** "No event
-  definition this compiler implements" and "no event definition at all" used to be one
-  state, and both were refused; with the second one compiling, the first would have become
-  a pass-through that silently does nothing the model asked for. A throw event carrying a
-  timer — which BPMN allows only on a catch — would have run straight through instead of
-  waiting. So an unmatched `*EventDefinition` child is now refused by name, and by its
-  suffix rather than by a list of the five that are wrong today, because such a list goes
-  stale silently and in the direction of accepting something.
-
-- **A capability record now says when somebody last read it and meant it.** The gap
-  report checks a realisation against what is deployed, because that is a fact Atlas can
-  see. The rest of a capability — who owns it, what it is and is not responsible for,
-  what it has promised — is prose about people and promises, and Atlas took all of it on
-  trust. A map whose realisations are green and whose owners left two years ago is worse
-  than no map: it is confidently wrong in exactly the fields somebody escalates against.
-
-  Both records now carry a confirmation: when, by whom, who they asked, and one line on
-  what the review found. `POST /api/v1/capabilities/{key}/confirmation` is the only
-  thing that sets it, and creating a record counts, because writing something down is an
-  assertion.
-
-  **No edit sets it** — not even one that rewrites the owner or an SLA. If saving
-  refreshed the date, fixing a typo in the summary would assert that every field had
-  been re-checked, which is precisely the lie the mechanism exists to prevent, made
-  automatic and leaving no diff in which anybody could have noticed it. For the same
-  reason there is no bulk confirm.
-
-  The confirmation also records **who was asked**. The confirmer is almost never the
-  owner, because the owner is free text precisely to accommodate people with no Atlas
-  account — so without that field the map confirms itself and a reader cannot tell that
-  from a review the owner sat in. Leaving it empty is a legitimate confirmation and a
-  weaker one, and the record says which. A self-confirmation is shown beside it and
-  never reported: in a four-person installation the architect is the only person who
-  *can* confirm, and a report that fires on the normal case stops being read.
-
-  A confirmation stays fresh for twelve months, the interval this repository already
-  uses for the two other things it dates and cannot verify. Unlike those, it is
-  configurable — `PUT /api/v1/settings/confirmation`, admin only — because those govern
-  content here and this governs a customer's map reviewed on their own cadence. Setting
-  it to something nothing outlives does silence the check, and that is allowed and made
-  legible instead: it is one visible number, and every report says which interval it
-  applied.
-
-  What lapses becomes two new gap findings and a `?stale=true` listing — the review
-  backlog, the exact twin of `?realized=false`, the automation one. A stale record is
-  flagged everywhere it is read and never withheld, because hiding it would make the map
-  least useful at the moment it most needs attention. Both are also MCP tools, whose
-  descriptions say in as many words that only what was actually re-read may be
-  confirmed.
-
-  Nine of the report's ten findings are facts Atlas checked. These two are not, and the
-  report does not pretend otherwise: the only honest thing it can say about prose is
-  that nobody has stood behind it lately.
-
-- **Atlas now holds what the organisation must be able to do, not only what it runs.** A
-  deployed process could be found by its name and by nothing else: not by the business
-  capability it realises, not by who owns that capability, and not by what would stall
-  without it. The answer to all three lived in a slide deck, if anywhere.
-
-  Two design-time records close that, following the business architecture of Ruecker
-  and Strauch's *Enterprise Process Orchestration*. A **business capability** says what
-  has to be done, independently of how — its scope (including what it is explicitly
-  *not* responsible for), its input and output, its business owner, the resources it
-  draws on, what it requires from other capabilities, and the KPIs and SLAs it is held
-  to. A **value stream** is the ordered activity that meets a customer need, its stages
-  naming the capabilities that perform them.
-
-  A capability says how it is currently done in one of four ways: an executable process
-  here, a Worker, a purchased system, or a person. The last two are the point. A map
-  that could only record what Atlas already runs would tell you nothing the deployment
-  list does not, and `GET /api/v1/capabilities?realized=false` — everything nothing
-  currently automates — is the adoption backlog the whole thing exists to shrink.
-
-  Nothing about a realisation is stored beyond a portable key. Whether the process still
-  exists, at which version, with how many instances running, is resolved every time you
-  read, so the record cannot go stale about the installation. **Coverage** answers that
-  for one capability, along with what it depends on, what each of those has promised, who
-  depends on it, and which value-stream stages it performs.
-
-  The reverse direction is computed and never stored. `GET
-  /api/v1/business-architecture/gaps` compares the map against what this server actually
-  runs: capabilities nothing realises, realisations pointing at what is not here,
-  deployed processes no capability claims, stages with no capability, dependencies naming
-  no capability, and — the one worth the most — a call activity crossing from one
-  capability's process into another's that the caller never declared. It is a comparison
-  and never a merge: the method's black box is normally a service task, so a declared
-  dependency with no call activity is the ordinary case and raises nothing. Two things it
-  refuses to report: a purchased system or a person, which Atlas cannot see and will not
-  call a defect, and anything outside your sharing scope, which reads as restricted
-  rather than missing — with a count, so a clean report can be told from a blind one.
-
-  Capabilities are a **flat, tagged list**, and the record has no parent field. That is
-  the method's own advice and it is now structural: an "end-to-end" capability is
-  regularly invoked from inside another one, so any tree is wrong from some direction,
-  and a test asserts the field's absence rather than a comment asking for it. There is
-  one identity, the key, and it is also the filename — the map reads on disk as
-  `capabilities/loan-underwriting.json` and diffs like source. The price, stated in the
-  refusal that enforces it, is that a key cannot be renamed in place.
-
-  Both stores are design-time, so the existing export and restore already carry the map
-  between installations. The whole surface is available as MCP tools as well, because an
-  agent that deploys a process has no other way to say what the process is for.
-
-  Every KPI and SLA in the registry is a **declaration**. Atlas computes none of them,
-  and the coverage answer says so in a field rather than letting a client render a goal
-  as an achievement. The data to compute them is already there; whether it can be
-  aggregated at the volumes this is aimed at is an open question the decision record
-  carries, and measurement is a separate slice.
-
-  The method and how to work it are in `docs/architecture/business-architecture.md`,
-  including two things checking it against the tree turned up: a **none intermediate
-  throw event** — the method's milestone marker — does not compile, and Atlas's
-  Prometheus surface is operational rather than business-level, so a KPI dashboard
-  planned against `/metrics` will not find what it needs.
-
-- **A lifecycle can now take its states from an «enumeration» you already wrote.**
-  [ADR-0259](docs/adr/0259-data-object-lifecycle.md) gave a class a state machine, and it
-  was written against a real model that already had one — drawn as an enumeration. That
-  model is the whole problem: its author had written the five states of an identity as
-  literals, with a paragraph of documentation on each, *because that was the only place
-  the states could be written down at all*. Adding a lifecycle beside it made the model
-  say the same five strings twice, with nothing connecting them and nothing noticing when
-  they drifted.
-
-  A business object's lifecycle now names an enumeration in the same model, and that
-  enumeration's literals **are** its states. The name of a state is written in one place.
-  Everything an enumeration cannot hold stays on the lifecycle, which is most of what a
-  lifecycle is for: which state instances are created in, which end the life, what may
-  follow what, and where each sits on the canvas.
-
-  Renaming a literal renames the state and rewrites every transition that names it —
-  which is exactly what renaming a state already does, because a state's name *is* the
-  string every process writes. Removing a literal removes the state and the arrows
-  touching it. Adding a state on the lifecycle sheet writes the literal, since that is
-  where the names live. On a lifecycle fed this way the state's name is shown read-only
-  and says where it is renamed, rather than taking an edit and dropping it.
-
-  **The class diagram finally shows the tie**: a dashed `«lifecycle»` line from the class
-  to the enumeration. It is derived from the reference and never drawn by hand — the same
-  construction as a data store's line to its class, for the same reason. A class and an
-  enumeration do not *relate*; one *takes its states from* the other, so the relationship
-  rules are untouched and nothing that counts relationships counts it.
-
-  The server refuses the three ways a document can contradict itself here: a reference to
-  a class that is not there, a reference to something that is not an enumeration, and a
-  state the enumeration does not declare. A literal with no state yet is *not* refused —
-  a machine half drawn is the normal condition, and that is incompleteness rather than a
-  contradiction. A lifecycle that names no enumeration behaves exactly as it did before.
-
-- **General-purpose scripts now have an opt-in, fail-closed OS sandbox.**
-  `--script-sandbox=strict` (or `ATLAS_SCRIPT_SANDBOX=strict`) gives every
-  PowerShell, Python and JavaScript execution private scratch, restricts file reads
-  and execution to the installed runtime with Linux Landlock, and denies creation
-  of network and Unix-domain sockets with seccomp. Atlas checks for Landlock ABI 3+
-  before starting a strict server or worker; it never silently falls back. The
-  initial default is `off`, deliberately, so upgrading does not break deployed
-  scripts that intentionally use mounted files or services. Independently of that
-  setting, a script timeout on Unix now kills the interpreter's complete process
-  group, so a spawned child cannot survive its timed-out parent.
-  ([ADR-0303](docs/adr/0303-script-sandbox-isolation.md))
-
-- **The Console landing page says what Atlas is, in both languages**: the dashboard
-  opened on "Welcome to Atlas" and three steps — it told a newcomer what to click, not
-  what they are running. A **Key features / Kernmerkmale** tile now sits below the
-  dashboard's own tiles: sixteen short entries (one binary, durability, the compiler,
-  throughput, the Modeler, token visibility, Panorama, human work, DMN, the information
-  model, checkable BPMN coverage, integrations, agents, operations, deployment, licence), collapsible and carrying the
-  same EN/DE toggle as What's New. The copy is a static asset
-  (`api/web/key-features.json`, guarded by a test) rather than markup, and the landing
-  page's two bilingual sections now share one language setting, so it is never half
-  English and half German.
-
-  A tile that enumerates what a product *is* goes stale the way the handbook's
-  screenshots do — silently, because the page still renders and the capability nobody
-  mentioned is simply absent. So the file carries a `reviewedThrough` marker naming the
-  newest `### Added` bullet it has been held against, and `go test ./api` fails while
-  bullets sit above it. The question a feature has to answer is one line long — does
-  this change what Atlas is? — and the usual answer is no, which moves the marker and
-  writes nothing. What the marker buys is that it is asked by the person who knows the
-  feature rather than by nobody.
-
-- **The information model can now be read off the processes instead of typed in beside
-  them.** [ADR-0230](docs/adr/0230-process-information-model.md) and
-  [ADR-0259](docs/adr/0259-data-object-lifecycle.md) both run in one direction: a person
-  models the vocabulary, and the processes are checked against it. Neither record priced
-  what that puts in front of the first user, which is a blank page — until classes exist,
-  the Modeler's class picker is empty, the data-state field is free text, and the Problems
-  panel reports nothing because there is nothing to report against. Meanwhile the engine
-  already knew most of it: a data object declares a name and often a type, every data
-  output association names the path it writes (`customer.name`), every data object may
-  carry a data state, and the compiled graph already says which writes can follow which.
-
-  **Data → As built** draws what an application's processes actually carry. A class per
-  data object, named by its `itemSubjectRef` or, failing that, by the object itself; a
-  member per write path; and, per class, the state machine its data states imply, with a
-  transition wherever the compiled graph says one write can precede another. It is a read
-  over the newest active version of each of the application's processes — the same set
-  the deploy checks assemble — so it costs a request and no storage, and it is drawn on
-  the same two canvases the authored model and the run-time overlay use, in their
-  read-only mode.
-
-  The two readings are deliberately different statements rather than two copies of one.
-  What is derived is what is **built**; what somebody models by hand is what is
-  **wanted**. Neither is written into the other, because the point is not to make them
-  agree — their difference is the work not yet done. A `cancelled` state in the model that
-  no process ever writes is a backlog item, which is the same fact `data.unreachable-state`
-  reports from the other side.
-
-  What derivation cannot see is said above the drawing rather than under it, because a
-  derived picture mistaken for a complete one is worse than no picture. No derived class
-  carries a business key — nothing in BPMN says which attribute identifies a thing, and
-  it is the one fact every cross-process capability rests on, so it stays the first thing
-  to add by hand. Attributes are untyped, since a FEEL expression's result type is not a
-  static fact of the model. Per class it also says when the name came from the data object
-  rather than a declared type, which is the case most likely to be spelled wrongly, and
-  when a dotted write path proved a member has members of its own that nothing in BPMN
-  names. Nothing on the view is editable: it is evidence about the processes, not a
-  document about the business.
-
-  Also readable as `GET /api/v1/infomodel/derived?applicationId=…` and, for agents, as the
-  MCP tool `atlas_derived_information_model`.
-
-- **A lifecycle that is ahead of the processes that write it now says so.** A class can
-  declare that an order may be `cancelled`; whether anything ever cancels one is a
-  question about the *application*, not about any one process, so it could not be asked
-  where the other two lifecycle checks live — `CheckDataFlow` reads one compiled process
-  at a time, and "nothing ever writes this" is false until every process has been looked
-  at. Asking it there would mean either passing the other processes into a per-process
-  check, where the same finding repeats once per process and is attached to whichever one
-  happened to be deployed, or answering it wrong.
-
-  It is asked once, of the set: the newest version of each of the application's
-  processes, minus the deactivated ones, plus whatever is being deployed or drawn right
-  now — so the process that finally cancels an order clears the finding as it arrives
-  rather than one deploy later. The result is one sentence per class naming every state
-  nothing reaches, carrying no element, because it is a fact about the model rather than
-  about any element of any process. Like its two siblings it is a warning and refuses
-  nothing: a lifecycle is routinely drawn before the process that will write it.
-
-  The state instances are created in counts as reached, since every instance begins
-  there — so a data object that carries no data state at all leaves the lifecycle's own
-  starting state unreached, which is worth saying because the remedy is one field in the
-  Modeler. A class no process handles is not reported at all: that is a lifecycle drawn
-  before its processes, which is the normal order of work rather than a defect
-  (`data.unreachable-state`, ADR-0259).
-
-- **An OpenAPI document can configure the task that calls it.** `atlas openapi-template
-  --spec petstore.yaml --out ./packages` writes one element-template package per
-  operation, in the shape the repository catalog already uses
-  ([ADR-0300](docs/adr/0300-openapi-element-templates.md)).
-
-  It is the reader behind `atlas mock-openapi` pointed the other way: the same document
-  that makes an API answer now also fills in the task that calls it. Method is fixed to
-  the operation's; the URL is the document's server plus the path, literal where there
-  is nothing to substitute and a FEEL expression where there is —
-  `="https://api.digitalocean.com/v2/droplets/" + string(droplet_id)` — with the
-  description naming each variable the process must hold. A URL that carries no host is
-  called out, including the relative-server case (`/api/v3`) that looks filled in and is
-  not.
-
-  What the document cannot decide stays empty: headers, authentication and the
-  credential reference. Security schemes are deliberately not mapped onto Atlas's auth
-  types, because the useful ones need a token endpoint and a client id that live on the
-  server, and a guess there is a wrong answer wearing a filled-in field.
-
-  **What you can do with the result today is limited, and the command says so where it
-  writes them.** Applying a template to a task is
-  [ADR-0212](docs/adr/0212-element-template-applier.md), which is not built, and a
-  running server's catalog is compiled in — so these are files to commit or to keep,
-  not to install.
-
-- **An instance's data objects are drawn on the lifecycle their class declares.** The
-  state trail was already on disk — every durable write, with the element that made it
-  — and the state machine was already in the information model. Nothing read them
-  against each other, so the question *where has this order got to, and what moved it
-  there* meant reading a list of writes and holding the machine in your head.
-
-  The replay's **Data** tab gained a third reading beside List and Diagram. It draws
-  the whole declared machine — including the ways out this instance never took, because
-  a picture of only what happened answers a different question — with the states this
-  datum has been through filled in, the one it is in now ringed, and each edge it
-  travelled carrying the BPMN element that moved it along. That last part is the thing
-  no class diagram can say, and the reason to draw this rather than list the trail.
-
-  The half worth the whole feature is what it says when something is wrong. A move the
-  machine does not join is drawn as what it is — dashed, apart, and never mistakable
-  for something the model says — and named in words underneath with the element that
-  made it. A state the class never declared is named too, since it cannot be drawn.
-  Together they are the run-time twin of the `data.illegal-transition` and
-  `data.unknown-state` deploy checks, and they catch what those cannot see: an instance
-  that started before the lifecycle was drawn, and a process the check never ran
-  against. Where two transitions join the same pair of states the trail cannot tell
-  them apart — it records states, not transition ids — so both are marked and the
-  panel says so rather than picking one.
-
-  This adds no event, no record type and no migration, and touches nothing in
-  `applyToState`: it is a read over what the log already said. `GET
-  /api/v1/instances/{key}/lifecycle` serves it, and `atlas_instance_lifecycle` puts the
-  same answer in front of an agent (ADR-0259).
-- **The deploy says when a searchable declaration cannot be honoured.** The Modeler marks
-  such a name while it is typed, but a model deployed from a pipeline or over the API
-  never passes through the Modeler, and `atlas:searchable` is accepted whatever it names:
-  the search then stays empty forever with nothing saying why. The deploy response now
-  carries the same reading, beside the worker and namespace warnings it already gives —
-  never a refusal, because a model is routinely deployed before the rest of its world
-  exists. It reads the model's own bytes rather than the compiled process, so it counts
-  writers generically, by attribute: every Worker Type, script and decision writes into a
-  `resultVariable`, including the kinds added after this was written. A name the model
-  itself declares as a JSON start variable is reported for any process, because the
-  declaration settles it. A name nothing in the model produces is reported only where the
-  model has stated its inputs — it declares start variables and links no form, whose
-  fields are a separate resource this cannot read — and the sentence says plainly that a
-  worker's own output or a write through the variables API makes it fine.
-
-- **A searchable declaration that indexes nothing now says so.** `atlas:searchable` names
-  variables, and nothing checked that the model writes any: a typo, or a name holding
-  JSON, is accepted by the deploy and then answers an empty search forever, with no screen
-  saying why. The field now paints a chip per declared name, read against the same static
-  analysis the Variables panel uses. Red where the model settles it — a repeated name the
-  deploy refuses, or a name the model itself says holds a structured value, which the
-  index cannot hold. Amber where it is a question rather than a verdict: nothing in the
-  diagram writes that name, which is usually a typo but not always, because a worker's
-  output or the variables API can write a name the diagram never mentions. Each chip
-  carries the reason as its tooltip, and they are painted as the name is typed.
-
-- **A migration now re-indexes what its target declares.** [ADR-0244](docs/adr/0244-searchable-variables.md)
-  argued that a declared searchable variable needs no backfill, and for the case it looked
-  at that holds: the attribute postdates every definition that could lack it. It missed the
-  one way an instance changes version after it has written values — migration
-  ([ADR-0162](docs/adr/0162-process-instance-migration.md)). An instance started on a
-  version that declares nothing and migrated onto one that declares `identityId` held a
-  value stamped "not indexed", so the version-scoped search — which for a declared name is
-  answered from the index alone — returned nothing for an instance the engine was holding.
-  A wrong answer, not a slow one, and a silent one.
-
-  A migration now emits one membership correction per variable whose answer differs under
-  the target's declaration, in both directions: a name the target declares and the source
-  did not is added, one it no longer declares is dropped. The comparison happens at command
-  time against the compiled process — the fold cannot ask one anything, which is ADR-0244's
-  own finding — so what reaches the log is the answer, and a replay rebuilds the identical
-  index. A migration between two versions that declare the same names emits nothing.
-
-  For the instances migrated before this,
-  **`POST /api/v1/processes/{key}/reindex-instances`** (admin, `?limit=`, default 500, max
-  5000) queues the same correction for a bounded batch of a definition's running instances
-  and reports what that definition declares. It is idempotent: an instance already in step
-  emits no events at all, so running it twice writes nothing the second time. Running
-  instances only — a finished instance's membership can no longer change through any normal
-  path, and reaching into the history family from a command handler was not worth it for a
-  strictly historical case.
-  ([ADR-0295](docs/adr/0295-migration-reindexes-searchable-variables.md))
-
-- **The Modeler can now say what a process is found by.** `atlas:searchable`
-  ([ADR-0244](docs/adr/0244-searchable-variables.md)) turns an operator's value search
-  into a seek, but it shipped as an attribute with no field and no moddle property, so
-  the only way to declare a searchable variable was to hand-edit the exported XML
-  outside the tool. The process properties now carry a **Searchable variables** field
-  beside the two TTLs, validated the way they are: a nameless entry or a name given
-  twice is what the deploy refuses, so the panel says so while authoring and still
-  stores what was typed rather than dropping the author's value.
-
-  What was missing was never the round trip — moddle keeps an attribute it has no
-  property for in `$attrs` and writes it back, so a hand-authored declaration was
-  invisible rather than lost. It was that nothing could *read or write* it: the panel
-  reads `rootBo.searchable` and writes through `updateProperties`, and both go through
-  moddle's properties. A drift test now fails for any future `<bpmn:process>` attribute
-  the compiler reads that `atlas-moddle.json` does not declare, so the next one cannot
-  ship unauthorable (`api/moddle_drift_test.go`, `e2e/searchable-modeler.spec.mjs`).
-
-### Changed
-
-- **The class canvas's palette is drawn in the notation now, not in Unicode.** Its marks
-  were characters — `▭` for a business object, `▢` for a value type, `☰` for an
-  enumeration, `◇` and `◆` for the two kinds of whole. That was a defensible trade when
-  there was nothing to vendor: bpmn-js ships an icon font for BPMN's shapes and there is
-  no UML equivalent, and four kilobytes of font for eight marks buys little. What it cost
-  was that a palette entry looked like whatever the reader's system had for that
-  codepoint, and that the three classifiers were three near-identical rectangles.
-
-  Each entry is now a miniature of the shape the click produces, drawn as inline SVG in
-  the stylesheet. No font, no image files, nothing to fetch — the same reasoning that
-  keeps the canvases buildless ([ADR-0012](docs/adr/0012-web-ui-app-shell.md)). There is
-  no official UML icon set to take: the standard fixes the shapes on the *diagram* and
-  says nothing about a toolbar, so the miniatures are drawn from the notation itself.
-
-  The entries split in two, and the split is what each entry *is* rather than a
-  preference. A classifier is a button — one click adds one, it has no state — so it
-  carries its kind in colour: a business object with the key knocked out of its name
-  compartment, because identity is what makes it one; a value type with that compartment
-  empty, because nothing identifies it; an «enumeration» whose body is a list of literals
-  rather than rows of attributes; a data store as its cylinder. A relationship is a
-  *mode*: one of them is armed while the next two clicks draw that line, and the armed
-  entry has to be recoloured to say so — which a baked-in colour cannot do. So the four
-  relationships and the two tools are stencils that take the palette's own colour, and
-  they keep lighting on hover and reversing out of the accent when armed.
-
-- **A refused write through MCP now says why, not just that.** A validation refusal has
-  always carried every reason at once — an author fixing a form should not make one round
-  trip per mistake — but the MCP client read only the one-line summary out of it. So an
-  agent saving an information model got "the model is not valid" and nothing else. It has
-  no form to read the details out of, so it retried blind, which is the failure mode the
-  tool surface exists to avoid. The shared client now appends the findings to the message,
-  reading both shapes in use, and skips a finding it cannot parse rather than losing the
-  whole refusal to one odd entry.
-
-- **The Console landing page carries the brand mark.** "Welcome to Atlas" opened on a
-  bare heading, so the one page a newcomer lands on was the one page that showed no
-  mark at all — the glyph sat in the top bar above it and nowhere in the card itself.
-  The heading now leads with the same `.mark` box the bar uses, at 48px. It is the
-  shared box rather than a copy of the glyph, so an organisation that has uploaded its
-  own logo (ADR-0148) sees that logo here too, and a later upload or removal repaints
-  this mark along with every other one. The logo setting names the landing page along
-  with the top bar and the login screen, so what it promises is what it does.
-
-- **The Starmap reads its structure once for everybody, and everybody's health for
-  themselves.** With every open Starmap now re-reading itself, the cost of deriving one
-  scaled with the audience: a landscape is built on the engine's run loop — the single
-  writer — and costs a directory listing and a JSON decode per record across four
-  stores, plus a walk of every compiled process. Twenty tabs is one operations team,
-  and it was twenty of those readings, competing for the loop that executes process
-  instances.
-
-  The server now holds that reading for **30 seconds** — the view's own re-read floor,
-  deliberately: a shorter one bounds nothing, because readers do not poll in step. What
-  it holds is the whole design:
-
-  - **Health is never cached.** Parked work, incident ages, running instances, which
-    workers have polled — all read fresh on every request. They are what an operator
-    opens the view for, and they are engine point reads rather than disk. A status view
-    that made trouble wait out a timer would be saving the wrong cost.
-  - **Visibility is never cached.** Every access decision is made on the request, from
-    the request. The held reading carries the *inputs* a decision is made from and
-    never a decision, so one person's landscape can never be served to another.
-
-  Deploying a process, writing a call override and creating a deployment target drop
-  the reading at once — those are the changes somebody makes and then immediately looks
-  for on this picture. A new application or worker appears within the 30 seconds, and
-  the picture says how old it is while it waits: the landscape is dated by when its
-  *structure* was read, not by when the answer was served, so the freshness line is
-  true of a cached answer as much as a fresh one (ADR-0211 §7).
-
-- **The Starmap says when it was read, and keeps itself true.** Everything on that
-  canvas has a shelf life — the severity badges are an observation, the incident counts
-  move as an operator works through them, and the three new weightings below are live
-  quantities, one of them measured against a clock. A landscape opened at nine and
-  still open at eleven showed two-hour-old numbers with nothing on the page saying so,
-  which is the failure the export's stamp already exists to prevent, happening on the
-  screen the stamp is copied from.
-
-  The observation time is now on the page beside the node count (**"observed 4 min
-  ago"**), rewritten every ten seconds, and a **Live** switch beside it — on by
-  default — re-reads the landscape from the server while the view is open.
-
-  The cadence is paced by what the picture costs rather than by a constant: the mesh is
-  derived on the engine's run loop, so the interval is a twentieth of what the last
-  derive actually took, floored at 30 seconds and ceilinged at 5 minutes. A landscape
-  that derives in 40 ms is re-read on the floor; one that takes four seconds backs off
-  to well over a minute by itself. Nothing is asked behind a hidden tab, or while a
-  node is being dragged. A refusal keeps the picture, says **"could not re-read"**, and
-  backs off to the ceiling — a server that is down does not want thirty requests a
-  minute from every open tab. The filter, the drilldown, the selection, the pins and
-  the zoom all survive a re-read. Turning Live off stops it; turning it back on asks at
-  once rather than waiting out another interval (ADR-0211 §7).
-
-- **The Starmap can be sized by what is running on it, by what is stuck on it, or by
-  how long it has been stuck.** The instance counts were a checkbox beside the Notation
-  picker — an overlay ticked onto
-  whatever was on screen — and that offered a picture with no reading. Size on the
-  Starmap is one channel and it already carried connectivity, so a landscape with the
-  box ticked had radii meaning structure while its labels meant load, and the one
-  question somebody ticks it to ask, *where is the work*, was the one it could not
-  answer.
-
-  The checkbox is gone. The Notation picker now offers two **heatmaps** beside *Atlas
-  (derived)* and the two projections, because every entry there decides how the
-  landscape is drawn and only one of them can be chosen at a time:
-
-  - **Instances (heatmap)** — *where is the work.* A node's size is what is running on
-    it: capacity, reading a load test, finding the process actually carrying the estate.
-  - **Incidents (heatmap)** — *where is it stuck.* A node's size is how many unresolved
-    incidents the engine holds against it. The severity badges already said **which**
-    nodes have a finding; what they could not say is how much is parked behind each,
-    and a process holding four hundred stuck tokens wore the same badge as one holding
-    a single retry. The badge stays the classification; the size is now the magnitude.
-  - **Incident age (heatmap)** — *how long has it been stuck.* A node's size is how long
-    its earliest unresolved incident has been standing. This is the one that changes a
-    decision: four hundred incidents from the last five minutes is a worker that has
-    just fallen over and drains itself once somebody restarts it, and three standing
-    since Friday is a process nobody is coming back to. The count ranks those the wrong
-    way round, every time.
-
-  For the third one the mesh payload carries a new fact: **`oldestIncident`**, the
-  moment a node's earliest unresolved incident was raised. The oldest rather than the
-  newest, because that is the age of the *problem* — a process where one token parked
-  on Friday and three hundred piled up behind it has been stuck since Friday. It is
-  absent, never zero, where there is nothing to date, including an incident raised
-  before the engine recorded the moment: "not known" and "raised at the epoch" are
-  different facts, and a zero would draw the process as the oldest trouble on the
-  estate. A collapsed application carries the earliest of the processes it stands for.
-  Collecting it costs nothing — the incident scan already reads every record, and the
-  raise time is a field on the record it is reading.
-
-  The panel states the exact age for whichever node is selected (**"Oldest still parked
-  5 d ago"**), which is the number a circle cannot give.
-
-  On any of them the size is a **ratio scale**. A node carrying nothing sits at a floor;
-  a node carrying the least the weighting counts — one running instance, one incident, a
-  minute stuck — is already a clear step above it; and from there the size grows with
-  each *tenfold*, so equal steps of size are equal multiples of the tally and the largest
-  node on the landscape is the largest circle. That is the question a heatmap is opened
-  with: an estate's instance counts run from one to several thousand, and what an
-  operator wants of a circle is how many times, not how much.
-
-  The key **draws** that scale rather than only describing it: a row of reference
-  circles — nothing at all, then the tallies the scale is marked at, up to the busiest
-  node — each at the size a node carrying that much is drawn. They come out of the same
-  arithmetic the nodes did, so a circle in the key is the circle on the picture, and
-  the row travels into an exported file as well, where there is no key to scroll to.
-
-  Each circle is also a **filter**. Click the one marked 100 and the picture narrows to
-  the nodes running between a hundred and the next mark, with their neighbours kept for
-  context exactly as a search keeps them; click it again to widen. It combines with the
-  search box rather than replacing it — a term and a band together show what matches
-  both — and a saved view remembers which band it was looking at.
-
-  Every node keeps a **floor**, whatever its tally, so nothing drops off the picture: an
-  idle process, a worker, a decision and an application whose load sits on the processes
-  it holds are all still nodes somebody can see and click, and "nothing here" stays
-  distinguishable from "not on this server". On the incident picture that also makes the
-  good news legible — a flat landscape is the answer, and the key says so rather than
-  leaving you to wonder whether anything was measured. Kind is unaffected: it was never
-  carried by size alone, and shape and colour still carry it.
-
-  The reference is the largest node on the **whole** landscape rather than on what the
-  filter has left on screen, so narrowing to two nodes cannot swell the smaller of them
-  into the worst thing on the estate — and it is named in the key and in the export's
-  stamp, because an area with no stated reference is a decoration rather than a
-  quantity. A saved view stored while the counts were a switch reopens as the weighting
-  it stood for.
-
-  **The ranking column follows the weighting too.** It ranks by blast radius on the
-  derived drawing, as it always has; with a heatmap on it ranks by the same quantity
-  the canvas is sized by, so the largest circle and the first row are the same node.
-  Two orderings on one screen, with nothing on it saying they answer different
-  questions, is a contradiction a reader cannot resolve. It is not a re-listing of the
-  picture: a circle gives neither the exact number — nobody reads 41 against 38 off two
-  areas — nor the name, which zoomed out is not painted at all. The blast radius stays
-  as the second number on each row, which is what turns a count into a priority: forty
-  incidents on a leaf process is a contained problem, twelve on something two hundred
-  things need is an outage (ADR-0211 §6, §8).
-
-- **A Worker Type's setup folds away once you have set it up.** The section that says
-  where a type's work runs and what has to exist at the provider stood open above the
-  fields. That is right the first time and wrong every time after: on a 270-pixel panel
-  it is most of a screen, and an author who has already configured the type scrolls past
-  all of it to reach the field they came for. It is a group now — the chevron, the title
-  and the collapse memory that Operation, Failure handling and the mapping lists already
-  have, and *Collapse all* reaches it like the rest.
-
-  It does not simply start folded, which would undo what it is for. It opens by itself
-  when this server has **no** Worker of that type configured *and* the type names one at
-  all — someone meeting a type they have not set up. A type that configures nothing (a
-  REST call, a mockup, user provisioning) has a setup worth one read, so it starts
-  folded. An explicit toggle beats both and survives the next selection, because one
-  title serves every Worker Type: not wanting to read it is a statement about the
-  section, not about Jira.
+- **A task folder judges every task in one listing against the same moment.** The
+  "overdue", "due within" and instance-age conditions called FEEL's `now()`, which reads
+  the clock again for every task, so a task on the edge of a window could fall on either
+  side of it depending on when the listing reached it. They now compare against `scanAt`,
+  the one instant the request is evaluated at. The expression a folder shows, and returns
+  as `feel`, reads `scanAt` where it read `now()`; a folder is stored as its conditions,
+  so nothing stored changes.
+
+- **A multi-instance loop records each round's result, not the collection so far.** Every
+  finished iteration wrote the whole output collection back, so round N recorded N
+  elements: the log grew with the square of the iteration count, and the variable
+  timeline kept every half-filled copy of the list. A round now records one
+  `VariableElementSet` event carrying its element and its index, and replay rebuilds the
+  list from those; eighty rounds of ~200-byte results write 165 KB of log instead of
+  821 KB ([ADR-0296](docs/adr/0296-a-loop-records-its-element.md)). Each element is
+  measured against `ATLAS_LIMIT_VARIABLE` as it is written, and parks its iteration with
+  an incident when it does not fit.
+
+  **Upgrade note:** logs and state written by 0.6.x are read unchanged, and loops already
+  running carry on. The new record is one-way: a 0.6.x build has no case for it and skips
+  it on replay, so do not roll back to 0.6.x while a loop with an output collection is
+  running.
 
 ### Security
+
+- **Completing, claiming or releasing a user task now requires holding it.**
+  `POST /api/v1/tasks/{key}/complete`, `/claim` and `/unclaim` asked only for the `user`
+  role, which every signed-in account has, and then acted on whatever task the key named
+  — and the task list hands out the keys. So any signed-in account could decide any open
+  task, an approval among them. A task the model addressed, by assignee or by candidate
+  groups, is now answered only by whoever holds it under the inbox's own rule; anybody
+  else gets **403**. Operators and administrators still act on every task, a task
+  addressed to nobody stays open work anybody may take, and with authentication off
+  nothing changes ([ADR-0317](docs/adr/0317-task-commands-are-an-object-question.md)).
+
+  **Upgrade note:** an integration that answers other people's tasks through an account
+  holding only the `user` role now gets 403. Give that account the `operator` role, or
+  let the addressed person act.
 
 - **Model-authored scripts no longer inherit Atlas credentials.** The supervised script
   worker starts from an explicit runtime allowlist, and each interpreter receives only
@@ -6092,29 +6290,6 @@ no stored format and no default changes; this one is worth checking your models 
   firing on two tokens from one branch now parks — a deadlocked join, visible in
   Operations and terminable, where before it continued silently. Worth a look at any
   model that forks and rejoins through an exclusive merge.
-
-- **A refused variable write now stops what comes next, instead of only saying so.**
-  The variable and collection budgets refuse a value past their ceiling and raise an
-  incident on the element that produced it. That was half a refusal: terminating an
-  element clears the incident it carries, so a site that refused a write and then let
-  its element finish left nothing behind at all — not the value, and not the report.
-  The run looked successful, and the only evidence was a variable that was not there.
-
-  Every site at which a model's or a worker's value becomes a variable now answers
-  what happens next, and each answer follows from that site's own semantics. A message
-  or signal catch does not complete, because its subscription is already correlated
-  and neither is delivered twice. A call activity does not resume without the result
-  it called for, because the child instance is already gone. An output mapping does
-  not let its activity finish having promoted nothing, and keeps the activity's local
-  scope — that is where the raw result the mapping reads still is, so resolving
-  re-evaluates over it. An input mapping stops the behaviour *before* it runs, rather
-  than handing a worker a job missing what the model promised it.
-
-  **Upgrade note:** an instance whose write is refused now stays where it is, with an
-  incident naming the variable and both sizes. Resolving it retries the write, so
-  correcting the data — or raising `ATLAS_LIMIT_VARIABLE` / `ATLAS_LIMIT_COLLECTION` —
-  lets it carry on. Before this, such an instance could complete as though nothing had
-  happened.
 
 - **The class canvas got its toolbox, and its boxes stopped overflowing.** Three
   things about the drawing were wrong on any model larger than the examples, and an
@@ -12584,7 +12759,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/pblumer/atlas/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/pblumer/atlas/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/pblumer/atlas/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/pblumer/atlas/compare/v0.3.0...v0.4.0
