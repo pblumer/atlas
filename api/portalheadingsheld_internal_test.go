@@ -56,8 +56,12 @@ func TestWhatSomebodyHoldsIsFiledUnderTheHeadingTheyOrderedItUnder(t *testing.T)
 				"came to disagree", field)
 		}
 	}
-	for _, want := range []string{"headingsHeld(rel, by, ids, 'category')",
-		"headingsHeld(rel, by, ids, 'productGroup')"} {
+	// Built from the products the held positions resolve to (a held service is
+	// listed under its product), and the group column from those of them under the
+	// heading chosen — the cascade the catalogue draws, read over what this person
+	// holds.
+	for _, want := range []string{"headingsHeld(rel, by, offerings, 'category')",
+		"headingsHeld(rel, by, inCat, 'productGroup')"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the services view does not build a column with %s, so this guard "+
 				"has lost its subject", want)
