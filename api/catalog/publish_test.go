@@ -224,6 +224,25 @@ func TestBothProcessesAreRequired(t *testing.T) {
 	contains(t, problems, "provision")
 }
 
+// TestNoPositionIsWorkedByTheOrchestration: a product bound to the process that
+// works the order would start that process for itself, and the copy would do it
+// again, without end. Either binding is refused.
+func TestNoPositionIsWorkedByTheOrchestration(t *testing.T) {
+	for _, bind := range []func(*Item){
+		func(it *Item) { it.ProvisionProcess = FulfilmentProcess },
+		func(it *Item) { it.DeprovisionProcess = FulfilmentProcess },
+	} {
+		it := item("tastatur")
+		bind(&it)
+		in := Input{
+			Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de"}, Items: []string{"tastatur"}}},
+			Items:    []Item{it},
+		}
+		_, problems := Publish(in)
+		contains(t, problems, "works the order itself")
+	}
+}
+
 // TestEveryDeclaredLanguageIsReportedAndNotRefused.
 //
 // This used to refuse, on the reasoning that a customer must not meet a product

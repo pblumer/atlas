@@ -40,6 +40,12 @@ type Lifecycle struct {
 // withdrawn rather than removed. A store that can delete one can orphan evidence.
 type State string
 
+// FulfilmentProcess is the id of the model that works an order
+// (api/systemprocesses/auftrag-erfuellung.bpmn). It lives here, where a product's
+// bindings are checked against it, and the order package names it through this
+// constant, so the Go side has one spelling of it.
+const FulfilmentProcess = "atlas-auftrag-erfuellung"
+
 const (
 	// StateDraft is an item being written. It cannot be published.
 	StateDraft State = "draft"

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/api/order"
 	"github.com/pblumer/atlas/model"
 )
 
@@ -100,6 +101,7 @@ func (s *Server) startInstance(w http.ResponseWriter, key uint64, startVars []mo
 		driveNeeded bool
 		instKey     uint64
 		processID   string
+		selfStart   bool
 	)
 	s.do(func() {
 		d, ok := s.deployments[key]
@@ -114,6 +116,10 @@ func (s *Server) startInstance(w http.ResponseWriter, key uint64, startVars []mo
 			return
 		}
 		processID = d.ProcessID
+		if processID == order.FulfilmentProcess && namesPosition(startVars) {
+			selfStart = true
+			return
+		}
 		// Reporting, so the answer can name the instance it started and an order
 		// position can be told which instance works it (ADR-0416).
 		s.proc.CreateInstanceReporting(key, &instKey, startVars...)
@@ -133,6 +139,16 @@ func (s *Server) startInstance(w http.ResponseWriter, key uint64, startVars []mo
 		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
 	case notExec:
 		httpapi.Error(w, http.StatusConflict, "process is not executable and cannot be started")
+	case selfStart:
+		// The orchestration asked to start itself for one of its positions: the
+		// position is bound to the orchestration in the order it froze. Started, the
+		// copy would start the same position again, and so on without end. Refused
+		// here, the orchestration's start task fails with this message, which is an
+		// incident somebody can find, instead of a flood nobody can.
+		httpapi.Error(w, http.StatusUnprocessableEntity, "refusing to start "+processID+
+			" for an order position: a position is never worked by the process that works "+
+			"its order, and starting it would start the position again without end; bind "+
+			"the product to its own provisioning process")
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "run instance: "+runErr.Error())
 	case statErr != nil:
@@ -141,4 +157,15 @@ func (s *Server) startInstance(w http.ResponseWriter, key uint64, startVars []mo
 		s.notePositionInstance(startVars, instKey, processID)
 		httpapi.JSON(w, http.StatusOK, createInstanceResp{DefinitionKey: key, InstanceKey: instKey, Stats: stats})
 	}
+}
+
+// namesPosition reports whether start variables name an order position, which is
+// what the orchestration hands every process it starts for one.
+func namesPosition(vars []model.VariableValue) bool {
+	for _, v := range vars {
+		if v.Name == progressPositionVar && v.Kind == model.VarString && v.Text != "" {
+			return true
+		}
+	}
+	return false
 }
