@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api/layout"
+	"github.com/pblumer/atlas/api/taskfolder"
 	"github.com/pblumer/atlas/api/vault"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
@@ -4474,7 +4475,7 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 	// its own instance's task) always finds it, even when a flood has pushed that
 	// task past the global page cap.
 	if v := strings.TrimSpace(q.Get("processInstance")); v != "" {
-		s.listTasksForInstance(w, v, limit)
+		s.listTasksForInstance(w, taskfolder.Viewer(r), v, limit)
 		return
 	}
 
@@ -4498,6 +4499,15 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 	// below.
 	if id := folderQuery(r); id != "" {
 		s.listTasksForFolder(w, r, id, limit, before)
+		return
+	}
+
+	// A viewer who does not see every task gets the same page with what is not
+	// theirs skipped (see [Server.taskVisibleTo]). That walk grows with the tasks it
+	// skips, so it runs off the loop like a folder does; operators and
+	// administrators keep the loop-bound page below.
+	if viewer := taskfolder.Viewer(r); s.authEnabled && !viewer.SeesAll {
+		s.listVisibleTasks(w, viewer, limit, before)
 		return
 	}
 
@@ -4549,7 +4559,7 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 // than the global activatable scan. This keeps a client that only cares about its
 // own instance — the order-to-cash demo — working under a flood that has pushed that
 // instance's task past the global /tasks page cap.
-func (s *Server) listTasksForInstance(w http.ResponseWriter, raw string, limit int) {
+func (s *Server) listTasksForInstance(w http.ResponseWriter, viewer taskfolder.User, raw string, limit int) {
 	instKey, err := strconv.ParseUint(raw, 10, 64)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid processInstance (want an instance key)")
@@ -4577,7 +4587,9 @@ func (s *Server) listTasksForInstance(w http.ResponseWriter, raw string, limit i
 			if jv.JobType != compiler.UserTaskJobTypeIndex || jv.Retries <= 0 {
 				return nil
 			}
-			tasks = append(tasks, s.enrichTask(jobKey, jv))
+			if tr := s.enrichTask(jobKey, jv); s.taskVisibleTo(viewer, tr) {
+				tasks = append(tasks, tr)
+			}
 			return nil
 		})
 		scanErr = unlessTruncated(err)
@@ -4668,6 +4680,7 @@ func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "invalid task key")
 		return
 	}
+	viewer := taskfolder.Viewer(r)
 	var (
 		task  taskResp
 		found bool
@@ -4685,8 +4698,12 @@ func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
 		if !ok || jv.JobType != compiler.UserTaskJobTypeIndex {
 			return
 		}
-		found = true
-		task = s.enrichTask(key, jv)
+		// A task the viewer may not see answers exactly as an absent one does: the
+		// by-key read must not be a way round the list's filter.
+		if tr := s.enrichTask(key, jv); s.taskVisibleTo(viewer, tr) {
+			found = true
+			task = tr
+		}
 	})
 	switch {
 	case opErr != nil:

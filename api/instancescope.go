@@ -218,22 +218,29 @@ func (s *Server) taskFieldsFor(pr *httpapi.Principal, piKey uint64) (map[string]
 //
 // A claimed task grants nothing to the group: once somebody holds it, it is theirs.
 func (s *Server) holdsTask(pr *httpapi.Principal, assignee, candidateGroups string) bool {
+	return s.holdsTaskAs(pr.Username, pr.UserID, pr.GroupIDs, assignee, candidateGroups)
+}
+
+// holdsTaskAs is holdsTask for a caller given by its parts rather than by its
+// principal, so the task views, which know their viewer as a [taskfolder.User],
+// answer with the same rule the commands do.
+func (s *Server) holdsTaskAs(username, userID string, groupIDs []string, assignee, candidateGroups string) bool {
 	if assignee != "" {
-		return (pr.Username != "" && strings.EqualFold(assignee, pr.Username)) ||
-			(pr.UserID != "" && assignee == pr.UserID)
+		return (username != "" && strings.EqualFold(assignee, username)) ||
+			(userID != "" && assignee == userID)
 	}
 	wanted := strings.Split(candidateGroups, ",")
 	// Ids first, and all of them, before any store read: a modeller who wrote group
 	// ids never pays for the name lookup, and the lookup then happens once rather
 	// than once per candidate entry.
 	for _, want := range wanted {
-		for _, id := range pr.GroupIDs {
+		for _, id := range groupIDs {
 			if strings.EqualFold(strings.TrimSpace(want), id) {
 				return true
 			}
 		}
 	}
-	for _, id := range pr.GroupIDs {
+	for _, id := range groupIDs {
 		g, ok, err := s.groups.Get(id)
 		if err != nil || !ok {
 			continue

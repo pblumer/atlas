@@ -173,7 +173,12 @@ func (s *Server) countTaskFolders(matchers []*taskfolder.Matcher, u taskfolder.U
 	// One instant for the whole scan, so "overdue" cannot mean two different
 	// moments within a single answer.
 	now := time.Now()
-	budgetHit, err := s.visitOpenTasks(0, needInstance, func(_ uint64, _ taskResp, ft taskfolder.Task) bool {
+	budgetHit, err := s.visitOpenTasks(0, needInstance, func(_ uint64, tr taskResp, ft taskfolder.Task) bool {
+		// A badge counts what the viewer's list would show, not what exists: a count
+		// that includes tasks the list withholds is the withheld inbox by another name.
+		if !s.taskVisibleTo(u, tr) {
+			return true
+		}
 		tally.Total++
 		for i, m := range matchers {
 			if m.Match(ft, u, now) {
@@ -209,12 +214,32 @@ func (s *Server) listTasksForFolder(w http.ResponseWriter, r *http.Request, fold
 		httpapi.Error(w, http.StatusNotFound, "no folder with that id")
 		return
 	}
+	now := time.Now()
+	s.pageOpenTasks(w, limit, before, matcher.NeedsInstance(), func(tr taskResp, ft taskfolder.Task) bool {
+		return s.taskVisibleTo(viewer, tr) && matcher.Match(ft, viewer, now)
+	})
+}
+
+// listVisibleTasks is the unfiltered listing for a viewer who does not see every
+// task: the same page, cap and cursor, walked off the loop because it has to skip
+// what [Server.taskVisibleTo] withholds, exactly as a folder skips what its rule
+// does not select.
+func (s *Server) listVisibleTasks(w http.ResponseWriter, viewer taskfolder.User, limit int, before uint64) {
+	s.pageOpenTasks(w, limit, before, false, func(tr taskResp, _ taskfolder.Task) bool {
+		return s.taskVisibleTo(viewer, tr)
+	})
+}
+
+// pageOpenTasks writes one newest-first page of the open user tasks keep selects.
+// It keeps the page cap, the truncation flag and the cursor the unfiltered listing
+// uses, so a filtered list pages exactly like "All tasks" does.
+func (s *Server) pageOpenTasks(w http.ResponseWriter, limit int, before uint64, needInstance bool,
+	keep func(tr taskResp, ft taskfolder.Task) bool) {
 	tasks := []taskResp{}
 	var nextCursor uint64
-	now := time.Now()
 	full := false
-	budgetHit, scanErr := s.visitOpenTasks(before, matcher.NeedsInstance(), func(jobKey uint64, tr taskResp, ft taskfolder.Task) bool {
-		if !matcher.Match(ft, viewer, now) {
+	budgetHit, scanErr := s.visitOpenTasks(before, needInstance, func(jobKey uint64, tr taskResp, ft taskfolder.Task) bool {
+		if !keep(tr, ft) {
 			// A skipped task still advances the cursor: the next page must resume
 			// after everything this one looked at, not after the last row it kept.
 			nextCursor = jobKey
@@ -234,7 +259,7 @@ func (s *Server) listTasksForFolder(w http.ResponseWriter, r *http.Request, fold
 	}
 	// Same shape and same reasoning as the unfiltered listing
 	// (ADR-0378). The exact
-	// count for this folder is what GET /api/v1/task-folders/counts answers; here the
+	// count for a folder is what GET /api/v1/task-folders/counts answers; here the
 	// total is the page unless the page is everything.
 	capped := full || budgetHit
 	page := httpapi.PageOf(tasks, capped)
