@@ -500,8 +500,13 @@ func evalDecision(ctx context.Context, defs *tdmn.Definitions, decisionId string
 	// accepted under either spelling, so a task deployed before temis told the two
 	// apart still finds its input (names.go).
 	aliased := aliasedInputs(nodes, in)
-	if err := refuseTypeMismatch(defs, decisionId, aliased, where); err != nil {
-		return nil, nil, err
+	// The decision resolved a few lines up, so an error here cannot be "no such
+	// decision" in practice; treating it as nothing to check keeps a future engine
+	// change from turning a working evaluation into a failed job.
+	if probs, verr := defs.ValidateReachableInput(decisionId, tdmn.Input(aliased)); verr == nil {
+		if err := refuseTypeMismatch(probs, fmt.Sprintf("evaluate %q in %s", decisionId, where)); err != nil {
+			return nil, nil, err
+		}
 	}
 	res, err := dec.Evaluate(ctx, tdmn.Input(aliased), tdmn.WithTrace())
 	if err != nil {
@@ -565,14 +570,15 @@ func evalDecision(ctx context.Context, defs *tdmn.Definitions, decisionId string
 // Every mismatch is named rather than only the first, so an operator reading an
 // incident sees the whole picture instead of fixing one input and meeting the
 // next.
-func refuseTypeMismatch(defs *tdmn.Definitions, decisionId string, in map[string]any, where string) error {
-	probs, err := defs.ValidateReachableInput(decisionId, tdmn.Input(in))
-	if err != nil {
-		// The decision was resolved a few lines up, so this cannot be "no such
-		// decision" in practice; treating it as "nothing to check" keeps a future
-		// engine change from turning a working evaluation into a failed job.
-		return nil
-	}
+//
+// A decision service is refused by the same rule, against the schema it now
+// publishes (temis ADR-0042): the input data read behind its interface and the
+// results of its input decisions, each with its declared type. One asymmetry
+// remains and is the engine's, not this function's: temis's service evaluation
+// does not refuse a *missing* input the way a decision's does, so for a service
+// the MISSING_INPUT argument above is not redundancy but a gap, left for the same
+// record that would take up VALUE_NOT_ALLOWED.
+func refuseTypeMismatch(probs []tdmn.InputProblem, what string) error {
 	var bad []string
 	for _, p := range probs {
 		if p.Code != "TYPE_MISMATCH" {
@@ -583,7 +589,7 @@ func refuseTypeMismatch(defs *tdmn.Definitions, decisionId string, in map[string
 	if len(bad) == 0 {
 		return nil
 	}
-	return fmt.Errorf("dmn: evaluate %q in %s: %s", decisionId, where, strings.Join(bad, "; "))
+	return fmt.Errorf("dmn: %s: %s", what, strings.Join(bad, "; "))
 }
 
 // evalService evaluates a decision service — DMN's published interface over part
@@ -612,7 +618,14 @@ func refuseTypeMismatch(defs *tdmn.Definitions, decisionId string, in map[string
 // rules, and the surfaces say so.
 func evalService(ctx context.Context, defs *tdmn.Definitions, svc *tdmn.CompiledService, name string, in map[string]any, where string) (map[string]any, []byte, error) {
 	nodes := defs.Graph().Nodes
-	res, err := svc.Evaluate(ctx, tdmn.Input(aliasedInputs(nodes, in)), tdmn.WithTrace())
+	aliased := aliasedInputs(nodes, in)
+	// Refused like a decision (ADR-0419): a task that names the service must not
+	// get a silent catch-all answer for the input that would fail the task naming
+	// the decision behind it.
+	if err := refuseTypeMismatch(svc.ValidateInput(tdmn.Input(aliased)), fmt.Sprintf("evaluate service %q in %s", name, where)); err != nil {
+		return nil, nil, err
+	}
+	res, err := svc.Evaluate(ctx, tdmn.Input(aliased), tdmn.WithTrace())
 	if err != nil {
 		return nil, nil, fmt.Errorf("dmn: evaluate service %q in %s: %w", name, where, err)
 	}

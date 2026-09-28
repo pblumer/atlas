@@ -294,36 +294,32 @@ func TestTheDepthFixtureCanBeTriedAtEveryLevel(t *testing.T) {
 	}
 }
 
-// REMAINING GAP, narrowed by temis ADR-0041 rather than closed: a decision
-// service converts its inputs by declared type now, but a wrongly-typed one is
-// still not refused there.
-//
-// The two halves moved apart. Conversion is temis's and reaches a service,
-// because its working set is built from its output decisions' cones (the test
-// above proves it). Refusal is Atlas's, sits in evalDecision, and a service goes
-// through evalService — where there is nothing to ask, because CompiledService
-// publishes no input schema. temis ADR-0041 names that as what it does not
-// decide.
-//
-// So the same wrong value is refused when the task names the decision and
-// answers silently when it names the service over it. That asymmetry is the gap,
-// and it is asserted rather than left to be rediscovered: when a service can be
-// validated, this test fails and should become the assertion that it is refused.
-func TestRemainingGapAServiceDoesNotRefuseAWronglyTypedInput(t *testing.T) {
+// A wrongly-typed input is refused whether the task names the decision or the
+// service over it (ADR-0419). It was not: the service answered silently, because
+// CompiledService published no input schema to validate against. temis ADR-0042
+// gave it one — the input data read behind the interface plus the input
+// decisions at its boundary — and evalService now asks it, as evalDecision asks
+// the decision's reachable schema.
+func TestAServiceRefusesAWronglyTypedInputLikeItsDecision(t *testing.T) {
 	reg := layeredRegistry(t)
 	bad := map[string]any{"antragBetrag": "30000", "kundeSeit": "2018-05-01", "risikoKlasse": "A", "aktiv": true}
 
 	if _, err := reg.Evaluate(context.Background(), 1, "Gesamturteil", bad); err == nil {
-		t.Fatal("the decision no longer refuses a wrongly-typed input — the premise of this gap is gone")
+		t.Fatal("the decision no longer refuses a wrongly-typed input — the premise of this test is gone")
 	}
 
-	out, err := reg.Evaluate(context.Background(), 1, "Pruefung", bad)
-	if err != nil {
-		t.Fatalf("the service now refuses it too (%v).\n"+
-			"That is the gap closing: turn this test into the assertion that the service "+
-			"refuses, and narrow ADR-0419's open question accordingly.", err)
+	_, err := reg.Evaluate(context.Background(), 1, "Pruefung", bad)
+	if err == nil {
+		t.Fatal("the service answered a wrongly-typed input instead of refusing it")
 	}
-	if out["urteil"] == nil {
-		t.Fatalf("Pruefung returned nothing at all — this gap is about a silent answer, not an empty one")
+	for _, want := range []string{`service "Pruefung"`, "antragBetrag", "expects number, got string"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not name %q", err, want)
+		}
+	}
+
+	good := map[string]any{"antragBetrag": 30000, "kundeSeit": "2018-05-01", "risikoKlasse": "A", "aktiv": true}
+	if out, err := reg.Evaluate(context.Background(), 1, "Pruefung", good); err != nil || out["urteil"] == nil {
+		t.Fatalf("a correctly-typed input: %v, %v — the refusal must not reach it", out, err)
 	}
 }

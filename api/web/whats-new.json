@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-28",
   "entries": [
     {
+      "id": "a-decision-service-refuses-a-wrongly-typed-input-as-its-deci",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A decision service refuses a wrongly-typed input",
+        "de": "Ein Decision Service weist eine falsch typisierte Eingabe ab"
+      },
+      "summary": {
+        "en": "A business rule task that sends an input of the wrong type to a decision fails into an incident that names the input. The same task pointed at the decision service over that decision used to get a silent answer from the catch-all row instead, because the engine published no input schema for a service and there was nothing to check against. A service now publishes what its caller supplies — the input data read behind its interface and the results of its input decisions, each with its declared type — and is refused by the same rule. The schema also reaches an input decision the conversion could not see before: one declared as a date and sent as text now arrives as a date rather than as a string. The retained evaluations of the one deployed service were checked against the new rule first; none would have been refused.",
+        "de": "Ein Business Rule Task, der einer Decision eine Eingabe vom falschen Typ schickt, endet in einem Incident, der die Eingabe benennt. Derselbe Task, auf den Decision Service über dieser Decision gerichtet, bekam bisher stattdessen still die Antwort der Catch-all-Zeile, weil die Engine für einen Service kein Eingabeschema veröffentlichte und es nichts gab, wogegen geprüft werden konnte. Ein Service veröffentlicht jetzt, was sein Aufrufer liefert — die Input Data, die hinter seiner Schnittstelle gelesen werden, und die Ergebnisse seiner Input-Decisions, jeweils mit deklariertem Typ — und wird nach derselben Regel abgewiesen. Das Schema erreicht auch eine Input-Decision, die die Umwandlung bisher nicht sah: Eine als Datum deklarierte und als Text gesendete kommt jetzt als Datum an statt als Zeichenkette. Die aufbewahrten Auswertungen des einen deployten Service wurden vorher gegen die neue Regel geprüft; keine wäre abgewiesen worden."
+      },
+      "link": {
+        "label": "ADR-0419",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0419-a-declared-type-is-honoured-at-the-decision-boundary.md"
+      },
+      "tags": [
+        "Decisions",
+        "Engine"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the incidents",
+          "de": "Incidents öffnen"
+        },
+        "route": "#/operations/incidents"
+      }
+    },
+    {
       "id": "a-deployment-target-can-name-a-second-credential-for-reading",
       "version": "0.7.0",
       "date": "2026-09-28",
@@ -324,24 +353,6 @@
           "«Meine Aufträge» öffnen: Unter der Position steht die Genehmigung und auf wen sie wartet.",
           "Als genehmigende Person anmelden, «Meine Aufträge» öffnen, bei der Aufgabe «Erledigen» wählen und abschliessen."
         ]
-      }
-    },
-    {
-      "id": "the-portal-speaks-french-and-italian",
-      "version": "0.7.0",
-      "date": "2026-09-28",
-      "category": "Added",
-      "title": {
-        "en": "The portal speaks French and Italian.",
-        "de": "The portal speaks French and Italian."
-      },
-      "summary": {
-        "en": "It had German and English, so a catalogue kept in French or Italian carried translations that no reader could ever select: the switch will not offer a language the page cannot render whole, and the page could not render those.",
-        "de": "It had German and English, so a catalogue kept in French or Italian carried translations that no reader could ever select: the switch will not offer a language the page cannot render whole, and the page could not render those."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
       }
     }
   ]
