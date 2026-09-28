@@ -12,6 +12,87 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-09-28
+
+**This release is about what an organisation offers, and who holds it.** Atlas gains a
+self-service catalogue: products with their variants, an approval rule and the processes
+that provision and revoke them, published as frozen releases. People order in the
+**shop** from the one catalogue their groups reach — in German, English, French or
+Italian, and on a phone. An approval is an ordinary user task, decided in the Tasks inbox.
+What was provisioned becomes an **inventory** of what each person holds, kept as engine
+state of its own so that retention cannot delete it; it can be reconciled against what a
+target system actually says, recertified by asking whether somebody still needs it, and
+ended by date. Accounts and groups can be mirrored from a Microsoft Entra tenant. About a
+hundred of this release's 250 entries are this one line of work, which is why several of
+them rename or remove things that never shipped in a release — the portal became the shop,
+and its approval page folded into the inbox.
+
+**Decisions are deployment artifacts of their own.** Publishing deploys a DMN model as a
+versioned decision deployment, and a process resolves `latest` once, when it is deployed,
+instead of whenever a token arrives — so publishing a new decision no longer changes
+processes that are already running. The decision editor is a page of the Modeler with
+drafts, a test panel and single-decision deploy; it opens DMN 1.5 models, and it draws,
+folds and lays out decision services, which a business rule task can now call. At the
+boundary, a business rule task refuses an input whose type contradicts the decision's
+declaration, rather than letting every comparison against it go null and the catch-all
+row answer.
+
+**The architecture around the processes has a model of its own.** Business capabilities and
+value streams are drawn and kept in one register, with service levels that are measured
+rather than only declared. The information model can be read off the processes instead of
+typed in beside them, and Atlas reports the difference between what the processes build and
+what the model plans. The Starmap sizes the estate by load, by incidents or by how long they
+have stood, draws a Product Map beside it, and a new estate view takes in every configured
+deployment target.
+
+**And fewer failures stay silent or stall everything else.** A server whose store had grown
+froze for seconds at a time, on a cadence: publishing a checkpoint and resolving the WAL
+compaction cut read the whole store while holding the run loop. That work now runs off it
+([ADR-0382](docs/adr/0382-whole-store-reads-leave-the-writer.md)). A stored
+definition that a newer compiler rule would refuse no longer stops the server from starting.
+An outage now trips a breaker at the worker instead of an incident at every token, an
+incident flood is read by cause and cleared in one action, and a model fix reaches an
+instance whose tokens cannot be carried across by continuing it in a new one. Completing,
+claiming or releasing a user task now requires holding it — in 0.6.0 any signed-in account
+could decide any task by its key. Personal data can be declared per process and erased by
+destroying one key per data subject, and model-authored scripts no longer see the server's
+credentials.
+
+**Read this before upgrading from 0.6.0.** These act on an existing installation:
+
+- A breaking API change: `GET /api/v1/tasks`, `/instances`, `/instances/search`,
+  `/incidents` and `/audit` answer with `{items, total, totalExact, truncated, nextCursor}`
+  instead of a bare array, and the `X-*-Truncated` and `X-*-Next-Cursor` headers are gone.
+  **Every client of these endpoints has to change.**
+- A user task the model addressed is completed, claimed or released only by whoever holds
+  it, an operator or an administrator; anybody else gets **403**.
+- The shipped user-management processes named their mail worker after a person; every
+  process Atlas ships now names **`mail`**. Configure a mail worker under that name. The
+  shipped processes deploy as new versions on the first start, and instances already running
+  stay on the version — and the worker name — they started with.
+- A business rule task whose input contradicts the type its decision declares now stops with
+  an incident instead of answering, on instances already running too.
+- A BPMN deploy refuses a FEEL call to a function that does not exist (`is defined` is the
+  usual one). A definition stored before still loads and runs as it did and says so in the
+  log (`deployment.reloaded_with_problems`); redeploying it needs the expression fixed.
+- A process deployed before keeps resolving a decision's `latest` version when the task
+  activates; redeploying it pins the version at deploy time.
+- A model-authored script starts from an allowlisted environment, so a script that read a
+  variable from the server's environment no longer sees it.
+- The state store's block cache now defaults to 64 MB and its write buffer to 16 MB
+  (`--state-cache-mb`, `--state-memtable-mb`; 0 restores Pebble's defaults), which costs
+  resident memory on a small machine.
+- No upgrade grants the new `productmanager` role; somebody has to be given it before a
+  catalogue can be maintained.
+- Treat the upgrade as one-way. 0.7.0 writes records 0.6.x has no replay rule for — a
+  loop's element, an entitlement — so take a backup before upgrading and restore it, rather
+  than starting 0.6.x on a data directory 0.7.0 has written.
+
+**Known issue.** A multi-instance loop whose output collection outgrows
+`ATLAS_LIMIT_COLLECTION` (16 MiB by default) completes without the collection and without
+an incident; 0.6.0 parked it with a `VariableTooLarge` incident. Until that is fixed, keep a
+loop's collected output well below the limit, or raise the limit.
+
 ### Added
 
 - **The decision picker tells a decision service's answer from its workings.** A
@@ -12600,7 +12681,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/pblumer/atlas/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/pblumer/atlas/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/pblumer/atlas/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/pblumer/atlas/compare/v0.3.0...v0.4.0

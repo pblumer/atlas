@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-09-09",
+  "generatedAt": "2026-09-28",
   "entries": [
     {
       "id": "the-decision-picker-tells-a-decision-service-s-answer-from-i",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.7.0",
+      "date": "2026-09-28",
       "category": "Added",
       "title": {
         "en": "The picker tells a decision service's answer from its workings",
@@ -16,7 +16,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
       },
       "tags": [
         "Modeler",
@@ -32,8 +32,8 @@
     },
     {
       "id": "the-decision-picker-says-when-a-decision-is-not-deployed",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.7.0",
+      "date": "2026-09-28",
       "category": "Added",
       "title": {
         "en": "The decision picker says when a decision is not deployed yet",
@@ -45,7 +45,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
       },
       "tags": [
         "Modeler",
@@ -61,8 +61,8 @@
     },
     {
       "id": "the-test-panel-s-fields-follow-the-type-the-decision-declare",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.7.0",
+      "date": "2026-09-28",
       "category": "Added",
       "title": {
         "en": "Testing a decision offers the right field for each input",
@@ -74,7 +74,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
       },
       "tags": [
         "Modeler",
@@ -90,8 +90,8 @@
     },
     {
       "id": "a-decision-says-where-its-diagram-and-its-logic-disagree-and",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.7.0",
+      "date": "2026-09-28",
       "category": "Added",
       "title": {
         "en": "A decision's diagram and its logic are kept in step",
@@ -103,7 +103,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
       },
       "tags": [
         "Modeler",
@@ -119,8 +119,8 @@
     },
     {
       "id": "a-decision-s-input-columns-follow-the-graph-they-come-from-a",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.7.0",
+      "date": "2026-09-28",
       "category": "Added",
       "title": {
         "en": "A decision's columns follow the diagram, and nothing is thrown away unasked",
@@ -132,7 +132,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
       },
       "tags": [
         "Modeler",
@@ -148,8 +148,8 @@
     },
     {
       "id": "the-shop-works-on-a-phone",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.7.0",
+      "date": "2026-09-28",
       "category": "Added",
       "title": {
         "en": "The shop works on a phone",
@@ -181,8 +181,8 @@
     },
     {
       "id": "tasks-works-on-a-phone",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.7.0",
+      "date": "2026-09-28",
       "category": "Added",
       "title": {
         "en": "Tasks works on a phone",
@@ -214,8 +214,8 @@
     },
     {
       "id": "a-decision-service-s-name-can-be-moved-out-of-the-way-and-th",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.7.0",
+      "date": "2026-09-28",
       "category": "Added",
       "title": {
         "en": "Move a decision service's name, and fold it from the box",
@@ -227,7 +227,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
       },
       "tags": [
         "Modeler",
@@ -243,8 +243,8 @@
     },
     {
       "id": "a-decision-service-s-name-box-can-be-resized-and-its-name-is",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.7.0",
+      "date": "2026-09-28",
       "category": "Added",
       "title": {
         "en": "The name of a decision service has a size you can set",
@@ -256,7 +256,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
       },
       "tags": [
         "Modeler",
@@ -272,8 +272,8 @@
     },
     {
       "id": "an-order-in-the-shop-says-whom-each-position-waits-for-and-w",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.7.0",
+      "date": "2026-09-28",
       "category": "Added",
       "title": {
         "en": "The shop shows whom an order waits for",
@@ -285,7 +285,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
       },
       "tags": [
         "Service catalogue",
@@ -306,8 +306,8 @@
     },
     {
       "id": "the-portal-speaks-french-and-italian",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.7.0",
+      "date": "2026-09-28",
       "category": "Added",
       "title": {
         "en": "The portal speaks French and Italian.",
@@ -319,13 +319,13 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
       }
     },
     {
       "id": "the-portal-s-language-switch-offers-the-languages-the-catalo",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.7.0",
+      "date": "2026-09-28",
       "category": "Added",
       "title": {
         "en": "The portal's language switch offers the languages the catalogue is kept in.",
@@ -337,7 +337,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
       }
     }
   ]
