@@ -1,14 +1,39 @@
+## A decision service: converted now, still not refused
+
+This record's refusal sits in `evalDecision`. A decision service goes through
+`evalService`, and the two halves of "honour the declared type" have come apart
+there.
+
+**Conversion reaches it.** temis ADR-0041 corrected what ADR-0040 had scoped too
+narrowly: a decision is converted by the union over its requirements cone rather
+than by what it declares itself. A service's working set is built from its output
+decisions, so it inherited the correction — which matters, because that set was
+empty for exactly the services that encapsulate anything. In the depth fixture, a
+`date` declared two levels below the service now reaches it as a date, asserted
+from both the composed decision and the service over it.
+
+**Refusal does not.** `CompiledService` still publishes no input schema, so there
+is nothing for Atlas to ask at that boundary. The same wrongly-typed value is
+refused when a task names the decision and answers silently when it names the
+service — `Pruefung` returns `abgelehnt` where `Gesamturteil` returns the
+mismatch. temis ADR-0041 names a published service schema as what it does not
+decide; until it exists, so does this.
+
+The asymmetry is asserted rather than left to be rediscovered
+(`TestRemainingGapAServiceDoesNotRefuseAWronglyTypedInput`), with a failure
+message saying what to do when it closes.
+
 # ADR-0419: A declared type is honoured at the decision boundary
 
 - **Status:** Accepted
 - **Implementation:** Landed
 - **Date:** 2026-09-25
 - **Deciders:** Atlas maintainers
-- **Open question:** whether a decision **service** should be held to the same
-  standard — neither the conversion nor the refusal reaches one today, because temis
-  publishes no input schema for a `CompiledService`, and the working set the
-  conversion does use is empty whenever a service's output decision reaches its
-  inputs through other decisions rather than directly
+- **Open question:** whether a decision **service** should *refuse* a wrongly-typed
+  input, not only convert one — temis ADR-0041 gave a service the conversion by
+  making its working set the output decisions' cones, but `CompiledService` still
+  publishes no input schema, so `evalService` has nothing to validate against and
+  the same value that fails at a decision answers silently at the service over it
 - **Question checked:** 2026-09
 
 ## Context and problem statement

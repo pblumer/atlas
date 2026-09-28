@@ -1,0 +1,15 @@
+{
+  "tags": ["Decisions", "Engine"],
+  "title": {
+    "en": "A declared type reaches a decision built on other decisions",
+    "de": "Ein deklarierter Typ erreicht auch eine aufbauende Decision"
+  },
+  "summary": {
+    "en": "The engine converted an input by what the decision being evaluated declares itself. For a decision whose requirements are other decisions — the shape a well-factored model has at the top, and where a business rule task usually points — that is nothing at all, so nothing was converted. A date reached the decision that declares it as the text it was sent as, the comparison was null, and a decision table cannot tell null from false. The same sub-decision evaluated on its own was right, which is what made it so hard to see: the wrong answer appeared levels above its cause, with no diagnostic and no trace entry. A decision service inherited the correction, because its working set is built from its output decisions — and that set was empty for exactly the services that encapsulate something. Not everything moved: a service converts its inputs now but still does not refuse a wrongly-typed one, because the engine publishes no input schema for a service, so the same value is refused when a task names the decision and answered silently when it names the service over it.",
+    "de": "Die Engine hat eine Eingabe nach dem umgewandelt, was die ausgewertete Decision selbst deklariert. Bei einer Decision, deren Anforderungen andere Decisions sind — die Form, die ein sauber geschichtetes Modell oben hat, und wohin ein Business Rule Task in aller Regel zeigt —, ist das gar nichts, also wurde nichts umgewandelt. Ein Datum erreichte die Decision, die es deklariert, als die Zeichenkette, als die es gesendet wurde; der Vergleich war null, und eine Entscheidungstabelle kann null nicht von false unterscheiden. Dieselbe Sub-Decision allein ausgewertet war richtig — deshalb war es so schwer zu sehen: Die falsche Antwort erschien Ebenen über ihrer Ursache, ohne Diagnose und ohne Trace-Eintrag. Ein Decision Service hat die Korrektur geerbt, weil seine Arbeitsmenge aus seinen Output-Decisions gebildet wird — und diese Menge war für genau jene Services leer, die etwas kapseln. Nicht alles hat sich mitbewegt: Ein Service wandelt seine Eingaben jetzt um, verweigert eine falsch typisierte aber weiterhin nicht, weil die Engine für einen Service kein Eingabeschema veröffentlicht. Derselbe Wert wird also verweigert, wenn ein Task die Decision benennt, und still beantwortet, wenn er den Service darüber benennt."
+  },
+  "try": {
+    "label": { "en": "Open the Modeler", "de": "Modeler öffnen" },
+    "route": "#/modeler"
+  }
+}

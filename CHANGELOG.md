@@ -14,6 +14,25 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A declared type now reaches a decision built on other decisions (ADR-0419).** The
+  engine converted an input by what the decision being evaluated declares *itself*.
+  For a decision whose requirements are other decisions — the shape a well-factored
+  model has at the top, and where a business rule task usually points — that is
+  nothing at all, so nothing was converted. A `date` reached the decision that
+  declares it as the text it was sent as, the comparison was null, and a decision
+  table cannot tell null from false. The same sub-decision evaluated on its own was
+  right, which is what made it so hard to see: the wrong answer appeared levels above
+  its cause, with no diagnostic and no trace entry.
+
+  Carried by the engine bump. A decision service inherited the correction, because
+  its working set is built from its output decisions — and that set was empty for
+  exactly the services that encapsulate something.
+
+  Not everything moved: a service converts its inputs now but still does not refuse a
+  wrongly-typed one, because the engine publishes no input schema for a service. The
+  same value is refused when a task names the decision and answered silently when it
+  names the service over it. That is asserted rather than left to be rediscovered.
+
 - **Deploying one decision now versions its decision service too.** The Deploy button
   in the decision editor — and the single-decision deploy behind it — recorded a
   version for each decision in the model but none for the decision service over them.
