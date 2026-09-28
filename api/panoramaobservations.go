@@ -316,7 +316,7 @@ func (s *Server) collectRuntimeAndTargetFacts(facts panorama.Facts) ([]remoteTar
 		// The credential is resolved on the loop, because reading the vault is a
 		// loop read. It travels no further than the Authorization header phase two
 		// sets, and reaches no payload, no log line and no error message.
-		peers = append(peers, remoteTarget{target: t, credential: s.resolveConnectorSecret(t.CredentialRef)})
+		peers = append(peers, remoteTarget{target: t, credential: s.resolveConnectorSecret(t.readRef())})
 	}
 	return peers, nil
 }

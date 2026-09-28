@@ -102,6 +102,25 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A deployment target can name a second credential, for reading the peer rather than
+  publishing to it.** A target's credential does two jobs, and they need credentials that cannot
+  be the same one: publishing reaches the import route and nothing else — a deploy token is
+  deliberately the narrowest thing that can publish — while reading a peer needs its descriptor
+  and, at the estate altitude, its derived landscape, and a credential that reaches those is
+  refused the import route. A token carries one scope, so one reference could only ever do one
+  of the two. Measured against two installations rather than argued: a deploy token answers 401
+  at both read routes, and a landscape credential answers 403 at the import route.
+
+  The consequence was quiet and wrong: a target configured for promotion — which is what a
+  target is for — was drawn on the estate as *unreachable*, and the picture was honest about
+  knowing nothing while an operator could see the peer was plainly there.
+
+  A target now takes an optional `readCredentialRef` beside its `credentialRef`, and a read of
+  the peer presents it: the estate's fan-out, the landscape's target rows and the observation
+  projection. Leaving it empty means the two jobs share one credential, which is what every
+  target configured before this says, so nothing that exists moves. Both are handles into the
+  vault and neither is a secret, so naming two discloses no more than naming one.
+
 - **The decision picker tells a decision service's answer from its workings.** A
   service publishes output decisions and encapsulates the ones it evaluates on the way
   there (DMN §10.4), and the catalogue merged the two: every one of them read
@@ -787,6 +806,25 @@ _Changed_ / _Removed_ for each version.
   French page and deliver half of one. A reader whose browser is English, meeting a
   German-only catalogue, now gets a German page rather than English navigation beside
   German products.
+
+- **A credential minted for reading another Atlas can now actually read it.** Two installations
+  pointed at each other found two defects in the credential reach released with the estate, both
+  of which every test passed over.
+
+  A `landscape` credential reaches the peer's node descriptor as well as its starmap. The estate
+  read is two steps — a peer is asked who it is before it is asked for a landscape, because that
+  is the only way to tell a peer one version behind from a peer in trouble — and the scope
+  covered only the second step. With authentication on, which is the default, every peer was
+  drawn as unreachable.
+
+  And a stated reach now **grants** viewer inside itself, not only withholds everything outside
+  it. The reach was checked above the branches that grant, so it narrowed an administrator and a
+  deploy agent correctly; but everything below those branches reads a sharing scope, and a
+  credential has no account to be an owner or a member with. A token minted with a reach over one
+  application therefore saw a landscape of nothing at all — and the estate drew that as a peer
+  holding nothing, so an empty installation and a credential that grants nothing looked the same.
+  Measured after the fix: the same credential reads the one application its reach names, where an
+  administrator on that server reads four.
 
 - **The estate: one node per domain, and each one says how wide the credential that drew it
   was.** A new Panorama view beside the Starmap draws this installation and every configured

@@ -322,7 +322,7 @@ func (s *Server) readStructure(withDrafts bool, now time.Time) (*meshFacts, erro
 		// no further than the Authorization header the fan-out sets, and reaches no
 		// payload, no log line and no error message.
 		facts.peers = append(facts.peers, remoteTarget{
-			target: t, credential: s.resolveConnectorSecret(t.CredentialRef),
+			target: t, credential: s.resolveConnectorSecret(t.readRef()),
 		})
 	}
 	return facts, nil

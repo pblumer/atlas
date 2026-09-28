@@ -118,6 +118,28 @@
       }
     },
     {
+      "id": "a-deployment-target-can-name-a-second-credential-for-reading",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A deployment target can name one credential for publishing and one for reading",
+        "de": "Ein Deployment-Ziel kann ein Credential zum Publizieren und eines zum Lesen nennen"
+      },
+      "summary": {
+        "en": "A target's credential does two jobs and they need credentials that cannot be the same one. Publishing reaches the import route and nothing else, because a deploy token is deliberately the narrowest thing that can publish; reading a peer needs its descriptor and, at the estate altitude, its derived landscape, and a credential that reaches those is refused the import route. A token carries one scope, so one reference could only ever do one of the two — measured against two installations, a deploy token answers 401 at both read routes and a landscape credential answers 403 at the import route. The consequence was quiet and wrong: a target configured for promotion, which is what a target is for, was drawn on the estate as unreachable while an operator could see the peer was plainly there. A target now takes an optional read credential reference beside the one it already had, and a read of the peer presents it. Leaving it empty means both jobs share one credential, which is what every target configured before this says, so nothing that exists moves. Both are handles into the vault rather than secrets, so naming two discloses no more than naming one.",
+        "de": "Das Credential eines Ziels erfüllt zwei Aufgaben, und die brauchen Credentials, die nicht dasselbe sein können. Publizieren erreicht die Import-Route und sonst nichts, weil ein Deploy-Token bewusst das Schmalste ist, was publizieren kann; das Lesen einer Gegenstelle braucht deren Deskriptor und, auf der Estate-Ebene, deren abgeleitete Landschaft — und ein Credential, das diese erreicht, wird an der Import-Route abgewiesen. Ein Token trägt einen Scope, eine Referenz konnte also immer nur eine der beiden Aufgaben erfüllen: an zwei Installationen gemessen antwortet ein Deploy-Token an beiden Leserouten mit 401 und ein Landscape-Credential an der Import-Route mit 403. Die Folge war still und falsch: ein für Promotionen konfiguriertes Ziel — und dafür sind Ziele da — wurde im Estate als nicht erreichbar gezeichnet, während der Betrieb die Gegenstelle offensichtlich vor sich hatte. Ein Ziel nimmt jetzt neben der bisherigen Referenz eine optionale Lese-Referenz, und ein Lesezugriff auf die Gegenstelle legt diese vor. Bleibt sie leer, teilen sich beide Aufgaben ein Credential — so, wie es jedes bisher konfigurierte Ziel sagt, es bewegt sich also nichts Bestehendes. Beides sind Handles in den Tresor und keine Geheimnisse; zwei zu nennen legt nicht mehr offen als eines."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations",
+        "Security"
+      ]
+    },
+    {
       "id": "the-decision-picker-tells-a-decision-service-s-answer-from-i",
       "version": "Unreleased",
       "date": null,
@@ -326,35 +348,6 @@
           "Eine Aufgabe in der Liste öffnen; mit «Back to the list» geht es zurück.",
           "Unter «Access review» eine Zeile in ihrer Karte mit «Still needed» oder «Withdraw…» beantworten."
         ]
-      }
-    },
-    {
-      "id": "a-decision-service-s-name-can-be-moved-out-of-the-way-and-th",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Move a decision service's name, and fold it from the box",
-        "de": "Namen eines Decision Service verschieben, Einklappen direkt in der Box"
-      },
-      "summary": {
-        "en": "DMN requires a decision service's name inside the shape and says nothing about where — and its own figures disagree, one drawing it centred at the top and three at the top left. Whichever corner an editor picks is wrong for some diagram: the name lands on a decision, or on an arrow crossing the border. So it starts at the top left, and a grab handle over it drags it anywhere inside the box, above the dividing line — where DMN puts the name, alongside the decisions the service publishes. Where you put it is stored as the shape's label bounds, DMN's own place for it, so it survives a save and means the same thing to another tool; nothing is written until you move it. Folding the service away has moved too: from the context menu into the box, as a plus at the bottom edge while the definition is hidden and a minus while it is shown, in the same place either way.",
-        "de": "DMN verlangt den Namen eines Decision Service innerhalb der Form und sagt nichts darüber, wo — und die eigenen Abbildungen widersprechen sich: eine zeichnet ihn oben mittig, drei oben links. Welche Ecke ein Editor auch wählt, für irgendein Diagramm ist sie falsch: Der Name landet auf einer Decision oder auf einem Pfeil, der den Rand kreuzt. Er beginnt deshalb oben links, und ein Griff über dem Namen zieht ihn an jede Stelle innerhalb der Box, oberhalb der Trennlinie — dorthin, wo DMN den Namen zusammen mit den veröffentlichten Decisions verortet. Die gewählte Stelle wird als Label-Bounds der Form gespeichert, also dort, wo DMN sie vorsieht; sie übersteht das Speichern und bedeutet für ein anderes Werkzeug dasselbe. Geschrieben wird erst, wenn Sie den Namen bewegen. Auch das Einklappen ist umgezogen: vom Kontextmenü in die Box, als Plus am unteren Rand bei verborgener Definition und als Minus bei sichtbarer — beides an derselben Stelle."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]
