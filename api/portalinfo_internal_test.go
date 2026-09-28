@@ -81,7 +81,7 @@ func TestEveryViewThatOffersThePanelAlsoDrawsIt(t *testing.T) {
 	for _, view := range []struct{ name, from, to string }{
 		{"the catalogue", "function renderCatalogue(", "\nfunction renderBasket("},
 		{"the basket", "function renderBasket(", "\n// --- What a product needs"},
-		{"what somebody holds", "const row = (id) => {", "\n// The brand mark"},
+		{"what somebody holds", "function renderServices(", "\n// The brand mark"},
 	} {
 		body := webRegion(t, src, view.from, view.to)
 		if !strings.Contains(body, "infoButton(") {

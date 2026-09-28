@@ -8103,12 +8103,38 @@ async function viewTasks(preselectKey) {
   // there is a key the approver would have to look up. The names are not form
   // fields, so completing the form never writes them into the process — the order
   // and the process keep ids (ADR-0314).
-  function withPeopleNamed(data, approval) {
-    if (!approval) return data;
+  //
+  // A task that is not an approval — a provisioning step — carries the same two ids
+  // and was shown them raw. For those the names come from the principals directory
+  // (`names`, id → display name), so a form can say for whom without the process
+  // ever holding a name.
+  function withPeopleNamed(data, approval, names) {
     const out = { ...data };
-    if (approval.recipientName && out.recipientName == null) out.recipientName = approval.recipientName;
-    if (approval.ordererName && out.ordererName == null) out.ordererName = approval.ordererName;
+    if (approval && approval.recipientName && out.recipientName == null) out.recipientName = approval.recipientName;
+    if (approval && approval.ordererName && out.ordererName == null) out.ordererName = approval.ordererName;
+    if (names) {
+      if (out.recipientName == null && typeof out.recipient === "string" && names.has(out.recipient)) {
+        out.recipientName = names.get(out.recipient);
+      }
+      if (out.ordererName == null && typeof out.orderer === "string" && names.has(out.orderer)) {
+        out.ordererName = names.get(out.orderer);
+      }
+    }
     return out;
+  }
+
+  // peopleNames is the principals directory as id → display name, read once and
+  // shared by every form this page mounts. Any signed-in caller may read it
+  // (ADR-0073). A failed read answers with no names — the form then shows the ids
+  // it always showed — and is retried on the next mount rather than remembered.
+  let peopleNamesLoad = null;
+  function peopleNames() {
+    if (!peopleNamesLoad) {
+      peopleNamesLoad = api("GET", "/api/v1/principals")
+        .then((dir) => new Map((dir || []).map((p) => [p.id, p.name || p.id])))
+        .catch(() => { peopleNamesLoad = null; return new Map(); });
+    }
+    return peopleNamesLoad;
   }
 
   // mountForm loads the vendored form-js viewer, the task's bound form schema,
@@ -8119,7 +8145,7 @@ async function viewTasks(preselectKey) {
     const host = document.getElementById("task-form");
     if (!host) return;
     try {
-      const [{ Form }, def, data] = await Promise.all([
+      const [{ Form }, def, data, names] = await Promise.all([
         loadFormViewer(),
         api("GET", "/api/v1/forms/" + encodeURIComponent(t.formId)),
         // Prefill from the task's own element-instance scope — where its input-mapped
@@ -8128,11 +8154,12 @@ async function viewTasks(preselectKey) {
         // process instance when a task carries no element-instance key. A failed read
         // just yields a blank form rather than blocking the task.
         api("GET", "/api/v1/instances/" + (t.elementInstanceKey || t.processInstanceKey) + "/variables").catch(() => ({})),
+        peopleNames(),
       ]);
       if (state.selected !== t.key) return; // selection moved on; drop this mount
       host.innerHTML = "";
       const form = new Form({ container: host });
-      await form.importSchema(def.schema, withPeopleNamed(data || {}, state.approvals.get(t.key)));
+      await form.importSchema(def.schema, withPeopleNamed(data || {}, state.approvals.get(t.key), names));
       if (state.selected !== t.key) { try { form.destroy(); } catch { /* noop */ } return; }
       state.mountedForm = form;
       // The variables the form was filled from, kept beside it. Completing the task
