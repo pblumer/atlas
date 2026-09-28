@@ -85,6 +85,23 @@ func reporter() *httpapi.Principal {
 	return &httpapi.Principal{UserID: "usr_worker", Username: "worker"}
 }
 
+// The approver of a line goes with the right it grants, because the order is
+// deleted by retention long before the right ends and the approval with it.
+func TestAGrantCarriesTheLinesApprover(t *testing.T) {
+	s, _, inv, _ := inventoryFixture(t, Line{
+		ItemID: "laptop", Status: StatusPending,
+		ProvisionProcess: "prov", DeprovisionProcess: "deprov",
+		ApprovedBy: "usr_imke", ApprovedAt: 1500,
+	})
+	if rec := do(t, s.HandleReport, reporter(), "POST", `{"status":"done"}`,
+		"id", "ord_1", "item", "laptop"); rec.Code != http.StatusOK {
+		t.Fatalf("report = %d: %s", rec.Code, rec.Body)
+	}
+	if len(inv.granted) != 1 || inv.granted[0].ApprovedBy != "usr_imke" {
+		t.Fatalf("granted = %+v, want one right approved by usr_imke", inv.granted)
+	}
+}
+
 // A line that reached done is the moment somebody starts holding something. It
 // is recorded against the *recipient*, not the orderer: an integration manager
 // who orders a laptop for a new colleague does not thereby hold a laptop, and an

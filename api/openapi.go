@@ -1139,10 +1139,10 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("The updated order", tObject())}},
 
 		{"POST", "/api/v1/orders/{id}/lines/{item}/decision", s.orders.HandleDecide, apiOp{
-			summary: "Record that an approver refused a line, with who decided and why — reporting will not take a rejection, because that is a decision with an author rather than a provisioning outcome", tag: "Order", role: RoleOperator,
+			summary: "Record an approver's decision on a line, with who decided: a refusal, which needs a reason and settles the line — reporting will not take a rejection, because that is a decision with an author rather than a provisioning outcome — or, with \"approved\": true, an approval, which records approvedBy and approvedAt and leaves the line to be provisioned", tag: "Order", role: RoleOperator,
 			req: jsonBody("Decision", schemaObj(map[string]any{
-				"by": tString(), "reason": tString(),
-			}, "by", "reason")),
+				"by": tString(), "reason": tString(), "approved": tBool(),
+			}, "by")),
 			resp: jsonBody("The updated order", tObject())}},
 
 		// Process documentation (ADR-0143): a process published as one structured PDF
@@ -1819,11 +1819,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("The ended holds, or what the record said at a moment", tObject())}},
 
 		{"POST", "/api/v1/recertification", s.handleOpenRecertification, apiOp{
-			summary: "Open a recertification campaign: turn what the inventory records into questions somebody has to answer. Narrow it with `items` and `principals`, or leave both out for the whole inventory — this route concludes nothing from absence, so a campaign over everything is a big campaign rather than a wrong one. `reviewers` maps each holder to the person who answers for them; Atlas does not derive it, because a line-manager lookup is a directory question and belongs to a modelled process. A holder nobody names gives an unassigned row, which lands with the campaign's owner rather than stopping the campaign",
+			summary: "Open a recertification campaign: turn what the inventory records into questions somebody has to answer. Narrow it with `items` and `principals`, or leave both out for the whole inventory — this route concludes nothing from absence, so a campaign over everything is a big campaign rather than a wrong one. `reviewers` maps each holder to the person who answers for them; Atlas does not derive it, because a line-manager lookup is a directory question and belongs to a modelled process. A holder nobody names gives an unassigned row, which lands with the campaign's owner rather than stopping the campaign — or, when `reviewerGroup` names a group (by name or id), with that group: any member may decide it. An unknown group is refused",
 			tag:     "Catalogue", role: RoleOperator,
 			req: jsonBody("What to certify and who answers for it", schemaObj(map[string]any{
 				"name": tString(), "items": tArray(), "principals": tArray(),
-				"reviewers": tObject(), "dueAt": tInteger(),
+				"reviewers": tObject(), "reviewerGroup": tString(), "dueAt": tInteger(),
 			}, "name")),
 			resp: jsonBody("The campaign and the questions it asks", tObject())}},
 		{"GET", "/api/v1/recertification", s.handleListRecertifications, apiOp{

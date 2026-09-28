@@ -52,6 +52,9 @@ type endedHold struct {
 	Held   bool   `json:"held"`
 	// EndedBy is who decided, empty where nothing recorded it.
 	EndedBy string `json:"endedBy,omitempty"`
+	// ApprovedBy is who approved the order line behind the hold, as a principal
+	// id, empty where no approval was recorded.
+	ApprovedBy string `json:"approvedBy,omitempty"`
 }
 
 // historyResp is one principal's ended holds, or — with ?at= — what the record
@@ -178,7 +181,7 @@ func endedHoldOf(v *model.EntitlementHistoryValue) endedHold {
 		OverdueDays: int(v.Overdue() / int64(24*time.Hour)),
 		Origin:      v.Origin.String(), OrderID: v.OrderID,
 		Reason: v.EndedReason.String(), Held: v.EndedReason.Held(),
-		EndedBy: v.EndedBy,
+		EndedBy: v.EndedBy, ApprovedBy: v.ApprovedBy,
 	}
 }
 
@@ -191,7 +194,7 @@ func stillHeldAt(v *model.EntitlementValue) endedHold {
 	return endedHold{
 		ItemID: v.ItemID, VariantID: v.VariantID, Since: v.Since, Until: v.Until,
 		Origin: v.Origin.String(), OrderID: v.OrderID,
-		Reason: "held", Held: true,
+		Reason: "held", Held: true, ApprovedBy: v.ApprovedBy,
 	}
 }
 

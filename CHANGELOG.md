@@ -26,6 +26,27 @@ _Changed_ / _Removed_ for each version.
   interface as a string, and now arrives as a date. The ten retained evaluations of the one
   deployed service were read against the new schema first; none would have been refused.
 
+- **The handbook counted what it no longer had: thirty examples, nine apps, four roles.**
+  The examples chapter said "thirty" above thirty-eight cards, the welcome chapter headed
+  its eight app cards "the nine apps" after Approvals folded into the inbox (ADR-0394), and
+  the accounts chapter's role table had no row for `productmanager` (ADR-0315) — so the
+  one role that opens the Catalogue was the one role the handbook never named, and the
+  claim-mapping section told an operator the mapping decides three roles when it decides
+  four. Every sentence was true once; none of them was checked by anything.
+
+  The example counts are now `<span data-count="…">` elements that `go test ./examples`
+  holds against the catalog and the cards, and `-update` — the command that already
+  regenerates the catalog after an example is added — rewrites them, so adding an example
+  stays one command. The app and role headings carry no number any more; the e2e test for
+  the accounts chapter checks every role the server grants rather than "the four". The
+  role table names `productmanager`, and says that migrating instances and overwriting
+  their variables take `admin`, not `operator`.
+
+  `docs/compliance/isds-konzept.md` §5.2.3 still described the state before M9 — "no role
+  but `admin` is enforced", deploying open to any signed-in user — while its own risk
+  table already described M9. The section now describes the role model the code enforces,
+  including `productmanager` and the scopes an API token can carry.
+
 ## [0.7.0] — 2026-09-28
 
 **This release is about what an organisation offers, and who holds it.** Atlas gains a

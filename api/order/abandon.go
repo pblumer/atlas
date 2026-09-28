@@ -117,3 +117,27 @@ func (l Line) Valid() error {
 	}
 	return nil
 }
+
+// Approve records who approved a line and when. Unlike [Reject] it settles
+// nothing: the status is left as it is, because an approved line goes on to be
+// provisioned and its outcome arrives through the ordinary report.
+//
+// Only a line still on its way can be approved — approving one already settled
+// would write a decision beside somebody else's — and only once: a second approval
+// would overwrite the first author, which is the one fact this exists to keep.
+func Approve(l Line, by string, at int64) (Line, error) {
+	if l.Status != StatusPending && l.Status != StatusRunning {
+		return l, fmt.Errorf("order: cannot approve a %s line", l.Status)
+	}
+	if by == "" {
+		return l, fmt.Errorf("order: approving a line needs the principal who decided it")
+	}
+	if at == 0 {
+		return l, fmt.Errorf("order: approving a line needs the moment it was decided")
+	}
+	if l.ApprovedBy != "" {
+		return l, fmt.Errorf("order: line %s was already approved by %s", l.ItemID, l.ApprovedBy)
+	}
+	l.ApprovedBy, l.ApprovedAt = by, at
+	return l, nil
+}

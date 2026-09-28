@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -68,6 +69,9 @@ func (s *Server) mayDecideRow(r *http.Request, cmp recertifyCampaign, row recert
 	}
 	if row.Reviewer != "" {
 		return row.Reviewer == me
+	}
+	if row.ReviewerGroup != "" {
+		return slices.Contains(p.GroupIDs, row.ReviewerGroup)
 	}
 	return cmp.OpenedBy == me
 }

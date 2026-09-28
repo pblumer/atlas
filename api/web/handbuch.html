@@ -416,7 +416,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         process as a diagram, deploy it, and Atlas runs it step by step – reliably, traceably and durably stored.
         Decisions live in <b>DMN</b> tables.</p>
 
-      <h3 data-l="de">Die neun Apps</h3><h3 data-l="en">The nine apps</h3>
+      <h3 data-l="de">Die Apps im Überblick</h3><h3 data-l="en">The apps at a glance</h3>
       <p data-l="de">Oben links im Raster-Menü (⊞) wechselst du zwischen den Apps. Das Menü zeigt nur,
         was deine <a href="#konten">Rolle</a> erreicht – wer keine Modelle bearbeiten darf, sieht Modeler,
         Panorama und Data gar nicht erst.</p>
@@ -509,12 +509,14 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
       <div data-nugget="roundhouse"></div>
 
       <h3 data-l="de">Dein Pfad, nach Rolle</h3><h3 data-l="en">Your path, by role</h3>
-      <p data-l="de">Atlas kennt <a href="#konten">vier Rollen</a>. Sie sind eine Liste, keine Rangfolge: Ein Konto
-        trägt mehrere, und nur <code>admin</code> erreicht alles. Wer nicht weiss, welche er hat, sieht es im
-        Kontomenü oben rechts in der App &ndash; oder daran, welche Apps ihm das Rastermenü überhaupt anbietet.</p>
-      <p data-l="en">Atlas has <a href="#konten">four roles</a>. They are a list, not a ladder: an account carries
-        several, and only <code>admin</code> reaches everything. If you do not know which you have, the account
-        menu in the top right of the app says so &ndash; or simply look at which apps the grid menu offers you.</p>
+      <p data-l="de">Was jemand in Atlas darf, entscheiden <a href="#konten">Rollen</a>. Sie sind eine Liste, keine
+        Rangfolge: Ein Konto trägt mehrere, und nur <code>admin</code> erreicht alles. Wer nicht weiss, welche er
+        hat, sieht es im Kontomenü oben rechts in der App &ndash; oder daran, welche Apps ihm das Rastermenü
+        überhaupt anbietet.</p>
+      <p data-l="en">What somebody may do in Atlas is decided by <a href="#konten">roles</a>. They are a list, not a
+        ladder: an account carries several, and only <code>admin</code> reaches everything. If you do not know which
+        you have, the account menu in the top right of the app says so &ndash; or simply look at which apps the grid
+        menu offers you.</p>
       <table>
         <thead><tr>
           <th data-l="de">Rolle</th><th data-l="en">Role</th>
@@ -542,6 +544,10 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <td class="muted">1:04</td></tr>
         </tbody>
       </table>
+      <p data-l="de">Die Rolle <code>productmanager</code> pflegt den Katalog des Shops und hat hier keinen eigenen
+        Pfad; was sie öffnet, steht unter <a href="#konten">Konten, Rollen &amp; Anmeldung</a>.</p>
+      <p data-l="en">The <code>productmanager</code> role maintains the shop's catalogue and has no path of its own
+        here; what it opens is described under <a href="#konten">accounts, roles &amp; sign-in</a>.</p>
 
       <div data-nugget="user"></div>
       <div data-nugget="modeler"></div>
@@ -2160,13 +2166,13 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <!-- ==================== EXAMPLES ==================== -->
     <section id="beispiele">
       <h2 data-l="de">Beispiele</h2><h2 data-l="en">Examples</h2>
-      <p class="lead" data-l="de">Dreissig fertige Szenarien, die im Atlas-Repository liegen und hier
-        vollständig beschrieben sind – <b>fachlich</b> (wofür ist das gut, wer hat etwas davon) und <b>technisch</b>
+      <p class="lead" data-l="de">Hier stehen <span data-count="examples">38</span> fertige Szenarien aus dem
+        Atlas-Repository, vollständig beschrieben – <b>fachlich</b> (wofür ist das gut, wer hat etwas davon) und <b>technisch</b>
         (wie ist es gebaut, welche Variablen, welche Fallstricke). Jedes lässt sich mit einem Klick in deine eigene
         Instanz installieren, im Modeler öffnen und zu deinem Prozess umbauen. Vom Dreizeiler bis zur Applikation aus
         zwei Prozessen; vom Einzelunternehmen bis zum Konzernverzeichnis mit 50 000 Konten.</p>
-      <p class="lead" data-l="en">Thirty finished scenarios that live in the Atlas repository and are described
-        here in full – <b>in business terms</b> (what it is good for, who benefits) and <b>technically</b> (how it is
+      <p class="lead" data-l="en">Here are <span data-count="examples">38</span> finished scenarios from the Atlas
+        repository, described in full – <b>in business terms</b> (what it is good for, who benefits) and <b>technically</b> (how it is
         built, which variables, which traps). Each one installs into your own instance in one click, opens in the
         Modeler, and can be rebuilt into your process. From a three-liner to an application of two processes; from a
         one-person business to a corporate directory with 50,000 accounts.</p>
@@ -2240,9 +2246,11 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <div class="card">
           <b><span class="tag ok" data-l="de">läuft sofort</span><span class="tag ok" data-l="en">runs at once</span></b>
           <p class="lead" data-l="de">Kein Worker, kein Zugang, kein Internet. Installieren, starten, in Operations
-            zusehen. Fünfzehn der Beispiele sind so – darunter jedes, das etwas Grundsätzliches erklärt.</p>
+            zusehen. Das gilt für <span data-count="examples-runnable">15</span> der Beispiele – darunter jedes, das
+            etwas Grundsätzliches erklärt.</p>
           <p class="lead" data-l="en">No worker, no credential, no internet. Install it, start it, watch it in
-            Operations. Fifteen of the examples are like this – including every one that explains something fundamental.</p>
+            Operations. That holds for <span data-count="examples-runnable">15</span> of the examples – including every
+            one that explains something fundamental.</p>
         </div>
         <div class="card">
           <b><span class="tag warn" data-l="de">braucht Internet</span><span class="tag warn" data-l="en">needs the internet</span></b>
@@ -3312,7 +3320,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <div class="bsp-cols">
           <div>
             <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
-            <p data-l="de">Ein Produkt anzulegen heißt heute: Konsole öffnen, ein Formular mit zwanzig Feldern
+            <p data-l="de">Ein Produkt anzulegen heisst heute: Konsole öffnen, ein Formular mit zwanzig Feldern
               ausfüllen, speichern – und darauf vertrauen, dass jemand nachschaut. Hier ist es ein Ablauf mit
               Aufgaben: Katalog wählen oder anlegen, Produktdaten, Zusammenstellung, Preise. Gespeichert wird als
               <b>Entwurf</b>, und erst eine <b>Verifizierung</b> – dieselben Felder noch einmal, noch einmal
@@ -7064,7 +7072,7 @@ atlas worker --connector mssql</code></pre>
       <p class="lead" data-l="en">Who can sign in – and what they may do afterwards. Both are managed under
         <a href="/#/console/org">Console&nbsp;→&nbsp;Organization</a>.</p>
 
-      <h3 data-l="de">Die vier Rollen</h3><h3 data-l="en">The four roles</h3>
+      <h3 data-l="de">Die Rollen</h3><h3 data-l="en">The roles</h3>
       <p data-l="de">Jeder Endpunkt nennt die Rolle, die ihn erreicht, und der Server prüft sie, bevor die Anfrage
         irgendetwas anderes berührt – gleich, ob sie aus dem Browser kommt, mit einem API-Token oder über MCP von
         einem KI-Assistenten.</p>
@@ -7079,9 +7087,11 @@ atlas worker --connector mssql</code></pre>
         <tbody>
           <tr><td><b><code>admin</code></b></td>
             <td data-l="de">Konten, Gruppen, Zugangsdaten, Secrets, Einstellungen, Backup und Restore – alles, was
-              die Installation selbst betrifft.</td>
+              die Installation selbst betrifft. Dazu die Eingriffe in laufende Instanzen, die mehr sind als eine
+              Reparatur: Instanzen migrieren und ihre Variablen von aussen überschreiben.</td>
             <td data-l="en">Accounts, groups, credentials, secrets, settings, backup and restore – everything about
-              the instance itself.</td></tr>
+              the instance itself. Plus the interventions in running instances that go beyond a repair: migrating
+              instances and overwriting their variables from outside.</td></tr>
           <tr><td><b><code>modeler</code></b></td>
             <td data-l="de">Entwürfe, Formulare, Entscheidungen und Worker bearbeiten – <b>und deployen</b>.
               Deployen ist Codeausführung, deshalb ist es genau diese Rolle und nicht «angemeldet».</td>
@@ -7095,6 +7105,15 @@ atlas worker --connector mssql</code></pre>
           <tr><td><b><code>user</code></b></td>
             <td data-l="de">Die eigene Aufgabenliste: Aufgaben sehen, übernehmen und abschliessen.</td>
             <td data-l="en">Their own task list: seeing, claiming and completing tasks.</td></tr>
+          <tr><td><b><code>productmanager</code></b></td>
+            <td data-l="de">Die Kataloge des Shops und die Produkte darin pflegen, an deployte Prozesse binden und
+              veröffentlichen – die App <a href="/#/catalog">Catalogue</a>. Bewusst nicht <code>modeler</code>:
+              Ein Produkt wählt Prozesse, die schon deployt sind, und deployt nie selbst. Welche Kataloge jemand
+              anfassen darf, entscheidet der Katalog selbst.</td>
+            <td data-l="en">Maintaining the shop's catalogues and the products in them, binding them to deployed
+              processes and publishing them – the <a href="/#/catalog">Catalogue</a> app. Deliberately not
+              <code>modeler</code>: a product picks processes that are already deployed and never deploys one
+              itself. Which catalogues somebody may touch is decided by the catalogue.</td></tr>
         </tbody>
       </table>
       <ul>
@@ -7193,17 +7212,18 @@ atlas worker --connector mssql</code></pre>
         <li data-l="en"><b>Nothing is granted by absence.</b> Every rule is an exact value match. Somebody the
           provider says nothing about matches no rule and is granted nothing.</li>
         <li data-l="de"><b><code>user</code> ist ein Boden, keine Vergabe.</b> Entschieden werden
-          <code>admin</code>, <code>modeler</code> und <code>operator</code>; wer sich anmelden kann, behält
-          <code>user</code> – eine verschwundene Gruppe nimmt niemandem die eigene Aufgabenliste.</li>
+          <code>admin</code>, <code>modeler</code>, <code>operator</code> und <code>productmanager</code>; wer sich
+          anmelden kann, behält <code>user</code> – eine verschwundene Gruppe nimmt niemandem die eigene
+          Aufgabenliste.</li>
         <li data-l="en"><b><code>user</code> is a floor, not a grant.</b> What is decided is <code>admin</code>,
-          <code>modeler</code> and <code>operator</code>; anybody who can sign in keeps <code>user</code> – a group
-          that goes away does not cost somebody their own task list.</li>
+          <code>modeler</code>, <code>operator</code> and <code>productmanager</code>; anybody who can sign in keeps
+          <code>user</code> – a group that goes away does not cost somebody their own task list.</li>
         <li data-l="de"><b>Nur die genannten Gruppen gehören der Abbildung.</b> Rollen sind ein geschlossener Satz
-          von vier Namen, die Atlas selbst vergibt – die Abbildung entscheidet sie deshalb vollständig, und eine von
+          von Namen, die Atlas selbst vergibt – die Abbildung entscheidet sie deshalb vollständig, und eine von
           Hand vergebene Rolle überlebt die nächste Anmeldung nicht. Gruppen legst du selbst an; über eine Gruppe,
           die in keiner Regel vorkommt, hat die Abbildung nichts gesagt, und eine dort von Hand gesetzte
           Mitgliedschaft bleibt.</li>
-        <li data-l="en"><b>Only the groups it names belong to the mapping.</b> Roles are a closed set of four names
+        <li data-l="en"><b>Only the groups it names belong to the mapping.</b> Roles are a closed set of names
           Atlas defines, so the mapping decides them completely and a role granted by hand does not survive the next
           sign-in. Groups you create yourself; about a group no rule mentions the mapping has said nothing, and a
           membership set by hand there stays.</li>
@@ -8371,7 +8391,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
              <a class="applink" href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a></p>
         </div>
         <div class="card"><b data-l="de">Beispiele</b><b data-l="en">Examples</b>
-          <p><a class="applink" href="#beispiele"><span data-l="de">Alle 30 Beispiele im Handbuch</span><span data-l="en">All 30 examples in the handbook</span></a> ·
+          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">38</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">38</span> examples in the handbook</span></a> ·
              <a class="applink" href="#runbooks"><span data-l="de">Worker in Betrieb nehmen</span><span data-l="en">Putting a worker into service</span></a></p>
           <p class="lead" data-l="de">Die Dateien dazu liegen unter <code>examples/</code> im Repository.</p>
           <p class="lead" data-l="en">Their files live under <code>examples/</code> in the repository.</p>

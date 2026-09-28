@@ -269,6 +269,16 @@ type Line struct {
 	// made it. DecidedBy is a principal id.
 	DecidedBy string `json:"decidedBy,omitempty"`
 
+	// ApprovedBy and ApprovedAt record who approved this line and when, as a
+	// principal id and a moment. They are the other half of DecidedBy: a refusal
+	// settles a line and keeps its author there, while an approval leaves the line
+	// to be provisioned and keeps its author here. Without them the record of an
+	// approval offered to a group said only that the line went on, and an access
+	// review asks who let it. Empty on a line that needed no approval, and on one
+	// approved before this was recorded.
+	ApprovedBy string `json:"approvedBy,omitempty"`
+	ApprovedAt int64  `json:"approvedAt,omitempty"`
+
 	// ReturnedBy is who asked for this line to be given back, as a principal id.
 	//
 	// A third actor field beside AbandonedBy and DecidedBy, for the reason those

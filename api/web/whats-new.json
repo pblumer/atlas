@@ -31,6 +31,27 @@
       }
     },
     {
+      "id": "the-handbook-counted-what-it-no-longer-had-thirty-examples-n",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The handbook names every role, and counts what it really holds",
+        "de": "Das Handbuch nennt alle Rollen und zählt, was es wirklich enthält"
+      },
+      "summary": {
+        "en": "The handbook said thirty examples where there are thirty-eight, nine apps where there are eight, and it named four roles where Atlas grants five: productmanager, the role that maintains the shop's catalogue, was missing from the chapter on accounts and roles. It is there now, together with the fact that migrating instances and overwriting their variables take the admin role. The number of examples is checked against the examples themselves, so it cannot fall behind again.",
+        "de": "Das Handbuch sprach von dreissig Beispielen, wo es achtunddreissig sind, von neun Apps, wo es acht sind, und nannte vier Rollen, wo Atlas fünf vergibt: productmanager, die Rolle, die den Katalog des Shops pflegt, fehlte im Kapitel über Konten und Rollen. Sie steht jetzt dort, zusammen mit dem Hinweis, dass das Migrieren von Instanzen und das Überschreiben ihrer Variablen die Rolle admin verlangt. Die Zahl der Beispiele wird gegen die Beispiele selbst geprüft und kann nicht mehr zurückfallen."
+      },
+      "link": {
+        "label": "ADR-0315",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0315-portal-roles-and-responsibilities.md"
+      },
+      "tags": [
+        "Handbook"
+      ]
+    },
+    {
       "id": "a-deployment-target-can-name-a-second-credential-for-reading",
       "version": "0.7.0",
       "date": "2026-09-28",
@@ -319,40 +340,6 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "an-order-in-the-shop-says-whom-each-position-waits-for-and-w",
-      "version": "0.7.0",
-      "date": "2026-09-28",
-      "category": "Added",
-      "title": {
-        "en": "The shop shows whom an order waits for",
-        "de": "Der Shop zeigt, auf wen ein Auftrag wartet"
-      },
-      "summary": {
-        "en": "An order's row said \"Waiting\" and not on whom. Under each position the shop now lists the open tasks of the processes working it and whom each waits for — for an approval, the named person, the group or the line manager. Whoever may work a task opens its form right in the row and completes it there. The orderer and the recipient see their orders' tasks; a line manager who has to approve an order sees that order too, marked as one to handle. Orders placed before this update show no tasks. Approvals, in Tasks and in the approval form, now name the recipient and the orderer instead of showing their account ids.",
-        "de": "In der Zeile eines Auftrags stand «Wartet», aber nicht, auf wen. Unter jeder Position zeigt der Shop jetzt die offenen Aufgaben der Prozesse, die sie bearbeiten, und auf wen jede wartet – bei einer Genehmigung die festgelegte Person, die Gruppe oder die vorgesetzte Person. Wer eine Aufgabe bearbeiten darf, öffnet ihr Formular direkt in der Zeile und schliesst sie dort ab. Besteller und Empfänger sehen die Aufgaben ihrer Aufträge; eine vorgesetzte Person, die einen Auftrag genehmigen muss, sieht diesen Auftrag ebenfalls, gekennzeichnet als zu bearbeiten. Aufträge von vor diesem Update zeigen keine Aufgaben. Genehmigungen nennen in Tasks und im Genehmigungsformular Empfänger und Besteller jetzt mit Namen statt mit ihrer Benutzerkennung."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
-      },
-      "tags": [
-        "Service catalogue",
-        "Shop"
-      ],
-      "tutorial": {
-        "en": [
-          "Order a product that needs an approval.",
-          "Open \"My orders\": under the position stands the approval and whom it waits for.",
-          "Sign in as the approver, open \"My orders\", press \"Work on it\" on the task and complete it."
-        ],
-        "de": [
-          "Ein Produkt bestellen, das eine Genehmigung braucht.",
-          "«Meine Aufträge» öffnen: Unter der Position steht die Genehmigung und auf wen sie wartet.",
-          "Als genehmigende Person anmelden, «Meine Aufträge» öffnen, bei der Aufgabe «Erledigen» wählen und abschliessen."
-        ]
       }
     }
   ]

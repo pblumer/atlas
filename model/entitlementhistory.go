@@ -116,6 +116,10 @@ type EntitlementHistoryValue struct {
 	// authenticated as, which is the honest answer — a process is who its token
 	// says it is.
 	EndedBy string
+	// ApprovedBy is who approved the order line behind the hold, copied from it:
+	// the other end of the story EndedBy closes. Empty where no approval was
+	// recorded.
+	ApprovedBy string
 }
 
 // Overdue reports how long past its promised end the hold was still recorded, in
@@ -149,7 +153,8 @@ func (v *EntitlementHistoryValue) encode(dst []byte) []byte {
 	dst = appendString(dst, v.ItemID)
 	dst = appendString(dst, v.VariantID)
 	dst = appendString(dst, v.OrderID)
-	return appendString(dst, v.EndedBy)
+	dst = appendString(dst, v.EndedBy)
+	return appendString(dst, v.ApprovedBy)
 }
 
 func (v *EntitlementHistoryValue) decode(src []byte) error {
@@ -176,7 +181,7 @@ func (v *EntitlementHistoryValue) decode(src []byte) error {
 	}
 	// The rest end early rather than erroring, so a field can be appended later
 	// without migrating a family that is by design never rewritten.
-	for _, into := range []*string{&v.VariantID, &v.OrderID, &v.EndedBy} {
+	for _, into := range []*string{&v.VariantID, &v.OrderID, &v.EndedBy, &v.ApprovedBy} {
 		if len(rest) == 0 {
 			return nil
 		}
