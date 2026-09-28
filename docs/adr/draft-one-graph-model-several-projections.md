@@ -252,13 +252,46 @@ that a reader always sees which layer an element belongs to (ADR-0211 §2).
   starmap. That is a judgment, and it is recorded as one rather than dressed as a
   metric.
 
-### 8. Authorization: a walk stops at what the caller may not see, and says so
+### 8. Authorization: a hidden node is greyed out; passing through it is an opt-in
 
 Every node is resolved under the rule of the area that owns it. A node the caller may
-not see is returned as the existing `restricted` kind, and **a traversal does not
-continue through it**. Continuing would disclose the structure behind a node whose
-existence is all the caller may know; stopping makes the answer incomplete, so the
-result states every point at which it stopped (ADR-0211 §3).
+not see is returned as the existing `restricted` placeholder — the greyed-out node the
+mesh already draws (`api/panorama/mesh.go`): no name, no state, no severity, an opaque
+ordinal that is valid for one response only. That part is not new and not in question.
+
+What is new is the walk, and here greying out is necessary but not sufficient. A grey
+node hides its *label*; it does not hide its *position*. What remains visible still
+carries meaning:
+
+- **the edge kinds around it** — only a process is the target of `calls`, only a worker
+  or a decision the target of `uses` — so the kind is readable from the edges;
+- **the visible nodes beyond it** — a grey node between a visible process and a
+  visible worker named after a payroll system says what it is about, and in a small
+  estate there are few candidates for what it is;
+- **the counts on its edges** — traffic through a hidden node is a fact about it;
+- **the number of placeholders** — how many hidden things sit on a path.
+
+Against that stands the strongest reason to walk through anyway: **impact analysis
+that stops at a hidden node gives an operator a wrong-looking answer at the worst
+moment.** "Nothing depends on this worker" is false if a hidden process does, and the
+visible capability behind that process fails all the same.
+
+So two modes, and the conservative one is the default:
+
+- **Stop (default).** The walk does not continue through a placeholder. The answer is
+  incomplete, and it states every point at which it stopped (ADR-0211 §3) — so it
+  never reads as "no impact".
+- **Opaque passage (opt-in per installation).** The walk continues, but every maximal
+  run of hidden nodes on a path is collapsed into **one** grey segment, whatever it
+  contains; the edges touching the segment lose their kind (shown as a generic
+  *depends on*) and their counts; and the answer says "passes through something you
+  may not see", never how many. What is still disclosed is exactly one fact: that two
+  things the caller *may* see are connected through something they may not. That
+  residue is stated in the setting's own description, because an operator enabling it
+  is deciding that this fact is acceptable to disclose.
+
+Opaque passage never crosses an installation boundary: a segment that would include a
+node of another installation ends the walk there, under the stop rule.
 
 Across installations, the estate rules of ADR-0402 apply unchanged. ADR-0402's open
 question — an estate reader who may not see all of it — is inherited: this record makes
@@ -301,9 +334,10 @@ it more pressing, because a path is a disclosure a single node is not.
   successor has been judged at least as good.
 - **Negative / trade-offs accepted:** two views of the landscape exist for a while, and
   every fix to the starmap in that period is paid for twice or deferred.
-- **Negative:** stopping a walk at a restricted node makes answers incomplete for
-  readers with partial access. That is chosen over disclosure, and stated in every
-  answer it affects.
+- **Negative:** by default a walk stops at a restricted node, so answers are
+  incomplete for readers with partial access. That is chosen over disclosure and
+  stated in every answer it affects; opaque passage (§8) trades one disclosed fact for
+  completeness where an installation decides it may.
 - **Negative:** without a textual language, ad-hoc questions need a JSON document or
   the view's controls. Accepted until the open question is answered from real use.
 - **Follow-ups / risks to watch:** the size of the modeled layer on a large
