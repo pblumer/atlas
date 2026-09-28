@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/api/taskfolder"
 	"github.com/pblumer/atlas/compiler"
 )
 
@@ -88,10 +89,10 @@ func (s *Server) mayWorkTask(r *http.Request, key uint64) (taskAuthority, error)
 }
 
 // refuseTaskWork writes the answer for a caller who may not act, and reports
-// whether it wrote anything. 404 and 403 say different things on purpose: the task
-// list already tells any signed-in caller which tasks exist, so hiding one here
-// would withhold nothing and explain nothing, where "this one is not yours" is
-// something the person can act on.
+// whether it wrote anything. 404 and 403 say different things on purpose: "this one
+// is not yours" is something the person can act on. The task views no longer list
+// a task to somebody it was not addressed to (see [Server.taskVisibleTo]), so a
+// caller reaches this with a key they were handed, not one they browsed to.
 func (s *Server) refuseTaskWork(w http.ResponseWriter, a taskAuthority, err error) bool {
 	switch {
 	case err != nil:
@@ -105,4 +106,24 @@ func (s *Server) refuseTaskWork(w http.ResponseWriter, a taskAuthority, err erro
 		return false
 	}
 	return true
+}
+
+// taskVisibleTo decides whether a task view shows this task to this viewer. It is
+// the read half of [Server.mayWorkTask] and draws the same line: a task addressed
+// to a person or to candidate groups is shown to whoever it was addressed to, one
+// addressed to nobody is open work and shown to everybody, and operators and
+// administrators see everything. Until this existed every signed-in account read
+// the whole inbox — an approval offered to one group was listed, with its order and
+// its recipient, to every other account that could open the Tasks app.
+//
+// It reads the group store, which is safe off the run loop, so it serves both the
+// loop-bound lookups and the off-loop walks.
+func (s *Server) taskVisibleTo(u taskfolder.User, tr taskResp) bool {
+	if !s.authEnabled || u.SeesAll {
+		return true
+	}
+	if tr.Assignee == "" && tr.CandidateGroups == "" {
+		return true
+	}
+	return s.holdsTaskAs(u.Name, u.ID, u.Groups, tr.Assignee, tr.CandidateGroups)
 }

@@ -136,7 +136,10 @@ func New(loop *runloop.Loop, store *Store, options func(User) Options, count Cou
 // enough to own a folder.
 func Viewer(r *http.Request) User {
 	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
-		return User{ID: p.UserID, Name: p.Username, Groups: p.GroupIDs}
+		// The role names are the api package's RoleOperator and RoleAdmin, spelt out
+		// because this package sits below it.
+		return User{ID: p.UserID, Name: p.Username, Groups: p.GroupIDs,
+			SeesAll: p.HasRole("operator") || p.HasRole("admin")}
 	}
 	return User{Name: strings.TrimSpace(r.URL.Query().Get("me"))}
 }

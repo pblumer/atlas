@@ -453,10 +453,16 @@ type Task struct {
 // "assigned to me" compare a username against an account id and quietly match
 // nothing, which is why `user.name` and not `user.id` is what an assignee
 // condition generates.
+//
+// SeesAll says the viewer is an operator or an administrator, who keep every open
+// task in view. Everybody else sees the tasks addressed to them, to one of their
+// groups, or to nobody at all; the server applies that, since only it has the
+// task's resolved assignment in hand.
 type User struct {
-	ID     string
-	Name   string
-	Groups []string
+	ID      string
+	Name    string
+	Groups  []string
+	SeesAll bool
 }
 
 // BuiltinFolder is one of the fixed inbox folders the console lists above the saved
