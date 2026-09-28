@@ -115,6 +115,12 @@ type processResp struct {
 	// somebody redeployed.
 	DiagramUpdatedAt int64  `json:"diagramUpdatedAt,omitempty"`
 	DiagramUpdatedBy string `json:"diagramUpdatedBy,omitempty"`
+	// FrozenDecisions are the decisions this definition's latest-bound business rule
+	// tasks were frozen on when it was deployed under ADR-0319, and what latest
+	// resolves to now. Absent on every definition that follows latest, which is every
+	// one deployed since ADR-0423 — so the listing says which definitions do not
+	// behave as their binding reads, and only those.
+	FrozenDecisions []frozenDecisionResp `json:"frozenDecisions,omitempty"`
 }
 
 // collaborationParticipants reports how many <participant> pools a model's
@@ -1171,6 +1177,7 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
 				Active:           !d.inactive,
 				DiagramUpdatedAt: d.diagramUpdatedAt,
 				DiagramUpdatedBy: d.diagramUpdatedBy,
+				FrozenDecisions:  s.frozenDecisionsOf(d),
 			})
 		}
 	})

@@ -62,7 +62,12 @@
       };
       const api = async (method, url) => {
         if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
-        if (method === "GET" && /\/processes$/.test(url)) return [];
+        // The deployment on screen was deployed while latest was frozen at deploy
+        // time, on v1, and v2 has been deployed since (ADR-0423).
+        if (method === "GET" && /\/processes$/.test(url)) return [{
+          key: 42, processId: "antrag", name: "Antrag", version: 3,
+          frozenDecisions: [{ decisionId: "eligibility", key: 11, version: 1, latestKey: 12, latestVersion: 2, behind: true }],
+        }];
         if (method === "GET" && /\/drafts$/.test(url)) return [];
         if (method === "GET" && /\/decision-deployments\?decisionId=eligibility$/.test(url)) return VERSIONS;
         if (method === "GET" && /\/decision-deployments/.test(url)) return [];

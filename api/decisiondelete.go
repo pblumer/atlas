@@ -32,7 +32,20 @@ type decisionPinRef struct {
 	Name       string `json:"name,omitempty"`
 	Version    int32  `json:"version"`
 	DecisionID string `json:"decisionId"`
+	// Binding is how the definition's task came to hold the deployment, which is also
+	// what would release it: pinBindingLatest for a latest-bound reference frozen on
+	// it at deploy (ADR-0319), released by deploying the process again under the
+	// runtime policy; pinBindingVersion for a task that names this version
+	// (ADR-0423), released only by changing the task.
+	Binding string `json:"binding"`
 }
+
+// The [decisionPinRef.Binding] values: the business rule task's own binding word,
+// so a reader matches it against what the Modeler shows.
+const (
+	pinBindingLatest  = "latest"
+	pinBindingVersion = "version"
+)
 
 // handleDeleteDecisionDeployment removes one decision deployment — a key, which is
 // one model, which may provide several decisions and therefore one version of
@@ -143,6 +156,7 @@ func (s *Server) definitionsPinnedTo(key uint64) []decisionPinRef {
 			if pinned, ok := d.cp.PinnedDecisionKey(id); ok && pinned == key {
 				out = append(out, decisionPinRef{
 					Key: d.Key, ProcessID: d.ProcessID, Name: d.Name, Version: d.Version, DecisionID: id,
+					Binding: pinBindingLatest,
 				})
 			}
 		}
@@ -153,6 +167,7 @@ func (s *Server) definitionsPinnedTo(key uint64) []decisionPinRef {
 			if pinned, ok := d.cp.VersionPinnedKey(ref.DecisionID, ref.Version); ok && pinned == key {
 				out = append(out, decisionPinRef{
 					Key: d.Key, ProcessID: d.ProcessID, Name: d.Name, Version: d.Version, DecisionID: ref.DecisionID,
+					Binding: pinBindingVersion,
 				})
 			}
 		}
@@ -199,6 +214,7 @@ func (s *Server) definitionsStrandedBy(rec persistedDecision, all []persistedDec
 			if going[id] && !s.dmnRegistry.Provides(d.Key, id) {
 				out = append(out, decisionPinRef{
 					Key: d.Key, ProcessID: d.ProcessID, Name: d.Name, Version: d.Version, DecisionID: id,
+					Binding: pinBindingLatest,
 				})
 			}
 		}

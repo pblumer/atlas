@@ -33,7 +33,8 @@ import { workerKindDocHTML } from "./workertypedocs.js";
 import { migrateProcessFlow } from "./migrationdialog.js";
 import { openPickModal } from "./pickmodal.js";
 import { refDeleteWarning } from "./dmnref-impact.js";
-import { versionDeleteState } from "./decision-cleanup.js";
+import { versionDeleteState, holderNote } from "./decision-cleanup.js";
+import { frozenMark } from "./frozen-decisions.js";
 import { t as tr, plural as trPlural } from "./i18n.js";
 import { loadFolders, loadCounts, openFolderEditor, forgetCatalogue } from "./taskfolders.js";
 import { runImport } from "./infomodel-import.js";
@@ -3016,9 +3017,16 @@ async function viewModelerHome() {
     // from its timer/message/signal start events (ADR-0119). Flag it and offer the
     // inverse toggle.
     const inactive = g.latest.active === false;
-    const badge = inactive
+    const frozen = frozenMark(g.latest);
+    const badge = (inactive
       ? ` <span class="pill warn" title="Deployed but paused: no new instances auto-start from its timer, message, or signal start events">Inactive</span>`
-      : "";
+      : "") +
+      // A definition whose latest-bound decisions were frozen at its deploy does not
+      // do what its binding reads (ADR-0423), and this row is where its owner would
+      // redeploy it.
+      (frozen
+        ? ` <span class="pill${frozen.behind ? " warn" : ""} frozen-mark" title="${esc(frozen.title)}">${esc(frozen.label)}</span>`
+        : "");
     const toggleLabel = inactive ? "Activate" : "Deactivate";
     const toggleTitle = inactive
       ? "Resume automatic starts (timer/message/signal start events)"
@@ -7381,10 +7389,15 @@ async function viewDecisionDetail(id) {
       return;
     }
     versionRows.innerHTML = rows.map((r) => {
+      // Each holder says how it holds the version (ADR-0423): frozen at its deploy,
+      // which deploying the process again undoes for new instances, or named on
+      // purpose by its task.
       const held = (r.pinnedBy || []).length
-        ? (r.pinnedBy || []).map((p) =>
-            `<a href="#/operations/p/${p.key}" title="${esc(`${p.processId} v${p.version} pinned this version at deploy time`)}">${esc(p.name || p.processId)}</a>`
-          ).join(", ")
+        ? (r.pinnedBy || []).map((p) => {
+            const how = holderNote(p);
+            return `<a href="#/operations/p/${p.key}" title="${esc(how.title)}">${esc(p.name || p.processId)}</a>` +
+              (how.label ? ` <span class="muted" title="${esc(how.title)}">${esc(how.label)}</span>` : "");
+          }).join(", ")
         : '<span class="muted">—</span>';
       // The server decides; this only keeps the reader from clicking into a refusal,
       // and carries its reason as the tooltip.

@@ -115,9 +115,12 @@
           // Stamped: this definition's drawing was adjusted after it was deployed
           // (ADR-0251), which the live view says out loud —
           // the two halves of the same complaint meet on this screen.
+          // And frozen: deployed while latest was frozen at deploy time, on a decision
+          // version a newer one has since replaced (ADR-0423).
           return [{
             key: DEF, processId: "beschaffung", name: "Beschaffung", version: 1,
             diagramUpdatedAt: 1_756_900_000, diagramUpdatedBy: "u-patrick",
+            frozenDecisions: [{ decisionId: "freigabe", key: 11, version: 1, latestKey: 33, latestVersion: 3, behind: true }],
           }];
         }
         if (/\/processes\/\d+\/xml$/.test(url)) return XML;

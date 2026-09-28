@@ -74,3 +74,13 @@ test("a binding the panel does not offer is shown and kept, not rewritten to lat
   expect(cd).toContain('bindingType="versionTag"');
   expect(page.__errors).toEqual([]);
 });
+
+test("a deployment whose latest was frozen when it was deployed says so beside its name", async ({ page }) => {
+  // The binding field reads what a deploy from here will do; this deployment does
+  // something else, and Deploy on this bar is the remedy.
+  const mark = page.locator(".editor-bar .crumbs .frozen-mark");
+  await expect(mark).toBeVisible();
+  await expect(mark).toHaveText("Decision frozen · newer deployed");
+  await expect(mark).toHaveAttribute("title", /eligibility runs v1, the newest is v2/);
+  expect(page.__errors).toEqual([]);
+});
