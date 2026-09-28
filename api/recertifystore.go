@@ -101,6 +101,10 @@ type recertifyRow struct {
 	// Reviewer is who was asked. Empty is "nobody", which is a real answer rather
 	// than an error, and makes the row the campaign owner's.
 	Reviewer string `json:"reviewer,omitempty"`
+	// ReviewerGroup is the group, as its id, asked when no person was: any member
+	// may decide the row. Empty with an empty Reviewer leaves the row the campaign
+	// owner's, as before.
+	ReviewerGroup string `json:"reviewerGroup,omitempty"`
 
 	// Decision is empty until somebody answers, and empty is *undecided* — never a
 	// synonym for keep and never one for revoke.

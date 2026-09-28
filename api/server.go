@@ -1617,6 +1617,9 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 					// only here, which is what keeps it off adopted and legacy rights:
 					// neither is granted by an order, and neither knows when it began.
 					Until: g.Until,
+					// Who approved the line travels with the grant, so the right keeps
+					// its approver after retention has deleted the order.
+					ApprovedBy: g.ApprovedBy,
 				})
 			})
 			return s.drive()

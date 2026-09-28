@@ -358,6 +358,88 @@ func TestAnUnassignedRowBelongsToWhoeverOpenedTheCampaign(t *testing.T) {
 	}
 }
 
+// countOfKind counts the pending items of one kind.
+func countOfKind(t *testing.T, rep map[string]any, kind string) int {
+	t.Helper()
+	n := 0
+	for _, it := range pendingItems(t, rep) {
+		if it["kind"] == kind {
+			n++
+		}
+	}
+	return n
+}
+
+// TestARowOfferedToAGroupIsAnsweredByItsMembers.
+//
+// A campaign can be handed to a standing function — the integration managers —
+// rather than to a list of people somebody has to keep current. Any member answers,
+// nobody else does, and a group Atlas does not know is refused rather than leaving
+// rows waiting on a name that reaches no inbox.
+func TestARowOfferedToAGroupIsAnsweredByItsMembers(t *testing.T) {
+	ts, _ := newAuthServer(t, "root", "correct horse battery")
+	admin := newClient(t)
+	login(t, admin, ts, "root", "correct horse battery")
+	_, bo := aCertifiableEstate(t, admin, ts)
+
+	code, raw := cReq(t, admin, ts, "POST", "/api/v1/groups", `{"name":"IntMgr"}`)
+	if code != http.StatusCreated {
+		t.Fatalf("create group: %d (%s)", code, raw)
+	}
+	var grp struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(raw, &grp); err != nil {
+		t.Fatalf("decode group: %v", err)
+	}
+	if code, raw := cReq(t, admin, ts, "PUT", "/api/v1/groups/"+grp.ID+"/members/"+bo, ""); code != http.StatusOK && code != http.StatusNoContent {
+		t.Fatalf("add bo: %d (%s)", code, raw)
+	}
+
+	if code, raw := cReq(t, admin, ts, "POST", "/api/v1/recertification",
+		`{"name":"Q3 access review","reviewerGroup":"no-such-group"}`); code != http.StatusBadRequest {
+		t.Errorf("an unknown reviewer group = %d %s, want 400", code, raw)
+	}
+
+	// Named as a group, in any case, as a candidate group is.
+	opened := openCampaign(t, admin, ts, `{"name":"Q3 access review","reviewerGroup":"intmgr"}`)
+	id := fmt.Sprint(opened["id"])
+	rows := rowsOf(t, opened)
+	if rows[0]["reviewerGroup"] != grp.ID || rows[0]["reviewer"] != nil {
+		t.Fatalf("the row was not offered to the group: %+v", rows[0])
+	}
+	if countsOf(t, opened)["unassigned"] != float64(0) {
+		t.Errorf("a row offered to a group counts as asked of nobody: %+v", countsOf(t, opened))
+	}
+	row := fmt.Sprint(rows[0]["id"])
+
+	anAccountWithMail(t, admin, ts, "cy", "cy@example.org")
+	cy := newClient(t)
+	login(t, cy, ts, "cy", "correct horse battery")
+	if code, raw := cReq(t, cy, ts,
+		"POST", "/api/v1/recertification/"+id+"/rows/"+row+"/keep", ""); code != http.StatusForbidden {
+		t.Errorf("somebody outside the group answered: %d %s, want 403", code, raw)
+	}
+
+	// Signed in after joining, so the session carries the group.
+	boC := newClient(t)
+	login(t, boC, ts, "bo", "correct horse battery")
+	if got := len(rowsOf(t, readCampaign(t, boC, ts, id, "?mine=true"))); got != 1 {
+		t.Errorf("a member's own view has %d row(s), want the 1 offered to the group", got)
+	}
+	// What a member owes includes it; what an outsider owes does not.
+	if got := countOfKind(t, readPending(t, boC, ts, ""), "recertification"); got != 1 {
+		t.Errorf("a member owes %d recertification(s), want the 1 offered to the group", got)
+	}
+	if got := countOfKind(t, readPending(t, cy, ts, ""), "recertification"); got != 0 {
+		t.Errorf("somebody outside the group owes %d recertification(s), want none", got)
+	}
+	if code, raw := cReq(t, boC, ts,
+		"POST", "/api/v1/recertification/"+id+"/rows/"+row+"/keep", ""); code != http.StatusOK {
+		t.Fatalf("a member of the group could not answer: %d %s", code, raw)
+	}
+}
+
 // TestACampaignThatAsksNothingSaysWhy.
 //
 // An empty campaign and a healthy estate look identical from outside, and the usual

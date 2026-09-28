@@ -36,4 +36,7 @@ type Grant struct {
 	// record stays held past it, and a modelled process is what actually takes the
 	// access away.
 	Until int64
+	// ApprovedBy is who approved the line, copied from it (Line.ApprovedBy), so the
+	// right keeps its approver after retention has deleted the order.
+	ApprovedBy string
 }

@@ -88,6 +88,15 @@ type EntitlementValue struct {
 	// measured from it would schedule the expiry of a whole estate on the
 	// anniversary of the day somebody switched the portal on.
 	Until int64
+
+	// ApprovedBy is who approved the order line that granted this right, as a
+	// principal id, or empty where no approval was recorded: a right that needed
+	// none, one adopted or loaded rather than ordered, and one granted before
+	// approvals were recorded. It is kept here and not only on the order because
+	// the order is deleted by retention long before the right ends, and "who let
+	// this person have it" is the question an access review asks of a right still
+	// held.
+	ApprovedBy string
 }
 
 // Expired reports whether this right's end has passed. A right with no end never
@@ -109,7 +118,10 @@ func (v *EntitlementValue) encode(dst []byte) []byte {
 	// Appended after the strings rather than beside Since, because that is what
 	// keeps every record written before this field readable: a decoder that reached
 	// the end has a right with no end, which is exactly what those records mean.
-	return binary.LittleEndian.AppendUint64(dst, uint64(v.Until))
+	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.Until))
+	// After Until for the same reason Until is after the strings: a record that
+	// ends before it decodes with no approver, which is what it had.
+	return appendString(dst, v.ApprovedBy)
 }
 
 func (v *EntitlementValue) decode(src []byte) error {
@@ -152,9 +164,21 @@ func (v *EntitlementValue) decode(src []byte) error {
 	}
 	// And the first non-string field to arrive late. Absent means no end, which is
 	// what every record written before ceilings existed meant and still means.
-	if len(rest) >= 8 {
-		v.Until = int64(binary.LittleEndian.Uint64(rest))
+	if len(rest) < 8 {
+		return nil
 	}
+	v.Until = int64(binary.LittleEndian.Uint64(rest))
+	rest = rest[8:]
+	// And who approved it, absent on every record written before approvals were
+	// recorded.
+	if len(rest) == 0 {
+		return nil
+	}
+	s, _, err := readString(rest)
+	if err != nil {
+		return err
+	}
+	v.ApprovedBy = s
 	return nil
 }
 

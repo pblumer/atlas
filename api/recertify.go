@@ -93,6 +93,17 @@ type recertifyOpen struct {
 	// prevent the recertification of an estate.
 	Reviewers map[string]string `json:"reviewers,omitempty"`
 
+	// ReviewerGroup is a group, by name or id, whose members answer for every
+	// holder Reviewers does not name. Any member may decide such a row, as any
+	// member may decide a task offered to the group; operators and administrators
+	// still may too. It is how a campaign is handed to a standing function — the
+	// integration managers — rather than to a list of people somebody has to keep
+	// current. A named reviewer still wins for the holders it names. A group Atlas
+	// does not know is refused at opening: rows offered to nobody would wait on a
+	// name that reaches no inbox, which is the failure the owner fallback exists
+	// to prevent.
+	ReviewerGroup string `json:"reviewerGroup,omitempty"`
+
 	// DueAt is advisory and nothing acts on it. A deadline that revoked what nobody
 	// answered would take access away because somebody was on holiday, and a
 	// deadline that certified it would invent the signature this whole record
@@ -110,6 +121,9 @@ type recertifyInput struct {
 	// systems currently disagree about is a right whose certification would be a
 	// signature on a contested statement.
 	Disputes map[string]discrepancyRecord
+	// ReviewerGroup is the opening's reviewer group resolved to its id, empty when
+	// the opening named none.
+	ReviewerGroup string
 }
 
 // rowID is stable for a campaign and a pair, so a decision cannot be applied to
@@ -223,6 +237,9 @@ func buildCampaign(msg recertifyOpen, in recertifyInput, by string, now, atNanos
 			OrderID: v.OrderID, Origin: originName(v.Origin), Since: v.Since,
 			Until: v.Until, Reviewer: reviewerOf[v.Principal], UpdatedAt: now,
 		}
+		if row.Reviewer == "" {
+			row.ReviewerGroup = in.ReviewerGroup
+		}
 		if d, disputed := in.Disputes[disputeKey(v.Principal, v.ItemID)]; disputed {
 			// Marked, never refused. One open discrepancy must not block a campaign
 			// over thousands of rights, and the reviewer of this row may well know
@@ -302,7 +319,8 @@ func countRows(rows []recertifyRow) recertifyCounts {
 		default:
 			c.Undecided++
 		}
-		if r.Reviewer == "" {
+		// A row offered to a group was addressed to somebody: its members.
+		if r.Reviewer == "" && r.ReviewerGroup == "" {
 			c.Unassigned++
 		}
 		if r.Disputed {

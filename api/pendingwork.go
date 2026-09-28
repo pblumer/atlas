@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 
@@ -310,6 +311,14 @@ func (s *Server) reviewsWaitingFor(principal string) ([]pendingItem, error) {
 		return nil, opErr
 	}
 
+	// The groups this person is in, for the rows offered to a group. Read once,
+	// on the loop, where the group store is.
+	var groupIDs []string
+	s.do(func() { groupIDs, opErr = s.groups.idsForUser(principal) })
+	if opErr != nil {
+		return nil, opErr
+	}
+
 	out := []pendingItem{}
 	for _, c := range campaigns {
 		if !c.Open() {
@@ -337,7 +346,9 @@ func (s *Server) reviewsWaitingFor(principal string) ([]pendingItem, error) {
 			switch {
 			case row.Reviewer != "" && row.Reviewer != principal:
 				continue
-			case row.Reviewer == "" && full.OpenedBy != principal:
+			case row.Reviewer == "" && row.ReviewerGroup != "" && !slices.Contains(groupIDs, row.ReviewerGroup):
+				continue
+			case row.Reviewer == "" && row.ReviewerGroup == "" && full.OpenedBy != principal:
 				continue
 			}
 			out = append(out, pendingItem{

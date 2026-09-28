@@ -41,7 +41,9 @@ func TestEndingAHoldWritesTheRowAndRemovesTheLive(t *testing.T) {
 	s := openStore(t)
 
 	tx := s.NewTransaction()
-	if err := tx.PutEntitlement(heldRow("usr_ada", "approve-payment", 1000)); err != nil {
+	held := heldRow("usr_ada", "approve-payment", 1000)
+	held.ApprovedBy = "usr_imke"
+	if err := tx.PutEntitlement(held); err != nil {
 		t.Fatalf("PutEntitlement: %v", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -68,6 +70,7 @@ func TestEndingAHoldWritesTheRowAndRemovesTheLive(t *testing.T) {
 		Principal: "usr_ada", ItemID: "approve-payment", VariantID: "gold",
 		OrderID: "ord_7", Since: 1000, Until: 1500, Origin: model.OriginOrdered,
 		EndedAt: 9000, EndedReason: model.EndReturned, EndedBy: "usr_chef",
+		ApprovedBy: "usr_imke",
 	}
 	if len(got) != 1 || got[0] != want {
 		t.Errorf("history = %+v, want %+v — the row carries what the order will not "+
