@@ -147,6 +147,8 @@ dient die Ausgangsmessung der Beobachtungssitzung.
 - **Playground-Regel ohne Treffer gilt als erfüllt.** Eine Regel, deren `when` keinen
   Fall auswählt (etwa wegen eines Tippfehlers), besteht; das Urteil vermerkt nur «no case
   of N matched», und `atlas playground` endet mit Exit-Code 0. ADR-0215 hat das bewusst
-  so entschieden. Für den Lehrgang ist es ein Lernpunkt («jede Regel einmal rot sehen»);
-  ob eine Regel zusätzlich eine Mindestzahl an Treffern verlangen können soll, wäre eine
-  Produktfrage.
+  so entschieden. Für den Lehrgang ist es ein Lernpunkt («jede Regel einmal rot sehen»).
+  Vorschlag für eine Mindestzahl an Treffern je Regel, samt Meldung der Variablen, die kein
+  Fall trägt: ADR-draft-a-playground-rule-can-demand-the-cases-it-speaks-about
+  (`docs/adr/draft-a-playground-rule-can-demand-the-cases-it-speaks-about.md`, Status
+  «Proposed»). Modul M4 wird nach dem Entscheid darüber geschrieben.
