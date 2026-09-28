@@ -2,6 +2,28 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-refused-write-s-incident-no-longer-tells-you-to-resolve-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A refused write's incident no longer tells you to resolve it",
+        "de": "Der Incident einer abgelehnten Schreiboperation empfiehlt nicht mehr das Auflösen"
+      },
+      "summary": {
+        "en": "When a value is larger than its variable or collection budget, the element stops with an incident. That incident used to say \"resolve to write it again\", but resolving does not write the value: the incident disappears and the element stays where it stopped, now with no incident at all. The message now says so, and that the limit has to be raised before the work producing such a value runs. Making resolve continue the element is tracked in issue #1123.",
+        "de": "Ist ein Wert grösser als das Budget für eine Variable oder eine Sammlung, hält das Element mit einem Incident an. Dieser Incident empfahl bisher, ihn aufzulösen, damit der Wert geschrieben wird. Das Auflösen schreibt den Wert jedoch nicht: Der Incident verschwindet, und das Element bleibt stehen, danach ganz ohne Incident. Die Meldung sagt das jetzt und weist darauf hin, dass das Limit erhöht werden muss, bevor die Arbeit läuft, die einen solchen Wert erzeugt. Dass das Auflösen das Element fortsetzt, wird in Issue #1123 verfolgt."
+      },
+      "link": {
+        "label": "ADR-0294",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0294-a-variable-is-a-record.md"
+      },
+      "tags": [
+        "Engine",
+        "Operations"
+      ]
+    },
+    {
       "id": "a-loop-whose-collection-outgrew-its-budget-while-it-filled-f",
       "version": "Unreleased",
       "date": null,
@@ -304,39 +326,6 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "the-shop-works-on-a-phone",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The shop works on a phone",
-        "de": "Der Shop funktioniert auf dem Handy"
-      },
-      "summary": {
-        "en": "Below 860px every view of the shop is one column wide. The catalogue shows the column you have reached, and a stepper above it goes back and names the path so far. The basket stacks each offering over its own services and options. My orders is a list of cards, with each position's tasks, and the form to answer one, at the card's width. The buttons grow to a fingertip's size. A wide screen keeps its layout.",
-        "de": "Unter 860 px Breite ist jede Ansicht des Shops einspaltig. Der Katalog zeigt die Spalte, bei der man gerade ist; eine Leiste darüber führt zurück und nennt den bisherigen Weg. Der Warenkorb zeigt jedes Angebot mit seinen Services und Optionen darunter. «Meine Aufträge» ist eine Liste von Karten, mit den Aufgaben jeder Position und dem Formular zu ihrer Erledigung in der Breite der Karte. Die Schaltflächen sind gross genug für den Finger. Auf breiten Bildschirmen bleibt die bisherige Darstellung."
-      },
-      "link": {
-        "label": "ADR-0417",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0417-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md"
-      },
-      "tags": [
-        "Shop"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the shop on a phone, or narrow the browser window below 860px.",
-          "In the catalogue, choose a category, a group and a product; use Back to return.",
-          "Under My orders, open a task with Work on it and answer it in the card."
-        ],
-        "de": [
-          "Den Shop auf dem Handy öffnen oder das Browserfenster schmaler als 860 px machen.",
-          "Im Katalog eine Kategorie, eine Gruppe und ein Produkt wählen; mit «Zurück» geht es zurück.",
-          "Unter «Meine Aufträge» eine Aufgabe mit «Erledigen» öffnen und in der Karte erledigen."
-        ]
       }
     }
   ]

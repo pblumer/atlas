@@ -4608,9 +4608,8 @@ func writeList(c *ProcessingContext, scope uint64, name string, elems []expr.Val
 
 // parkOversizedWrite refuses a write whose value is past its budget: nothing is
 // written, and an incident on the element that produced it names the variable and both
-// sizes. Resolving retries the write, so correcting the data — or raising the budget —
-// lets it through, and leaving it refuses again
-// (ADR-0294).
+// sizes (ADR-0294). Resolving the incident does not retry the write: nothing re-runs
+// it, so the incident goes and the element stays where it stopped (#1123).
 //
 // The element is the scope's own when the scope is one (a loop's body, a container),
 // and otherwise the write's producer, which is the element instance whose processing

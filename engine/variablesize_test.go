@@ -35,8 +35,9 @@ func varText(t *testing.T, s *state.Store, scopeKey uint64, name string) string 
 // The refusal is the point, not the failure. Before this budget an oversized value
 // went all the way to the write-ahead log and failed *there*, against the 64 MiB
 // per-record cap — which aborts the batch, so the instance stopped with an error
-// nobody could resolve. Now it is an incident: nothing is written, the instance is
-// intact, and correcting the data and resolving writes it after all.
+// nobody could resolve. Now it is an incident: nothing is written and the instance is
+// intact. (Resolving it does not write the value after all — see #1123 and
+// TestARefusedWriteDoesNotPromiseThatResolvingWritesIt.)
 func TestAVariableIsRefusedAtItsBudget(t *testing.T) {
 	const limit = 1 << 12
 	for _, tc := range []struct {
@@ -208,6 +209,37 @@ func TestACollectionUnderItsBudgetIsUnchanged(t *testing.T) {
 	}
 	if n := len(incidents(t, h.store)); n != 0 {
 		t.Errorf("incidents = %d, want none for an ordinary loop", n)
+	}
+}
+
+// TestARefusedWriteDoesNotPromiseThatResolvingWritesIt pins what the incident tells
+// an operator. Resolving it does not write the value again — the resume path has
+// nothing to re-run for a refused write (#1123) — so a message that says it does sends
+// the operator to the one action that leaves the element standing with no incident at
+// all, which is harder to find than the refusal was.
+func TestARefusedWriteDoesNotPromiseThatResolvingWritesIt(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	p, jobKey, _ := startedJob(t, h)
+	p.SetMaxVariable(8)
+
+	p.CompleteJob(jobKey, model.VariableValue{
+		Name: "result", Kind: model.VarString, Text: strings.Repeat("x", 64)})
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	incs := incidents(t, h.store)
+	if len(incs) != 1 {
+		t.Fatalf("incidents = %d, want the refusal", len(incs))
+	}
+	for _, inc := range incs {
+		if strings.Contains(inc.Message, "resolve to write it again") {
+			t.Errorf("message = %q, which tells the operator that resolving writes the value", inc.Message)
+		}
+		if !strings.Contains(inc.Message, "does not write it again") {
+			t.Errorf("message = %q, want it to say that resolving does not write the value", inc.Message)
+		}
 	}
 }
 
