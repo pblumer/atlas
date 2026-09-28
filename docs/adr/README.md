@@ -506,6 +506,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0418](0418-a-withdrawn-ordered-right-goes-back-through-its-order.md) | A withdrawn ordered right goes back through its order | Accepted | Landed |
 | [0419](0419-a-declared-type-is-honoured-at-the-decision-boundary.md) | A declared type is honoured at the decision boundary | Accepted | Landed |
 | [0420](0420-one-graph-model-several-projections.md) | One graph model, several projections, and a successor view built beside the starmap | Proposed | Not started |
+| [0421](0421-a-task-is-listed-to-whoever-it-was-addressed-to.md) | A task is listed to whoever it was addressed to | Accepted | Landed |
 
 ## The two states of a record
 
