@@ -184,6 +184,11 @@ type Line struct {
 	// converted keeps the two ids (ADR-0427).
 	LifecycleProcess string            `json:"lifecycleProcess,omitempty"`
 	Operations       map[string]string `json:"operations,omitempty"`
+	// LifecycleForm is how the lifecycle process runs for this line, frozen with the
+	// binding: a per-position line's later operations are delivered to the instance
+	// its provisioning started
+	// (ADR-0428).
+	LifecycleForm string `json:"lifecycleForm,omitempty"`
 	// Rebindings are the moves of this line from the binding it froze to its
 	// product's lifecycle process, each with who, when and why (ADR-0427). A list,
 	// because a line moved twice has two facts to tell.
@@ -343,6 +348,25 @@ func (l Line) BindingFor(op string) catalog.Binding {
 	}.BindingFor(op)
 }
 
+// PerPosition reports whether this line's lifecycle runs as one instance per
+// position (ADR-0428).
+func (l Line) PerPosition() bool {
+	return l.LifecycleProcess != "" && l.LifecycleForm == catalog.FormPerPosition
+}
+
+// StrandOf is the instance a per-position line's later operations are delivered to:
+// the newest instance its lifecycle process was started with for provisioning, or
+// zero when none was recorded.
+func (l Line) StrandOf() uint64 {
+	for i := len(l.Instances) - 1; i >= 0; i-- {
+		in := l.Instances[i]
+		if in.Operation == catalog.OpProvision && in.ProcessID == l.LifecycleProcess {
+			return in.Key
+		}
+	}
+	return 0
+}
+
 // StartsOf counts the instances already started for an operation of this line. It
 // is the attempt a new start is, which is what makes a deliberate retry a new
 // trigger and a repeated delivery of the same start the same one.
@@ -359,8 +383,12 @@ func (l Line) StartsOf(op string) int {
 // RecordInstance notes that an instance was started to work one position.
 //
 // ref names the position the way a process does: its key, or the product where
-// the order carries one position of it. Recording the same instance twice records
-// it once, so a caller that retries does not make one instance look like two.
+// the order carries one position of it. Recording the same instance for the same
+// operation twice records it once, so a caller that retries does not make one
+// instance look like two. The same instance for another operation is a new entry:
+// a per-position lifecycle carries the position's return in the instance its
+// provisioning started, and the return is still an attempt that counts
+// (ADR-0428).
 func RecordInstance(o Order, ref string, inst LineInstance) (Order, error) {
 	position, err := ResolveLine(o, ref)
 	if err != nil {
@@ -373,7 +401,7 @@ func RecordInstance(o Order, ref string, inst LineInstance) (Order, error) {
 			continue
 		}
 		for _, have := range next.Lines[i].Instances {
-			if have.Key == inst.Key {
+			if have.Key == inst.Key && have.Operation == inst.Operation {
 				return o, nil
 			}
 		}

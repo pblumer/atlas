@@ -99,3 +99,65 @@ func TestBindingForReadsEitherForm(t *testing.T) {
 		t.Errorf("lifecycle change without a start event = %+v, want unbound", b)
 	}
 }
+
+type fakeShape struct {
+	fakeEntryPoints
+	catches map[string][]CatchPoint
+	cycles  map[string][]string
+}
+
+func (f fakeShape) CatchPoints(id string) []CatchPoint { return f.catches[id] }
+func (f fakeShape) WaitlessCycle(id string) []string   { return f.cycles[id] }
+
+// TestAPerPositionBindingIsCheckedAgainstTheStrand: the later operations must be
+// caught, keyed, and every cycle must wait; change may be a catch rather than a
+// start; a lookup that cannot read the strand refuses rather than passes.
+func TestAPerPositionBindingIsCheckedAgainstTheStrand(t *testing.T) {
+	it := lifecycleItem("laptop")
+	it.LifecycleForm = FormPerPosition
+	it.Operations[OpChange] = "laptop.change"
+	starts := fakeEntryPoints{"laptop-lifecycle": {messages: []string{"laptop.deprovision", "laptop.provision"}}}
+	good := fakeShape{fakeEntryPoints: starts, catches: map[string][]CatchPoint{"laptop-lifecycle": {
+		{Element: "Held", Message: "laptop.deprovision", Correlated: true},
+		{Element: "Change", Message: "laptop.change", Correlated: true},
+	}}}
+	if got := LifecycleProblems([]Item{it}, good); len(got) != 0 {
+		t.Fatalf("problems = %v, want none", got)
+	}
+
+	contains(t, LifecycleProblems([]Item{it}, starts), "cannot read what the process waits for")
+
+	loose := good
+	loose.catches = map[string][]CatchPoint{"laptop-lifecycle": {
+		{Element: "Held", Message: "laptop.deprovision"},
+		{Element: "Change", Message: "laptop.change", Correlated: true},
+	}}
+	contains(t, LifecycleProblems([]Item{it}, loose), "Held waits for laptop.deprovision without a correlation key")
+
+	uncaught := good
+	uncaught.catches = map[string][]CatchPoint{"laptop-lifecycle": {{Element: "Held", Message: "laptop.deprovision", Correlated: true}}}
+	contains(t, LifecycleProblems([]Item{it}, uncaught), "names laptop.change, which laptop-lifecycle never waits for")
+
+	circling := good
+	circling.cycles = map[string][]string{"laptop-lifecycle": {"a", "b"}}
+	contains(t, LifecycleProblems([]Item{it}, circling), "circles through a, b")
+
+	it.LifecycleForm = ""
+	contains(t, LifecycleProblems([]Item{it}, good), "names laptop.change, which is not a message start event")
+}
+
+// TestTheLifecycleFormIsOneOfTwo: an unknown form, and a form on an item with no
+// lifecycle process, are refused by the catalogue alone.
+func TestTheLifecycleFormIsOneOfTwo(t *testing.T) {
+	odd := lifecycleItem("laptop")
+	odd.LifecycleForm = "sometimes"
+	contains(t, publishLifecycleItem(odd), "lifecycle form sometimes is not one")
+
+	stray := item("laptop")
+	stray.LifecycleForm = FormPerPosition
+	contains(t, publishLifecycleItem(stray), "names a lifecycle form but binds no lifecycle process")
+
+	if !(Item{LifecycleProcess: "p", LifecycleForm: FormPerPosition}).PerPosition() || (Item{LifecycleForm: FormPerPosition}).PerPosition() {
+		t.Error("PerPosition does not require a lifecycle process and the per-position form")
+	}
+}

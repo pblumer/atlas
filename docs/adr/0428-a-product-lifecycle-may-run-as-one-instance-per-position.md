@@ -1,7 +1,7 @@
 # ADR-0428: A product lifecycle may run as one instance per position, and its later operations are delivered to that instance
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted
+- **Implementation:** Partial
 - **Date:** 2026-09-29
 - **Deciders:** Atlas maintainers
 - **Open question:** Whether ADR-0162 migration can move an instance that waits at an
@@ -206,10 +206,13 @@ A change loop is a cycle through a waiting element, and two rules keep it bounde
 
 - **A cycle without a wait state is already stopped by the engine.** ADR-0272 raises an
   incident when one token runs automatic steps beyond the execution budget. Nothing new.
-- **Every cycle through the strand must wait for an external event.** Publishing
-  refuses a `per-position` process in which a cycle reachable from the `provision` start
-  passes no message catch event, receive task or user task — a cycle that would re-enter
-  on its own is a modelling error in this form.
+- **Every cycle through the strand must wait for something outside the token.**
+  Publishing refuses a `per-position` process in which any cycle passes no message catch
+  event, receive task, user task, timer, signal or conditional catch — a cycle that would
+  re-enter on its own is a modelling error in this form. (Amended at implementation: the
+  check covers every cycle in the process rather than only those reachable from the
+  `provision` start, and a timer, signal or condition counts as a wait, since each
+  advances once per outside event and cannot run away.)
 - **The number of changes is bounded by the model**, not by the engine: the strand counts
   its changes and refuses those beyond a limit the product sets. Atlas does not impose a
   number; a product with legitimate daily changes and one with two changes in its life
@@ -250,6 +253,41 @@ A change loop is a cycle through a waiting element, and two rules keep it bounde
     to external senders); this record gives it a place in the strand, not a trigger.
   - Retention: an instance that runs for years is never finished and never purged; its
     history grows with every change.
+
+## Implementation
+
+Landed:
+
+- **Engine.** `Processor.DeliverMessage` (`engine/delivery.go`) delivers one message to
+  one instance by key through a command-only intent, `IntentDelivering`, and answers
+  `Delivered`, `Replayed`, `NotWaiting` or `Gone`. It correlates only that instance's
+  open subscriptions for the message under the given key, through the same helper the
+  name-correlated publish uses (`deliverToSubscriptions`), so a message arrives the same
+  way whichever path sent it — intermediate catch, event-based gateway branch or message
+  boundary. The receipt is ADR-0425's (`IntentTriggerReceived`), written in the same
+  batch as the correlation.
+- **Compiler.** `CompiledProcess.MessageCatchPoints` and `WaitlessCycle`
+  (`compiler/lifecycleshape.go`) answer what publishing asks of the strand.
+- **Catalogue.** `Item.LifecycleForm` (`per-operation` | `per-position`), checked by
+  `checkBindings`; the per-position rules in `LifecycleProblems` read the strand through
+  `ShapeLookup`, which the server's process lookup implements.
+- **Order.** `Line.LifecycleForm` is frozen with the binding; `Line.StrandOf` finds the
+  instance to deliver to. `RecordInstance` now keeps one entry per instance *and*
+  operation, so a return carried by the strand counts as an attempt.
+- **Server.** `startReturn` — the orderer's return and a recertification's revoke —
+  delivers a per-position line's return through `deliverOrStart`, falling back to the
+  deprovision start event when the strand is gone. `POST /api/v1/messages` refuses a
+  message a per-position product delivers (`catalogOwnerOfDelivered`). The shop's open
+  tasks list a strand once.
+- **Surfaces.** The product form offers the form; the MCP save tool declares
+  `lifecycleForm`.
+
+Not yet built:
+
+- the deploy answer's count of active instances left on older versions (§5);
+- a route that delivers `change` (the strand has a place for it; nothing sends it yet);
+- position progress (ADR-0390) naming a waiting strand as held rather than showing it
+  as a running instance.
 
 ## Pros and cons of the options
 

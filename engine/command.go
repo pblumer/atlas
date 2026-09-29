@@ -104,6 +104,10 @@ type Command struct {
 	// same contract as Created — written on the processor goroutine, read after
 	// RunUntilIdle returned, never on a replayed command.
 	Triggered *TriggerResult
+	// Delivered is where a directed delivery's answer is written
+	// (ADR-0428), under the
+	// same contract as Triggered.
+	Delivered *DeliveryResult
 }
 
 // sideEffect is work to run after the batch's fsync (invariant I2). It is a

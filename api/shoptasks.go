@@ -134,7 +134,14 @@ func (s *Server) handleShopTasks(w http.ResponseWriter, r *http.Request) {
 		def := defsMeta(defs)
 		for _, o := range orders {
 			for _, l := range o.Lines {
+				// A per-position line records its one instance once per operation it
+				// carried; its tasks are listed once.
+				seen := map[uint64]bool{}
 				for _, inst := range l.Instances {
+					if seen[inst.Key] {
+						continue
+					}
+					seen[inst.Key] = true
 					if err := rv.ElementInstancesOfProcess(inst.Key, func(elKey uint64) error {
 						jobKey, ok, err := rv.JobOfElement(elKey)
 						if err != nil || !ok {

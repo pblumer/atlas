@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/pblumer/atlas/api/catalog"
 	"github.com/pblumer/atlas/compiler"
 )
 
@@ -132,4 +133,33 @@ func (l processLookup) EntryPoints(processID string) (messages []string, hasNone
 	})
 	slices.Sort(messages)
 	return messages, hasNone, deployed
+}
+
+// CatchPoints lists the message catch points of the newest deployed version of a
+// process id: what a per-position lifecycle delivers its later operations to
+// (ADR-0428).
+func (l processLookup) CatchPoints(processID string) []catalog.CatchPoint {
+	var out []catalog.CatchPoint
+	l.s.do(func() {
+		d := l.s.latestDeploymentOf(strings.TrimSpace(processID))
+		if d == nil || d.cp == nil {
+			return
+		}
+		for _, c := range d.cp.MessageCatchPoints() {
+			out = append(out, catalog.CatchPoint{Element: c.Element, Message: c.MessageName, Correlated: c.Correlated})
+		}
+	})
+	return out
+}
+
+// WaitlessCycle names a cycle in the newest deployed version of a process id that
+// waits for nothing, or nil (ADR-0428).
+func (l processLookup) WaitlessCycle(processID string) []string {
+	var out []string
+	l.s.do(func() {
+		if d := l.s.latestDeploymentOf(strings.TrimSpace(processID)); d != nil && d.cp != nil {
+			out = d.cp.WaitlessCycle()
+		}
+	})
+	return out
 }

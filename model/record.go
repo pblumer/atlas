@@ -471,6 +471,14 @@ const (
 	// prior intent keeps its numeric value on the log.
 	IntentTriggerReceiptsPruning
 	IntentTriggerReceiptsPruned
+	// IntentDelivering is a command-only intent: a directed delivery asks to hand one
+	// message to one running instance — the instance a product's lifecycle runs in
+	// for one order position (ADR-0428).
+	// Its handler correlates the instance's open subscriptions for that message and
+	// records IntentTriggerReceived in the same batch, so a retry answers from the
+	// receipt instead of delivering twice. Appended at the end so every prior intent
+	// keeps its numeric value on the log.
+	IntentDelivering
 )
 
 func (i Intent) String() string {
@@ -577,6 +585,8 @@ func (i Intent) String() string {
 		return "TriggerReceiptsPruning"
 	case IntentTriggerReceiptsPruned:
 		return "TriggerReceiptsPruned"
+	case IntentDelivering:
+		return "Delivering"
 	default:
 		return "Intent(?)"
 	}

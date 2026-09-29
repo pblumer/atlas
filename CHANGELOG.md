@@ -14,6 +14,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A product's lifecycle can run as one instance per order position.** A lifecycle
+  process (ADR-0425) may now be bound with `lifecycleForm: "per-position"`: provisioning
+  starts one instance per position, which then waits for the position's change or return
+  for as long as the right is held, so one instance is the whole record of one right
+  (ADR-0428). A return is
+  delivered to the instance the order line recorded — by key, never by name — and the
+  answer says whether it arrived; where that instance is gone (an old line, a cancelled
+  instance) the return starts the process at its deprovision start event instead.
+  Publishing checks the strand: the return and any change must be caught under a
+  correlation key, the return must also be a start event, and no cycle may run without
+  waiting. `POST /api/v1/messages` refuses the messages such a product delivers. The
+  product form, the MCP save tool and the fulfilment of returns and recertifications
+  know the new form; the deploy-time count of rights held on older versions and a
+  `change` route are still to come.
+
 - **The live view migrates the running instances of the version on screen.** Draining
   one version onto another was reachable only from the ⋯ menu of a process row in the
   Instances list, which made the operator pick the source version again after finding it

@@ -149,3 +149,30 @@ func (s *Server) catalogOwnerOfEntry(processID, message string) (string, error) 
 	}
 	return "", nil
 }
+
+// catalogOwnerOfDelivered names the per-position product that delivers this message
+// to its running instances as a change or a return, or "" when none does
+// (ADR-0428). Its
+// provisioning start is refused on the trigger route by [Server.catalogOwnerOfEntry];
+// this is the same rule for the messages that reach an instance already running.
+// Reads the catalogue store, so it runs on the run loop.
+func (s *Server) catalogOwnerOfDelivered(message string) (string, error) {
+	if s.catalogStore == nil || message == "" {
+		return "", nil
+	}
+	items, err := s.catalogStore.Items()
+	if err != nil {
+		return "", err
+	}
+	for _, it := range items {
+		if !it.PerPosition() {
+			continue
+		}
+		for _, op := range []string{catalog.OpChange, catalog.OpDeprovision} {
+			if it.Operations[op] == message {
+				return it.ID, nil
+			}
+		}
+	}
+	return "", nil
+}

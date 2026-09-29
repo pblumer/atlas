@@ -832,6 +832,7 @@ export function productBody(f, { productID, homeCatalog, langs, stored }) {
     deprovisionProcess: f.get("deprovisionProcess") || "",
     lifecycleProcess: f.get("lifecycleProcess") || "",
     operations: operationsFrom(f),
+    lifecycleForm: f.get("lifecycleProcess") ? (f.get("lifecycleForm") || "") : "",
     multipleAllowed: !!f.get("multipleAllowed"),
     targets: parseTargets(f.get("targets")),
     keywords: list(f.get("keywords")),
@@ -1643,6 +1644,11 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
           operation enters — provision and deprovision are required, change is optional.
           Publishing checks that the process has those start events and no plain start.</span>
         ${procSelect("lifecycleProcess", v.lifecycleProcess)}</label>
+      <label class="field">How the process runs
+        <select name="lifecycleForm">
+          <option value=""${(v.lifecycleForm || "") === "" ? " selected" : ""}>One instance per operation</option>
+          <option value="per-position"${v.lifecycleForm === "per-position" ? " selected" : ""}>One instance per position, for as long as it is held</option>
+        </select></label>
       <label class="field">Provision start event
         <input name="opProvision" value="${esc((v.operations || {}).provision || "")}"
           autocomplete="off" placeholder="laptop.provision"></label>

@@ -21,6 +21,23 @@ const (
 	OpDeprovision = "deprovision"
 )
 
+// The instance forms of a lifecycle process
+// (ADR-0428).
+const (
+	// FormPerOperation starts an instance for every operation (ADR-0425). It is
+	// what an empty LifecycleForm means.
+	FormPerOperation = "per-operation"
+	// FormPerPosition starts one instance per order position at provisioning and
+	// delivers every later operation to it.
+	FormPerPosition = "per-position"
+)
+
+// PerPosition reports whether the item's lifecycle runs as one instance per order
+// position.
+func (it Item) PerPosition() bool {
+	return it.UsesLifecycleProcess() && it.LifecycleForm == FormPerPosition
+}
+
 // knownOperations are the keys Operations may carry. A key nothing asks for is a
 // typo waiting to be the operation somebody believed was bound.
 var knownOperations = map[string]bool{OpProvision: true, OpChange: true, OpDeprovision: true}
@@ -94,7 +111,16 @@ func checkBindings(it Item, add func(Problem)) {
 				"that works the order itself; it would start itself for this position, again " +
 				"and again, without end"})
 		}
+		switch it.LifecycleForm {
+		case "", FormPerOperation, FormPerPosition:
+		default:
+			add(Problem{Item: it.ID, Message: "lifecycle form " + it.LifecycleForm + " is not one " +
+				"a lifecycle process runs in (" + FormPerOperation + ", " + FormPerPosition + ")"})
+		}
 		return
+	}
+	if it.LifecycleForm != "" {
+		add(Problem{Item: it.ID, Message: "names a lifecycle form but binds no lifecycle process"})
 	}
 	if it.ProvisionProcess == "" {
 		add(Problem{Item: it.ID, Message: "no provision process bound"})
@@ -127,6 +153,26 @@ type EntryPointLookup interface {
 	EntryPoints(processID string) (messages []string, hasNone bool, deployed bool)
 }
 
+// ShapeLookup answers what a per-position lifecycle process owes beyond its start
+// events: which messages it waits for, and whether it can circle without waiting. A
+// lookup that does not implement it cannot check a per-position binding, and
+// [LifecycleProblems] says so rather than passing it.
+type ShapeLookup interface {
+	// CatchPoints returns the newest deployed version's message catch points: for
+	// each, the message it waits for and whether it declares a correlation key.
+	CatchPoints(processID string) []CatchPoint
+	// WaitlessCycle returns the elements of a cycle in the newest deployed version
+	// that waits for nothing outside the token, or nil.
+	WaitlessCycle(processID string) []string
+}
+
+// CatchPoint is one element of a process that waits for a message.
+type CatchPoint struct {
+	Element    string
+	Message    string
+	Correlated bool
+}
+
 // LifecycleProblems checks the lifecycle bindings of items against what is deployed:
 // the process exists, every bound operation is one of its message start events, and
 // it has no none start — an entry the catalogue never uses and a create by hand
@@ -157,10 +203,15 @@ func LifecycleProblems(items []Item, look EntryPointLookup) []Problem {
 		}
 		sort.Strings(ops)
 		for _, op := range ops {
-			if msg := strings.TrimSpace(it.Operations[op]); msg != "" && !have[msg] {
-				out = append(out, Problem{Item: it.ID, Message: "operation " + op + " names " +
-					msg + ", which is not a message start event of " + it.LifecycleProcess})
+			msg := strings.TrimSpace(it.Operations[op])
+			if msg == "" || have[msg] || (it.PerPosition() && op == OpChange) {
+				continue
 			}
+			out = append(out, Problem{Item: it.ID, Message: "operation " + op + " names " +
+				msg + ", which is not a message start event of " + it.LifecycleProcess})
+		}
+		if it.PerPosition() {
+			out = append(out, perPositionProblems(it, look)...)
 		}
 		if hasNone {
 			out = append(out, Problem{Item: it.ID, Message: "lifecycle process " +
@@ -170,6 +221,48 @@ func LifecycleProblems(items []Item, look EntryPointLookup) []Problem {
 		}
 	}
 	sortProblems(out)
+	return out
+}
+
+// perPositionProblems holds what a per-position binding owes beyond ADR-0425's:
+// the later operations are messages the strand waits for, keyed on the position, and
+// no cycle in it runs without waiting.
+func perPositionProblems(it Item, look EntryPointLookup) []Problem {
+	shape, ok := look.(ShapeLookup)
+	if !ok {
+		return []Problem{{Item: it.ID, Message: "lifecycle process " + it.LifecycleProcess +
+			" runs per position, and this server cannot read what the process waits for"}}
+	}
+	var out []Problem
+	catches := map[string][]CatchPoint{}
+	for _, c := range shape.CatchPoints(it.LifecycleProcess) {
+		catches[c.Message] = append(catches[c.Message], c)
+	}
+	for _, op := range []string{OpChange, OpDeprovision} {
+		msg := strings.TrimSpace(it.Operations[op])
+		if msg == "" {
+			continue
+		}
+		points := catches[msg]
+		if len(points) == 0 {
+			out = append(out, Problem{Item: it.ID, Message: "operation " + op + " names " + msg +
+				", which " + it.LifecycleProcess + " never waits for; a per-position lifecycle " +
+				"delivers it to the running instance, so the strand must catch it"})
+			continue
+		}
+		for _, c := range points {
+			if !c.Correlated {
+				out = append(out, Problem{Item: it.ID, Message: c.Element + " waits for " + msg +
+					" without a correlation key; key it on the position, or one message by name " +
+					"reaches every position of the product"})
+			}
+		}
+	}
+	if cycle := shape.WaitlessCycle(it.LifecycleProcess); cycle != nil {
+		out = append(out, Problem{Item: it.ID, Message: "lifecycle process " + it.LifecycleProcess +
+			" circles through " + strings.Join(cycle, ", ") + " without waiting for anything; " +
+			"an instance that lives as long as the right would run until the engine stops it"})
+	}
 	return out
 }
 

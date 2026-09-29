@@ -184,6 +184,14 @@ type Item struct {
 	// order asks for.
 	LifecycleProcess string            `json:"lifecycleProcess,omitempty"`
 	Operations       map[string]string `json:"operations,omitempty"`
+	// LifecycleForm says how the lifecycle process runs: "per-operation" (the
+	// default, and what empty means) starts an instance for every operation;
+	// "per-position" starts one instance per order position at provisioning and
+	// delivers every later operation to it
+	// (ADR-0428). Declared
+	// rather than read off the diagram, so a catch event somebody adds to a model
+	// cannot silently change how a product is returned.
+	LifecycleForm string `json:"lifecycleForm,omitempty"`
 	// MultipleAllowed says whether a principal may hold this item more than once —
 	// two licences, two mailboxes. Where it is false the basket marks an item the
 	// orderer already holds as held, and skips it.

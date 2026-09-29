@@ -422,7 +422,7 @@ func TestStringersExhaustive(t *testing.T) {
 		IntentVariableModify, IntentVariableAudited,
 		IntentCompensableRecorded, IntentCompensableConsumed, IntentOperatorActed,
 		IntentJobErrorThrown, IntentTriggering, IntentTriggerReceived,
-		IntentTriggerReceiptsPruning, IntentTriggerReceiptsPruned,
+		IntentTriggerReceiptsPruning, IntentTriggerReceiptsPruned, IntentDelivering,
 	}
 	for _, in := range intents {
 		if s := in.String(); s == "" || s == "Intent(?)" {

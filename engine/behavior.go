@@ -53,6 +53,7 @@ func (p *Processor) registerHandlers() {
 		handlerKey(model.VTVariable, model.IntentVariableModify):               handleVariablesModify,
 		handlerKey(model.VTTriggerReceipt, model.IntentTriggering):             handleTriggering,
 		handlerKey(model.VTTriggerReceipt, model.IntentTriggerReceiptsPruning): handleTriggerReceiptsPruning,
+		handlerKey(model.VTTriggerReceipt, model.IntentDelivering):             handleDelivering,
 	}
 }
 
@@ -2593,23 +2594,18 @@ func evalStartCorrelationKey(e *expr.Compiled, vars []model.VariableValue) strin
 	return v.String()
 }
 
-// correlateMessage delivers a message with the given name and correlation key to
-// every open subscription that matches. For each match it emits
-// SubscriptionCorrelated (which retires the subscription), writes the message's
-// payload variables into that instance's scope, and commands the waiting element
-// instance to complete. Matches are collected before any mutation so retiring a
-// subscription can't disturb the scan. A message that matches nothing is a no-op
-// — there is no buffering yet (ADR-0020).
-func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []model.VariableValue, senderPIKey uint64) {
-	type match struct {
-		elKey uint64
-		sub   model.MessageSubscriptionValue
-	}
-	var matches []match
-	c.p.fail(c.tx.CorrelatableSubscriptions(name, correlationKey, func(elKey uint64, v *model.MessageSubscriptionValue) error {
-		matches = append(matches, match{elKey: elKey, sub: *v})
-		return nil
-	}))
+// subscriptionMatch is one open message subscription a delivery reaches.
+type subscriptionMatch struct {
+	elKey uint64
+	sub   model.MessageSubscriptionValue
+}
+
+// deliverToSubscriptions hands a message to each matched subscription: it retires
+// the subscription, records the message flow, writes the payload into the waiting
+// instance's scope and commands the waiting element to complete. Shared by the
+// name-correlated publish and the directed delivery to one instance, so a message
+// arrives the same way whichever of the two sent it.
+func deliverToSubscriptions(c *ProcessingContext, matches []subscriptionMatch, name, correlationKey string, vars []model.VariableValue, senderPIKey uint64) {
 	// A payload is attributed to the catch event that received it (below); the command
 	// driving this may itself be an element's — a throw event publishing the message — so
 	// the producer is put back rather than zeroed (ADR-0219).
@@ -2649,6 +2645,22 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 			c.AppendElementCommand(m.elKey, model.IntentCompleting, *ei)
 		}
 	}
+}
+
+// correlateMessage delivers a message with the given name and correlation key to
+// every open subscription that matches. For each match it emits
+// SubscriptionCorrelated (which retires the subscription), writes the message's
+// payload variables into that instance's scope, and commands the waiting element
+// instance to complete. Matches are collected before any mutation so retiring a
+// subscription can't disturb the scan. A message that matches nothing is a no-op
+// — there is no buffering yet (ADR-0020).
+func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []model.VariableValue, senderPIKey uint64) {
+	var matches []subscriptionMatch
+	c.p.fail(c.tx.CorrelatableSubscriptions(name, correlationKey, func(elKey uint64, v *model.MessageSubscriptionValue) error {
+		matches = append(matches, subscriptionMatch{elKey: elKey, sub: *v})
+		return nil
+	}))
+	deliverToSubscriptions(c, matches, name, correlationKey, vars, senderPIKey)
 	// A message also instantiates every deployed process with a matching message
 	// start event, seeded with the payload (ADR-0035). Matching is by name; the
 	// created instance additionally records the correlation key its start event
