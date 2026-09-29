@@ -151,6 +151,9 @@ test("removing an incompatibility removes both directions", async ({ page }) => 
 
   await table.locator('button[data-act="unexclude"]').click();
 
+  // The click only starts the write: the handler sends the PATCH on its own time, so
+  // the list is read once the write has arrived, not the moment the click returns.
+  await expect.poll(() => page.__sent.filter((w) => w.method === "PATCH").length).toBe(1);
   const written = page.__sent.filter((w) => w.method === "PATCH");
   expect(written).toHaveLength(1);
   // Both directions gone, and the precedence edge untouched: removing one would
