@@ -237,3 +237,78 @@ func TestAReturnEntersTheLifecycleProcessAtItsDeprovisionStart(t *testing.T) {
 		t.Fatalf("the return ran %s, want the deprovision branch only", vars)
 	}
 }
+
+// TestTheStartActRefusesWhatIsNotItsToStart: each way the start act declines, and
+// the approval a gated position owes before its provisioning.
+func TestTheStartActRefusesWhatIsNotItsToStart(t *testing.T) {
+	ts, admin, ord, cat := aLifecycleOrder(t)
+	start := func(line, body string) (int, []byte) {
+		return cReq(t, admin, ts, "POST", "/api/v1/orders/"+ord+"/lines/"+line+"/start", body)
+	}
+	for _, c := range []struct {
+		line, body string
+		want       int
+	}{
+		{"laptop", `{`, http.StatusBadRequest},
+		{"laptop", `{"operation":"deprovision"}`, http.StatusBadRequest},
+		{"nothing", `{}`, http.StatusNotFound},
+	} {
+		if code, b := start(c.line, c.body); code != c.want {
+			t.Errorf("%s %s: %d (%s), want %d", c.line, c.body, code, b, c.want)
+		}
+	}
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/orders/nope/lines/laptop/start", `{}`); code != http.StatusNotFound {
+		t.Errorf("unknown order: %d (%s)", code, b)
+	}
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/orders/"+ord+"/lines/laptop", `{"status":"skipped"}`); code != http.StatusOK {
+		t.Fatalf("settle the line: %d (%s)", code, b)
+	}
+	if code, b := start("laptop", `{}`); code != http.StatusConflict {
+		t.Errorf("a settled line: %d (%s), want 409", code, b)
+	}
+
+	// A gated product: the act owes the approval first. The approval process is not
+	// deployed on this server, so the act says it cannot start it; with approvedBy it
+	// records the approval and provisions.
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/catalog-products",
+		`{"id":"laptop","homeCatalog":"`+cat+`","state":"active","texts":{"de":"Laptop"},`+
+			`"approval":{"kind":"fixed","ref":"root"},"lifecycleProcess":"laptop-lifecycle",`+
+			`"operations":{"provision":"laptop.provision","deprovision":"laptop.deprovision"}}`,
+	); code != http.StatusOK {
+		t.Fatalf("gate the product: %d (%s)", code, b)
+	}
+	code, body := cReq(t, admin, ts, "POST", "/api/v1/catalogs/"+cat+"/releases", "")
+	if code != http.StatusCreated {
+		t.Fatalf("publish: %d (%s)", code, body)
+	}
+	rel := idOf(t, body)
+	code, body = cReq(t, admin, ts, "POST", "/api/v1/orders", `{"releaseId":"`+rel+`","items":["laptop"]}`)
+	if code != http.StatusCreated {
+		t.Fatalf("order: %d (%s)", code, body)
+	}
+	gated := idOf(t, body)
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/orders/"+gated+"/lines/laptop/start", `{}`); code != http.StatusConflict ||
+		!strings.Contains(string(b), "atlas-genehmigung-fix") {
+		t.Errorf("gated start without the approval process: %d (%s), want 409 naming it", code, b)
+	}
+	code, body = cReq(t, admin, ts, "POST", "/api/v1/orders/"+gated+"/lines/laptop/start", `{"approvedBy":"root"}`)
+	var got startAnswer
+	if code != http.StatusOK || json.Unmarshal(body, &got) != nil || got.Started != "provision" {
+		t.Fatalf("approved start: %d (%s), want the provisioning", code, body)
+	}
+	code, body = cReq(t, admin, ts, "GET", "/api/v1/orders/"+gated, "")
+	if code != http.StatusOK || !strings.Contains(string(body), `"approvedBy":"root"`) {
+		t.Fatalf("order after the approved start: %d (%s), want the approver recorded", code, body)
+	}
+}
+
+// TestTheTriggerRouteRefusesAnUnreadableBody: malformed JSON and variables that are
+// not an object are the caller's to fix.
+func TestTheTriggerRouteRefusesAnUnreadableBody(t *testing.T) {
+	ts, admin, _, _ := aLifecycleOrder(t)
+	for _, body := range []string{`{`, `{"triggerId":"a","variables":"x"}`} {
+		if code, b := cReq(t, admin, ts, "POST", "/api/v1/processes/laptop-lifecycle/triggers/x", body); code != http.StatusBadRequest {
+			t.Errorf("%s: %d (%s), want 400", body, code, b)
+		}
+	}
+}
