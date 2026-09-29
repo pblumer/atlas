@@ -54,10 +54,10 @@ const KINDS = {
     name: "Unmanaged",
     pill: "warn",
     what: "Held in the target system and not recorded here — somebody has this and " +
-      "nothing in Atlas decided to give it to them.",
+      "nothing in atlas decided to give it to them.",
     acts: [
       { act: "adopt", label: "Adopt", cls: "btn sm",
-        title: "Record it as held, with origin “adopted” — Atlas did not grant it and will not say it did" },
+        title: "Record it as held, with origin “adopted” — atlas did not grant it and will not say it did" },
       { act: "deprovision", label: "Deprovision…", cls: "btn sm danger",
         title: "Run the product's deprovisioning process and take the access away" },
     ],
@@ -65,7 +65,7 @@ const KINDS = {
   missing: {
     name: "Missing",
     pill: "err",
-    what: "Recorded here and not held in the target system — Atlas is asserting " +
+    what: "Recorded here and not held in the target system — atlas is asserting " +
       "something the target system does not agree with, and will keep asserting it.",
     acts: [
       { act: "revoke", label: "Revoke record", cls: "btn sm",
@@ -97,9 +97,9 @@ export async function viewReconciliation({ api, toast, view, isSuperseded }) {
       <h1>Reconciliation</h1>
       <button class="btn neutral" id="rec-refresh" title="Reload the findings">Refresh</button>
     </div>
-    <p class="muted">Where Atlas and a target system disagree about who holds what.
+    <p class="muted">Where atlas and a target system disagree about who holds what.
     An entitlement asserts that a right exists somewhere else, and target systems are
-    changed from outside Atlas — so the inventory decays, and this is what checking it
+    changed from outside atlas — so the inventory decays, and this is what checking it
     turns up. <b>Nothing here happened automatically and nothing here will:</b> each
     finding is acted on by a person, one at a time.</p>
     <p class="muted">Findings are produced by a reconciliation run, which a modelled

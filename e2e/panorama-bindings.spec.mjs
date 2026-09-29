@@ -534,7 +534,7 @@ test("looks up history on demand and says which store answered", async ({ page }
   // Nothing is fetched until somebody asks: a query costs a system that did not
   // agree to be browsed.
   expect(asked).toEqual([]);
-  await expect(panel).toContainText("Asks the stores outside Atlas");
+  await expect(panel).toContainText("Asks the stores outside atlas");
 
   await page.getByRole("button", { name: "Look up history" }).click();
   await expect.poll(() => asked).toEqual(["app-orders"]);

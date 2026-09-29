@@ -103,7 +103,7 @@ func TestTheReviewerIsToldWhereTheRightCameFromAndWhetherItIsDisputed(t *testing
 	// pinned a sentence across a line break would fail on a reflow and say nothing
 	// about what it was guarding.
 	for _, frag := range []struct{ text, why string }{
-		{"Atlas did not grant it", "what an adopted right is"},
+		{"atlas did not grant it", "what an adopted right is"},
 		{"Nobody here decided it", "what a legacy right is"},
 		{"attests to something the target system denies", "why a disputed row matters"},
 	} {

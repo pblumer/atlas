@@ -1622,7 +1622,7 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
       ${approverField(ap, dir, people)}
       ${eligibleField(dir, v.eligible)}
       <label class="field wide">Details the orderer fills in
-        <span class="muted" style="display:block; margin:2px 0 6px">An Atlas form, for what
+        <span class="muted" style="display:block; margin:2px 0 6px">An atlas form, for what
           this product needs that its name does not say — a cost centre, a site, an
           employee number. It is shown in the basket and its answers travel with the
           order line, so an approver reads them and a provisioning process can act on
@@ -1669,7 +1669,7 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
           <code>system:reference</code> — <code>ad:CN=VPN-Users</code>,
           <code>entra:ENTERPRISEPACK</code>. This is what a commissioning load joins a right
           it found to this product by, and it is compared literally, case and all. Leave it
-          empty for anything nothing outside Atlas grants: a load will then never name this
+          empty for anything nothing outside atlas grants: a load will then never name this
           product, which is the right answer and not a gap. Two products claiming one
           reference is refused when the catalogue is published — a right that matches both
           is attributed to neither.</span>
