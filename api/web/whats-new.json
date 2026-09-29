@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-28",
   "entries": [
     {
+      "id": "a-held-per-position-right-can-be-changed-and-reads-as-held",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A held right can be changed in its own process",
+        "de": "Ein gehaltenes Recht lässt sich im eigenen Prozess ändern"
+      },
+      "summary": {
+        "en": "A product whose lifecycle runs as one instance per order position now takes changes too: the orderer asks for a change of a held position, and Atlas delivers it to the instance that carries that right, by key and with a clear answer. A retry with the same change id does not change the right twice, and a right whose instance is no longer running is refused rather than started anew. The order progress now shows such a position as held while its instance waits for the next change or its return. Redeploying a per-position process warns how many instances still run on older versions, because they keep their right there until they are migrated explicitly.",
+        "de": "Ein Produkt, dessen Lebenszyklus als eine Instanz pro Bestellposition läuft, nimmt jetzt auch Änderungen entgegen: Die bestellende Person verlangt eine Änderung einer gehaltenen Position, und Atlas stellt sie gezielt der Instanz zu, die dieses Recht trägt, mit einer eindeutigen Antwort. Eine Wiederholung mit derselben Änderungs-ID ändert das Recht nicht zweimal, und ein Recht, dessen Instanz nicht mehr läuft, wird abgelehnt statt neu gestartet. Der Bestellfortschritt zeigt eine solche Position als gehalten, solange ihre Instanz auf die nächste Änderung oder die Rückgabe wartet. Das erneute Bereitstellen eines Prozesses pro Position warnt, wie viele Instanzen noch auf älteren Versionen laufen, denn sie behalten ihr Recht dort, bis sie ausdrücklich migriert werden."
+      },
+      "link": {
+        "label": "ADR-0428",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0428-a-product-lifecycle-may-run-as-one-instance-per-position.md"
+      },
+      "tags": [
+        "Catalogue",
+        "Orders"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Console",
+          "de": "Konsole öffnen"
+        },
+        "route": "#/console"
+      }
+    },
+    {
       "id": "a-product-s-lifecycle-can-run-as-one-instance-per-order-posi",
       "version": "Unreleased",
       "date": null,
@@ -331,35 +360,6 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "an-evaluation-says-which-version-answered",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See which decision version answered",
-        "de": "Sehen, welche Decision-Version geantwortet hat"
-      },
-      "summary": {
-        "en": "Each decision evaluation now records which deployed version of the decision answered. Operations shows it as a version chip on the instance's decision card and in a decision's list of evaluations, and \"How this was decided\" draws the rules of that version rather than whatever is deployed today. Before, you could see the rules that fired but not which version they came from. Evaluations recorded before this change show no version rather than a guess.",
-        "de": "Jede Auswertung einer Decision hält jetzt fest, welche deployte Version geantwortet hat. Operations zeigt sie als Versionsangabe auf der Decision-Karte einer Instanz und in der Liste der Auswertungen einer Decision, und „How this was decided“ zeichnet die Regeln genau dieser Version statt der heute deployten. Bisher sah man die Regeln, die gegriffen haben, aber nicht, aus welcher Version sie stammten. Auswertungen von vor dieser Änderung zeigen keine Version an statt einer Vermutung."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Decisions",
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the decisions",
-          "de": "Decisions öffnen"
-        },
-        "route": "#/operations/decisions"
       }
     }
   ]

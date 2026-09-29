@@ -184,6 +184,7 @@ func (s *Server) deployWarningsOnLoop(deployed []deployedProcess, applicationID 
 		}
 		out = append(out, s.connectorWarnings(dep.cp)...)
 		out = append(out, renderProblems(s.ambiguousCallTargetsOnLoop(dep.cp, nil))...)
+		out = append(out, s.heldOnOlderVersionsOnLoop(d.Key, d.ProcessID)...)
 		if vocabErr == nil {
 			out = append(out, dataFlowWarnings(dep.cp, vocab)...)
 		}
