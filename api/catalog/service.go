@@ -65,6 +65,11 @@ type Service struct {
 	// can refuse a lifecycle binding that names one it does not (ADR-0425). Nil
 	// skips that check, for the reason Processes may be nil.
 	EntryPoints EntryPointLookup
+
+	// Remainders counts the order lines a converted product left on its old
+	// processes, for the fulfilment report (ADR-0427). Nil leaves the report's
+	// remainder empty.
+	Remainders RemainderLookup
 }
 
 // New builds the service. Every dependency is an explicit argument (ADR-0147).

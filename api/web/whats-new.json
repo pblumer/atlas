@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-28",
   "entries": [
     {
+      "id": "converting-a-product-to-a-lifecycle-process-no-longer-lets-i",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Old processes stay as long as an order still needs them",
+        "de": "Alte Prozesse bleiben, solange ein Auftrag sie noch braucht"
+      },
+      "summary": {
+        "en": "When a product moves to one lifecycle process, orders placed before keep the processes they were placed with — a laptop handed out last year is still returned by last year's return process. Atlas now refuses to delete such a process while an order line can still start it, and says how many lines per product. The fulfilment report shows what is left, and if an old process can no longer work, a maintainer can move the lines to the new process; each moved line records who did it and why.",
+        "de": "Wechselt ein Produkt auf einen Lebenszyklusprozess, behalten früher aufgegebene Aufträge die Prozesse, mit denen sie aufgegeben wurden — ein letztes Jahr ausgegebener Laptop wird mit dem Rückgabeprozess von letztem Jahr zurückgenommen. Atlas verweigert jetzt das Löschen eines solchen Prozesses, solange eine Auftragsposition ihn noch starten kann, und nennt die Anzahl Positionen pro Produkt. Der Fulfilment-Report zeigt den Restbestand, und kann ein alter Prozess nicht mehr funktionieren, lassen sich die Positionen auf den neuen Prozess umbinden; jede umgebundene Position hält fest, wer das getan hat und warum."
+      },
+      "link": {
+        "label": "ADR-0427",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0427-converting-a-product-to-a-lifecycle-process.md"
+      },
+      "tags": [
+        "Catalogue",
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Console",
+          "de": "Console öffnen"
+        },
+        "route": "#/console"
+      }
+    },
+    {
       "id": "a-product-can-be-one-process-for-its-whole-lifecycle-entered",
       "version": "Unreleased",
       "date": null,
@@ -319,28 +348,6 @@
         },
         "route": "#/modeler"
       }
-    },
-    {
-      "id": "the-decision-registry-is-safe-to-read-while-a-decision-is-de",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Deploying a decision while tasks evaluate is safe",
-        "de": "Ein Decision-Deploy während laufender Auswertungen ist sicher"
-      },
-      "summary": {
-        "en": "Business rule tasks are evaluated in the background while the engine may be deploying a new decision version at the same moment. The two touched the same internal tables without coordination; the Go race detector reported it, and in the worst case the server could stop. The tables are now protected, and evaluations still run in parallel.",
-        "de": "Business Rule Tasks werden im Hintergrund ausgewertet, während die Engine gleichzeitig eine neue Decision-Version deployen kann. Beide griffen ohne Abstimmung auf dieselben internen Tabellen zu; der Race-Detector von Go hat das gemeldet, und im schlimmsten Fall konnte der Server stehen bleiben. Die Tabellen sind jetzt geschützt, und Auswertungen laufen weiterhin parallel."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Decisions",
-        "Engine"
-      ]
     }
   ]
 }
