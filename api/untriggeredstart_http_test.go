@@ -117,3 +117,55 @@ func TestProblemsPanelWarnsOfACallIntoSeveralTriggers(t *testing.T) {
 	}
 	t.Fatalf("no call.untriggered-start finding in %s", body)
 }
+
+// TestDeployWarnsOfACallIntoSeveralTriggers: the same finding reaches the deploy
+// response as a warning, and the deploy goes through — the target is resolved per
+// server, and the incident at runtime is the authority.
+func TestDeployWarnsOfACallIntoSeveralTriggers(t *testing.T) {
+	ts := newTestServer(t)
+	deployXML(t, ts, severalTriggersBPMN)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", callerOfSeveralTriggersBPMN, "application/xml")
+	if code != http.StatusOK || !strings.Contains(string(body), "park on an incident") {
+		t.Fatalf("deploy: %d (%s), want 200 with the warning", code, body)
+	}
+}
+
+// TestCSVUploadRefusesAProcessOnlyItsTriggersCanStart: a CSV batch is a start by hand
+// like any other, and is refused the same way (ADR-0426).
+func TestCSVUploadRefusesAProcessOnlyItsTriggersCanStart(t *testing.T) {
+	ts := newTestServer(t)
+	key := deployXML(t, ts, severalTriggersBPMN)
+	upload, ct := buildCSVUpload(t, "records.csv", strptr(sampleRecordsCSV), strptr(validCSVConfig))
+	code, body := postMultipart(t, ts, fmt.Sprintf("/api/v1/processes/%d/instances-from-csv", key), upload, ct)
+	if code != http.StatusConflict || !strings.Contains(string(body), "ADR-0426") {
+		t.Fatalf("CSV start: %d (%s), want 409 citing ADR-0426", code, body)
+	}
+}
+
+// TestPublicStartRefusesAProcessOnlyItsTriggersCanStart: a link minted while the
+// process had a start form stops starting it once its newest version can only be
+// entered through its triggers — with the answer a non-executable process gets,
+// because the person filling in the form cannot act on the model's shape.
+func TestPublicStartRefusesAProcessOnlyItsTriggersCanStart(t *testing.T) {
+	ts := newTestServer(t)
+	if code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", startFormBPMN, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy v1: %d (%s)", code, body)
+	}
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/public-links", `{"processId":"onboard"}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("publish: %d (%s)", code, body)
+	}
+	var link struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(body, &link); err != nil || link.Token == "" {
+		t.Fatalf("decode link: %v (%s)", err, body)
+	}
+	v2 := strings.Replace(severalTriggersBPMN, `id="laptop-lifecycle"`, `id="onboard"`, 1)
+	if code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", v2, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy v2: %d (%s)", code, body)
+	}
+	if code, body := doReq(t, ts, http.MethodPost, "/public/forms/"+link.Token+"/start", "{}", "application/json"); code != http.StatusConflict {
+		t.Fatalf("public start: %d (%s), want 409", code, body)
+	}
+}
