@@ -31,6 +31,48 @@
       }
     },
     {
+      "id": "the-live-view-migrates-the-running-instances-of-the-version-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Migrate a version's running instances straight from its live view",
+        "de": "Laufende Instanzen einer Version direkt aus der Live-Ansicht migrieren"
+      },
+      "summary": {
+        "en": "When you open a process version in Operations and see its tokens on the diagram, you can now move all of that version's running instances onto another deployed version from the same screen. The new button \"Migrate instances…\" opens the migration dialog with the version you are looking at already chosen as the source and the newest version as the target; each version shows how many instances it is running. The button is only offered when the process has more than one version deployed, and it always moves the whole version — a single instance is still moved from its replay.",
+        "de": "Wenn Sie in Operations eine Prozessversion öffnen und ihre Tokens im Diagramm sehen, können Sie jetzt alle laufenden Instanzen dieser Version direkt aus derselben Ansicht auf eine andere bereitgestellte Version verschieben. Die neue Schaltfläche «Migrate instances…» öffnet den Migrationsdialog mit der angezeigten Version als Quelle und der neuesten Version als Ziel; zu jeder Version steht, wie viele Instanzen darauf laufen. Die Schaltfläche erscheint nur, wenn mehr als eine Version bereitgestellt ist, und sie verschiebt immer die ganze Version — eine einzelne Instanz verschieben Sie weiterhin aus ihrem Replay."
+      },
+      "link": {
+        "label": "ADR-0162",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0162-process-instance-migration.md"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Operations and click a process that has more than one version deployed.",
+          "Pick the version whose instances should move in the Version selector.",
+          "Click \"Migrate instances…\", check the target version, give a reason and confirm.",
+          "Instances that cannot be moved stay where they are and are listed afterwards."
+        ],
+        "de": [
+          "Öffnen Sie Operations und klicken Sie auf einen Prozess mit mehr als einer bereitgestellten Version.",
+          "Wählen Sie im Feld «Version» die Version, deren Instanzen verschoben werden sollen.",
+          "Klicken Sie auf «Migrate instances…», prüfen Sie die Zielversion, geben Sie einen Grund an und bestätigen Sie.",
+          "Instanzen, die nicht verschoben werden können, bleiben unverändert und werden anschliessend aufgelistet."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "the-handbook-teaches-monitoring-an-atlas-installation",
       "version": "Unreleased",
       "date": null,
@@ -318,35 +360,6 @@
           "de": "Decisions öffnen"
         },
         "route": "#/operations/decisions"
-      }
-    },
-    {
-      "id": "a-process-only-its-triggers-can-start-is-no-longer-started-b",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "A process with several triggers is no longer started into all of them",
-        "de": "Ein Prozess mit mehreren Auslösern startet nicht mehr in alle zugleich"
-      },
-      "summary": {
-        "en": "A process can have several start events — one message for provisioning, one for deprovisioning. Started by hand, through a start link or from a call activity, none of them fired, and Atlas used to run every branch at once. Now such a start is refused and says which start events the process has; a call activity waits on an incident instead. Processes with a normal start event, or with only one start event, start as before.",
-        "de": "Ein Prozess kann mehrere Startereignisse haben — eine Nachricht für die Provisionierung, eine für die Deprovisionierung. Wurde er von Hand, über einen Startlink oder aus einer Call Activity gestartet, löste keines davon aus, und Atlas führte bisher alle Zweige gleichzeitig aus. Jetzt wird ein solcher Start abgelehnt und nennt die Startereignisse des Prozesses; eine Call Activity wartet stattdessen auf einem Incident. Prozesse mit einem normalen Startereignis oder mit nur einem Startereignis starten wie bisher."
-      },
-      "link": {
-        "label": "ADR-0426",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0426-an-untriggered-create-never-seeds-several-start-events.md"
-      },
-      "tags": [
-        "Operations",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
       }
     }
   ]

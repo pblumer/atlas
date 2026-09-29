@@ -318,6 +318,17 @@ function askMigration({ api, instanceKey, processId, fromVersion, targets }) {
   });
 }
 
+// runningByDefinition keeps the per-*version* running counts a process-level rollup
+// sums away, keyed by the definition key as a string. Migrating drains one deployed
+// version onto another, so its picker has to say which version is actually holding
+// instances — a choice the summed number cannot answer (ADR-0162). `rows` is what
+// GET /api/v1/instances/summary answers.
+export function runningByDefinition(rows) {
+  const byDef = new Map();
+  for (const r of rows || []) byDef.set(String(r.processDefKey), r.active || 0);
+  return byDef;
+}
+
 // migrateProcessFlow moves every running instance of one deployed version onto another,
 // in the bounded batches the server hands out. Each instance is its own command and its
 // own event, so a refusal on one does not roll back the rest — which is why this reports
@@ -327,32 +338,53 @@ function askMigration({ api, instanceKey, processId, fromVersion, targets }) {
 // its own refusal list, which the operator reads afterwards and works through one by
 // one. `versions` is the process's deployed versions; `runningOf` answers how many
 // instances a version has, so the picker can say which of them is worth draining.
-export async function migrateProcessFlow({ api, toast, processId, processName, versions, runningOf, onDone }) {
+// `fromKey` preselects the source: a caller that is showing one version — the live
+// view — has already said which version it means, and the picker must not second-guess
+// it.
+export async function migrateProcessFlow({ api, toast, processId, processName, versions, runningOf, fromKey, onDone }) {
   const deployed = (versions || []).slice().sort((a, b) => b.version - a.version);
   if (deployed.length < 2) {
     toast("Only one version of this process is deployed — deploy the fixed model first, then migrate.", "warn");
     return false;
   }
-  const choice = await askBatchMigration({ processId, processName, versions: deployed, runningOf });
+  const choice = await askBatchMigration({ processId, processName, versions: deployed, runningOf, fromKey });
   if (!choice) return false;
 
   let migrated = 0;
   const refused = [];
+  const route = `/api/v1/processes/${encodeURIComponent(choice.from.key)}/migrate-instances`;
   try {
-    // The server caps each call and reports whether more are waiting, exactly as the
-    // bulk terminate does. The guard is a backstop against a server that never stops
-    // saying "remaining" — it bounds the loop, it is not the expected exit.
+    // The server caps each call and says whether more are waiting, and where the next
+    // call continues: past the last instance this one looked at. Without that cursor a
+    // refused instance — which stays where it is — is selected again by every call,
+    // and a page of them is all the walk ever sees. The guard is a backstop against a
+    // server that never stops saying "remaining"; it bounds the loop, it is not the
+    // expected exit.
+    let after = "";
     for (let guard = 0; guard < 1000; guard++) {
-      const res = await api("POST", `/api/v1/processes/${encodeURIComponent(choice.from.key)}/migrate-instances`, {
+      const res = await api("POST", after ? `${route}?after=${encodeURIComponent(after)}` : route, {
         targetProcessDefKey: choice.to.key,
         reason: choice.reason,
       });
       migrated += res.migrated || 0;
       for (const r of res.refused || []) refused.push(r);
       if (!res.remaining) break;
+      // A call that says more remain without saying where to continue cannot be
+      // repeated safely: from the front it would meet the same refusals again.
+      if (!res.nextCursor || res.nextCursor === after) break;
+      after = res.nextCursor;
+      // Tens of thousands of instances are a hundred calls or more, and a dialog that
+      // has closed with nothing on screen for that long reads as a hang.
+      toast(`Migrating to ${versionLabel(choice.to)} — ${migrated} moved${
+        refused.length ? `, ${refused.length} left behind` : ""} so far…`);
     }
   } catch (e) {
-    toast(migrateError(e), "err");
+    // What moved before the failure has moved — each instance is its own event — so
+    // the count is part of the message, and the caller's view is re-read either way.
+    toast(migrated
+      ? `${migrateError(e)} — ${migrated} instance${migrated === 1 ? " was" : "s were"} already migrated`
+      : migrateError(e), "err");
+    if (migrated && onDone) await onDone();
     return false;
   }
 
@@ -375,17 +407,26 @@ export async function migrateProcessFlow({ api, toast, processId, processName, v
 // askBatchMigration picks the two versions and the reason. Source first: draining a
 // version is the act, and which one is holding instances is the thing an operator is
 // looking at.
-function askBatchMigration({ processId, processName, versions, runningOf }) {
+function askBatchMigration({ processId, processName, versions, runningOf, fromKey }) {
   return new Promise((resolve) => {
     const running = (v) => (runningOf ? runningOf(v) : 0);
+    // Without counts the options say nothing about them: "none running" on every
+    // version would be a claim, and a false one exactly when the counts could not be read.
     const optionFor = (v) => {
       const n = running(v);
-      return `<option value="${esc(String(v.key))}">${esc(versionLabel(v))}${n ? ` — ${n} running` : " — none running"}</option>`;
+      const count = runningOf ? (n ? ` — ${n} running` : " — none running") : "";
+      return `<option value="${esc(String(v.key))}">${esc(versionLabel(v))}${count}</option>`;
     };
-    // Default: drain the oldest version that still holds instances onto the newest one,
-    // which is the shape of the job nearly every time this is opened.
+    // Default: the version the caller named, else drain the oldest version that still
+    // holds instances onto the newest one, which is the shape of the job nearly every
+    // time this is opened from the overview. The target stays the newest either way: when
+    // that is the source too, the dialog asks for a target rather than proposing to move
+    // instances back to an older version on the operator's behalf.
     const withRunning = versions.filter((v) => running(v) > 0);
-    const defaultFrom = (withRunning.length ? withRunning[withRunning.length - 1] : versions[versions.length - 1]).key;
+    const named = fromKey != null && versions.find((v) => String(v.key) === String(fromKey));
+    const defaultFrom = named
+      ? named.key
+      : (withRunning.length ? withRunning[withRunning.length - 1] : versions[versions.length - 1]).key;
 
     const ov = document.createElement("div");
     ov.className = "modal-ov";
@@ -456,9 +497,17 @@ function askBatchMigration({ processId, processName, versions, runningOf }) {
 // showBatchOutcome reports a batch that did not take every instance with it. It is a
 // dialog rather than a toast because the refusals are a work list — each named instance
 // is still on the old version and still needs a decision.
+// How many refusals the outcome lists by name. A model change that strands every token
+// refuses every instance, and fifty thousand rows is not a work list anyone reads — it
+// is a page the browser struggles to draw. Past this the dialog says how many more there
+// are and where they all are: still on the source version, which lists them.
+export const OUTCOME_LIST_MAX = 200;
+
 function showBatchOutcome({ migrated, refused, from, to }) {
   return new Promise((resolve) => {
-    const rows = refused.map((r) => {
+    const listed = refused.slice(0, OUTCOME_LIST_MAX);
+    const unlisted = refused.length - listed.length;
+    const rows = listed.map((r) => {
       const why = (r.problems || []).map((p) => `${p.elementId ? p.elementId + " " : ""}${p.reason}`).join("; ");
       return `<li><a href="#/operations/i/${esc(String(r.instanceKey))}" class="mono">${esc(String(r.instanceKey))}</a>
         <span class="muted">${esc(why || "could not be migrated")}</span></li>`;
@@ -474,6 +523,8 @@ function showBatchOutcome({ migrated, refused, from, to }) {
           ${refused.length} could not be, and ${refused.length === 1 ? "is" : "are"} still running on
           <b>${esc(versionLabel(from))}</b> exactly as before:</p>
           <ul class="mig-problems mig-refused">${rows}</ul>
+          ${unlisted ? `<p class="mig-unlisted" style="margin:6px 0 0;font-size:12.5px">…and ${unlisted} more. Every one of them
+          is still on <b>${esc(versionLabel(from))}</b>, so that version&rsquo;s live view lists them all.</p>` : ""}
           <p class="muted" style="margin:8px 0 0;font-size:12px">Open one to see where its token is. A refusal is not a
           failure to apply — nothing was written for these, so they are unchanged rather than half-migrated.</p>
         </div>

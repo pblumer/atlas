@@ -349,19 +349,30 @@ func migrationValueOf(s *Server, plan migrationPlanResp) model.ProcessMigrationV
 }
 
 // migrateBatchResp is the answer to migrating a whole version's instances: what moved,
-// what was refused and why, and whether this call hit its cap.
+// what was refused and why, and whether this call hit its cap. NextCursor is set exactly
+// when Remaining is: the key of the last instance this call looked at, which the next
+// call passes as `?after=`.
 type migrateBatchResp struct {
 	ToProcessDefKey uint64              `json:"toProcessDefKey"`
 	Migrated        int                 `json:"migrated"`
 	Refused         []migrationPlanResp `json:"refused,omitempty"`
 	Remaining       bool                `json:"remaining"`
+	NextCursor      string              `json:"nextCursor,omitempty"`
 }
 
 // handleMigrateInstancesOfProcess migrates a bounded batch of one definition's running
 // instances to another version. Each instance is its own command and its own event, so
 // a refusal on the four-hundredth does not roll back the three hundred and ninety-nine
 // that were fine (ADR-0162) — the batch is an API convenience, never one durable
-// transaction. The caller repeats while `remaining` is true, as the bulk cancel does.
+// transaction. The caller repeats while `remaining` is true, passing the `nextCursor`
+// each call hands back as the next call's `?after=`.
+//
+// The cursor is what makes repeating a walk. A refused instance stays on the version it
+// was on, so a batch that starts from the front every time selects it again: its
+// refusal is reported once per call, and once a whole page is refused that page is all
+// any later call selects — `remaining` stays true and the instances behind it are never
+// reached. The bulk cancel needs no cursor because what it touches leaves the version.
+// A call without `after` starts from the oldest instance, as it always has.
 func (s *Server) handleMigrateInstancesOfProcess(w http.ResponseWriter, r *http.Request) {
 	fromKey, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
@@ -388,6 +399,15 @@ func (s *Server) handleMigrateInstancesOfProcess(w http.ResponseWriter, r *http.
 	if limit > migrationBatchMax {
 		limit = migrationBatchMax
 	}
+	var after uint64
+	if q := strings.TrimSpace(r.URL.Query().Get("after")); q != "" {
+		n, err := strconv.ParseUint(q, 10, 64)
+		if err != nil {
+			httpapi.Error(w, http.StatusBadRequest, "invalid after cursor (want an instance key)")
+			return
+		}
+		after = n
+	}
 	actor := ""
 	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
 		actor = p.Username
@@ -398,30 +418,34 @@ func (s *Server) handleMigrateInstancesOfProcess(w http.ResponseWriter, r *http.
 		resp  = migrateBatchResp{ToProcessDefKey: req.TargetProcessDefKey}
 		opErr error
 	)
-	// Selecting the batch is a read over the whole active family; planning and
-	// migrating are writes. Only the second half needs the run loop, so the walk
-	// runs off it — the same split as the bulk cancel. An instance that finishes in
-	// between is already handled below (planMigration reports it as gone).
+	// Selecting the batch is a read of the definition's own instance index, past the
+	// cursor; planning and migrating are writes. Only the second half needs the run
+	// loop, so the walk runs off it — the same split as the bulk cancel. An instance
+	// that finishes in between is already handled below (planMigration reports it as
+	// gone), and one that is refused is behind the cursor the next call starts from.
 	var keys []uint64
 	opErr = s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
 		if _, ok := defs[fromKey]; !ok {
 			return nil
 		}
 		found = true
-		err := rv.ActiveProcessInstances(func(k uint64, v *model.ProcessInstanceValue) error {
-			if v.ProcessDefKey != fromKey {
-				return nil
-			}
-			keys = append(keys, k)
-			if len(keys) >= limit {
+		err := rv.ActiveInstancesOfDef(fromKey, after, func(k uint64, _ *model.ProcessInstanceValue) error {
+			// Stopping on the instance *after* a full page, rather than on the one that
+			// fills it, makes `remaining` exact: a page that ends on the last instance
+			// does not send the caller round once more for an empty answer.
+			if len(keys) == limit {
 				return errMigrationBatchFull
 			}
+			keys = append(keys, k)
 			return nil
 		})
 		if err != nil && !errors.Is(err, errMigrationBatchFull) {
 			return err
 		}
 		resp.Remaining = errors.Is(err, errMigrationBatchFull)
+		if resp.Remaining {
+			resp.NextCursor = strconv.FormatUint(keys[len(keys)-1], 10)
+		}
 		return nil
 	})
 	if opErr != nil {

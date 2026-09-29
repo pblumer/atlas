@@ -213,3 +213,75 @@ func TestInstanceDefIndexScanDecodeErrors(t *testing.T) {
 		t.Error("FinishedInstancesOfDefDesc over an undecodable record: want error")
 	}
 }
+
+// TestActiveInstancesOfDefAscendingAfterCursor: the oldest-first walk of one
+// definition's live instances continues strictly past `after`, which is how a batch
+// operation over a version resumes where its previous call stopped — including past an
+// instance it looked at and left alone, and past a cursor that names no instance of this
+// definition at all.
+func TestActiveInstancesOfDefAscendingAfterCursor(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	tx := s.NewTransaction()
+	for _, k := range []uint64{103, 100, 101} {
+		_ = tx.PutProcessInstance(k, &model.ProcessInstanceValue{ProcessDefKey: 7})
+	}
+	_ = tx.PutProcessInstance(102, &model.ProcessInstanceValue{ProcessDefKey: 8})
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+	_ = tx.Close()
+	// An index entry whose instance was never written is skipped, as the descending
+	// walk skips it.
+	if err := s.db.Set(keyInstanceByDef(7, 104), nil, pebble.Sync); err != nil {
+		t.Fatalf("orphan entry: %v", err)
+	}
+
+	walk := func(after uint64) []uint64 {
+		var got []uint64
+		if err := s.ActiveInstancesOfDef(7, after, func(key uint64, v *model.ProcessInstanceValue) error {
+			if v.ProcessDefKey != 7 {
+				t.Errorf("instance %d of def %d yielded for def 7", key, v.ProcessDefKey)
+			}
+			got = append(got, key)
+			return nil
+		}); err != nil {
+			t.Fatalf("ActiveInstancesOfDef(after=%d): %v", after, err)
+		}
+		return got
+	}
+	for _, c := range []struct {
+		after uint64
+		want  []uint64
+	}{
+		{0, []uint64{100, 101, 103}}, // from the oldest
+		{100, []uint64{101, 103}},    // strictly past the cursor
+		{102, []uint64{103}},         // a cursor naming another definition's instance
+		{103, nil},                   // past the newest: nothing left
+	} {
+		got := walk(c.after)
+		if len(got) != len(c.want) {
+			t.Errorf("after=%d: got %v, want %v", c.after, got, c.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("after=%d: got %v, want %v", c.after, got, c.want)
+				break
+			}
+		}
+	}
+
+	if err := s.db.Set(keyProcessInstance(101), []byte{0xff}, pebble.Sync); err != nil {
+		t.Fatalf("corrupt: %v", err)
+	}
+	if err := s.ActiveInstancesOfDef(7, 0, func(uint64, *model.ProcessInstanceValue) error {
+		return nil
+	}); err == nil {
+		t.Error("ActiveInstancesOfDef over an undecodable record: want error")
+	}
+}

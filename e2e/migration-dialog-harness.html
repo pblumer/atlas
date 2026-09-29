@@ -19,6 +19,9 @@
       <button class="btn" id="mig-bad">Migrate stranded instance</button>
       <button class="btn" id="mig-only">Migrate (only one version)</button>
       <button class="btn" id="mig-batch">Migrate batch</button>
+      <button class="btn" id="mig-batch-fail">Migrate batch (fails on page 2)</button>
+      <button class="btn" id="mig-batch-nocursor">Migrate batch (no cursor)</button>
+      <button class="btn" id="mig-batch-flood">Migrate batch (all refused)</button>
     </div>
     <script type="module">
       import { migrateInstanceFlow, migrateProcessFlow, planSummary, otherVersions, forkSummary } from "/migrationdialog.js";
@@ -70,7 +73,8 @@
 
       window.__calls = [];   // every write the flow issued, in order
       window.__result = null;
-      let batchPage = 0;
+      window.__done = 0;     // how often the flow asked its caller to re-read
+      let batchMode = "";    // which server the batch endpoint plays: see below
 
       const toast = (msg, kind) => {
         const t = document.getElementById("toast");
@@ -107,17 +111,34 @@
         if (url.includes("/migrate-instances")) {
           // Two pages, so the caller's "repeat while remaining" loop is exercised; the
           // second page carries a refusal, so the outcome dialog has something to list.
-          batchPage++;
-          if (batchPage === 1) return { toProcessDefKey: body.targetProcessDefKey, migrated: 2, remaining: true };
+          // The second page is only reachable through the cursor the first handed back,
+          // as on the server: a call without it starts from the front again.
+          const after = new URL(url, location.origin).searchParams.get("after");
+          const to = body.targetProcessDefKey;
+          if (batchMode === "nocursor") return { toProcessDefKey: to, migrated: 2, remaining: true };
+          if (batchMode === "flood") {
+            const refused = Array.from({ length: 250 }, (_, i) => ({
+              instanceKey: String(8000 + i), migratable: false,
+              problems: [{ elementId: "review", reason: "no element in the target version is mapped to it" }],
+            }));
+            return { toProcessDefKey: to, migrated: 0, remaining: false, refused };
+          }
+          if (!after) return { toProcessDefKey: to, migrated: 2, remaining: true, nextCursor: "7002" };
+          if (after !== "7002") throw new Error(`unexpected cursor ${after}`);
+          if (batchMode === "fail") {
+            const err = new Error("migrate instances: loop closing");
+            err.status = 500;
+            throw err;
+          }
           return {
-            toProcessDefKey: body.targetProcessDefKey, migrated: 1, remaining: false,
+            toProcessDefKey: to, migrated: 1, remaining: false,
             refused: [{ instanceKey: "7007", migratable: false, problems: [{ elementId: "review", reason: "is a bpmn:UserTask but maps to gate, which is a bpmn:ExclusiveGateway" }] }],
           };
         }
         return {};
       };
 
-      const reset = () => { window.__calls = []; window.__result = null; window.__toast = null; batchPage = 0; };
+      const reset = () => { window.__calls = []; window.__result = null; window.__toast = null; window.__done = 0; batchMode = ""; };
 
       document.getElementById("mig-ok").addEventListener("click", async () => {
         reset();
@@ -138,14 +159,20 @@
           api, toast, instanceKey: "6001", processId: "unrelated", fromVersion: 1, fromProcessDefKey: 900,
         });
       });
-      document.getElementById("mig-batch").addEventListener("click", async () => {
+      const batch = (mode) => async () => {
         reset();
+        batchMode = mode;
         window.__result = await migrateProcessFlow({
           api, toast, processId: "migrating", processName: "Migrating",
           versions: PROCESSES.filter((p) => p.processId === "migrating"),
           runningOf: (v) => (v.key === 101 ? 3 : 0),
+          onDone: () => { window.__done++; },
         });
-      });
+      };
+      document.getElementById("mig-batch").addEventListener("click", batch(""));
+      document.getElementById("mig-batch-fail").addEventListener("click", batch("fail"));
+      document.getElementById("mig-batch-nocursor").addEventListener("click", batch("nocursor"));
+      document.getElementById("mig-batch-flood").addEventListener("click", batch("flood"));
 
       // Exported pure helpers, checked directly rather than through the DOM.
       window.__planSummary = planSummary;

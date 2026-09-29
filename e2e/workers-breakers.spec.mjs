@@ -7,15 +7,20 @@
 // stopped serving it look identical everywhere else on this page.
 import { test, expect } from "@playwright/test";
 
+// One instant for the fixture and for the page's clock. Read from Date.now() at two
+// different moments — once here, once when the page draws the card — "in 10s" became
+// "in 9s" whenever drawing took more than a second, which a loaded machine does.
+const NOW = Date.UTC(2026, 8, 29, 12, 0, 0);
+
 // A breaker that tripped a minute ago and next probes in ten seconds — the state an
 // operator lands on while an SMTP host is down.
 const heldRow = () => ({
   jobType: "io.atlas.mail.send",
   connector: "Patrick Blumer",
   state: "open",
-  trippedAt: (Date.now() - 60_000) * 1e6,
+  trippedAt: (NOW - 60_000) * 1e6,
   reason: 'dial tcp 10.0.0.9:587: connect: connection refused',
-  probeAt: (Date.now() + 10_000) * 1e6,
+  probeAt: (NOW + 10_000) * 1e6,
   cooldown: 10e9,
   refused: 412,
 });
@@ -51,6 +56,7 @@ const goto = async (page, hash) => {
 };
 
 async function bootApp(page) {
+  await page.clock.setFixedTime(NOW);
   await page.goto("/index.html");
   await page.waitForFunction(() => document.querySelector("#view")?.children.length > 0, null, { timeout: 15000 });
 }
@@ -98,8 +104,10 @@ test("Close now releases exactly the target on its row", async ({ page }) => {
   await goto(page, "#/operations/workers");
 
   await page.locator("#wk-breakers button", { hasText: "Close now" }).click();
-  await page.waitForTimeout(600);
 
+  // The click only starts the request; waiting a fixed 600 ms for it to arrive is a bet
+  // a loaded machine can lose. Wait for the request itself.
+  await expect.poll(() => closed.length).toBe(1);
   expect(closed).toEqual([{ jobType: "io.atlas.mail.send", connector: "Patrick Blumer" }]);
   expect(errors).toEqual([]);
 });

@@ -979,6 +979,32 @@ func (q queries) CompletedProcessInstances(fn func(key uint64, v *model.ProcessI
 	})
 }
 
+// ActiveInstancesOfDef calls fn with every live instance of one definition in
+// ASCENDING key order — oldest first — starting just above `after`; after == 0 starts
+// from the oldest. It reads the same by-definition index as
+// [queries.ActiveInstancesOfDefDesc], so its cost is what it yields and not the store.
+//
+// It is the walk for a batch that works through a version in bounded calls (ADR-0162):
+// the key of the last instance a call looked at is the cursor for the next, whatever
+// the call did with it. Resuming from the front instead meets every instance the batch
+// left in place again — a refused migration stays on its version — and a page of them
+// is then all any later call ever sees. Ascending, because an instance started on the
+// version while the batch runs has a key above every cursor so far, and is reached —
+// keys are a partition's monotonic counter, and the server runs one partition
+// (ADR-0006). A second partition would need a cursor per partition.
+func (q queries) ActiveInstancesOfDef(procDefKey, after uint64, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
+	lo := instanceByDefPrefix(procDefKey)
+	hi := prefixEnd(lo)
+	if after != 0 {
+		// LowerBound is inclusive. Every entry of this index is the same length, so the
+		// entry for `after` with one byte appended sorts strictly above it and below
+		// every later entry — the start of "the next page", whether or not `after`
+		// itself is still in the index.
+		lo = append(keyInstanceByDef(procDefKey, after), 0)
+	}
+	return q.scanRange(lo, hi, q.instanceOfEntry(keyProcessInstance, fn))
+}
+
 // ActiveInstancesOfDefDesc calls fn with every live instance of one definition in
 // DESCENDING key order — newest first — starting just below `before`; before == 0
 // starts from the newest. It reads the by-definition index, so its cost is the
@@ -1076,7 +1102,13 @@ func (q queries) InstancesOnElementDesc(procDefKey uint64, elementId int32, befo
 // the record each entry names. The two indexes differ only in their key range and
 // in which family holds the record, so the walk itself is written once.
 func (q queries) instancesOfDefDesc(lo, hi []byte, recordKey func(uint64) []byte, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
-	return q.scanRangeDesc(lo, hi, func(k, _ []byte) error {
+	return q.scanRangeDesc(lo, hi, q.instanceOfEntry(recordKey, fn))
+}
+
+// instanceOfEntry turns a by-definition index entry into the record it names, for a
+// walk in either direction.
+func (q queries) instanceOfEntry(recordKey func(uint64) []byte, fn func(key uint64, v *model.ProcessInstanceValue) error) func(k, _ []byte) error {
+	return func(k, _ []byte) error {
 		key := trailingKey(k)
 		raw, ok, err := getCopy(q.r, recordKey(key))
 		if err != nil || !ok {
@@ -1090,7 +1122,7 @@ func (q queries) instancesOfDefDesc(lo, hi []byte, recordKey func(uint64) []byte
 			return err
 		}
 		return fn(key, v.(*model.ProcessInstanceValue))
-	})
+	}
 }
 
 // ActiveProcessInstancesDesc calls fn with live process instances in descending key

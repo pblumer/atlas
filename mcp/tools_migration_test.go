@@ -144,6 +144,58 @@ func TestMigrationToolsRefuseAndBatch(t *testing.T) {
 	}
 }
 
+// An agent draining a version does what the description says: repeat while remaining,
+// handing each call's cursor to the next. The tool has to carry that cursor through to
+// the server — without it every call starts from the oldest instance again — and has to
+// refuse one it cannot pass on rather than drop it and restart the walk.
+func TestMigrationToolsBatchCursor(t *testing.T) {
+	atlas := newAtlas(t)
+	v1 := deployVersion(t, atlas, 1, migrateToolsV1)
+	v2 := deployVersion(t, atlas, 2, migrateToolsV2)
+	for id := 3; id < 5; id++ {
+		if _, isErr := toolText(t, result(t, run(t, atlas, callTool(id, "atlas_create_instance", map[string]any{"key": v1}))[0])); isErr {
+			t.Fatal("create_instance failed")
+		}
+	}
+	type step struct {
+		Migrated   int    `json:"migrated"`
+		Remaining  bool   `json:"remaining"`
+		NextCursor string `json:"nextCursor"`
+	}
+	call := func(id int, args map[string]any) step {
+		t.Helper()
+		text, isErr := toolText(t, result(t, run(t, atlas, callTool(id, "atlas_migrate_instances", args))[0]))
+		if isErr {
+			t.Fatalf("migrate_instances %v: %s", args, text)
+		}
+		var s step
+		if err := json.Unmarshal([]byte(text), &s); err != nil {
+			t.Fatalf("decode %q: %v", text, err)
+		}
+		return s
+	}
+
+	first := call(5, map[string]any{"key": v1, "targetProcessDefKey": v2, "reason": "drain", "limit": 1})
+	if first.Migrated != 1 || !first.Remaining || first.NextCursor == "" {
+		t.Fatalf("first call = %+v, want one migrated and a cursor", first)
+	}
+	// A cursor past every instance selects nothing — which a call that dropped the
+	// cursor would not answer, since the second instance is still waiting at the front.
+	if past := call(8, map[string]any{"key": v1, "targetProcessDefKey": v2, "reason": "drain", "after": "18446744073709551615"}); past.Migrated != 0 || past.Remaining {
+		t.Errorf("a cursor past the end = %+v, want nothing selected", past)
+	}
+	second := call(6, map[string]any{"key": v1, "targetProcessDefKey": v2, "reason": "drain", "limit": 1, "after": first.NextCursor})
+	if second.Migrated != 1 || second.Remaining || second.NextCursor != "" {
+		t.Errorf("second call = %+v, want the other instance migrated and the walk finished", second)
+	}
+
+	if text, isErr := toolText(t, result(t, run(t, atlas, callTool(7, "atlas_migrate_instances", map[string]any{
+		"key": v1, "targetProcessDefKey": v2, "reason": "drain", "after": 42,
+	}))[0])); !isErr || !strings.Contains(text, "nextCursor") {
+		t.Errorf("a numeric cursor = (%q, isErr=%v), want a refusal naming what to pass", text, isErr)
+	}
+}
+
 // The repair beside the migration: an operator (or an agent driving one) can bring a
 // version's running instances back in line with what it declares searchable, without
 // having to reason about when that version was deployed. The tool is a plain proxy, so
@@ -174,5 +226,49 @@ func TestReindexInstancesTool(t *testing.T) {
 	// and nothing to write for it — which is exactly the shape of a no-op run.
 	if got.ProcessDefKey != v1 || got.Submitted != 1 || got.Remaining || len(got.Searchable) != 0 {
 		t.Errorf("reindex = %+v, want the definition, one instance submitted, nothing remaining, no declaration", got)
+	}
+}
+
+// The repair walks a version the way the migration batch does, and for a sharper reason:
+// a repaired instance stays on its version, so without the cursor every call would
+// select the same page. The tool carries the cursor through and refuses one it cannot.
+func TestReindexInstancesToolCursor(t *testing.T) {
+	atlas := newAtlas(t)
+	v1 := deployVersion(t, atlas, 1, migrateToolsV1)
+	for id := 2; id < 4; id++ {
+		if _, isErr := toolText(t, result(t, run(t, atlas, callTool(id, "atlas_create_instance", map[string]any{"key": v1}))[0])); isErr {
+			t.Fatal("create_instance failed")
+		}
+	}
+	type step struct {
+		Submitted  int    `json:"submitted"`
+		Remaining  bool   `json:"remaining"`
+		NextCursor string `json:"nextCursor"`
+	}
+	call := func(id int, args map[string]any) step {
+		t.Helper()
+		text, isErr := toolText(t, result(t, run(t, atlas, callTool(id, "atlas_reindex_instances", args))[0]))
+		if isErr {
+			t.Fatalf("reindex_instances %v: %s", args, text)
+		}
+		var s step
+		if err := json.Unmarshal([]byte(text), &s); err != nil {
+			t.Fatalf("decode %q: %v", text, err)
+		}
+		return s
+	}
+
+	first := call(4, map[string]any{"key": v1, "limit": 1})
+	if first.Submitted != 1 || !first.Remaining || first.NextCursor == "" {
+		t.Fatalf("first call = %+v, want one submitted and a cursor", first)
+	}
+	second := call(5, map[string]any{"key": v1, "limit": 1, "after": first.NextCursor})
+	if second.Submitted != 1 || second.Remaining || second.NextCursor != "" {
+		t.Errorf("second call = %+v, want the other instance and the walk finished", second)
+	}
+	if text, isErr := toolText(t, result(t, run(t, atlas, callTool(6, "atlas_reindex_instances", map[string]any{
+		"key": v1, "after": 7,
+	}))[0])); !isErr || !strings.Contains(text, "nextCursor") {
+		t.Errorf("a numeric cursor = (%q, isErr=%v), want a refusal naming what to pass", text, isErr)
 	}
 }

@@ -1,0 +1,18 @@
+{
+  "tags": ["Operations"],
+  "title": {
+    "en": "The Instances list's row menu works again",
+    "de": "Das Zeilenmenü der Instanzliste funktioniert wieder"
+  },
+  "summary": {
+    "en": "In Operations → Instances, the ⋯ menu of a process row offers \"Migrate running instances…\" and \"Terminate all running\". Both only closed the menu and did nothing else. They open their dialogs again: migration asks for the source and target version and a reason, and terminating asks for a confirmation before anything is discarded.",
+    "de": "In Operations → Instances bietet das ⋯-Menü einer Prozesszeile «Migrate running instances…» und «Terminate all running» an. Beide schlossen nur das Menü und bewirkten sonst nichts. Sie öffnen ihre Dialoge jetzt wieder: Die Migration fragt nach Quell- und Zielversion sowie einem Grund, das Beenden verlangt eine Bestätigung, bevor etwas verworfen wird."
+  },
+  "try": {
+    "label": {
+      "en": "Open Instances",
+      "de": "Instanzen öffnen"
+    },
+    "route": "#/operations"
+  }
+}
