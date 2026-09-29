@@ -1398,7 +1398,26 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 		running    int
 		scanErr    error
 		persistErr error
+		needed     string
+		released   []string
+		processID  string
+		lastOne    bool
 	)
+	// Whether an order still needs this process is a scan of the order store, so it
+	// is asked off the run loop, before the delete's own turn (ADR-0427). Only the
+	// last deployed version of a process id is guarded: an order starts the newest.
+	s.do(func() {
+		if d, ok := s.deployments[key]; ok {
+			processID = d.ProcessID
+			lastOne = s.onlyVersionOnLoop(key, processID)
+		}
+	})
+	if lastOne {
+		if needed, scanErr = s.processStillNeeded(processID); scanErr != nil {
+			httpapi.Error(w, http.StatusInternalServerError, "check orders: "+scanErr.Error())
+			return
+		}
+	}
 	s.do(func() {
 		d, ok := s.deployments[key]
 		if !ok {
@@ -1410,6 +1429,16 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 		if s.systemPIDs[d.ProcessID] {
 			protected = true
 			return
+		}
+		if needed != "" {
+			return
+		}
+		// Re-asked here, in the turn that deletes: a version deployed meanwhile makes
+		// this one no longer the last, and a release published meanwhile binds.
+		if s.onlyVersionOnLoop(key, d.ProcessID) {
+			if released, scanErr = s.releaseBindsOnLoop(d.ProcessID); scanErr != nil || len(released) > 0 {
+				return
+			}
 		}
 		// The per-definition live count is maintained on the write path (ADR-0083),
 		// so the refusal check is a single counter read. It used to walk every
@@ -1441,6 +1470,12 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusForbidden, "protected system process cannot be deleted")
 	case scanErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "check instances: "+scanErr.Error())
+	case needed != "":
+		httpapi.Error(w, http.StatusConflict, needed)
+	case len(released) > 0:
+		httpapi.Error(w, http.StatusConflict, fmt.Sprintf("cannot delete: the current catalogue "+
+			"release binds %s for %s; an order placed now would freeze it (ADR-0427)",
+			processID, strings.Join(released, ", ")))
 	case running > 0:
 		httpapi.Error(w, http.StatusConflict, fmt.Sprintf("cannot delete: %d running instance(s); cancel them first", running))
 	case persistErr != nil:

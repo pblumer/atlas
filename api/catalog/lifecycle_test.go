@@ -88,6 +88,9 @@ func TestBindingForReadsEitherForm(t *testing.T) {
 	if b := old.BindingFor(OpChange); b.Bound() {
 		t.Errorf("two-process change = %+v, want unbound", b)
 	}
+	if b := old.BindingFor(OpProvision); b.Process != old.ProvisionProcess || b.Triggered() {
+		t.Errorf("two-process provision = %+v", b)
+	}
 	lc := lifecycleItem("vpn")
 	if b := lc.BindingFor(OpProvision); b.Process != "vpn-lifecycle" || b.Message != "vpn.provision" {
 		t.Errorf("lifecycle provision = %+v", b)

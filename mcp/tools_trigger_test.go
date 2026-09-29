@@ -48,3 +48,22 @@ func TestTriggerStartViaTool(t *testing.T) {
 		}
 	}
 }
+
+// TestRebindCatalogProductViaTool: the tool needs a reason and answers the server's
+// refusal for a product that does not exist as a tool error (ADR-0427).
+func TestRebindCatalogProductViaTool(t *testing.T) {
+	ts := newAtlas(t)
+	if text, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_rebind_catalog_product",
+		map[string]any{"id": "laptop"}))[0])); !isErr {
+		t.Errorf("no reason: %q, want a tool error", text)
+	}
+	if text, isErr := toolText(t, result(t, run(t, ts, callTool(2, "atlas_rebind_catalog_product",
+		map[string]any{"reason": "x"}))[0])); !isErr {
+		t.Errorf("no id: %q, want a tool error", text)
+	}
+	text, isErr := toolText(t, result(t, run(t, ts, callTool(3, "atlas_rebind_catalog_product",
+		map[string]any{"id": "nothing", "reason": "the old IdM is gone"}))[0]))
+	if !isErr || !strings.Contains(text, "nothing") {
+		t.Errorf("unknown product: (%q, isErr=%v), want the server's 404", text, isErr)
+	}
+}

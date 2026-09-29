@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-28",
   "entries": [
     {
+      "id": "converting-a-product-to-a-lifecycle-process-no-longer-lets-i",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Old processes stay as long as an order still needs them",
+        "de": "Alte Prozesse bleiben, solange ein Auftrag sie noch braucht"
+      },
+      "summary": {
+        "en": "When a product moves to one lifecycle process, orders placed before keep the processes they were placed with — a laptop handed out last year is still returned by last year's return process. Atlas now refuses to delete such a process while an order line can still start it, and says how many lines per product. The fulfilment report shows what is left, and if an old process can no longer work, a maintainer can move the lines to the new process; each moved line records who did it and why.",
+        "de": "Wechselt ein Produkt auf einen Lebenszyklusprozess, behalten früher aufgegebene Aufträge die Prozesse, mit denen sie aufgegeben wurden — ein letztes Jahr ausgegebener Laptop wird mit dem Rückgabeprozess von letztem Jahr zurückgenommen. Atlas verweigert jetzt das Löschen eines solchen Prozesses, solange eine Auftragsposition ihn noch starten kann, und nennt die Anzahl Positionen pro Produkt. Der Fulfilment-Report zeigt den Restbestand, und kann ein alter Prozess nicht mehr funktionieren, lassen sich die Positionen auf den neuen Prozess umbinden; jede umgebundene Position hält fest, wer das getan hat und warum."
+      },
+      "link": {
+        "label": "ADR-0427",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0427-converting-a-product-to-a-lifecycle-process.md"
+      },
+      "tags": [
+        "Catalogue",
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Console",
+          "de": "Console öffnen"
+        },
+        "route": "#/console"
+      }
+    },
+    {
       "id": "a-product-can-be-one-process-for-its-whole-lifecycle-entered",
       "version": "Unreleased",
       "date": null,
@@ -318,35 +347,6 @@
           "de": "Worker öffnen"
         },
         "route": "#/console/workers"
-      }
-    },
-    {
-      "id": "camunda-s-versiontag-binding-is-refused-instead-of-read-as-l",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A versionTag binding is refused, not silently ignored",
-        "de": "Eine Bindung per versionTag wird abgewiesen statt still ignoriert"
-      },
-      "summary": {
-        "en": "Camunda lets a business rule task bind a decision by version tag. Atlas does not support that, and it used to treat such a task as \"Latest\" without a word, so a model that pinned a tag ran whatever version was newest. The Modeler also rewrote the binding to \"Latest\" on the next save. Deploying such a model is now refused and names the task, and the Modeler shows the binding as it is and keeps it. A process already deployed with one keeps running as before.",
-        "de": "Camunda erlaubt, einen Business Rule Task per Version-Tag an eine Decision zu binden. Atlas unterstützt das nicht und behandelte einen solchen Task bisher kommentarlos wie „Latest“: Ein Modell, das einen Tag festlegte, führte die jeweils neueste Version aus. Der Modeler schrieb die Bindung ausserdem beim nächsten Speichern auf „Latest“ um. Der Deploy eines solchen Modells wird jetzt abgewiesen und nennt den Task, und der Modeler zeigt die Bindung unverändert an und behält sie bei. Ein bereits deployter Prozess mit einer solchen Bindung läuft weiter wie bisher."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Decisions",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]

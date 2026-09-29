@@ -1,7 +1,7 @@
 # ADR-0427: Converting a product to a lifecycle process keeps the old processes alive until nothing needs them
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-29
 - **Deciders:** Atlas maintainers
 - **Open question:** how many orders a production installation holds. The deletion guard
@@ -140,6 +140,23 @@ today — `itemId`, `positionId`, `orderId`, `recipient`, `variantId` where ther
 and `reason` where something other than the orderer asked. A right provisioned by the old
 process must be revocable by the new branch; the catalogue cannot check that, so it is a
 convention, stated here beside the existing one that every branch reports its outcome.
+
+### As built
+
+- **Guard.** `DELETE /api/v1/processes/{key}` refuses with 409 when the key is the **last**
+  deployed version of its process id and a line can still start it
+  (`order.Line.StillStarts`, the status table above), naming the count per product; and
+  when the newest release of any catalogue binds it. Deleting an older version while a
+  newer one is deployed is not guarded, because an order starts the newest. The order
+  scan runs off the loop before the delete's turn; the release check and the delete run
+  in that turn.
+- **Report.** The fulfilment report carries `remainder`: per converted product and old
+  process, how many lines can still start it.
+- **Rebinding.** `POST /api/v1/catalog-products/{id}/rebind` with a required `reason`
+  (MCP: `atlas_rebind_catalog_product`), for an editor of the product's home catalogue.
+  Each moved line gains a `rebindings` entry — the ids it froze, the lifecycle process it
+  moved to, who, when, why — and its old ids are cleared, so every starter reads the new
+  binding. `running` and `returning` lines stay.
 
 ### Consequences
 

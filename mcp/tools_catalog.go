@@ -424,6 +424,41 @@ func catalogTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_rebind_catalog_product",
+			Description: "Move the order lines of a product that was converted to a lifecycle " +
+				"process (ADR-0425) from the processes they froze when they were placed to the " +
+				"product's CURRENT lifecycle binding (ADR-0427). By default a line keeps its frozen " +
+				"processes, so a grant is revoked by the rules it was granted under; move lines only " +
+				"when the old process can no longer succeed — its target system was replaced. Each " +
+				"moved line records what it was bound to, who moved it, when and 'reason' (REQUIRED). " +
+				"Lines whose process is running now are left. Check the fulfilment report's " +
+				"`remainder` first: it counts the lines still on each old process. Returns {lines, orders}.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":     stringProp("The product id."),
+					"reason": stringProp("Why the lines no longer revoke by the rules they were granted under."),
+				},
+				"required": []any{"id", "reason"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				reason, err := argString(args, "reason")
+				if err != nil {
+					return "", err
+				}
+				body, err := json.Marshal(map[string]string{"reason": reason})
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/catalog-products/"+url.PathEscape(id)+"/rebind",
+					"application/json", body))
+			},
+		},
+		{
 			Name: "atlas_catalog_releases",
 			Description: "List a catalogue's releases, newest first. A release is frozen: it " +
 				"carries the products, edges, approval rules, ceilings and prices as they stood " +
