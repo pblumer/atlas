@@ -199,22 +199,95 @@ anybody means — it is the defect ADR-0226 describes, reached through a differe
 The refusal is a check on the compiled process at the API boundary. It writes no event and
 changes nothing that is replayed.
 
-### 6. External triggers go through the inventory, not around it
+**A call activity reaches the same trap from inside the engine**, and it is closed here
+too. `callActivityBehavior.OnActivated` creates the child with
+`AppendCreateChildInstanceCommand`, which carries no `StartElements`, so the child is
+seeded by `startElementsFor` exactly like an untriggered API create. Checked against the
+engine before this record was written: a lifecycle process with three message starts,
+started by a call activity, ran **all three** branches, and so did an API create; a
+message ran only its own. The rule is therefore the same: a call activity whose resolved
+target has no none start and more than one start event does not create the child. It
+raises an incident on the call activity (ADR-0061) naming the target's start events, and
+the token stays where it is. The check reads the target's compiled start events, which
+the create already reads, so it adds no allocation to the path (I1). The Problems panel
+(ADR-0026) warns at design time where the target is resolvable then; the runtime
+incident is the authority, because a target is resolved per server and per version
+(ADR-0076, ADR-0105).
+
+### 6. The order starts its positions through a start act, not through a route choice in the models
+
+The fulfilment process and the three approval processes start a position today by posting
+`{processId, variables}` to `POST /api/v1/instances` (ADR-0411). Branching in those models
+between that route and the directed trigger is possible — the REST connector's `url` is a
+FEEL expression, and its body is the task's input mappings (ADR-0174) — but it is the
+wrong place:
+
+- **Four models would carry the same branch**, one of them multi-instance, and each would
+  have to compute a `triggerId` that is stable across retries yet new for a deliberate
+  second attempt. Only the order knows which attempt this is.
+- **The link between a position and its instance is noted by the server** at the moment
+  it is certain (`notePositionInstance`, ADR-0416), and today that happens on the create
+  path only. A model posting to a message route would bypass it, and the shop would stop
+  showing the position's open tasks.
+- **Where a line may start is the order's statement**, not a model's. A route choice in a
+  model is a second copy of it.
+
+So a new act on the order does it:
+
+```
+POST /api/v1/orders/{id}/lines/{position}/start      { "operation": "provision" }
+```
+
+It reads the line's **frozen** binding, starts the two-process form through the existing
+create path or the lifecycle form through the directed trigger's engine call, derives the
+`triggerId` from the order, the position, the operation and the attempt, and records the
+instance on the line. The fulfilment and approval models post to it instead of to
+`/api/v1/instances`: one input mapping fewer, no branch, and the same call for both
+binding shapes. A return, a recertification and a reconciliation already start
+server-side and call the same function directly.
+
+Rollout order follows from the embedded bundle (ADR-0122): the models are redeployed as a
+new version when the binary changes, so the server and its bundle are upgraded first, and
+products are bound in the lifecycle form afterwards. A line in the lifecycle form carries
+no `provisionProcess`, so an unchanged older model that still posts to
+`/api/v1/instances` gets a 400 for the empty process id — loud, not silent.
+
+### 7. Authority is decided by the order's state, not by who is calling
+
+The shipped models authenticate with an operator API token held as the `atlas` secret
+(ADR-0411). Any other operator client — an HR system among them — presents the same kind
+of credential, and anybody allowed to deploy a model can author one that uses the `atlas`
+secret. The internal service identity of ADR-0049 does not change that: it is minted per
+process start for the in-process MCP adapter and is not something a model's REST task
+holds. **No caller identity available today separates "the catalogue layer" from any
+other operator.**
+
+The gate is therefore not an identity but the absence of a door:
+
+- The directed trigger route **refuses unconditionally** an entry point a published
+  catalogue binds. There is no exception for a privileged caller, so there is nothing to
+  impersonate.
+- The catalogue layer never uses that route. The start act (§6), a return, a
+  recertification and a reconciliation fire the trigger through an **in-process call**
+  after checking the order: the line exists, its status permits the operation, and it was
+  not already started for this attempt.
+- An operator token can therefore still start a position — exactly as it can today
+  through `POST /api/v1/instances` — but only the one the order says may start, and only
+  once per attempt.
+
+### 8. External triggers go through the inventory, not around it
 
 An external system is given two kinds of door, never a third:
 
 - **Catalogue acts.** A leaver report or a revocation request names a principal and a
   product, or a position. It enters through the same layer a return or a reconciliation
   does today, which records the line's transition durably first and then fires the
-  directed trigger. The inventory therefore never says `done` about a right a process
-  has already removed.
+  trigger in-process (§7). The inventory therefore never says `done` about a right a
+  process has already removed.
 - **Uncatalogued entry points.** A message start that no catalogue binds may be triggered
-  directly. Once ADR-0373 lands, this is what a published interface's **send** grant
-  covers.
-
-The directed trigger **refuses** an entry point that a published catalogue binds, unless
-the call comes from the catalogue layer itself. Before ADR-0373's grants exist, the route
-requires `RoleOperator`, as `POST /api/v1/messages` does today.
+  directly through the directed trigger route. Once ADR-0373 lands, this is what a
+  published interface's **send** grant covers; until then the route requires
+  `RoleOperator`, as `POST /api/v1/messages` does today.
 
 ### Consequences
 
@@ -235,18 +308,21 @@ requires `RoleOperator`, as `POST /api/v1/messages` does today.
 - **Negative:** §5 refuses a create that is accepted today. A client that relied on it
   was running every branch of such a process, so the change is called out in the
   changelog rather than hidden.
+- **Negative:** the §5 incident on a call activity turns a model that runs today — all
+  branches of its callee — into one that stops. That model was already wrong, but it
+  stops visibly where it used to run silently, and the changelog says so.
 - **Follow-ups / risks to watch:**
-  - The shipped fulfilment and approval processes (`auftrag-erfuellung.bpmn`,
-    `genehmigung-*.bpmn`) start by process id. They need a branch for a lifecycle-bound
-    line, or a server-side start act that hides the difference.
-  - A call activity to a process with several non-none starts is the same trap reached
-    from inside the engine. It is not closed here and needs its own answer, most likely a
-    deploy-time warning plus an incident.
-  - Whether the catalogue layer is recognised by the trigger route through an internal
-    service identity (ADR-0049) or through a separate internal route is an
-    implementation choice this record leaves open.
+  - The approval models deliberately do not report an approval (the provisioning result
+    is the one truth). The start act can check that a line is open and not yet started;
+    it cannot check that it was approved. That is the same trust the create route extends
+    today, and it is named here rather than widened.
+  - `TestEverySystemProcessCallsARouteThatExists` must learn the start act's route in the
+    same change that the four models move to it.
   - When ADR-0370's buffer lands, it must **not** apply to the directed trigger: a start
     that cannot happen now is a 404 or a 409, never a message waiting for a definition.
+  - Scoping an operator token to fewer acts than every operator act is outside this
+    record. It matters more once external systems hold such tokens, and belongs with
+    ADR-0373's grants.
 
 ## Pros and cons of the options
 
@@ -290,3 +366,7 @@ requires `RoleOperator`, as `POST /api/v1/messages` does today.
 - relates to ADR-0370 (the durable buffer, which must not cover this route)
 - relates to ADR-0373 (published interfaces and the **send** grant for external callers)
 - relates to ADR-0119 (a deactivated definition is answered, not skipped)
+- relates to ADR-0076 and ADR-0105 (call activities and their per-server resolution)
+- relates to ADR-0411 (the shipped models call Atlas with an operator token) and
+  ADR-0049 (the internal service identity, which does not reach a model)
+- relates to ADR-0416 (the server notes which instance works a position)
