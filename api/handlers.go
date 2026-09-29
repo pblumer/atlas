@@ -4042,11 +4042,32 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 		statErr error
 		stats   statsResp
 	)
-	var driveNeeded bool
+	var (
+		driveNeeded bool
+		owner       string
+		ownerErr    error
+	)
 	s.do(func() {
+		// A message a per-position product delivers to its running instances is the
+		// catalogue's to send, addressed to one instance and reported. By name it
+		// would reach whatever waits under the key it carries, and say "published"
+		// if nothing did (ADR-draft-a-product-lifecycle-may-run-as-one-instance-per-position).
+		if owner, ownerErr = s.catalogOwnerOfDelivered(payload.Name); ownerErr != nil || owner != "" {
+			return
+		}
 		s.proc.PublishMessage(payload.Name, payload.CorrelationKey, vars...)
 		driveNeeded = true
 	})
+	switch {
+	case ownerErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "read catalogue: "+ownerErr.Error())
+		return
+	case owner != "":
+		httpapi.Error(w, http.StatusConflict, "message "+payload.Name+" is product "+owner+
+			"'s operation, delivered by the catalogue to the one instance that carries a "+
+			"position; it is never published by name")
+		return
+	}
 	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
 	// read-back that follows it are two separate visits to the loop — and the
 	// read-back's is now only long enough to take a view, not to do the counting

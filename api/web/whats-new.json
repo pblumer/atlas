@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-28",
   "entries": [
     {
+      "id": "a-product-s-lifecycle-can-run-as-one-instance-per-order-posi",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "One process instance for the whole life of a right",
+        "de": "Eine Prozessinstanz für das ganze Leben eines Rechts"
+      },
+      "summary": {
+        "en": "A product's lifecycle process can now run as one instance per order position: provisioning starts it, and it waits for changes and the return for as long as the right is held — one instance is the whole record of one right. A return goes to exactly that instance and says whether it arrived; if the instance is gone, the process starts at its return start event instead, so every right stays returnable. Publishing checks that the process waits for its return under the position's key and cannot loop without waiting. Choose \"One instance per position\" in the product form.",
+        "de": "Ein Lebenszyklusprozess eines Produkts kann jetzt als eine Instanz pro Auftragsposition laufen: Die Bereitstellung startet sie, und sie wartet auf Änderungen und die Rückgabe, solange das Recht gehalten wird — eine Instanz ist die ganze Akte eines Rechts. Eine Rückgabe geht genau an diese Instanz und meldet, ob sie angekommen ist; ist die Instanz nicht mehr da, startet der Prozess stattdessen an seinem Rückgabe-Startereignis, damit jedes Recht rückgebbar bleibt. Beim Veröffentlichen wird geprüft, dass der Prozess unter dem Schlüssel der Position auf die Rückgabe wartet und nicht ohne Wartezustand kreisen kann. Im Produktformular «Eine Instanz pro Position» wählen."
+      },
+      "link": {
+        "label": "ADR-0425",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0425-a-product-lifecycle-is-one-process-with-message-triggers.md"
+      },
+      "tags": [
+        "Catalogue",
+        "Processes"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Console",
+          "de": "Console öffnen"
+        },
+        "route": "#/console"
+      }
+    },
+    {
       "id": "the-handbook-teaches-writing-your-own-worker-over-the-job-ap",
       "version": "Unreleased",
       "date": null,
@@ -319,28 +348,6 @@
         },
         "route": "#/modeler"
       }
-    },
-    {
-      "id": "atlas-can-restart-on-windows",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Atlas can restart on Windows",
-        "de": "Atlas lässt sich unter Windows neu starten"
-      },
-      "summary": {
-        "en": "On Windows, every start after the first stopped with \"truncate atlas-data\\wal\\0000000000000000.wal: Access is denied.\" The log opened its newest file in a mode that may only append, and on Windows that mode may not shorten the file, which every start does. The log now opens its files for reading and writing, and the data directory is flushed through a handle Windows accepts. Nothing changes on Linux or macOS.",
-        "de": "Unter Windows brach jeder Start nach dem ersten mit «truncate atlas-data\\wal\\0000000000000000.wal: Access is denied.» ab. Das Log öffnete seine neueste Datei in einem Modus, der nur anhängen darf, und unter Windows darf dieser Modus die Datei nicht kürzen, was jeder Start tut. Das Log öffnet seine Dateien jetzt zum Lesen und Schreiben, und das Datenverzeichnis wird über ein Handle auf den Datenträger geschrieben, das Windows dafür akzeptiert. Unter Linux und macOS ändert sich nichts."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations",
-        "Engine"
-      ]
     }
   ]
 }

@@ -2,10 +2,10 @@
 
 Entwurfsmodell zum ADR-Entwurf
 [`draft-a-product-lifecycle-may-run-as-one-instance-per-position.md`](../../adr/draft-a-product-lifecycle-may-run-as-one-instance-per-position.md)
-(Form `per-position`). Es ist **nicht** lauffähig im Katalog: Solange der Entwurf nicht
-umgesetzt ist, kann ein Produkt eine Operation nur an ein Startereignis binden
-(ADR-0425), und das Zwischenereignis «Rückgabe angefordert» wird von keiner Rückgabe
-erreicht.
+(Form `per-position`). Ein Produkt bindet die Vorlage mit `lifecycleProcess`,
+`lifecycleForm: "per-position"` und den Operationen `provision` und `deprovision`
+(optional `change`). Die Schritte sind Platzhalter; vor dem Einsatz Prozess-Id,
+Nachrichtennamen, Formulare und Kandidatengruppen ersetzen.
 
 ![Vorlage](proc_produkt_lebenszyklus_vorlage.png)
 

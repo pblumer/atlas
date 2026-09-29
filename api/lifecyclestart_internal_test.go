@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -192,5 +193,57 @@ func TestReconciliationDeprovisionsThroughALifecycleProcess(t *testing.T) {
 	})
 	if finished != 1 {
 		t.Fatalf("finished instances = %d, want the one deprovisioning", finished)
+	}
+}
+
+// A strand that waits for its return under the position's key and for nothing else.
+const waitingStrand = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <message id="m_p" name="s.provision"/>
+  <message id="m_d" name="s.deprovision"><extensionElements><zeebe:subscription correlationKey="=positionKey"/></extensionElements></message>
+  <message id="m_c" name="s.change"><extensionElements><zeebe:subscription correlationKey="=positionKey"/></extensionElements></message>
+  <process id="waiting-strand" isExecutable="true">
+    <startEvent id="P"><messageEventDefinition messageRef="m_p"/></startEvent>
+    <intermediateCatchEvent id="Held"><messageEventDefinition messageRef="m_d"/></intermediateCatchEvent>
+    <startEvent id="D"><messageEventDefinition messageRef="m_d"/></startEvent>
+    <endEvent id="E1"/>
+    <endEvent id="E2"/>
+    <sequenceFlow id="f1" sourceRef="P" targetRef="Held"/>
+    <sequenceFlow id="f2" sourceRef="Held" targetRef="E1"/>
+    <sequenceFlow id="f3" sourceRef="D" targetRef="E2"/>
+  </process>
+</definitions>`
+
+// TestDeliverOrStartAnswersEveryCase: a message the strand does not wait for is
+// refused with a reason and nothing is started; the one it waits for is delivered to
+// it; a strand that is gone falls back to the start event; and a binding started by
+// hand never tries to deliver.
+func TestDeliverOrStartAnswersEveryCase(t *testing.T) {
+	srv := newServerForErrors(t)
+	if code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", waitingStrand, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy: %d (%s)", code, body)
+	}
+	pos := []model.VariableValue{{Name: "positionKey", Kind: model.VarString, Text: "o1/x"}}
+	strand, err := srv.startBinding(catalog.Binding{Process: "waiting-strand", Message: "s.provision"}, "p-1", pos)
+	if err != nil || strand == 0 {
+		t.Fatalf("provision: %d (%v)", strand, err)
+	}
+
+	_, err = srv.deliverOrStart(strand, catalog.Binding{Process: "waiting-strand", Message: "s.change"}, "o1/x", "c-1", nil)
+	var refused errTriggerRefused
+	if !errors.As(err, &refused) || !strings.Contains(refused.msg, "does not wait for s.change") {
+		t.Fatalf("change the strand does not wait for: %v, want a refusal", err)
+	}
+
+	ret := catalog.Binding{Process: "waiting-strand", Message: "s.deprovision"}
+	if key, err := srv.deliverOrStart(strand, ret, "o1/x", "d-1", nil); err != nil || key != strand {
+		t.Fatalf("return to the strand = %d (%v), want %d", key, err, strand)
+	}
+	key, err := srv.deliverOrStart(strand, ret, "o1/x", "d-2", nil)
+	if err != nil || key == 0 || key == strand {
+		t.Fatalf("return after the strand ended = %d (%v), want a new instance", key, err)
+	}
+	if _, err := srv.deliverOrStart(strand, catalog.Binding{Process: "nowhere"}, "o1/x", "", nil); err == nil {
+		t.Fatal("a hand-started binding to nothing succeeded")
 	}
 }

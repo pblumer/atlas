@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Catalogue",
+    "Processes"
+  ],
+  "title": {
+    "en": "One process instance for the whole life of a right",
+    "de": "Eine Prozessinstanz für das ganze Leben eines Rechts"
+  },
+  "summary": {
+    "en": "A product's lifecycle process can now run as one instance per order position: provisioning starts it, and it waits for changes and the return for as long as the right is held — one instance is the whole record of one right. A return goes to exactly that instance and says whether it arrived; if the instance is gone, the process starts at its return start event instead, so every right stays returnable. Publishing checks that the process waits for its return under the position's key and cannot loop without waiting. Choose \"One instance per position\" in the product form.",
+    "de": "Ein Lebenszyklusprozess eines Produkts kann jetzt als eine Instanz pro Auftragsposition laufen: Die Bereitstellung startet sie, und sie wartet auf Änderungen und die Rückgabe, solange das Recht gehalten wird — eine Instanz ist die ganze Akte eines Rechts. Eine Rückgabe geht genau an diese Instanz und meldet, ob sie angekommen ist; ist die Instanz nicht mehr da, startet der Prozess stattdessen an seinem Rückgabe-Startereignis, damit jedes Recht rückgebbar bleibt. Beim Veröffentlichen wird geprüft, dass der Prozess unter dem Schlüssel der Position auf die Rückgabe wartet und nicht ohne Wartezustand kreisen kann. Im Produktformular «Eine Instanz pro Position» wählen."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Console",
+      "de": "Console öffnen"
+    },
+    "route": "#/console"
+  }
+}

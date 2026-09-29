@@ -112,3 +112,46 @@ func triggerRefusal(res engine.TriggerResult, process, message string) string {
 func positionTriggerID(orderID, position, op string, attempt int) string {
 	return "order:" + orderID + ":" + position + ":" + op + ":" + strconv.Itoa(attempt)
 }
+
+// Delivering a later operation of a per-position lifecycle
+// (ADR-draft-a-product-lifecycle-may-run-as-one-instance-per-position).
+//
+// A per-position line's provisioning started the instance that carries the right
+// for as long as it is held; its return, and any change, is a message that instance
+// waits for. It is delivered to that instance and to nothing else, and the answer
+// says whether it arrived. Where the line has no such instance any more — it was
+// placed before its product was converted, or the instance was cancelled — the
+// operation starts at the process's start event for it instead, so every held right
+// stays returnable.
+
+// positionCorrelationKey is the key a per-position lifecycle process keys its catch
+// events on: the order and the position, which together name exactly one right
+// (ADR-0384).
+func positionCorrelationKey(orderID, position string) string { return orderID + "/" + position }
+
+// deliverOrStart delivers operation b to the strand instance when there is one and
+// it is still running, and starts b's start event when there is none. It returns the
+// instance that took the operation.
+func (s *Server) deliverOrStart(strand uint64, b catalog.Binding, correlationKey, triggerID string, vars []model.VariableValue) (uint64, error) {
+	if strand != 0 && b.Triggered() {
+		var res engine.DeliveryResult
+		s.do(func() {
+			s.proc.DeliverMessage(strand, b.Message, correlationKey, orderTriggerSource, triggerID, &res, vars...)
+		})
+		if err := s.drive(); err != nil {
+			return 0, err
+		}
+		switch res.Outcome {
+		case engine.DeliveryDelivered, engine.DeliveryReplayed:
+			return res.InstanceKey, nil
+		case engine.DeliveryNotWaiting:
+			return 0, errTriggerRefused{fmt.Sprintf("the instance %d that carries this position "+
+				"is running but does not wait for %s now; nothing was delivered — retry once "+
+				"it reaches a step that listens for it", strand, b.Message)}
+		case engine.DeliveryNotProcessed:
+			return 0, errors.New("the delivery was not processed")
+		}
+		// DeliveryGone falls through to the start event.
+	}
+	return s.startBinding(b, triggerID, vars)
+}

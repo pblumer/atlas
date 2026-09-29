@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/pblumer/atlas/api/catalog"
@@ -89,8 +90,15 @@ func (s *Server) handleReturnLine(w http.ResponseWriter, r *http.Request) {
 	// before anything runs, so a start that fails leaves a visible "returning" an
 	// operator can act on rather than a silent nothing.
 	if err := s.startReturn(binding, id, item, out, ""); err != nil {
-		httpapi.Error(w, http.StatusInternalServerError,
-			"the return was recorded, but its process could not be started: "+err.Error())
+		// A refusal is the engine's answer, not a fault: the instance that carries a
+		// per-position line is not waiting for its return right now
+		// (ADR-draft-a-product-lifecycle-may-run-as-one-instance-per-position).
+		status := http.StatusInternalServerError
+		var refused errTriggerRefused
+		if errors.As(err, &refused) {
+			status = http.StatusConflict
+		}
+		httpapi.Error(w, status, "the return was recorded, but its process could not be started: "+err.Error())
 		return
 	}
 	httpapi.JSON(w, http.StatusOK, returnResp{Order: out, Process: binding.Process})
@@ -138,7 +146,15 @@ func (s *Server) startReturn(b catalog.Binding, orderID, ref string, o order.Ord
 	// it failed is a new trigger rather than a replay of the one that failed.
 	triggerID := positionTriggerID(orderID, position, catalog.OpDeprovision,
 		line.StartsOf(catalog.OpDeprovision)+1)
-	instKey, err := s.startBinding(b, triggerID, vars)
+	var instKey uint64
+	if line.PerPosition() {
+		// A per-position line's return is delivered to the instance that carries it,
+		// and starts the process only where that instance is gone
+		// (ADR-draft-a-product-lifecycle-may-run-as-one-instance-per-position).
+		instKey, err = s.deliverOrStart(line.StrandOf(), b, positionCorrelationKey(orderID, position), triggerID, vars)
+	} else {
+		instKey, err = s.startBinding(b, triggerID, vars)
+	}
 	if err != nil {
 		return err
 	}

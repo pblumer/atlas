@@ -140,6 +140,13 @@ func catalogItemProps() map[string]any {
 			"\"change\": \"<message name>\"}. provision and deprovision are REQUIRED to publish, change " +
 			"is optional. The key is the contract an order asks for; the message name is the process's " +
 			"own business and may be renamed with the process."),
+		"lifecycleForm": stringProp("For a lifecycleProcess: how it runs. \"per-operation\" (the default, " +
+			"also what empty means) starts an instance for every operation. \"per-position\" starts ONE " +
+			"instance per order position at provisioning and DELIVERS every later operation to it: the " +
+			"`deprovision` message must then also be caught in the strand (and still be a message start " +
+			"event, the fallback for a right with no running instance), `change` must be a catch event, " +
+			"every such catch must declare a correlation key (orderId + \"/\" + positionId), and no cycle " +
+			"in the process may run without waiting. Publishing checks all of it."),
 		"lifecycle": objectProp("The window in which it may be ordered: {from, until} as Unix " +
 			"nanoseconds. Zero on a side means unbounded there, which is the ordinary case. " +
 			"BOTH ENDS ARE INCLUSIVE AND IT IS ENFORCED: an order placed outside the window is " +

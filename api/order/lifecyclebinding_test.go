@@ -61,3 +61,27 @@ func TestALifecycleLineIsReturnable(t *testing.T) {
 		t.Fatal("a line with no deprovision start was returnable")
 	}
 }
+
+// TestAPerPositionLineFindsItsStrand: a per-position line delivers to the newest
+// instance its lifecycle process was started with for provisioning; the same instance
+// recorded for its return is a second entry, so the return counts as an attempt; and
+// a line of the other form, or of another process, has no strand.
+func TestAPerPositionLineFindsItsStrand(t *testing.T) {
+	l := Line{ItemID: "hull", LifecycleProcess: "hull-strand", LifecycleForm: catalog.FormPerPosition}
+	if !l.PerPosition() || l.StrandOf() != 0 {
+		t.Fatalf("an unstarted per-position line: per-position %v, strand %d", l.PerPosition(), l.StrandOf())
+	}
+	o := Order{ID: "o1", Lines: []Line{l}}
+	o, _ = RecordInstance(o, "hull", LineInstance{Key: 3, ProcessID: "old-prov", Operation: catalog.OpProvision})
+	o, _ = RecordInstance(o, "hull", LineInstance{Key: 7, ProcessID: "hull-strand", Operation: catalog.OpProvision})
+	o, _ = RecordInstance(o, "hull", LineInstance{Key: 7, ProcessID: "hull-strand", Operation: catalog.OpProvision})
+	o, _ = RecordInstance(o, "hull", LineInstance{Key: 7, ProcessID: "hull-strand", Operation: catalog.OpDeprovision})
+	got := o.Lines[0]
+	if got.StrandOf() != 7 || len(got.Instances) != 3 || got.StartsOf(catalog.OpDeprovision) != 1 {
+		t.Fatalf("strand %d, instances %+v", got.StrandOf(), got.Instances)
+	}
+	got.LifecycleForm = ""
+	if got.PerPosition() {
+		t.Error("a per-operation line reads as per-position")
+	}
+}

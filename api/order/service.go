@@ -608,6 +608,7 @@ func linesFor(rel catalog.Release, ordered []string, held map[string]bool,
 				DeprovisionProcess: it.DeprovisionProcess,
 				LifecycleProcess:   it.LifecycleProcess,
 				Operations:         copyAnswers(it.Operations),
+				LifecycleForm:      it.LifecycleForm,
 				MaxDays:            it.MaxDays,
 				// The form's id travels with the line beside the answers, so a reader of
 				// the order months later knows which set of questions these answers were
