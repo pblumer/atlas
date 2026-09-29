@@ -289,6 +289,65 @@ An external system is given two kinds of door, never a third:
   published interface's **send** grant covers; until then the route requires
   `RoleOperator`, as `POST /api/v1/messages` does today.
 
+### 9. Converting a product from two processes to one
+
+A product is converted by publishing a catalogue release in which the item carries the
+lifecycle binding instead of the two ids. What that does and does not reach:
+
+| Who reads the binding                         | Which binding it gets after conversion |
+|-----------------------------------------------|----------------------------------------|
+| an order placed after the release             | the lifecycle binding                  |
+| a line placed before it and not yet started   | the **two frozen ids** — it is provisioned by the old process |
+| a line placed before it and held              | the **two frozen ids** — it is returned by the old process |
+| a line whose return failed (`returnFailed`)   | the two frozen ids, on every retry     |
+| a reconciliation of an unmanaged right        | the lifecycle binding — it reads the catalogue, because there is no order (`reconcileactions.go`) |
+
+So the old processes are **not retired by the conversion**. They stay in use until the
+last line that froze them is settled, and for a service held for years that is years.
+
+What exists today does not protect that period:
+
+- Deleting a process refuses only while it has **running instances**
+  (`handleDeleteProcess`). An old deprovisioning process with no instance running at the
+  moment deletes without objection, and the next return of a line that froze it fails
+  with *no deployed process* — loud, but a revocation that cannot run.
+- Deactivating it (ADR-0119) is safe: an explicit create is not gated, so returns keep
+  working while nothing else starts it. That is the state an old process should be put in.
+
+This record therefore decides three things:
+
+1. **A frozen binding keeps its process alive.** Deleting a process is refused while any
+   line of any order binds it and is not settled (not yet started, running, held, being
+   returned, or failed to return). The refusal names how many lines, by product — a count,
+   for the reason ADR-0353 gives counts rather than lists. Deactivation remains allowed
+   and is what the conversion recommends for the old pair.
+2. **The remainder is visible.** The fulfilment report (`fulfilmentreport.go`) gains, per
+   product, the number of unsettled lines still bound to each old process. A maintainer
+   can see when the old pair is no longer needed, instead of guessing.
+3. **Rebinding is an explicit, recorded act, never a side effect of converting.** A
+   maintainer may move the unsettled lines of one product from the two frozen ids to the
+   product's current lifecycle binding. Each moved line records what it was bound to
+   before, who moved it, when and why — the recorded correction ADR-0359 uses for a held
+   line's details, for the same reason: the record must still say what was in force when
+   the right was granted, and that it was changed afterwards. A line that is `running` or
+   `returning` is not moved, because a process has it now.
+
+**Why rebinding is offered at all**, although ADR-0312 freezes the binding so that a
+grant is undone by the rules in force when it was made. Its strongest reading holds for
+rules — an approval, a ceiling — which must not change under somebody. A deprovisioning
+process is not only a rule; it is a conversation with a target system as that system is
+**now**. When the target's interface is replaced, the old process cannot succeed any more,
+and keeping it is not fidelity but a return that will fail. The default stays frozen; the
+act exists for that case, and it leaves a trace.
+
+**What the lifecycle process must accept** to be a valid target for rebinding: its
+`deprovision` branch reads the same variables every return and reconciliation hands over
+today — `itemId`, `positionId`, `orderId`, `recipient`, `variantId` where there is one,
+and `reason` where something other than the orderer asked. A right provisioned by the
+old process must be revocable by the new branch; the catalogue cannot check that, so it
+is a convention, stated here beside the existing one that every branch reports its
+outcome.
+
 ### Consequences
 
 - **Positive:** a product's whole lifecycle is one diagram, and every way into it is a
@@ -311,7 +370,13 @@ An external system is given two kinds of door, never a third:
 - **Negative:** the §5 incident on a call activity turns a model that runs today — all
   branches of its callee — into one that stops. That model was already wrong, but it
   stops visibly where it used to run silently, and the changelog says so.
+- **Negative:** deleting a process gains a refusal it does not have today (§9). An
+  operator cleaning up old versions meets it; the message says which products still
+  need the process and how many lines.
 - **Follow-ups / risks to watch:**
+  - The §9 guard asks every order whether it binds a process. Answered by walking the
+    orders it is a scan; at scale it needs an index from process id to unsettled lines,
+    maintained where a line's status changes.
   - The approval models deliberately do not report an approval (the provisioning result
     is the one truth). The start act can check that a line is open and not yet started;
     it cannot check that it was approved. That is the same trust the create route extends
