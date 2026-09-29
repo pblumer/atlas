@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/pblumer/atlas/internal/dirsync"
 )
 
 // ManifestName is the manifest file's name inside a checkpoint directory.
@@ -385,7 +387,7 @@ func writeFileSync(path string, data []byte) (err error) {
 // syncDir fsyncs a directory so entries created or renamed inside it survive a crash,
 // mirroring the WAL's own directory-durability step.
 func syncDir(dir string) (err error) {
-	d, err := os.Open(dir)
+	d, err := dirsync.Open(dir)
 	if err != nil {
 		return err
 	}

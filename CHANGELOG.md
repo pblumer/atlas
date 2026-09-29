@@ -148,6 +148,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Atlas can restart on Windows.** Every start that found a log in the data
+  directory stopped with `truncate atlas-data\wal\0000000000000000.wal: Access is
+  denied.` The log opened its newest segment append-only, and on Windows such a handle
+  lacks the right to write data, which trimming the file needs — even to its own
+  length, as every start does. Segments are now opened for reading and writing and
+  positioned explicitly; the log is their only writer, so the append flag guaranteed
+  nothing. The directory fsync behind a new segment, a checkpoint and every design-time
+  save opened the directory read-only, and Windows documents flushing as needing write
+  access, so there it now opens the directory with write access. Other platforms behave
+  as before.
+
 - **A job failed back with retries left wakes the workers waiting for it.** A worker
   that fails a job with retries left and no backoff gives it straight back to the
   queue, but a second worker already long-polling that job type was not told: it slept

@@ -36,6 +36,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/pblumer/atlas/internal/dirsync"
 )
 
 const (
@@ -166,7 +168,11 @@ func Open(opts Options) (*Log, error) {
 		}
 		return l, nil
 	}
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_APPEND, 0o644)
+	// Not O_APPEND: see openNewSegment. The Truncate below is what that flag
+	// breaks on Windows, where it leaves the handle without the right to write
+	// data, which SetEndOfFile needs — so every start that found a segment failed
+	// with "Access is denied".
+	f, err := os.OpenFile(path, os.O_RDWR, 0o644)
 	if err != nil {
 		return nil, err
 	}
@@ -183,8 +189,13 @@ func Open(opts Options) (*Log, error) {
 		return nil, err
 	}
 	// Drop any torn bytes past the last durable batch so future appends extend
-	// a clean log. With O_APPEND, writes resume at the truncated end.
+	// a clean log, and put the offset there: the scan left it wherever its reader
+	// stopped, which is past validEnd whenever there was a torn tail to drop.
 	if err := f.Truncate(validEnd); err != nil {
+		f.Close()
+		return nil, err
+	}
+	if _, err := f.Seek(validEnd, io.SeekStart); err != nil {
 		f.Close()
 		return nil, err
 	}
@@ -360,7 +371,12 @@ func (l *Log) roll() error {
 
 func (l *Log) openNewSegment(seq uint64) error {
 	name := filepath.Join(l.dir, segmentName(seq))
-	f, err := os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o644)
+	// No segment is opened with O_APPEND. The Log is the file's only writer (I3)
+	// and never seeks after positioning, so every write already lands at the end
+	// and the flag guarantees nothing. What it does do is narrow the handle on
+	// Windows to append-only, without the right to write data, which Truncate
+	// needs and FlushFileBuffers is documented to need.
+	f, err := os.OpenFile(name, os.O_RDWR|os.O_CREATE, 0o644)
 	if err != nil {
 		return err
 	}
@@ -382,7 +398,7 @@ func (l *Log) openNewSegment(seq uint64) error {
 }
 
 func (l *Log) syncDir() error {
-	d, err := os.Open(l.dir)
+	d, err := dirsync.Open(l.dir)
 	if err != nil {
 		return err
 	}

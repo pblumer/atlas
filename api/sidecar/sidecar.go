@@ -13,6 +13,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+
+	"github.com/pblumer/atlas/internal/dirsync"
 )
 
 // WriteJSON marshals v and writes it to path atomically: temp file → fsync
@@ -60,7 +62,7 @@ func WriteFile(dir, path string, data []byte) error {
 // FsyncDir fsyncs a directory so a create/rename/remove of a file within it is
 // itself durable.
 func FsyncDir(dir string) error {
-	d, err := os.Open(dir)
+	d, err := dirsync.Open(dir)
 	if err != nil {
 		return fmt.Errorf("sidecar: open dir: %w", err)
 	}
