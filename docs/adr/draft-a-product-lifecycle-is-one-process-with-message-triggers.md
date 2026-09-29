@@ -302,6 +302,24 @@ lifecycle binding instead of the two ids. What that does and does not reach:
 | a line whose return failed (`returnFailed`)   | the two frozen ids, on every retry     |
 | a reconciliation of an unmanaged right        | the lifecycle binding — it reads the catalogue, because there is no order (`reconcileactions.go`) |
 
+Which line statuses can still **start** one of the two frozen processes, traced through
+`api/order` rather than assumed. The code's own word for this is not `Settled()`: that
+includes `done` and `failed`, and a done line is exactly one that will be returned.
+
+| Status | May still start the provisioning process | May still start the deprovisioning process | Why |
+|---|---|---|---|
+| `pending` | yes | yes, once done | `Next` offers only pending lines |
+| `blocked` | yes | yes, once done | derived; recomputed to `pending` when its cause is repaired (`Propagate`) |
+| `running` | no new start; its instance runs | yes, once done | the instance holds its definition, and deletion already refuses a definition with running instances |
+| `failed` | no | **yes** | nothing starts a failed line again (`Next` skips it; no restart path exists), but the repaired instance may still report `done` — `Apply` has no from-status check except for `returned` |
+| `done` | no | yes | `Returnable` accepts it; a recertification returns through the same path |
+| `returning` | no | no new start; its instance runs | `Returnable` refuses a second return |
+| `returnFailed` | no | yes, on every retry | the **only** status from which a revocation is started again |
+| `skipped`, `rejected`, `abandoned`, `cancelled`, `returned` | no | no | final; `skipped` is not `Returnable`, because this order never granted it |
+
+`returnFailed` is therefore the only status that *retries* a start. `failed` is the one
+that looks final and is not: it keeps the deprovisioning process alive.
+
 So the old processes are **not retired by the conversion**. They stay in use until the
 last line that froze them is settled, and for a service held for years that is years.
 
@@ -317,10 +335,31 @@ What exists today does not protect that period:
 This record therefore decides three things:
 
 1. **A frozen binding keeps its process alive.** Deleting a process is refused while any
-   line of any order binds it and is not settled (not yet started, running, held, being
-   returned, or failed to return). The refusal names how many lines, by product — a count,
-   for the reason ADR-0353 gives counts rather than lists. Deactivation remains allowed
-   and is what the conversion recommends for the old pair.
+   line of any order binds it and may still start it, by the table above: as
+   provisioning process for `pending` and `blocked`; as deprovisioning process for
+   `pending`, `blocked`, `running`, `failed`, `done` and `returnFailed`. It is also
+   refused while the **current** catalogue release binds it. The refusal names how many
+   lines, by product — a count, for the reason ADR-0353 gives counts rather than lists.
+   Deactivation remains allowed and is what the conversion recommends for the old pair.
+
+   **How the check runs.** Orders are a sidecar store: one JSON file per order, and
+   `All()` reads every file. Measured on this tree with orders of three lines (about
+   640 bytes each, warm page cache, 4 cores): 10,000 orders in 0.24 s, 50,000 in 1.3 s,
+   200,000 in 11 s. Real orders are larger (configuration answers, amendments,
+   instances), so these are lower bounds. That rules out running the scan inside the
+   run loop, where `handleDeleteProcess` does its work today: at 200,000 orders it
+   would stall the engine for over ten seconds. The scan therefore runs **off the loop**
+   (a sidecar store may be read there, ADR-0239), and only the delete itself runs on it.
+
+   The gap between the two is safe without a lock, because nothing can add a binding to
+   an old process in it: a new order freezes the current release, which the in-loop half
+   checks; a rebinding (point 3) only moves lines *away* from an old process; and a
+   retry of `returnFailed` is a line the scan already counted.
+
+   Deleting a process is a rare operator act, so a scan of seconds is acceptable there.
+   An index from process id to lines is **not** built now. It becomes necessary when the
+   fulfilment report (point 2) is read routinely, because that is the same scan on a
+   read path; the report is where the index is introduced, if it is.
 2. **The remainder is visible.** The fulfilment report (`fulfilmentreport.go`) gains, per
    product, the number of unsettled lines still bound to each old process. A maintainer
    can see when the old pair is no longer needed, instead of guessing.
@@ -374,13 +413,17 @@ outcome.
   operator cleaning up old versions meets it; the message says which products still
   need the process and how many lines.
 - **Follow-ups / risks to watch:**
-  - The §9 guard asks every order whether it binds a process. Answered by walking the
-    orders it is a scan; at scale it needs an index from process id to unsettled lines,
-    maintained where a line's status changes.
-  - The approval models deliberately do not report an approval (the provisioning result
-    is the one truth). The start act can check that a line is open and not yet started;
-    it cannot check that it was approved. That is the same trust the create route extends
-    today, and it is named here rather than widened.
+  - The §9 guard is a full scan of the order store, measured above. The same scan
+    already runs on the loop elsewhere — `Store.For` walks every order for one person's
+    shop listing — which is a scaling limit of the order store in general, not of this
+    record, and is left to its own.
+  - The shipped approval models record a rejection but not an approval. Recording one
+    is already possible (`POST …/decision` with `approved: true` calls `order.Approve`,
+    and is optional today). If the models record it before posting the start act, the
+    start act can refuse an approval-gated line without an approver on record — a check
+    on the order's state, which is what §7 relies on. Until then the start act can check
+    that a line is open and not yet started, but not that it was approved, which is the
+    same trust the create route extends today.
   - `TestEverySystemProcessCallsARouteThatExists` must learn the start act's route in the
     same change that the four models move to it.
   - When ADR-0370's buffer lands, it must **not** apply to the directed trigger: a start
