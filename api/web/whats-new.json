@@ -348,28 +348,6 @@
         },
         "route": "#/modeler"
       }
-    },
-    {
-      "id": "the-decision-registry-is-safe-to-read-while-a-decision-is-de",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Deploying a decision while tasks evaluate is safe",
-        "de": "Ein Decision-Deploy während laufender Auswertungen ist sicher"
-      },
-      "summary": {
-        "en": "Business rule tasks are evaluated in the background while the engine may be deploying a new decision version at the same moment. The two touched the same internal tables without coordination; the Go race detector reported it, and in the worst case the server could stop. The tables are now protected, and evaluations still run in parallel.",
-        "de": "Business Rule Tasks werden im Hintergrund ausgewertet, während die Engine gleichzeitig eine neue Decision-Version deployen kann. Beide griffen ohne Abstimmung auf dieselben internen Tabellen zu; der Race-Detector von Go hat das gemeldet, und im schlimmsten Fall konnte der Server stehen bleiben. Die Tabellen sind jetzt geschützt, und Auswertungen laufen weiterhin parallel."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Decisions",
-        "Engine"
-      ]
     }
   ]
 }
