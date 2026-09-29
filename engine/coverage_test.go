@@ -372,3 +372,16 @@ func TestFirstErr(t *testing.T) {
 		t.Fatalf("firstErr = %v, want the first non-nil error", err)
 	}
 }
+
+// TestInflightCarriesATriggerReceipt: the receipt a directed trigger writes is
+// carried into and out of an inflightValue like every other payload (ADR-0425).
+func TestInflightCarriesATriggerReceipt(t *testing.T) {
+	r := &model.TriggerReceiptValue{Source: "hr", TriggerID: "x", InstanceKey: 7, At: 9}
+	iv := inflightFromRecord(model.Record{Header: model.RecordHeader{ValueType: model.VTTriggerReceipt}, Value: r})
+	if iv.trigger != *r {
+		t.Fatalf("inflightFromRecord = %+v, want %+v", iv.trigger, *r)
+	}
+	if v, ok := iv.asValue(model.VTTriggerReceipt).(*model.TriggerReceiptValue); !ok || *v != *r {
+		t.Fatalf("asValue = %v", v)
+	}
+}

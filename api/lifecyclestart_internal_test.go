@@ -9,6 +9,7 @@ import (
 
 	"github.com/pblumer/atlas/api/catalog"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/model"
 )
 
 // TestEveryTriggerOutcomeHasAnAnswer: each way a directed trigger starts nothing is
@@ -131,5 +132,52 @@ func TestEntryPointsReadTheNewestVersion(t *testing.T) {
 	msgs, hasNone, deployed := look.EntryPoints("two-triggers")
 	if !deployed || !hasNone || strings.Join(msgs, ",") != "t.a,t.b" {
 		t.Fatalf("EntryPoints = %v none=%v deployed=%v", msgs, hasNone, deployed)
+	}
+}
+
+// TestReconciliationDeprovisionsThroughALifecycleProcess: an unmanaged right of a
+// product that binds a lifecycle process is revoked at the process's deprovision
+// start (ADR-0425), and a product whose deprovision start does not exist says so
+// instead of starting anything.
+func TestReconciliationDeprovisionsThroughALifecycleProcess(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	if code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", twoTriggers, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy: %d (%s)", code, body)
+	}
+	save := func(deprov string) {
+		t.Helper()
+		var err error
+		srv.do(func() {
+			err = srv.catalogStore.SaveItem(catalog.Item{ID: "vpn-access", HomeCatalog: "cat",
+				State: catalog.StateActive, LifecycleProcess: "two-triggers",
+				Operations: map[string]string{catalog.OpProvision: "t.a", catalog.OpDeprovision: deprov}})
+		})
+		if err != nil {
+			t.Fatalf("save product: %v", err)
+		}
+	}
+
+	save("t.missing")
+	seedDiscrepancy(t, srv, openUnmanaged("r1"))
+	if code, body := deprovision(t, srv, "r1"); code == http.StatusOK || !strings.Contains(body, "t.missing") {
+		t.Fatalf("a missing deprovision start: %d (%s), want a refusal naming it", code, body)
+	}
+
+	save("t.b")
+	seedDiscrepancy(t, srv, openUnmanaged("r2"))
+	if code, body := deprovision(t, srv, "r2"); code != http.StatusOK {
+		t.Fatalf("deprovision: %d (%s)", code, body)
+	}
+	// The deprovision branch runs straight to its end, so the instance it started is
+	// among the finished ones.
+	var finished int
+	srv.do(func() {
+		_ = srv.store.CompletedProcessInstances(func(uint64, *model.ProcessInstanceValue) error {
+			finished++
+			return nil
+		})
+	})
+	if finished != 1 {
+		t.Fatalf("finished instances = %d, want the one deprovisioning", finished)
 	}
 }
