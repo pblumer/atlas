@@ -1,0 +1,11 @@
+{
+  "tags": ["Operations", "API"],
+  "title": {
+    "en": "Repairing a version's search index now covers all of its instances",
+    "de": "Die Reparatur des Suchindexes einer Version erfasst jetzt alle Instanzen"
+  },
+  "summary": {
+    "en": "After running instances were moved onto a version that declares different searchable variables, the repair that brings their search index back in line works through them in portions — through the API or the AI tool atlas_reindex_instances. Until now every portion picked the same instances again, so on a version with more than 500 running instances the repair never finished and never reached the rest. Each portion now continues where the previous one stopped.",
+    "de": "Nachdem laufende Instanzen auf eine Version mit anderen durchsuchbaren Variablen verschoben wurden, bringt eine Reparatur ihren Suchindex portionenweise wieder in Ordnung — über die API oder das KI-Werkzeug atlas_reindex_instances. Bisher wählte jede Portion wieder dieselben Instanzen: Bei einer Version mit mehr als 500 laufenden Instanzen endete die Reparatur nie und erreichte den Rest nicht. Jede Portion setzt jetzt dort fort, wo die vorherige aufgehört hat."
+  }
+}

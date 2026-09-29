@@ -134,6 +134,15 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Repairing a version's search index reaches past its first page.**
+  `POST /api/v1/processes/{key}/reindex-instances` selected the newest instances of the
+  version on every call, and a repaired instance stays on its version — so on a version
+  with more instances than one call's limit (500 by default), every call selected the
+  same page, `remaining` stayed true for good, and the instances past it were never
+  repaired. It now takes the same cursor as the batch migration: a call answers
+  `nextCursor` beside `remaining`, and the next call passes it as `?after=`.
+  `atlas_reindex_instances` passes it on (ADR-0244).
+
 - **A batch migration reaches every instance of the version, and stops.** Each call of
   `POST /api/v1/processes/{key}/migrate-instances` selected the first instances of the
   version from the front, and a refused instance stays on the version it was on — so

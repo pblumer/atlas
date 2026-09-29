@@ -276,6 +276,28 @@
       }
     },
     {
+      "id": "repairing-a-version-s-search-index-reaches-past-its-first-pa",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Repairing a version's search index now covers all of its instances",
+        "de": "Die Reparatur des Suchindexes einer Version erfasst jetzt alle Instanzen"
+      },
+      "summary": {
+        "en": "After running instances were moved onto a version that declares different searchable variables, the repair that brings their search index back in line works through them in portions — through the API or the AI tool atlas_reindex_instances. Until now every portion picked the same instances again, so on a version with more than 500 running instances the repair never finished and never reached the rest. Each portion now continues where the previous one stopped.",
+        "de": "Nachdem laufende Instanzen auf eine Version mit anderen durchsuchbaren Variablen verschoben wurden, bringt eine Reparatur ihren Suchindex portionenweise wieder in Ordnung — über die API oder das KI-Werkzeug atlas_reindex_instances. Bisher wählte jede Portion wieder dieselben Instanzen: Bei einer Version mit mehr als 500 laufenden Instanzen endete die Reparatur nie und erreichte den Rest nicht. Jede Portion setzt jetzt dort fort, wo die vorherige aufgehört hat."
+      },
+      "link": {
+        "label": "ADR-0244",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0244-searchable-variables.md"
+      },
+      "tags": [
+        "Operations",
+        "API"
+      ]
+    },
+    {
       "id": "a-batch-migration-reaches-every-instance-of-the-version-and-",
       "version": "Unreleased",
       "date": null,
@@ -329,35 +351,6 @@
           "de": "Instanzen öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "restarting-a-supervised-worker-is-never-quietly-ignored",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Restarting a worker always restarts it",
-        "de": "Ein Worker-Neustart startet den Worker immer neu"
-      },
-      "summary": {
-        "en": "A restart asked for while a supervised worker was still running, or in the moment after it crashed, could be missed: the worker then waited out its full backoff, up to 30 seconds, before starting again, and a worker with nothing to serve stayed paused until Restart was pressed a second time. The same restart happens automatically when you configure a worker's kind in the Console, so a newly configured mail worker could stay asleep. A restart is now never missed, whenever it is asked for.",
-        "de": "Ein Neustart, der angefordert wurde, während ein überwachter Worker noch lief oder kurz nachdem er abgestürzt war, konnte verloren gehen: Der Worker wartete dann seine volle Wartezeit von bis zu 30 Sekunden ab, bevor er wieder startete, und ein Worker ohne Aufgabe blieb pausiert, bis „Restart“ ein zweites Mal gedrückt wurde. Derselbe Neustart erfolgt automatisch, wenn man in der Console die Art eines Workers konfiguriert; ein neu konfigurierter Mail-Worker konnte deshalb inaktiv bleiben. Ein Neustart geht jetzt nie mehr verloren, egal wann er angefordert wird."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Workers",
-        "Console"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the workers",
-          "de": "Worker öffnen"
-        },
-        "route": "#/console/workers"
       }
     }
   ]

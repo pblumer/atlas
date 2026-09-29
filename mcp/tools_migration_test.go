@@ -228,3 +228,47 @@ func TestReindexInstancesTool(t *testing.T) {
 		t.Errorf("reindex = %+v, want the definition, one instance submitted, nothing remaining, no declaration", got)
 	}
 }
+
+// The repair walks a version the way the migration batch does, and for a sharper reason:
+// a repaired instance stays on its version, so without the cursor every call would
+// select the same page. The tool carries the cursor through and refuses one it cannot.
+func TestReindexInstancesToolCursor(t *testing.T) {
+	atlas := newAtlas(t)
+	v1 := deployVersion(t, atlas, 1, migrateToolsV1)
+	for id := 2; id < 4; id++ {
+		if _, isErr := toolText(t, result(t, run(t, atlas, callTool(id, "atlas_create_instance", map[string]any{"key": v1}))[0])); isErr {
+			t.Fatal("create_instance failed")
+		}
+	}
+	type step struct {
+		Submitted  int    `json:"submitted"`
+		Remaining  bool   `json:"remaining"`
+		NextCursor string `json:"nextCursor"`
+	}
+	call := func(id int, args map[string]any) step {
+		t.Helper()
+		text, isErr := toolText(t, result(t, run(t, atlas, callTool(id, "atlas_reindex_instances", args))[0]))
+		if isErr {
+			t.Fatalf("reindex_instances %v: %s", args, text)
+		}
+		var s step
+		if err := json.Unmarshal([]byte(text), &s); err != nil {
+			t.Fatalf("decode %q: %v", text, err)
+		}
+		return s
+	}
+
+	first := call(4, map[string]any{"key": v1, "limit": 1})
+	if first.Submitted != 1 || !first.Remaining || first.NextCursor == "" {
+		t.Fatalf("first call = %+v, want one submitted and a cursor", first)
+	}
+	second := call(5, map[string]any{"key": v1, "limit": 1, "after": first.NextCursor})
+	if second.Submitted != 1 || second.Remaining || second.NextCursor != "" {
+		t.Errorf("second call = %+v, want the other instance and the walk finished", second)
+	}
+	if text, isErr := toolText(t, result(t, run(t, atlas, callTool(6, "atlas_reindex_instances", map[string]any{
+		"key": v1, "after": 7,
+	}))[0])); !isErr || !strings.Contains(text, "nextCursor") {
+		t.Errorf("a numeric cursor = (%q, isErr=%v), want a refusal naming what to pass", text, isErr)
+	}
+}
