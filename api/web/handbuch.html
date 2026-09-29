@@ -7615,13 +7615,11 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
         <li data-l="de"><b>Nichts erreicht atlas im Klartext.</b> Entweder terminiert atlas TLS selbst –
           <code>--tls-cert</code> und <code>--tls-key</code> machen aus dem Port einen TLS-1.3-Listener, beide
           Dateien oder keine – oder ein Reverse Proxy davor tut es. Eins von beidem, bevor jemand von aussen
-          darauf zugreifen kann. Verschlüsselung ist keine Autorisierung: <code>/metrics</code>,
-          <code>/healthz</code> und <code>/readyz</code> antworten jedem, der den Port erreicht.</li>
+          darauf zugreifen kann. Verschlüsselung ist keine Autorisierung: <code>/healthz</code> und <code>/readyz</code> antworten jedem, der den Port erreicht; <code>/metrics</code> dagegen verlangt seit ADR-0198 einen API-Token mit Scope <code>metrics</code> (siehe <a href="#ueberwachen">Überwachen</a>).</li>
         <li data-l="en"><b>Nothing should reach atlas in the clear.</b> Either atlas terminates TLS itself –
           <code>--tls-cert</code> and <code>--tls-key</code> turn the port into a TLS 1.3 listener, both files or
           neither – or a reverse proxy in front of it does. One of the two, before anyone outside the host can
-          reach it. Encryption is not authorization: <code>/metrics</code>, <code>/healthz</code> and
-          <code>/readyz</code> answer whoever can reach the port.</li>
+          reach it. Encryption is not authorization: <code>/healthz</code> and <code>/readyz</code> answer whoever can reach the port; <code>/metrics</code>, since ADR-0198, requires an API token of scope <code>metrics</code> (see <a href="#ueberwachen">Monitoring</a>).</li>
         <li data-l="de"><b>Sichere den Vault-Key.</b> Ein Datenverzeichnis ohne seinen <code>vault.key</code> ist
           nicht wiederherstellbar – die darin gespeicherten Worker-Secrets sind dann nicht mehr lesbar.</li>
         <li data-l="en"><b>Back up the vault key.</b> A data directory without its <code>vault.key</code> is not
@@ -7639,6 +7637,155 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
         <a class="applink" href="https://github.com/pblumer/atlas/blob/main/docs/install.md" target="_blank" rel="noopener"><code>docs/install.md</code>&nbsp;↗</a>.
         For containers and Kubernetes:
         <a class="applink" href="https://github.com/pblumer/atlas/blob/main/deploy/README.md" target="_blank" rel="noopener"><code>deploy/</code>&nbsp;↗</a>.</p>
+
+      <div id="ueberwachen" style="scroll-margin-top:66px"></div>
+      <h3 data-l="de">Überwachen: Metriken, Alarmierung, Export, Aufbewahrung, Sicherung</h3>
+      <h3 data-l="en">Monitoring: metrics, alerting, export, retention, backup</h3>
+      <p data-l="de">Die <a href="/#/operations">Operations</a>-App zeigt den einzelnen Fall. Eine
+        Installation im Dauerbetrieb braucht daneben die Sicht von aussen: Zahlen, die ein Wächter abfragt,
+        ein Ereignisstrom, den ein Suchindex aufnimmt, eine Aufbewahrung, die alte Fälle abräumt, und eine
+        Sicherung, aus der man wiederherstellt. Alles davon ist Mechanik; jeder Aufruf wurde an einer laufenden
+        Instanz nachvollzogen.</p>
+      <p data-l="en">The <a href="/#/operations">Operations</a> app shows the single case. An installation
+        running day and night also needs the view from outside: numbers a monitor scrapes, an event stream a search
+        index takes in, a retention that clears old cases away, and a backup you restore from. All of it is
+        mechanics; every call below was run against a live instance.</p>
+
+      <h4 data-l="de">Metriken</h4><h4 data-l="en">Metrics</h4>
+      <p data-l="de">Atlas legt unter <code>/metrics</code> eine Prometheus-Exposition ab (ADR-0142); jede
+        Kennzahl trägt das Präfix <code>atlas_</code>. Die tragenden sind <code>atlas_open_incidents</code> (die
+        Zahl geparkter Incidents), <code>atlas_active_process_instances</code>, <code>atlas_open_jobs</code>,
+        <code>atlas_jobs_failed_total</code> und <code>atlas_worker_breakers_open</code>. <b>Seit ADR-0198 liegt
+        <code>/metrics</code> hinter der Anmeldung</b>: ist <code>--auth</code> an (Standard), braucht ein Scraper
+        einen API-Token mit Scope <code>metrics</code>, der genau diese eine Route erreicht und sonst nichts. Ohne
+        Token antwortet die Route mit <i>401</i>, mit einem Token anderen Scopes mit <i>403</i>. (Ein Reverse-Proxy
+        davor bleibt sinnvoll – für TLS, nicht mehr für die Autorisierung.)</p>
+      <p data-l="en">Atlas serves a Prometheus exposition at <code>/metrics</code> (ADR-0142); every metric carries
+        the <code>atlas_</code> prefix. The load-bearing ones are <code>atlas_open_incidents</code> (the count of
+        parked incidents), <code>atlas_active_process_instances</code>, <code>atlas_open_jobs</code>,
+        <code>atlas_jobs_failed_total</code> and <code>atlas_worker_breakers_open</code>. <b>Since ADR-0198
+        <code>/metrics</code> sits behind authentication</b>: with <code>--auth</code> on (the default) a scraper
+        needs an API token of scope <code>metrics</code>, which reaches that one route and nothing else. Without a
+        token the route answers <i>401</i>, with a token of another scope <i>403</i>. (A reverse proxy in front
+        still makes sense – for TLS, no longer for authorization.)</p>
+      <pre><code># Der Scraper hält einen metrics-Token  ·  The scraper holds a metrics token
+curl -H "Authorization: Bearer $ATLAS_METRICS_TOKEN" https://atlas.example.com/metrics
+# atlas_open_incidents 1
+# atlas_active_process_instances 1  …</code></pre>
+      <p data-l="de">Nicht zu verwechseln: <code>--metrics</code> schaltet <i>diese</i> Exposition ein;
+        <code>--metrics-url</code> ist der lesende Gegenpart, mit dem <a href="#panorama">Panorama</a> die
+        Verlaufszahlen eines Prometheus abfragt (ADR-0189) – zwei getrennte Dinge.</p>
+      <p data-l="en">Not to be confused: <code>--metrics</code> turns <i>this</i> exposition on;
+        <code>--metrics-url</code> is the reading counterpart with which <a href="#panorama">Panorama</a> queries a
+        Prometheus for history (ADR-0189) – two separate things.</p>
+
+      <h4 data-l="de">Alarmierung</h4><h4 data-l="en">Alerting</h4>
+      <p data-l="de">Atlas <b>alarmiert nicht von sich aus</b> – es gibt keinen eingebauten Melder, kein Webhook
+        auf einen Incident. Alarmiert wird <b>ausserhalb</b>, auf den Metriken und den Log-Zeilen: eine Regel auf
+        <code>atlas_open_incidents &gt; 0</code> oder auf einen Anstieg von <code>atlas_jobs_failed_total</code> im
+        eigenen Prometheus-Alerting, oder ein Log-Verarbeiter auf die Ereignisse (jede Zeile trägt ein stabiles
+        <code>event=</code>, ADR-0142). Wer die Fälle selbst sehen will, liest sie über
+        <code>GET /api/v1/incidents</code> und löst sie mit <code>POST /api/v1/incidents/{key}/resolve</code>
+        (Rolle <code>operator</code>).</p>
+      <p data-l="en">Atlas <b>does not alert on its own</b> – there is no built-in notifier, no webhook on an
+        incident. Alerting happens <b>outside</b>, on the metrics and the log lines: a rule on
+        <code>atlas_open_incidents &gt; 0</code> or on a rise in <code>atlas_jobs_failed_total</code> in your own
+        Prometheus alerting, or a log processor on the events (every line carries a stable <code>event=</code>,
+        ADR-0142). To see the cases yourself, read them over <code>GET /api/v1/incidents</code> and resolve them
+        with <code>POST /api/v1/incidents/{key}/resolve</code> (role <code>operator</code>).</p>
+
+      <h4 data-l="de">Ereignisse exportieren</h4><h4 data-l="en">Exporting events</h4>
+      <p data-l="de">Für Auswertung und Aufbewahrung über die Instanz hinaus spiegelt ein Exporter das
+        Ereignisprotokoll in einen <b>OpenSearch</b>-Index (ADR-0114): <code>--opensearch-url</code> schaltet ihn
+        ein (leer = aus), <code>--opensearch-index</code> nennt den Index (Standard <code>atlas-events</code>). Er
+        läuft <b>neben</b> dem Prozessor, nie auf dem heissen Pfad, liest nur das bereits gesicherte Protokoll und
+        indexiert nie über die Sicherungs-Wasserlinie hinaus. Die Zustellung ist mindestens einmal, idempotent
+        über die Log-Position als Dokument-Id; sein Fortschritt steht in <code>atlas_exporter_position</code> und
+        <code>atlas_exporter_lag_positions</code>.</p>
+      <p data-l="en">For analysis and retention beyond the instance, an exporter mirrors the event log into an
+        <b>OpenSearch</b> index (ADR-0114): <code>--opensearch-url</code> turns it on (empty = off),
+        <code>--opensearch-index</code> names the index (default <code>atlas-events</code>). It runs <b>beside</b>
+        the processor, never on the hot path, reads only the already-durable log, and never indexes past the
+        durable watermark. Delivery is at-least-once, idempotent by the log position as the document id; its
+        progress is in <code>atlas_exporter_position</code> and <code>atlas_exporter_lag_positions</code>.</p>
+
+      <h4 data-l="de">Aufbewahrung</h4><h4 data-l="en">Retention</h4>
+      <p data-l="de">Fertige Fälle sammeln sich an. <code>--retention-max-age</code> löscht abgeschlossene
+        Instanzen, die älter sind (ADR-0115; Standard 0 = aus, dann gilt nur ein pro Prozess gesetztes
+        <code>atlas:historyTtl</code>). Das Löschen ist <b>export-gesteuert</b>: Läuft ein OpenSearch-Exporter,
+        wird nur gelöscht, was er schon ausgeliefert hat; läuft keiner, gilt der gesicherte Stand des
+        Ereignisprotokolls als Archiv. So verschwindet nichts, das nicht anderswo liegt. Der Lauf ist flaggen- und
+        timergesteuert (<code>--retention-interval</code>, <code>--retention-batch</code>); eine HTTP-Route dafür
+        gibt es nicht.</p>
+      <p data-l="en">Finished cases pile up. <code>--retention-max-age</code> deletes completed instances older
+        than it (ADR-0115; default 0 = off, leaving only a per-process <code>atlas:historyTtl</code>). The deletion
+        is <b>export-gated</b>: with an OpenSearch exporter running, only what it has already shipped is deleted;
+        with none, the durable event log stands as the archive. So nothing disappears that is not held elsewhere.
+        The sweep is flag- and timer-driven (<code>--retention-interval</code>, <code>--retention-batch</code>);
+        there is no HTTP route for it.</p>
+
+      <h4 data-l="de">Sichern und wiederherstellen</h4><h4 data-l="en">Backing up and restoring</h4>
+      <p data-l="de">Zwei Sicherungen, für zwei Fragen. <code>GET /api/v1/backup</code> lädt die
+        <b>Design-Zeit-Daten</b> als <code>tar.gz</code> – Deployments, Entwürfe, Formulare, Entscheidungen,
+        Applikationen, Worker, Einstellungen –, <b>ohne</b> Konten, Vault-Schlüssel und Laufzeitzustand;
+        <code>POST /api/v1/restore</code> spielt sie zurück (überschreibt Passendes, ein Neustart bringt deployte
+        Prozesse zur Geltung). <code>GET /api/v1/backup/full</code> lädt die <b>ganze Instanz</b> – dazu das WAL
+        mit den laufenden Instanzen, die Konten und den Vault-Schlüssel –; <code>POST /api/v1/restore/full</code>
+        wird beim nächsten Neustart angewandt und ersetzt alles, dann wird der Zustand aus dem WAL neu aufgebaut.
+        Alle vier verlangen die Rolle <code>admin</code>. In der Konsole liegt beides unter
+        <b>Backup</b>.</p>
+      <p data-l="en">Two backups, for two questions. <code>GET /api/v1/backup</code> downloads the
+        <b>design-time data</b> as a <code>tar.gz</code> – deployments, drafts, forms, decisions, applications,
+        workers, settings –, <b>without</b> accounts, the vault key, or runtime state;
+        <code>POST /api/v1/restore</code> plays it back (overwriting matches; a restart brings deployed processes
+        into effect). <code>GET /api/v1/backup/full</code> downloads the <b>whole instance</b> – with the WAL and
+        its running instances, the accounts, and the vault key –; <code>POST /api/v1/restore/full</code> is applied
+        on the next restart and replaces everything, then the state is rebuilt from the WAL. All four need the
+        <code>admin</code> role. In the Console both sit under <b>Backup</b>.</p>
+
+      <table id="monitor-routes">
+        <thead><tr>
+          <th data-l="de">Aufruf</th><th data-l="en">Call</th>
+          <th data-l="de">Rolle</th><th data-l="en">Role</th>
+          <th data-l="de">Wofür</th><th data-l="en">For</th>
+        </tr></thead>
+        <tbody>
+          <tr><td><code>GET /api/v1/incidents</code></td><td><code>operator</code></td>
+            <td data-l="de">geparkte Incidents lesen</td>
+            <td data-l="en">read parked incidents</td></tr>
+          <tr><td><code>POST /api/v1/incidents/{key}/resolve</code></td><td><code>operator</code></td>
+            <td data-l="de">einen Incident auflösen</td>
+            <td data-l="en">resolve an incident</td></tr>
+          <tr><td><code>GET /api/v1/backup</code></td><td><code>admin</code></td>
+            <td data-l="de">die Design-Zeit-Daten sichern</td>
+            <td data-l="en">back up the design-time data</td></tr>
+          <tr><td><code>POST /api/v1/restore</code></td><td><code>admin</code></td>
+            <td data-l="de">die Design-Zeit-Daten wiederherstellen</td>
+            <td data-l="en">restore the design-time data</td></tr>
+          <tr><td><code>GET /api/v1/backup/full</code></td><td><code>admin</code></td>
+            <td data-l="de">die ganze Instanz sichern (mit WAL, Konten, Vault)</td>
+            <td data-l="en">back up the whole instance (WAL, accounts, vault)</td></tr>
+        </tbody>
+      </table>
+      <p data-l="de"><code>/metrics</code> steht bewusst nicht in dieser Tabelle: es liegt neben dem
+        <code>/api/v1</code>-Baum und wird über den <code>metrics</code>-Scope erreicht, nicht über eine Rolle.</p>
+      <p data-l="en"><code>/metrics</code> is deliberately not in this table: it sits beside the
+        <code>/api/v1</code> tree and is reached through the <code>metrics</code> scope, not a role.</p>
+
+      <div class="note warn">
+        <div class="lbl" data-l="de">Stolpersteine</div><div class="lbl" data-l="en">Traps</div>
+        <p data-l="de"><b>Alarmierung baut man selbst.</b> Atlas meldet keinen Incident von sich aus; ohne eine
+          Regel auf <code>atlas_open_incidents</code> oder die Logs bleibt ein geparkter Fall unbemerkt, bis jemand
+          hinsieht.</p>
+        <p data-l="en"><b>Alerting is yours to build.</b> Atlas raises no incident notification on its own; without
+          a rule on <code>atlas_open_incidents</code> or the logs, a parked case goes unnoticed until somebody
+          looks.</p>
+        <p data-l="de"><b>Eine Design-Zeit-Sicherung enthält keine laufenden Fälle.</b> Wer eine ganze Instanz
+          umziehen oder als Ganzes wiederherstellen will, braucht die <i>Full-Sicherung</i> – die reguläre trägt
+          Modelle, nicht das WAL.</p>
+        <p data-l="en"><b>A design-time backup holds no running cases.</b> To move a whole instance, or restore one
+          as a whole, use the <i>full</i> backup – the regular one carries models, not the WAL.</p>
+      </div>
     </section>
 
 

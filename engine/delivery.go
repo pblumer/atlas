@@ -2,7 +2,7 @@ package engine
 
 import "github.com/pblumer/atlas/model"
 
-// Directed delivery (ADR-draft-a-product-lifecycle-may-run-as-one-instance-per-position).
+// Directed delivery (ADR-0428).
 //
 // A product whose lifecycle runs as one instance per order position starts that
 // instance once, at provisioning, and every later operation — a change, the return —

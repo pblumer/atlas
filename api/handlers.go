@@ -4051,7 +4051,7 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 		// A message a per-position product delivers to its running instances is the
 		// catalogue's to send, addressed to one instance and reported. By name it
 		// would reach whatever waits under the key it carries, and say "published"
-		// if nothing did (ADR-draft-a-product-lifecycle-may-run-as-one-instance-per-position).
+		// if nothing did (ADR-0428).
 		if owner, ownerErr = s.catalogOwnerOfDelivered(payload.Name); ownerErr != nil || owner != "" {
 			return
 		}

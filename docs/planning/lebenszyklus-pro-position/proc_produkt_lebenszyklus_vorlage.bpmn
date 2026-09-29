@@ -10,7 +10,7 @@
   <message id="m_change" name="produkt.change"><extensionElements><zeebe:subscription correlationKey="=orderId + &#34;/&#34; + (if positionId = null then itemId else positionId)"/></extensionElements></message>
   <message id="m_deprovision" name="produkt.deprovision"><extensionElements><zeebe:subscription correlationKey="=orderId + &#34;/&#34; + (if positionId = null then itemId else positionId)"/></extensionElements></message>
   <process id="proc_produkt_lebenszyklus_vorlage" name="Produkt: Lebenszyklus (ein Strang)" isExecutable="true">
-    <documentation>Vorlage: ein Strang pro Position (ADR-draft-a-product-lifecycle-may-run-as-one-instance-per-position, Form per-position).
+    <documentation>Vorlage: ein Strang pro Position (ADR-0428, Form per-position).
 Ablauf: Neu bestellt -> Provisionierung -> Ausgegeben -> Warten auf Auftrag -> (Change)* -> Deprovisionierung -> Recht beendet.
 Stopps gegen Endlosschleifen:
 1. Jede Runde der Change-Schleife beginnt am ereignisbasierten Gateway und braucht ein externes Ereignis; eine Schleife ohne Wartezustand stoppt ohnehin das Execution Budget der Engine (ADR-0272).

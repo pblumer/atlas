@@ -105,7 +105,7 @@ type Command struct {
 	// RunUntilIdle returned, never on a replayed command.
 	Triggered *TriggerResult
 	// Delivered is where a directed delivery's answer is written
-	// (ADR-draft-a-product-lifecycle-may-run-as-one-instance-per-position), under the
+	// (ADR-0428), under the
 	// same contract as Triggered.
 	Delivered *DeliveryResult
 }

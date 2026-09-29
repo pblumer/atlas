@@ -1,7 +1,7 @@
 # Lebenszyklus als ein Strang pro Position — Vorlage
 
-Entwurfsmodell zum ADR-Entwurf
-[`draft-a-product-lifecycle-may-run-as-one-instance-per-position.md`](../../adr/draft-a-product-lifecycle-may-run-as-one-instance-per-position.md)
+Vorlage zu ADR-0428
+[`0428-a-product-lifecycle-may-run-as-one-instance-per-position.md`](../../adr/0428-a-product-lifecycle-may-run-as-one-instance-per-position.md)
 (Form `per-position`). Ein Produkt bindet die Vorlage mit `lifecycleProcess`,
 `lifecycleForm: "per-position"` und den Operationen `provision` und `deprovision`
 (optional `change`). Die Schritte sind Platzhalter; vor dem Einsatz Prozess-Id,

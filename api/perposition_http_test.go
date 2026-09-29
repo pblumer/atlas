@@ -12,7 +12,7 @@ import (
 // A per-position lifecycle: provisioning starts the strand, which waits for its
 // return under the position's key; a return with no strand to reach starts at the
 // deprovision start event and joins the same return path
-// (ADR-draft-a-product-lifecycle-may-run-as-one-instance-per-position).
+// (ADR-0428).
 const hullStrandBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
   <message id="m_prov" name="hull.provision"/>

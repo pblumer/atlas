@@ -187,7 +187,7 @@ type Line struct {
 	// LifecycleForm is how the lifecycle process runs for this line, frozen with the
 	// binding: a per-position line's later operations are delivered to the instance
 	// its provisioning started
-	// (ADR-draft-a-product-lifecycle-may-run-as-one-instance-per-position).
+	// (ADR-0428).
 	LifecycleForm string `json:"lifecycleForm,omitempty"`
 	// Rebindings are the moves of this line from the binding it froze to its
 	// product's lifecycle process, each with who, when and why (ADR-0427). A list,
@@ -349,7 +349,7 @@ func (l Line) BindingFor(op string) catalog.Binding {
 }
 
 // PerPosition reports whether this line's lifecycle runs as one instance per
-// position (ADR-draft-a-product-lifecycle-may-run-as-one-instance-per-position).
+// position (ADR-0428).
 func (l Line) PerPosition() bool {
 	return l.LifecycleProcess != "" && l.LifecycleForm == catalog.FormPerPosition
 }
@@ -388,7 +388,7 @@ func (l Line) StartsOf(op string) int {
 // instance look like two. The same instance for another operation is a new entry:
 // a per-position lifecycle carries the position's return in the instance its
 // provisioning started, and the return is still an attempt that counts
-// (ADR-draft-a-product-lifecycle-may-run-as-one-instance-per-position).
+// (ADR-0428).
 func RecordInstance(o Order, ref string, inst LineInstance) (Order, error) {
 	position, err := ResolveLine(o, ref)
 	if err != nil {

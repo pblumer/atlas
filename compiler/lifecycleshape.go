@@ -1,7 +1,7 @@
 package compiler
 
 // What publishing asks of a per-position lifecycle process
-// (ADR-draft-a-product-lifecycle-may-run-as-one-instance-per-position).
+// (ADR-0428).
 //
 // A product whose lifecycle runs as one instance per order position has its later
 // operations delivered to that instance, so the catalogue has to know two things the

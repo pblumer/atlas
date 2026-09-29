@@ -188,7 +188,7 @@ type Item struct {
 	// default, and what empty means) starts an instance for every operation;
 	// "per-position" starts one instance per order position at provisioning and
 	// delivers every later operation to it
-	// (ADR-draft-a-product-lifecycle-may-run-as-one-instance-per-position). Declared
+	// (ADR-0428). Declared
 	// rather than read off the diagram, so a catch event somebody adds to a model
 	// cannot silently change how a product is returned.
 	LifecycleForm string `json:"lifecycleForm,omitempty"`

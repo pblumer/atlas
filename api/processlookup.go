@@ -137,7 +137,7 @@ func (l processLookup) EntryPoints(processID string) (messages []string, hasNone
 
 // CatchPoints lists the message catch points of the newest deployed version of a
 // process id: what a per-position lifecycle delivers its later operations to
-// (ADR-draft-a-product-lifecycle-may-run-as-one-instance-per-position).
+// (ADR-0428).
 func (l processLookup) CatchPoints(processID string) []catalog.CatchPoint {
 	var out []catalog.CatchPoint
 	l.s.do(func() {
@@ -153,7 +153,7 @@ func (l processLookup) CatchPoints(processID string) []catalog.CatchPoint {
 }
 
 // WaitlessCycle names a cycle in the newest deployed version of a process id that
-// waits for nothing, or nil (ADR-draft-a-product-lifecycle-may-run-as-one-instance-per-position).
+// waits for nothing, or nil (ADR-0428).
 func (l processLookup) WaitlessCycle(processID string) []string {
 	var out []string
 	l.s.do(func() {

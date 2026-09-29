@@ -92,7 +92,7 @@ func (s *Server) handleReturnLine(w http.ResponseWriter, r *http.Request) {
 	if err := s.startReturn(binding, id, item, out, ""); err != nil {
 		// A refusal is the engine's answer, not a fault: the instance that carries a
 		// per-position line is not waiting for its return right now
-		// (ADR-draft-a-product-lifecycle-may-run-as-one-instance-per-position).
+		// (ADR-0428).
 		status := http.StatusInternalServerError
 		var refused errTriggerRefused
 		if errors.As(err, &refused) {
@@ -150,7 +150,7 @@ func (s *Server) startReturn(b catalog.Binding, orderID, ref string, o order.Ord
 	if line.PerPosition() {
 		// A per-position line's return is delivered to the instance that carries it,
 		// and starts the process only where that instance is gone
-		// (ADR-draft-a-product-lifecycle-may-run-as-one-instance-per-position).
+		// (ADR-0428).
 		instKey, err = s.deliverOrStart(line.StrandOf(), b, positionCorrelationKey(orderID, position), triggerID, vars)
 	} else {
 		instKey, err = s.startBinding(b, triggerID, vars)

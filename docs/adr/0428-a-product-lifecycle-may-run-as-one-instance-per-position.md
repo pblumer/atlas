@@ -1,4 +1,4 @@
-# ADR-DRAFT: A product lifecycle may run as one instance per position, and its later operations are delivered to that instance
+# ADR-0428: A product lifecycle may run as one instance per position, and its later operations are delivered to that instance
 
 - **Status:** Accepted
 - **Implementation:** Partial

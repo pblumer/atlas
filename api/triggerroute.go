@@ -152,7 +152,7 @@ func (s *Server) catalogOwnerOfEntry(processID, message string) (string, error) 
 
 // catalogOwnerOfDelivered names the per-position product that delivers this message
 // to its running instances as a change or a return, or "" when none does
-// (ADR-draft-a-product-lifecycle-may-run-as-one-instance-per-position). Its
+// (ADR-0428). Its
 // provisioning start is refused on the trigger route by [Server.catalogOwnerOfEntry];
 // this is the same rule for the messages that reach an instance already running.
 // Reads the catalogue store, so it runs on the run loop.

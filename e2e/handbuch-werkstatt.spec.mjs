@@ -371,3 +371,30 @@ test("the forms chapter teaches a custom worker over the Job API", async ({ page
   await expect(page.locator("#formulare #worker-jobs-routes td:first-child code",
     { hasText: /\/jobs\/activate$/ })).toHaveCount(1);
 });
+
+// The monitoring subsection lives inside the Operations & incidents chapter (it is not a
+// chapter of its own, so no table-of-contents entry). It teaches metrics, alerting,
+// export, retention and backup; its route table is guarded against the real routes and
+// roles in Go, so the table has to be on the page for that guard to mean anything.
+test("the operations chapter teaches monitoring and lists the backup route", async ({ page }) => {
+  const calls = [];
+  installMock(page, calls);
+  await page.goto("/handbuch.html");
+
+  await expect(page.locator("#betrieb #ueberwachen")).toHaveCount(1);
+
+  // The load-bearing fact, in whichever language is on screen: Atlas raises no alert on
+  // its own — you alert on the metrics.
+  for (const [lang, text] of [
+    ["de", "atlas_open_incidents"],
+    ["en", "atlas_open_incidents"],
+  ]) {
+    await page.click(`#lang-${lang}`);
+    await expect(page.locator("#betrieb").locator(`[data-l="${lang}"]`, { hasText: text }).first())
+      .toBeVisible();
+  }
+
+  // The first column only: the "For" cells name routes in prose too.
+  await expect(page.locator("#betrieb #monitor-routes td:first-child code",
+    { hasText: /\/backup$/ })).toHaveCount(1);
+});

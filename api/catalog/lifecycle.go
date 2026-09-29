@@ -22,7 +22,7 @@ const (
 )
 
 // The instance forms of a lifecycle process
-// (ADR-draft-a-product-lifecycle-may-run-as-one-instance-per-position).
+// (ADR-0428).
 const (
 	// FormPerOperation starts an instance for every operation (ADR-0425). It is
 	// what an empty LifecycleForm means.

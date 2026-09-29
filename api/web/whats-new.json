@@ -31,6 +31,35 @@
       }
     },
     {
+      "id": "the-handbook-teaches-monitoring-an-atlas-installation",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Monitor an Atlas installation — the handbook now shows how",
+        "de": "Eine Atlas-Installation überwachen – das Handbuch zeigt jetzt, wie"
+      },
+      "summary": {
+        "en": "Operations shows the single case; running Atlas day and night needs the view from outside. Atlas already exposed Prometheus metrics, mirrored its event log into OpenSearch, deleted finished instances on an export-gated schedule, and backed up either the design-time data or the whole instance — and the operations chapter stopped at the single incident. A new subsection explains all of it, in German and English, including two things worth knowing first: Atlas raises no alert on its own (you alert on the metrics), and `/metrics` is no longer open — since ADR-0198 it sits behind a `metrics`-scoped token. Every call was run against a live instance first.",
+        "de": "Operations zeigt den einzelnen Fall; Atlas im Dauerbetrieb braucht die Sicht von aussen. Atlas legte längst Prometheus-Metriken ab, spiegelte sein Ereignisprotokoll nach OpenSearch, löschte fertige Instanzen export-gesteuert und sicherte wahlweise die Design-Zeit-Daten oder die ganze Instanz – und das Betriebskapitel endete beim einzelnen Incident. Ein neuer Abschnitt erklärt das vollständig, auf Deutsch und Englisch, samt zweier Dinge, die man zuerst wissen sollte: Atlas alarmiert nicht von sich aus (man alarmiert auf die Metriken), und `/metrics` ist nicht mehr offen – seit ADR-0198 liegt es hinter einem Token mit Scope `metrics`. Jeder Aufruf wurde zuerst an einer laufenden Instanz ausgeführt."
+      },
+      "link": {
+        "label": "ADR-0142",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0142-prometheus-metrics.md"
+      },
+      "tags": [
+        "Handbook",
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "the-handbook-teaches-writing-your-own-worker-over-the-job-ap",
       "version": "Unreleased",
       "date": null,
@@ -318,35 +347,6 @@
           "de": "Operations öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "a-business-rule-task-bound-to-latest-runs-the-newest-decisio",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "Latest means the newest version when the task runs",
-        "de": "„Latest“ heisst: die neueste Version, wenn der Task läuft"
-      },
-      "summary": {
-        "en": "A business rule task bound to \"Latest\" now evaluates the newest deployed version of its decision each time it runs, as the Modeler always said and as in Camunda. Until now \"Latest\" was fixed when the process was deployed: a process deployed while a decision was at version 1 kept evaluating version 1 after versions 2 and 3 were deployed, until the process itself was deployed again. Processes already deployed keep the version they were deployed with until they are deployed again, so nothing changes under a running process without a deploy. To keep a process on one version on purpose, bind it to that version.",
-        "de": "Ein Business Rule Task mit der Bindung „Latest“ wertet jetzt bei jeder Ausführung die neueste deployte Version seiner Decision aus, so wie es der Modeler immer beschrieben hat und wie in Camunda. Bisher wurde „Latest“ beim Deploy des Prozesses festgelegt: Ein Prozess, der deployt wurde, als eine Decision bei Version 1 stand, wertete auch nach dem Deploy von Version 2 und 3 weiterhin Version 1 aus, bis der Prozess selbst neu deployt wurde. Bereits deployte Prozesse behalten ihre Version, bis sie neu deployt werden; unter einem laufenden Prozess ändert sich also nichts ohne Deploy. Wer einen Prozess bewusst auf einer Version halten will, bindet ihn an diese Version."
-      },
-      "link": {
-        "label": "ADR-0319",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0319-durable-versioned-decision-deployments.md"
-      },
-      "tags": [
-        "Decisions",
-        "Engine"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]

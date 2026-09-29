@@ -114,7 +114,7 @@ func positionTriggerID(orderID, position, op string, attempt int) string {
 }
 
 // Delivering a later operation of a per-position lifecycle
-// (ADR-draft-a-product-lifecycle-may-run-as-one-instance-per-position).
+// (ADR-0428).
 //
 // A per-position line's provisioning started the instance that carries the right
 // for as long as it is held; its return, and any change, is a message that instance
