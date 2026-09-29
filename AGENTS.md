@@ -57,6 +57,15 @@ go test ./engine/...
 go test ./engine/ -run TestProcessorRecovery -v
 ```
 
+CI also runs the storage packages — `wal/`, `checkpoint/`, `state/`, `api/sidecar/`,
+`internal/` — on a Windows runner (`windows · storage` in `.github/workflows/ci.yml`),
+because a Windows binary ships and those packages are file-system behaviour. Linux cannot
+run that job for you; the closest local check is that the tests still compile there:
+
+```bash
+GOOS=windows go vet ./wal/... ./checkpoint/... ./state/... ./api/sidecar/... ./internal/...
+```
+
 Browser end-to-end tests for the web UI (the Design-view token simulation) live in
 [`e2e/`](e2e/) and run on Playwright + Chromium — see [`e2e/README.md`](e2e/README.md).
 They are JS, not Go, so they are a separate CI job and are not part of the Go commands above.
