@@ -1062,6 +1062,15 @@ func handleJobFailed(c *ProcessingContext) {
 		return
 	}
 	c.AppendJobEvent(c.cmd.Key, model.IntentJobFailed, *job)
+	// With retries left and nothing holding it, the job is back on the activatable index
+	// the moment this batch is durable, and a worker long-polling its type must be told —
+	// every other path that puts a job there does (creation, a backoff or a lease
+	// running out, a resolved incident). Without it a waiting worker slept out its whole
+	// poll while the job it was waiting for sat there, which is the dead time releasing
+	// the lease above was meant to remove.
+	if job.Retries > 0 && job.RetryDueDate == 0 {
+		c.NotifyJobAvailable(job.JobType)
+	}
 	if job.Retries <= 0 {
 		var elementId int32
 		if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {

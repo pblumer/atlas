@@ -292,6 +292,35 @@
       }
     },
     {
+      "id": "a-job-failed-back-with-retries-left-wakes-the-workers-waitin",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A job failed with retries left reaches a waiting worker at once",
+        "de": "Ein Job mit verbleibenden Wiederholungen erreicht wartende Worker sofort"
+      },
+      "summary": {
+        "en": "When a worker fails a job that still has retries and no backoff, the job goes straight back to the queue. A second worker already waiting for work of that type was not told, and slept out its whole wait while the job sat there. It is woken now, the same way it already was for a new job, an elapsed backoff or lease, and a resolved incident. A failure with a backoff still wakes it when the backoff elapses, and a job without retries still waits for an operator.",
+        "de": "Meldet ein Worker den Fehlschlag eines Jobs, der noch Wiederholungen und keine Wartezeit hat, geht der Job sofort in die Warteschlange zurück. Ein zweiter Worker, der bereits auf Arbeit dieses Typs wartete, erfuhr davon nichts und wartete seine ganze Wartezeit ab, während der Job bereitlag. Er wird jetzt geweckt, so wie bereits bei einem neuen Job, einer abgelaufenen Wartezeit oder Lease und einem gelösten Incident. Ein Fehlschlag mit Wartezeit weckt ihn weiterhin erst nach deren Ablauf, und ein Job ohne Wiederholungen wartet weiterhin auf einen Operator."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Workers",
+        "Engine"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the workers",
+          "de": "Worker öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
       "id": "restarting-a-supervised-worker-is-never-quietly-ignored",
       "version": "Unreleased",
       "date": null,
@@ -318,35 +347,6 @@
           "de": "Worker öffnen"
         },
         "route": "#/console/workers"
-      }
-    },
-    {
-      "id": "camunda-s-versiontag-binding-is-refused-instead-of-read-as-l",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A versionTag binding is refused, not silently ignored",
-        "de": "Eine Bindung per versionTag wird abgewiesen statt still ignoriert"
-      },
-      "summary": {
-        "en": "Camunda lets a business rule task bind a decision by version tag. Atlas does not support that, and it used to treat such a task as \"Latest\" without a word, so a model that pinned a tag ran whatever version was newest. The Modeler also rewrote the binding to \"Latest\" on the next save. Deploying such a model is now refused and names the task, and the Modeler shows the binding as it is and keeps it. A process already deployed with one keeps running as before.",
-        "de": "Camunda erlaubt, einen Business Rule Task per Version-Tag an eine Decision zu binden. Atlas unterstützt das nicht und behandelte einen solchen Task bisher kommentarlos wie „Latest“: Ein Modell, das einen Tag festlegte, führte die jeweils neueste Version aus. Der Modeler schrieb die Bindung ausserdem beim nächsten Speichern auf „Latest“ um. Der Deploy eines solchen Modells wird jetzt abgewiesen und nennt den Task, und der Modeler zeigt die Bindung unverändert an und behält sie bei. Ein bereits deployter Prozess mit einer solchen Bindung läuft weiter wie bisher."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Decisions",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]
