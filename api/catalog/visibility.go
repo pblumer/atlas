@@ -190,6 +190,10 @@ func (s *Service) HandleMyCatalog(w http.ResponseWriter, r *http.Request) {
 	httpapi.JSON(w, http.StatusOK, got)
 }
 
+// MayEdit reports whether p may change this catalogue and its products — the right
+// a write on a product needs, which a viewer grant does not give.
+func (s *Service) MayEdit(c Catalog, p *httpapi.Principal) bool { return s.mayEdit(c, p) }
+
 // MayMaintain reports whether p may see this catalogue as somebody who maintains it,
 // rather than as somebody it is offered to.
 //

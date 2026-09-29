@@ -107,6 +107,19 @@ func TestStartBindingRefusesWhatCannotStart(t *testing.T) {
 	if key, err := srv.startBinding(bindingOf("two-triggers", "t.b"), "y", nil); err != nil || key == 0 {
 		t.Errorf("a triggered start = %d (%v)", key, err)
 	}
+
+	// A two-process binding names no start event and is created by hand.
+	plain := `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="plain" isExecutable="true">
+    <startEvent id="s"/><endEvent id="e"/><sequenceFlow id="f" sourceRef="s" targetRef="e"/>
+  </process>
+</definitions>`
+	if code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", plain, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy: %d (%s)", code, body)
+	}
+	if key, err := srv.startBinding(bindingOf("plain", ""), "", nil); err != nil || key == 0 {
+		t.Errorf("a start by hand = %d (%v)", key, err)
+	}
 }
 
 func bindingOf(process, message string) catalog.Binding {

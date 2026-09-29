@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Catalogue",
+    "Operations"
+  ],
+  "title": {
+    "en": "Old processes stay as long as an order still needs them",
+    "de": "Alte Prozesse bleiben, solange ein Auftrag sie noch braucht"
+  },
+  "summary": {
+    "en": "When a product moves to one lifecycle process, orders placed before keep the processes they were placed with — a laptop handed out last year is still returned by last year's return process. Atlas now refuses to delete such a process while an order line can still start it, and says how many lines per product. The fulfilment report shows what is left, and if an old process can no longer work, a maintainer can move the lines to the new process; each moved line records who did it and why.",
+    "de": "Wechselt ein Produkt auf einen Lebenszyklusprozess, behalten früher aufgegebene Aufträge die Prozesse, mit denen sie aufgegeben wurden — ein letztes Jahr ausgegebener Laptop wird mit dem Rückgabeprozess von letztem Jahr zurückgenommen. Atlas verweigert jetzt das Löschen eines solchen Prozesses, solange eine Auftragsposition ihn noch starten kann, und nennt die Anzahl Positionen pro Produkt. Der Fulfilment-Report zeigt den Restbestand, und kann ein alter Prozess nicht mehr funktionieren, lassen sich die Positionen auf den neuen Prozess umbinden; jede umgebundene Position hält fest, wer das getan hat und warum."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Console",
+      "de": "Console öffnen"
+    },
+    "route": "#/console"
+  }
+}

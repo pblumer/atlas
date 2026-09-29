@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-28",
   "entries": [
     {
+      "id": "converting-a-product-to-a-lifecycle-process-no-longer-lets-i",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Old processes stay as long as an order still needs them",
+        "de": "Alte Prozesse bleiben, solange ein Auftrag sie noch braucht"
+      },
+      "summary": {
+        "en": "When a product moves to one lifecycle process, orders placed before keep the processes they were placed with — a laptop handed out last year is still returned by last year's return process. Atlas now refuses to delete such a process while an order line can still start it, and says how many lines per product. The fulfilment report shows what is left, and if an old process can no longer work, a maintainer can move the lines to the new process; each moved line records who did it and why.",
+        "de": "Wechselt ein Produkt auf einen Lebenszyklusprozess, behalten früher aufgegebene Aufträge die Prozesse, mit denen sie aufgegeben wurden — ein letztes Jahr ausgegebener Laptop wird mit dem Rückgabeprozess von letztem Jahr zurückgenommen. Atlas verweigert jetzt das Löschen eines solchen Prozesses, solange eine Auftragsposition ihn noch starten kann, und nennt die Anzahl Positionen pro Produkt. Der Fulfilment-Report zeigt den Restbestand, und kann ein alter Prozess nicht mehr funktionieren, lassen sich die Positionen auf den neuen Prozess umbinden; jede umgebundene Position hält fest, wer das getan hat und warum."
+      },
+      "link": {
+        "label": "ADR-0427",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0427-converting-a-product-to-a-lifecycle-process.md"
+      },
+      "tags": [
+        "Catalogue",
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Console",
+          "de": "Console öffnen"
+        },
+        "route": "#/console"
+      }
+    },
+    {
       "id": "a-product-can-be-one-process-for-its-whole-lifecycle-entered",
       "version": "Unreleased",
       "date": null,
@@ -304,35 +333,6 @@
       "tags": [
         "Workers",
         "Engine"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the workers",
-          "de": "Worker öffnen"
-        },
-        "route": "#/console/workers"
-      }
-    },
-    {
-      "id": "restarting-a-supervised-worker-is-never-quietly-ignored",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Restarting a worker always restarts it",
-        "de": "Ein Worker-Neustart startet den Worker immer neu"
-      },
-      "summary": {
-        "en": "A restart asked for while a supervised worker was still running, or in the moment after it crashed, could be missed: the worker then waited out its full backoff, up to 30 seconds, before starting again, and a worker with nothing to serve stayed paused until Restart was pressed a second time. The same restart happens automatically when you configure a worker's kind in the Console, so a newly configured mail worker could stay asleep. A restart is now never missed, whenever it is asked for.",
-        "de": "Ein Neustart, der angefordert wurde, während ein überwachter Worker noch lief oder kurz nachdem er abgestürzt war, konnte verloren gehen: Der Worker wartete dann seine volle Wartezeit von bis zu 30 Sekunden ab, bevor er wieder startete, und ein Worker ohne Aufgabe blieb pausiert, bis „Restart“ ein zweites Mal gedrückt wurde. Derselbe Neustart erfolgt automatisch, wenn man in der Console die Art eines Workers konfiguriert; ein neu konfigurierter Mail-Worker konnte deshalb inaktiv bleiben. Ein Neustart geht jetzt nie mehr verloren, egal wann er angefordert wird."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Workers",
-        "Console"
       ],
       "try": {
         "label": {
