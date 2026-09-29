@@ -54,12 +54,34 @@ func (s *Server) handleValidate(w http.ResponseWriter, r *http.Request) {
 	if appID := strings.TrimSpace(r.URL.Query().Get("applicationId")); appID != "" {
 		problems = append(problems, s.dataFlowProblems(bytes.NewReader(body), appID)...)
 	}
+	problems = append(problems, s.ambiguousCallProblems(bytes.NewReader(body))...)
 	// A nil slice would serialize as JSON null; the panel expects an array, so
 	// normalize "no problems" to an empty list.
 	if problems == nil {
 		problems = []compiler.Problem{}
 	}
 	httpapi.JSON(w, http.StatusOK, validateResp{Version: Version, Problems: problems})
+}
+
+// ambiguousCallProblems reports the call activities of a draft whose target only its
+// triggers can start (ADR-0426). A model that does not compile has no call
+// activities to check, and its compile errors are already in the list.
+func (s *Server) ambiguousCallProblems(r io.Reader) []compiler.Problem {
+	deployables, err := compiler.ParseAll(0, 1, r)
+	if err != nil {
+		return nil
+	}
+	siblings := make([]*compiler.CompiledProcess, 0, len(deployables))
+	for _, d := range deployables {
+		siblings = append(siblings, d.Process)
+	}
+	var out []compiler.Problem
+	s.do(func() {
+		for _, cp := range siblings {
+			out = append(out, s.ambiguousCallTargetsOnLoop(cp, siblings)...)
+		}
+	})
+	return out
 }
 
 // dataFlowWarnings renders the information model's findings on a compiled process
@@ -161,6 +183,7 @@ func (s *Server) deployWarningsOnLoop(deployed []deployedProcess, applicationID 
 			continue
 		}
 		out = append(out, s.connectorWarnings(dep.cp)...)
+		out = append(out, renderProblems(s.ambiguousCallTargetsOnLoop(dep.cp, nil))...)
 		if vocabErr == nil {
 			out = append(out, dataFlowWarnings(dep.cp, vocab)...)
 		}

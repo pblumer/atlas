@@ -147,6 +147,35 @@
       }
     },
     {
+      "id": "a-process-only-its-triggers-can-start-is-no-longer-started-b",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "A process with several triggers is no longer started into all of them",
+        "de": "Ein Prozess mit mehreren Auslösern startet nicht mehr in alle zugleich"
+      },
+      "summary": {
+        "en": "A process can have several start events — one message for provisioning, one for deprovisioning. Started by hand, through a start link or from a call activity, none of them fired, and Atlas used to run every branch at once. Now such a start is refused and says which start events the process has; a call activity waits on an incident instead. Processes with a normal start event, or with only one start event, start as before.",
+        "de": "Ein Prozess kann mehrere Startereignisse haben — eine Nachricht für die Provisionierung, eine für die Deprovisionierung. Wurde er von Hand, über einen Startlink oder aus einer Call Activity gestartet, löste keines davon aus, und Atlas führte bisher alle Zweige gleichzeitig aus. Jetzt wird ein solcher Start abgelehnt und nennt die Startereignisse des Prozesses; eine Call Activity wartet stattdessen auf einem Incident. Prozesse mit einem normalen Startereignis oder mit nur einem Startereignis starten wie bisher."
+      },
+      "link": {
+        "label": "ADR-0426",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0426-an-untriggered-create-never-seeds-several-start-events.md"
+      },
+      "tags": [
+        "Operations",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "a-business-rule-task-bound-to-latest-runs-the-newest-decisio",
       "version": "Unreleased",
       "date": null,
@@ -297,35 +326,6 @@
         "Operations",
         "Security"
       ]
-    },
-    {
-      "id": "the-decision-picker-tells-a-decision-service-s-answer-from-i",
-      "version": "0.7.0",
-      "date": "2026-09-28",
-      "category": "Added",
-      "title": {
-        "en": "The picker tells a decision service's answer from its workings",
-        "de": "Die Auswahl unterscheidet die Antwort eines Decision Service von seinen Zwischenschritten"
-      },
-      "summary": {
-        "en": "A decision service publishes the decisions it answers with and encapsulates the ones it evaluates on the way there. The picker merged the two: every one of them read “inside <service>”. They are not the same offer. Calling a published decision gets the service's own answer by a longer route; calling an encapsulated one reaches past the interface into an arrangement the service exists to be free to change — and nothing later says a word about it, because it runs and it answers correctly. The two now read differently, “published by X” against “internal to X — bypasses it”, and a service's workings are listed last, after the decisions that are somebody's to call. All of them stay selectable: the decision id on a task is a free-text field and the picker is a convenience, so refusing one here would move the practice out of sight rather than stop it. The list makes the boundary-respecting pick the easy one and leaves the other reading as what it is.",
-        "de": "Ein Decision Service veröffentlicht die Decisions, mit denen er antwortet, und kapselt jene, die er auf dem Weg dorthin auswertet. Die Auswahl hat beide vermischt: Jede von ihnen las sich als „inside <Service>“. Es sind aber nicht dieselben Angebote. Eine veröffentlichte Decision aufzurufen liefert die Antwort des Service auf einem Umweg; eine gekapselte aufzurufen greift an der Schnittstelle vorbei in eine Anordnung, die der Service ändern können soll — und niemand sagt später ein Wort dazu, weil es läuft und korrekt antwortet. Beide lesen sich jetzt unterschiedlich, „published by X“ gegenüber „internal to X — bypasses it“, und die Zwischenschritte eines Service stehen zuletzt, nach den Decisions, die tatsächlich für Aufrufer gedacht sind. Auswählbar bleiben alle: Die decisionId am Task ist ein freies Textfeld und die Auswahl nur eine Bequemlichkeit — eine Sperre hier würde die Praxis aus dem Blick schieben statt sie zu beenden. Die Reihenfolge macht die grenzwahrende Auswahl zur bequemen und lässt die andere als das erscheinen, was sie ist."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
     }
   ]
 }

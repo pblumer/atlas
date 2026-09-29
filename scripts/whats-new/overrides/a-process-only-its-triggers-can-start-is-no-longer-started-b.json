@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Operations",
+    "Modeler"
+  ],
+  "title": {
+    "en": "A process with several triggers is no longer started into all of them",
+    "de": "Ein Prozess mit mehreren Auslösern startet nicht mehr in alle zugleich"
+  },
+  "summary": {
+    "en": "A process can have several start events — one message for provisioning, one for deprovisioning. Started by hand, through a start link or from a call activity, none of them fired, and Atlas used to run every branch at once. Now such a start is refused and says which start events the process has; a call activity waits on an incident instead. Processes with a normal start event, or with only one start event, start as before.",
+    "de": "Ein Prozess kann mehrere Startereignisse haben — eine Nachricht für die Provisionierung, eine für die Deprovisionierung. Wurde er von Hand, über einen Startlink oder aus einer Call Activity gestartet, löste keines davon aus, und Atlas führte bisher alle Zweige gleichzeitig aus. Jetzt wird ein solcher Start abgelehnt und nennt die Startereignisse des Prozesses; eine Call Activity wartet stattdessen auf einem Incident. Prozesse mit einem normalen Startereignis oder mit nur einem Startereignis starten wie bisher."
+  },
+  "try": {
+    "label": {
+      "en": "Open Operations",
+      "de": "Operations öffnen"
+    },
+    "route": "#/operations"
+  }
+}

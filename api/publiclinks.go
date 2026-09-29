@@ -306,6 +306,8 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 		found   bool
 		notExec bool
 		runErr  error
+		// ambiguous is ADR-0426's refusal: a process only its triggers can start.
+		ambiguous string
 	)
 	s.do(func() {
 		link, ok, e := s.publicLinks.Get(token)
@@ -323,6 +325,9 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 			notExec = true
 			return
 		}
+		if ambiguous = untriggeredStartRefusal(d.cp); ambiguous != "" {
+			return
+		}
 		found = true
 		s.proc.CreateInstance(d.Key, vars...)
 	})
@@ -334,7 +339,9 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "start: "+runErr.Error())
-	case notExec:
+	case notExec, ambiguous != "":
+		// The same answer for both: a person filling a public form cannot act on
+		// the model's shape, and the operator reads the reason off the link's process.
 		httpapi.Error(w, http.StatusConflict, "process is not executable and cannot be started")
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "unknown or revoked link")

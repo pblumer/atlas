@@ -212,16 +212,21 @@ func (s *Server) startDeprovisioningFor(process, itemID, principal, reason strin
 		{Name: "reason", Kind: model.VarString, Text: reason},
 	}
 	var (
-		key   uint64
-		found bool
+		key       uint64
+		found     bool
+		ambiguous string
 	)
 	s.do(func() {
 		if d := s.latestDeploymentOf(process); d != nil {
 			key, found = d.Key, true
+			ambiguous = untriggeredStartRefusal(d.cp)
 		}
 	})
 	if !found {
 		return fmt.Errorf("deprovision: no deployed process with id %s", process)
+	}
+	if ambiguous != "" {
+		return fmt.Errorf("deprovision: %s", ambiguous)
 	}
 	s.do(func() { s.proc.CreateInstance(key, vars...) })
 	return s.drive()

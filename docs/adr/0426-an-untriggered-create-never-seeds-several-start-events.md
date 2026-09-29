@@ -1,7 +1,7 @@
 # ADR-0426: An untriggered create never seeds several start events
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-29
 - **Deciders:** Atlas maintainers
 - **Open question:** how many deployed models rely on the behaviour this record refuses —
@@ -98,6 +98,19 @@ can be resolved then; the runtime incident remains the authority.
 - every triggered create: exactly the start event that fired, as ADR-0226 decided;
 - a process with **two none** starts: both are seeded on a create by hand. ADR-0226
   names that ambiguity and leaves it deliberately, and this record does not reopen it.
+
+### As built
+
+Every door that creates an instance by hand asks one question of the compiled
+process, `CompiledProcess.UntriggeredStartAmbiguous`, and refuses on it
+(`api/untriggeredstart.go`). There are more doors than the three named above: besides
+the two start routes (and the MCP tool, which calls them), a CSV upload, a public start
+link, an order line's return and a reconciliation's deprovisioning create by hand too,
+and each refuses the same way — the public link with the same answer it gives for a
+non-executable process, because the person filling in its form cannot act on the
+model's shape. The call activity raises a job-less incident, and resolving it re-runs
+the activation through `resumeParkedElement`. The Problems panel's finding is rule
+`call.untriggered-start`, reported by `POST /api/v1/validate` and as a deploy warning.
 
 ### Consequences
 

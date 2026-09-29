@@ -136,13 +136,18 @@ func (s *Server) startReturn(process, orderID, ref string, o order.Order, reason
 
 	var key uint64
 	var found bool
+	var ambiguous string
 	s.do(func() {
 		if d := s.latestDeploymentOf(process); d != nil {
 			key, found = d.Key, true
+			ambiguous = untriggeredStartRefusal(d.cp)
 		}
 	})
 	if !found {
 		return fmt.Errorf("no deployed process with id %s", process)
+	}
+	if ambiguous != "" {
+		return fmt.Errorf("%s", ambiguous)
 	}
 	var instKey uint64
 	s.do(func() { s.proc.CreateInstanceReporting(key, &instKey, vars...) })

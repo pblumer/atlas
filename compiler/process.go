@@ -2287,6 +2287,28 @@ func (p *CompiledProcess) ConnectorTaskOf(id int32) (*ConnectorTaskDetail, error
 // StartEvents returns the process's entry-point element ids.
 func (p *CompiledProcess) StartEvents() []int32 { return p.startEvents }
 
+// UntriggeredStartAmbiguous reports whether a create that nobody triggered — the
+// API, a call activity — has no answer to where the instance begins: the process
+// has no none start event and more than one start event (ADR-0426).
+//
+// Each of those start events is a trigger, and a create by hand fired none of them.
+// With one, seeding it is what "start this by hand" has always meant (ADR-0035).
+// With several, seeding all of them runs branches nobody triggered — a lifecycle
+// process would provision and deprovision in the same instant — so a caller refuses
+// the create instead. It reads the slice the create reads anyway and allocates
+// nothing (invariant I1).
+func (p *CompiledProcess) UntriggeredStartAmbiguous() bool {
+	if len(p.startEvents) < 2 {
+		return false
+	}
+	for _, id := range p.startEvents {
+		if p.nodes[id].Type == TypeStartEvent {
+			return false
+		}
+	}
+	return true
+}
+
 // DataObjects returns the process's declared data objects — the typed, named
 // data seeded under each instance's scope at creation (ADR-0053). Empty for a
 // process that declares none. String fields are interned; resolve with Intern.
