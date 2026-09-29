@@ -434,6 +434,9 @@ func TestAChangeIsOnlyForAHeldPerPositionRight(t *testing.T) {
 	if code, b := cReq(t, admin, ts, "POST", "/api/v1/orders/nope/lines/laptop/change", `{"changeId":"c"}`); code != http.StatusNotFound {
 		t.Fatalf("unknown order: %d (%s), want 404", code, b)
 	}
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/orders/"+ord+"/lines/no-such-line/change", `{"changeId":"c"}`); code != http.StatusConflict {
+		t.Fatalf("unknown line: %d (%s), want 409", code, b)
+	}
 	if code, b := cReq(t, admin, ts, "POST", "/api/v1/orders/"+ord+"/lines/laptop/change", `{`); code != http.StatusBadRequest {
 		t.Fatalf("malformed body: %d (%s), want 400", code, b)
 	}
