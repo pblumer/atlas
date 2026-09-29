@@ -99,6 +99,11 @@ type Command struct {
 	// pointer the caller owns allocates nothing here (invariant I1). Commands are
 	// never replayed (I6), so recovery never writes through it.
 	Created *uint64
+	// Triggered is where a directed trigger's answer is written (ADR-0425): whether
+	// it created an instance, answered from a receipt, or was refused and why. The
+	// same contract as Created — written on the processor goroutine, read after
+	// RunUntilIdle returned, never on a replayed command.
+	Triggered *TriggerResult
 }
 
 // sideEffect is work to run after the batch's fsync (invariant I2). It is a

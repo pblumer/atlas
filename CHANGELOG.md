@@ -14,6 +14,30 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A product can be one process for its whole lifecycle, entered at a start event per
+  operation.** A catalogue product may bind a `lifecycleProcess` instead of a provisioning
+  and a deprovisioning process, with `operations` naming the message start event each
+  operation enters — `provision` and `deprovision` required, `change` optional. Publishing
+  checks the newest deployed version: the named start events exist, and there is no plain
+  start event a start by hand could take. Orders freeze the binding like the two ids, and
+  products already bound to two processes work as before (ADR-0425).
+
+  The order now starts its own positions: `POST /api/v1/orders/{id}/lines/{position}/start`
+  starts the approval a position still owes or, once approved, its provisioning — by hand
+  for the two-process form, at the provision start event for a lifecycle process — and marks
+  the position running, so it is not offered twice. The shipped fulfilment and approval
+  processes call it instead of `POST /api/v1/instances`; an approval process passes
+  `approvedBy`, which records who agreed. Returns, recertification and reconciliation enter a
+  lifecycle process at its deprovision start event.
+
+  For systems outside Atlas, `POST /api/v1/processes/{processId}/triggers/{message}` (MCP:
+  `atlas_trigger_start`) starts a process at one of its message start events and answers with
+  the instance: 201 when it started one, 200 with the first instance when the same `triggerId`
+  was delivered before, 404 for an unknown process or start event, and 409 for a singleton
+  already running, a deactivated process, or a start event a catalogue product binds — those
+  start through the order, which records them first. Receipts are kept for
+  `--trigger-receipt-ttl` (`ATLAS_TRIGGER_RECEIPT_TTL`, default 720h).
+
 - **The handbook teaches delivering a process to another server.** Publishing an
   application, minting a release, registering a deployment target with a deploy token,
   promoting the frozen release, and moving the source tree were all in the product

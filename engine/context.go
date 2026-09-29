@@ -690,6 +690,12 @@ func (c *ProcessingContext) AppendMessageFlowEvent(v model.MessageFlowValue) {
 	c.appendEvent(v.ReceiverProcessDefKey, model.VTMessageFlow, model.IntentMessagePublished, inflightValue{messageFlow: v})
 }
 
+// AppendTriggerReceiptEvent records a trigger receipt, or with
+// IntentTriggerReceiptsPruned drops the receipts older than v.Cutoff (ADR-0425).
+func (c *ProcessingContext) AppendTriggerReceiptEvent(intent model.Intent, v model.TriggerReceiptValue) {
+	c.appendEvent(0, model.VTTriggerReceipt, intent, inflightValue{trigger: v})
+}
+
 // AppendInboundDeliveryEvent advances an external source's inbound high-water mark
 // (ADR-0075), keyed on the receiving definition space as a neutral key (the record
 // carries the source id and sequence it needs). Emitted in the same batch as the

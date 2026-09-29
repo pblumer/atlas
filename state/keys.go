@@ -54,6 +54,7 @@ const (
 	cfInstanceByElement      columnFamily = 0x29 // piByEl:<procDefKey>:<elementId>:<piKey>:<elKey> → nil
 	cfEntitlement            columnFamily = 0x2A // ent:<principal>:0x00:<itemId> → EntitlementValue (ADR-0312)
 	cfEntitlementHistory     columnFamily = 0x2B // entHist:<principal>:0x00:<endedAt>:<itemId> → EntitlementHistoryValue (ADR-0346)
+	cfTriggerReceipt         columnFamily = 0x2C // trigRcpt:<source>:0x00:<triggerId> → instanceKey(8) at(8) (ADR-0425)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key

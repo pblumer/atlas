@@ -11,7 +11,7 @@
   <bpmn:process id="atlas-genehmigung-fix" name="Shop: Genehmigung (feste Person)" isExecutable="true">
     <bpmn:documentation>Holt die Genehmigung für eine Auftragsposition ein und entscheidet, was danach geschieht: bei Zustimmung wird der Provisionierungsprozess der Position gestartet, bei Ablehnung die Entscheidung mit Urheber und Begründung an den Auftrag gemeldet.
 
-Startvariablen: orderId, itemId, provisionProcess, approvalRef, recipient, orderer, variantId.
+Startvariablen: orderId, itemId, positionId, provisionProcess, approvalRef, recipient, orderer, variantId, atlasApiBase, portalBaseUrl.
 
 Warum die Genehmigung hier liegt und nicht im Provisionierungsprozess: die Regel steht am Produkt und gehört dem Katalog. Läge sie im Produktprozess, müsste jeder von ihnen sie mitmodellieren, und eine Änderung an der Regel wäre eine Änderung an jedem Prozess.
 
@@ -46,16 +46,14 @@ Das Formular zeigt, worum es geht, und verlangt bei einer Ablehnung eine Begrün
     </bpmn:exclusiveGateway>
 
     <bpmn:serviceTask id="Provisionieren" name="Provisionierung starten">
-      <bpmn:documentation>POST /api/v1/instances startet den Prozess, an den die Position gebunden ist. Der Prozessname kommt aus der Position und nicht aus dem Katalog: was bestellt wurde, ist eingefroren.
-
-Die Zustimmung selbst wird nicht gemeldet — das Ergebnis der Provisionierung kommt auf dem gewöhnlichen Weg, und eine zweite Meldung wäre eine zweite Wahrheit.</bpmn:documentation>
+      <bpmn:documentation>POST /api/v1/orders/{orderId}/lines/{positionId}/start mit approvedBy. Der Auftrag hält die Zustimmung fest — wer zugestimmt hat, steht damit im Nachweis — und startet im selben Schritt die Provisionierung, an die das Produkt gebunden war: einen von Hand gestarteten Prozess oder den Startpunkt „provision“ seines Lebenszyklusprozesses (ADR-0425). Welcher Prozess das ist, weiss der Auftrag; dieses Modell muss es nicht wissen.</bpmn:documentation>
       <bpmn:extensionElements>
         <atlas:restConnector method="POST"
-          url="=atlasApiBase + &#34;/api/v1/instances&#34;"
+          url="=atlasApiBase + &#34;/api/v1/orders/&#34; + orderId + &#34;/lines/&#34; + positionId + &#34;/start&#34;"
           authType="bearer" authSecret="atlas" />
         <zeebe:ioMapping>
-          <zeebe:input source="=provisionProcess" target="processId" />
-          <zeebe:input source="={orderId: orderId, itemId: itemId, positionId: positionId, variantId: variantId, recipient: recipient, orderer: orderer, atlasApiBase: atlasApiBase, portalBaseUrl: portalBaseUrl}" target="variables" />
+          <zeebe:input source="=&#34;provision&#34;" target="operation" />
+          <zeebe:input source="=approvalRef" target="approvedBy" />
         </zeebe:ioMapping>
       </bpmn:extensionElements>
       <bpmn:incoming>F_Gw_Provisionieren</bpmn:incoming>

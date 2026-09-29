@@ -750,6 +750,20 @@ export function headingFrom(f, prefix, langs, was) {
 // has to read past. The keys are in it because a heading with no wordings is
 // still a heading to reuse, and typing a second spelling of one is how a category
 // becomes two.
+
+// operationsFrom reads the lifecycle start events back from the form (ADR-0425). An
+// empty box is left out rather than sent as "", so a product without a change start
+// event stores none, and one that binds no lifecycle process sends no map at all.
+function operationsFrom(f) {
+  if (!f.get("lifecycleProcess")) return undefined;
+  const ops = {};
+  for (const [op, field] of [["provision", "opProvision"], ["deprovision", "opDeprovision"], ["change", "opChange"]]) {
+    const v = String(f.get(field) || "").trim();
+    if (v) ops[op] = v;
+  }
+  return ops;
+}
+
 function knownHeadingsIn(items, field, lang, first) {
   const out = new Set();
   for (const i of items) {
@@ -816,6 +830,8 @@ export function productBody(f, { productID, homeCatalog, langs, stored }) {
     configForm: f.get("configForm") || "",
     provisionProcess: f.get("provisionProcess") || "",
     deprovisionProcess: f.get("deprovisionProcess") || "",
+    lifecycleProcess: f.get("lifecycleProcess") || "",
+    operations: operationsFrom(f),
     multipleAllowed: !!f.get("multipleAllowed"),
     targets: parseTargets(f.get("targets")),
     keywords: list(f.get("keywords")),
@@ -1074,7 +1090,7 @@ function productRow(it, iid, langs, canAssemble) {
     <td>${esc(textOf(it.texts, langs, it.id))}<div class="muted">${esc(it.id)}</div></td>
     <td>${esc((STATES.find((s) => s.id === it.state) || {}).name || it.state || "—")}</td>
     <td>${esc(kind.name)}${ap.ref ? ` <span class="muted">(${esc(ap.ref)})</span>` : ""}</td>
-    <td>${esc(it.provisionProcess || "—")}</td>
+    <td>${esc(it.lifecycleProcess || it.provisionProcess || "—")}</td>
     <td class="row-actions"><button class="btn ghost" data-act="edit" data-id="${esc(it.id)}">edit</button>
       ${canAssemble ? `<button class="btn ghost" data-act="assemble" data-id="${esc(it.id)}">assemble</button>` : ""}
       <button class="btn ghost danger" data-act="drop" data-id="${esc(it.id)}">remove</button></td>
@@ -1620,6 +1636,22 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
         </select></label>
       <label class="field">Provisioned by${procSelect("provisionProcess", v.provisionProcess)}</label>
       <label class="field">Revoked by${procSelect("deprovisionProcess", v.deprovisionProcess)}</label>
+      <label class="field wide">Or one lifecycle process for everything
+        <span class="muted" style="display:block; margin:2px 0 6px">Instead of the two
+          processes above: <b>one</b> process whose operations are message start events.
+          Leave the two above empty when you choose one here. Name the start event each
+          operation enters — provision and deprovision are required, change is optional.
+          Publishing checks that the process has those start events and no plain start.</span>
+        ${procSelect("lifecycleProcess", v.lifecycleProcess)}</label>
+      <label class="field">Provision start event
+        <input name="opProvision" value="${esc((v.operations || {}).provision || "")}"
+          autocomplete="off" placeholder="laptop.provision"></label>
+      <label class="field">Deprovision start event
+        <input name="opDeprovision" value="${esc((v.operations || {}).deprovision || "")}"
+          autocomplete="off" placeholder="laptop.deprovision"></label>
+      <label class="field">Change start event (optional)
+        <input name="opChange" value="${esc((v.operations || {}).change || "")}"
+          autocomplete="off" placeholder="laptop.change"></label>
       <label class="field wide">How long the right may last
         <span class="muted" style="display:block; margin:2px 0 6px">In days, or
           <code>0</code> for a right that does not end &mdash; which is the ordinary case.

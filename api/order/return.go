@@ -3,6 +3,8 @@ package order
 import (
 	"fmt"
 	"sort"
+
+	"github.com/pblumer/atlas/api/catalog"
 )
 
 // Giving back what an order granted.
@@ -58,7 +60,7 @@ func Returnable(o Order, ref string) error {
 			return fmt.Errorf("order: line %s is %s and is not held by anybody", key, line.Status)
 		}
 	}
-	if line.DeprovisionProcess == "" {
+	if !line.BindingFor(catalog.OpDeprovision).Bound() {
 		return fmt.Errorf("order: line %s names no process to revoke it with", key)
 	}
 	// Dependencies are between products, so this asks about the product this
@@ -140,14 +142,21 @@ func Returning(o Order, ref string, at int64, by string) (Order, error) {
 // granted is what has to be revoked — a product whose deprovisioning was changed
 // afterwards must not revoke an older grant by the newer rules.
 func ReturnProcessOf(o Order, ref string) string {
+	return ReturnBindingOf(o, ref).Process
+}
+
+// ReturnBindingOf is [ReturnProcessOf] with the start event, for a line whose
+// product binds a lifecycle process (ADR-0425): where the revocation starts, not
+// only which process runs it.
+func ReturnBindingOf(o Order, ref string) catalog.Binding {
 	key, err := ResolveLine(o, ref)
 	if err != nil {
-		return ""
+		return catalog.Binding{}
 	}
 	for _, l := range o.Lines {
 		if l.Key() == key {
-			return l.DeprovisionProcess
+			return l.BindingFor(catalog.OpDeprovision)
 		}
 	}
-	return ""
+	return catalog.Binding{}
 }

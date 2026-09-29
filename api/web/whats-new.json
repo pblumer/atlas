@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-28",
   "entries": [
     {
+      "id": "a-product-can-be-one-process-for-its-whole-lifecycle-entered",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "One process per product: provisioning, change and deprovisioning in one model",
+        "de": "Ein Prozess pro Produkt: Provisionierung, Änderung und Deprovisionierung in einem Modell"
+      },
+      "summary": {
+        "en": "A product no longer needs a separate process for granting and for revoking. Bind one lifecycle process instead and name, per operation, the message start event it begins at. An order enters it at the provision start, a return at the deprovision start — and nothing else runs. Systems outside Atlas can start a process at a chosen start event too, and a retry with the same trigger id gets the first instance back instead of starting a second.",
+        "de": "Ein Produkt braucht keinen getrennten Prozess mehr für das Vergeben und das Entziehen. Stattdessen wird ein Lebenszyklusprozess gebunden und pro Operation das Nachrichten-Startereignis genannt, bei dem sie beginnt. Ein Auftrag steigt beim Startereignis für die Provisionierung ein, eine Rückgabe bei dem für die Deprovisionierung — und sonst läuft nichts. Auch Systeme ausserhalb von Atlas können einen Prozess an einem gewählten Startereignis starten; ein erneuter Aufruf mit derselben Trigger-ID erhält die erste Instanz zurück, statt eine zweite zu starten."
+      },
+      "link": {
+        "label": "ADR-0425",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0425-a-product-lifecycle-is-one-process-with-message-triggers.md"
+      },
+      "tags": [
+        "Catalogue",
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Console",
+          "de": "Console öffnen"
+        },
+        "route": "#/console"
+      }
+    },
+    {
       "id": "the-handbook-teaches-delivering-a-process-to-another-server",
       "version": "Unreleased",
       "date": null,
@@ -312,27 +341,6 @@
         },
         "route": "#/operations/incidents"
       }
-    },
-    {
-      "id": "the-handbook-counted-what-it-no-longer-had-thirty-examples-n",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The handbook names every role, and counts what it really holds",
-        "de": "Das Handbuch nennt alle Rollen und zählt, was es wirklich enthält"
-      },
-      "summary": {
-        "en": "The handbook said thirty examples where there are thirty-eight, nine apps where there are eight, and it named four roles where Atlas grants five: productmanager, the role that maintains the shop's catalogue, was missing from the chapter on accounts and roles. It is there now, together with the fact that migrating instances and overwriting their variables take the admin role. The number of examples is checked against the examples themselves, so it cannot fall behind again.",
-        "de": "Das Handbuch sprach von dreissig Beispielen, wo es achtunddreissig sind, von neun Apps, wo es acht sind, und nannte vier Rollen, wo Atlas fünf vergibt: productmanager, die Rolle, die den Katalog des Shops pflegt, fehlte im Kapitel über Konten und Rollen. Sie steht jetzt dort, zusammen mit dem Hinweis, dass das Migrieren von Instanzen und das Überschreiben ihrer Variablen die Rolle admin verlangt. Die Zahl der Beispiele wird gegen die Beispiele selbst geprüft und kann nicht mehr zurückfallen."
-      },
-      "link": {
-        "label": "ADR-0315",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0315-portal-roles-and-responsibilities.md"
-      },
-      "tags": [
-        "Handbook"
-      ]
     }
   ]
 }

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pblumer/atlas/api/catalog"
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/order"
 	"github.com/pblumer/atlas/model"
@@ -240,7 +241,7 @@ func (s *Server) revokeCertifiedRight(row recertifyRow, by string) (string, erro
 	}
 
 	var (
-		process string
+		binding catalog.Binding
 		opErr   error
 	)
 	s.do(func() {
@@ -251,18 +252,18 @@ func (s *Server) revokeCertifiedRight(row recertifyRow, by string) (string, erro
 		case !ok:
 			opErr = fmt.Errorf("revoke: no product %s; it was withdrawn or removed since the "+
 				"campaign was opened", row.ItemID)
-		case strings.TrimSpace(it.DeprovisionProcess) == "":
+		case !it.BindingFor(catalog.OpDeprovision).Bound():
 			opErr = fmt.Errorf("revoke: product %s binds no deprovisioning process. Publishing a "+
 				"catalogue refuses that, so this product has never been published — bind one and "+
 				"publish before revoking rights through it", row.ItemID)
 		default:
-			process = it.DeprovisionProcess
+			binding = it.BindingFor(catalog.OpDeprovision)
 		}
 	})
 	if opErr != nil {
 		return "", opErr
 	}
-	if err := s.startDeprovisioningFor(process, row.ItemID, row.Principal, reason); err != nil {
+	if err := s.startDeprovisioningFor(binding, row.ItemID, row.Principal, reason); err != nil {
 		return "", err
 	}
 	return outcomeDeprovisioning, nil
@@ -283,7 +284,7 @@ func (s *Server) returnOrderedRight(held model.EntitlementValue, by, reason stri
 	}
 	var (
 		out       order.Order
-		process   string
+		binding   catalog.Binding
 		found     bool
 		returnErr error
 		opErr     error
@@ -302,7 +303,7 @@ func (s *Server) returnOrderedRight(held model.EntitlementValue, by, reason stri
 			return
 		}
 		found = true
-		process = order.ReturnProcessOf(ord, ref)
+		binding = order.ReturnBindingOf(ord, ref)
 		if out, returnErr = order.Returning(ord, ref, at, by); returnErr != nil {
 			return
 		}
@@ -318,7 +319,7 @@ func (s *Server) returnOrderedRight(held model.EntitlementValue, by, reason stri
 			held.OrderID, ref, returnErr)}
 	}
 	// Durable first, then the process, as for the orderer's own return (I2).
-	if err := s.startReturn(process, held.OrderID, ref, out, reason); err != nil {
+	if err := s.startReturn(binding, held.OrderID, ref, out, reason); err != nil {
 		return false, fmt.Errorf("the return was recorded on order %s, but its process could "+
 			"not be started: %w", held.OrderID, err)
 	}

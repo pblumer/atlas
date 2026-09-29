@@ -285,6 +285,23 @@ func TestRecordRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name:   "trigger receipt",
+			vt:     VTTriggerReceipt,
+			intent: IntentTriggerReceived,
+			value: &TriggerReceiptValue{
+				Source:      "hr-system",
+				TriggerID:   "leaver-4711",
+				InstanceKey: NewKey(1, 77),
+				At:          1_790_000_000_000_000_000,
+			},
+		},
+		{
+			name:   "trigger receipts pruned",
+			vt:     VTTriggerReceipt,
+			intent: IntentTriggerReceiptsPruned,
+			value:  &TriggerReceiptValue{Cutoff: 1_780_000_000_000_000_000},
+		},
+		{
 			name:   "header only, no payload",
 			vt:     VTError, // a value type without a payload codec yet (VTSignal gained one in ADR-0088)
 			intent: IntentActivating,
