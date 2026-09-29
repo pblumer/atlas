@@ -52,7 +52,7 @@ func TestBothDirectionsAreExplainedOnTheScreen(t *testing.T) {
 	// a test that pinned a sentence across a line break would fail on a reflow and
 	// say nothing about what it was guarding.
 	for _, phrase := range []struct{ frag, why string }{
-		{"nothing in Atlas decided to give it to them", "what unmanaged means, in words"},
+		{"nothing in atlas decided to give it to them", "what unmanaged means, in words"},
 		{"does not agree with", "what missing means, in words"},
 		{"keep asserting it", "that a missing finding does not go away by itself"},
 	} {

@@ -465,7 +465,7 @@ export class PdfDocument {
 
     // 6 Info
     startObject(6);
-    push(`<< /Title (${escapePdfString(toWinAnsi(this.title))}) /Producer (Atlas) /Creator (Atlas) >>\n`);
+    push(`<< /Title (${escapePdfString(toWinAnsi(this.title))}) /Producer (atlas) /Creator (atlas) >>\n`);
     endObject();
 
     // Pages, each naming the fonts and only the images it actually draws.

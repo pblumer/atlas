@@ -107,7 +107,7 @@ function signInFailure(e) {
 
 function signIn(ctx) {
   card.innerHTML = `<h1>Sign in to continue</h1>
-    <p class="muted"><b>${esc(ctx.clientName)}</b> is asking for access to Atlas.
+    <p class="muted"><b>${esc(ctx.clientName)}</b> is asking for access to atlas.
     Sign in to decide.</p>
     <form id="login">
       <label>Username<input name="username" autocomplete="username" required autofocus /></label>
@@ -135,9 +135,9 @@ function signIn(ctx) {
 function consent(ctx) {
   const mcpOnly = String(ctx.resource || "").endsWith("/mcp");
   const reach = mcpOnly
-    ? ["Drive Atlas through its Model Context Protocol tools, as you.",
+    ? ["Drive atlas through its Model Context Protocol tools, as you.",
        "Nothing else: this approval does not reach the rest of the API."]
-    : ["Use the Atlas API as you — everything your account can do."];
+    : ["Use the atlas API as you — everything your account can do."];
   // Who vouched for this application. Where self-registration is open, the name
   // above is one the application chose for itself and nobody checked — and a
   // person cannot weigh a request without being told which of the two they are
@@ -149,7 +149,7 @@ function consent(ctx) {
        only if you started this yourself and recognise what you started.</div>`
     : "";
   card.innerHTML = `<h1>Authorize ${esc(ctx.clientName)}</h1>
-    <p class="muted">This application is asking to act as you in Atlas.</p>
+    <p class="muted">This application is asking to act as you in atlas.</p>
     ${vouch}
     <ul class="reach">${reach.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
     <p class="muted" style="margin-top:14px">It will be able to do this until you

@@ -49,7 +49,7 @@ function heldSince(nanos) {
 // completely different answers to the same question.
 const ORIGINS = {
   ordered: { pill: "", what: "Ordered through the catalogue, with whatever approval it carries." },
-  adopted: { pill: "warn", what: "Found in the target system and accepted by a person — Atlas did not grant it." },
+  adopted: { pill: "warn", what: "Found in the target system and accepted by a person — atlas did not grant it." },
   legacy: { pill: "warn", what: "Found in place when the inventory was first taken. Nobody here decided it." },
 };
 
@@ -132,7 +132,7 @@ export async function viewRecertification({ api, toast, view, isSuperseded }) {
       // campaign" look identical in an empty table and call for opposite reactions.
       tbody.innerHTML = `<tr><td colspan="6" class="empty">No campaigns. A campaign is opened by a
         modelled process — see <code>examples/rezertifizierung.bpmn</code> — which resolves who
-        reviews whom and asks Atlas for the questions.</td></tr>`;
+        reviews whom and asks atlas for the questions.</td></tr>`;
       return false;
     }
     const chosen = picker.value;

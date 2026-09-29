@@ -1124,9 +1124,9 @@ function heatEntry(heat) {
 // prevent. Shape carries it as well as colour — a dashed ring for something only
 // declared, a second ring for something known from both sides.
 const PROVENANCE = {
-  derived: { label: "Derived — Atlas has it, nothing models it" },
-  both: { label: "Both — Atlas has it and a model binds to it", ring: true },
-  modeled: { label: "Modeled — a model declares it, Atlas does not have it", ghost: true },
+  derived: { label: "Derived — atlas has it, nothing models it" },
+  both: { label: "Both — atlas has it and a model binds to it", ring: true },
+  modeled: { label: "Modeled — a model declares it, atlas does not have it", ghost: true },
 };
 
 // SEVERITY is ADR-0211 §4's three classes plus the neutral one, as this view draws
@@ -4044,7 +4044,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   if (!graph.nodes.length) {
     view.innerHTML = `<div class="card empty"><h1>Starmap</h1>
       <p>Nothing is deployed on this server yet, and there are no saved diagrams
-      either. The landscape is derived from what Atlas holds, so it fills in as you
+      either. The landscape is derived from what atlas holds, so it fills in as you
       draw and deploy — there is nothing to model first.</p></div>`;
     return;
   }
@@ -4077,7 +4077,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
            is one nobody looks in for the others. -->
       <label class="mesh-notation" for="mesh-notation">View</label>
       <select id="mesh-notation" class="mesh-notation-pick"
-        title="What this picture shows and how: the estate as Atlas's own kinds, sized by what is running, by what is stuck or by how long it has been stuck, projected into another vocabulary — or the product map, which is what this server offers rather than what it runs">${notationsAvailable()
+        title="What this picture shows and how: the estate as atlas's own kinds, sized by what is running, by what is stuck or by how long it has been stuck, projected into another vocabulary — or the product map, which is what this server offers rather than what it runs">${notationsAvailable()
         .map((n) => `<option value="${esc(n.id)}">${esc(n.label)}</option>`).join("")}</select>
       <!-- Saved diagrams nobody has deployed. Off by default, and the one control here
            that re-asks the server rather than re-drawing what is already on screen:

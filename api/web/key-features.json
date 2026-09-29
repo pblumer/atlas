@@ -6,8 +6,8 @@
     "de": "Kernmerkmale"
   },
   "intro": {
-    "en": "What Atlas is, in short: a durable, high-throughput BPMN 2.x workflow engine in a single self-contained binary.",
-    "de": "Was Atlas ausmacht, kurz gefasst: eine ausfallsichere, hochperformante BPMN-2.x-Workflow-Engine in einer einzigen, abhängigkeitsfreien Binärdatei."
+    "en": "What atlas is, in short: a durable, high-throughput BPMN 2.x workflow engine in a single self-contained binary.",
+    "de": "Was atlas ausmacht, kurz gefasst: eine ausfallsichere, hochperformante BPMN-2.x-Workflow-Engine in einer einzigen, abhängigkeitsfreien Binärdatei."
   },
   "features": [
     {
