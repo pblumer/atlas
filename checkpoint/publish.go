@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/pblumer/atlas/internal/dirsync"
 )
@@ -218,10 +219,7 @@ var (
 // makes an interrupted publish invisible. A missing root is not an error: it just has
 // no checkpoints.
 func List(root string) ([]uint64, error) {
-	entries, err := os.ReadDir(root)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
-	}
+	entries, _, err := readRoot(root)
 	if err != nil {
 		return nil, err
 	}
@@ -238,6 +236,22 @@ func List(root string) ([]uint64, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
 	return out, nil
+}
+
+// readRoot lists the checkpoint root and says whether it is missing, which is not an
+// error: a missing root holds no checkpoints. A root that is not a directory is one.
+// os.ReadDir says so on Unix, but on Windows it lists a regular file as an empty
+// directory — so a file in the root's place would read there, and only there, as "no
+// checkpoints", and the caller would carry on as though there were none.
+func readRoot(root string) (entries []os.DirEntry, missing bool, err error) {
+	if fi, err := os.Stat(root); err == nil && !fi.IsDir() {
+		return nil, false, &fs.PathError{Op: "readdir", Path: root, Err: syscall.ENOTDIR}
+	}
+	entries, err = os.ReadDir(root)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, true, nil
+	}
+	return entries, false, err
 }
 
 // Load reads and validates the manifest of the checkpoint published at pos. A
@@ -284,11 +298,8 @@ func Prune(root string, keep int) error {
 	if keep < 1 {
 		keep = 1
 	}
-	entries, err := os.ReadDir(root)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
+	entries, missing, err := readRoot(root)
+	if missing || err != nil {
 		return err
 	}
 	// One pass classifies every entry: published checkpoints by position, and temporary
