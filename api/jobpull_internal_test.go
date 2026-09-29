@@ -426,6 +426,49 @@ func TestLongPollReturnsWhenAJobArrives(t *testing.T) {
 	}
 }
 
+// TestLongPollReturnsWhenAFailedJobIsOfferedAgain: a worker that fails a job with
+// retries left gives it straight back, and a second worker already parked on the type
+// is woken for it — as for a new job — rather than sleeping out its poll while the job
+// waits on the index.
+func TestLongPollReturnsWhenAFailedJobIsOfferedAgain(t *testing.T) {
+	srv := jobPullSrv(t, "send-email", `{}`)
+	_, held := pull(t, srv, `{"type":"send-email","worker":"w1","leaseMs":60000}`)
+	if len(held.Jobs) != 1 {
+		t.Fatalf("pulled %d jobs, want the fixture's one", len(held.Jobs))
+	}
+	job := held.Jobs[0]
+
+	done := make(chan pullResp, 1)
+	started := time.Now()
+	go func() {
+		// Far longer than the test waits: an answer inside the bound can only be a wake.
+		_, got := pull(t, srv, `{"type":"send-email","worker":"w2","waitMs":30000}`)
+		done <- got
+	}()
+	deadline := time.Now().Add(3 * time.Second)
+	for srv.jobWaiters.count(waitTypeIndex(t, srv, "send-email")) == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the long poll never registered a waiter")
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+
+	path := fmt.Sprintf("/api/v1/jobs/%d/fail", job.JobKey)
+	body := fmt.Sprintf(`{"retries":2,"message":"transient","worker":"w1","leaseToken":%d}`, job.LeaseToken)
+	if code, b := serveInternal(t, srv, http.MethodPost, path, body, "application/json"); code != http.StatusOK {
+		t.Fatalf("fail: status=%d body=%s", code, b)
+	}
+
+	select {
+	case got := <-done:
+		if len(got.Jobs) != 1 || got.Jobs[0].JobKey != job.JobKey {
+			t.Errorf("the long poll returned %+v, want the failed job offered again", got.Jobs)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatalf("the long poll was not woken by a job failed back to the queue (waited %s)", time.Since(started).Round(time.Second))
+	}
+}
+
 // TestLongPollDoesNotHoldTheRunLoop is the constraint the whole sequence exists for.
 // A request that waited inside Loop.Do would freeze the single writer for the length
 // of the poll — every other request, every timer tick, the whole engine. So while a

@@ -205,6 +205,35 @@
       }
     },
     {
+      "id": "a-job-failed-back-with-retries-left-wakes-the-workers-waitin",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A job failed with retries left reaches a waiting worker at once",
+        "de": "Ein Job mit verbleibenden Wiederholungen erreicht wartende Worker sofort"
+      },
+      "summary": {
+        "en": "When a worker fails a job that still has retries and no backoff, the job goes straight back to the queue. A second worker already waiting for work of that type was not told, and slept out its whole wait while the job sat there. It is woken now, the same way it already was for a new job, an elapsed backoff or lease, and a resolved incident. A failure with a backoff still wakes it when the backoff elapses, and a job without retries still waits for an operator.",
+        "de": "Meldet ein Worker den Fehlschlag eines Jobs, der noch Wiederholungen und keine Wartezeit hat, geht der Job sofort in die Warteschlange zurück. Ein zweiter Worker, der bereits auf Arbeit dieses Typs wartete, erfuhr davon nichts und wartete seine ganze Wartezeit ab, während der Job bereitlag. Er wird jetzt geweckt, so wie bereits bei einem neuen Job, einer abgelaufenen Wartezeit oder Lease und einem gelösten Incident. Ein Fehlschlag mit Wartezeit weckt ihn weiterhin erst nach deren Ablauf, und ein Job ohne Wiederholungen wartet weiterhin auf einen Operator."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Workers",
+        "Engine"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the workers",
+          "de": "Worker öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
       "id": "restarting-a-supervised-worker-is-never-quietly-ignored",
       "version": "Unreleased",
       "date": null,
@@ -312,27 +341,6 @@
         },
         "route": "#/operations/incidents"
       }
-    },
-    {
-      "id": "the-handbook-counted-what-it-no-longer-had-thirty-examples-n",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The handbook names every role, and counts what it really holds",
-        "de": "Das Handbuch nennt alle Rollen und zählt, was es wirklich enthält"
-      },
-      "summary": {
-        "en": "The handbook said thirty examples where there are thirty-eight, nine apps where there are eight, and it named four roles where Atlas grants five: productmanager, the role that maintains the shop's catalogue, was missing from the chapter on accounts and roles. It is there now, together with the fact that migrating instances and overwriting their variables take the admin role. The number of examples is checked against the examples themselves, so it cannot fall behind again.",
-        "de": "Das Handbuch sprach von dreissig Beispielen, wo es achtunddreissig sind, von neun Apps, wo es acht sind, und nannte vier Rollen, wo Atlas fünf vergibt: productmanager, die Rolle, die den Katalog des Shops pflegt, fehlte im Kapitel über Konten und Rollen. Sie steht jetzt dort, zusammen mit dem Hinweis, dass das Migrieren von Instanzen und das Überschreiben ihrer Variablen die Rolle admin verlangt. Die Zahl der Beispiele wird gegen die Beispiele selbst geprüft und kann nicht mehr zurückfallen."
-      },
-      "link": {
-        "label": "ADR-0315",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0315-portal-roles-and-responsibilities.md"
-      },
-      "tags": [
-        "Handbook"
-      ]
     }
   ]
 }
