@@ -138,6 +138,59 @@ func TestReindexInstancesOfProcess(t *testing.T) {
 	}
 }
 
+// Repeating the repair has to be a walk through the version, not the same page again. A
+// reindexed instance stays on its version — that is the whole point of the repair — so a
+// call that starts from the same end every time selects the same instances forever:
+// `remaining` never turns false and the instances past the first page are never
+// reached. Each call hands back where the next one continues.
+func TestReindexInstancesCursorWalksTheVersionOnce(t *testing.T) {
+	ts := newTestServer(t)
+	def := searchFixture(t, ts, searchableBPMN,
+		`{"variables":{"identityId":"MT-1998"}}`,
+		`{"variables":{"identityId":"MT-1999"}}`,
+		`{"variables":{"identityId":"XY-1000"}}`,
+	)
+
+	type step struct {
+		Submitted  int    `json:"submitted"`
+		Remaining  bool   `json:"remaining"`
+		NextCursor string `json:"nextCursor"`
+	}
+	submitted, calls, cursor := 0, 0, ""
+	for {
+		calls++
+		if calls > 3 {
+			t.Fatalf("still remaining after %d calls with %d submitted — the repair is not advancing", calls-1, submitted)
+		}
+		path := fmt.Sprintf("/api/v1/processes/%d/reindex-instances?limit=2", def)
+		if cursor != "" {
+			path += "&after=" + cursor
+		}
+		code, body := doReq(t, ts, http.MethodPost, path, "", "")
+		if code != http.StatusOK {
+			t.Fatalf("reindex after %q: status=%d body=%s", cursor, code, body)
+		}
+		var s step
+		if err := json.Unmarshal(body, &s); err != nil {
+			t.Fatalf("decode: %v (%s)", err, body)
+		}
+		submitted += s.Submitted
+		if !s.Remaining {
+			if s.NextCursor != "" {
+				t.Errorf("last call hands back cursor %q; nothing is left to continue to", s.NextCursor)
+			}
+			break
+		}
+		if s.NextCursor == "" || s.NextCursor == cursor {
+			t.Fatalf("call %d says more remain but hands back cursor %q (was %q)", calls, s.NextCursor, cursor)
+		}
+		cursor = s.NextCursor
+	}
+	if submitted != 3 || calls != 2 {
+		t.Errorf("walk submitted %d over %d calls, want each of the 3 instances once over 2 calls", submitted, calls)
+	}
+}
+
 // The refusals, so a mistyped request is answered rather than silently doing nothing.
 func TestReindexInstancesRefusals(t *testing.T) {
 	ts := newTestServer(t)
@@ -151,6 +204,7 @@ func TestReindexInstancesRefusals(t *testing.T) {
 		{"unparsable key", "/api/v1/processes/nope/reindex-instances", http.StatusBadRequest},
 		{"invalid limit", fmt.Sprintf("/api/v1/processes/%d/reindex-instances?limit=abc", def), http.StatusBadRequest},
 		{"zero limit", fmt.Sprintf("/api/v1/processes/%d/reindex-instances?limit=0", def), http.StatusBadRequest},
+		{"invalid cursor", fmt.Sprintf("/api/v1/processes/%d/reindex-instances?after=next", def), http.StatusBadRequest},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if code, body := doReq(t, ts, http.MethodPost, tc.path, "", ""); code != tc.want {

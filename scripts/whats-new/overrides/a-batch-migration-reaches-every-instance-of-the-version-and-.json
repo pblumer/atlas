@@ -1,0 +1,18 @@
+{
+  "tags": ["Operations"],
+  "title": {
+    "en": "Migrating many instances at once now reaches all of them",
+    "de": "Die Migration vieler Instanzen erreicht jetzt alle"
+  },
+  "summary": {
+    "en": "Moving all running instances of a version onto another works through them in portions. An instance that cannot be moved stays where it is — and until now, the next portion started from the front again and met it again. A few such instances made the list of instances left behind show them many times over; a full portion of them meant the migration never got past them and never finished. Each portion now continues where the previous one stopped, so every instance is looked at exactly once and the migration ends. While a long migration runs, Atlas shows how far it has got; if it is interrupted, it says how many instances had already moved; and when very many instances could not be moved, it lists the first 200 and counts the rest.",
+    "de": "Das Verschieben aller laufenden Instanzen einer Version auf eine andere arbeitet sie portionenweise ab. Eine Instanz, die sich nicht verschieben lässt, bleibt, wo sie ist — und bisher begann die nächste Portion wieder von vorne und traf sie erneut an. Wenige solche Instanzen erschienen dadurch mehrfach in der Liste der zurückgebliebenen Instanzen; eine ganze Portion davon bedeutete, dass die Migration nie über sie hinauskam und nie endete. Jede Portion setzt jetzt dort fort, wo die vorherige aufgehört hat: Jede Instanz wird genau einmal betrachtet, und die Migration endet. Während einer langen Migration zeigt Atlas den Fortschritt an; wird sie unterbrochen, nennt Atlas, wie viele Instanzen bereits verschoben waren; und lassen sich sehr viele Instanzen nicht verschieben, listet Atlas die ersten 200 auf und zählt den Rest."
+  },
+  "try": {
+    "label": {
+      "en": "Open Instances",
+      "de": "Instanzen öffnen"
+    },
+    "route": "#/operations"
+  }
+}

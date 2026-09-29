@@ -28,12 +28,15 @@ var errReindexBatchFull = errors.New("reindex batch full")
 // command was queued for, not the memberships that changed: a command whose instance is
 // already in step emits no events at all, which is what makes repeating the repair free
 // (ADR-0244). Searchable echoes what the definition declares, so an operator can see
-// what the index will answer for before reading the count.
+// what the index will answer for before reading the count. NextCursor is set exactly
+// when Remaining is: the key of the last instance this call submitted, which the next
+// call passes as `?after=`.
 type reindexBatchResp struct {
 	ProcessDefKey uint64   `json:"processDefKey"`
 	Searchable    []string `json:"searchable"`
 	Submitted     int      `json:"submitted"`
 	Remaining     bool     `json:"remaining"`
+	NextCursor    string   `json:"nextCursor,omitempty"`
 }
 
 // handleReindexInstancesOfProcess brings a bounded batch of one definition's running
@@ -67,6 +70,18 @@ func (s *Server) handleReindexInstancesOfProcess(w http.ResponseWriter, r *http.
 	if limit > reindexBatchMax {
 		limit = reindexBatchMax
 	}
+	// A repaired instance stays on its version, so a call that starts from the same end
+	// every time selects the same page forever and never reaches the rest. The cursor
+	// makes repeating a walk, as it does for the batch migration (ADR-0162).
+	var after uint64
+	if q := strings.TrimSpace(r.URL.Query().Get("after")); q != "" {
+		n, err := strconv.ParseUint(q, 10, 64)
+		if err != nil {
+			httpapi.Error(w, http.StatusBadRequest, "invalid after cursor (want an instance key)")
+			return
+		}
+		after = n
+	}
 
 	var (
 		found bool
@@ -86,17 +101,21 @@ func (s *Server) handleReindexInstancesOfProcess(w http.ResponseWriter, r *http.
 		if def.cp != nil {
 			resp.Searchable = def.cp.SearchableVariables()
 		}
-		err := rv.ActiveInstancesOfDefDesc(defKey, 0, func(k uint64, _ *model.ProcessInstanceValue) error {
-			keys = append(keys, k)
-			if len(keys) >= limit {
+		err := rv.ActiveInstancesOfDef(defKey, after, func(k uint64, _ *model.ProcessInstanceValue) error {
+			// Stopping on the instance after a full page makes `remaining` exact.
+			if len(keys) == limit {
 				return errReindexBatchFull
 			}
+			keys = append(keys, k)
 			return nil
 		})
 		if err != nil && !errors.Is(err, errReindexBatchFull) {
 			return err
 		}
 		resp.Remaining = errors.Is(err, errReindexBatchFull)
+		if resp.Remaining {
+			resp.NextCursor = strconv.FormatUint(keys[len(keys)-1], 10)
+		}
 		return nil
 	})
 	if opErr != nil {

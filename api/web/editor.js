@@ -15,7 +15,7 @@ import { devLang } from "./dev-lang.js";
 // here any more.
 import { tokenSimulationModule } from "./token-simulation.js";
 import { attachIdCheck } from "./idcheck.js";
-import { migrateInstanceFlow } from "./migrationdialog.js";
+import { migrateInstanceFlow, migrateProcessFlow, runningByDefinition } from "./migrationdialog.js";
 // Which keys a form-js schema binds — the Developer View reads it to offer a linked
 // form's fields as variables, the incident's repair form reads it to know which keys a
 // submit may write (ADR-0169). One description of it, in one place.
@@ -9946,6 +9946,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   // Resolve the process this definition version belongs to, and all its versions,
   // so the version picker can offer them. One /processes call feeds both.
   let procName = `definition ${key}`;
+  let processId = ""; // the BPMN process id every version shares; "" when unresolved
   let versions = []; // [{key, version, name}], newest first
   // The stamp on a diagram somebody has adjusted since it was deployed
   // (ADR-0251). It rides the listing this already fetches,
@@ -9962,6 +9963,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     const here = procs.find((x) => x.key === key);
     if (here) {
       procName = here.name || here.processId;
+      processId = here.processId;
       const frozen = frozenMark(here);
       if (frozen) {
         frozenNote = ` <span class="pill${frozen.behind ? " warn" : ""} frozen-mark" title="${esc(frozen.title)}">${esc(frozen.label)}</span>`;
@@ -9996,6 +9998,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         <div style="flex:1"></div>
         <a class="btn neutral" id="edit-modeler" href="#/modeler/d/${key}" title="Open this definition in the Modeler">✎ Edit in Modeler</a>
         <button class="btn" id="start" title="Start a new instance of this process">Start instance</button>
+        <button class="btn neutral" id="migrate-version" hidden>&#8644; Migrate instances&hellip;</button>
         <button class="btn ghost danger" id="cancel-inst" hidden title="Cancel the running instance">Cancel instance</button>
         <a class="btn" id="replay-inst" hidden title="Replay this instance step by step">&#9654; Replay</a>
         <a class="btn" id="collab-link" hidden>⇄ Collaboration replay</a>
@@ -11148,6 +11151,31 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   }
 
   root.querySelector("#refresh").addEventListener("click", poll);
+
+  // Migrating the version on screen: every running instance of it, whichever one the
+  // picker has isolated — a single instance moves from its replay. Offered only when
+  // there is another version to move to, which is fixed for the life of this view; the
+  // running count is not, and the dialog says per version what it holds (ADR-0162).
+  const migrateBtn = root.querySelector("#migrate-version");
+  const thisVersion = versions.find((v) => v.key === key);
+  if (processId && thisVersion && versions.length > 1) {
+    migrateBtn.hidden = false;
+    migrateBtn.title = `Move every running instance of v${thisVersion.version} — not only the one selected — onto another deployed version of this process`;
+    migrateBtn.addEventListener("click", async () => {
+      // This view counts its own version only, and the picker has to say which of the
+      // others hold instances too. The summary is one row per definition, not a scan.
+      let running = null;
+      try { running = runningByDefinition(await api("GET", "/api/v1/instances/summary")); }
+      catch { /* best-effort: the picker then states no counts rather than wrong ones */ }
+      await migrateProcessFlow({
+        api, toast, processId, processName: procName, versions, fromKey: key,
+        runningOf: running ? (v) => running.get(String(v.key)) || 0 : undefined,
+        // The moved instances leave this version's counts and diagram, so re-read now
+        // rather than on the next tick.
+        onDone: poll,
+      });
+    });
+  }
   bindJsonCards(varPanel, jsonCollapsed, renderVariables);
   bindVarCopy(varPanel, toast);
   varsPanelCtl = wireVarsPanel(root, viewer);

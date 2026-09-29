@@ -188,11 +188,15 @@ test("a batch drains every page and lists the instances it left behind", async (
   await modal.locator("#migb-reason").fill("draining v1");
   await modal.locator("[data-migb-go]").click();
 
-  // The server pages; the caller repeats while `remaining` is true.
+  // The server pages; the caller repeats while `remaining` is true, continuing past
+  // the cursor each page hands back rather than from the front, where a refused
+  // instance would be selected again.
   await expect(page.locator("#migo-title")).toBeVisible();
   const calls = await page.evaluate(() => window.__calls.filter((c) => c.url.includes("migrate-instances")));
   expect(calls.length).toBe(2);
   expect(calls[0].body.reason).toBe("draining v1");
+  expect(calls[0].url).not.toContain("after=");
+  expect(calls[1].url).toContain("?after=7002");
 
   // Both numbers, and the refusal as a work list: each named instance is still on the
   // old version and still needs a decision.
@@ -216,5 +220,49 @@ test("a batch refuses to migrate a version onto itself", async ({ page }) => {
   await expect(modal.locator(".mig-err")).toBeVisible();
   await expect(modal.locator("[data-migb-go]")).toBeDisabled();
 
+  expect(page.__errors, "page errors").toEqual([]);
+});
+
+// startBatch opens the batch dialog on one of the harness's server behaviours and
+// submits it with a reason.
+const startBatch = async (page, button) => {
+  await page.locator(button).click();
+  const modal = page.locator(".mig-modal");
+  await modal.locator("#migb-reason").fill("draining v1");
+  await modal.locator("[data-migb-go]").click();
+};
+
+test("a batch that fails part-way says how much already moved, and re-reads", async ({ page }) => {
+  await startBatch(page, "#mig-batch-fail");
+
+  // Each instance is its own event, so the first page's two are on the new version
+  // whatever happened to the second call — an error that did not say so would read as
+  // "nothing happened".
+  await expect.poll(() => page.evaluate(() => window.__toast && window.__toast.kind)).toBe("err");
+  const t = await page.evaluate(() => window.__toast);
+  expect(t.msg).toContain("2 instances were already migrated");
+  expect(await page.evaluate(() => window.__done)).toBe(1);
+  expect(await page.evaluate(() => window.__result)).toBe(false);
+  expect(page.__errors, "page errors").toEqual([]);
+});
+
+test("a page that says more remain but not where to continue ends the walk", async ({ page }) => {
+  await startBatch(page, "#mig-batch-nocursor");
+
+  // From the front again it would meet the same instances; the loop stops instead of
+  // spinning to its guard.
+  await expect.poll(() => page.evaluate(() => window.__result)).toBe(true);
+  const calls = await page.evaluate(() => window.__calls.filter((c) => c.url.includes("migrate-instances")));
+  expect(calls.length).toBe(1);
+  expect(page.__errors, "page errors").toEqual([]);
+});
+
+test("a flood of refusals is listed up to a bound and counted beyond it", async ({ page }) => {
+  await startBatch(page, "#mig-batch-flood");
+
+  await expect(page.locator("#migo-title")).toContainText("250 left behind");
+  await expect(page.locator(".mig-refused li")).toHaveCount(200);
+  await expect(page.locator(".mig-unlisted")).toContainText("50 more");
+  await expect(page.locator(".mig-unlisted")).toContainText("v1");
   expect(page.__errors, "page errors").toEqual([]);
 });

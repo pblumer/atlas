@@ -2,6 +2,48 @@
   "generatedAt": "2026-09-28",
   "entries": [
     {
+      "id": "the-live-view-migrates-the-running-instances-of-the-version-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Migrate a version's running instances straight from its live view",
+        "de": "Laufende Instanzen einer Version direkt aus der Live-Ansicht migrieren"
+      },
+      "summary": {
+        "en": "When you open a process version in Operations and see its tokens on the diagram, you can now move all of that version's running instances onto another deployed version from the same screen. The new button \"Migrate instances…\" opens the migration dialog with the version you are looking at already chosen as the source and the newest version as the target; each version shows how many instances it is running. The button is only offered when the process has more than one version deployed, and it always moves the whole version — a single instance is still moved from its replay.",
+        "de": "Wenn Sie in Operations eine Prozessversion öffnen und ihre Tokens im Diagramm sehen, können Sie jetzt alle laufenden Instanzen dieser Version direkt aus derselben Ansicht auf eine andere bereitgestellte Version verschieben. Die neue Schaltfläche «Migrate instances…» öffnet den Migrationsdialog mit der angezeigten Version als Quelle und der neuesten Version als Ziel; zu jeder Version steht, wie viele Instanzen darauf laufen. Die Schaltfläche erscheint nur, wenn mehr als eine Version bereitgestellt ist, und sie verschiebt immer die ganze Version — eine einzelne Instanz verschieben Sie weiterhin aus ihrem Replay."
+      },
+      "link": {
+        "label": "ADR-0162",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0162-process-instance-migration.md"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Operations and click a process that has more than one version deployed.",
+          "Pick the version whose instances should move in the Version selector.",
+          "Click \"Migrate instances…\", check the target version, give a reason and confirm.",
+          "Instances that cannot be moved stay where they are and are listed afterwards."
+        ],
+        "de": [
+          "Öffnen Sie Operations und klicken Sie auf einen Prozess mit mehr als einer bereitgestellten Version.",
+          "Wählen Sie im Feld «Version» die Version, deren Instanzen verschoben werden sollen.",
+          "Klicken Sie auf «Migrate instances…», prüfen Sie die Zielversion, geben Sie einen Grund an und bestätigen Sie.",
+          "Instanzen, die nicht verschoben werden können, bleiben unverändert und werden anschliessend aufgelistet."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "the-handbook-teaches-monitoring-an-atlas-installation",
       "version": "Unreleased",
       "date": null,
@@ -318,35 +360,6 @@
           "de": "Operations öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "a-business-rule-task-bound-to-latest-runs-the-newest-decisio",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "Latest means the newest version when the task runs",
-        "de": "„Latest“ heisst: die neueste Version, wenn der Task läuft"
-      },
-      "summary": {
-        "en": "A business rule task bound to \"Latest\" now evaluates the newest deployed version of its decision each time it runs, as the Modeler always said and as in Camunda. Until now \"Latest\" was fixed when the process was deployed: a process deployed while a decision was at version 1 kept evaluating version 1 after versions 2 and 3 were deployed, until the process itself was deployed again. Processes already deployed keep the version they were deployed with until they are deployed again, so nothing changes under a running process without a deploy. To keep a process on one version on purpose, bind it to that version.",
-        "de": "Ein Business Rule Task mit der Bindung „Latest“ wertet jetzt bei jeder Ausführung die neueste deployte Version seiner Decision aus, so wie es der Modeler immer beschrieben hat und wie in Camunda. Bisher wurde „Latest“ beim Deploy des Prozesses festgelegt: Ein Prozess, der deployt wurde, als eine Decision bei Version 1 stand, wertete auch nach dem Deploy von Version 2 und 3 weiterhin Version 1 aus, bis der Prozess selbst neu deployt wurde. Bereits deployte Prozesse behalten ihre Version, bis sie neu deployt werden; unter einem laufenden Prozess ändert sich also nichts ohne Deploy. Wer einen Prozess bewusst auf einer Version halten will, bindet ihn an diese Version."
-      },
-      "link": {
-        "label": "ADR-0319",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0319-durable-versioned-decision-deployments.md"
-      },
-      "tags": [
-        "Decisions",
-        "Engine"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]

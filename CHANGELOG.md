@@ -14,6 +14,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The live view migrates the running instances of the version on screen.** Draining
+  one version onto another was reachable only from the ⋯ menu of a process row in the
+  Instances list, which made the operator pick the source version again after finding it
+  by opening that very version. The live view now carries **⇄ Migrate instances…**
+  whenever the process has another version deployed. It opens the same batch dialog with
+  the version on screen as the source, the newest version as the target, and each
+  version's running count read from the instance summary. On the newest version the
+  dialog asks for a target rather than proposing an older one, and the button always
+  means the whole version — a single instance still moves from its replay (ADR-0162).
+
 - **The handbook teaches monitoring an Atlas installation.** Metrics, alerting, event
   export, retention and backup were all in the product (ADR-0142, ADR-0114, ADR-0115,
   ADR-0107/0109) and the operations chapter stopped at the single incident. A new
@@ -184,6 +194,39 @@ _Changed_ / _Removed_ for each version.
   one written before that keeps resolving as it always has.
 
 ### Fixed
+
+- **Repairing a version's search index reaches past its first page.**
+  `POST /api/v1/processes/{key}/reindex-instances` selected the newest instances of the
+  version on every call, and a repaired instance stays on its version — so on a version
+  with more instances than one call's limit (500 by default), every call selected the
+  same page, `remaining` stayed true for good, and the instances past it were never
+  repaired. It now takes the same cursor as the batch migration: a call answers
+  `nextCursor` beside `remaining`, and the next call passes it as `?after=`.
+  `atlas_reindex_instances` passes it on (ADR-0244).
+
+- **A batch migration reaches every instance of the version, and stops.** Each call of
+  `POST /api/v1/processes/{key}/migrate-instances` selected the first instances of the
+  version from the front, and a refused instance stays on the version it was on — so
+  every later call selected it again. One refusal per page was reported once per call,
+  inflating the Console's "left behind" count; a page of refusals was all any call ever
+  selected, `remaining` stayed true, and a caller doing what the contract says — repeat
+  while remaining — never reached the instances behind them and never stopped. The
+  Console would have repeated it a thousand times and drawn every duplicate. A call now
+  answers `nextCursor` beside `remaining`, and the next call passes it as `?after=` to
+  continue past the last instance the previous one looked at; `remaining` is exact, and a
+  call without a cursor starts from the oldest instance as before. The batch now reads the
+  version's own instance index instead of walking every running instance on the server.
+  The Console and `atlas_migrate_instances` pass the cursor on. The Console also says how
+  far a long drain has got, says how many instances had already moved when a later call
+  fails, and lists at most 200 refusals by name with a count of the rest (ADR-0162).
+
+- **"Migrate running instances…" and "Terminate all running" in the Instances list open
+  their dialogs again.** Both items of a process row's ⋯ menu closed the menu and did
+  nothing else. Their handlers were bound once, while the table still showed "Loading…",
+  so the rows drawn afterwards — and drawn again on every refresh — carried menu items
+  nothing listened to. They are bound with each render now. The dialog's own harness
+  could not have caught it, because it cannot load `app.js`; `e2e/migration-wiring.spec.mjs`
+  boots the real console and clicks what an operator clicks (ADR-0162).
 
 - **Atlas can restart on Windows.** Every start that found a log in the data
   directory stopped with `truncate atlas-data\wal\0000000000000000.wal: Access is
