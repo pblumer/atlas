@@ -989,7 +989,9 @@ func (q queries) CompletedProcessInstances(fn func(key uint64, v *model.ProcessI
 // the call did with it. Resuming from the front instead meets every instance the batch
 // left in place again — a refused migration stays on its version — and a page of them
 // is then all any later call ever sees. Ascending, because an instance started on the
-// version while the batch runs has a key above every cursor so far, and is reached.
+// version while the batch runs has a key above every cursor so far, and is reached —
+// keys are a partition's monotonic counter, and the server runs one partition
+// (ADR-0006). A second partition would need a cursor per partition.
 func (q queries) ActiveInstancesOfDef(procDefKey, after uint64, fn func(key uint64, v *model.ProcessInstanceValue) error) error {
 	lo := instanceByDefPrefix(procDefKey)
 	hi := prefixEnd(lo)
