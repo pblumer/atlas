@@ -5,7 +5,6 @@ import "testing"
 // Trigger receipts, at the layer that keeps them (ADR-0425). The engine tests the
 // fold; coverage is measured per package, and the store's contract is the store's.
 
-
 // TestATriggerReceiptIsReadBackByItsSenderOnly: a receipt answers for its own source
 // and trigger id, a source whose name prefixes another's reads nothing of the other's,
 // and a receipt written earlier in the same transaction counts.
