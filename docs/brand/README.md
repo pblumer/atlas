@@ -30,6 +30,15 @@ wider gap and a larger cross — because at 16px the shipped weights close up.
 Keep it that way wherever the name is set as a wordmark. `ATLAS` in the
 codebase is only an environment-variable prefix and is never the mark.
 
+**In running text the name is lowercase too — except at the start of a
+sentence.** Write `atlas` in labels, headings and sentences (`Welcome to atlas`,
+`diese atlas-Instanz`), and `Atlas` only where it opens a sentence, or a heading
+or label that starts with the name (`Atlas keeps running.`, `Atlas bindings`).
+The Console's visible texts, including the handbook, follow this rule. Code
+comments, identifiers, values a program reads (such as `product` in
+`/api/v1/info`), messages the server returns, the ADRs, the developer docs and
+the examples under `examples/` were deliberately left as they are.
+
 **The card is set in English.** It is read wherever the repository link is
 pasted, so the copy stays in English even where the surrounding docs are not.
 

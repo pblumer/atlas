@@ -74,9 +74,9 @@ const de = (s) => s, en = (s) => s; // readability only
 export const NUGGETS = [
 {
   id: "roundhouse",
-  title: { de: "Roundhouse Kick &ndash; Atlas in drei Minuten", en: "Roundhouse Kick &ndash; Atlas in three minutes" },
-  lead: { de: "Der ganze Überblick am Stück, an der echten Oberfläche: was Atlas ist, was es kann und wofür man es nimmt.",
-          en: "The whole picture in one go, on the real interface: what Atlas is, what it does and what it is for." },
+  title: { de: "Roundhouse Kick &ndash; atlas in drei Minuten", en: "Roundhouse Kick &ndash; atlas in three minutes" },
+  lead: { de: "Der ganze Überblick am Stück, an der echten Oberfläche: was atlas ist, was es kann und wofür man es nimmt.",
+          en: "The whole picture in one go, on the real interface: what atlas is, what it does and what it is for." },
   scenes: [
     { t: 9000, img: "console",
       cap: { de: "<b>Atlas</b> ist eine Workflow-Engine für BPMN 2.x in einer einzigen Datei. Das hier ist die <b>Console</b> &ndash; der Startpunkt, der sagt, was auf dieser Installation läuft.",
@@ -219,11 +219,11 @@ export const NUGGETS = [
       cap: { de: "Vier Rollen, und sie sind eine <b>Liste, keine Rangfolge</b>: <code>modeler</code> enthält <code>operator</code> nicht. Ein neues Konto bekommt <code>user</code> &ndash; alles Weitere vergibst du bewusst.",
              en: "Four roles, and they are a <b>list, not a ladder</b>: <code>modeler</code> does not contain <code>operator</code>. A new account gets <code>user</code> &ndash; everything beyond that you grant deliberately." } },
     { t: 9500, img: "console-workers",
-      cap: { de: "Ein <b>Worker</b> ist die Stelle, an der Atlas nach draussen greift. Die Zugangsdaten liegen im Tresor, nie im Prozessmodell &ndash; und hier siehst du, welche Art wo läuft.",
-             en: "A <b>worker</b> is where Atlas reaches outside. Credentials live in the vault, never in the process model &ndash; and here you see which kind runs where." } },
+      cap: { de: "Ein <b>Worker</b> ist die Stelle, an der atlas nach draussen greift. Die Zugangsdaten liegen im Tresor, nie im Prozessmodell &ndash; und hier siehst du, welche Art wo läuft.",
+             en: "A <b>worker</b> is where atlas reaches outside. Credentials live in the vault, never in the process model &ndash; and here you see which kind runs where." } },
     { t: 9500, img: "console-ai",
-      cap: { de: "Soll ein KI-Assistent Atlas bedienen, richtest du das unter <b>AI access</b> ein. Die Seite prüft vorher, ob die veröffentlichten Adressen überhaupt brauchbar sind &ndash; sonst endet es als «der Connector geht einfach nicht».",
-             en: "To let an AI assistant drive Atlas you set that up under <b>AI access</b>. The page checks first whether the published addresses are usable at all &ndash; otherwise it ends as \"the connector just doesn't work\"." } },
+      cap: { de: "Soll ein KI-Assistent atlas bedienen, richtest du das unter <b>AI access</b> ein. Die Seite prüft vorher, ob die veröffentlichten Adressen überhaupt brauchbar sind &ndash; sonst endet es als «der Connector geht einfach nicht».",
+             en: "To let an AI assistant drive atlas you set that up under <b>AI access</b>. The page checks first whether the published addresses are usable at all &ndash; otherwise it ends as \"the connector just doesn't work\"." } },
     { t: 9000, img: "console-audit",
       cap: { de: "Das <b>Revisionsprotokoll</b> hält jede Freigabe, jeden Entzug und jeden Eigentümerwechsel fest. Ohne eingeschaltete Authentisierung wird nichts aufgezeichnet &ndash; ohne angemeldete Person gibt es keinen Handelnden.",
              en: "The <b>audit log</b> records every share, every revocation and every change of owner. With authentication off nothing is recorded &ndash; with no principal there is no actor." } },
