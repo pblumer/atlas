@@ -7570,12 +7570,16 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
       <p data-l="de">Für viele Fälle auf einmal gibt es die stapelweise Migration je Definition
         (<code>POST /api/v1/processes/{key}/migrate-instances</code>, begrenzt über <code>?limit=</code>): jede
         Instanz ist ihr eigenes Ereignis, ein abgelehnter Fall rollt die anderen nicht zurück, und man wiederholt,
-        solange die Antwort <code>remaining: true</code> meldet. Deklariert die Zielversion andere durchsuchbare
+        solange die Antwort <code>remaining: true</code> meldet – jeweils mit dem zurückgegebenen
+        <code>nextCursor</code> als <code>?after=</code>. Ohne ihn beginnt der nächste Aufruf wieder bei der ältesten
+        Instanz, und ein abgelehnter Fall, der ja auf seiner Version bleibt, würde erneut gewählt. Deklariert die Zielversion andere durchsuchbare
         Variablen, stellt <code>POST /api/v1/processes/{key}/reindex-instances</code> den Suchindex nach (ADR-0295).</p>
       <p data-l="en">For many cases at once there is the per-definition batch migration
         (<code>POST /api/v1/processes/{key}/migrate-instances</code>, bounded by <code>?limit=</code>): each
         instance is its own event, a refused one does not roll back the rest, and you repeat while the response
-        reports <code>remaining: true</code>. When the target version declares different searchable variables,
+        reports <code>remaining: true</code> – each time passing the returned <code>nextCursor</code> as
+        <code>?after=</code>. Without it the next call starts from the oldest instance again, and a refused case,
+        which stays on its version, would be selected again. When the target version declares different searchable variables,
         <code>POST /api/v1/processes/{key}/reindex-instances</code> restores the search index (ADR-0295).</p>
 
       <h3 data-l="de">Fork: fortsetzen, wenn sich ein Token nicht umbinden lässt</h3>

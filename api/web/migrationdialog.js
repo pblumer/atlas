@@ -352,21 +352,39 @@ export async function migrateProcessFlow({ api, toast, processId, processName, v
 
   let migrated = 0;
   const refused = [];
+  const route = `/api/v1/processes/${encodeURIComponent(choice.from.key)}/migrate-instances`;
   try {
-    // The server caps each call and reports whether more are waiting, exactly as the
-    // bulk terminate does. The guard is a backstop against a server that never stops
-    // saying "remaining" — it bounds the loop, it is not the expected exit.
+    // The server caps each call and says whether more are waiting, and where the next
+    // call continues: past the last instance this one looked at. Without that cursor a
+    // refused instance — which stays where it is — is selected again by every call,
+    // and a page of them is all the walk ever sees. The guard is a backstop against a
+    // server that never stops saying "remaining"; it bounds the loop, it is not the
+    // expected exit.
+    let after = "";
     for (let guard = 0; guard < 1000; guard++) {
-      const res = await api("POST", `/api/v1/processes/${encodeURIComponent(choice.from.key)}/migrate-instances`, {
+      const res = await api("POST", after ? `${route}?after=${encodeURIComponent(after)}` : route, {
         targetProcessDefKey: choice.to.key,
         reason: choice.reason,
       });
       migrated += res.migrated || 0;
       for (const r of res.refused || []) refused.push(r);
       if (!res.remaining) break;
+      // A call that says more remain without saying where to continue cannot be
+      // repeated safely: from the front it would meet the same refusals again.
+      if (!res.nextCursor || res.nextCursor === after) break;
+      after = res.nextCursor;
+      // Tens of thousands of instances are a hundred calls or more, and a dialog that
+      // has closed with nothing on screen for that long reads as a hang.
+      toast(`Migrating to ${versionLabel(choice.to)} — ${migrated} moved${
+        refused.length ? `, ${refused.length} left behind` : ""} so far…`);
     }
   } catch (e) {
-    toast(migrateError(e), "err");
+    // What moved before the failure has moved — each instance is its own event — so
+    // the count is part of the message, and the caller's view is re-read either way.
+    toast(migrated
+      ? `${migrateError(e)} — ${migrated} instance${migrated === 1 ? " was" : "s were"} already migrated`
+      : migrateError(e), "err");
+    if (migrated && onDone) await onDone();
     return false;
   }
 
@@ -479,9 +497,17 @@ function askBatchMigration({ processId, processName, versions, runningOf, fromKe
 // showBatchOutcome reports a batch that did not take every instance with it. It is a
 // dialog rather than a toast because the refusals are a work list — each named instance
 // is still on the old version and still needs a decision.
+// How many refusals the outcome lists by name. A model change that strands every token
+// refuses every instance, and fifty thousand rows is not a work list anyone reads — it
+// is a page the browser struggles to draw. Past this the dialog says how many more there
+// are and where they all are: still on the source version, which lists them.
+export const OUTCOME_LIST_MAX = 200;
+
 function showBatchOutcome({ migrated, refused, from, to }) {
   return new Promise((resolve) => {
-    const rows = refused.map((r) => {
+    const listed = refused.slice(0, OUTCOME_LIST_MAX);
+    const unlisted = refused.length - listed.length;
+    const rows = listed.map((r) => {
       const why = (r.problems || []).map((p) => `${p.elementId ? p.elementId + " " : ""}${p.reason}`).join("; ");
       return `<li><a href="#/operations/i/${esc(String(r.instanceKey))}" class="mono">${esc(String(r.instanceKey))}</a>
         <span class="muted">${esc(why || "could not be migrated")}</span></li>`;
@@ -497,6 +523,8 @@ function showBatchOutcome({ migrated, refused, from, to }) {
           ${refused.length} could not be, and ${refused.length === 1 ? "is" : "are"} still running on
           <b>${esc(versionLabel(from))}</b> exactly as before:</p>
           <ul class="mig-problems mig-refused">${rows}</ul>
+          ${unlisted ? `<p class="mig-unlisted" style="margin:6px 0 0;font-size:12.5px">…and ${unlisted} more. Every one of them
+          is still on <b>${esc(versionLabel(from))}</b>, so that version&rsquo;s live view lists them all.</p>` : ""}
           <p class="muted" style="margin:8px 0 0;font-size:12px">Open one to see where its token is. A refusal is not a
           failure to apply — nothing was written for these, so they are unchanged rather than half-migrated.</p>
         </div>

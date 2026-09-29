@@ -2,8 +2,10 @@ package mcp
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 // Tool is one MCP tool: its advertised name, human/model-facing description,
@@ -992,9 +994,11 @@ func runtimeTools() []Tool {
 			Name: "atlas_migrate_instances",
 			Description: "Migrate a bounded batch of one deployed definition's running instances to another " +
 				"version of the same process. Each instance is migrated independently, so a refusal on one " +
-				"does not roll back the others: returns {toProcessDefKey, migrated, refused, remaining}, " +
-				"where 'refused' carries a full plan per instance that could not move. Repeat while " +
-				"'remaining' is true. A 'reason' is required (ADR-0162).",
+				"does not roll back the others: returns {toProcessDefKey, migrated, refused, remaining, " +
+				"nextCursor}, where 'refused' carries a full plan per instance that could not move. Repeat " +
+				"while 'remaining' is true, passing 'nextCursor' as 'after': a refused instance stays on " +
+				"its version, and a call without the cursor starts from the oldest instance again. A " +
+				"'reason' is required (ADR-0162).",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -1002,6 +1006,7 @@ func runtimeTools() []Tool {
 					"targetProcessDefKey": map[string]any{"type": "integer", "description": "The deployed definition key to migrate them to."},
 					"reason":              map[string]any{"type": "string", "description": "Why these instances are being migrated. Recorded per instance in its audit trail."},
 					"limit":               map[string]any{"type": "integer", "minimum": 1, "description": "Maximum instances to migrate in this call (default 500, capped at 5000)."},
+					"after":               map[string]any{"type": "string", "description": "The nextCursor the previous call returned; this call continues past it. Omit on the first call."},
 					"mapping":             migrationMappingSchema(),
 				},
 				"required": []any{"key", "targetProcessDefKey", "reason"},
@@ -1015,11 +1020,27 @@ func runtimeTools() []Tool {
 				if err != nil {
 					return "", err
 				}
-				path := "/api/v1/processes/" + strconv.FormatUint(key, 10) + "/migrate-instances"
+				q := url.Values{}
 				if limit, present, err := optPositiveUint(args, "limit"); err != nil {
 					return "", err
 				} else if present {
-					path += "?limit=" + strconv.FormatUint(limit, 10)
+					q.Set("limit", strconv.FormatUint(limit, 10))
+				}
+				// A cursor that is present but not the string the server handed back is
+				// refused rather than dropped: dropped, the call would quietly start from
+				// the oldest instance again — the repeat the cursor exists to prevent.
+				if v, present := args["after"]; present {
+					after, ok := v.(string)
+					if !ok {
+						return "", fmt.Errorf("argument %q must be the nextCursor string the previous call returned", "after")
+					}
+					if after = strings.TrimSpace(after); after != "" {
+						q.Set("after", after)
+					}
+				}
+				path := "/api/v1/processes/" + strconv.FormatUint(key, 10) + "/migrate-instances"
+				if len(q) > 0 {
+					path += "?" + q.Encode()
 				}
 				return asText(c.post(path, "application/json", body))
 			},

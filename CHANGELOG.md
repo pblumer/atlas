@@ -134,6 +134,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A batch migration reaches every instance of the version, and stops.** Each call of
+  `POST /api/v1/processes/{key}/migrate-instances` selected the first instances of the
+  version from the front, and a refused instance stays on the version it was on — so
+  every later call selected it again. One refusal per page was reported once per call,
+  inflating the Console's "left behind" count; a page of refusals was all any call ever
+  selected, `remaining` stayed true, and a caller doing what the contract says — repeat
+  while remaining — never reached the instances behind them and never stopped. The
+  Console would have repeated it a thousand times and drawn every duplicate. A call now
+  answers `nextCursor` beside `remaining`, and the next call passes it as `?after=` to
+  continue past the last instance the previous one looked at; `remaining` is exact, and a
+  call without a cursor starts from the oldest instance as before. The batch now reads the
+  version's own instance index instead of walking every running instance on the server.
+  The Console and `atlas_migrate_instances` pass the cursor on. The Console also says how
+  far a long drain has got, says how many instances had already moved when a later call
+  fails, and lists at most 200 refusals by name with a count of the rest (ADR-0162).
+
 - **"Migrate running instances…" and "Terminate all running" in the Instances list open
   their dialogs again.** Both items of a process row's ⋯ menu closed the menu and did
   nothing else. Their handlers were bound once, while the table still showed "Loading…",

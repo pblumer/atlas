@@ -354,6 +354,10 @@ func TestMigrateInstancesOfProcessBatches(t *testing.T) {
 		fmt.Sprintf(`{"targetProcessDefKey":%d,"reason":"x"}`, v2), "application/json"); code != http.StatusBadRequest {
 		t.Errorf("batch with limit=0 = %d %s, want 400", code, body)
 	}
+	if code, body := doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/migrate-instances?after=next", v1),
+		fmt.Sprintf(`{"targetProcessDefKey":%d,"reason":"x"}`, v2), "application/json"); code != http.StatusBadRequest {
+		t.Errorf("batch with a non-numeric cursor = %d %s, want 400", code, body)
+	}
 	if code, body := doReq(t, ts, http.MethodPost, "/api/v1/processes/999999/migrate-instances",
 		fmt.Sprintf(`{"targetProcessDefKey":%d,"reason":"x"}`, v2), "application/json"); code != http.StatusNotFound {
 		t.Errorf("batch on an unknown definition = %d %s, want 404", code, body)
@@ -461,6 +465,124 @@ func TestMigrateInstancesReportsRefusals(t *testing.T) {
 		}
 		if r.Problems[0].ElementID != "review" {
 			t.Errorf("refusal names element %q, want the parked one", r.Problems[0].ElementID)
+		}
+	}
+}
+
+// batchStep is one call of the batch form as a caller repeating it makes one: the
+// cursor the previous call handed back goes into the next.
+type batchStep struct {
+	Migrated   int    `json:"migrated"`
+	Remaining  bool   `json:"remaining"`
+	NextCursor string `json:"nextCursor"`
+	Refused    []struct {
+		InstanceKey uint64 `json:"instanceKey"`
+	} `json:"refused"`
+}
+
+func migrateBatchStep(t *testing.T, ts *httptest.Server, from, to uint64, limit int, after string) batchStep {
+	t.Helper()
+	path := fmt.Sprintf("/api/v1/processes/%d/migrate-instances?limit=%d", from, limit)
+	if after != "" {
+		path += "&after=" + after
+	}
+	code, body := doReq(t, ts, http.MethodPost, path,
+		fmt.Sprintf(`{"targetProcessDefKey":%d,"reason":"draining"}`, to), "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("batch step after %q: status=%d body=%s", after, code, body)
+	}
+	var step batchStep
+	if err := json.Unmarshal(body, &step); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	return step
+}
+
+// A refused instance stays on the version it was on, so a batch that starts from the
+// front every time selects it again on every call. With one refusal per page that
+// repeated it in every later page's report; with a whole page refused it was the only
+// thing any call ever selected, `remaining` stayed true, and a caller doing exactly
+// what the contract says — repeat while remaining — never reached the instances behind
+// it and never stopped. The cursor is what makes "repeat" a walk: each call continues
+// past the last instance the previous one looked at, whatever became of it.
+func TestMigrateInstancesCursorNeverRevisitsARefusal(t *testing.T) {
+	ts := newTestServer(t)
+	v1 := deployXML(t, ts, migrateV1BPMN)
+	renamed := deployXML(t, ts, migrateV2RenamedBPMN) // every instance's token is stranded there
+	started := map[uint64]bool{}
+	for i := 0; i < 4; i++ {
+		started[startInstance(t, ts, v1)] = true
+	}
+
+	seen := map[uint64]int{}
+	cursor, calls := "", 0
+	for {
+		calls++
+		if calls > 4 {
+			t.Fatalf("still remaining after %d calls — the batch is not advancing (seen %v)", calls-1, seen)
+		}
+		step := migrateBatchStep(t, ts, v1, renamed, 2, cursor)
+		if step.Migrated != 0 {
+			t.Fatalf("call %d migrated %d onto a version that strands every token", calls, step.Migrated)
+		}
+		for _, r := range step.Refused {
+			seen[r.InstanceKey]++
+		}
+		if !step.Remaining {
+			if step.NextCursor != "" {
+				t.Errorf("last call hands back cursor %q; nothing is left to continue to", step.NextCursor)
+			}
+			break
+		}
+		if step.NextCursor == "" || step.NextCursor == cursor {
+			t.Fatalf("call %d says more remain but hands back cursor %q (was %q)", calls, step.NextCursor, cursor)
+		}
+		cursor = step.NextCursor
+	}
+
+	// Four instances at two a call is two calls: `remaining` is exact, so a page that
+	// happens to end on the last instance does not send the caller round once more.
+	if calls != 2 {
+		t.Errorf("walk took %d calls, want 2", calls)
+	}
+	if len(seen) != len(started) {
+		t.Errorf("reported %d distinct instances, want all %d", len(seen), len(started))
+	}
+	for k, n := range seen {
+		if !started[k] {
+			t.Errorf("reported instance %d, which this test never started", k)
+		}
+		if n != 1 {
+			t.Errorf("instance %d reported %d times, want once", k, n)
+		}
+	}
+}
+
+// An instance started on the source version while a drain is under way has a key above
+// every cursor handed out so far, so the walk reaches it rather than leaving it behind.
+func TestMigrateInstancesCursorReachesInstancesStartedDuringTheDrain(t *testing.T) {
+	ts := newTestServer(t)
+	v1 := deployXML(t, ts, migrateV1BPMN)
+	v2 := deployXML(t, ts, migrateV2BPMN)
+	keys := []uint64{startInstance(t, ts, v1), startInstance(t, ts, v1)}
+
+	step := migrateBatchStep(t, ts, v1, v2, 1, "")
+	if step.Migrated != 1 || !step.Remaining || step.NextCursor == "" {
+		t.Fatalf("first step = %+v, want one migrated and a cursor to continue from", step)
+	}
+	keys = append(keys, startInstance(t, ts, v1)) // arrives mid-drain
+
+	cursor := step.NextCursor
+	for calls := 0; step.Remaining; calls++ {
+		if calls > 4 {
+			t.Fatalf("drain is not advancing (cursor %q)", cursor)
+		}
+		step = migrateBatchStep(t, ts, v1, v2, 1, cursor)
+		cursor = step.NextCursor
+	}
+	for _, k := range keys {
+		if got := instanceDefKey(t, ts, k); got != v2 {
+			t.Errorf("instance %d is on def %d, want %d", k, got, v2)
 		}
 	}
 }

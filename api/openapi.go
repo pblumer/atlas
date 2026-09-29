@@ -386,7 +386,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "targetProcessDefKey", "reason")),
 			resp: jsonBody("Fork result", tObject())}},
 		{"POST", "/api/v1/processes/{key}/migrate-instances", s.handleMigrateInstancesOfProcess, apiOp{
-			summary: "Migrate a bounded batch of a definition's running instances to another version (?limit=, default 500, max 5000); each instance is its own event, so a refusal does not roll back the rest — repeat while the response reports remaining=true (ADR-0162)", tag: "Instances", role: RoleAdmin,
+			summary: "Migrate a bounded batch of a definition's running instances to another version, oldest first (?limit=, default 500, max 5000); each instance is its own event, so a refusal does not roll back the rest. Repeat while the response reports remaining=true, passing its nextCursor as ?after= — a refused instance stays on the version, and without the cursor the next call would select it again (ADR-0162)", tag: "Instances", role: RoleAdmin,
 			req: jsonBody("Target version, reason, and optional element-id overrides", schemaObj(map[string]any{
 				"targetProcessDefKey": tInteger(), "reason": tString(), "mapping": tArray(),
 			}, "targetProcessDefKey", "reason")),
