@@ -9818,9 +9818,9 @@ async function viewDmnViewer(refId) {
 // whether it is being designed or being accounted for.
 
 // setTitle sets the browser tab / history title with the distinctive part first, so
-// several open Atlas tabs are told apart at a glance. "" falls back to plain "Atlas".
+// several open Atlas tabs are told apart at a glance. "" falls back to plain "atlas".
 function setTitle(label) {
-  document.title = label ? `${label} · Atlas` : "Atlas";
+  document.title = label ? `${label} · atlas` : "atlas";
 }
 
 // routeTitle derives a tab title from the route alone (set immediately on navigation).
