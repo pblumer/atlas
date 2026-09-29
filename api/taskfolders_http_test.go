@@ -127,6 +127,13 @@ func TestFolderFiltersTheTaskList(t *testing.T) {
 		if task["processId"] != "kunden-anfrage" {
 			t.Errorf("folder list contains %v", task["processId"])
 		}
+		if _, ok := task["createdAt"]; !ok {
+			t.Errorf("folder row %v does not say when the task was opened", task["key"])
+		}
+	}
+	// Asked for their content, a folder's rows are the same rows.
+	if withContent, _ := listTasks(t, ts, "/api/v1/tasks?content=1&folder="+f.ID); len(withContent) != 3 {
+		t.Fatalf("folder list with content = %d tasks, want 3", len(withContent))
 	}
 }
 

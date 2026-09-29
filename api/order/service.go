@@ -456,10 +456,10 @@ func PlacedVariables(o Order, portalBase, apiBase string) map[string]string {
 }
 
 // FulfilmentProcess is the id of the model that works an order
-// (api/systemprocesses/auftrag-erfuellung.bpmn). Named here so the Go side has one
-// spelling of it; the model carries its own, and the two are held together by the
-// tests that start it.
-const FulfilmentProcess = "atlas-auftrag-erfuellung"
+// (api/systemprocesses/auftrag-erfuellung.bpmn). The catalogue holds the spelling,
+// because publishing refuses a product bound to it; the model carries its own, and
+// the two are held together by the tests that start it.
+const FulfilmentProcess = catalog.FulfilmentProcess
 
 // unresolvedVariant reports what is wrong with the variants this order names, or
 // "" when nothing is.

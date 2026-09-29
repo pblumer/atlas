@@ -7544,6 +7544,14 @@ function taskOrder(a, b) {
   return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
 }
 
+// openedLabel is when a task was opened as a short date and time, or "" when the
+// server did not say. It is shown on the row and is part of what the filter
+// searches, so "28.9." finds the tasks opened that day.
+function openedLabel(t) {
+  if (!t || !t.createdAt) return "";
+  return new Date(t.createdAt).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+}
+
 // dueInfo turns a task's Unix-ms due date into a short relative label and an
 // overdue flag, or null when the task has no due date.
 function dueInfo(t) {
@@ -7624,6 +7632,9 @@ async function viewTasks(preselectKey) {
     // about the product, the price or the person waiting. This is the inbox
     // learning which of its own rows those are.
     approvals: new Map(),
+    // The principals directory as id → name, so a task can be found by the name of
+    // the person it is about while it only holds their id (see matchesQuery).
+    names: new Map(),
   };
 
   // SORTS are the orderings the toolbar offers over the visible tasks. "smart" is
@@ -7659,7 +7670,7 @@ async function viewTasks(preselectKey) {
         <div class="tasks-toolbar">
           <span class="tasks-search">
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
-            <input id="task-q" type="text" placeholder="Filter tasks…" aria-label="Filter tasks" spellcheck="false"/>
+            <input id="task-q" type="text" placeholder="${esc(tr("tasks.filter"))}" aria-label="Filter tasks" spellcheck="false"/>
           </span>
           <label class="tasks-sort">Sort
             <select id="task-sort">${Object.entries(SORTS).map(([k, s]) => `<option value="${k}"${k === state.sort ? " selected" : ""}>${esc(s.label)}</option>`).join("")}</select>
@@ -7713,9 +7724,27 @@ async function viewTasks(preselectKey) {
   })();
 
   // visible applies the folder, then the free-text query, then the chosen sort.
-  const matchesQuery = (t, q) =>
-    (taskTitle(t) + " " + (t.processId || "") + " " + (t.assignee || "") + " " +
-      (t.candidateGroups || "") + " " + (t.elementId || "")).toLowerCase().includes(q);
+  //
+  // The query reads what a task is about as well as what it is called: the values
+  // at its scope (the list asks for them with ?content=1), each id among them also
+  // under the name of the person it is, and the product an approval decides. A task
+  // "for Patrick Blumer" holds his id, never his name; without the directory the
+  // search for the name a person knows would find nothing. Every word of the query
+  // has to match somewhere, so "blumer macbook" narrows rather than widens.
+  const taskHaystack = (t) => {
+    const ap = state.approvals.get(t.key);
+    const content = (t.content || []).map((v) => {
+      const name = state.names.get(v);
+      return name ? v + " " + name : v;
+    });
+    return [taskTitle(t), t.processId, t.assignee, t.candidateGroups, t.elementId,
+      t.assignee && state.names.get(t.assignee), ap && approvalName(ap), openedLabel(t),
+      ...content].filter(Boolean).join(" ").toLowerCase();
+  };
+  const matchesQuery = (t, q) => {
+    const hay = taskHaystack(t);
+    return q.split(/\s+/).filter(Boolean).every((w) => hay.includes(w));
+  };
   const visible = () => {
     const q = state.query.trim().toLowerCase();
     // A saved folder's rows were selected by the server, so the only thing left to
@@ -7864,6 +7893,11 @@ async function viewTasks(preselectKey) {
         // with its full path (see renderDetail), where it was already more useful
         // than a truncated leaf name here.
         const id = `<span class="tasks-item-id" title="Job-Key ${t.key}">#${t.key}</span>`;
+        // When the task was opened, on the row, so a queue can be read by age without
+        // opening each task. Absent for a task the server has no time for.
+        const opened = t.createdAt
+          ? `<span class="tasks-item-opened" title="${esc(tr("tasks.opened") + " " + new Date(t.createdAt).toLocaleString())}">${esc(openedLabel(t))}</span>`
+          : "";
         // A row that decides an order says so, and says where it is decided.
         //
         // It linked nowhere and was labelled nothing: the same decision also sat
@@ -7895,7 +7929,7 @@ async function viewTasks(preselectKey) {
               <span class="chip" title="${esc(t.processId || "")}">${esc(t.processId || "")}</span>
             </div>
             <div class="tasks-item-sub muted">
-              <span class="tasks-item-meta">${id}<span>${who}</span>${apprLine}</span>${due}
+              <span class="tasks-item-meta">${id}${opened}<span>${who}</span>${apprLine}</span>${due}
             </div>
           </div>
         </li>`;
@@ -8545,6 +8579,7 @@ async function viewTasks(preselectKey) {
         ${row("Candidate groups", esc(t.candidateGroups || "—"))}
         ${t.lane ? row("Lane", esc((t.lanePath && t.lanePath.length > 1 ? t.lanePath : [t.lane]).join(" › "))) : ""}
         ${row("Priority", `${taskPriority(t)}${taskPriority(t) >= 70 ? ' <span class="prio-dot" title="High priority"></span>' : ""}`)}
+        ${row(tr("tasks.opened"), t.createdAt ? esc(new Date(t.createdAt).toLocaleString()) : "—")}
         ${row("Due", (() => { const d = dueInfo(t); return d ? `<span class="${d.overdue ? "due-text overdue" : "due-text"}" title="${esc(d.abs)}">${esc(d.label)} · ${esc(d.abs)}</span>` : "—"; })())}
         ${row("Instance", `<span class="chip">${t.processInstanceKey}</span>`)}
         ${row("Task key", `<span class="chip">${t.key}</span>`)}
@@ -8656,7 +8691,8 @@ async function viewTasks(preselectKey) {
       // off the body rather than a header is the point: a header is a thing a caller
       // has to know to ask for, and this one went unread for years
       // (ADR-0378).
-      const page = await api("GET", "/api/v1/tasks");
+      const [page, names] = await Promise.all([api("GET", "/api/v1/tasks?content=1"), peopleNames()]);
+      state.names = names;
       state.tasks = (page && page.items) || [];
       state.truncated = !!(page && page.truncated);
       state.nextCursor = (page && page.nextCursor) || null;
@@ -8749,7 +8785,7 @@ async function viewTasks(preselectKey) {
     // under its name.
     const saved = savedFolder();
     const into = saved ? (state.filtered || (state.filtered = [])) : state.tasks;
-    const q = "/api/v1/tasks?before=" + encodeURIComponent(state.nextCursor) +
+    const q = "/api/v1/tasks?content=1&before=" + encodeURIComponent(state.nextCursor) +
       (saved ? "&folder=" + encodeURIComponent(saved.id) : "");
     try {
       const page = await api("GET", q);
@@ -8831,7 +8867,7 @@ async function viewTasks(preselectKey) {
     const saved = savedFolder();
     if (!saved) { state.filtered = null; renderAll(); return; }
     try {
-      const page = await api("GET", "/api/v1/tasks?folder=" + encodeURIComponent(saved.id) +
+      const page = await api("GET", "/api/v1/tasks?content=1&folder=" + encodeURIComponent(saved.id) +
         (authOn || !state.me ? "" : "&me=" + encodeURIComponent(state.me)));
       state.filtered = (page && page.items) || [];
       state.truncated = !!(page && page.truncated);

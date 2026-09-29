@@ -6408,6 +6408,8 @@ button.im-problem:hover { background: var(--accent-soft); }
   color: var(--muted); font-variant-numeric: tabular-nums; flex: 0 0 auto;
 }
 .tasks-item.selected .tasks-item-id { color: var(--accent); }
+/* When the task was opened: after the key, before the holder. */
+.tasks-item-opened { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; flex: 0 0 auto; white-space: nowrap; }
 
 /* ---------- The folder editor ---------- */
 /* Wider than the stock modal: a condition is four controls on one line, and

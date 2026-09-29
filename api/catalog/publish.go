@@ -355,6 +355,16 @@ func checkItems(in Input, add func(Problem)) {
 			// A catalogue that can only grant is not a lifecycle.
 			add(Problem{Item: it.ID, Message: "no deprovision process bound"})
 		}
+		// The orchestration that works an order is never the process of a position
+		// in it. Bound as one, it starts itself for that position, the new copy asks
+		// what may start and starts the same position again, and every round adds
+		// another: one installation grew to hundreds of orchestrations and their
+		// provisioning tasks per minute before anybody could see why.
+		if it.ProvisionProcess == FulfilmentProcess || it.DeprovisionProcess == FulfilmentProcess {
+			add(Problem{Item: it.ID, Message: "is bound to " + FulfilmentProcess + ", the process " +
+				"that works the order itself; it would start itself for this position, again " +
+				"and again, without end"})
+		}
 		switch it.Approval.Kind {
 		case KindFixed, KindRole:
 			if it.Approval.Ref == "" {
