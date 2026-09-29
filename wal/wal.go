@@ -199,6 +199,20 @@ func Open(opts Options) (*Log, error) {
 		f.Close()
 		return nil, err
 	}
+	if validEnd < segmentHeaderSize {
+		// The header write itself was cut short, so the segment holds nothing and is
+		// now empty. A batch written into it as it stands would have no header in
+		// front of it, and the next start would read the file as the version-1
+		// format and hand back each batch — framing and all — as one record. So the
+		// header goes back first. It becomes durable with the next batch's fsync, as
+		// a fresh segment's does; a crash before then leaves a torn header again,
+		// which this same path repairs.
+		if err := writeSegmentHeader(f); err != nil {
+			f.Close()
+			return nil, err
+		}
+		validEnd = segmentHeaderSize
+	}
 	l.active = f
 	l.activeSize = validEnd
 	l.segSeq = seq
@@ -238,8 +252,9 @@ func isBatchFramed(path string) (bool, error) {
 	if herr != nil {
 		return false, fmt.Errorf("wal: %s: %w", filepath.Base(path), herr)
 	}
-	// A segment whose header was cut short is still ours: it holds nothing, and the
-	// truncation below trims it back to empty so writing can continue in it.
+	// A segment whose header was cut short is still ours: it holds nothing, and Open
+	// trims it back to empty and writes the header again so writing can continue in
+	// it.
 	return batched || torn, nil
 }
 
@@ -380,13 +395,7 @@ func (l *Log) openNewSegment(seq uint64) error {
 	if err != nil {
 		return err
 	}
-	// The header names the format, so a reader never has to guess how to parse
-	// what follows — and an older file, which has no header, is recognised as
-	// older rather than misread as a batch of nonsense.
-	var hdr [segmentHeaderSize]byte
-	copy(hdr[:], segmentMagic[:])
-	binary.LittleEndian.PutUint32(hdr[len(segmentMagic):], segmentVersion)
-	if _, err := f.Write(hdr[:]); err != nil {
+	if err := writeSegmentHeader(f); err != nil {
 		f.Close()
 		return err
 	}
@@ -395,6 +404,18 @@ func (l *Log) openNewSegment(seq uint64) error {
 	l.segSeq = seq
 	// fsync the directory so the new segment's existence survives a crash.
 	return l.syncDir()
+}
+
+// writeSegmentHeader writes the preamble every segment this build writes starts
+// with. The header names the format, so a reader never has to guess how to parse
+// what follows — and an older file, which has no header, is recognised as older
+// rather than misread as a batch of nonsense.
+func writeSegmentHeader(f *os.File) error {
+	var hdr [segmentHeaderSize]byte
+	copy(hdr[:], segmentMagic[:])
+	binary.LittleEndian.PutUint32(hdr[len(segmentMagic):], segmentVersion)
+	_, err := f.Write(hdr[:])
+	return err
 }
 
 func (l *Log) syncDir() error {
