@@ -160,6 +160,37 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Atlas can restart on Windows.** Every start that found a log in the data
+  directory stopped with `truncate atlas-data\wal\0000000000000000.wal: Access is
+  denied.` The log opened its newest segment append-only, and on Windows such a handle
+  lacks the right to write data, which trimming the file needs — even to its own
+  length, as every start does. Segments are now opened for reading and writing and
+  positioned explicitly; the log is their only writer, so the append flag guaranteed
+  nothing. The directory fsync behind a new segment, a checkpoint and every design-time
+  save opened the directory read-only, and Windows documents flushing as needing write
+  access, so there it now opens the directory with write access. Other platforms behave
+  as before.
+
+- **On Windows, a record being read no longer blocks deleting or saving it.** The
+  design-time stores (projects, drafts, forms, workers, settings and the rest) are read
+  off the run loop while the writer on it deletes and replaces records. On Windows a
+  file open for reading could not be deleted or renamed over, so a delete or a save that
+  met a concurrent read — a login listing the users, say — failed with "The process
+  cannot access the file because it is being used by another process". Their reads now
+  open the file with delete sharing, as every open already behaves on Linux and macOS,
+  and a save renames the finished file over the record with POSIX semantics, the one
+  rename Windows lets replace a file somebody is reading.
+  The same new Windows test run found that a file in place of the checkpoint directory
+  read there as "no checkpoints" instead of as an error; it is now an error everywhere.
+
+- **A log segment whose header a crash cut short gets its header back.** A crash in the
+  middle of writing the 16-byte header of a new segment left a file that the next start
+  rightly accepted as empty and continued writing into — but without writing the header
+  again. The start after that read the segment as the headerless version-1 format and
+  replayed each batch, framing and entry kinds included, as a single garbled record.
+  Open now writes the header again before anything else lands in such a segment. A
+  segment already damaged this way is not repaired by this change.
+
 - **A job failed back with retries left wakes the workers waiting for it.** A worker
   that fails a job with retries left and no backoff gives it straight back to the
   queue, but a second worker already long-polling that job type was not told: it slept

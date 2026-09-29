@@ -92,3 +92,37 @@ func TestSyncDirError(t *testing.T) {
 		t.Fatal("syncDir of a missing directory: got nil error, want an open error")
 	}
 }
+
+// failingFile is an active segment that fails the one operation it is told to.
+type failingFile struct {
+	truncate, seek, write error
+}
+
+func (f failingFile) Truncate(int64) error           { return f.truncate }
+func (f failingFile) Seek(int64, int) (int64, error) { return 0, f.seek }
+func (f failingFile) Write(p []byte) (int, error) {
+	if f.write != nil {
+		return 0, f.write
+	}
+	return len(p), nil
+}
+
+// TestResumeAtStopsOnEachFailure: each step that readies the active segment — drop
+// the torn tail, put the offset at the end, write back a header a crash cut short —
+// has to stop Open when it fails. Carrying on past any of them writes the next batch
+// after garbage, at the wrong offset, or with no header in front of it.
+func TestResumeAtStopsOnEachFailure(t *testing.T) {
+	boom := errors.New("boom")
+	for name, f := range map[string]failingFile{
+		"truncate":       {truncate: boom},
+		"seek":           {seek: boom},
+		"header rewrite": {write: boom},
+	} {
+		t.Run(name, func(t *testing.T) {
+			// validEnd 0 is a header cut short, so every step is taken.
+			if _, err := resumeAt(f, 0); !errors.Is(err, boom) {
+				t.Fatalf("resumeAt = %v, want %v", err, boom)
+			}
+		})
+	}
+}

@@ -292,62 +292,47 @@
       }
     },
     {
-      "id": "a-job-failed-back-with-retries-left-wakes-the-workers-waitin",
+      "id": "atlas-can-restart-on-windows",
       "version": "Unreleased",
       "date": null,
       "category": "Fixed",
       "title": {
-        "en": "A job failed with retries left reaches a waiting worker at once",
-        "de": "Ein Job mit verbleibenden Wiederholungen erreicht wartende Worker sofort"
+        "en": "Atlas can restart on Windows",
+        "de": "Atlas lässt sich unter Windows neu starten"
       },
       "summary": {
-        "en": "When a worker fails a job that still has retries and no backoff, the job goes straight back to the queue. A second worker already waiting for work of that type was not told, and slept out its whole wait while the job sat there. It is woken now, the same way it already was for a new job, an elapsed backoff or lease, and a resolved incident. A failure with a backoff still wakes it when the backoff elapses, and a job without retries still waits for an operator.",
-        "de": "Meldet ein Worker den Fehlschlag eines Jobs, der noch Wiederholungen und keine Wartezeit hat, geht der Job sofort in die Warteschlange zurück. Ein zweiter Worker, der bereits auf Arbeit dieses Typs wartete, erfuhr davon nichts und wartete seine ganze Wartezeit ab, während der Job bereitlag. Er wird jetzt geweckt, so wie bereits bei einem neuen Job, einer abgelaufenen Wartezeit oder Lease und einem gelösten Incident. Ein Fehlschlag mit Wartezeit weckt ihn weiterhin erst nach deren Ablauf, und ein Job ohne Wiederholungen wartet weiterhin auf einen Operator."
+        "en": "On Windows, every start after the first stopped with \"truncate atlas-data\\wal\\0000000000000000.wal: Access is denied.\" The log opened its newest file in a mode that may only append, and on Windows that mode may not shorten the file, which every start does. The log now opens its files for reading and writing, and the data directory is flushed through a handle Windows accepts. Nothing changes on Linux or macOS.",
+        "de": "Unter Windows brach jeder Start nach dem ersten mit «truncate atlas-data\\wal\\0000000000000000.wal: Access is denied.» ab. Das Log öffnete seine neueste Datei in einem Modus, der nur anhängen darf, und unter Windows darf dieser Modus die Datei nicht kürzen, was jeder Start tut. Das Log öffnet seine Dateien jetzt zum Lesen und Schreiben, und das Datenverzeichnis wird über ein Handle auf den Datenträger geschrieben, das Windows dafür akzeptiert. Unter Linux und macOS ändert sich nichts."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       },
       "tags": [
-        "Workers",
+        "Operations",
         "Engine"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the workers",
-          "de": "Worker öffnen"
-        },
-        "route": "#/console/workers"
-      }
+      ]
     },
     {
-      "id": "restarting-a-supervised-worker-is-never-quietly-ignored",
+      "id": "on-windows-a-record-being-read-no-longer-blocks-deleting-or-",
       "version": "Unreleased",
       "date": null,
       "category": "Fixed",
       "title": {
-        "en": "Restarting a worker always restarts it",
-        "de": "Ein Worker-Neustart startet den Worker immer neu"
+        "en": "On Windows, deleting or saving no longer collides with a read",
+        "de": "Unter Windows kollidiert Löschen oder Speichern nicht mehr mit einem Lesezugriff"
       },
       "summary": {
-        "en": "A restart asked for while a supervised worker was still running, or in the moment after it crashed, could be missed: the worker then waited out its full backoff, up to 30 seconds, before starting again, and a worker with nothing to serve stayed paused until Restart was pressed a second time. The same restart happens automatically when you configure a worker's kind in the Console, so a newly configured mail worker could stay asleep. A restart is now never missed, whenever it is asked for.",
-        "de": "Ein Neustart, der angefordert wurde, während ein überwachter Worker noch lief oder kurz nachdem er abgestürzt war, konnte verloren gehen: Der Worker wartete dann seine volle Wartezeit von bis zu 30 Sekunden ab, bevor er wieder startete, und ein Worker ohne Aufgabe blieb pausiert, bis „Restart“ ein zweites Mal gedrückt wurde. Derselbe Neustart erfolgt automatisch, wenn man in der Console die Art eines Workers konfiguriert; ein neu konfigurierter Mail-Worker konnte deshalb inaktiv bleiben. Ein Neustart geht jetzt nie mehr verloren, egal wann er angefordert wird."
+        "en": "On a Windows server, deleting or saving a project, draft, form or other saved item could fail with \"The process cannot access the file because it is being used by another process\" when another request was reading it at that moment, for example during a login. Reads no longer lock the file against that. Nothing changes on Linux or macOS.",
+        "de": "Auf einem Windows-Server konnte das Löschen oder Speichern eines Projekts, Entwurfs, Formulars oder eines anderen gespeicherten Elements mit «The process cannot access the file because it is being used by another process» fehlschlagen, wenn ein anderer Request es im selben Moment las, etwa bei einer Anmeldung. Lesezugriffe sperren die Datei dafür nicht mehr. Unter Linux und macOS ändert sich nichts."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       },
       "tags": [
-        "Workers",
-        "Console"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the workers",
-          "de": "Worker öffnen"
-        },
-        "route": "#/console/workers"
-      }
+        "Operations"
+      ]
     }
   ]
 }

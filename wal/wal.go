@@ -36,6 +36,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/pblumer/atlas/internal/dirsync"
 )
 
 const (
@@ -166,7 +168,11 @@ func Open(opts Options) (*Log, error) {
 		}
 		return l, nil
 	}
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_APPEND, 0o644)
+	// Not O_APPEND: see openNewSegment. The Truncate in resumeAt is what that flag
+	// breaks on Windows, where it leaves the handle without the right to write
+	// data, which SetEndOfFile needs — so every start that found a segment failed
+	// with "Access is denied".
+	f, err := os.OpenFile(path, os.O_RDWR, 0o644)
 	if err != nil {
 		return nil, err
 	}
@@ -182,16 +188,53 @@ func Open(opts Options) (*Log, error) {
 		f.Close()
 		return nil, err
 	}
-	// Drop any torn bytes past the last durable batch so future appends extend
-	// a clean log. With O_APPEND, writes resume at the truncated end.
-	if err := f.Truncate(validEnd); err != nil {
+	end, err := resumeAt(f, validEnd)
+	if err != nil {
 		f.Close()
 		return nil, err
 	}
 	l.active = f
-	l.activeSize = validEnd
+	l.activeSize = end
 	l.segSeq = seq
 	return l, nil
+}
+
+// activeFile is what resumeAt needs of a segment: an *os.File when the log opens,
+// and in the tests of the paths a healthy file never takes, one that fails on cue.
+type activeFile interface {
+	io.Writer
+	io.Seeker
+	Truncate(size int64) error
+}
+
+// resumeAt readies the active segment for writing after a scan found its last whole
+// batch ending at validEnd, and returns the offset the next batch is written at.
+//
+// Torn bytes past validEnd are dropped, so the next batch extends a clean log rather
+// than following garbage, and the offset is put at the end explicitly: the segment is
+// not open with O_APPEND (see openNewSegment), and the scan left the offset wherever
+// its reader stopped — past validEnd whenever there was a torn tail to drop.
+//
+// A validEnd short of the header means the header write itself was cut short, so the
+// segment holds nothing. A batch written into it as it stands would have no header in
+// front of it, and the next start would read the file as the version-1 format and
+// hand back each batch — framing and all — as one record. So the header goes back
+// first. It becomes durable with the next batch's fsync, as a fresh segment's does; a
+// crash before then leaves a torn header again, which this same path repairs.
+func resumeAt(f activeFile, validEnd int64) (int64, error) {
+	if err := f.Truncate(validEnd); err != nil {
+		return 0, err
+	}
+	if _, err := f.Seek(validEnd, io.SeekStart); err != nil {
+		return 0, err
+	}
+	if validEnd >= segmentHeaderSize {
+		return validEnd, nil
+	}
+	if err := writeSegmentHeader(f); err != nil {
+		return 0, err
+	}
+	return segmentHeaderSize, nil
 }
 
 // isOurTornHead reports whether head is a proper prefix of a version-2 segment
@@ -227,8 +270,9 @@ func isBatchFramed(path string) (bool, error) {
 	if herr != nil {
 		return false, fmt.Errorf("wal: %s: %w", filepath.Base(path), herr)
 	}
-	// A segment whose header was cut short is still ours: it holds nothing, and the
-	// truncation below trims it back to empty so writing can continue in it.
+	// A segment whose header was cut short is still ours: it holds nothing, and
+	// resumeAt trims it back to empty and writes the header again so writing can
+	// continue in it.
 	return batched || torn, nil
 }
 
@@ -360,17 +404,16 @@ func (l *Log) roll() error {
 
 func (l *Log) openNewSegment(seq uint64) error {
 	name := filepath.Join(l.dir, segmentName(seq))
-	f, err := os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o644)
+	// No segment is opened with O_APPEND. The Log is the file's only writer (I3)
+	// and never seeks after positioning, so every write already lands at the end
+	// and the flag guarantees nothing. What it does do is narrow the handle on
+	// Windows to append-only, without the right to write data, which Truncate
+	// needs and FlushFileBuffers is documented to need.
+	f, err := os.OpenFile(name, os.O_RDWR|os.O_CREATE, 0o644)
 	if err != nil {
 		return err
 	}
-	// The header names the format, so a reader never has to guess how to parse
-	// what follows — and an older file, which has no header, is recognised as
-	// older rather than misread as a batch of nonsense.
-	var hdr [segmentHeaderSize]byte
-	copy(hdr[:], segmentMagic[:])
-	binary.LittleEndian.PutUint32(hdr[len(segmentMagic):], segmentVersion)
-	if _, err := f.Write(hdr[:]); err != nil {
+	if err := writeSegmentHeader(f); err != nil {
 		f.Close()
 		return err
 	}
@@ -381,8 +424,20 @@ func (l *Log) openNewSegment(seq uint64) error {
 	return l.syncDir()
 }
 
+// writeSegmentHeader writes the preamble every segment this build writes starts
+// with. The header names the format, so a reader never has to guess how to parse
+// what follows — and an older file, which has no header, is recognised as older
+// rather than misread as a batch of nonsense.
+func writeSegmentHeader(w io.Writer) error {
+	var hdr [segmentHeaderSize]byte
+	copy(hdr[:], segmentMagic[:])
+	binary.LittleEndian.PutUint32(hdr[len(segmentMagic):], segmentVersion)
+	_, err := w.Write(hdr[:])
+	return err
+}
+
 func (l *Log) syncDir() error {
-	d, err := os.Open(l.dir)
+	d, err := dirsync.Open(l.dir)
 	if err != nil {
 		return err
 	}

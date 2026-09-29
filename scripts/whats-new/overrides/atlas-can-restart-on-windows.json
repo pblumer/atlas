@@ -1,0 +1,11 @@
+{
+  "tags": ["Operations", "Engine"],
+  "title": {
+    "en": "Atlas can restart on Windows",
+    "de": "Atlas lässt sich unter Windows neu starten"
+  },
+  "summary": {
+    "en": "On Windows, every start after the first stopped with \"truncate atlas-data\\wal\\0000000000000000.wal: Access is denied.\" The log opened its newest file in a mode that may only append, and on Windows that mode may not shorten the file, which every start does. The log now opens its files for reading and writing, and the data directory is flushed through a handle Windows accepts. Nothing changes on Linux or macOS.",
+    "de": "Unter Windows brach jeder Start nach dem ersten mit «truncate atlas-data\\wal\\0000000000000000.wal: Access is denied.» ab. Das Log öffnete seine neueste Datei in einem Modus, der nur anhängen darf, und unter Windows darf dieser Modus die Datei nicht kürzen, was jeder Start tut. Das Log öffnet seine Dateien jetzt zum Lesen und Schreiben, und das Datenverzeichnis wird über ein Handle auf den Datenträger geschrieben, das Windows dafür akzeptiert. Unter Linux und macOS ändert sich nichts."
+  }
+}
