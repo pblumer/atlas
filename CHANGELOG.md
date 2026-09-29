@@ -14,6 +14,19 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The handbook teaches monitoring an Atlas installation.** Metrics, alerting, event
+  export, retention and backup were all in the product (ADR-0142, ADR-0114, ADR-0115,
+  ADR-0107/0109) and the operations chapter stopped at the single incident. A new
+  subsection «Überwachen» / «Monitoring» carries the mechanics in German and English:
+  the `/metrics` Prometheus exposition and its load-bearing series
+  (`atlas_open_incidents` and the rest); that Atlas raises no alert on its own, so you
+  alert externally on those metrics and the logs; the OpenSearch event exporter;
+  export-gated history retention; and design-time backup versus the full-instance
+  snapshot. It also corrects a stale line: since ADR-0198 `/metrics` sits behind
+  authentication and a `metrics`-scoped token, no longer open like `/healthz`. Every
+  call was run against a live instance first. Its route table is held to the real routes
+  and their roles by `api/monitorhandbook_internal_test.go`.
+
 - **The handbook teaches writing your own worker over the Job API.** A service task
   whose job type no built-in worker handles waits for a worker you write, on any host,
   holding an API token of scope `worker` — and the handbook covered the built-in
