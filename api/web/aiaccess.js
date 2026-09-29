@@ -80,7 +80,7 @@ function originNotice(disc) {
     <code>${esc(disc.issuer)}</code></b>, not the <code>${esc(location.origin)}</code>
     you are using. A hosted connector uses the published one, so that has to be an
     address it can actually reach. If the published address is right and you are simply
-    coming in by another route, nothing is wrong. If it is not, Atlas terminates no TLS
+    coming in by another route, nothing is wrong. If it is not, atlas terminates no TLS
     and cannot work this out behind a proxy — tell it, with
     <code>--external-url</code> (or <code>ATLAS_EXTERNAL_URL</code>). Everything below
     uses the published address either way, so you see what a connector would see.</div>`;
@@ -183,7 +183,7 @@ export async function viewAIAccess({ api, toast, view, isSuperseded }) {
               <p class="muted" style="margin-top:-4px">The application shows you this —
               its dialog may call it <i>Callback URL</i> or <i>Redirect URI</i>. It must
               match character for character: it is where the authorization travels back,
-              so Atlas matches it whole and never by prefix. <code>https</code> is
+              so atlas matches it whole and never by prefix. <code>https</code> is
               required unless it points at this machine.</p>
             </div>
           </div>
@@ -192,7 +192,7 @@ export async function viewAIAccess({ api, toast, view, isSuperseded }) {
           <div class="step-n">2</div>
           <div class="step-body">
             <label class="step-title">Create the credentials</label>
-            <p class="muted">The secret is shown once, here, and never again — Atlas
+            <p class="muted">The secret is shown once, here, and never again — atlas
             stores only its fingerprint.</p>
             <button class="btn" type="submit">Create</button>
           </div>
@@ -234,7 +234,7 @@ export async function viewAIAccess({ api, toast, view, isSuperseded }) {
   view.innerHTML = `<div id="ai-access">
     <div class="card">
       <h1>AI access</h1>
-      <p class="muted">An AI assistant reaches Atlas through its Model Context Protocol
+      <p class="muted">An AI assistant reaches atlas through its Model Context Protocol
       tools — deploying, starting and inspecting processes — and it does so <b>as the
       person who approved it</b>. Nothing here grants an application anything on its
       own: it may only ask, and every approval is one person's, revocable by them.</p>

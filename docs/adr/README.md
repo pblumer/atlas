@@ -513,6 +513,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0425](0425-a-product-lifecycle-is-one-process-with-message-triggers.md) | A product's lifecycle is one process, and each operation is a message start it is triggered at | Accepted | Partial |
 | [0426](0426-an-untriggered-create-never-seeds-several-start-events.md) | An untriggered create never seeds several start events | Accepted | Landed |
 | [0427](0427-converting-a-product-to-a-lifecycle-process.md) | Converting a product to a lifecycle process keeps the old processes alive until nothing needs them | Accepted | Landed |
+| [0428](0428-a-product-lifecycle-may-run-as-one-instance-per-position.md) | A product lifecycle may run as one instance per position, and its later operations are delivered to that instance | Proposed | Not started |
 
 ## The two states of a record
 

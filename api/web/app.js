@@ -187,7 +187,7 @@ function updateAccount() {
     btn.title = label;
     if (menu) menu.innerHTML =
       `<div class="mlabel">Signed in as <b>${esc(AUTH.user.username)}</b></div>` +
-      `<button type="button" data-act="logout" title="Sign out of Atlas">Log out</button>`;
+      `<button type="button" data-act="logout" title="Sign out of atlas">Log out</button>`;
   } else {
     // Nobody is signed in — which is two different things. With enforcement off the
     // server is open and there is nothing to sign in to; with it on, this is the
@@ -264,7 +264,7 @@ function viewLogin() {
   view.innerHTML = `
     <div class="card" style="max-width:380px; margin:8vh auto">
       <h1>Sign in</h1>
-      <p class="muted">This Atlas instance requires you to sign in.</p>
+      <p class="muted">This atlas instance requires you to sign in.</p>
       <p id="sso-error" class="muted err" hidden>Signing in with your identity provider did not work. Try again, or ask an administrator to check the server log.</p>
       <div id="sso-providers" hidden></div>
       <form id="login-form">
@@ -724,7 +724,7 @@ function sqlWorkerTypeDesc(product, envPrefix, placeholder, binding) {
     `Values reach it as bound parameters (${placeholder}). ${binding} ` +
     `A query carries a row cap (1000 by default) and exceeding it fails the task rather than truncating, because a short result set is a wrong business answer and a process that branches on the row count would branch on it confidently. ` +
     `Configure each database below: the whole connection string is the credential, sealed into the vault. ` +
-    `Worker-only \u2014 the engine never holds a database credential \u2014 so a SQL task needs a worker, which Atlas supervises for you. ` +
+    `Worker-only \u2014 the engine never holds a database credential \u2014 so a SQL task needs a worker, which atlas supervises for you. ` +
     `Or a mockup: the Databases switch on Console \u203a Workers makes every database worker answer from prepared answers in its own memory, and a worker you run yourself reads the same decision from ATLAS_${envPrefix}_MOCK — either way a model that reads or writes a database runs end to end before anyone has a connection string.`;
 }
 
@@ -781,7 +781,7 @@ const WORKER_TYPES = [
   },
   {
     id: "agent", name: "AI agent model", kind: "AI",
-    desc: "The model an agent-driven ad-hoc subprocess asks which of its tools to run next. What an agent may reach is the diagram: the contained activities no sequence flow leads to are its tools, named by their element ids, described by the modeller\u0027s own documentation. A round is one job and a tool call one activity, so the loop is durable and replayable \u2014 and it never runs in the engine, because one model call can take minutes and hang. Two wire formats: Messages (Anthropic, and OpenRouter\u0027s Messages-compatible endpoint) and Chat Completions (OpenAI, and anything OpenAI-compatible). Configure each model below: its API key lives in the vault and never enters a model, and the model named here is the default \u2014 a task or a container may name its own, so one Worker serves a cheap classification and a strong piece of advice. The same configuration also serves the AI Task: a service task that asks a model once and puts the answer in a variable, with no tools, because a step with tools is the container. Worker-only, and Atlas supervises the worker for it.",
+    desc: "The model an agent-driven ad-hoc subprocess asks which of its tools to run next. What an agent may reach is the diagram: the contained activities no sequence flow leads to are its tools, named by their element ids, described by the modeller\u0027s own documentation. A round is one job and a tool call one activity, so the loop is durable and replayable \u2014 and it never runs in the engine, because one model call can take minutes and hang. Two wire formats: Messages (Anthropic, and OpenRouter\u0027s Messages-compatible endpoint) and Chat Completions (OpenAI, and anything OpenAI-compatible). Configure each model below: its API key lives in the vault and never enters a model, and the model named here is the default \u2014 a task or a container may name its own, so one Worker serves a cheap classification and a strong piece of advice. The same configuration also serves the AI Task: a service task that asks a model once and puts the answer in a variable, with no tools, because a step with tools is the container. Worker-only, and atlas supervises the worker for it.",
     refs: "ADR-0117 \u00b7 ADR-0253 \u00b7 ADR-0254 \u00b7 ADR-0256", status: "active", statusLabel: "configured below",
   },
   {
@@ -1028,7 +1028,7 @@ function handbookHelp(path) {
   // falls through to the Console's own chapter.
   if (path.startsWith("#/console/workers")) return H("formulare", "Forms & workers");
   if (path.startsWith("#/console")) return H("schnellstart", "Quick start");
-  return H("willkommen", "Welcome to Atlas");
+  return H("willkommen", "Welcome to atlas");
 }
 
 // The help menu is built once (async, after /info resolves) but its contextual
@@ -1140,7 +1140,7 @@ function paintApps() {
 
 function setChrome(appId, route) {
   document.getElementById("app-name").textContent =
-    (APPS.find((a) => a.id === appId) || {}).name || "Atlas";
+    (APPS.find((a) => a.id === appId) || {}).name || "atlas";
   paintApps();
   const topnav = document.getElementById("topnav");
   topnav.innerHTML = (TOPNAV[appId] || []).filter((t) => mayUse(t.role)).map((t) =>
@@ -1201,7 +1201,7 @@ function setChrome(appId, route) {
 // step-by-step tutorial, a link to the PR/ADR, and an optional "Try it" deep link.
 const WN_STRINGS = {
   en: { title: "What's New", latest: "New", tutorial: "Try it out", more: "Show older", less: "Show fewer", empty: "" },
-  de: { title: "Neu in Atlas", latest: "Neu", tutorial: "Ausprobieren", more: "Ältere anzeigen", less: "Weniger anzeigen", empty: "" },
+  de: { title: "Neu in atlas", latest: "Neu", tutorial: "Ausprobieren", more: "Ältere anzeigen", less: "Weniger anzeigen", empty: "" },
 };
 // Only these hash-route prefixes are accepted as a "Try it" target, so a bad or
 // hostile route in the data can never point the button somewhere unexpected.
@@ -1318,7 +1318,7 @@ async function viewConsoleDashboard() {
         <span class="mark welcome-mark${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
           hasLogoCached() ? `<img class="mark-img" alt="" src="${esc(LOGO_URL)}" />` : BUILTIN_MARK
         }</span>
-        <h1>Welcome to Atlas</h1>
+        <h1>Welcome to atlas</h1>
       </div>
       <p class="muted">Atlas is a durable, high-throughput BPMN&nbsp;2.x workflow engine that runs
       from a single self-contained binary. This Console manages deployments and shows engine health;
@@ -1384,7 +1384,7 @@ async function viewConsoleEngine() {
   view.innerHTML += `
     <div class="card" id="node-card" style="margin-top:14px">
       <h2>This node</h2>
-      <p class="muted">The identity this server presents to other Atlas servers (ADR-0189). The id is
+      <p class="muted">The identity this server presents to other atlas servers (ADR-0189). The id is
       minted once and survives restarts — it is what a landscape view correlates against, and what an
       architecture model binds to with <code>atlas.runtimeId</code>. The name is for people; the id is
       for machines, and changing the name never changes the id.</p>
@@ -1790,7 +1790,7 @@ function avatarField(u) {
   const src = `/api/v1/users/${encodeURIComponent(u.id)}/avatar`;
   return `<div class="avatar-field" data-uid="${esc(u.id)}" style="border-top:1px solid var(--border); margin-top:14px; padding-top:12px">
     <b>Picture</b>
-    <p class="muted" style="margin:2px 0 8px">Shown beside this person's name wherever Atlas names
+    <p class="muted" style="margin:2px 0 8px">Shown beside this person's name wherever atlas names
       them — a task list, an approval, the shop's recipient picker. PNG or JPEG.
       ${u.avatarSource === "entra"
     ? "This one came from the directory; uploading here replaces it, and the mirror will not put it back."
@@ -2139,7 +2139,7 @@ async function viewConsoleWorkers() {
       operation against a directory in its own memory: no domain controller is touched, and nothing
       in a model changes. It still refuses what Active Directory refuses — creating the same account
       twice, a password over an unencrypted connection, an account that is not there. Switching
-      restarts the worker; Atlas keeps running.</p>
+      restarts the worker; atlas keeps running.</p>
       <label style="display:flex; align-items:center; gap:10px; margin-bottom:10px">
         <input type="checkbox" id="admock-on" ${adMock.enabled ? "checked" : ""}>
         <span>Serve Active Directory tasks against a mockup</span>
@@ -2197,7 +2197,7 @@ async function viewConsoleWorkers() {
       PostgreSQL worker answers statements from prepared answers in its own memory: no database is
       touched, no connection string is needed, and nothing in a model changes. One switch covers all
       three — simulating one product while really writing to another looks like a full mockup run,
-      which is the one thing it must never look like. Switching restarts the workers; Atlas keeps
+      which is the one thing it must never look like. Switching restarts the workers; atlas keeps
       running.</p>
       <label style="display:flex; align-items:center; gap:10px; margin-bottom:10px">
         <input type="checkbox" id="sqlmock-on" ${sqlMock.enabled ? "checked" : ""}>
@@ -2296,7 +2296,7 @@ async function viewConsoleWorkers() {
       <div class="between" style="padding:16px 18px 0"><h1 style="margin:0">Workers</h1></div>
       <h2 style="padding:0 18px; margin:12px 0 4px">Worker catalog</h2>
       <p class="muted" style="padding:0 18px; margin:6px 0 12px">The Worker Types available to
-      this Atlas instance. A <b>Worker Type</b> is a capability; a configured worker below binds
+      this atlas instance. A <b>Worker Type</b> is a capability; a configured worker below binds
       that capability to one concrete target and identity, org-wide and shared across every
       process.</p>
       <table><tbody>${WORKER_TYPES.map(workerTypeRow).join("")}</tbody></table>
@@ -2348,7 +2348,7 @@ async function viewConsoleOrg() {
   const presencePill = (p) => {
     const state = (p && p.state) || "offline";
     if (state === "online") {
-      return `<span class="pill ok" title="Signed in and using Atlas — last action ${esc(ago(p.lastActiveAt))}"><span class="dot"></span>online</span>`;
+      return `<span class="pill ok" title="Signed in and using atlas — last action ${esc(ago(p.lastActiveAt))}"><span class="dot"></span>online</span>`;
     }
     if (state === "idle") {
       return `<span class="pill warn" title="Signed in, but nothing done since ${esc(ago(p.lastActiveAt))}"><span class="dot"></span>idle</span>`;
@@ -3945,7 +3945,7 @@ async function createDmnRef(projectId, reload) {
   } catch (e) {
     const modelRef = window.prompt("Couldn't upload the file (models may be served by a remote temis service).\nReference an existing temis model by name instead:");
     if (!modelRef || !modelRef.trim()) { toast("DMN model not added: " + e.message, "err"); return; }
-    const refName = (window.prompt("Reference name (how it shows in Atlas)", modelRef.trim()) || modelRef).trim();
+    const refName = (window.prompt("Reference name (how it shows in atlas)", modelRef.trim()) || modelRef).trim();
     try {
       await api("POST", "/api/v1/dmnrefs", { name: refName, modelRef: modelRef.trim(), projectId });
       toast(`Added DMN reference "${refName}"`, "ok");
@@ -4123,7 +4123,7 @@ function confirmMIMOverwrite(conflict, fileName) {
     ov.className = "modal-ov";
     ov.innerHTML = `
       <div class="modal" role="dialog" aria-modal="true" aria-label="Import would overwrite" style="max-width:760px">
-        <div class="modal-head"><h2>Already in Atlas</h2></div>
+        <div class="modal-head"><h2>Already in atlas</h2></div>
         <div class="modal-body">
           <p class="muted" style="margin:0 0 10px">Nothing has been imported yet. ${esc(fileName || "The file")} would be saved onto ${conflict.impacts.length === 1 ? "a process id that is" : "process ids that are"} already in use:</p>
           <div style="max-height:52vh; overflow:auto">${conflict.impacts.map(mimImpactCard).join("")}</div>
@@ -4475,7 +4475,7 @@ function toggleProvisionClio(row, workerId, workerName) {
   const panel = document.createElement("tr");
   panel.className = "provision-row";
   panel.innerHTML = `<td colspan="3" style="background:var(--surface); padding:12px 18px">
-    <div class="muted" style="margin-bottom:8px">Provision access — Atlas mints a scoped clio key with your admin token and stores it as this worker's credential. The admin token is used once and never stored.</div>
+    <div class="muted" style="margin-bottom:8px">Provision access — atlas mints a scoped clio key with your admin token and stores it as this worker's credential. The admin token is used once and never stored.</div>
     <form id="prov-form" style="display:grid;gap:8px;grid-template-columns:1fr 1fr auto;align-items:end">
       <label class="field" style="margin:0"><span>clio admin token</span><input name="adminToken" type="password" autocomplete="off" placeholder="kid.secret (admin)" required/></label>
       <label class="field" style="margin:0"><span>Read subject</span><input name="subject" placeholder="/employees" required/></label>
@@ -4609,12 +4609,12 @@ async function toggleInboundSubs(row, workerId, kind) {
   const isGoogle = kind === "googlesheets";
   const isDiscord = kind === "discord";
   const what = isDiscord
-    ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the messages posted in a Discord channel are published as Atlas messages, so a message starts a process. Atlas polls every 15 seconds by default; nothing has to reach this server from the internet. <b>The bot needs the Message Content intent</b> — without it Discord returns every message with an empty <code>content</code>, no error and no warning, and a correlation key over it quietly matches nothing. Enable it under <i>Developer Portal &rsaquo; your application &rsaquo; Bot &rsaquo; Privileged Gateway Intents</i>. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a channel the Worker also posts into has no natural end. Empty uses 60.</div>`
+    ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the messages posted in a Discord channel are published as atlas messages, so a message starts a process. Atlas polls every 15 seconds by default; nothing has to reach this server from the internet. <b>The bot needs the Message Content intent</b> — without it Discord returns every message with an empty <code>content</code>, no error and no warning, and a correlation key over it quietly matches nothing. Enable it under <i>Developer Portal &rsaquo; your application &rsaquo; Bot &rsaquo; Privileged Gateway Intents</i>. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a channel the Worker also posts into has no natural end. Empty uses 60.</div>`
     : isGoogle
-    ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — a spreadsheet's new rows, or the files put into a Drive folder, are published as Atlas messages so each one starts a process. Atlas polls once a minute by default; nothing has to reach this server from the internet. <b>A row watch follows the sheet's own row numbers</b>, so it sees rows appended at the end — which is what a form response sheet does. Deleting rows from the watched range renumbers the tail, and a later row landing on a number already delivered is not delivered again. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a watch fed by what its own processes write has no natural end. Empty uses 60.</div>`
+    ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — a spreadsheet's new rows, or the files put into a Drive folder, are published as atlas messages so each one starts a process. Atlas polls once a minute by default; nothing has to reach this server from the internet. <b>A row watch follows the sheet's own row numbers</b>, so it sees rows appended at the end — which is what a form response sheet does. Deleting rows from the watched range renumbers the tail, and a later row landing on a number already delivered is not delivered again. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a watch fed by what its own processes write has no natural end. Empty uses 60.</div>`
     : isJira
-    ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the issues a JQL matches are published as Atlas messages, so a new ticket starts a process (ADR-0214). Atlas polls; nothing has to reach this server from the internet. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`
-    : `<div class="muted" style="margin-bottom:8px">Inbound event subscriptions — a watched clio subject's events are published as Atlas messages (ADR-0075). <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`;
+    ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the issues a JQL matches are published as atlas messages, so a new ticket starts a process (ADR-0214). Atlas polls; nothing has to reach this server from the internet. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`
+    : `<div class="muted" style="margin-bottom:8px">Inbound event subscriptions — a watched clio subject's events are published as atlas messages (ADR-0075). <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`;
   const source = isDiscord
     ? `<label class="field" style="margin:0"><span>Channel</span><input name="channelId" placeholder="123456789012345678" required/></label>`
     : isGoogle
@@ -5156,7 +5156,7 @@ async function moveDmnRef(id, projectId, reload) {
 // handle rather than re-uploading, so the model is *recovered* rather than copied —
 // a re-upload would file a second model under a suffixed handle (ADR-0222).
 async function referenceStoredModel(handle, suggested, reload) {
-  const name = (window.prompt("Reference name (how it shows in Atlas)", suggested || handle) || "").trim();
+  const name = (window.prompt("Reference name (how it shows in atlas)", suggested || handle) || "").trim();
   if (!name) return;
   try {
     await api("POST", "/api/v1/dmnrefs", { name, modelRef: handle, projectId: "" });
@@ -6513,7 +6513,7 @@ async function viewWorkers() {
           </tr>`;
         }).join("")}</tbody>
       </table>` : `<p class="empty">No job types yet &mdash; deploy a process with a service task.</p>`}
-      <p class="wk-note">An <b>in-process</b> type is worked by Atlas itself and cannot be leased from
+      <p class="wk-note">An <b>in-process</b> type is worked by atlas itself and cannot be leased from
         outside; relocating it to a worker means turning that handler off.</p>
       </details>`;
 
@@ -6546,7 +6546,7 @@ async function viewWorkers() {
         and name the job type it serves.</p>`}
       <p class="wk-note">Counters are since this server started and are not restored on restart.
         <b>In flight</b> is what a Worker Instance holds a lease on right now. <b>Workers held</b> is
-        what an instance reports it has credentials for &mdash; only it knows, since Atlas holds none
+        what an instance reports it has credentials for &mdash; only it knows, since atlas holds none
         for a Worker Type it has handed over. Open an instance\u2019s name for the jobs it ran.</p>`;
 
     // Opening a worker asks for its recent jobs. They are deliberately not part of the
@@ -6808,7 +6808,7 @@ async function viewWorkers() {
               || `<span class="muted">&mdash;</span>`}</td>
           </tr>`).join("")}</tbody>
         </table>
-        <p class="wk-note">These models name a worker, and neither Atlas nor any Worker Instance seen
+        <p class="wk-note">These models name a worker, and neither atlas nor any Worker Instance seen
           this run holds a configuration for it &mdash; so their tasks will park. Configure the name on
           an instance that serves this Worker Type, or point the model at one that is configured. An
           instance that has not polled yet reports nothing, so a name may clear itself on its first poll. Only versions that
@@ -9112,7 +9112,7 @@ function viewComingSoon(appId) {
   view.innerHTML = `
     <div class="card empty">
       <h1>${esc(name)}</h1>
-      <p class="muted">${esc(name)} is on the Atlas roadmap and isn't part of this build yet.</p>
+      <p class="muted">${esc(name)} is on the atlas roadmap and isn't part of this build yet.</p>
       <a class="btn ghost" href="#/console">Back to Console</a>
     </div>`;
 }
@@ -9187,7 +9187,7 @@ async function viewInfoModels() {
       </div>
       ${writable.length ? `<div style="display:flex; gap:8px; align-items:center">
         <button class="btn ghost" data-act="import-im"
-          title="Read a class diagram somebody already drew: Atlas's own JSON, or the XMI a UML tool exports">Import…</button>
+          title="Read a class diagram somebody already drew: atlas's own JSON, or the XMI a UML tool exports">Import…</button>
         <button class="btn ghost" data-act="derived-im"
           title="Read what an application's processes already imply, without modelling anything">As built…</button>
         <button class="btn" data-act="new-im">Create new</button>
@@ -9856,7 +9856,7 @@ async function viewDmnViewer(refId) {
     } catch { /* keep the generic "← Project" label, which still links correctly */ }
   };
   const editBtn = ref && ref.modelRef
-    ? `<button class="btn" id="dmn-edit" title="Edit this decision in Atlas">Edit</button>` : "";
+    ? `<button class="btn" id="dmn-edit" title="Edit this decision in atlas">Edit</button>` : "";
   // Edit navigates to the decision editor's own page; coming back re-renders this
   // viewer from the stored model. Also resolves the back link's project name.
   const wireEdit = () => {
@@ -9880,7 +9880,7 @@ async function viewDmnViewer(refId) {
       <div class="row">${editBtn}</div>
     </div>
     <div id="dmn-canvas" style="overflow:auto;border:1px solid #e5e7eb;border-radius:10px;background:var(--diagram-bg);padding:8px">${renderDrgSvg(g)}</div>
-    <p class="muted" style="font-size:12px">This decision can be edited in Atlas (<b>Edit</b>) or used from a business rule task through the Modeler's decision picker.</p></div>`;
+    <p class="muted" style="font-size:12px">This decision can be edited in atlas (<b>Edit</b>) or used from a business rule task through the Modeler's decision picker.</p></div>`;
   wireEdit();
 }
 

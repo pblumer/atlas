@@ -41,7 +41,7 @@ export const SECRET_SHAPES = {
     what: "a Microsoft Graph OAuth credential bundle (JSON)",
     oauth: "microsoft",
     skeleton: { method: "clientCredentials", tenantId: "…", clientId: "…", clientSecret: "…" },
-    note: "The tenant id is what Atlas builds the token endpoint from.",
+    note: "The tenant id is what atlas builds the token endpoint from.",
   },
   "sharepoint:": {
     what: "a Microsoft Graph OAuth credential bundle (JSON)",

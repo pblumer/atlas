@@ -87,7 +87,7 @@
       <code>userTask</code> mit <b>einem</b> Formular (<code>reise-antrag</code>).
       Diese Seite lädt dieses eine Schema und teilt es <b>im Browser</b> in Seiten
       auf. Welche Seite als Nächstes kommt, entscheidet der <b>Client</b> — nicht
-      der Prozess. Am Ende geht <b>eine</b> Abgabe an Atlas.</p>
+      der Prozess. Am Ende geht <b>eine</b> Abgabe an atlas.</p>
     <div class="callout">Der Kontrast zu Fall B steht im HTTP-Log unten:
       <b>ein</b> <code>start</code> · <b>ein</b> <code>complete</code>. Fall B
       (verschiedene User-Tasks) hätte hier vier <code>complete</code>.</div>
@@ -97,7 +97,7 @@
   <section class="card" id="stage">
     <h2><span>Reiseantrag</span><span class="hint" id="instHint">—</span></h2>
     <div id="body">
-      <p class="muted">Starte einen neuen Antrag — Atlas legt eine echte Instanz an und parkt auf
+      <p class="muted">Starte einen neuen Antrag — atlas legt eine echte Instanz an und parkt auf
         dem einen Erfassungs-Task. Diese Seite führt dich durch das Formular; abgeschickt wird
         erst am Ende, in einem Rutsch.</p>
       <div class="actions" style="border-top:0;padding-top:4px">
@@ -108,12 +108,12 @@
   </section>
 
   <section class="card">
-    <h2><span>HTTP-Aufrufe an Atlas</span><span class="hint">ein start, ein complete</span></h2>
+    <h2><span>HTTP-Aufrufe an atlas</span><span class="hint">ein start, ein complete</span></h2>
     <div class="log" id="log"><div class="s2">Wartet auf den ersten Aufruf …</div></div>
   </section>
 
   <footer>
-    Wird von Atlas unter <code>/reisebuchung-einschritt-kunde.html</code> ausgeliefert · Prozess:
+    Wird von atlas unter <code>/reisebuchung-einschritt-kunde.html</code> ausgeliefert · Prozess:
     <code>examples/reisebuchung/fall-a/reise-antrag-einschritt.bpmn</code> · Basis-URL:
     <input id="base" value="/api/v1" style="width:150px;font-family:var(--mono);font-size:11px" title="Same-origin per Default."/>
   </footer>
@@ -141,7 +141,7 @@ const PAGES = [
   { title:"Begleitung Minderjähriger", keys:["vertreterName","einverstaendnis"], show:d=>isMinor(d),
     why:"Diese Seite blendet der <b>Client</b> nur ein, wenn das Geburtsdatum auf eine minderjährige Person zeigt." },
   { title:"Bestätigung", keys:["buchungBestaetigt"],                     show:()=>true,
-    why:"Erst der Klick hier löst die <b>eine</b> complete an Atlas aus." },
+    why:"Erst der Klick hier löst die <b>eine</b> complete an atlas aus." },
 ];
 
 // ————— fetch wrapper + call log —————

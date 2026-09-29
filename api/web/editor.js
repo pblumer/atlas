@@ -812,7 +812,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
           <button type="button" data-sev="error" title="Show only errors">Errors</button>
           <button type="button" data-sev="warning" title="Show only warnings">Warnings</button>
         </span>
-        <span class="muted" id="prob-version">Checked against the Atlas compiler</span>
+        <span class="muted" id="prob-version">Checked against the atlas compiler</span>
         <span class="prob-caret" id="prob-caret" aria-hidden="true">▾</span>
       </div>
     </div>`;
@@ -1248,7 +1248,7 @@ function wireProblems(root, modeler, api, applicationId) {
     // finding quotes that id — avoiding a doubled row for the same element.
     problems = [...server, ...unsupported.filter((u) =>
       !flagged.has(u.element) && !server.some((p) => (p.message || "").includes(`"${u.element}"`)))];
-    if (res.version) versionEl.textContent = `Checked against Atlas ${res.version}`;
+    if (res.version) versionEl.textContent = `Checked against atlas ${res.version}`;
     render();
   };
   const scheduleValidate = () => {
@@ -4115,7 +4115,7 @@ const SERVICE_TASK_KINDS = [
   ],
 },
   {
-    id: "userconnector", name: "User Provisioning", group: "Directory & identity", desc: "Create, set the password of, or disable an Atlas login", icon: "U",
+    id: "userconnector", name: "User Provisioning", group: "Directory & identity", desc: "Create, set the password of, or disable an atlas login", icon: "U",
     // A person mark on a teal tile reads "user account" at a glance. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
     // fill and the white figure strokes.
@@ -4134,7 +4134,7 @@ const SERVICE_TASK_KINDS = [
         ],
       },
       { group: "Account" },
-      { key: "username", label: "Username", placeholder: "=benutzername", fx: true, hint: "The Atlas login to create, update, or disable. May be a FEEL expression (fx)." },
+      { key: "username", label: "Username", placeholder: "=benutzername", fx: true, hint: "The atlas login to create, update, or disable. May be a FEEL expression (fx)." },
       { key: "email", label: "E-mail", placeholder: "=email", fx: true, showIf: (v) => !v.operation || v.operation === "create" },
       { key: "displayName", label: "Display name", placeholder: '=vorname + " " + nachname', fx: true, showIf: (v) => !v.operation || v.operation === "create" },
       {
@@ -4461,7 +4461,7 @@ const PLACEMENT_TAIL = {
       that job type; these kinds keep working and are being moved out of the engine.`,
     "engine-only": `Its work changes this server&rsquo;s own state rather than calling anything out,
       so there is nothing to move onto a worker.`,
-    "worker": `Its jobs wait for a worker process serving this job type — Atlas supervises one for
+    "worker": `Its jobs wait for a worker process serving this job type — atlas supervises one for
       the kinds it offloads by default. That process holds the configured Worker&rsquo;s endpoint and
       credential, so the credential lives where it is used; <b>Workers</b> in the Console shows which
       names are served and which are configured nowhere (ADR-0168).`,
@@ -7069,7 +7069,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               <input type="text" id="f-decisionid" value="${esc(cd.decisionId || "")}" placeholder="pick a decision above" readonly title="Set by the decision picked above — no need to type it"/></label>
             <label class="field"><span>Result variable</span>
               <input type="text" id="f-resultvar" value="${esc(cd.resultVariable || "")}" placeholder="dish"/></label>${bindingField}
-            <p class="muted" style="font-size:12px">Pick a decision to auto-fill its id, inputs and result variable. <b>Latest</b> evaluates the newest deployed version each time the task runs, so a newly deployed version takes effect without redeploying the process. <b>Version</b> evaluates the version you choose, whatever is deployed after it; it is an Atlas setting, and Camunda ignores it and runs the newest. <b>Deployment</b> evaluates the model deployed together with this process.</p>
+            <p class="muted" style="font-size:12px">Pick a decision to auto-fill its id, inputs and result variable. <b>Latest</b> evaluates the newest deployed version each time the task runs, so a newly deployed version takes effect without redeploying the process. <b>Version</b> evaluates the version you choose, whatever is deployed after it; it is an atlas setting, and Camunda ignores it and runs the newest. <b>Deployment</b> evaluates the model deployed together with this process.</p>
             <h3>Failure handling</h3>
             <label class="field"><span>Retries</span>
               <input type="number" id="f-brt-retries" min="1" step="1" value="${esc(cd.retries || "")}" placeholder="3"/></label>
@@ -7425,7 +7425,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     // the diagram claim behavior it doesn't have (ADR-0133).
     if (bo.loopCharacteristics && !html.includes("f-mi-mode")) {
       html += `<h3>Loop</h3>
-        <p class="muted" style="font-size:12px">This element carries a <b>loop marker</b> Atlas does not execute here — it will run <b>once</b>, whatever the icon suggests. Loops run on <b>activities</b>: every task kind, call activities and subprocesses (a message-kind send task is a throw, not an activity). Remove the marker (the wrench icon on the shape) or move the work to one of those.</p>`;
+        <p class="muted" style="font-size:12px">This element carries a <b>loop marker</b> atlas does not execute here — it will run <b>once</b>, whatever the icon suggests. Loops run on <b>activities</b>: every task kind, call activities and subprocesses (a message-kind send task is a throw, not an activity). Remove the marker (the wrench icon on the shape) or move the work to one of those.</p>`;
     }
     body.innerHTML = html;
 
@@ -10642,7 +10642,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         notConfigured: "Instances this server no longer holds are not searchable: no event log is exported. " +
           "Enable the OpenSearch exporter to make purged history findable.",
         refused: "The event log store declined the query, so purged history was not searched. " +
-          "Its credentials here may not carry read access to the index Atlas writes.",
+          "Its credentials here may not carry read access to the index atlas writes.",
         unreachable: "The event log store could not be reached, so purged history was not searched — " +
           "which is not the same as there having been none.",
       }[archiveState] || "";
@@ -12921,7 +12921,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const writtenBy = (h, i) => {
       if (h.producedBy) return `<span class="do-by">${esc(doLabel(h.producedBy))}</span>`;
       if (i === 0) return `<span class="do-by none" title="No element wrote this — it is the value the object was seeded with when the instance was created">seeded</span>`;
-      return `<span class="do-by none" title="This write cannot be attributed: the instance ran before Atlas recorded which element writes a data object, or the definition that element belonged to is gone">unknown</span>`;
+      return `<span class="do-by none" title="This write cannot be attributed: the instance ran before atlas recorded which element writes a data object, or the definition that element belonged to is gone">unknown</span>`;
     };
     const rows = dataObjects.map((d) => {
       const open = !!openTrails[d.name];
@@ -13455,7 +13455,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
 
   // What the out section says about itself on an instance whose log cannot name the
   // writer — so the reader knows why a neighbouring branch's variable may be listed.
-  const LEGACY_OUT_HINT = "This instance ran before Atlas recorded which element wrote " +
+  const LEGACY_OUT_HINT = "This instance ran before atlas recorded which element wrote " +
     "each variable, so this is everything that changed while the element ran — on " +
     "parallel branches that includes the other branch's writes.";
 
