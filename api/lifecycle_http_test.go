@@ -312,3 +312,72 @@ func TestTheTriggerRouteRefusesAnUnreadableBody(t *testing.T) {
 		}
 	}
 }
+
+// TestTheTriggerRouteNamesItsSenderAndRefusesADeactivatedProcess: a caller without
+// an identity is recorded as anonymous, a source narrows the receipt below the
+// caller — so the same trigger id from two sources is two triggers — and a
+// deactivated process answers 409 rather than "published".
+func TestTheTriggerRouteNamesItsSenderAndRefusesADeactivatedProcess(t *testing.T) {
+	ts := newTestServer(t)
+	key := deployXML(t, ts, severalTriggersBPMN)
+	path := "/api/v1/processes/laptop-lifecycle/triggers/laptop.provision"
+	if code, b := doReq(t, ts, http.MethodPost, path, `{"triggerId":"a","source":"hr"}`, "application/json"); code != http.StatusCreated {
+		t.Fatalf("anonymous trigger: %d (%s)", code, b)
+	}
+	if code, b := doReq(t, ts, http.MethodPost, path, `{"triggerId":"a","source":"ticketing"}`, "application/json"); code != http.StatusCreated {
+		t.Fatalf("same id from another source: %d (%s), want a new instance", code, b)
+	}
+	if code, b := doReq(t, ts, http.MethodPut, fmt.Sprintf("/api/v1/processes/%d/active", key), `{"active":false}`, "application/json"); code != http.StatusOK && code != http.StatusNoContent {
+		t.Fatalf("deactivate: %d (%s)", code, b)
+	}
+	if code, b := doReq(t, ts, http.MethodPost, path, `{"triggerId":"b"}`, "application/json"); code != http.StatusConflict {
+		t.Fatalf("deactivated: %d (%s), want 409", code, b)
+	}
+}
+
+// A stand-in for the shipped fixed-approver process: it parks, so the start act's
+// approval branch can be watched without the system bundle's own orchestration.
+const approvalStandIn = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <message id="m" name="approval.never"/>
+  <process id="atlas-genehmigung-fix" isExecutable="true">
+    <startEvent id="s"/>
+    <intermediateCatchEvent id="w"><messageEventDefinition messageRef="m"/></intermediateCatchEvent>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="w"/>
+    <sequenceFlow id="f2" sourceRef="w" targetRef="e"/>
+  </process>
+</definitions>`
+
+// TestTheStartActStartsAnOwedApprovalOnce: a gated position nobody approved starts
+// its approval process, and asking again answers with that instance.
+func TestTheStartActStartsAnOwedApprovalOnce(t *testing.T) {
+	ts, admin, _, cat := aLifecycleOrder(t)
+	if code, b := cReqTyped(t, admin, ts, "POST", "/api/v1/deployments", "application/xml", approvalStandIn); code != http.StatusOK {
+		t.Fatalf("deploy: %d (%s)", code, b)
+	}
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/catalog-products",
+		`{"id":"laptop","homeCatalog":"`+cat+`","state":"active","texts":{"de":"Laptop"},`+
+			`"approval":{"kind":"fixed","ref":"root"},"lifecycleProcess":"laptop-lifecycle",`+
+			`"operations":{"provision":"laptop.provision","deprovision":"laptop.deprovision"}}`,
+	); code != http.StatusOK {
+		t.Fatalf("gate: %d (%s)", code, b)
+	}
+	code, body := cReq(t, admin, ts, "POST", "/api/v1/catalogs/"+cat+"/releases", "")
+	if code != http.StatusCreated {
+		t.Fatalf("publish: %d (%s)", code, body)
+	}
+	code, body = cReq(t, admin, ts, "POST", "/api/v1/orders", `{"releaseId":"`+idOf(t, body)+`","items":["laptop"]}`)
+	if code != http.StatusCreated {
+		t.Fatalf("order: %d (%s)", code, body)
+	}
+	ord := idOf(t, body)
+	var first, again startAnswer
+	code, body = cReq(t, admin, ts, "POST", "/api/v1/orders/"+ord+"/lines/laptop/start", `{}`)
+	if code != http.StatusOK || json.Unmarshal(body, &first) != nil || first.Started != "approval" || first.Already {
+		t.Fatalf("first start: %d (%s), want the approval started", code, body)
+	}
+	code, body = cReq(t, admin, ts, "POST", "/api/v1/orders/"+ord+"/lines/laptop/start", `{}`)
+	if code != http.StatusOK || json.Unmarshal(body, &again) != nil || !again.Already || again.InstanceKey != first.InstanceKey {
+		t.Fatalf("second start: %d (%s), want the same approval instance", code, body)
+	}
+}

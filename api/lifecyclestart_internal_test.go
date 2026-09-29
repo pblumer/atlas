@@ -111,3 +111,25 @@ func TestStartBindingRefusesWhatCannotStart(t *testing.T) {
 func bindingOf(process, message string) catalog.Binding {
 	return catalog.Binding{Process: process, Message: message}
 }
+
+// TestEntryPointsReadTheNewestVersion: what publishing asks of a lifecycle process —
+// its message starts, whether it has a none start, whether it is deployed at all.
+func TestEntryPointsReadTheNewestVersion(t *testing.T) {
+	srv := newServerForErrors(t)
+	look := processLookup{s: srv}
+	if _, _, deployed := look.EntryPoints(" "); deployed {
+		t.Error("a blank id is deployed")
+	}
+	if _, _, deployed := look.EntryPoints("nowhere"); deployed {
+		t.Error("an undeployed id is deployed")
+	}
+	withNone := strings.Replace(twoTriggers, `<endEvent id="AE"/>`,
+		`<startEvent id="N"/><endEvent id="NE"/><sequenceFlow id="f3" sourceRef="N" targetRef="NE"/><endEvent id="AE"/>`, 1)
+	if code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", withNone, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy: %d (%s)", code, body)
+	}
+	msgs, hasNone, deployed := look.EntryPoints("two-triggers")
+	if !deployed || !hasNone || strings.Join(msgs, ",") != "t.a,t.b" {
+		t.Fatalf("EntryPoints = %v none=%v deployed=%v", msgs, hasNone, deployed)
+	}
+}
