@@ -5501,6 +5501,142 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           properties panel asks for a <b>Worker type</b> and, below it, for the <b>Worker</b> – the same three
           levels, under the same names.</p>
       </div>
+      <div id="eigener-worker" style="scroll-margin-top:66px"></div>
+      <h3 data-l="de">Ein eigener Worker über die Job-API</h3>
+      <h3 data-l="en">Your own worker over the Job API</h3>
+      <p data-l="de">Die eingebauten Worker decken die häufigen Aussensysteme ab. Für alles andere schreibt man
+        einen <b>eigenen Worker</b>: ein Programm in einer beliebigen Sprache, das auf einem beliebigen Rechner
+        läuft und über die <b>Job-API</b> Arbeit abholt. Ein Service-Task nennt dazu einen frei gewählten
+        <b>Job-Type</b> statt eines eingebauten Connectors – über die Zeebe-Erweiterung
+        <code>&lt;zeebe:taskDefinition type="…" retries="N"/&gt;</code> (ohne <code>retries</code> gilt 3). Auf
+        diesen Typ horcht dann kein eingebauter Worker, sondern der eigene.</p>
+      <p data-l="en">The built-in workers cover the common outside systems. For everything else you write your
+        <b>own worker</b>: a program in any language, running on any host, that pulls work over the <b>Job API</b>.
+        A service task names a job type of your choosing instead of a built-in connector – through the Zeebe
+        extension <code>&lt;zeebe:taskDefinition type="…" retries="N"/&gt;</code> (3 when <code>retries</code> is
+        omitted). No built-in worker listens on that type; yours does.</p>
+      <p data-l="de">Der Worker hält einen <b>API-Token mit Scope <code>worker</code></b>, den eine
+        Administratorin ausstellt (<a href="#konten">Konten, Rollen &amp; Anmeldung</a>); er reicht genau für die
+        Job-Aufrufe und nichts sonst. Damit läuft dieselbe <b>Schleife</b>, die auch <code>atlas worker</code>
+        fährt: einen Job seines Typs leasen, die Arbeit tun, abschliessen – oder mit verbleibenden Versuchen
+        fehlschlagen lassen.</p>
+      <p data-l="en">The worker holds an <b>API token with scope <code>worker</code></b>, minted by an
+        administrator (<a href="#konten">Accounts, roles &amp; sign-in</a>); it reaches exactly the job calls and
+        nothing else. With it runs the same <b>loop</b> that <code>atlas worker</code> runs: lease a job of its
+        type, do the work, complete it – or fail it carrying the remaining attempts.</p>
+      <pre><code># 1) Einen Job leasen  ·  Lease a job
+curl -X POST https://atlas.example.com/api/v1/jobs/activate \
+  -H "Authorization: Bearer $ATLAS_TOKEN" -H "Content-Type: application/json" \
+  -d '{"type":"berechtigung.pruefen","worker":"mein-worker","maxJobs":10,"leaseMs":60000}'
+# → {"jobs":[{"jobKey":…,"leaseToken":1,"variables":{…},"retries":3, …}]}
+
+# 2) Nach getaner Arbeit abschliessen  ·  Complete once the work is done
+curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/complete \
+  -H "Authorization: Bearer $ATLAS_TOKEN" -H "Content-Type: application/json" \
+  -d '{"worker":"mein-worker","leaseToken":1,"variables":{"ergebnis":"genehmigt"}}'
+
+# … oder mit verbleibenden Versuchen fehlschlagen  ·  … or fail, carrying the attempts left
+curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
+  -H "Authorization: Bearer $ATLAS_TOKEN" -H "Content-Type: application/json" \
+  -d '{"worker":"mein-worker","leaseToken":1,"retries":2,"message":"Umsystem nicht erreichbar"}'</code></pre>
+      <p data-l="de">Ein aktivierter Job ist bis zum Ablauf seines Lease für andere Worker unsichtbar; mit
+        <code>waitMs</code> wartet ein Aufruf per Long-Poll auf den nächsten Job, statt leer zurückzukehren. Der
+        Abschluss mischt die mitgegebenen Variablen in den Prozess und rückt den Token weiter. Ein Mensch kann
+        einen Job stattdessen von Hand abschliessen oder fehlschlagen lassen – mit einem <code>reason</code> statt
+        <code>worker</code>/<code>leaseToken</code>; das ist die Rolle <code>operator</code> und wird protokolliert.</p>
+      <p data-l="en">An activated job is invisible to other workers until its lease expires; with
+        <code>waitMs</code> a call long-polls for the next job instead of returning empty. Completing merges the
+        variables it carries into the process and advances the token. A human can instead complete or fail a job by
+        hand – with a <code>reason</code> in place of <code>worker</code>/<code>leaseToken</code>; that is the
+        <code>operator</code> role and it is recorded.</p>
+
+      <h4 data-l="de">Mindestens einmal – also idempotent</h4>
+      <h4 data-l="en">At least once – so, idempotent</h4>
+      <p data-l="de">Zustellung ist <b>mindestens einmal</b> (ADR-0007). Läuft ein Lease ab, nachdem der Worker die
+        Arbeit getan, aber bevor der Abschluss angekommen ist, wird der Job wieder aktivierbar und die Arbeit
+        geschieht ein zweites Mal. Ein Worker muss das vertragen: dieselbe Wirkung zweimal darf nicht zweimal
+        zählen (nach fachlichem Schlüssel prüfen, ein „upsert" statt eines blinden „insert"). Die Engine hilft mit
+        zwei Sperren:</p>
+      <p data-l="en">Delivery is <b>at least once</b> (ADR-0007). If a lease expires after the worker did the work
+        but before the completion arrived, the job becomes activatable again and the work happens a second time. A
+        worker has to tolerate that: the same effect twice must not count twice (check by a business key, an
+        "upsert" rather than a blind "insert"). The engine helps with two guards:</p>
+      <ul>
+        <li data-l="de"><b>Der <code>leaseToken</code> zäunt ein veraltetes Lease aus.</b> Er steigt bei jeder
+          Neu-Aktivierung. Schliesst ein Worker mit einem alten Token ab, den ein anderer inzwischen übernommen
+          hat, wird das mit <i>409</i> abgelehnt: „worker … does not hold this job's current lease; it may have
+          elapsed and been taken by another worker".</li>
+        <li data-l="en"><b>The <code>leaseToken</code> fences out a stale lease.</b> It rises on every
+          re-activation. A worker completing with an old token that another has since taken over is refused with
+          <i>409</i>: "worker … does not hold this job's current lease; it may have elapsed and been taken by
+          another worker".</li>
+        <li data-l="de"><b>Ein abgeschlossener Job-Key ist verbraucht.</b> Ein zweiter Abschluss desselben Keys
+          findet nichts mehr (<i>404 „no job with that key"</i>) – harmlos, aber eben kein Ersatz für einen
+          idempotenten Worker, denn die <i>Arbeit</i> kann schon zweimal geschehen sein.</li>
+        <li data-l="en"><b>A completed job key is spent.</b> A second completion of the same key finds nothing
+          (<i>404 "no job with that key"</i>) – harmless, but no substitute for an idempotent worker, because the
+          <i>work</i> may already have happened twice.</li>
+      </ul>
+
+      <h4 data-l="de">Versuche und der Incident</h4><h4 data-l="en">Attempts and the incident</h4>
+      <p data-l="de">Beim Fehlschlagen gibt der Worker die <b>verbleibenden Versuche</b> mit. Solange sie über 0
+        liegen, wird der Job wieder aktivierbar (der <code>leaseToken</code> steigt); bei <b>0</b> entsteht ein
+        <a href="#betrieb">Incident</a> am Element, mit der übergebenen Meldung. Der Prozess bleibt dort stehen,
+        bis jemand den Incident löst – ein liegengebliebener Job, kein verlorener. Wie viele Versuche ein Task hat,
+        steht im Modell (<code>retries</code>, sonst 3).</p>
+      <p data-l="en">On failing, the worker carries the <b>remaining attempts</b>. While they are above 0 the job
+        becomes activatable again (the <code>leaseToken</code> rises); at <b>0</b> an <a href="#betrieb">incident</a>
+        is raised on the element, with the message the worker passed. The process waits there until someone
+        resolves the incident – a parked job, not a lost one. How many attempts a task has is in the model
+        (<code>retries</code>, else 3).</p>
+
+      <table id="worker-jobs-routes">
+        <thead><tr>
+          <th data-l="de">Aufruf</th><th data-l="en">Call</th>
+          <th data-l="de">Rolle</th><th data-l="en">Role</th>
+          <th data-l="de">Wofür</th><th data-l="en">For</th>
+        </tr></thead>
+        <tbody>
+          <tr><td><code>POST /api/v1/jobs/activate</code></td><td><code>operator</code></td>
+            <td data-l="de">Jobs eines Typs leasen (Worker-Scope)</td>
+            <td data-l="en">lease jobs of a type (worker scope)</td></tr>
+          <tr><td><code>POST /api/v1/jobs/{key}/complete</code></td><td><code>operator</code></td>
+            <td data-l="de">einen Job abschliessen (Worker-Scope)</td>
+            <td data-l="en">complete a job (worker scope)</td></tr>
+          <tr><td><code>POST /api/v1/jobs/{key}/fail</code></td><td><code>operator</code></td>
+            <td data-l="de">einen Job fehlschlagen lassen (Worker-Scope)</td>
+            <td data-l="en">fail a job (worker scope)</td></tr>
+          <tr><td><code>POST /api/v1/api-tokens</code></td><td><code>admin</code></td>
+            <td data-l="de">einen <code>worker</code>-Token für den Worker ausstellen</td>
+            <td data-l="en">mint a <code>worker</code> token for the worker</td></tr>
+        </tbody>
+      </table>
+      <p data-l="de">Die Rolle ist die am Eingang geprüfte – ein Mensch mit ihr darf einen Job von Hand
+        abschliessen. Ein Worker hält keine Rolle, sondern einen Token: der Scope <code>worker</code> erreicht
+        genau diese Job-Aufrufe (plus die Mail-Outbox der Vorschau und die Mockup-Ablagen) und antwortet überall
+        sonst mit <i>403</i>; ohne Token ist es <i>401</i>.</p>
+      <p data-l="en">The role is the one checked at the boundary – a human with it may complete a job by hand. A
+        worker holds no role but a token: the <code>worker</code> scope reaches exactly these job calls (plus the
+        preview mail outbox and the mockup journals) and answers <i>403</i> everywhere else; without a token it is
+        <i>401</i>.</p>
+
+      <div class="note warn">
+        <div class="lbl" data-l="de">Stolpersteine</div><div class="lbl" data-l="en">Traps</div>
+        <p data-l="de"><b>Ein Worker, der nicht idempotent ist, ist ein Fehler, der auf sich warten lässt.</b>
+          Solange nichts schiefgeht, sieht man den zweiten Lauf nie; er kommt am Tag der ersten Netzstörung. Nach
+          fachlichem Schlüssel prüfen, nicht auf „genau einmal" bauen.</p>
+        <p data-l="en"><b>A worker that is not idempotent is a bug that bides its time.</b> While nothing goes
+          wrong you never see the second run; it arrives on the day of the first network hiccup. Check by a
+          business key, do not build on "exactly once".</p>
+        <p data-l="de"><b>Der Token gehört auf den Worker, nicht ins Modell.</b> Er wird einmal ausgestellt,
+          einmal sichtbar, und lebt in der Umgebung des Workers (<code>ATLAS_TOKEN</code>) – nicht im Diagramm und
+          nicht im Quellbaum. Läuft er ab, stellt die Administratorin einen neuen aus; das Modell bleibt
+          unberührt.</p>
+        <p data-l="en"><b>The token belongs on the worker, not in the model.</b> It is minted once, shown once,
+          and lives in the worker's environment (<code>ATLAS_TOKEN</code>) – not in the diagram and not in the
+          source tree. When it expires the administrator mints a new one; the model is untouched.</p>
+      </div>
+
     </section>
 
     <!-- ==================== WORKER RUNBOOKS ==================== -->

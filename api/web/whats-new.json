@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-28",
   "entries": [
     {
+      "id": "the-handbook-teaches-writing-your-own-worker-over-the-job-ap",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Write your own worker — the handbook now shows the Job API",
+        "de": "Einen eigenen Worker schreiben – das Handbuch zeigt jetzt die Job-API"
+      },
+      "summary": {
+        "en": "The built-in workers cover the common outside systems; for everything else you write your own, on any host, holding an API token of scope worker. It leases a job by its type, does the work, and completes or fails it — the same loop atlas worker runs. The handbook's Forms & workers chapter now explains it in German and English: the task definition that names the job type, the activate/complete/fail calls with a curl example, the lease token that fences a stale completion, and why at-least-once delivery means your worker has to be idempotent. Every call was run against a live instance first.",
+        "de": "Die eingebauten Worker decken die häufigen Aussensysteme ab; für alles andere schreibt man einen eigenen, auf einem beliebigen Rechner, mit einem API-Token des Scopes worker. Er least einen Job nach seinem Typ, tut die Arbeit und schliesst ihn ab oder lässt ihn fehlschlagen – dieselbe Schleife, die auch atlas worker fährt. Das Kapitel «Formulare & Worker» erklärt das jetzt auf Deutsch und Englisch: die Task-Definition, die den Job-Type benennt, die Aufrufe activate/complete/fail mit curl-Beispiel, den Lease-Token, der einen veralteten Abschluss auszäunt, und warum mindestens einmalige Zustellung heisst, dass der Worker idempotent sein muss. Jeder Aufruf wurde zuerst an einer laufenden Instanz ausgeführt."
+      },
+      "link": {
+        "label": "ADR-0007",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0007-job-worker-protocol.md"
+      },
+      "tags": [
+        "Handbook",
+        "Workers"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Console",
+          "de": "Konsole öffnen"
+        },
+        "route": "#/console"
+      }
+    },
+    {
       "id": "the-handbook-teaches-evolving-a-deployed-process",
       "version": "Unreleased",
       "date": null,
@@ -311,56 +340,6 @@
       "tags": [
         "Decisions",
         "Engine"
-      ]
-    },
-    {
-      "id": "a-decision-service-refuses-a-wrongly-typed-input-as-its-deci",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A decision service refuses a wrongly-typed input",
-        "de": "Ein Decision Service weist eine falsch typisierte Eingabe ab"
-      },
-      "summary": {
-        "en": "A business rule task that sends an input of the wrong type to a decision fails into an incident that names the input. The same task pointed at the decision service over that decision used to get a silent answer from the catch-all row instead, because the engine published no input schema for a service and there was nothing to check against. A service now publishes what its caller supplies — the input data read behind its interface and the results of its input decisions, each with its declared type — and is refused by the same rule. The schema also reaches an input decision the conversion could not see before: one declared as a date and sent as text now arrives as a date rather than as a string. The retained evaluations of the one deployed service were checked against the new rule first; none would have been refused.",
-        "de": "Ein Business Rule Task, der einer Decision eine Eingabe vom falschen Typ schickt, endet in einem Incident, der die Eingabe benennt. Derselbe Task, auf den Decision Service über dieser Decision gerichtet, bekam bisher stattdessen still die Antwort der Catch-all-Zeile, weil die Engine für einen Service kein Eingabeschema veröffentlichte und es nichts gab, wogegen geprüft werden konnte. Ein Service veröffentlicht jetzt, was sein Aufrufer liefert — die Input Data, die hinter seiner Schnittstelle gelesen werden, und die Ergebnisse seiner Input-Decisions, jeweils mit deklariertem Typ — und wird nach derselben Regel abgewiesen. Das Schema erreicht auch eine Input-Decision, die die Umwandlung bisher nicht sah: Eine als Datum deklarierte und als Text gesendete kommt jetzt als Datum an statt als Zeichenkette. Die aufbewahrten Auswertungen des einen deployten Service wurden vorher gegen die neue Regel geprüft; keine wäre abgewiesen worden."
-      },
-      "link": {
-        "label": "ADR-0419",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0419-a-declared-type-is-honoured-at-the-decision-boundary.md"
-      },
-      "tags": [
-        "Decisions",
-        "Engine"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the incidents",
-          "de": "Incidents öffnen"
-        },
-        "route": "#/operations/incidents"
-      }
-    },
-    {
-      "id": "the-handbook-counted-what-it-no-longer-had-thirty-examples-n",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The handbook names every role, and counts what it really holds",
-        "de": "Das Handbuch nennt alle Rollen und zählt, was es wirklich enthält"
-      },
-      "summary": {
-        "en": "The handbook said thirty examples where there are thirty-eight, nine apps where there are eight, and it named four roles where Atlas grants five: productmanager, the role that maintains the shop's catalogue, was missing from the chapter on accounts and roles. It is there now, together with the fact that migrating instances and overwriting their variables take the admin role. The number of examples is checked against the examples themselves, so it cannot fall behind again.",
-        "de": "Das Handbuch sprach von dreissig Beispielen, wo es achtunddreissig sind, von neun Apps, wo es acht sind, und nannte vier Rollen, wo Atlas fünf vergibt: productmanager, die Rolle, die den Katalog des Shops pflegt, fehlte im Kapitel über Konten und Rollen. Sie steht jetzt dort, zusammen mit dem Hinweis, dass das Migrieren von Instanzen und das Überschreiben ihrer Variablen die Rolle admin verlangt. Die Zahl der Beispiele wird gegen die Beispiele selbst geprüft und kann nicht mehr zurückfallen."
-      },
-      "link": {
-        "label": "ADR-0315",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0315-portal-roles-and-responsibilities.md"
-      },
-      "tags": [
-        "Handbook"
       ]
     }
   ]
