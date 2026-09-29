@@ -43,9 +43,10 @@ function cacheLogoPresent(present) {
 // introduces no injection surface.
 export const BUILTIN_MARK =
   '<svg viewBox="0 0 256 256">' +
-  '<path fill="currentColor" fill-rule="evenodd" d="M40 156a60 60 0 1 0 120 0a60 60 0 1 0 -120 0ZM69 156a31 31 0 1 0 62 0a31 31 0 1 0 -62 0Z"/>' +
-  '<path fill="currentColor" fill-rule="evenodd" d="M131 96h29v120h-29Z"/>' +
-  '<path fill="currentColor" fill-rule="evenodd" d="M182.5 51H197.5V68.5H215V83.5H197.5V101H182.5V83.5H165V68.5H182.5Z"/>' +
+  '<path fill="currentColor" d="M146 189.6A60 60 0 0 1 42.3 167.5L69.5 145.6A31 31 0 0 0 123.7 170.9Z"/>' +
+  '<path fill="currentColor" d="M40.6 159.4A60 60 0 0 1 114.5 92.8L125.4 113.3L107.5 120.9A31 31 0 0 0 70.5 141.4Z"/>' +
+  '<path fill="currentColor" d="M133 93H162V211H133Z"/>' +
+  '<path fill="currentColor" d="M184.5 53H199.5V70.5H217V85.5H199.5V103H184.5V85.5H167V70.5H184.5Z"/>' +
   '</svg>';
 
 // applyLogo swaps every brand mark (the ".mark" boxes in the top bar and drawer)

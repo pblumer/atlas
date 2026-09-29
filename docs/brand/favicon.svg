@@ -1,10 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="atlas">
   <title>atlas</title>
   <!-- Same mark as atlas-mark.svg, drawn heavier: the a fills more of the tile,
-       its bowl and stem are thicker and the cross is larger, so the cross still
-       reads as a cross at 16px where the shipped weights close up. -->
+       the band and stem are thicker, the gap wider and the cross larger, so the
+       cross still reads as a cross at 16px where the shipped weights close up.
+       Below about 24px the gap and the arrow point are no longer resolved; the
+       a with its cross is what carries the mark there. -->
   <rect width="256" height="256" rx="52" fill="#000"/>
-  <path fill="#fff" fill-rule="evenodd" d="M26 160a68 68 0 1 0 136 0a68 68 0 1 0 -136 0ZM62 160a32 32 0 1 0 64 0a32 32 0 1 0 -64 0Z"/>
-  <path fill="#fff" d="M130 92h34v136h-34Z"/>
-  <path fill="#fff" d="M189.5 31H210.5V55.5H235V76.5H210.5V101H189.5V76.5H165V55.5H189.5Z"/>
+  <path fill="#fff" d="M142.1 201.7A68 68 0 0 1 24 174.5L57.5 152.3A33 33 0 0 0 115.3 179.2Z"/>
+  <path fill="#fff" d="M22.2 162.7A68 68 0 0 1 106.5 92L119.7 117.1L98 126A33 33 0 0 0 59 146.7Z"/>
+  <path fill="#fff" d="M126 92H160V226H126Z"/>
+  <path fill="#fff" d="M189.5 38H210.5V62.5H235V83.5H210.5V108H189.5V83.5H165V62.5H189.5Z"/>
 </svg>

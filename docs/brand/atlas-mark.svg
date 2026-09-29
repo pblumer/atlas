@@ -3,11 +3,15 @@
   <!-- Black tile: fixed colours (no theme dependency) so the mark reads on any
        background, light or dark. -->
   <rect width="256" height="256" rx="56" fill="#000"/>
-  <!-- A geometric lowercase a — the name is always set lowercase — with the Swiss
-       cross raised at its shoulder like an exponent. Three solid shapes: the bowl
-       (its counter cut out, evenodd), the stem and the cross, whose arms are 7/6
-       of their width as on the federal flag. No strokes, no fine detail. -->
-  <path fill="#fff" fill-rule="evenodd" d="M40 156a60 60 0 1 0 120 0a60 60 0 1 0 -120 0ZM69 156a31 31 0 1 0 62 0a31 31 0 1 0 -62 0Z"/>
-  <path fill="#fff" d="M131 96h29v120h-29Z"/>
-  <path fill="#fff" d="M182.5 51H197.5V68.5H215V83.5H197.5V101H182.5V83.5H165V68.5H182.5Z"/>
+  <!-- A lowercase a — the name is always set lowercase — whose bowl is a band
+       running round from the stem and ending in an arrow point: a flow that
+       comes back to where it started. The band passes over itself on the left,
+       shown by a slanted gap rather than by shading, so the mark stays one
+       colour. The Swiss cross is raised beside the stem like an exponent, arms
+       7/6 of their width as on the federal flag. Four solid shapes (lower band,
+       upper band, stem, cross); no strokes. -->
+  <path fill="#fff" d="M146 189.6A60 60 0 0 1 42.3 167.5L69.5 145.6A31 31 0 0 0 123.7 170.9Z"/>
+  <path fill="#fff" d="M40.6 159.4A60 60 0 0 1 114.5 92.8L125.4 113.3L107.5 120.9A31 31 0 0 0 70.5 141.4Z"/>
+  <path fill="#fff" d="M133 93H162V211H133Z"/>
+  <path fill="#fff" d="M184.5 53H199.5V70.5H217V85.5H199.5V103H184.5V85.5H167V70.5H184.5Z"/>
 </svg>

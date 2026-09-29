@@ -1,12 +1,15 @@
 # Atlas — Brand assets
 
 The atlas mark is a **white lowercase a carrying the Swiss cross, on a black
-tile**. The a is geometric and single-storey, because the name is always set
-lowercase; the cross is raised at its shoulder like an exponent, with arms 7/6
-of their width as on the federal flag — the cross of where atlas is built. It is
-three solid shapes (bowl, stem, cross) with only the counter cut out (SVG
-`evenodd`), so there are no strokes and no fine detail to lose. That is what
-keeps it readable from a hero down to a 16px favicon.
+tile**. The a is set lowercase because the name always is. Its bowl is a band
+that runs round from the stem and ends in an arrow point — a flow that comes
+back to where it started — and passes over itself on the left, which a slanted
+gap shows instead of shading, so the mark stays one colour. The cross is raised
+beside the stem like an exponent, with arms 7/6 of their width as on the
+federal flag — the cross of where atlas is built. It is four solid shapes
+(lower band, upper band, stem, cross) with no strokes. At 16px the gap and the
+arrow point close up and the a with its cross carries the mark alone; that is
+expected, not a defect.
 
 The mark uses fixed colors (no theme dependency) so it reads on **any**
 background, light or dark.
@@ -20,8 +23,8 @@ background, light or dark.
 **Three cuts, one drawing.** `atlas-mark.svg` is the mark as it ships. Where the
 ground is already dark, or the container draws its own tile (the Console's `.mark`
 box), use the tile-less `atlas-glyph.svg`, which inherits `currentColor`.
-`favicon.svg` is the same drawing pushed heavier — a larger, thicker a and a
-larger cross — because at 16px the shipped weights close up.
+`favicon.svg` is the same drawing pushed heavier — a thicker band and stem, a
+wider gap and a larger cross — because at 16px the shipped weights close up.
 
 **The wordmark is set lowercase.** The social card and the Console's top bar spell the name `atlas`.
 Keep it that way wherever the name is set as a wordmark. `ATLAS` in the
