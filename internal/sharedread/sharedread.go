@@ -1,5 +1,6 @@
 // Package sharedread opens a file for reading without stopping anyone else from
-// deleting it or renaming another file over it.
+// deleting it or renaming another file over it — the latter, on Windows, with a
+// rename that asks for POSIX semantics, as os.Root.Rename does.
 //
 // On Unix every open already behaves that way. Windows is why this package exists:
 // os.Open leaves FILE_SHARE_DELETE out of the share mode, so while a reader holds a

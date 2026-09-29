@@ -55,8 +55,10 @@ func TestAnOpenFileCanBeRemoved(t *testing.T) {
 	}
 }
 
-// TestAnOpenFileCanBeReplaced: a save renames a finished temp file over the record,
-// which on Windows a reader's os.Open handle refused just as it refused a delete.
+// TestAnOpenFileCanBeReplaced: a save renames a finished temp file over the record.
+// On Windows that takes a rename with POSIX semantics, which os.Root.Rename asks for and
+// api/sidecar uses — and even that is refused while a reader's handle does not share
+// delete, as an os.Open handle does not.
 func TestAnOpenFileCanBeReplaced(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "rec.json")
@@ -66,9 +68,13 @@ func TestAnOpenFileCanBeReplaced(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	defer f.Close()
-	tmp := filepath.Join(dir, "rec.json.tmp")
-	writeFile(t, tmp, "new")
-	if err := os.Rename(tmp, path); err != nil {
+	writeFile(t, filepath.Join(dir, "rec.json.tmp"), "new")
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatalf("OpenRoot: %v", err)
+	}
+	defer root.Close()
+	if err := root.Rename("rec.json.tmp", "rec.json"); err != nil {
 		t.Fatalf("Rename over a file a reader holds: %v", err)
 	}
 	if got, err := io.ReadAll(f); err != nil || string(got) != "old" {

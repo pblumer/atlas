@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/pblumer/atlas/internal/dirsync"
 )
@@ -52,11 +53,26 @@ func WriteFile(dir, path string, data []byte) error {
 		_ = os.Remove(tmp)
 		return fmt.Errorf("sidecar: close temp: %w", err)
 	}
-	if err := os.Rename(tmp, path); err != nil {
+	if err := replace(tmp, path); err != nil {
 		_ = os.Remove(tmp)
 		return fmt.Errorf("sidecar: rename: %w", err)
 	}
 	return FsyncDir(dir)
+}
+
+// replace renames tmp over path through an os.Root on their directory. On Unix that
+// is the same rename os.Rename makes. On Windows it is the one rename that can replace
+// a record another request is reading: os.Rename's MoveFileEx refuses a target anyone
+// holds open with "Access is denied", while Root.Rename asks for POSIX semantics —
+// falling back to the classic rename on a file system that has none. The readers'
+// half is internal/sharedread, whose handles allow it.
+func replace(tmp, path string) error {
+	root, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	return root.Rename(filepath.Base(tmp), filepath.Base(path))
 }
 
 // FsyncDir fsyncs a directory so a create/rename/remove of a file within it is
