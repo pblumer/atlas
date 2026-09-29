@@ -26,6 +26,18 @@ _Changed_ / _Removed_ for each version.
   role by `api/workerjobshandbook_internal_test.go`; a renamed route or a changed role
   fails the build.
 
+- **Converting a product to a lifecycle process no longer lets its old processes be
+  deleted from under the orders that still need them.** Order lines keep the processes they
+  froze when they were placed, so a product converted to one lifecycle process still returns
+  its older lines through its old deprovisioning process. Deleting the last deployed version
+  of a process is now refused while any order line can still start it — the message counts
+  the lines per product — or while a current catalogue release binds it; deactivating it
+  stays allowed and is what to do instead. The catalogue's fulfilment report lists the
+  `remainder` per converted product and old process, and
+  `POST /api/v1/catalog-products/{id}/rebind` (MCP: `atlas_rebind_catalog_product`) moves a
+  product's lines onto its lifecycle process when the old one can no longer succeed, each
+  line recording what it was bound to, who moved it, when and why (ADR-0427).
+
 - **A product can be one process for its whole lifecycle, entered at a start event per
   operation.** A catalogue product may bind a `lifecycleProcess` instead of a provisioning
   and a deprovisioning process, with `operations` naming the message start event each

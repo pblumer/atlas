@@ -184,6 +184,10 @@ type Line struct {
 	// converted keeps the two ids (ADR-0427).
 	LifecycleProcess string            `json:"lifecycleProcess,omitempty"`
 	Operations       map[string]string `json:"operations,omitempty"`
+	// Rebindings are the moves of this line from the binding it froze to its
+	// product's lifecycle process, each with who, when and why (ADR-0427). A list,
+	// because a line moved twice has two facts to tell.
+	Rebindings []Rebinding `json:"rebindings,omitempty"`
 	// MaxDays is the product's ceiling on how long the right this line grants may
 	// last, copied from the release for the reason the two processes above are
 	// (ADR-0344). A ceiling relaxed in the catalogue
