@@ -169,3 +169,34 @@ func TestPublicStartRefusesAProcessOnlyItsTriggersCanStart(t *testing.T) {
 		t.Fatalf("public start: %d (%s), want 409", code, body)
 	}
 }
+
+// TestProblemsPanelReadsATargetFromTheSameModel: a caller and its target drawn in one
+// model are checked against each other, not against whatever is deployed — the
+// version in the model is the one that will deploy with it.
+func TestProblemsPanelReadsATargetFromTheSameModel(t *testing.T) {
+	ts := newTestServer(t)
+	both := strings.Replace(callerOfSeveralTriggersBPMN, "</definitions>",
+		severalTriggersBPMN[strings.Index(severalTriggersBPMN, "<message"):], 1)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/validate", both, "application/xml")
+	if code != http.StatusOK || !strings.Contains(string(body), "call.untriggered-start") {
+		t.Fatalf("validate: %d (%s), want the finding from the sibling process", code, body)
+	}
+}
+
+// TestAReturnRefusesADeprovisioningOnlyItsTriggersCanStart: giving a line back starts
+// its deprovisioning by hand, and that is refused for a process only its triggers can
+// start — the return stays recorded, and the answer says why nothing runs.
+func TestAReturnRefusesADeprovisioningOnlyItsTriggersCanStart(t *testing.T) {
+	ts, admin, _, ord := aServerWithAnOrderFor(t, "alice")
+	deprov := strings.Replace(severalTriggersBPMN, `id="laptop-lifecycle"`, `id="deprov"`, 1)
+	if code, b := cReqTyped(t, admin, ts, "POST", "/api/v1/deployments", "application/xml", deprov); code != http.StatusOK {
+		t.Fatalf("deploy: %d (%s)", code, b)
+	}
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/orders/"+ord+"/lines/vpn", `{"status":"done"}`); code != http.StatusOK {
+		t.Fatalf("report done: %d (%s)", code, b)
+	}
+	code, body := cReq(t, admin, ts, "POST", "/api/v1/orders/"+ord+"/lines/vpn/return", "")
+	if code != http.StatusInternalServerError || !strings.Contains(string(body), "ADR-0426") {
+		t.Fatalf("return: %d (%s), want the refusal citing ADR-0426", code, body)
+	}
+}
