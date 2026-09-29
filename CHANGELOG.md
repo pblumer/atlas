@@ -111,6 +111,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Restarting a supervised worker is never quietly ignored.** A restart asked for
+  while the worker was still running, or in the moment after it crashed, closed a
+  signal the supervisor had already stopped listening to: the worker then sat out its
+  full backoff — up to 30 seconds — before starting again, and one with nothing to
+  serve stayed parked until somebody pressed Restart a second time. That second case
+  is also what the Console's own restart does the moment an operator configures a
+  worker's kind, so a newly configured mail worker could stay asleep. The supervisor
+  now waits on the signal of the run it just finished, which a restart can no longer
+  miss. The race showed up as an intermittently failing test,
+  `TestRestartDuringBackoffTriesAgainImmediately`, on a loaded machine.
+
 - **Camunda's `versionTag` binding is refused instead of read as latest.** A model that
   bound a business rule task to a version tag ran whatever version was newest, without a
   word, and the Modeler rewrote the binding to latest on the next save. The deploy now
