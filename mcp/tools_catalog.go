@@ -129,6 +129,17 @@ func catalogItemProps() map[string]any {
 			"publish, and the requirement is the point: a catalogue that can only grant is not a " +
 			"lifecycle, and the day somebody must revoke at scale is the wrong day to find out " +
 			"the process was never written."),
+		"lifecycleProcess": stringProp("ONE BPMN process id for the whole lifecycle of this product, " +
+			"IN PLACE OF provisionProcess and deprovisionProcess (ADR-0425) — set this and leave those two " +
+			"empty, or the reverse; never both. Each operation is a message start event of that process, " +
+			"named in `operations`. Publishing checks the newest deployed version: every named start " +
+			"event must exist, and the process must have NO none start event (a start by hand would " +
+			"otherwise take it)."),
+		"operations": objectProp("For a lifecycleProcess: which message start event each operation " +
+			"enters, {\"provision\": \"<message name>\", \"deprovision\": \"<message name>\", " +
+			"\"change\": \"<message name>\"}. provision and deprovision are REQUIRED to publish, change " +
+			"is optional. The key is the contract an order asks for; the message name is the process's " +
+			"own business and may be renamed with the process."),
 		"lifecycle": objectProp("The window in which it may be ordered: {from, until} as Unix " +
 			"nanoseconds. Zero on a side means unbounded there, which is the ordinary case. " +
 			"BOTH ENDS ARE INCLUSIVE AND IT IS ENFORCED: an order placed outside the window is " +
@@ -410,6 +421,41 @@ func catalogTools() []Tool {
 				}
 				// No body: a publish is the catalogue as it stands, not an argument.
 				return asText(c.post(withID(id, "/releases"), "", nil))
+			},
+		},
+		{
+			Name: "atlas_rebind_catalog_product",
+			Description: "Move the order lines of a product that was converted to a lifecycle " +
+				"process (ADR-0425) from the processes they froze when they were placed to the " +
+				"product's CURRENT lifecycle binding (ADR-0427). By default a line keeps its frozen " +
+				"processes, so a grant is revoked by the rules it was granted under; move lines only " +
+				"when the old process can no longer succeed — its target system was replaced. Each " +
+				"moved line records what it was bound to, who moved it, when and 'reason' (REQUIRED). " +
+				"Lines whose process is running now are left. Check the fulfilment report's " +
+				"`remainder` first: it counts the lines still on each old process. Returns {lines, orders}.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":     stringProp("The product id."),
+					"reason": stringProp("Why the lines no longer revoke by the rules they were granted under."),
+				},
+				"required": []any{"id", "reason"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				reason, err := argString(args, "reason")
+				if err != nil {
+					return "", err
+				}
+				body, err := json.Marshal(map[string]string{"reason": reason})
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/catalog-products/"+url.PathEscape(id)+"/rebind",
+					"application/json", body))
 			},
 		},
 		{

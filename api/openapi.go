@@ -278,6 +278,12 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Start a process instance", tag: "Instances", role: RoleOperator,
 			req:  jsonBody("Initial variables", schemaObj(map[string]any{"variables": tObject()})),
 			resp: jsonBody("Created instance", tObject())}},
+		{"POST", "/api/v1/processes/{processId}/triggers/{message}", s.handleTrigger, apiOp{
+			summary: "Start the newest deployed version of a process at one of its message start events, idempotently per sender and trigger id (ADR-0425); 201 with the instance, 200 with the first instance for a repeated trigger, 404 for an unknown process or start event, 409 when refused (a catalogue product's operation, a singleton already running, a deactivated process)", tag: "Instances", role: RoleOperator,
+			req: jsonBody("The trigger", schemaObj(map[string]any{
+				"triggerId": tString(), "source": tString(), "variables": tObject(),
+			}, "triggerId")),
+			resp: jsonBody("The instance that answers", tObject())}},
 		{"POST", "/api/v1/processes/{key}/instances-from-csv", s.handleCreateInstanceFromCSV, apiOp{
 			summary: "Start a process instance from an uploaded CSV — multipart file + JSON column layout; seeds rows/rowCount/fileName as start variables (ADR-0084)", tag: "Instances", role: RoleOperator,
 			req: &bodySpec{mediaType: "multipart/form-data", desc: "CSV file and a JSON column layout", schema: schemaObj(map[string]any{
@@ -994,6 +1000,10 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/catalog-products/translation-gaps", s.catalogs.HandleTranslationGaps, apiOp{
 			summary: "Where a catalogue is written in one of its declared languages and not another: the name, the description, the two headings and the name of every shape the product is ordered in, per product and per language. The shapes are not a cosmetic gap like the rest — the shop draws them in the basket, where an orderer has to choose one. Publishing used to refuse these and does not any more — the shop falls back to the language the catalogue has, so the refusal protected no reader and instead held a usable catalogue back until the last translation arrived. What the refusal did do is make the gap impossible to ignore, and this is that half kept: a gate removed with nothing in its place is how a half-translated catalogue becomes invisible again. Read off the catalogues you maintain AS THEY STAND rather than off their releases, unlike the two reports beside it, because it is a list of work to do and work to do is about what is being edited — computed from the same input a publish is, so it says exactly what the next publish would have to live with. A product that says something in no language at all is not here: that one is still refused at publish, because the shop would show its id and there is nothing to fall back to",
 			tag:     "Catalogue", role: RoleProductManager, resp: jsonBody("The translation report", tObject())}},
+		{"POST", "/api/v1/catalog-products/{id}/rebind", s.handleRebindProduct, apiOp{
+			summary: "Move every order line of a product converted to a lifecycle process from the processes it froze to the product's current lifecycle binding (ADR-0427). Explicit and recorded: each moved line keeps what it was bound to, who moved it, when and why. A line whose process is running now is left where it is. reason is required. Needs edit on the product's home catalogue", tag: "Catalogue", role: RoleProductManager,
+			req:  jsonBody("Why the lines are moved", schemaObj(map[string]any{"reason": tString()}, "reason")),
+			resp: jsonBody("How many lines moved, in which orders", tObject())}},
 		{"GET", "/api/v1/catalog-products/{id}/usage", s.handleProductUsage, apiOp{
 			summary: "Where one product is used, read backwards out of the same edges the release froze: which catalogues offer it, which wholes carry it and whether integrally or optionally, what it needs, **what needs it**, what it may never be held with, and how many people hold it by origin. The reverse question is the one a maintainer cannot ask anywhere else — a product manager about to retire a service, rebind its provisioning or move it between catalogues has no other way to find out what they are about to break. Merged across catalogues, because a service does not belong to one: the same product carried by two catalogues is one thing somebody is about to change. Holders are counted and never listed — a list of the people holding one service is the inventory filtered to the interesting part",
 			tag:     "Catalogue", role: RoleProductManager,
@@ -1138,6 +1148,12 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "status")),
 			resp: jsonBody("The updated order", tObject())}},
 
+		{"POST", "/api/v1/orders/{id}/lines/{item}/start", s.handleStartLine, apiOp{
+			summary: "Start one position of an order: its approval when one is owed and nobody approved it, otherwise its provisioning through the product's frozen binding — a process started by hand or a lifecycle process's provision start event (ADR-0425). Idempotent: a position started before answers with that instance. approvedBy records the approval the calling approval process reached", tag: "Order", role: RoleOperator,
+			req: jsonBody("What to start", schemaObj(map[string]any{
+				"operation": tString(), "approvedBy": tString(),
+			})),
+			resp: jsonBody("The instance that answers", tObject())}},
 		{"POST", "/api/v1/orders/{id}/lines/{item}/decision", s.orders.HandleDecide, apiOp{
 			summary: "Record an approver's decision on a line, with who decided: a refusal, which needs a reason and settles the line — reporting will not take a rejection, because that is a decision with an author rather than a provisioning outcome — or, with \"approved\": true, an approval, which records approvedBy and approvedAt and leaves the line to be provisioned", tag: "Order", role: RoleOperator,
 			req: jsonBody("Decision", schemaObj(map[string]any{

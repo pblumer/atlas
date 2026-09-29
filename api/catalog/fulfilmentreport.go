@@ -98,6 +98,25 @@ type FulfilmentReport struct {
 	// whether the report is about what they just published.
 	Releases []string            `json:"releases"`
 	Problems []FulfilmentProblem `json:"problems"`
+	// Remainder is, for each product converted to a lifecycle process, how many
+	// order lines still start one of the processes it bound before (ADR-0427) — the
+	// count that says when those processes may be retired. Empty where nothing was
+	// converted or nothing is left.
+	Remainder []Remainder `json:"remainder"`
+}
+
+// Remainder is how many lines of one product still start one old process.
+type Remainder struct {
+	ItemID  string `json:"itemId"`
+	Process string `json:"process"`
+	Lines   int    `json:"lines"`
+}
+
+// RemainderLookup counts, over the orders, the lines of these lifecycle products
+// still bound to a process the product no longer binds. It is the server's to
+// answer — the orders are not the catalogue's — like [ProcessLookup].
+type RemainderLookup interface {
+	Remainder(items []Item) ([]Remainder, error)
 }
 
 // OrderProcess is the orchestration every order goes through. It is named here
@@ -137,6 +156,12 @@ func fulfilmentProblems(items []Item, look ProcessLookup) []FulfilmentProblem {
 		if p := ApprovalProcessFor(it); p != "" && !seenApproval[p] {
 			seenApproval[p] = true
 			rest = append(rest, bindingProblems("", "", "approval", p, look)...)
+		}
+		if it.UsesLifecycleProcess() {
+			// One process for every operation (ADR-0425): asked once, not once per
+			// operation that happens to name it.
+			rest = append(rest, bindingProblems(it.ID, it.HomeCatalog, "lifecycle", it.LifecycleProcess, look)...)
+			continue
 		}
 		rest = append(rest, bindingProblems(it.ID, it.HomeCatalog, "provision", it.ProvisionProcess, look)...)
 		rest = append(rest, bindingProblems(it.ID, it.HomeCatalog, "deprovision", it.DeprovisionProcess, look)...)
@@ -253,8 +278,26 @@ func (s *Service) HandleFulfilmentReport(w http.ResponseWriter, r *http.Request)
 	if releases == nil {
 		releases = []string{}
 	}
+	remainder := []Remainder{}
+	if s.Remainders != nil {
+		var converted []Item
+		for _, it := range offered {
+			if it.UsesLifecycleProcess() {
+				converted = append(converted, it)
+			}
+		}
+		if len(converted) > 0 {
+			got, err := s.Remainders.Remainder(converted)
+			if err != nil {
+				httpapi.Error(w, http.StatusInternalServerError, "fulfilment report: "+err.Error())
+				return
+			}
+			remainder = append(remainder, got...)
+		}
+	}
 	httpapi.JSON(w, http.StatusOK, FulfilmentReport{
 		Checked: len(offered), Releases: releases,
-		Problems: fulfilmentProblems(offered, s.Processes),
+		Problems:  fulfilmentProblems(offered, s.Processes),
+		Remainder: remainder,
 	})
 }

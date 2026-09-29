@@ -60,6 +60,16 @@ type Service struct {
 	// reason: the deployments and the workers belong to the server, and a Service
 	// built without them refuses the report rather than guessing at it.
 	Processes ProcessLookup
+
+	// EntryPoints answers which start events a deployed process has, so publishing
+	// can refuse a lifecycle binding that names one it does not (ADR-0425). Nil
+	// skips that check, for the reason Processes may be nil.
+	EntryPoints EntryPointLookup
+
+	// Remainders counts the order lines a converted product left on its old
+	// processes, for the fulfilment report (ADR-0427). Nil leaves the report's
+	// remainder empty.
+	Remainders RemainderLookup
 }
 
 // New builds the service. Every dependency is an explicit argument (ADR-0147).
@@ -658,13 +668,19 @@ func (s *Service) HandlePublish(w http.ResponseWriter, r *http.Request) {
 		if in, found, opErr = s.store.InputFor(id, cat.Edges); opErr != nil || !found {
 			return
 		}
-
-		if rel, problems = Publish(in); len(problems) > 0 {
-			return
-		}
-		rel.ID, rel.CatalogID, rel.CreatedAt = relID, id, s.now()
-		opErr = s.store.SaveRelease(rel)
+		rel, problems = Publish(in)
 	})
+	// What is deployed is the server's to answer, on its own visit to the loop, so it
+	// is asked between computing the release and saving it (ADR-0425). The release
+	// saved is the one computed above: a catalogue edited in between is published by
+	// its next publish, not folded into this one.
+	if opErr == nil && found && allowed && len(problems) == 0 {
+		problems = LifecycleProblems(rel.Items, s.EntryPoints)
+	}
+	if opErr == nil && found && allowed && len(problems) == 0 {
+		rel.ID, rel.CatalogID, rel.CreatedAt = relID, id, s.now()
+		s.loop.Do(func() { opErr = s.store.SaveRelease(rel) })
+	}
 
 	switch {
 	case opErr != nil:

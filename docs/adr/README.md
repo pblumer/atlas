@@ -510,9 +510,9 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0422](0422-who-decided-is-recorded.md) | Who decided is recorded, on the task, the order and the right | Accepted | Landed |
 | [0423](0423-a-business-rule-task-chooses-its-decision-version.md) | A business rule task follows the newest decision when it runs, or the version it names | Accepted | Landed |
 | [0424](0424-a-playground-rule-can-demand-the-cases-it-speaks-about.md) | A Playground rule can demand the cases it speaks about | Proposed | Not started |
-| [0425](0425-a-product-lifecycle-is-one-process-with-message-triggers.md) | A product's lifecycle is one process, and each operation is a message start it is triggered at | Proposed | Not started |
+| [0425](0425-a-product-lifecycle-is-one-process-with-message-triggers.md) | A product's lifecycle is one process, and each operation is a message start it is triggered at | Accepted | Partial |
 | [0426](0426-an-untriggered-create-never-seeds-several-start-events.md) | An untriggered create never seeds several start events | Accepted | Landed |
-| [0427](0427-converting-a-product-to-a-lifecycle-process.md) | Converting a product to a lifecycle process keeps the old processes alive until nothing needs them | Proposed | Not started |
+| [0427](0427-converting-a-product-to-a-lifecycle-process.md) | Converting a product to a lifecycle process keeps the old processes alive until nothing needs them | Accepted | Landed |
 
 ## The two states of a record
 

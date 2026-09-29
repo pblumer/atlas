@@ -1,10 +1,15 @@
 # Atlas — Brand assets
 
-The Atlas mark is a **white peak carrying a cross, on a black tile** — the load
-Atlas bears, with the Swiss cross of where it is built. It is one solid shape:
-the notch at the base and the cross are cut out of the peak (SVG `evenodd`), so
-there are no strokes and no fine detail to lose. That is what keeps it readable
-from a hero down to a 16px favicon.
+The atlas mark is a **white lowercase a carrying the Swiss cross, on a black
+tile**. The a is set lowercase because the name always is. Its bowl is a band
+that runs round from the stem and ends in an arrow point — a flow that comes
+back to where it started — and passes over itself on the left, which a slanted
+gap shows instead of shading, so the mark stays one colour. The cross is raised
+beside the stem like an exponent, with arms 7/6 of their width as on the
+federal flag — the cross of where atlas is built. It is four solid shapes
+(lower band, upper band, stem, cross) with no strokes. At 16px the gap and the
+arrow point close up and the a with its cross carries the mark alone; that is
+expected, not a defect.
 
 The mark uses fixed colors (no theme dependency) so it reads on **any**
 background, light or dark.
@@ -12,16 +17,16 @@ background, light or dark.
 | Color | Hex | Used for |
 |-------|-----|----------|
 | Black | `#000000` | The tile |
-| White | `#FFFFFF` | The peak |
+| White | `#FFFFFF` | The a and the cross |
 | Off-white | `#F4F7FB` | The tile-less glyph on dark grounds (the social card) |
 
 **Three cuts, one drawing.** `atlas-mark.svg` is the mark as it ships. Where the
 ground is already dark, or the container draws its own tile (the Console's `.mark`
 box), use the tile-less `atlas-glyph.svg`, which inherits `currentColor`.
-`favicon.svg` is the same drawing pushed heavier — a larger peak and a thicker
-cross — because at 16px the shipped weights close up.
+`favicon.svg` is the same drawing pushed heavier — a thicker band and stem, a
+wider gap and a larger cross — because at 16px the shipped weights close up.
 
-**The wordmark is set lowercase.** The social card spells the name `atlas`.
+**The wordmark is set lowercase.** The social card and the Console's top bar spell the name `atlas`.
 Keep it that way wherever the name is set as a wordmark. `ATLAS` in the
 codebase is only an environment-variable prefix and is never the mark.
 
@@ -32,8 +37,8 @@ pasted, so the copy stays in English even where the surrounding docs are not.
 
 | File | What it is |
 |------|-----------|
-| `atlas-mark.svg` | Full mark (tile + peak) — README, docs, wherever the logo appears |
-| `atlas-glyph.svg` | Peak only, `currentColor`, no tile — inlined by the Console's `.mark` box |
+| `atlas-mark.svg` | Full mark (tile + a + cross) — README, docs, wherever the logo appears |
+| `atlas-glyph.svg` | a and cross only, `currentColor`, no tile — inlined by the Console's `.mark` box |
 | `favicon.svg` | Heavier cut of the mark that stays legible to 16px |
 | `favicon-16.png` `favicon-32.png` `favicon-48.png` | Raster favicons |
 | `apple-touch-icon.png` | 180×180 home-screen icon |
@@ -74,7 +79,7 @@ Eight icons, one per Highlights bullet. They exist because the alternative was
 emoji, and a row of emoji down the left of a feature list reads as generated
 filler no matter what the words say.
 
-They are **drawn from the mark's own vocabulary** so the set and the logo look
+They are **drawn from the vocabulary of the former peak mark** so the set looks
 like one family: solid shapes with their detail cut out of them, the peak as the
 enclosing form, and nodes as filled dots. Same constants throughout —
 

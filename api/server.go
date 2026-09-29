@@ -609,6 +609,13 @@ type Server struct {
 	// all three are touched only on the run-loop goroutine (via do), so no lock.
 	retentionMaxAge   time.Duration
 	retentionInterval time.Duration
+	// triggerReceiptTTL is how long a directed trigger's receipt is kept (ADR-0425):
+	// a sender's retry inside it answers with the first instance, one after it is a
+	// new trigger. lastReceiptPrune paces the prune to once an hour, on the
+	// retention sweep's tick, so the log carries one prune event an hour and not one
+	// a tick.
+	triggerReceiptTTL time.Duration
+	lastReceiptPrune  int64
 	retentionBatch    int
 	retentionCursor   uint64
 
@@ -1024,6 +1031,17 @@ func WithRetention(maxAge time.Duration) Option {
 	return func(s *Server) {
 		if maxAge > 0 {
 			s.retentionMaxAge = maxAge
+		}
+	}
+}
+
+// WithTriggerReceiptRetention sets how long a directed trigger's receipt is kept
+// (ADR-0425); the default is 30 days. A retry that arrives after its receipt was
+// dropped starts a new instance, so this is the longest a sender may take to retry.
+func WithTriggerReceiptRetention(d time.Duration) Option {
+	return func(s *Server) {
+		if d > 0 {
+			s.triggerReceiptTTL = d
 		}
 	}
 }
@@ -1756,6 +1774,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// accounts and the groups are the server's, and this is where the two meet.
 	s.catalogs.Approvers = approverLookup{s: s}
 	s.catalogs.Processes = processLookup{s: s}
+	s.catalogs.EntryPoints = processLookup{s: s}
+	s.catalogs.Remainders = remainderLookup{s: s}
 	s.orders.Limits = s.budgets()
 	s.capabilities.Limits = s.budgets()
 	s.playground.Limits = s.budgets()
@@ -2181,6 +2201,29 @@ func (s *Server) retentionSweeper(every time.Duration) {
 	}
 }
 
+// defaultTriggerReceiptTTL is how long a trigger receipt is kept when the operator
+// set nothing (ADR-0425).
+const defaultTriggerReceiptTTL = 30 * 24 * time.Hour
+
+// pruneTriggerReceipts drops the trigger receipts older than their retention, at
+// most once an hour. It runs on the run loop, inside the retention sweep's turn.
+func (s *Server) pruneTriggerReceipts(now int64) {
+	if now-s.lastReceiptPrune < int64(time.Hour) {
+		return
+	}
+	s.lastReceiptPrune = now
+	ttl := s.triggerReceiptTTL
+	if ttl <= 0 {
+		ttl = defaultTriggerReceiptTTL
+	}
+	cutoff := now - int64(ttl)
+	if stale, err := s.store.HasTriggerReceiptBefore(cutoff); err != nil || !stale {
+		return
+	}
+	s.proc.PruneTriggerReceipts(cutoff)
+	_ = s.proc.RunUntilIdle()
+}
+
 // purgeTarget is one finished instance a sweep decided to hard-delete, carrying the
 // history value the purge command needs (its definition key, and the purge due date that
 // locates its schedule entry) so neither the command nor applyToState reads it again.
@@ -2197,6 +2240,7 @@ type purgeTarget struct {
 // purge commands it enqueues, and the cursor advance are one atomic single-writer step.
 // Errors are logged and retried next tick.
 func (s *Server) sweepRetention(now int64) {
+	s.pruneTriggerReceipts(now)
 	// A transient read error just skips this tick (retried on the next), matching the
 	// silent, best-effort style of the other run-loop pollers (timerScheduler).
 	safePos, err := s.retentionSafePosition()

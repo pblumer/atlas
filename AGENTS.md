@@ -57,6 +57,15 @@ go test ./engine/...
 go test ./engine/ -run TestProcessorRecovery -v
 ```
 
+CI also runs the storage packages — `wal/`, `checkpoint/`, `state/`, `api/sidecar/`,
+`internal/` — on a Windows runner (`windows · storage` in `.github/workflows/ci.yml`),
+because a Windows binary ships and those packages are file-system behaviour. Linux cannot
+run that job for you; the closest local check is that the tests still compile there:
+
+```bash
+GOOS=windows go vet ./wal/... ./checkpoint/... ./state/... ./api/sidecar/... ./internal/...
+```
+
 Browser end-to-end tests for the web UI (the Design-view token simulation) live in
 [`e2e/`](e2e/) and run on Playwright + Chromium — see [`e2e/README.md`](e2e/README.md).
 They are JS, not Go, so they are a separate CI job and are not part of the Go commands above.
@@ -106,6 +115,10 @@ mcp/        MCP server over the HTTP API (ADR-0016)
 metrics/    Prometheus metrics (ADR-0142)
 opensearch/ OpenSearch event exporter (ADR-0114)
 cmd/atlas/  The single binary (ADR-0011)
+internal/dirsync/ Opening a directory so it can be fsynced — the one step that differs
+            on Windows, shared by wal/, checkpoint/ and api/sidecar/
+internal/sharedread/ Reading a file without blocking a delete of it or a rename over it,
+            which an os.Open handle does on Windows — api/sidecar/'s readers use it
 ```
 
 **`connector/` holds the Worker Types.** Every capability a model can put on a

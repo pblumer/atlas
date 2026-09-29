@@ -606,6 +606,8 @@ func linesFor(rel catalog.Release, ordered []string, held map[string]bool,
 			out = append(out, Line{ItemID: id, VariantID: shape, Status: status,
 				ProvisionProcess:   it.ProvisionProcess,
 				DeprovisionProcess: it.DeprovisionProcess,
+				LifecycleProcess:   it.LifecycleProcess,
+				Operations:         copyAnswers(it.Operations),
 				MaxDays:            it.MaxDays,
 				// The form's id travels with the line beside the answers, so a reader of
 				// the order months later knows which set of questions these answers were

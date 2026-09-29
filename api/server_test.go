@@ -302,7 +302,7 @@ func TestHealthAndUI(t *testing.T) {
 	if code, body := doReq(t, ts, http.MethodGet, "/healthz", "", ""); code != http.StatusOK || !strings.Contains(string(body), "ok") {
 		t.Fatalf("healthz status=%d body=%s", code, body)
 	}
-	if code, body := doReq(t, ts, http.MethodGet, "/", "", ""); code != http.StatusOK || !strings.Contains(string(body), "<title>Atlas</title>") {
+	if code, body := doReq(t, ts, http.MethodGet, "/", "", ""); code != http.StatusOK || !strings.Contains(string(body), "<title>atlas</title>") {
 		t.Fatalf("index status=%d body=%s", code, body)
 	}
 	if code, body := doReq(t, ts, http.MethodGet, "/api/v1/info", "", ""); code != http.StatusOK || !strings.Contains(string(body), `"product":"Atlas"`) {

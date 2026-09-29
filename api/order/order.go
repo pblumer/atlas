@@ -10,6 +10,8 @@ package order
 import (
 	"fmt"
 	"strings"
+
+	"github.com/pblumer/atlas/api/catalog"
 )
 
 // LineStatus is where one ordered position stands.
@@ -176,6 +178,16 @@ type Line struct {
 	// order granted uses the process that was in force when it was granted.
 	ProvisionProcess   string `json:"provisionProcess,omitempty"`
 	DeprovisionProcess string `json:"deprovisionProcess,omitempty"`
+	// LifecycleProcess and Operations are the one-process form of the same binding
+	// (ADR-0425), frozen for the same reason. A line carries one form or the other,
+	// as its product did when it was ordered; a line placed before its product was
+	// converted keeps the two ids (ADR-0427).
+	LifecycleProcess string            `json:"lifecycleProcess,omitempty"`
+	Operations       map[string]string `json:"operations,omitempty"`
+	// Rebindings are the moves of this line from the binding it froze to its
+	// product's lifecycle process, each with who, when and why (ADR-0427). A list,
+	// because a line moved twice has two facts to tell.
+	Rebindings []Rebinding `json:"rebindings,omitempty"`
 	// MaxDays is the product's ceiling on how long the right this line grants may
 	// last, copied from the release for the reason the two processes above are
 	// (ADR-0344). A ceiling relaxed in the catalogue
@@ -314,6 +326,34 @@ type LineInstance struct {
 	ProcessID string `json:"processId,omitempty"`
 	// StartedAt is when it was started, in Unix nanoseconds.
 	StartedAt int64 `json:"startedAt"`
+	// Operation is what the instance does for the position — provision, change,
+	// deprovision — where the starter knew it (ADR-0425). A lifecycle process is one
+	// process id for all of them, so the id alone no longer says which.
+	Operation string `json:"operation,omitempty"`
+}
+
+// BindingFor is where an operation of this line starts: its frozen binding, in
+// whichever form the product had when the line was placed (ADR-0425).
+func (l Line) BindingFor(op string) catalog.Binding {
+	return catalog.Item{
+		ProvisionProcess:   l.ProvisionProcess,
+		DeprovisionProcess: l.DeprovisionProcess,
+		LifecycleProcess:   l.LifecycleProcess,
+		Operations:         l.Operations,
+	}.BindingFor(op)
+}
+
+// StartsOf counts the instances already started for an operation of this line. It
+// is the attempt a new start is, which is what makes a deliberate retry a new
+// trigger and a repeated delivery of the same start the same one.
+func (l Line) StartsOf(op string) int {
+	n := 0
+	for _, in := range l.Instances {
+		if in.Operation == op {
+			n++
+		}
+	}
+	return n
 }
 
 // RecordInstance notes that an instance was started to work one position.

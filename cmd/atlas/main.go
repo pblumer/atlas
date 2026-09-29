@@ -253,6 +253,7 @@ func runServe(args []string) error {
 	// interval. The defaults suit steady state; a bulk run that leaves tens of thousands
 	// of finished instances behind is why they are reachable at all.
 	retentionInterval := fs.Duration("retention-interval", envDurationOr("ATLAS_RETENTION_INTERVAL", api.DefaultRetentionInterval), "how often the retention sweep runs (ADR-0115); with --retention-batch this bounds the drain rate of a backlog")
+	triggerReceiptTTL := fs.Duration("trigger-receipt-ttl", envDuration("ATLAS_TRIGGER_RECEIPT_TTL"), "how long a directed trigger's receipt is kept (ADR-0425): a sender retrying the same triggerId within it gets the first instance back, one retrying after it starts a new one; 0 keeps the default of 720h")
 	retentionBatch := fs.Int("retention-batch", envIntOr("ATLAS_RETENTION_BATCH", api.DefaultRetentionBatch), "how many finished instances one retention sweep evaluates (ADR-0115); the cap keeps a sweep from blocking the run loop, so raise it with the loop's headroom in mind")
 	// Recovery checkpoints (ADR-0131): on by default, because bounded restart time is
 	// the point of them. They only ever add a shortcut — the WAL stays the source of
@@ -336,7 +337,7 @@ func runServe(args []string) error {
 		Password: os.Getenv("ATLAS_METRICS_PASSWORD"),
 		Instance: strings.TrimSpace(*metricsInstance),
 	}
-	retention := retentionConfig{maxAge: *retentionAge, interval: *retentionInterval, batch: *retentionBatch}
+	retention := retentionConfig{maxAge: *retentionAge, interval: *retentionInterval, batch: *retentionBatch, receiptTTL: *triggerReceiptTTL}
 	storeCfg := storeConfig{cacheMB: *stateCacheMB, memtableMB: *stateMemtableMB}
 	trace := tracing.Config{
 		Endpoint:    *traceEndpoint,
@@ -440,6 +441,9 @@ type retentionConfig struct {
 	maxAge   time.Duration
 	interval time.Duration
 	batch    int
+	// receiptTTL is how long a trigger receipt is kept (ADR-0425); zero keeps the
+	// server's default.
+	receiptTTL time.Duration
 }
 
 // storeConfig is how much memory the state store may use, in MiB. Both are resident
@@ -631,6 +635,8 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	// The cadence and batch apply either way: retention also runs for a process that
 	// declares its own atlas:historyTtl, with no server-wide age set (ADR-0144).
 	apiOpts = append(apiOpts, api.WithRetentionInterval(retention.interval), api.WithRetentionBatch(retention.batch))
+	// Trigger receipts are pruned on the same sweep (ADR-0425).
+	apiOpts = append(apiOpts, api.WithTriggerReceiptRetention(retention.receiptTTL))
 	if retention.maxAge > 0 {
 		gate := "durable position"
 		if osExport.Enabled() {

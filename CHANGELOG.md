@@ -24,6 +24,42 @@ _Changed_ / _Removed_ for each version.
   dialog asks for a target rather than proposing an older one, and the button always
   means the whole version — a single instance still moves from its replay (ADR-0162).
 
+- **Converting a product to a lifecycle process no longer lets its old processes be
+  deleted from under the orders that still need them.** Order lines keep the processes they
+  froze when they were placed, so a product converted to one lifecycle process still returns
+  its older lines through its old deprovisioning process. Deleting the last deployed version
+  of a process is now refused while any order line can still start it — the message counts
+  the lines per product — or while a current catalogue release binds it; deactivating it
+  stays allowed and is what to do instead. The catalogue's fulfilment report lists the
+  `remainder` per converted product and old process, and
+  `POST /api/v1/catalog-products/{id}/rebind` (MCP: `atlas_rebind_catalog_product`) moves a
+  product's lines onto its lifecycle process when the old one can no longer succeed, each
+  line recording what it was bound to, who moved it, when and why (ADR-0427).
+
+- **A product can be one process for its whole lifecycle, entered at a start event per
+  operation.** A catalogue product may bind a `lifecycleProcess` instead of a provisioning
+  and a deprovisioning process, with `operations` naming the message start event each
+  operation enters — `provision` and `deprovision` required, `change` optional. Publishing
+  checks the newest deployed version: the named start events exist, and there is no plain
+  start event a start by hand could take. Orders freeze the binding like the two ids, and
+  products already bound to two processes work as before (ADR-0425).
+
+  The order now starts its own positions: `POST /api/v1/orders/{id}/lines/{position}/start`
+  starts the approval a position still owes or, once approved, its provisioning — by hand
+  for the two-process form, at the provision start event for a lifecycle process — and marks
+  the position running, so it is not offered twice. The shipped fulfilment and approval
+  processes call it instead of `POST /api/v1/instances`; an approval process passes
+  `approvedBy`, which records who agreed. Returns, recertification and reconciliation enter a
+  lifecycle process at its deprovision start event.
+
+  For systems outside Atlas, `POST /api/v1/processes/{processId}/triggers/{message}` (MCP:
+  `atlas_trigger_start`) starts a process at one of its message start events and answers with
+  the instance: 201 when it started one, 200 with the first instance when the same `triggerId`
+  was delivered before, 404 for an unknown process or start event, and 409 for a singleton
+  already running, a deactivated process, or a start event a catalogue product binds — those
+  start through the order, which records them first. Receipts are kept for
+  `--trigger-receipt-ttl` (`ATLAS_TRIGGER_RECEIPT_TTL`, default 720h).
+
 - **The handbook teaches evolving a deployed process.** Deploying a new version,
   migrating a running case to it, forking one that cannot be rebound, pausing a version,
   and versioning a decision were all in the product (ADR-0162, ADR-0389, ADR-0119,
@@ -166,6 +202,46 @@ _Changed_ / _Removed_ for each version.
   nothing listened to. They are bound with each render now. The dialog's own harness
   could not have caught it, because it cannot load `app.js`; `e2e/migration-wiring.spec.mjs`
   boots the real console and clicks what an operator clicks (ADR-0162).
+
+- **Atlas can restart on Windows.** Every start that found a log in the data
+  directory stopped with `truncate atlas-data\wal\0000000000000000.wal: Access is
+  denied.` The log opened its newest segment append-only, and on Windows such a handle
+  lacks the right to write data, which trimming the file needs — even to its own
+  length, as every start does. Segments are now opened for reading and writing and
+  positioned explicitly; the log is their only writer, so the append flag guaranteed
+  nothing. The directory fsync behind a new segment, a checkpoint and every design-time
+  save opened the directory read-only, and Windows documents flushing as needing write
+  access, so there it now opens the directory with write access. Other platforms behave
+  as before.
+
+- **On Windows, a record being read no longer blocks deleting or saving it.** The
+  design-time stores (projects, drafts, forms, workers, settings and the rest) are read
+  off the run loop while the writer on it deletes and replaces records. On Windows a
+  file open for reading could not be deleted or renamed over, so a delete or a save that
+  met a concurrent read — a login listing the users, say — failed with "The process
+  cannot access the file because it is being used by another process". Their reads now
+  open the file with delete sharing, as every open already behaves on Linux and macOS,
+  and a save renames the finished file over the record with POSIX semantics, the one
+  rename Windows lets replace a file somebody is reading.
+  The same new Windows test run found that a file in place of the checkpoint directory
+  read there as "no checkpoints" instead of as an error; it is now an error everywhere.
+
+- **A log segment whose header a crash cut short gets its header back.** A crash in the
+  middle of writing the 16-byte header of a new segment left a file that the next start
+  rightly accepted as empty and continued writing into — but without writing the header
+  again. The start after that read the segment as the headerless version-1 format and
+  replayed each batch, framing and entry kinds included, as a single garbled record.
+  Open now writes the header again before anything else lands in such a segment. A
+  segment already damaged this way is not repaired by this change.
+
+- **A job failed back with retries left wakes the workers waiting for it.** A worker
+  that fails a job with retries left and no backoff gives it straight back to the
+  queue, but a second worker already long-polling that job type was not told: it slept
+  out its whole poll — up to the `waitMs` it asked for — while the job sat there. Every
+  other way a job becomes available (created, a backoff or a lease running out, an
+  incident resolved) already woke the waiting workers; a retryable failure now does too.
+  A fail with a backoff still wakes them when the backoff elapses, and an exhausting
+  one still waits for an operator.
 
 - **Restarting a supervised worker is never quietly ignored.** A restart asked for
   while the worker was still running, or in the moment after it crashed, closed a

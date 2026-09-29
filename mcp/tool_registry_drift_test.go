@@ -47,6 +47,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_catalog_translation_gaps":   "GET /api/v1/catalog-products/translation-gaps",
 	"atlas_save_catalog_product":       "POST /api/v1/catalog-products",
 	"atlas_publish_catalog":            "POST /api/v1/catalogs/{id}/releases",
+	"atlas_rebind_catalog_product":     "POST /api/v1/catalog-products/{id}/rebind",
 	"atlas_catalog_releases":           "GET /api/v1/catalogs/{id}/releases",
 	"atlas_catalog_unpublished":        "GET /api/v1/catalogs/{id}/unpublished",
 	"atlas_import_catalog_archimate":   "POST /api/v1/catalogs/{id}/import",
@@ -102,6 +103,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_claim_task":                   "POST /api/v1/tasks/{key}/claim",
 	"atlas_unclaim_task":                 "POST /api/v1/tasks/{key}/unclaim",
 	"atlas_publish_message":              "POST /api/v1/messages",
+	"atlas_trigger_start":                "POST /api/v1/processes/{processId}/triggers/{message}",
 	"atlas_complete_job":                 "POST /api/v1/jobs/{key}/complete",
 	"atlas_fail_job":                     "POST /api/v1/jobs/{key}/fail",
 	"atlas_list_incidents":               "GET /api/v1/incidents",
@@ -173,6 +175,10 @@ var mcpToolRoutes = map[string]string{
 var mcpOmittedRoutes = map[string]string{
 	// Server introspection / diagnostics an agent does not drive scenarios with.
 	"GET /api/v1/logs": "admin diagnostics, not an agent authoring/runtime action",
+	// The order starting its own positions (ADR-0425) is the fulfilment and approval
+	// models' call, made with the position's state behind it; an agent that wants a
+	// position worked places or returns the order instead.
+	"POST /api/v1/orders/{id}/lines/{item}/start": "the fulfilment models' own call, not an agent action",
 	// The portal catalogue's own maintenance routes are tools now, not omissions —
 	// see mcpToolRoutes and ADR-0376. What stays
 	// out of the tool surface is what a product manager does not do: the instance's

@@ -105,3 +105,31 @@ func (l processLookup) Served(jobType string) bool {
 	})
 	return served
 }
+
+// EntryPoints names the root message start events of the newest deployed version of
+// a process id, and says whether it has a none start and whether any version is
+// deployed at all (ADR-0425). The newest version, because that is the one a trigger
+// starts (supersedeStarts).
+func (l processLookup) EntryPoints(processID string) (messages []string, hasNone bool, deployed bool) {
+	processID = strings.TrimSpace(processID)
+	if processID == "" {
+		return nil, false, false
+	}
+	l.s.do(func() {
+		d := l.s.latestDeploymentOf(processID)
+		if d == nil || d.cp == nil {
+			return
+		}
+		deployed = true
+		for _, ms := range d.cp.MessageStartEvents() {
+			messages = append(messages, ms.MessageName)
+		}
+		for _, id := range d.cp.StartEvents() {
+			if d.cp.Node(id).Type == compiler.TypeStartEvent {
+				hasNone = true
+			}
+		}
+	})
+	slices.Sort(messages)
+	return messages, hasNone, deployed
+}

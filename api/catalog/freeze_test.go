@@ -34,6 +34,11 @@ func everything(id string) Item {
 	it.CategoryTexts = map[string]string{"de": "Arbeitsplatz"}
 	it.ProductGroup = "Netzzugang"
 	it.ProductGroupTexts = map[string]string{"de": "Netzzugang"}
+	// The lifecycle form, because that is the one with a map: the two process ids
+	// give way to one process and its operations (ADR-0425).
+	it.ProvisionProcess, it.DeprovisionProcess = "", ""
+	it.LifecycleProcess = "vpn-lifecycle"
+	it.Operations = map[string]string{OpProvision: "vpn.provision", OpDeprovision: "vpn.deprovision"}
 	return it
 }
 

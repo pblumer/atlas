@@ -44,6 +44,64 @@
       }
     },
     {
+      "id": "converting-a-product-to-a-lifecycle-process-no-longer-lets-i",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Old processes stay as long as an order still needs them",
+        "de": "Alte Prozesse bleiben, solange ein Auftrag sie noch braucht"
+      },
+      "summary": {
+        "en": "When a product moves to one lifecycle process, orders placed before keep the processes they were placed with — a laptop handed out last year is still returned by last year's return process. Atlas now refuses to delete such a process while an order line can still start it, and says how many lines per product. The fulfilment report shows what is left, and if an old process can no longer work, a maintainer can move the lines to the new process; each moved line records who did it and why.",
+        "de": "Wechselt ein Produkt auf einen Lebenszyklusprozess, behalten früher aufgegebene Aufträge die Prozesse, mit denen sie aufgegeben wurden — ein letztes Jahr ausgegebener Laptop wird mit dem Rückgabeprozess von letztem Jahr zurückgenommen. Atlas verweigert jetzt das Löschen eines solchen Prozesses, solange eine Auftragsposition ihn noch starten kann, und nennt die Anzahl Positionen pro Produkt. Der Fulfilment-Report zeigt den Restbestand, und kann ein alter Prozess nicht mehr funktionieren, lassen sich die Positionen auf den neuen Prozess umbinden; jede umgebundene Position hält fest, wer das getan hat und warum."
+      },
+      "link": {
+        "label": "ADR-0427",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0427-converting-a-product-to-a-lifecycle-process.md"
+      },
+      "tags": [
+        "Catalogue",
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Console",
+          "de": "Console öffnen"
+        },
+        "route": "#/console"
+      }
+    },
+    {
+      "id": "a-product-can-be-one-process-for-its-whole-lifecycle-entered",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "One process per product: provisioning, change and deprovisioning in one model",
+        "de": "Ein Prozess pro Produkt: Provisionierung, Änderung und Deprovisionierung in einem Modell"
+      },
+      "summary": {
+        "en": "A product no longer needs a separate process for granting and for revoking. Bind one lifecycle process instead and name, per operation, the message start event it begins at. An order enters it at the provision start, a return at the deprovision start — and nothing else runs. Systems outside Atlas can start a process at a chosen start event too, and a retry with the same trigger id gets the first instance back instead of starting a second.",
+        "de": "Ein Produkt braucht keinen getrennten Prozess mehr für das Vergeben und das Entziehen. Stattdessen wird ein Lebenszyklusprozess gebunden und pro Operation das Nachrichten-Startereignis genannt, bei dem sie beginnt. Ein Auftrag steigt beim Startereignis für die Provisionierung ein, eine Rückgabe bei dem für die Deprovisionierung — und sonst läuft nichts. Auch Systeme ausserhalb von Atlas können einen Prozess an einem gewählten Startereignis starten; ein erneuter Aufruf mit derselben Trigger-ID erhält die erste Instanz zurück, statt eine zweite zu starten."
+      },
+      "link": {
+        "label": "ADR-0425",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0425-a-product-lifecycle-is-one-process-with-message-triggers.md"
+      },
+      "tags": [
+        "Catalogue",
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Console",
+          "de": "Console öffnen"
+        },
+        "route": "#/console"
+      }
+    },
+    {
       "id": "the-handbook-teaches-evolving-a-deployed-process",
       "version": "Unreleased",
       "date": null,
@@ -296,62 +354,6 @@
         "Operations",
         "API"
       ]
-    },
-    {
-      "id": "a-batch-migration-reaches-every-instance-of-the-version-and-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Migrating many instances at once now reaches all of them",
-        "de": "Die Migration vieler Instanzen erreicht jetzt alle"
-      },
-      "summary": {
-        "en": "Moving all running instances of a version onto another works through them in portions. An instance that cannot be moved stays where it is — and until now, the next portion started from the front again and met it again. A few such instances made the list of instances left behind show them many times over; a full portion of them meant the migration never got past them and never finished. Each portion now continues where the previous one stopped, so every instance is looked at exactly once and the migration ends. While a long migration runs, Atlas shows how far it has got; if it is interrupted, it says how many instances had already moved; and when very many instances could not be moved, it lists the first 200 and counts the rest.",
-        "de": "Das Verschieben aller laufenden Instanzen einer Version auf eine andere arbeitet sie portionenweise ab. Eine Instanz, die sich nicht verschieben lässt, bleibt, wo sie ist — und bisher begann die nächste Portion wieder von vorne und traf sie erneut an. Wenige solche Instanzen erschienen dadurch mehrfach in der Liste der zurückgebliebenen Instanzen; eine ganze Portion davon bedeutete, dass die Migration nie über sie hinauskam und nie endete. Jede Portion setzt jetzt dort fort, wo die vorherige aufgehört hat: Jede Instanz wird genau einmal betrachtet, und die Migration endet. Während einer langen Migration zeigt Atlas den Fortschritt an; wird sie unterbrochen, nennt Atlas, wie viele Instanzen bereits verschoben waren; und lassen sich sehr viele Instanzen nicht verschieben, listet Atlas die ersten 200 auf und zählt den Rest."
-      },
-      "link": {
-        "label": "ADR-0162",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0162-process-instance-migration.md"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Instances",
-          "de": "Instanzen öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "migrate-running-instances-and-terminate-all-running-in-the-i",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The Instances list's row menu works again",
-        "de": "Das Zeilenmenü der Instanzliste funktioniert wieder"
-      },
-      "summary": {
-        "en": "In Operations → Instances, the ⋯ menu of a process row offers \"Migrate running instances…\" and \"Terminate all running\". Both only closed the menu and did nothing else. They open their dialogs again: migration asks for the source and target version and a reason, and terminating asks for a confirmation before anything is discarded.",
-        "de": "In Operations → Instances bietet das ⋯-Menü einer Prozesszeile «Migrate running instances…» und «Terminate all running» an. Beide schlossen nur das Menü und bewirkten sonst nichts. Sie öffnen ihre Dialoge jetzt wieder: Die Migration fragt nach Quell- und Zielversion sowie einem Grund, das Beenden verlangt eine Bestätigung, bevor etwas verworfen wird."
-      },
-      "link": {
-        "label": "ADR-0162",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0162-process-instance-migration.md"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Instances",
-          "de": "Instanzen öffnen"
-        },
-        "route": "#/operations"
-      }
     }
   ]
 }

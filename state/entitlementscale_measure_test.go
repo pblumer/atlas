@@ -1,3 +1,8 @@
+//go:build !windows
+
+// This measurement counts hard links through syscall.Stat_t, which Windows does not
+// have, so the file stays out of a Windows build instead of breaking it.
+
 package state
 
 import (

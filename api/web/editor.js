@@ -242,7 +242,7 @@ let pendingAdopt = null;
 // docTitle refines the browser tab title with a loaded subject (a diagram or
 // process name), matching app.js's "<subject> · Atlas" scheme so open tabs are
 // distinguishable. The router sets a route-based title first; this sharpens it.
-function docTitle(label) { document.title = label ? `${label} · Atlas` : "Atlas"; }
+function docTitle(label) { document.title = label ? `${label} · atlas` : "atlas"; }
 
 // cleanup tears down the current modeler and any live poll. app.js calls it (via
 // window.__atlasCleanup) when navigating away so nothing keeps running.

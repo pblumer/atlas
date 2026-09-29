@@ -393,6 +393,17 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			return tx.RecordMessageFlow(h.Timestamp, h.Position, &v.messageFlow)
 		}
 
+	case model.VTTriggerReceipt:
+		switch h.Intent {
+		case model.IntentTriggerReceived:
+			// A directed trigger was applied (ADR-0425). Everything the receipt holds
+			// is in the event — the instance key and the time were frozen into it —
+			// so replay rebuilds the identical set (I4, I6).
+			return tx.PutTriggerReceipt(v.trigger.Source, v.trigger.TriggerID, v.trigger.InstanceKey, v.trigger.At)
+		case model.IntentTriggerReceiptsPruned:
+			return tx.PruneTriggerReceipts(v.trigger.Cutoff)
+		}
+
 	case model.VTInboundDelivery:
 		if h.Intent == model.IntentInboundDeliveryApplied {
 			// Advance the external source's inbound high-water mark (ADR-0075). The
