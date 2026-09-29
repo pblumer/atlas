@@ -1,0 +1,25 @@
+{
+  "tags": [
+    "Handbook",
+    "Operations"
+  ],
+  "link": {
+    "label": "ADR-0142",
+    "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0142-prometheus-metrics.md"
+  },
+  "title": {
+    "en": "Monitor an Atlas installation — the handbook now shows how",
+    "de": "Eine Atlas-Installation überwachen – das Handbuch zeigt jetzt, wie"
+  },
+  "summary": {
+    "en": "Operations shows the single case; running Atlas day and night needs the view from outside. Atlas already exposed Prometheus metrics, mirrored its event log into OpenSearch, deleted finished instances on an export-gated schedule, and backed up either the design-time data or the whole instance — and the operations chapter stopped at the single incident. A new subsection explains all of it, in German and English, including two things worth knowing first: Atlas raises no alert on its own (you alert on the metrics), and `/metrics` is no longer open — since ADR-0198 it sits behind a `metrics`-scoped token. Every call was run against a live instance first.",
+    "de": "Operations zeigt den einzelnen Fall; Atlas im Dauerbetrieb braucht die Sicht von aussen. Atlas legte längst Prometheus-Metriken ab, spiegelte sein Ereignisprotokoll nach OpenSearch, löschte fertige Instanzen export-gesteuert und sicherte wahlweise die Design-Zeit-Daten oder die ganze Instanz – und das Betriebskapitel endete beim einzelnen Incident. Ein neuer Abschnitt erklärt das vollständig, auf Deutsch und Englisch, samt zweier Dinge, die man zuerst wissen sollte: Atlas alarmiert nicht von sich aus (man alarmiert auf die Metriken), und `/metrics` ist nicht mehr offen – seit ADR-0198 liegt es hinter einem Token mit Scope `metrics`. Jeder Aufruf wurde zuerst an einer laufenden Instanz ausgeführt."
+  },
+  "try": {
+    "label": {
+      "en": "Open Operations",
+      "de": "Operations öffnen"
+    },
+    "route": "#/operations"
+  }
+}

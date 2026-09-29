@@ -2,6 +2,64 @@
   "generatedAt": "2026-09-28",
   "entries": [
     {
+      "id": "the-handbook-teaches-monitoring-an-atlas-installation",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Monitor an Atlas installation — the handbook now shows how",
+        "de": "Eine Atlas-Installation überwachen – das Handbuch zeigt jetzt, wie"
+      },
+      "summary": {
+        "en": "Operations shows the single case; running Atlas day and night needs the view from outside. Atlas already exposed Prometheus metrics, mirrored its event log into OpenSearch, deleted finished instances on an export-gated schedule, and backed up either the design-time data or the whole instance — and the operations chapter stopped at the single incident. A new subsection explains all of it, in German and English, including two things worth knowing first: Atlas raises no alert on its own (you alert on the metrics), and `/metrics` is no longer open — since ADR-0198 it sits behind a `metrics`-scoped token. Every call was run against a live instance first.",
+        "de": "Operations zeigt den einzelnen Fall; Atlas im Dauerbetrieb braucht die Sicht von aussen. Atlas legte längst Prometheus-Metriken ab, spiegelte sein Ereignisprotokoll nach OpenSearch, löschte fertige Instanzen export-gesteuert und sicherte wahlweise die Design-Zeit-Daten oder die ganze Instanz – und das Betriebskapitel endete beim einzelnen Incident. Ein neuer Abschnitt erklärt das vollständig, auf Deutsch und Englisch, samt zweier Dinge, die man zuerst wissen sollte: Atlas alarmiert nicht von sich aus (man alarmiert auf die Metriken), und `/metrics` ist nicht mehr offen – seit ADR-0198 liegt es hinter einem Token mit Scope `metrics`. Jeder Aufruf wurde zuerst an einer laufenden Instanz ausgeführt."
+      },
+      "link": {
+        "label": "ADR-0142",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0142-prometheus-metrics.md"
+      },
+      "tags": [
+        "Handbook",
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
+      "id": "the-handbook-teaches-writing-your-own-worker-over-the-job-ap",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Write your own worker — the handbook now shows the Job API",
+        "de": "Einen eigenen Worker schreiben – das Handbuch zeigt jetzt die Job-API"
+      },
+      "summary": {
+        "en": "The built-in workers cover the common outside systems; for everything else you write your own, on any host, holding an API token of scope worker. It leases a job by its type, does the work, and completes or fails it — the same loop atlas worker runs. The handbook's Forms & workers chapter now explains it in German and English: the task definition that names the job type, the activate/complete/fail calls with a curl example, the lease token that fences a stale completion, and why at-least-once delivery means your worker has to be idempotent. Every call was run against a live instance first.",
+        "de": "Die eingebauten Worker decken die häufigen Aussensysteme ab; für alles andere schreibt man einen eigenen, auf einem beliebigen Rechner, mit einem API-Token des Scopes worker. Er least einen Job nach seinem Typ, tut die Arbeit und schliesst ihn ab oder lässt ihn fehlschlagen – dieselbe Schleife, die auch atlas worker fährt. Das Kapitel «Formulare & Worker» erklärt das jetzt auf Deutsch und Englisch: die Task-Definition, die den Job-Type benennt, die Aufrufe activate/complete/fail mit curl-Beispiel, den Lease-Token, der einen veralteten Abschluss auszäunt, und warum mindestens einmalige Zustellung heisst, dass der Worker idempotent sein muss. Jeder Aufruf wurde zuerst an einer laufenden Instanz ausgeführt."
+      },
+      "link": {
+        "label": "ADR-0007",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0007-job-worker-protocol.md"
+      },
+      "tags": [
+        "Handbook",
+        "Workers"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Console",
+          "de": "Konsole öffnen"
+        },
+        "route": "#/console"
+      }
+    },
+    {
       "id": "converting-a-product-to-a-lifecycle-process-no-longer-lets-i",
       "version": "Unreleased",
       "date": null,
@@ -290,49 +348,6 @@
         },
         "route": "#/modeler"
       }
-    },
-    {
-      "id": "atlas-can-restart-on-windows",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Atlas can restart on Windows",
-        "de": "Atlas lässt sich unter Windows neu starten"
-      },
-      "summary": {
-        "en": "On Windows, every start after the first stopped with \"truncate atlas-data\\wal\\0000000000000000.wal: Access is denied.\" The log opened its newest file in a mode that may only append, and on Windows that mode may not shorten the file, which every start does. The log now opens its files for reading and writing, and the data directory is flushed through a handle Windows accepts. Nothing changes on Linux or macOS.",
-        "de": "Unter Windows brach jeder Start nach dem ersten mit «truncate atlas-data\\wal\\0000000000000000.wal: Access is denied.» ab. Das Log öffnete seine neueste Datei in einem Modus, der nur anhängen darf, und unter Windows darf dieser Modus die Datei nicht kürzen, was jeder Start tut. Das Log öffnet seine Dateien jetzt zum Lesen und Schreiben, und das Datenverzeichnis wird über ein Handle auf den Datenträger geschrieben, das Windows dafür akzeptiert. Unter Linux und macOS ändert sich nichts."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations",
-        "Engine"
-      ]
-    },
-    {
-      "id": "on-windows-a-record-being-read-no-longer-blocks-deleting-or-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "On Windows, deleting or saving no longer collides with a read",
-        "de": "Unter Windows kollidiert Löschen oder Speichern nicht mehr mit einem Lesezugriff"
-      },
-      "summary": {
-        "en": "On a Windows server, deleting or saving a project, draft, form or other saved item could fail with \"The process cannot access the file because it is being used by another process\" when another request was reading it at that moment, for example during a login. Reads no longer lock the file against that. Nothing changes on Linux or macOS.",
-        "de": "Auf einem Windows-Server konnte das Löschen oder Speichern eines Projekts, Entwurfs, Formulars oder eines anderen gespeicherten Elements mit «The process cannot access the file because it is being used by another process» fehlschlagen, wenn ein anderer Request es im selben Moment las, etwa bei einer Anmeldung. Lesezugriffe sperren die Datei dafür nicht mehr. Unter Linux und macOS ändert sich nichts."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations"
-      ]
     }
   ]
 }

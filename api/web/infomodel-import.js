@@ -72,7 +72,7 @@ export function showImportReport({ app, api, toast, navigate, text, fileName, fa
       <div class="modal" role="dialog" aria-modal="true" aria-label="Import report" style="max-width:880px">
         <div class="modal-head"><h2>Import ${esc(fileName)}</h2></div>
         <div class="modal-body">
-          <p class="muted" style="margin:0 0 10px" id="im-import-counts">Read as <b>${esc(preview.format === "xmi" ? "UML XMI" : "Atlas JSON")}</b> —
+          <p class="muted" style="margin:0 0 10px" id="im-import-counts">Read as <b>${esc(preview.format === "xmi" ? "UML XMI" : "atlas JSON")}</b> —
             ${counted((model.classes || []).length, "class", "classes")},
             ${counted((model.associations || []).length, "relationship", "relationships")},
             ${counted((model.stores || []).length, "data store", "data stores")}.

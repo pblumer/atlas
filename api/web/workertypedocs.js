@@ -74,7 +74,7 @@ export const WORKER_TYPE_DOCS = {
     steps: [
       `Put the credential in the vault first: ${VAULT} &rarr; new secret, e.g. <code>crm_token</code>, holding the token or password itself.`,
       `Pick the authentication type (Basic, Bearer, API key) and enter that key as the <b>Secret reference</b>. The model stores the reference only, so an export, a version and a diagram carry no secret.`,
-      `Where the call runs on a worker rather than in the engine, the same reference travels as <code>ATLAS_CONNECTOR_&lt;REF&gt;_TOKEN</code>: a worker Atlas supervises is handed the vault's value at spawn — and only for the references the deployed models actually name — while a worker you run yourself reads it from its own environment.`,
+      `Where the call runs on a worker rather than in the engine, the same reference travels as <code>ATLAS_CONNECTOR_&lt;REF&gt;_TOKEN</code>: a worker atlas supervises is handed the vault's value at spawn — and only for the references the deployed models actually name — while a worker you run yourself reads it from its own environment.`,
       `Name a <b>result variable</b>; the JSON answer lands there and is addressable as <code>=antwort.feld</code>.`,
     ],
     trap: `<code>401</code> is the credential, <code>403</code> the permission. Both park the token on an incident that names the status — read it before changing the URL.`,
@@ -114,7 +114,7 @@ export const WORKER_TYPE_DOCS = {
       `Take the endpoint out of the WSDL (<code>soap:address</code>) and the operation name out of its <code>&lt;operation&gt;</code>, e.g. <code>GetUser</code>.`,
       `Store the credential in the vault: ${VAULT}, e.g. <code>ws_password</code>.`,
       `In this task: the endpoint, the operation, the SOAP version (1.1 sends <code>text/xml</code> with a <code>SOAPAction</code> header, 1.2 sends <code>application/soap+xml</code>), and Basic authentication with <code>ws_password</code> as the secret reference.`,
-      `The request body is the operation's request element only — Atlas writes the envelope around it. Switch on <code>fx</code> to interpolate variables into the XML.`,
+      `The request body is the operation's request element only — atlas writes the envelope around it. Switch on <code>fx</code> to interpolate variables into the XML.`,
     ],
     trap: `A wrong or missing <code>SOAPAction</code> is answered by most stacks with a fault about the <i>body</i>, not about the header. When the body looks right, check the action first.`,
   },
@@ -126,7 +126,7 @@ export const WORKER_TYPE_DOCS = {
     steps: [
       `Create a <b>directory service account</b> — not a personal account, not a domain admin — and delegate account and group rights on exactly the OUs the processes work in. Delegation at OU level is the advantage AD has over Entra ID; use it.`,
       `Store the bind bundle in the vault: ${VAULT}, e.g. <code>ad_prod_bind</code> holding <code>{"bindDN": "cn=svc-atlas,ou=service,dc=example,dc=com", "password": "…"}</code>.`,
-      `${WORKERS} &rarr; <b>New worker</b>: type <b>Active Directory</b>, a <b>name</b> (this task states exactly that name), endpoint <code>ldaps://dc.example.com:636</code>, credential reference <code>ad_prod_bind</code>. Saving is enough — Atlas restarts the supervised worker with the new configuration itself.`,
+      `${WORKERS} &rarr; <b>New worker</b>: type <b>Active Directory</b>, a <b>name</b> (this task states exactly that name), endpoint <code>ldaps://dc.example.com:636</code>, credential reference <code>ad_prod_bind</code>. Saving is enough — atlas restarts the supervised worker with the new configuration itself.`,
       `Practise without a domain controller: a worker started with <code>ATLAS_AD_MOCK=1</code> serves the same tasks from a directory in its own memory, and <code>ATLAS_AD_MOCK_SEED</code> names an LDIF or DSML file it starts from.`,
     ],
     trap: `<code>ldaps://</code>, not <code>ldap://</code>: a domain controller refuses to set a password over an unencrypted channel, so a plain connection works for everything except the one thing a joiner process needs.`,
@@ -222,7 +222,7 @@ export const WORKER_TYPE_DOCS = {
     checked: "2026-09",
     needs: `A configured temis Worker in ${WORKERS}: an endpoint, and a token reference only where the service requires one.`,
     steps: [
-      `Check whether you need it at all: a DMN decision deployed into Atlas is evaluated by the built-in engine and needs no worker. temis is for keeping decisions <b>centrally</b>, outside this installation.`,
+      `Check whether you need it at all: a DMN decision deployed into atlas is evaluated by the built-in engine and needs no worker. temis is for keeping decisions <b>centrally</b>, outside this installation.`,
       `Where the service requires a token, store it in the vault: ${VAULT}, e.g. <code>temis_token</code>.`,
       `${WORKERS} &rarr; <b>New worker</b>: type <b>temis</b>, a name, the endpoint <code>https://temis.example.com</code>, and the token reference where there is one.`,
       `On the business rule task, choose <b>External (temis worker)</b> and name that worker.`,
@@ -319,7 +319,7 @@ export const WORKER_TYPE_DOCS = {
     needs: `A configured Discord Worker in ${WORKERS}: a vault bundle with the bot token. No endpoint — Discord's API base is the same for everyone.`,
     steps: [
       `<b>Discord Developer Portal</b> &rarr; <i>New Application</i> &rarr; <i>Bot</i> &rarr; <b>Reset Token</b>, and copy the token. It is shown once.`,
-      `Store it in the vault: ${VAULT}, e.g. <code>discord_team</code> holding <code>{"botToken": "…"}</code> — the token alone; Atlas composes the <code>Bot </code> scheme itself.`,
+      `Store it in the vault: ${VAULT}, e.g. <code>discord_team</code> holding <code>{"botToken": "…"}</code> — the token alone; atlas composes the <code>Bot </code> scheme itself.`,
       `<b>Invite the bot to your server</b> (Developer Portal &rarr; <i>OAuth2</i> &rarr; URL generator, scope <code>bot</code>) and make sure it holds <b>View Channel</b> and <b>Send Messages</b> in every channel a process writes to.`,
       `${WORKERS} &rarr; <b>New worker</b>: type <b>Discord</b>, a name, credential reference <code>discord_team</code>, no endpoint.`,
       `Get the <b>channel id</b>: in Discord enable <i>Developer Mode</i> (User settings &rarr; Advanced), then right-click the channel &rarr; <b>Copy Channel ID</b>. A thread is itself a channel, so posting into one is a Send message naming the thread's id.`,
@@ -337,7 +337,7 @@ export const WORKER_TYPE_DOCS = {
       `${WORKERS} &rarr; <b>New worker</b>: type <b>AI agent model</b>, a name, the <b>provider</b> (<i>Messages</i> is Anthropic's format, <i>Chat Completions</i> is OpenAI's and anything calling itself OpenAI-compatible), the API key reference, and the <b>default model</b>. Leave the endpoint empty unless you go through a gateway, a proxy or a self-hosted deployment.`,
       `In the task, leave <b>Model</b> empty to ask the worker's default, or name one per task — a cheap model for a classification and a strong one for advice, through the same worker and the same key.`,
     ],
-    trap: `A model call takes seconds to minutes and can hang, so Atlas never runs it in the engine: it supervises a worker for this type and picks up a changed model as soon as you save, with no restart.`,
+    trap: `A model call takes seconds to minutes and can hang, so atlas never runs it in the engine: it supervises a worker for this type and picks up a changed model as soon as you save, with no restart.`,
   },
 
   webscrape: {
@@ -355,20 +355,20 @@ export const WORKER_TYPE_DOCS = {
   userconnector: {
     anchor: "runbook-userprov", title: "User provisioning",
     checked: "2026-09",
-    needs: "No Worker record and no credential — it acts on this Atlas's own login store, which is why it is fenced instead of configured.",
+    needs: "No Worker record and no credential — it acts on this atlas's own login store, which is why it is fenced instead of configured.",
     steps: [
       `It runs <b>only for processes in the protected system project</b>. A copy of the same task in an ordinary project is refused at deploy — that fence is the whole security model of this type.`,
-      `It is on by default. An installation that does not want Atlas logins created by a process starts the server with <code>--user-provisioning=false</code>; the tasks then park instead of acting.`,
+      `It is on by default. An installation that does not want atlas logins created by a process starts the server with <code>--user-provisioning=false</code>; the tasks then park instead of acting.`,
       `Put a <b>human approval step</b> in front of it and let an admin set the roles and the initial password there. Never let a requester choose roles on a public start form.`,
       `Pass the password as a FEEL reference to a variable (<code>=initialpasswort</code>, at least 8 characters), so no password is written into the model.`,
     ],
-    trap: `This is the one Worker Type that reopens the boundary between "a process" and "who may use Atlas". Treat every change to such a model as a change to access control.`,
+    trap: `This is the one Worker Type that reopens the boundary between "a process" and "who may use atlas". Treat every change to such a model as a change to access control.`,
   },
 
   mockup: {
     anchor: "runbook-mockup", title: "Mockup (simulation)",
     checked: "2026-09",
-    needs: "Nothing to configure, and nothing outside Atlas: the engine acts the foreign system itself.",
+    needs: "Nothing to configure, and nothing outside atlas: the engine acts the foreign system itself.",
     steps: [
       `Give it a duration (or a minimum and a maximum) so the diagram behaves like the system it stands in for.`,
       `Write the answer as a FEEL <b>result expression</b> over the instance's variables and name a result variable — that is the input&rarr;output script of the system that does not exist yet.`,

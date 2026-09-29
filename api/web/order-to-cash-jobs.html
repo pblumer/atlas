@@ -100,9 +100,9 @@
 <div class="wrap">
   <header>
     <p class="eyebrow">Atlas · Order-to-Cash · Service-Tasks · Job-API</p>
-    <h1>Der Prozess läuft in Atlas. Die App bleibt winzig.</h1>
+    <h1>Der Prozess läuft in atlas. Die App bleibt winzig.</h1>
     <p class="lede">Diese Seite steuert eine <b>echte</b> Instanz des
-      <b>Service-Task</b>-Modells <code>order-to-cash.bpmn</code> über die Atlas-HTTP-API.
+      <b>Service-Task</b>-Modells <code>order-to-cash.bpmn</code> über die atlas-HTTP-API.
       Sie listet die geparkten Jobs (<code>GET /instances/{key}/jobs</code>) und schließt
       sie ab (<code>POST /jobs/{key}/complete</code>) — die App agiert als Job-Worker.
       <b>Rechnen, Regeln, Routing und Parallelität macht die Engine.</b></p>
@@ -127,24 +127,24 @@
           <button data-v="Private">Private</button>
         </div>
       </div>
-      <button class="btn primary" id="startBtn" style="width:100%;margin-top:6px">Bestellung an Atlas übergeben →</button>
+      <button class="btn primary" id="startBtn" style="width:100%;margin-top:6px">Bestellung an atlas übergeben →</button>
       <p class="muted" id="startHint" style="margin-top:10px"></p>
     </section>
 
     <!-- OUTPUT: everything here comes back FROM Atlas -->
     <section class="card">
       <h2><span>Instanz</span><span class="hint" id="instHint">—</span></h2>
-      <div id="live"><p class="muted">Noch keine Instanz gestartet. Gib links deinen Warenkorb ein und übergib ihn an Atlas.</p></div>
+      <div id="live"><p class="muted">Noch keine Instanz gestartet. Gib links deinen Warenkorb ein und übergib ihn an atlas.</p></div>
     </section>
   </div>
 
   <section class="card" style="margin-top:18px">
-    <h2><span>HTTP-Aufrufe an Atlas</span><span class="hint">das ist die gesamte Integration</span></h2>
+    <h2><span>HTTP-Aufrufe an atlas</span><span class="hint">das ist die gesamte Integration</span></h2>
     <div class="log" id="log"><div class="s2">Wartet auf den ersten Aufruf …</div></div>
   </section>
 
   <footer>
-    Wird von Atlas unter <code>/order-to-cash-jobs.html</code> ausgeliefert · Prozessmodell:
+    Wird von atlas unter <code>/order-to-cash-jobs.html</code> ausgeliefert · Prozessmodell:
     <code>examples/order-to-cash.bpmn</code> · Basis-URL:
     <input id="base" value="/api/v1" style="width:180px;font-family:var(--mono);font-size:11px" title="Same-origin per Default. Für Cross-Origin muss der Server CORS senden."/>
   </footer>
@@ -357,7 +357,7 @@ function renderLive(vars, jobs, inst){
   let tasksHtml;
   if (state !== "active"){
     tasksHtml = state==="completed"
-      ? `<div class="banner">✓ Auftrag abgeschlossen — von Atlas geliefert &amp; verrechnet</div>`
+      ? `<div class="banner">✓ Auftrag abgeschlossen — von atlas geliefert &amp; verrechnet</div>`
       : `<div class="banner" style="background:var(--amber-soft);color:var(--amber)">Instanz ${state}</div>`;
   } else if (!jobs || jobs.length === 0){
     tasksHtml = `<p class="muted">Kein offener Job gerade — die Engine rechnet/routet. <button class="btn ghost small" onclick="refresh()">Aktualisieren</button></p>`;
@@ -390,7 +390,7 @@ $("#startBtn").onclick = async ()=>{
   try{
     const defKey = await ensureDeployed();
     instanceKey = await startInstance(defKey);
-    $("#startHint").textContent = "Instanz #"+instanceKey+" läuft in Atlas.";
+    $("#startHint").textContent = "Instanz #"+instanceKey+" läuft in atlas.";
     await refresh();
     if (!polling) polling = setInterval(refresh, 2500);  // keep in sync while active
   }catch(e){ $("#startHint").innerHTML = `<span style="color:#b23a3a">Fehler: ${e.message}</span>`; }
