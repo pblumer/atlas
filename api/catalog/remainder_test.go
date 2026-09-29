@@ -4,6 +4,8 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+
+	"github.com/pblumer/atlas/api/httpapi"
 )
 
 type fakeRemainders struct {
@@ -56,5 +58,29 @@ func TestTheFulfilmentReportCarriesTheRemainder(t *testing.T) {
 	rem.err = errors.New("orders unreadable")
 	if rec := as(t, s.HandleFulfilmentReport, user("usr_a"), "GET", ""); rec.Code != http.StatusInternalServerError {
 		t.Fatalf("a failing lookup: %d, want 500", rec.Code)
+	}
+}
+
+// TestMayEditIsTheWriteRight: the exported check answers as the write guard does —
+// the owner and an editor may, a viewer and an anonymous caller may not.
+func TestMayEditIsTheWriteRight(t *testing.T) {
+	s := newService(t)
+	c := Catalog{ID: "c", OwnerID: "usr_owner", Members: []Member{
+		{Ref: PrincipalRef{Type: "user", ID: "usr_ed"}, Role: RoleEditor},
+		{Ref: PrincipalRef{Type: "user", ID: "usr_view"}, Role: RoleViewer},
+	}}
+	for _, tc := range []struct {
+		p    *httpapi.Principal
+		want bool
+	}{
+		{&httpapi.Principal{UserID: "usr_owner"}, true},
+		{&httpapi.Principal{UserID: "usr_ed"}, true},
+		{&httpapi.Principal{UserID: "usr_view"}, false},
+		{&httpapi.Principal{UserID: "usr_admin", Roles: []string{"admin"}}, true},
+		{nil, false},
+	} {
+		if got := s.MayEdit(c, tc.p); got != tc.want {
+			t.Errorf("MayEdit(%+v) = %v, want %v", tc.p, got, tc.want)
+		}
 	}
 }
