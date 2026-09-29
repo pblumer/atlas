@@ -178,8 +178,9 @@ Publishing a catalogue (ADR-0312) additionally checks, against the latest active
 - `provision` and `deprovision` are bound; `change` may be;
 - every bound message name is a **root-scope message start event** of that process;
 - the process has **no none start event**. A none start in a lifecycle process is an
-  entry the catalogue never uses and the API would seed on an untriggered create, which
-  is exactly the failure described under §5;
+  entry the catalogue never uses and an untriggered create would seed; without one, an
+  untriggered create is refused altogether
+  (ADR-draft-an-untriggered-create-never-seeds-several-start-events);
 - the process is not `FulfilmentProcess`, as today.
 
 `order.Line` freezes the lifecycle binding at placement, beside the two ids it already
@@ -187,32 +188,14 @@ freezes and for the same reason: what was granted is revoked by the rules in for
 was granted. An existing line carries no lifecycle binding and is fulfilled and returned
 exactly as today. **Nothing is migrated.**
 
-### 5. The trap is closed for everybody, not only for the catalogue
+### 5. Starting a lifecycle process by hand is refused
 
-An untriggered create — `POST /api/v1/instances`, the MCP create tool — of a process with
-**no none start and more than one start event** is **refused** at the API boundary with a
-409 naming its start events. ADR-0226 kept the seed-everything reading because a process
-whose *only* entry is a message start must remain testable by hand; that case keeps
-working, since it has one start event. With several, seeding all of them is never what
-anybody means — it is the defect ADR-0226 describes, reached through a different door.
-
-The refusal is a check on the compiled process at the API boundary. It writes no event and
-changes nothing that is replayed.
-
-**A call activity reaches the same trap from inside the engine**, and it is closed here
-too. `callActivityBehavior.OnActivated` creates the child with
-`AppendCreateChildInstanceCommand`, which carries no `StartElements`, so the child is
-seeded by `startElementsFor` exactly like an untriggered API create. Checked against the
-engine before this record was written: a lifecycle process with three message starts,
-started by a call activity, ran **all three** branches, and so did an API create; a
-message ran only its own. The rule is therefore the same: a call activity whose resolved
-target has no none start and more than one start event does not create the child. It
-raises an incident on the call activity (ADR-0061) naming the target's start events, and
-the token stays where it is. The check reads the target's compiled start events, which
-the create already reads, so it adds no allocation to the path (I1). The Problems panel
-(ADR-0026) warns at design time where the target is resolvable then; the runtime
-incident is the authority, because a target is resolved per server and per version
-(ADR-0076, ADR-0105).
+A lifecycle process has no none start and several start events. An untriggered create of
+such a process — the API, the MCP create tool, a call activity — would today seed every
+start event and run provisioning and deprovisioning at once. That trap is not specific to
+the catalogue, and it is closed for every process by its own record:
+ADR-draft-an-untriggered-create-never-seeds-several-start-events. This record depends on
+it: a lifecycle process is entered only through one of its triggers.
 
 ### 6. The order starts its positions through a start act, not through a route choice in the models
 
@@ -289,103 +272,12 @@ An external system is given two kinds of door, never a third:
   published interface's **send** grant covers; until then the route requires
   `RoleOperator`, as `POST /api/v1/messages` does today.
 
-### 9. Converting a product from two processes to one
+### 9. Converting an existing product
 
-A product is converted by publishing a catalogue release in which the item carries the
-lifecycle binding instead of the two ids. What that does and does not reach:
-
-| Who reads the binding                         | Which binding it gets after conversion |
-|-----------------------------------------------|----------------------------------------|
-| an order placed after the release             | the lifecycle binding                  |
-| a line placed before it and not yet started   | the **two frozen ids** — it is provisioned by the old process |
-| a line placed before it and held              | the **two frozen ids** — it is returned by the old process |
-| a line whose return failed (`returnFailed`)   | the two frozen ids, on every retry     |
-| a reconciliation of an unmanaged right        | the lifecycle binding — it reads the catalogue, because there is no order (`reconcileactions.go`) |
-
-Which line statuses can still **start** one of the two frozen processes, traced through
-`api/order` rather than assumed. The code's own word for this is not `Settled()`: that
-includes `done` and `failed`, and a done line is exactly one that will be returned.
-
-| Status | May still start the provisioning process | May still start the deprovisioning process | Why |
-|---|---|---|---|
-| `pending` | yes | yes, once done | `Next` offers only pending lines |
-| `blocked` | yes | yes, once done | derived; recomputed to `pending` when its cause is repaired (`Propagate`) |
-| `running` | no new start; its instance runs | yes, once done | the instance holds its definition, and deletion already refuses a definition with running instances |
-| `failed` | no | **yes** | nothing starts a failed line again (`Next` skips it; no restart path exists), but the repaired instance may still report `done` — `Apply` has no from-status check except for `returned` |
-| `done` | no | yes | `Returnable` accepts it; a recertification returns through the same path |
-| `returning` | no | no new start; its instance runs | `Returnable` refuses a second return |
-| `returnFailed` | no | yes, on every retry | the **only** status from which a revocation is started again |
-| `skipped`, `rejected`, `abandoned`, `cancelled`, `returned` | no | no | final; `skipped` is not `Returnable`, because this order never granted it |
-
-`returnFailed` is therefore the only status that *retries* a start. `failed` is the one
-that looks final and is not: it keeps the deprovisioning process alive.
-
-So the old processes are **not retired by the conversion**. They stay in use until the
-last line that froze them is settled, and for a service held for years that is years.
-
-What exists today does not protect that period:
-
-- Deleting a process refuses only while it has **running instances**
-  (`handleDeleteProcess`). An old deprovisioning process with no instance running at the
-  moment deletes without objection, and the next return of a line that froze it fails
-  with *no deployed process* — loud, but a revocation that cannot run.
-- Deactivating it (ADR-0119) is safe: an explicit create is not gated, so returns keep
-  working while nothing else starts it. That is the state an old process should be put in.
-
-This record therefore decides three things:
-
-1. **A frozen binding keeps its process alive.** Deleting a process is refused while any
-   line of any order binds it and may still start it, by the table above: as
-   provisioning process for `pending` and `blocked`; as deprovisioning process for
-   `pending`, `blocked`, `running`, `failed`, `done` and `returnFailed`. It is also
-   refused while the **current** catalogue release binds it. The refusal names how many
-   lines, by product — a count, for the reason ADR-0353 gives counts rather than lists.
-   Deactivation remains allowed and is what the conversion recommends for the old pair.
-
-   **How the check runs.** Orders are a sidecar store: one JSON file per order, and
-   `All()` reads every file. Measured on this tree with orders of three lines (about
-   640 bytes each, warm page cache, 4 cores): 10,000 orders in 0.24 s, 50,000 in 1.3 s,
-   200,000 in 11 s. Real orders are larger (configuration answers, amendments,
-   instances), so these are lower bounds. That rules out running the scan inside the
-   run loop, where `handleDeleteProcess` does its work today: at 200,000 orders it
-   would stall the engine for over ten seconds. The scan therefore runs **off the loop**
-   (a sidecar store may be read there, ADR-0239), and only the delete itself runs on it.
-
-   The gap between the two is safe without a lock, because nothing can add a binding to
-   an old process in it: a new order freezes the current release, which the in-loop half
-   checks; a rebinding (point 3) only moves lines *away* from an old process; and a
-   retry of `returnFailed` is a line the scan already counted.
-
-   Deleting a process is a rare operator act, so a scan of seconds is acceptable there.
-   An index from process id to lines is **not** built now. It becomes necessary when the
-   fulfilment report (point 2) is read routinely, because that is the same scan on a
-   read path; the report is where the index is introduced, if it is.
-2. **The remainder is visible.** The fulfilment report (`fulfilmentreport.go`) gains, per
-   product, the number of unsettled lines still bound to each old process. A maintainer
-   can see when the old pair is no longer needed, instead of guessing.
-3. **Rebinding is an explicit, recorded act, never a side effect of converting.** A
-   maintainer may move the unsettled lines of one product from the two frozen ids to the
-   product's current lifecycle binding. Each moved line records what it was bound to
-   before, who moved it, when and why — the recorded correction ADR-0359 uses for a held
-   line's details, for the same reason: the record must still say what was in force when
-   the right was granted, and that it was changed afterwards. A line that is `running` or
-   `returning` is not moved, because a process has it now.
-
-**Why rebinding is offered at all**, although ADR-0312 freezes the binding so that a
-grant is undone by the rules in force when it was made. Its strongest reading holds for
-rules — an approval, a ceiling — which must not change under somebody. A deprovisioning
-process is not only a rule; it is a conversation with a target system as that system is
-**now**. When the target's interface is replaced, the old process cannot succeed any more,
-and keeping it is not fidelity but a return that will fail. The default stays frozen; the
-act exists for that case, and it leaves a trace.
-
-**What the lifecycle process must accept** to be a valid target for rebinding: its
-`deprovision` branch reads the same variables every return and reconciliation hands over
-today — `itemId`, `positionId`, `orderId`, `recipient`, `variantId` where there is one,
-and `reason` where something other than the orderer asked. A right provisioned by the
-old process must be revocable by the new branch; the catalogue cannot check that, so it
-is a convention, stated here beside the existing one that every branch reports its
-outcome.
+Nothing is migrated by this record: lines placed before a product is converted keep the
+two frozen ids. How long the old processes are then still needed, what protects them, and
+how lines may be moved to the lifecycle binding is decided in
+ADR-draft-converting-a-product-to-a-lifecycle-process.
 
 ### Consequences
 
@@ -395,28 +287,13 @@ outcome.
   The silent outcomes of the name-only publish do not exist on this route.
 - **Positive:** an external sender can retry freely. A duplicated leaver report creates
   one deprovisioning, not two.
-- **Positive:** the create-many-starts trap of §5 closes for every process, catalogued or
-  not.
 - **Negative / trade-offs accepted:** a new value type, column family and pruning event
   for receipts. This is new durable state and a new recovery path, and it is justified
   only because external at-least-once senders are in scope.
 - **Negative:** two binding shapes coexist in the catalogue, in the fulfilment report,
   in the landscape mesh (`panorama/mesh.go`) and in the portal, for as long as any
   product uses the old one.
-- **Negative:** §5 refuses a create that is accepted today. A client that relied on it
-  was running every branch of such a process, so the change is called out in the
-  changelog rather than hidden.
-- **Negative:** the §5 incident on a call activity turns a model that runs today — all
-  branches of its callee — into one that stops. That model was already wrong, but it
-  stops visibly where it used to run silently, and the changelog says so.
-- **Negative:** deleting a process gains a refusal it does not have today (§9). An
-  operator cleaning up old versions meets it; the message says which products still
-  need the process and how many lines.
 - **Follow-ups / risks to watch:**
-  - The §9 guard is a full scan of the order store, measured above. The same scan
-    already runs on the loop elsewhere — `Store.For` walks every order for one person's
-    shop listing — which is a scaling limit of the order store in general, not of this
-    record, and is left to its own.
   - The shipped approval models record a rejection but not an approval. Recording one
     is already possible (`POST …/decision` with `approved: true` calls `order.Approve`,
     and is optional today). If the models record it before posting the start act, the
@@ -474,7 +351,8 @@ outcome.
 - relates to ADR-0370 (the durable buffer, which must not cover this route)
 - relates to ADR-0373 (published interfaces and the **send** grant for external callers)
 - relates to ADR-0119 (a deactivated definition is answered, not skipped)
-- relates to ADR-0076 and ADR-0105 (call activities and their per-server resolution)
+- depends on ADR-draft-an-untriggered-create-never-seeds-several-start-events
+- continued by ADR-draft-converting-a-product-to-a-lifecycle-process
 - relates to ADR-0411 (the shipped models call Atlas with an operator token) and
   ADR-0049 (the internal service identity, which does not reach a model)
 - relates to ADR-0416 (the server notes which instance works a position)
