@@ -1,7 +1,7 @@
 # Lebenszyklus als ein Strang pro Position — Vorlage
 
 Entwurfsmodell zum ADR-Entwurf
-[`draft-a-product-lifecycle-may-run-as-one-instance-per-position.md`](../../adr/draft-a-product-lifecycle-may-run-as-one-instance-per-position.md)
+[`0428-a-product-lifecycle-may-run-as-one-instance-per-position.md`](../../adr/0428-a-product-lifecycle-may-run-as-one-instance-per-position.md)
 (Form `per-position`). Es ist **nicht** lauffähig im Katalog: Solange der Entwurf nicht
 umgesetzt ist, kann ein Produkt eine Operation nur an ein Startereignis binden
 (ADR-0425), und das Zwischenereignis «Rückgabe angefordert» wird von keiner Rückgabe
