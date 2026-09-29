@@ -378,6 +378,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <a href="#runbooks"><span data-l="de">Worker in Betrieb nehmen</span><span data-l="en">Putting a worker into service</span></a>
     <a href="#laufen"><span data-l="de">Zum Laufen bringen</span><span data-l="en">Make it run</span></a>
     <a href="#testen"><span data-l="de">Testen &amp; Simulieren</span><span data-l="en">Test &amp; simulate</span></a>
+    <a href="#ausliefern"><span data-l="de">Ausliefern</span><span data-l="en">Deliver</span></a>
     <a href="#betrieb"><span data-l="de">Betrieb &amp; Incidents</span><span data-l="en">Operations &amp; incidents</span></a>
     <a href="#konten"><span data-l="de">Konten, Rollen &amp; Anmeldung</span><span data-l="en">Accounts, roles &amp; sign-in</span></a>
     <h4 data-l="de">Landschaft &amp; Daten</h4><h4 data-l="en">Landscape &amp; data</h4>
@@ -7064,6 +7065,236 @@ atlas worker --connector mssql</code></pre>
           has to hold as a <a href="#szenarien">scenario</a> → run the scenario on every change, in the pipeline too
           → start real instances and check in Operations that the timeline and variables are correct. Only then go
           to production.</p>
+      </div>
+    </section>
+
+    <!-- ==================== DELIVER ==================== -->
+    <section id="ausliefern">
+      <h2 data-l="de">Ausliefern</h2><h2 data-l="en">Deliver</h2>
+      <p class="lead" data-l="de">Ein getestetes Modell wird zur <b>Applikation</b>, die als Ganzes einen
+        <b>Release</b> bekommt und auf einen anderen Server gebracht wird – die Umgebungen, in denen man ohnehin
+        denkt: <i>dieser Server</i>, <i>Test</i>, <i>Produktion</i>. Dieses Kapitel beschreibt nur die Mechanik
+        (ADR-0128, ADR-0129); jeder Aufruf wurde an zwei lokalen Instanzen nachvollzogen.</p>
+      <p class="lead" data-l="en">A tested model becomes an <b>application</b>, which is given a <b>release</b> as a
+        whole and shipped to another server – the environments you already think in: <i>this server</i>,
+        <i>Test</i>, <i>Production</i>. This chapter is mechanics only (ADR-0128, ADR-0129); every call below was
+        run against two local instances.</p>
+
+      <div id="liefereinheit" style="scroll-margin-top:66px"></div>
+      <h3 data-l="de">Die Applikation als Liefereinheit</h3>
+      <h3 data-l="en">The application as the unit of delivery</h3>
+      <p data-l="de">Eine <b>Applikation</b> ist dasselbe wie ein Projekt, nur umbenannt (ADR-0128): sie gruppiert
+        Entwürfe, Formulare und Entscheidungsreferenzen unter einem Namen und einem <b>Schlüssel</b>, den Atlas
+        einmal aus dem Namen ableitet und bei einer Umbenennung behält. Ausgeliefert wird sie als Ganzes. Beim
+        Publizieren werden ihre BPMN-Entwürfe und die von ihnen gebundenen DMN-Referenzen zusammen deployt –
+        alle oder keiner; <b>Formulare gehören zur Applikation, werden aber nicht deployt</b>. In der Konsole legt
+        man sie im Modeler unter <i>Create new › New application</i> an; ihr Detail hat die Reiter
+        <i>Artifacts</i> und <i>Deployments</i>.</p>
+      <p data-l="en">An <b>application</b> is the same thing as a project, only renamed (ADR-0128): it groups
+        drafts, forms and decision references under one name and one <b>key</b> that Atlas derives once from the
+        name and keeps across a rename. It is delivered as a whole. Publishing deploys its BPMN drafts and the DMN
+        references they bind together – all or none; <b>forms belong to the application but are not deployed</b>.
+        In the Console you create one in the Modeler under <i>Create new › New application</i>; its detail has the
+        <i>Artifacts</i> and <i>Deployments</i> tabs.</p>
+
+      <h3 data-l="de">Publizieren: ein Release</h3><h3 data-l="en">Publish: a release</h3>
+      <p data-l="de">Der Knopf <b>Publish</b> deployt die Applikation und hält zugleich einen <b>Release</b> fest:
+        eine Momentaufnahme dessen, was zusammen ausgeliefert wurde, mit einer <b>Versionsnummer je Applikation</b>,
+        die bei 1 beginnt und je Publikation um eins steigt – kein SemVer. (Ohne Release deployt dagegen der
+        Knopf <i>Deploy</i> im Editor, für einen einzelnen Prozess und schnelle Runden; <code>…/deploy</code> tut
+        dasselbe für die ganze Applikation, hat aber keinen Knopf.) Ein Release ist <b>unveränderlich</b>: es gibt keine
+        Route, die ihn ändert oder löscht, und keinen Rückrollen-Knopf – zurück geht es, indem man einen früheren
+        Release erneut auf das Ziel bringt. Was er festhält, sind seine Prozess- und Entscheidungsmitglieder mit
+        ihren Versionen; das eingefrorene XML liegt in den Deployments, auf die er zeigt.</p>
+      <p data-l="en">The <b>Publish</b> button deploys the application and at the same time records a
+        <b>release</b>: a snapshot of what was shipped together, with a <b>per-application version number</b> that
+        starts at 1 and rises by one per publish – not SemVer. (Deploying without a release is what the editor's
+        <i>Deploy</i> button does, for one process and quick rounds; <code>…/deploy</code> does the same for the
+        whole application but has no button.) A release is <b>immutable</b>: there is no route that changes or deletes one,
+        and no rollback button – you go back by promoting an earlier release to the target again. What it records
+        are its process and decision members with their versions; the frozen XML lives in the deployments it points
+        at.</p>
+      <pre><code># Publizieren; die Antwort trägt den geprägten Release  ·  Publish; the response carries the minted release
+curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/publish \
+  -H "Content-Type: application/json" -d '{"note":"Antrag prüfen"}'</code></pre>
+      <p data-l="de">In der Applikation zeigt <i>Deployments</i> die publizierte Version, die laufenden Instanzen
+        und darunter die <b>Release history</b>. Publizieren und Promoten verlangen die Rolle <code>modeler</code>
+        und auf der Applikation die Stufe <i>editor</i>.</p>
+      <p data-l="en">Inside the application, <i>Deployments</i> shows the published version, the running instances,
+        and below them the <b>Release history</b>. Publishing and promoting need the <code>modeler</code> role and,
+        on the application, the <i>editor</i> level.</p>
+
+      <h3 data-l="de">Ein Ziel und sein Token</h3><h3 data-l="en">A target and its token</h3>
+      <p data-l="de">Ein <b>Deployment-Ziel</b> ist ein anderer Atlas-Server, an den dieser hier promotet. Es ist
+        Server-Konfiguration und verlangt die Rolle <code>admin</code>. Der empfangende Server stellt dafür einen
+        <b>Deploy-Token</b> aus (Präfix <code>atlasdt_</code>), der genau einmal im Klartext erscheint; der
+        sendende Server legt ihn als <b>Secret</b> im Tresor ab und nennt diesen Namen im Ziel als
+        <code>credentialRef</code>. Eine Adresse muss <b>https</b> sein; Klartext ist nur für Loopback erlaubt.
+        Für Ziele gibt es <b>keine Oberfläche</b> – man legt sie über die API (oder MCP) an; in der Applikation
+        und in Panorama erscheinen sie nur lesend.</p>
+      <p data-l="en">A <b>deployment target</b> is another Atlas server this one promotes to. It is server
+        configuration and needs the <code>admin</code> role. The receiving server mints a <b>deploy token</b> for
+        it (prefix <code>atlasdt_</code>) which appears in the clear exactly once; the sending server stores it as
+        a <b>secret</b> in the vault and names that secret in the target as <code>credentialRef</code>. A base URL
+        must be <b>https</b>; plaintext is allowed only for loopback. Targets have <b>no screen</b> – you create
+        them over the API (or MCP); in the application and in Panorama they appear read-only.</p>
+      <pre><code># 1) Auf dem ZIELSERVER: Deploy-Token ausstellen (einmalig sichtbar)
+#    On the TARGET server: mint a deploy token (shown once)
+curl -X POST https://atlas-prod.example.com/api/v1/deploy-tokens \
+  -H "Content-Type: application/json" -d '{"name":"von-test"}'      # → {"token":"atlasdt_…"}
+
+# 2) Auf dem QUELLSERVER: den Token als Secret ablegen  ·  On the SOURCE server: store it as a secret
+curl -X PUT https://atlas-test.example.com/api/v1/secrets/produktion-deploy \
+  -H "Content-Type: application/json" -d '{"value":"atlasdt_…"}'
+
+# 3) Auf dem QUELLSERVER: das Ziel eintragen  ·  On the SOURCE server: register the target
+curl -X POST https://atlas-test.example.com/api/v1/targets \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Produktion","baseUrl":"https://atlas-prod.example.com","kind":"prod","credentialRef":"produktion-deploy"}'</code></pre>
+
+      <h3 data-l="de">Promotion: den Release ans Ziel bringen</h3>
+      <h3 data-l="en">Promotion: shipping the release to the target</h3>
+      <p data-l="de">Promoten sendet <b>eine</b> Anfrage je Ziel mit dem eingefrorenen Release; der Empfänger
+        prüft, deployt alle oder keinen und schreibt den Release unter der <b>mitgereisten Versionsnummer</b>. Es
+        reisen <b>nur die Prozesse</b> – bereits aufgelöst, mit ihren DMN-Modellen –, nicht Formulare, nicht die
+        Konfiguration. Über mehrere Ziele ist es <b>nicht atomar</b>: jedes Ziel gelingt oder scheitert für sich,
+        und die Antwort meldet je Ziel <code>ok</code>, den <code>remoteStatus</code> und einen Fehler. Denselben
+        Release ein zweites Mal auf dasselbe Ziel zu bringen, wird mit <i>„already imported"</i> abgelehnt (HTTP
+        200, <code>ok:false</code>); es gibt kein Erzwingen.</p>
+      <p data-l="en">Promoting sends <b>one</b> request per target with the frozen release; the receiver
+        validates, deploys all or none, and records the release under the <b>version number that travelled with
+        it</b>. Only the <b>processes</b> travel – already resolved, with their DMN models – not forms, not the
+        configuration. Across several targets it is <b>not atomic</b>: each target succeeds or fails on its own,
+        and the response reports <code>ok</code>, the <code>remoteStatus</code> and an error per target. Promoting
+        the same release to the same target a second time is refused with <i>"already imported"</i> (HTTP 200,
+        <code>ok:false</code>); there is no force.</p>
+      <pre><code># Release v1 auf ein oder mehrere Ziele  ·  Release v1 to one or more targets
+curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/releases/1/promote \
+  -H "Content-Type: application/json" -d '{"targetIds":["&lt;ziel-id&gt;"]}'</code></pre>
+      <div class="note">
+        <div class="lbl" data-l="de">Die Applikation wird über den Namen zugeordnet</div>
+        <div class="lbl" data-l="en">The application is matched by name</div>
+        <p data-l="de">Beim Promoten findet der Empfänger die Applikation über ihren <b>Namen</b>, nicht über den
+          Schlüssel. Wird sie auf dem Quellserver umbenannt, legt die nächste Promotion auf dem Ziel eine
+          <b>zweite</b> Applikation an. (Der Quellbaum-Import unten ordnet dagegen über den Schlüssel zu.)</p>
+        <p data-l="en">On promotion the receiver finds the application by its <b>name</b>, not its key. Rename it
+          on the source server and the next promotion creates a <b>second</b> application on the target. (The
+          source-tree import below matches by key instead.)</p>
+      </div>
+
+      <h3 data-l="de">Umgebungen unterscheiden sich über Konfiguration, nicht über das Modell</h3>
+      <h3 data-l="en">Environments differ by configuration, not by the model</h3>
+      <p data-l="de">Das ausgelieferte Modell ist das getestete. Was ein Server anders macht, steht in seiner
+        <b>Konfiguration</b>: welche <a href="#runbooks">Worker</a> die im Modell genannten Namen bedienen, ob ein
+        <a href="#testen">Mockup</a> für Verzeichnis oder Datenbank an ist, ob ein Mail-Worker als
+        <i>preview</i> in die Outbox statt nach draussen liefert. Ein Ziel, dem der Worker eines Service-Tasks
+        fehlt, deployt den Prozess trotzdem; sein Job <b>parkt</b> dann, bis der Worker eingerichtet ist – kein
+        Incident, nur ein wartender Job.</p>
+      <p data-l="en">The model that ships is the one that was tested. What a server does differently lives in its
+        <b>configuration</b>: which <a href="#runbooks">workers</a> serve the names the model calls, whether a
+        <a href="#testen">mockup</a> for the directory or a database is on, whether a mail worker delivers into the
+        outbox as <i>preview</i> rather than outward. A target that lacks a service task's worker still deploys the
+        process; its job then <b>parks</b> until the worker exists – not an incident, just a waiting job.</p>
+      <div class="note warn">
+        <div class="lbl" data-l="de">Die Promotion meldet fehlende Worker nicht zurück</div>
+        <div class="lbl" data-l="en">Promotion does not report a missing worker back</div>
+        <p data-l="de">Ein Import warnt zwar «… references the … worker, which is not configured on this server»,
+          aber die Antwort der Promotion trägt diese Warnung <b>nicht</b>. Auf dem Quellserver sieht man sie
+          also nicht. Deshalb nach dem ersten Promoten auf dem Ziel prüfen, dass jeder genannte Worker dort
+          eingerichtet ist – sonst parken die Jobs still.</p>
+        <p data-l="en">An import does warn "… references the … worker, which is not configured on this server", but
+          the promotion's response does <b>not</b> carry that warning, so you do not see it on the source server.
+          After the first promotion, check on the target that every named worker is configured there – otherwise
+          the jobs park silently.</p>
+      </div>
+
+      <h3 data-l="de">Der Quellbaum: die Quelle bewegen, nicht das Deployment</h3>
+      <h3 data-l="en">The source tree: moving the source, not the deployment</h3>
+      <p data-l="de">Promotion bewegt, <i>was deployt ist</i>. Der <b>Quellbaum</b> bewegt, <i>was ein Mensch
+        bearbeitet</i>: Entwürfe, Formulare und Entscheidungsreferenzen als lesbare Dateien. <i>Download source…</i>
+        lädt ein <code>tar.gz</code> mit einem Manifest <code>atlas.json</code> (Format-Version, Schlüssel, Name)
+        und je einer Datei unter <code>processes/</code> und <code>forms/</code>; Entscheidungen stehen als Verweis
+        im Manifest, ohne eigene Datei. Der Export ist <b>Byte für Byte reproduzierbar</b>. Beim Import wird die
+        Applikation über den <b>Schlüssel</b> gefunden; fehlt sie, wird sie angelegt. Der Import <b>überschreibt</b>
+        die genannten Artefakte und <b>löscht nie</b>; er schreibt Entwürfe und deployt nicht. Ein eingebautes Git
+        gibt es nicht – der Quellbaum ist ein Archiv, das man selbst versionieren kann.</p>
+      <p data-l="en">Promotion moves <i>what is deployed</i>. The <b>source tree</b> moves <i>what a person
+        edits</i>: drafts, forms and decision references as readable files. <i>Download source…</i> downloads a
+        <code>tar.gz</code> with a manifest <code>atlas.json</code> (format version, key, name) and one file each
+        under <code>processes/</code> and <code>forms/</code>; decisions appear as a reference in the manifest,
+        with no file of their own. The export is <b>byte-for-byte reproducible</b>. On import the application is
+        found by its <b>key</b>; if it is missing it is created. The import <b>overwrites</b> the listed artifacts
+        and <b>never deletes</b>; it writes drafts and does not deploy. There is no built-in git – the source tree
+        is an archive you can keep under version control yourself.</p>
+      <pre><code># Quellbaum herunterladen …  ·  Download the source tree …
+curl https://atlas-test.example.com/api/v1/applications/$APP/source -o berechtigungen-source.tar.gz
+# … und in einen Server einlesen (Zuordnung über den Schlüssel)  ·  … and read it into a server (matched by key)
+curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
+  -H "Content-Type: application/gzip" --data-binary @berechtigungen-source.tar.gz</code></pre>
+
+      <h3 data-l="de">Die Aufrufe im Überblick</h3><h3 data-l="en">The calls at a glance</h3>
+      <p data-l="de">Die Rolle ist die am Eingang geprüfte; Publizieren, Promoten und der Quellexport verlangen
+        zusätzlich eine Stufe auf der Applikation (editor bzw. Betrachter).</p>
+      <p data-l="en">The role is the one checked at the boundary; publishing, promoting and the source export also
+        need a level on the application (editor or viewer).</p>
+      <table id="delivery-routes">
+        <thead><tr>
+          <th data-l="de">Aufruf</th><th data-l="en">Call</th>
+          <th data-l="de">Rolle</th><th data-l="en">Role</th>
+          <th data-l="de">Wofür</th><th data-l="en">For</th>
+        </tr></thead>
+        <tbody>
+          <tr><td><code>POST /api/v1/applications/{id}/publish</code></td><td><code>modeler</code></td>
+            <td data-l="de">deployen und einen Release prägen</td>
+            <td data-l="en">deploy and mint a release</td></tr>
+          <tr><td><code>GET /api/v1/applications/{id}/releases</code></td><td><code>any</code></td>
+            <td data-l="de">die Release-Historie lesen</td>
+            <td data-l="en">read the release history</td></tr>
+          <tr><td><code>GET /api/v1/applications/{id}/deployments</code></td><td><code>any</code></td>
+            <td data-l="de">was hier deployt ist, mit Instanzzahlen</td>
+            <td data-l="en">what is deployed here, with instance counts</td></tr>
+          <tr><td><code>POST /api/v1/deploy-tokens</code></td><td><code>admin</code></td>
+            <td data-l="de">auf dem Zielserver: einen Deploy-Token ausstellen</td>
+            <td data-l="en">on the target server: mint a deploy token</td></tr>
+          <tr><td><code>PUT /api/v1/secrets/{name}</code></td><td><code>admin</code></td>
+            <td data-l="de">auf dem Quellserver: den Token im Tresor ablegen</td>
+            <td data-l="en">on the source server: store the token in the vault</td></tr>
+          <tr><td><code>POST /api/v1/targets</code></td><td><code>admin</code></td>
+            <td data-l="de">ein Deployment-Ziel eintragen</td>
+            <td data-l="en">register a deployment target</td></tr>
+          <tr><td><code>POST /api/v1/applications/{id}/releases/{version}/promote</code></td><td><code>modeler</code></td>
+            <td data-l="de">einen Release auf Ziele bringen</td>
+            <td data-l="en">promote a release to targets</td></tr>
+          <tr><td><code>GET /api/v1/applications/{id}/source</code></td><td><code>modeler</code></td>
+            <td data-l="de">den Quellbaum herunterladen</td>
+            <td data-l="en">download the source tree</td></tr>
+          <tr><td><code>POST /api/v1/applications/source</code></td><td><code>modeler</code></td>
+            <td data-l="de">einen Quellbaum einlesen</td>
+            <td data-l="en">read a source tree in</td></tr>
+        </tbody>
+      </table>
+
+      <div class="note warn">
+        <div class="lbl" data-l="de">Zwei Stolpersteine</div><div class="lbl" data-l="en">Two traps</div>
+        <p data-l="de"><b>Ein Ziel braucht einen Deploy-Token, nicht irgendeinen Token.</b> Ein voller API-Token
+          (Präfix <code>atlasat_</code>) darf zwar promoten, aber die Deployments-Ansicht liest den Status des
+          Ziels über dieselbe Referenz und trifft die vom Import <b>ohne Eigentümer</b> angelegte Applikation
+          nicht – das Ziel erscheint dann als <i>unreachable</i>. Ein Deploy-Token (<code>atlasdt_</code>) ist auf
+          jeder Applikation Betrachter und liest den Status; er ist zugleich auf die Import-Route beschränkt und
+          antwortet anderswo mit <i>403</i>.</p>
+        <p data-l="en"><b>A target needs a deploy token, not just any token.</b> A full API token (prefix
+          <code>atlasat_</code>) may promote, but the Deployments view reads the target's status over the same
+          reference and does not reach the <b>ownerless</b> application the import created – the target then shows
+          as <i>unreachable</i>. A deploy token (<code>atlasdt_</code>) is a viewer on every application and reads
+          the status; it is at the same time confined to the import route and answers <i>403</i> elsewhere.</p>
+        <p data-l="de"><b>Das Ziel ist ein anderer Server, kein zweiter Arbeitsplatz.</b> Die Versionsnummer wird
+          auf dem Quellserver geprägt und reist mit. Wer auf dem Ziel selbst publiziert, erzeugt Nummern in
+          derselben Reihe; eine spätere Promotion derselben Nummer wird mit <i>„already imported"</i> abgelehnt.
+          Ein Ziel bleibt darum am besten das, was nur empfängt.</p>
+        <p data-l="en"><b>A target is another server, not a second workbench.</b> The version number is minted on
+          the source server and travels with the release. Publishing on the target itself mints numbers into the
+          same sequence; a later promotion of that same number is refused with <i>"already imported"</i>. A target
+          is best left as the thing that only receives.</p>
       </div>
     </section>
 

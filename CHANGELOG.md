@@ -14,6 +14,19 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The handbook teaches delivering a process to another server.** Publishing an
+  application, minting a release, registering a deployment target with a deploy token,
+  promoting the frozen release, and moving the source tree were all in the product
+  (ADR-0128, ADR-0129) and nowhere in the handbook, which stopped at running a process
+  on the one server that modelled it. A new chapter «Ausliefern» / «Deliver» carries the
+  mechanics in German and English: publish versus deploy, the per-application release
+  and why it is immutable, the deploy token a target needs and where its secret lives,
+  what travels on a promotion and what does not, why an environment differs by
+  configuration rather than by the model, and the source tree as a reproducible archive.
+  Every call in it was run against two local instances first. Its route table is held to
+  the real routes and their roles, and the token prefixes it teaches to their constants,
+  by `api/deliveryhandbook_internal_test.go`; a renamed route or role fails the build.
+
 - **A process still frozen on an old decision version says so.** A process deployed
   while latest was settled at deploy time keeps evaluating the decision version that was
   newest then, although its binding reads latest — the case of the instance that
