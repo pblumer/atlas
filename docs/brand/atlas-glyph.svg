@@ -1,10 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Atlas">
-  <title>Atlas</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="atlas">
+  <title>atlas</title>
   <!-- The mark without its tile, inheriting the surrounding text colour. This is
        the variant the Console inlines into its ".mark" box, where the tile is a
        CSS background — keep it in step with atlas-mark.svg. -->
-  <path fill="currentColor" fill-rule="evenodd"
-        d="M128 34 236 206 20 206Z
-           M128 166 174 206 82 206Z
-           M115 77H141V102H166V128H141V153H115V128H90V102H115Z"/>
+  <path fill="currentColor" fill-rule="evenodd" d="M40 156a60 60 0 1 0 120 0a60 60 0 1 0 -120 0ZM69 156a31 31 0 1 0 62 0a31 31 0 1 0 -62 0Z"/>
+  <path fill="currentColor" d="M131 96h29v120h-29Z"/>
+  <path fill="currentColor" d="M182.5 51H197.5V68.5H215V83.5H197.5V101H182.5V83.5H165V68.5H182.5Z"/>
 </svg>

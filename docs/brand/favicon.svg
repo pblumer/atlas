@@ -1,10 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Atlas">
-  <title>Atlas</title>
-  <!-- Same mark as atlas-mark.svg, drawn heavier: the peak fills more of the tile
-       and the cross is thicker, so both survive at 16px where fine detail dies. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="atlas">
+  <title>atlas</title>
+  <!-- Same mark as atlas-mark.svg, drawn heavier: the a fills more of the tile,
+       its bowl and stem are thicker and the cross is larger, so the cross still
+       reads as a cross at 16px where the shipped weights close up. -->
   <rect width="256" height="256" rx="52" fill="#000"/>
-  <path fill="#fff" fill-rule="evenodd"
-        d="M128 26 244 214 12 214Z
-           M128 172 178 214 78 214Z
-           M111 72H145V99H172V133H145V160H111V133H84V99H111Z"/>
+  <path fill="#fff" fill-rule="evenodd" d="M26 160a68 68 0 1 0 136 0a68 68 0 1 0 -136 0ZM62 160a32 32 0 1 0 64 0a32 32 0 1 0 -64 0Z"/>
+  <path fill="#fff" d="M130 92h34v136h-34Z"/>
+  <path fill="#fff" d="M189.5 31H210.5V55.5H235V76.5H210.5V101H189.5V76.5H165V55.5H189.5Z"/>
 </svg>

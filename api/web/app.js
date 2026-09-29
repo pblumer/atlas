@@ -10031,7 +10031,7 @@ async function route() {
   // active. Auth off (the default) skips this entirely.
   if (!AUTH.loaded) await loadAuth();
   if (AUTH.enabled && !AUTH.user) {
-    document.getElementById("app-name").textContent = "Atlas";
+    document.getElementById("app-name").textContent = "atlas";
     document.getElementById("topnav").innerHTML = "";
     paintApps(); // nobody is signed in, so nobody holds a role: the drawer says so too
     syncIncidentBadge(""); // the login screen has no nav to badge, and must not poll

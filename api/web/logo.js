@@ -42,9 +42,11 @@ function cacheLogoPresent(present) {
 // a fixed literal, never anything derived from the server, so assigning it as markup
 // introduces no injection surface.
 export const BUILTIN_MARK =
-  '<svg viewBox="0 0 256 256"><path fill="currentColor" fill-rule="evenodd" ' +
-  'd="M128 34 236 206 20 206ZM128 166 174 206 82 206Z' +
-  'M115 77H141V102H166V128H141V153H115V128H90V102H115Z"/></svg>';
+  '<svg viewBox="0 0 256 256">' +
+  '<path fill="currentColor" fill-rule="evenodd" d="M40 156a60 60 0 1 0 120 0a60 60 0 1 0 -120 0ZM69 156a31 31 0 1 0 62 0a31 31 0 1 0 -62 0Z"/>' +
+  '<path fill="currentColor" fill-rule="evenodd" d="M131 96h29v120h-29Z"/>' +
+  '<path fill="currentColor" fill-rule="evenodd" d="M182.5 51H197.5V68.5H215V83.5H197.5V101H182.5V83.5H165V68.5H182.5Z"/>' +
+  '</svg>';
 
 // applyLogo swaps every brand mark (the ".mark" boxes in the top bar and drawer)
 // between the uploaded logo and the built-in glyph. When a logo is present each mark

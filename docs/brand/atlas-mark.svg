@@ -1,13 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Atlas">
-  <title>Atlas</title>
-  <!-- Black tile: the durable ground Atlas stands on. Fixed colours (no theme
-       dependency) so the mark reads on any background, light or dark. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="atlas">
+  <title>atlas</title>
+  <!-- Black tile: fixed colours (no theme dependency) so the mark reads on any
+       background, light or dark. -->
   <rect width="256" height="256" rx="56" fill="#000"/>
-  <!-- The peak Atlas bears, carrying the Swiss cross: one white shape, with the
-       base notch and the cross cut out of it (evenodd). No strokes, no fine
-       detail — it survives down to a 16px favicon. -->
-  <path fill="#fff" fill-rule="evenodd"
-        d="M128 34 236 206 20 206Z
-           M128 166 174 206 82 206Z
-           M115 77H141V102H166V128H141V153H115V128H90V102H115Z"/>
+  <!-- A geometric lowercase a — the name is always set lowercase — with the Swiss
+       cross raised at its shoulder like an exponent. Three solid shapes: the bowl
+       (its counter cut out, evenodd), the stem and the cross, whose arms are 7/6
+       of their width as on the federal flag. No strokes, no fine detail. -->
+  <path fill="#fff" fill-rule="evenodd" d="M40 156a60 60 0 1 0 120 0a60 60 0 1 0 -120 0ZM69 156a31 31 0 1 0 62 0a31 31 0 1 0 -62 0Z"/>
+  <path fill="#fff" d="M131 96h29v120h-29Z"/>
+  <path fill="#fff" d="M182.5 51H197.5V68.5H215V83.5H197.5V101H182.5V83.5H165V68.5H182.5Z"/>
 </svg>
