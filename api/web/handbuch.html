@@ -380,6 +380,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <a href="#testen"><span data-l="de">Testen &amp; Simulieren</span><span data-l="en">Test &amp; simulate</span></a>
     <a href="#ausliefern"><span data-l="de">Ausliefern</span><span data-l="en">Deliver</span></a>
     <a href="#betrieb"><span data-l="de">Betrieb &amp; Incidents</span><span data-l="en">Operations &amp; incidents</span></a>
+    <a href="#weiterentwickeln"><span data-l="de">Weiterentwickeln</span><span data-l="en">Evolve</span></a>
     <a href="#konten"><span data-l="de">Konten, Rollen &amp; Anmeldung</span><span data-l="en">Accounts, roles &amp; sign-in</span></a>
     <h4 data-l="de">Landschaft &amp; Daten</h4><h4 data-l="en">Landscape &amp; data</h4>
     <a href="#panorama"><span data-l="de">Panorama</span><span data-l="en">Panorama</span></a>
@@ -7506,6 +7507,194 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
 
 
     <!-- ==================== ACCOUNTS, ROLES & SIGN-IN ==================== -->
+    <!-- ==================== EVOLVE ==================== -->
+    <section id="weiterentwickeln">
+      <h2 data-l="de">Weiterentwickeln</h2><h2 data-l="en">Evolve</h2>
+      <p class="lead" data-l="de">Ein deployter Prozess ist unveränderlich und versioniert. Ihn
+        weiterzuentwickeln heisst: eine neue Version deployen und entscheiden, was mit den Fällen geschieht, die
+        schon laufen. Dieses Kapitel beschreibt nur die Mechanik (ADR-0162, ADR-0389, ADR-0119, ADR-0322); jeder
+        Aufruf wurde an einer laufenden Instanz nachvollzogen.</p>
+      <p class="lead" data-l="en">A deployed process is immutable and versioned. Evolving it means deploying a new
+        version and deciding what happens to the cases already running. This chapter is mechanics only (ADR-0162,
+        ADR-0389, ADR-0119, ADR-0322); every call below was run against a live instance.</p>
+
+      <div id="neue-version" style="scroll-margin-top:66px"></div>
+      <h3 data-l="de">Eine neue Version – und was mit laufenden Fällen geschieht</h3>
+      <h3 data-l="en">A new version – and what happens to running cases</h3>
+      <p data-l="de">Jeder Deploy desselben Prozesses (<code>POST /api/v1/deployments</code>) prägt eine neue
+        <b>Version</b> mit einem neuen Schlüssel – auch wenn am Modell nichts geändert wurde; Atlas dedupliziert
+        einen erneuten Deploy nicht. Eine laufende Instanz ist an den Schlüssel gebunden, unter dem sie gestartet
+        ist, und <b>bleibt auf ihrer Version</b>: ein neuer Deploy rührt sie nicht an. Nur neue Instanzen laufen auf
+        der neuen Version. Das ist die wichtigste Tatsache dieses Kapitels und zugleich die häufigste falsche
+        Erwartung.</p>
+      <p data-l="en">Every deploy of the same process (<code>POST /api/v1/deployments</code>) mints a new
+        <b>version</b> with a new key – even when nothing in the model changed; Atlas does not content-dedupe a
+        redeploy. A running instance is bound to the key it started under and <b>stays on its version</b>: a new
+        deploy does not touch it. Only new instances run on the new version. That is the load-bearing fact of this
+        chapter, and the most common wrong expectation.</p>
+      <p data-l="de">Zwei Dinge ändern eine Version <i>nicht</i>: das Speichern eines korrigierten Layouts auf ein
+        Deployment (<i>Save layout to deployment</i>, siehe <a href="#laufen">Zum Laufen bringen</a>) und das
+        Pausieren (unten). Alles, was den Prozess selbst ändert, ist ein neuer Deploy und eine neue Version.</p>
+      <p data-l="en">Two things do <i>not</i> change a version: saving a corrected layout onto a deployment
+        (<i>Save layout to deployment</i>, see <a href="#laufen">Make it run</a>) and pausing (below). Anything that
+        changes the process itself is a new deploy and a new version.</p>
+
+      <h3 data-l="de">Migration: einen laufenden Fall auf eine neue Version heben</h3>
+      <h3 data-l="en">Migration: lifting a running case to a new version</h3>
+      <p data-l="de">Damit ein laufender Fall die korrigierte Version erreicht, wird er <b>migriert</b>: seine Token
+        werden an die Elemente der Zielversion umgebunden, während Variablen, Aufträge, laufende Aufgaben und die
+        Historie erhalten bleiben (die Element-Instanz-Schlüssel ändern sich nicht). Zuerst fragt man den
+        <b>Plan</b> ab – er schreibt nichts und nennt die abgeleitete Zuordnung Element für Element sowie jeden
+        Grund, aus dem die Migration abgelehnt würde. Dann führt man sie aus; ein <b>Grund</b> ist Pflicht und wird
+        als Operator-Aktion protokolliert. Beides verlangt die Rolle <code>admin</code>. In der Konsole öffnet
+        <b>⇄ Migrate…</b> in der Instanzansicht denselben Dialog.</p>
+      <p data-l="en">To bring a running case to the corrected version it is <b>migrated</b>: its tokens are rebound
+        to the target version's elements while variables, jobs, live tasks and history are kept (the element
+        instance keys do not change). First you ask for the <b>plan</b> – it writes nothing and names the derived
+        mapping element by element and every reason the migration would be refused. Then you run it; a
+        <b>reason</b> is required and recorded as an operator action. Both need the <code>admin</code> role. In the
+        Console, <b>⇄ Migrate…</b> in the instance view opens the same dialog.</p>
+      <p data-l="de">Migration ist kein Freibrief. Sie wird als Ganzes abgelehnt (HTTP 409, mit dem Plan als
+        Antwort, nichts geschrieben), wenn ein aktiver Token in der Zielversion kein Ziel hat – etwa weil sein
+        Element entfernt oder umbenannt wurde: <i>«no element in the target version is mapped to it, so its token
+        would be stranded»</i>. Ebenso, wenn ein zugeordnetes Element den BPMN-Typ wechselt, die Scope-Kette nicht
+        zusammenpasst, eine Multi-Instance-Rolle sich ändert, eine Grenz-Event-Anheftung wegfällt oder ein
+        wartendes Element auf eine andere Nachricht horcht. Der Server erzwingt diese strukturellen Regeln; die
+        Zuordnung erfolgt über die BPMN-Element-Ids.</p>
+      <p data-l="en">Migration is not a free hand. It is refused as a whole (HTTP 409, with the plan as the
+        response, nothing written) when an active token has no target in the new version – because its element was
+        removed or renamed, say: <i>"no element in the target version is mapped to it, so its token would be
+        stranded"</i>. Likewise when a mapped element changes BPMN type, the scope chain does not line up, a
+        multi-instance role changes, a boundary attachment drops, or a waiting element listens for a different
+        message. The server enforces these structural rules; the mapping is by BPMN element id.</p>
+      <p data-l="de">Für viele Fälle auf einmal gibt es die stapelweise Migration je Definition
+        (<code>POST /api/v1/processes/{key}/migrate-instances</code>, begrenzt über <code>?limit=</code>): jede
+        Instanz ist ihr eigenes Ereignis, ein abgelehnter Fall rollt die anderen nicht zurück, und man wiederholt,
+        solange die Antwort <code>remaining: true</code> meldet. Deklariert die Zielversion andere durchsuchbare
+        Variablen, stellt <code>POST /api/v1/processes/{key}/reindex-instances</code> den Suchindex nach (ADR-0295).</p>
+      <p data-l="en">For many cases at once there is the per-definition batch migration
+        (<code>POST /api/v1/processes/{key}/migrate-instances</code>, bounded by <code>?limit=</code>): each
+        instance is its own event, a refused one does not roll back the rest, and you repeat while the response
+        reports <code>remaining: true</code>. When the target version declares different searchable variables,
+        <code>POST /api/v1/processes/{key}/reindex-instances</code> restores the search index (ADR-0295).</p>
+
+      <h3 data-l="de">Fork: fortsetzen, wenn sich ein Token nicht umbinden lässt</h3>
+      <h3 data-l="en">Fork: continuing when a token cannot be rebound</h3>
+      <p data-l="de">Wenn eine Migration abgelehnt wird, weil ein Token nicht umgebunden werden kann, ist der
+        <b>Fork</b> der Ausweg (<code>POST /api/v1/instances/{key}/migrate/fork</code>, ebenfalls
+        <code>admin</code>): die alte Instanz wird beendet, und eine <b>neue</b> Instanz der Zielversion beginnt an
+        den genannten <b>Resume-Punkten</b> (oder an den vorgeschlagenen, aus der Lage der Token abgeleiteten). Die
+        beiden Instanzen verweisen aufeinander (Vorgänger und Nachfolger); die alte steht danach auf
+        <i>terminated</i>. Es reisen die Variablen des Wurzel-Scopes und die Datenobjekte mit; laufende Aufträge
+        und Aufgaben enden mit dem Vorgänger, werden also nicht fortgeführt. Der Fork ist damit der bewusste
+        Schnitt, den die Migration verweigert – ein Mensch benennt, wo es weitergeht.</p>
+      <p data-l="en">When a migration is refused because a token cannot be rebound, the <b>fork</b> is the way out
+        (<code>POST /api/v1/instances/{key}/migrate/fork</code>, also <code>admin</code>): the old instance is
+        ended and a <b>new</b> instance of the target version begins at the named <b>resume points</b> (or the
+        proposed ones, derived from where the tokens sit). The two instances name each other (predecessor and
+        successor); the old one then reads <i>terminated</i>. The root-scope variables and the data objects travel;
+        in-flight jobs and tasks end with the predecessor and are not carried on. The fork is the deliberate cut
+        the migration refuses to make – a human names where the work resumes.</p>
+
+      <h3 data-l="de">Eine Version pausieren</h3><h3 data-l="en">Pausing a version</h3>
+      <p data-l="de">Eine deployte Version lässt sich <b>pausieren</b>, ohne sie zu löschen
+        (<code>PUT /api/v1/processes/{key}/active</code> mit <code>{"active":false}</code>, Rolle
+        <code>operator</code>). Pausiert heisst: die Version startet <b>keine neuen Instanzen mehr von selbst</b> –
+        aus einem Zeit-, Nachrichten- oder Signal-Start-Event. Ein <b>ausdrücklicher</b> Start über die API oder die
+        Oberfläche bleibt möglich, und laufende Instanzen laufen unberührt weiter. Es wirkt je Version, nicht je
+        Prozess-Id; eine neue Version startet unabhängig davon aktiv. In der Konsole trägt die pausierte Version im
+        Modeler die Marke <i>Inactive</i> und einen Knopf <i>Activate</i> / <i>Deactivate</i>.</p>
+      <p data-l="en">A deployed version can be <b>paused</b> without deleting it
+        (<code>PUT /api/v1/processes/{key}/active</code> with <code>{"active":false}</code>, role
+        <code>operator</code>). Paused means the version <b>no longer starts new instances on its own</b> – from a
+        timer, message or signal start event. An <b>explicit</b> start over the API or the UI still works, and
+        running instances continue untouched. It applies per version, not per process id; a new version starts
+        active regardless. In the Console the paused version carries an <i>Inactive</i> badge in the Modeler and an
+        <i>Activate</i> / <i>Deactivate</i> button.</p>
+
+      <h3 data-l="de">Entscheidungen weiterentwickeln</h3><h3 data-l="en">Evolving decisions</h3>
+      <p data-l="de">Eine DMN-Entscheidung wird für sich deployt (<code>POST /api/v1/decision-deployments</code>
+        mit dem DMN-XML, Rolle <code>modeler</code>) und ist je Entscheidungs-Id versioniert; auch hier erhöht jeder
+        Deploy die Version. Ein Business-Rule-Task bindet sie über <code>atlas:version="N"</code> an eine feste
+        Version oder über <b>latest</b> an die jeweils jüngste – und <b>latest</b> heisst seit ADR-0423 die jüngste
+        Version <i>zu dem Zeitpunkt, an dem die Task läuft</i>, nicht die zum Deploy des Prozesses eingefrorene. Wer
+        eine Version bindet, die nicht deployt ist, dessen Prozess-Deploy wird abgelehnt und nennt die deployten
+        Versionen.</p>
+      <p data-l="en">A DMN decision is deployed on its own (<code>POST /api/v1/decision-deployments</code> with the
+        DMN XML, role <code>modeler</code>) and is versioned per decision id; here too every deploy bumps the
+        version. A business rule task binds it to a fixed version with <code>atlas:version="N"</code> or to
+        <b>latest</b> for the newest one – and since ADR-0423 <b>latest</b> means the newest version <i>at the time
+        the task runs</i>, not the one frozen when the process was deployed. Binding a version that is not deployed
+        makes the process deploy refuse it and name the deployed versions.</p>
+      <p data-l="de">Eine Entscheidungs-Deployment, an die ein deployter Prozess gebunden ist, lässt sich
+        <b>nicht löschen</b>: <code>DELETE /api/v1/decision-deployments/{key}</code> antwortet mit 409 und nennt die
+        Definition, die daran hängt – erst die Definition entfernen. Eine Version, an die nichts gebunden ist, lässt
+        sich löschen.</p>
+      <p data-l="en">A decision deployment a deployed process is bound to <b>cannot be deleted</b>:
+        <code>DELETE /api/v1/decision-deployments/{key}</code> answers 409 and names the definition that hangs off
+        it – remove the definition first. A version nothing is bound to can be deleted.</p>
+
+      <h3 data-l="de">Die Aufrufe im Überblick</h3><h3 data-l="en">The calls at a glance</h3>
+      <p data-l="de">Migration und Fork verlangen <code>admin</code>; das Pausieren <code>operator</code>; Deploy und
+        DMN-Deployment <code>modeler</code>.</p>
+      <p data-l="en">Migration and fork need <code>admin</code>; pausing <code>operator</code>; deploy and DMN
+        deployment <code>modeler</code>.</p>
+      <table id="evolve-routes">
+        <thead><tr>
+          <th data-l="de">Aufruf</th><th data-l="en">Call</th>
+          <th data-l="de">Rolle</th><th data-l="en">Role</th>
+          <th data-l="de">Wofür</th><th data-l="en">For</th>
+        </tr></thead>
+        <tbody>
+          <tr><td><code>POST /api/v1/deployments</code></td><td><code>modeler</code></td>
+            <td data-l="de">eine neue Version deployen</td>
+            <td data-l="en">deploy a new version</td></tr>
+          <tr><td><code>POST /api/v1/instances/{key}/migrate/plan</code></td><td><code>admin</code></td>
+            <td data-l="de">prüfen, was eine Migration täte – schreibt nichts</td>
+            <td data-l="en">check what a migration would do – writes nothing</td></tr>
+          <tr><td><code>POST /api/v1/instances/{key}/migrate</code></td><td><code>admin</code></td>
+            <td data-l="de">einen Fall auf eine andere Version umbinden</td>
+            <td data-l="en">rebind a case to another version</td></tr>
+          <tr><td><code>POST /api/v1/instances/{key}/migrate/fork</code></td><td><code>admin</code></td>
+            <td data-l="de">in einer neuen Instanz fortsetzen</td>
+            <td data-l="en">continue in a new instance</td></tr>
+          <tr><td><code>POST /api/v1/processes/{key}/migrate-instances</code></td><td><code>admin</code></td>
+            <td data-l="de">viele Fälle einer Definition stapelweise migrieren</td>
+            <td data-l="en">migrate many cases of a definition in a batch</td></tr>
+          <tr><td><code>PUT /api/v1/processes/{key}/active</code></td><td><code>operator</code></td>
+            <td data-l="de">eine Version pausieren oder wieder aktivieren</td>
+            <td data-l="en">pause or reactivate a version</td></tr>
+          <tr><td><code>POST /api/v1/decision-deployments</code></td><td><code>modeler</code></td>
+            <td data-l="de">eine DMN-Entscheidung deployen</td>
+            <td data-l="en">deploy a DMN decision</td></tr>
+          <tr><td><code>DELETE /api/v1/decision-deployments/{key}</code></td><td><code>modeler</code></td>
+            <td data-l="de">eine ungebundene Entscheidungs-Version entfernen</td>
+            <td data-l="en">remove an unbound decision version</td></tr>
+        </tbody>
+      </table>
+
+      <div class="note warn">
+        <div class="lbl" data-l="de">Drei Stolpersteine</div><div class="lbl" data-l="en">Three traps</div>
+        <p data-l="de"><b>Ein neuer Deploy ändert laufende Fälle nicht.</b> Sie bleiben auf ihrer Version, bis
+          jemand sie migriert. Wer eine Korrektur deployt und erwartet, dass die steckengebliebenen Fälle sie
+          übernehmen, wartet vergebens – sie brauchen eine Migration.</p>
+        <p data-l="en"><b>A new deploy does not change running cases.</b> They stay on their version until somebody
+          migrates them. Deploy a fix and expect the stuck cases to pick it up, and you wait in vain – they need a
+          migration.</p>
+        <p data-l="de"><b>Migration wird abgelehnt, wenn ein Token nicht umgebunden werden kann.</b> Das ist kein
+          Fehler, sondern der Schutz davor, einen Token ins Leere zu setzen. Dann ist der Fork das Mittel: ein
+          Mensch benennt, wo die neue Instanz weitermacht.</p>
+        <p data-l="en"><b>Migration is refused when a token cannot be rebound.</b> That is not a fault but the
+          guard against stranding a token. The fork is the answer then: a human names where the new instance
+          continues.</p>
+        <p data-l="de"><b>«latest» bei einer Entscheidung heisst: jüngste Version, wenn die Task läuft.</b> Nicht die
+          zum Prozess-Deploy eingefrorene. Wer eine bestimmte Version festhalten will, bindet sie mit
+          <code>atlas:version</code>.</p>
+        <p data-l="en"><b>"latest" for a decision means the newest version when the task runs.</b> Not the one
+          frozen at the process deploy. To hold a specific version, bind it with <code>atlas:version</code>.</p>
+      </div>
+    </section>
+
     <section id="konten">
       <h2 data-l="de">Konten, Rollen &amp; Anmeldung</h2><h2 data-l="en">Accounts, roles &amp; sign-in</h2>
       <p class="lead" data-l="de">Wer sich anmelden kann – und was er danach darf. Beides wird unter

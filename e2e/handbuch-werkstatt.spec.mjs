@@ -314,3 +314,31 @@ test("the deliver chapter is reachable and lists the promote route", async ({ pa
   await expect(page.locator("#ausliefern #delivery-routes td:first-child code",
     { hasText: /\/releases\/\{version\}\/promote$/ })).toHaveCount(1);
 });
+
+// The evolve chapter teaches deploying a new version, migrating or forking a running
+// case, pausing a version, and versioning a decision. It sits after operations — you
+// deliver, operate, then evolve — and its route table (guarded against the real routes
+// and roles in Go) has to be on the page for that guard to mean anything to a reader.
+test("the evolve chapter is reachable and lists the migrate route", async ({ page }) => {
+  const calls = [];
+  installMock(page, calls);
+  await page.goto("/handbuch.html");
+
+  await expect(page.locator('#toc a[href="#weiterentwickeln"]')).toBeVisible();
+  await expect(page.locator("main section#weiterentwickeln")).toHaveCount(1);
+
+  // The load-bearing fact of the chapter, in whichever language is on screen: a new
+  // deploy does not move running cases — a migration does.
+  for (const [lang, text] of [
+    ["de", "Migration"],
+    ["en", "Migration"],
+  ]) {
+    await page.click(`#lang-${lang}`);
+    await expect(page.locator("#weiterentwickeln").locator(`[data-l="${lang}"]`, { hasText: text }).first())
+      .toBeVisible();
+  }
+
+  // The first column only: the "For" cells name routes in prose too.
+  await expect(page.locator("#weiterentwickeln #evolve-routes td:first-child code",
+    { hasText: /\/instances\/\{key\}\/migrate$/ })).toHaveCount(1);
+});

@@ -31,6 +31,35 @@
       }
     },
     {
+      "id": "the-handbook-teaches-evolving-a-deployed-process",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Evolve a running process — the handbook now shows how",
+        "de": "Einen laufenden Prozess weiterentwickeln – das Handbuch zeigt jetzt, wie"
+      },
+      "summary": {
+        "en": "A deployed process is immutable and versioned, so a fix reaches the cases already running only if you move them. Atlas could already deploy a new version without touching running instances, migrate a case to it (plan first, then apply), fork one whose tokens cannot be rebound into a new linked instance, pause a version so it stops auto-starting, and version a decision on its own — and the handbook explained none of it. A new chapter does, in German and English, including the trap that catches everyone first: a new deploy does not carry the stuck cases along; a migration does, and it is refused rather than stranding a token.",
+        "de": "Ein deployter Prozess ist unveränderlich und versioniert – eine Korrektur erreicht die schon laufenden Fälle nur, wenn man sie bewegt. Atlas konnte längst eine neue Version deployen, ohne laufende Instanzen anzutasten, einen Fall darauf migrieren (erst der Plan, dann die Ausführung), einen Fall, dessen Token sich nicht umbinden lässt, in eine neue verknüpfte Instanz forken, eine Version pausieren, damit sie nicht mehr von selbst startet, und eine Entscheidung für sich versionieren – und das Handbuch erklärte nichts davon. Ein neues Kapitel tut es, auf Deutsch und Englisch, samt dem Stolperstein, auf den man zuerst trifft: Ein neuer Deploy nimmt die steckengebliebenen Fälle nicht mit; eine Migration tut es, und sie wird eher abgelehnt, als einen Token ins Leere zu setzen."
+      },
+      "link": {
+        "label": "ADR-0162",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0162-process-instance-migration.md"
+      },
+      "tags": [
+        "Handbook",
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "the-handbook-teaches-delivering-a-process-to-another-server",
       "version": "Unreleased",
       "date": null,
@@ -312,35 +341,6 @@
         "Decisions",
         "Engine"
       ]
-    },
-    {
-      "id": "a-decision-service-refuses-a-wrongly-typed-input-as-its-deci",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A decision service refuses a wrongly-typed input",
-        "de": "Ein Decision Service weist eine falsch typisierte Eingabe ab"
-      },
-      "summary": {
-        "en": "A business rule task that sends an input of the wrong type to a decision fails into an incident that names the input. The same task pointed at the decision service over that decision used to get a silent answer from the catch-all row instead, because the engine published no input schema for a service and there was nothing to check against. A service now publishes what its caller supplies — the input data read behind its interface and the results of its input decisions, each with its declared type — and is refused by the same rule. The schema also reaches an input decision the conversion could not see before: one declared as a date and sent as text now arrives as a date rather than as a string. The retained evaluations of the one deployed service were checked against the new rule first; none would have been refused.",
-        "de": "Ein Business Rule Task, der einer Decision eine Eingabe vom falschen Typ schickt, endet in einem Incident, der die Eingabe benennt. Derselbe Task, auf den Decision Service über dieser Decision gerichtet, bekam bisher stattdessen still die Antwort der Catch-all-Zeile, weil die Engine für einen Service kein Eingabeschema veröffentlichte und es nichts gab, wogegen geprüft werden konnte. Ein Service veröffentlicht jetzt, was sein Aufrufer liefert — die Input Data, die hinter seiner Schnittstelle gelesen werden, und die Ergebnisse seiner Input-Decisions, jeweils mit deklariertem Typ — und wird nach derselben Regel abgewiesen. Das Schema erreicht auch eine Input-Decision, die die Umwandlung bisher nicht sah: Eine als Datum deklarierte und als Text gesendete kommt jetzt als Datum an statt als Zeichenkette. Die aufbewahrten Auswertungen des einen deployten Service wurden vorher gegen die neue Regel geprüft; keine wäre abgewiesen worden."
-      },
-      "link": {
-        "label": "ADR-0419",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0419-a-declared-type-is-honoured-at-the-decision-boundary.md"
-      },
-      "tags": [
-        "Decisions",
-        "Engine"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the incidents",
-          "de": "Incidents öffnen"
-        },
-        "route": "#/operations/incidents"
-      }
     }
   ]
 }
