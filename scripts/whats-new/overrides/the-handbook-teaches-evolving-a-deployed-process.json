@@ -1,0 +1,25 @@
+{
+  "tags": [
+    "Handbook",
+    "Operations"
+  ],
+  "link": {
+    "label": "ADR-0162",
+    "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0162-process-instance-migration.md"
+  },
+  "title": {
+    "en": "Evolve a running process — the handbook now shows how",
+    "de": "Einen laufenden Prozess weiterentwickeln – das Handbuch zeigt jetzt, wie"
+  },
+  "summary": {
+    "en": "A deployed process is immutable and versioned, so a fix reaches the cases already running only if you move them. Atlas could already deploy a new version without touching running instances, migrate a case to it (plan first, then apply), fork one whose tokens cannot be rebound into a new linked instance, pause a version so it stops auto-starting, and version a decision on its own — and the handbook explained none of it. A new chapter does, in German and English, including the trap that catches everyone first: a new deploy does not carry the stuck cases along; a migration does, and it is refused rather than stranding a token.",
+    "de": "Ein deployter Prozess ist unveränderlich und versioniert – eine Korrektur erreicht die schon laufenden Fälle nur, wenn man sie bewegt. Atlas konnte längst eine neue Version deployen, ohne laufende Instanzen anzutasten, einen Fall darauf migrieren (erst der Plan, dann die Ausführung), einen Fall, dessen Token sich nicht umbinden lässt, in eine neue verknüpfte Instanz forken, eine Version pausieren, damit sie nicht mehr von selbst startet, und eine Entscheidung für sich versionieren – und das Handbuch erklärte nichts davon. Ein neues Kapitel tut es, auf Deutsch und Englisch, samt dem Stolperstein, auf den man zuerst trifft: Ein neuer Deploy nimmt die steckengebliebenen Fälle nicht mit; eine Migration tut es, und sie wird eher abgelehnt, als einen Token ins Leere zu setzen."
+  },
+  "try": {
+    "label": {
+      "en": "Open Operations",
+      "de": "Operations öffnen"
+    },
+    "route": "#/operations"
+  }
+}
