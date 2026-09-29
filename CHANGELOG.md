@@ -14,6 +14,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The handbook teaches writing your own worker over the Job API.** A service task
+  whose job type no built-in worker handles waits for a worker you write, on any host,
+  holding an API token of scope `worker` — and the handbook covered the built-in
+  connectors but never that loop (ADR-0007). The «Formulare & Worker» chapter now carries
+  it in German and English: the `<zeebe:taskDefinition type="…">` that names the job type,
+  the activate → complete/fail loop with a curl example, the `leaseToken` that fences a
+  stale completion, at-least-once delivery and why a worker must be idempotent, and the
+  remaining-attempts count that raises an incident at zero. Every call was run against a
+  live instance first. Its route table is held to the real job routes and their boundary
+  role by `api/workerjobshandbook_internal_test.go`; a renamed route or a changed role
+  fails the build.
+
 - **Converting a product to a lifecycle process no longer lets its old processes be
   deleted from under the orders that still need them.** Order lines keep the processes they
   froze when they were placed, so a product converted to one lifecycle process still returns

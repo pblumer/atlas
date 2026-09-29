@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-28",
   "entries": [
     {
+      "id": "the-handbook-teaches-writing-your-own-worker-over-the-job-ap",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Write your own worker — the handbook now shows the Job API",
+        "de": "Einen eigenen Worker schreiben – das Handbuch zeigt jetzt die Job-API"
+      },
+      "summary": {
+        "en": "The built-in workers cover the common outside systems; for everything else you write your own, on any host, holding an API token of scope worker. It leases a job by its type, does the work, and completes or fails it — the same loop atlas worker runs. The handbook's Forms & workers chapter now explains it in German and English: the task definition that names the job type, the activate/complete/fail calls with a curl example, the lease token that fences a stale completion, and why at-least-once delivery means your worker has to be idempotent. Every call was run against a live instance first.",
+        "de": "Die eingebauten Worker decken die häufigen Aussensysteme ab; für alles andere schreibt man einen eigenen, auf einem beliebigen Rechner, mit einem API-Token des Scopes worker. Er least einen Job nach seinem Typ, tut die Arbeit und schliesst ihn ab oder lässt ihn fehlschlagen – dieselbe Schleife, die auch atlas worker fährt. Das Kapitel «Formulare & Worker» erklärt das jetzt auf Deutsch und Englisch: die Task-Definition, die den Job-Type benennt, die Aufrufe activate/complete/fail mit curl-Beispiel, den Lease-Token, der einen veralteten Abschluss auszäunt, und warum mindestens einmalige Zustellung heisst, dass der Worker idempotent sein muss. Jeder Aufruf wurde zuerst an einer laufenden Instanz ausgeführt."
+      },
+      "link": {
+        "label": "ADR-0007",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0007-job-worker-protocol.md"
+      },
+      "tags": [
+        "Handbook",
+        "Workers"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Console",
+          "de": "Konsole öffnen"
+        },
+        "route": "#/console"
+      }
+    },
+    {
       "id": "converting-a-product-to-a-lifecycle-process-no-longer-lets-i",
       "version": "Unreleased",
       "date": null,
@@ -311,27 +340,6 @@
       "tags": [
         "Operations",
         "Engine"
-      ]
-    },
-    {
-      "id": "on-windows-a-record-being-read-no-longer-blocks-deleting-or-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "On Windows, deleting or saving no longer collides with a read",
-        "de": "Unter Windows kollidiert Löschen oder Speichern nicht mehr mit einem Lesezugriff"
-      },
-      "summary": {
-        "en": "On a Windows server, deleting or saving a project, draft, form or other saved item could fail with \"The process cannot access the file because it is being used by another process\" when another request was reading it at that moment, for example during a login. Reads no longer lock the file against that. Nothing changes on Linux or macOS.",
-        "de": "Auf einem Windows-Server konnte das Löschen oder Speichern eines Projekts, Entwurfs, Formulars oder eines anderen gespeicherten Elements mit «The process cannot access the file because it is being used by another process» fehlschlagen, wenn ein anderer Request es im selben Moment las, etwa bei einer Anmeldung. Lesezugriffe sperren die Datei dafür nicht mehr. Unter Linux und macOS ändert sich nichts."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations"
       ]
     }
   ]

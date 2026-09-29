@@ -342,3 +342,32 @@ test("the evolve chapter is reachable and lists the migrate route", async ({ pag
   await expect(page.locator("#weiterentwickeln #evolve-routes td:first-child code",
     { hasText: /\/instances\/\{key\}\/migrate$/ })).toHaveCount(1);
 });
+
+// The "your own worker" subsection lives inside the Forms & workers chapter (it is not
+// a chapter of its own, so no table-of-contents entry). It teaches the Job API a custom
+// worker drives; its route table is guarded against the real routes and roles in Go, so
+// the table has to be on the page for that guard to mean anything.
+test("the forms chapter teaches a custom worker over the Job API", async ({ page }) => {
+  const calls = [];
+  installMock(page, calls);
+  await page.goto("/handbuch.html");
+
+  await expect(page.locator("#formulare #eigener-worker")).toHaveCount(1);
+
+  // The load-bearing fact, in whichever language is on screen: at-least-once delivery
+  // means the worker must be idempotent.
+  for (const [lang, text] of [
+    ["de", "idempotent"],
+    ["en", "idempotent"],
+  ]) {
+    await page.click(`#lang-${lang}`);
+    // #eigener-worker is an empty anchor div; the prose is its siblings, so scope to
+    // the chapter. "idempotent" appears only in this subsection within it.
+    await expect(page.locator("#formulare").locator(`[data-l="${lang}"]`, { hasText: text }).first())
+      .toBeVisible();
+  }
+
+  // The first column only: the "For" cells name routes in prose too.
+  await expect(page.locator("#formulare #worker-jobs-routes td:first-child code",
+    { hasText: /\/jobs\/activate$/ })).toHaveCount(1);
+});
