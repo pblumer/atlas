@@ -1,4 +1,4 @@
-# ADR-DRAFT: A product's lifecycle is one process, and each operation is a message start it is triggered at
+# ADR-0425: A product's lifecycle is one process, and each operation is a message start it is triggered at
 
 - **Status:** Proposed
 - **Implementation:** Not started
@@ -180,7 +180,7 @@ Publishing a catalogue (ADR-0312) additionally checks, against the latest active
 - the process has **no none start event**. A none start in a lifecycle process is an
   entry the catalogue never uses and an untriggered create would seed; without one, an
   untriggered create is refused altogether
-  (ADR-draft-an-untriggered-create-never-seeds-several-start-events);
+  (ADR-0426);
 - the process is not `FulfilmentProcess`, as today.
 
 `order.Line` freezes the lifecycle binding at placement, beside the two ids it already
@@ -194,7 +194,7 @@ A lifecycle process has no none start and several start events. An untriggered c
 such a process — the API, the MCP create tool, a call activity — would today seed every
 start event and run provisioning and deprovisioning at once. That trap is not specific to
 the catalogue, and it is closed for every process by its own record:
-ADR-draft-an-untriggered-create-never-seeds-several-start-events. This record depends on
+ADR-0426. This record depends on
 it: a lifecycle process is entered only through one of its triggers.
 
 ### 6. The order starts its positions through a start act, not through a route choice in the models
@@ -277,7 +277,7 @@ An external system is given two kinds of door, never a third:
 Nothing is migrated by this record: lines placed before a product is converted keep the
 two frozen ids. How long the old processes are then still needed, what protects them, and
 how lines may be moved to the lifecycle binding is decided in
-ADR-draft-converting-a-product-to-a-lifecycle-process.
+ADR-0427.
 
 ### Consequences
 
@@ -351,8 +351,8 @@ ADR-draft-converting-a-product-to-a-lifecycle-process.
 - relates to ADR-0370 (the durable buffer, which must not cover this route)
 - relates to ADR-0373 (published interfaces and the **send** grant for external callers)
 - relates to ADR-0119 (a deactivated definition is answered, not skipped)
-- depends on ADR-draft-an-untriggered-create-never-seeds-several-start-events
-- continued by ADR-draft-converting-a-product-to-a-lifecycle-process
+- depends on ADR-0426
+- continued by ADR-0427
 - relates to ADR-0411 (the shipped models call Atlas with an operator token) and
   ADR-0049 (the internal service identity, which does not reach a model)
 - relates to ADR-0416 (the server notes which instance works a position)

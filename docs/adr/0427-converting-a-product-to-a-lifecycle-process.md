@@ -1,4 +1,4 @@
-# ADR-DRAFT: Converting a product to a lifecycle process keeps the old processes alive until nothing needs them
+# ADR-0427: Converting a product to a lifecycle process keeps the old processes alive until nothing needs them
 
 - **Status:** Proposed
 - **Implementation:** Not started
@@ -13,7 +13,7 @@
 
 ## Context and problem statement
 
-ADR-draft-a-product-lifecycle-is-one-process-with-message-triggers lets a catalogue
+ADR-0425 lets a catalogue
 product bind **one** lifecycle process instead of a provisioning and a deprovisioning
 process. It deliberately migrates nothing: an order line freezes its product's binding at
 placement (ADR-0312), so lines placed before a product is converted keep the two old
@@ -187,7 +187,7 @@ convention, stated here beside the existing one that every branch reports its ou
 
 ## Links
 
-- builds on ADR-draft-a-product-lifecycle-is-one-process-with-message-triggers
+- builds on ADR-0425
 - relates to ADR-0312 (frozen bindings) and ADR-0359 (recorded corrections)
 - relates to ADR-0119 (deactivating a process), ADR-0239 (off-loop reads) and
   ADR-0353 (counts rather than lists)

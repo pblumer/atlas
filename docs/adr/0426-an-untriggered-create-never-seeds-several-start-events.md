@@ -1,4 +1,4 @@
-# ADR-DRAFT: An untriggered create never seeds several start events
+# ADR-0426: An untriggered create never seeds several start events
 
 - **Status:** Proposed
 - **Implementation:** Not started
@@ -42,7 +42,7 @@ with `AppendCreateChildInstanceCommand`, which carries no `StartElements`, so th
 goes through the same fallback.
 
 The shape is not hypothetical. Modelling a product's lifecycle as one process with one
-message start per operation (ADR-draft-a-product-lifecycle-is-one-process-with-message-triggers)
+message start per operation (ADR-0425)
 is exactly this shape, and anybody who starts such a process by hand from the Console, the
 MCP create tool or a call activity would provision and deprovision in the same instant.
 
@@ -115,7 +115,7 @@ can be resolved then; the runtime incident remains the authority.
     same rule, so that the simulation does not show what the engine refuses.
   - A caller that genuinely needs to enter such a process by hand uses one of its
     triggers — a message, or the directed trigger of
-    ADR-draft-a-product-lifecycle-is-one-process-with-message-triggers. Option 4 is not
+    ADR-0425. Option 4 is not
     needed for that.
 
 ## Pros and cons of the options
@@ -147,4 +147,4 @@ can be resolved then; the runtime incident remains the authority.
 - relates to ADR-0076 and ADR-0105 (call activities and their per-server resolution)
 - relates to ADR-0061 (incidents) and ADR-0026 (the Problems panel)
 - relates to ADR-0078 (token simulation)
-- motivated by ADR-draft-a-product-lifecycle-is-one-process-with-message-triggers
+- motivated by ADR-0425
