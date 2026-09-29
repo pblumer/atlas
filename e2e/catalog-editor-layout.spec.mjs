@@ -122,10 +122,13 @@ test("sorting the list keeps the panel level with its product", async ({ page })
   // The shared table enhancer sorts the tbody underneath the panel (table.js), which
   // moves the row it is aligned to — the alignment has to be re-measured, not kept.
   await page.click(".product-list thead th:first-child");
-  await page.waitForTimeout(120);
-  const b = await boxes(page);
-  expect(b.row).not.toBeNull();
-  expect(Math.abs(b.panel.top - b.row.top)).toBeLessThanOrEqual(4);
+  // The panel re-measures one frame after the click (catalog-admin.js realign), so the
+  // alignment is awaited rather than read after a fixed 120 ms a loaded machine can
+  // overrun.
+  await expect.poll(async () => {
+    const b = await boxes(page);
+    return b.row ? Math.abs(b.panel.top - b.row.top) : Infinity;
+  }).toBeLessThanOrEqual(4);
   await expect(page.locator(".product-editor input[name=id]")).toHaveValue("p10");
 });
 
