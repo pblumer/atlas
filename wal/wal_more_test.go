@@ -75,21 +75,23 @@ func TestOpenLastSegmentOpenError(t *testing.T) {
 }
 
 // TestOpenSkipsAnUnwritableSegment: a segment the writer cannot recognise — here
-// one symlinked to /dev/null, which reads as empty and holds no format header —
-// is not adopted for writing. Open succeeds, leaves the file alone, and continues
-// in a fresh segment, so one unusable file cannot stop the log from starting.
+// an empty file it may not write to, which holds no format header — is not adopted
+// for writing. Open succeeds, leaves the file alone, and continues in a fresh
+// segment, so one unusable file cannot stop the log from starting.
 //
 // This is the same path a pre-batch segment takes (ADR-0285):
 // anything without the version-2 header is read but never appended to, because a
 // batch cannot be written into a file whose framing predates batches.
+//
+// The file is made read-only rather than linked to the null device: a symlink to
+// os.DevNull resolves to the device on Unix but to a missing file next to the link on
+// Windows. Read-only refuses a write open on both — except to root on Unix, which is
+// why the test also checks the file directly instead of relying on Open failing.
 func TestOpenSkipsAnUnwritableSegment(t *testing.T) {
-	if _, err := os.Stat(os.DevNull); err != nil {
-		t.Skipf("no %s", os.DevNull)
-	}
 	dir := t.TempDir()
-	link := filepath.Join(dir, "0000000000000000.wal")
-	if err := os.Symlink(os.DevNull, link); err != nil {
-		t.Skipf("symlink unsupported: %v", err)
+	unusable := filepath.Join(dir, "0000000000000000.wal")
+	if err := os.WriteFile(unusable, nil, 0o444); err != nil {
+		t.Fatalf("WriteFile: %v", err)
 	}
 	l, err := wal.Open(wal.Options{Dir: dir})
 	if err != nil {
@@ -111,6 +113,12 @@ func TestOpenSkipsAnUnwritableSegment(t *testing.T) {
 	}
 	if len(got) != 1 || got[0] != "after" {
 		t.Fatalf("replayed %q, want [after] written to a fresh segment", got)
+	}
+	if st, err := os.Stat(unusable); err != nil || st.Size() != 0 {
+		t.Fatalf("the unusable segment was touched: %v, %v", st, err)
+	}
+	if segs := segmentPaths(t, dir); len(segs) != 2 {
+		t.Fatalf("segments = %d, want 2: writing continues in a fresh segment", len(segs))
 	}
 }
 
@@ -156,13 +164,17 @@ func TestReplaySegmentFilesError(t *testing.T) {
 	if err := l.Sync(); err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
+	// Closed before the directory goes: Windows will not delete a file that is still
+	// open, and Replay reads the segments through handles of its own, not this one.
+	if err := l.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatalf("RemoveAll: %v", err)
 	}
 	if err := l.Replay(func([]byte) error { return nil }); err == nil {
 		t.Fatal("Replay after directory removal: got nil error, want a listing error")
 	}
-	l.Close()
 }
 
 // TestReplayStopsOnCallbackError covers the path where the replay callback fails:

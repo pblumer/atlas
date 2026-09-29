@@ -1,6 +1,8 @@
 package wal_test
 
 import (
+	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -125,6 +127,57 @@ func TestTornTailOfTheActiveSegmentIsStillFine(t *testing.T) {
 	}
 	defer l.Close()
 	wantEntries(t, replayAll(t, l), "A", "B")
+}
+
+// TestATornSegmentHeaderIsWrittenAgainBeforeWritingResumes: a crash can cut the
+// 16-byte header of a fresh segment short. Open accepts such a segment as ours and
+// empty, but trimming it to empty is not enough to write into it again: batches
+// written after it without a header make the file read as the headerless
+// version-1 format on the next start, and each batch — framing, kind bytes and
+// all — came back as one garbled record.
+func TestATornSegmentHeaderIsWrittenAgainBeforeWritingResumes(t *testing.T) {
+	header := segmentHeaderFor(2)
+	for cut := 1; cut < len(header); cut++ {
+		t.Run(fmt.Sprintf("%d of %d header bytes", cut, len(header)), func(t *testing.T) {
+			dir := t.TempDir()
+			writeSegment(t, dir, header[:cut])
+
+			l, err := wal.Open(wal.Options{Dir: dir})
+			if err != nil {
+				t.Fatalf("Open over a torn header: %v", err)
+			}
+			for _, rec := range []string{"one", "two"} {
+				if err := l.Append([]byte(rec)); err != nil {
+					t.Fatalf("Append: %v", err)
+				}
+			}
+			if err := l.Sync(); err != nil {
+				t.Fatalf("Sync: %v", err)
+			}
+			if err := l.Close(); err != nil {
+				t.Fatalf("Close: %v", err)
+			}
+
+			paths := segmentPaths(t, dir)
+			if len(paths) != 1 {
+				t.Fatalf("segments = %d, want 1: writing continues in the torn segment", len(paths))
+			}
+			blob, err := os.ReadFile(paths[0])
+			if err != nil {
+				t.Fatalf("ReadFile: %v", err)
+			}
+			if !bytes.HasPrefix(blob, header) {
+				t.Fatalf("segment starts %q, want the whole header %q", blob[:min(len(blob), len(header))], header)
+			}
+
+			l2, err := wal.Open(wal.Options{Dir: dir})
+			if err != nil {
+				t.Fatalf("reopen: %v", err)
+			}
+			defer l2.Close()
+			wantEntries(t, replayAll(t, l2), "one", "two")
+		})
+	}
 }
 
 // TestCorruptionFollowedByDataIsNotATail: even in the active segment, a damaged

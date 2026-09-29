@@ -260,6 +260,51 @@ jobs:
       - name: Coverage floor (>= 95%, ADR-0018)
         run: ./scripts/check-coverage.sh 94
 
+  # The storage packages on the one platform the release ships a binary for and no
+  # job here ran on.
+  #
+  # release.yml builds atlas.exe from this tree, but every other job runs on Linux, so
+  # a Windows-only defect reached a server before any runner saw it: the WAL reopened
+  # its newest segment append-only, a handle Windows will not truncate, and every
+  # start after the first stopped with "Access is denied". The code was correct Go and
+  # passed the whole suite; only the file system underneath it differed.
+  #
+  # So this runs the packages whose correctness *is* file-system behaviour — the log,
+  # checkpoints, the state store, the design-time stores' write discipline, and the
+  # directory fsync they share — on a Windows runner. Not the whole suite: the rest is
+  # platform-neutral Go that the Linux jobs already stand for.
+  #
+  # CGO_ENABLED=0 because that is how release.yml builds atlas.exe, which also rules
+  # out the race detector (it needs cgo). Races are the race job's to catch — nothing
+  # about them is Windows-specific — and this job exists for what is. The shipped
+  # binary is built first, natively, so a change that breaks the Windows build fails
+  # on its pull request instead of on the release tag.
+  windows:
+    name: windows · storage
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: windows-latest
+    # Paired with the per-package limit on the Test step, which has to fire first so Go
+    # names the package. The packages take seconds on Linux; nearly all of this job is
+    # setting up Go and compiling on a Windows runner.
+    timeout-minutes: 25
+    env:
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          check-latest: true
+
+      - name: Build atlas.exe
+        run: go build -o atlas.exe ./cmd/atlas
+
+      - name: Test storage packages
+        run: go test -timeout=10m ./wal/... ./checkpoint/... ./state/... ./api/sidecar/... ./internal/...
+
   # Everything a docs-only change can actually break, and nothing else.
   #
   # "Documentation" is not inert here. docs/adr is a Go package whose tests read every

@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/pblumer/atlas/internal/sharedread"
 )
 
 // Store is a durable store for one kind of design-time record: one JSON file per
@@ -128,7 +130,9 @@ func (s *Store[T]) Get(key string) (T, bool, error) {
 	if !s.addressable(key) {
 		return zero, false, nil
 	}
-	data, err := os.ReadFile(s.FileFor(key))
+	// Through sharedread, not os: a reader here runs off the run loop, and on Windows
+	// an os.Open handle would make the writer's Delete or Save of this record fail.
+	data, err := sharedread.ReadFile(s.FileFor(key))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return zero, false, nil
@@ -173,7 +177,7 @@ func (s *Store[T]) LoadAll() ([]T, error) {
 		if !s.ok(strings.TrimSuffix(name, ".json")) {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(s.dir, name))
+		data, err := sharedread.ReadFile(filepath.Join(s.dir, name)) // see Get
 		if err != nil {
 			// The record went away between the directory listing and this read.
 			// A reader on the loop was shielded from that by being the writer too;
