@@ -171,6 +171,16 @@ _Changed_ / _Removed_ for each version.
   access, so there it now opens the directory with write access. Other platforms behave
   as before.
 
+- **On Windows, a record being read no longer blocks deleting or saving it.** The
+  design-time stores (projects, drafts, forms, workers, settings and the rest) are read
+  off the run loop while the writer on it deletes and replaces records. On Windows a
+  file open for reading could not be deleted or renamed over, so a delete or a save that
+  met a concurrent read — a login listing the users, say — failed with "The process
+  cannot access the file because it is being used by another process". Their reads now
+  open the file with delete sharing, as every open already behaves on Linux and macOS.
+  The same new Windows test run found that a file in place of the checkpoint directory
+  read there as "no checkpoints" instead of as an error; it is now an error everywhere.
+
 - **A log segment whose header a crash cut short gets its header back.** A crash in the
   middle of writing the 16-byte header of a new segment left a file that the next start
   rightly accepted as empty and continued writing into — but without writing the header
