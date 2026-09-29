@@ -51,6 +51,8 @@ func (p *Processor) registerHandlers() {
 		handlerKey(model.VTTimer, model.IntentTimerStartArm):                   handleTimerStartArm,
 		handlerKey(model.VTMessage, model.IntentMessagePublished):              handleMessagePublished,
 		handlerKey(model.VTVariable, model.IntentVariableModify):               handleVariablesModify,
+		handlerKey(model.VTTriggerReceipt, model.IntentTriggering):             handleTriggering,
+		handlerKey(model.VTTriggerReceipt, model.IntentTriggerReceiptsPruning): handleTriggerReceiptsPruning,
 	}
 }
 

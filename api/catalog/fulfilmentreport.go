@@ -138,6 +138,12 @@ func fulfilmentProblems(items []Item, look ProcessLookup) []FulfilmentProblem {
 			seenApproval[p] = true
 			rest = append(rest, bindingProblems("", "", "approval", p, look)...)
 		}
+		if it.UsesLifecycleProcess() {
+			// One process for every operation (ADR-0425): asked once, not once per
+			// operation that happens to name it.
+			rest = append(rest, bindingProblems(it.ID, it.HomeCatalog, "lifecycle", it.LifecycleProcess, look)...)
+			continue
+		}
 		rest = append(rest, bindingProblems(it.ID, it.HomeCatalog, "provision", it.ProvisionProcess, look)...)
 		rest = append(rest, bindingProblems(it.ID, it.HomeCatalog, "deprovision", it.DeprovisionProcess, look)...)
 	}

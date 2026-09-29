@@ -1,7 +1,7 @@
 # ADR-0425: A product's lifecycle is one process, and each operation is a message start it is triggered at
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted
+- **Implementation:** Partial
 - **Date:** 2026-09-29
 - **Deciders:** Atlas maintainers
 - **Open question:** what a **change** of something already held means on the order.
@@ -278,6 +278,42 @@ Nothing is migrated by this record: lines placed before a product is converted k
 two frozen ids. How long the old processes are then still needed, what protects them, and
 how lines may be moved to the lifecycle binding is decided in
 ADR-0427.
+
+### As built
+
+What is in the tree, and where it went further or stopped short of the text above:
+
+- **Engine.** `Processor.TriggerStart` creates the instance in the same batch as its
+  receipt (`VTTriggerReceipt`, `IntentTriggerReceived`), so one fsync commits both; a
+  repeated delivery reads the receipt through the transaction and answers
+  `TriggerReplayed`, including a second delivery in the same batch. Receipts are dropped
+  by `IntentTriggerReceiptsPruned` carrying its cutoff, written by the retention sweep at
+  most once an hour and only when a receipt is older than `--trigger-receipt-ttl`
+  (`ATLAS_TRIGGER_RECEIPT_TTL`, default 720h).
+- **Route.** `POST /api/v1/processes/{processId}/triggers/{message}`, and the MCP tool
+  `atlas_trigger_start`. The receipt's source is the caller's principal, optionally
+  narrowed by the body's `source` — never the body alone, so no caller can replay or read
+  another's triggers. The catalogue layer records its own under `atlas:order`, which the
+  route cannot produce.
+- **Start act.** The fulfilment process calls it for *every* ready position, and it
+  decides whether the approval or the provisioning starts: a gated position nobody
+  approved starts its approval process, and the approval process calls the act again with
+  `approvedBy`, which records the approval (`order.Approve`) in the same act that starts
+  the provisioning. That is one call where §7's follow-up foresaw two, and it makes the
+  approval a precondition the act checks rather than a report it trusts. A started
+  position is marked `running`, so `/next` no longer offers it twice, and a repeated call
+  answers with the instance already recorded.
+- **Returns, recertification, reconciliation** start through the same function, which
+  takes either binding form. A return's trigger id counts the deprovisioning attempts
+  already recorded on the line, so a return asked for again after `returnFailed` is a new
+  trigger. `LineInstance` gained `operation`.
+- **Catalogue.** `lifecycleProcess` and `operations` on the product, in the editor and
+  the MCP schema; the fulfilment report asks once for a lifecycle process; the landscape
+  draws one edge to it.
+- **Not built: `change`.** The binding is stored and checked at publish, but nothing
+  starts it: the order has no act for it (the open question), and §8 refuses a
+  catalogued start event on the trigger route. That is the one piece of the decision
+  missing, and why this record is `Partial`.
 
 ### Consequences
 

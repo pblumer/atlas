@@ -378,6 +378,7 @@ func TestValueTypeMethods(t *testing.T) {
 		{(&DecisionEvaluationValue{}), VTDecisionEvaluation},
 		{(&InboundDeliveryValue{}), VTInboundDelivery},
 		{(&CompensableValue{}), VTCompensable},
+		{(&TriggerReceiptValue{}), VTTriggerReceipt},
 	}
 	for _, c := range cases {
 		if got := c.v.ValueType(); got != c.want {
@@ -400,7 +401,7 @@ func TestStringersExhaustive(t *testing.T) {
 		VTProcessInstance, VTElementInstance, VTJob, VTTimer, VTMessageSubscription,
 		VTMessage, VTVariable, VTIncident, VTSignal, VTError, VTProcessDefinition,
 		VTMessageFlow, VTDataObject, VTDecisionEvaluation, VTInboundDelivery,
-		VTVariableAudit, VTCompensable, VTOperatorAction,
+		VTVariableAudit, VTCompensable, VTOperatorAction, VTTriggerReceipt,
 	}
 	for _, vt := range valueTypes {
 		if s := vt.String(); s == "" || s == "ValueType(?)" {
@@ -420,7 +421,8 @@ func TestStringersExhaustive(t *testing.T) {
 		IntentDecisionEvaluated, IntentVariableDeleted, IntentInboundDeliveryApplied,
 		IntentVariableModify, IntentVariableAudited,
 		IntentCompensableRecorded, IntentCompensableConsumed, IntentOperatorActed,
-		IntentJobErrorThrown,
+		IntentJobErrorThrown, IntentTriggering, IntentTriggerReceived,
+		IntentTriggerReceiptsPruning, IntentTriggerReceiptsPruned,
 	}
 	for _, in := range intents {
 		if s := in.String(); s == "" || s == "Intent(?)" {

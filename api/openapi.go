@@ -278,6 +278,12 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Start a process instance", tag: "Instances", role: RoleOperator,
 			req:  jsonBody("Initial variables", schemaObj(map[string]any{"variables": tObject()})),
 			resp: jsonBody("Created instance", tObject())}},
+		{"POST", "/api/v1/processes/{processId}/triggers/{message}", s.handleTrigger, apiOp{
+			summary: "Start the newest deployed version of a process at one of its message start events, idempotently per sender and trigger id (ADR-0425); 201 with the instance, 200 with the first instance for a repeated trigger, 404 for an unknown process or start event, 409 when refused (a catalogue product's operation, a singleton already running, a deactivated process)", tag: "Instances", role: RoleOperator,
+			req: jsonBody("The trigger", schemaObj(map[string]any{
+				"triggerId": tString(), "source": tString(), "variables": tObject(),
+			}, "triggerId")),
+			resp: jsonBody("The instance that answers", tObject())}},
 		{"POST", "/api/v1/processes/{key}/instances-from-csv", s.handleCreateInstanceFromCSV, apiOp{
 			summary: "Start a process instance from an uploaded CSV — multipart file + JSON column layout; seeds rows/rowCount/fileName as start variables (ADR-0084)", tag: "Instances", role: RoleOperator,
 			req: &bodySpec{mediaType: "multipart/form-data", desc: "CSV file and a JSON column layout", schema: schemaObj(map[string]any{
@@ -1138,6 +1144,12 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "status")),
 			resp: jsonBody("The updated order", tObject())}},
 
+		{"POST", "/api/v1/orders/{id}/lines/{item}/start", s.handleStartLine, apiOp{
+			summary: "Start one position of an order: its approval when one is owed and nobody approved it, otherwise its provisioning through the product's frozen binding — a process started by hand or a lifecycle process's provision start event (ADR-0425). Idempotent: a position started before answers with that instance. approvedBy records the approval the calling approval process reached", tag: "Order", role: RoleOperator,
+			req: jsonBody("What to start", schemaObj(map[string]any{
+				"operation": tString(), "approvedBy": tString(),
+			})),
+			resp: jsonBody("The instance that answers", tObject())}},
 		{"POST", "/api/v1/orders/{id}/lines/{item}/decision", s.orders.HandleDecide, apiOp{
 			summary: "Record an approver's decision on a line, with who decided: a refusal, which needs a reason and settles the line — reporting will not take a rejection, because that is a decision with an author rather than a provisioning outcome — or, with \"approved\": true, an approval, which records approvedBy and approvedAt and leaves the line to be provisioned", tag: "Order", role: RoleOperator,
 			req: jsonBody("Decision", schemaObj(map[string]any{

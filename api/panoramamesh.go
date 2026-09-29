@@ -505,11 +505,18 @@ func (s *Server) collectCatalogue(land *panorama.Landscape, p *httpapi.Principal
 		byID[c.ID] = c
 	}
 	for _, it := range items {
+		// A lifecycle process is both of the product's processes (ADR-0425); named
+		// once, so the picture draws one edge to it rather than two to the same node.
+		prov := strings.TrimSpace(it.BindingFor(catalog.OpProvision).Process)
+		deprov := strings.TrimSpace(it.BindingFor(catalog.OpDeprovision).Process)
+		if deprov == prov {
+			deprov = ""
+		}
 		land.Products = append(land.Products, panorama.Product{
 			ID: it.ID, Name: catalogWords(it.Texts, byID[it.HomeCatalog].Languages, it.ID),
 			HomeCatalog: it.HomeCatalog, CanView: visible[it.HomeCatalog],
-			ProvisionProcess:   strings.TrimSpace(it.ProvisionProcess),
-			DeprovisionProcess: strings.TrimSpace(it.DeprovisionProcess),
+			ProvisionProcess:   prov,
+			DeprovisionProcess: deprov,
 			// The store's own spellings, passed through rather than interpreted. What
 			// counts as "requires approval" is a reading and it is made where the
 			// picture is drawn; deciding it here would bake one reading into the

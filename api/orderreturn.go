@@ -1,9 +1,9 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 
+	"github.com/pblumer/atlas/api/catalog"
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/order"
 	"github.com/pblumer/atlas/model"
@@ -42,7 +42,7 @@ func (s *Server) handleReturnLine(w http.ResponseWriter, r *http.Request) {
 
 	var (
 		out       order.Order
-		process   string
+		binding   catalog.Binding
 		found     bool
 		returnErr error
 		opErr     error
@@ -65,7 +65,7 @@ func (s *Server) handleReturnLine(w http.ResponseWriter, r *http.Request) {
 			found = false
 			return
 		}
-		process = order.ReturnProcessOf(ord, item)
+		binding = order.ReturnBindingOf(ord, item)
 		out, returnErr = order.Returning(ord, item, at, principalID(r))
 		if returnErr != nil {
 			return
@@ -88,12 +88,12 @@ func (s *Server) handleReturnLine(w http.ResponseWriter, r *http.Request) {
 	// Durable first, then the process (I2). The line says a return is under way
 	// before anything runs, so a start that fails leaves a visible "returning" an
 	// operator can act on rather than a silent nothing.
-	if err := s.startReturn(process, id, item, out, ""); err != nil {
+	if err := s.startReturn(binding, id, item, out, ""); err != nil {
 		httpapi.Error(w, http.StatusInternalServerError,
 			"the return was recorded, but its process could not be started: "+err.Error())
 		return
 	}
-	httpapi.JSON(w, http.StatusOK, returnResp{Order: out, Process: process})
+	httpapi.JSON(w, http.StatusOK, returnResp{Order: out, Process: binding.Process})
 }
 
 // startReturn runs the line's deprovisioning, seeded the way its provisioning was:
@@ -104,7 +104,7 @@ func (s *Server) handleReturnLine(w http.ResponseWriter, r *http.Request) {
 // reason is set when something other than the orderer asked for the return — a
 // recertification — and says what, in words for the person the process shows it
 // to. The orderer's own return carries none.
-func (s *Server) startReturn(process, orderID, ref string, o order.Order, reason string) error {
+func (s *Server) startReturn(b catalog.Binding, orderID, ref string, o order.Order, reason string) error {
 	position, err := order.ResolveLine(o, ref)
 	if err != nil {
 		return err
@@ -134,28 +134,16 @@ func (s *Server) startReturn(process, orderID, ref string, o order.Order, reason
 		vars = append(vars, model.VariableValue{Name: "reason", Kind: model.VarString, Text: reason})
 	}
 
-	var key uint64
-	var found bool
-	var ambiguous string
-	s.do(func() {
-		if d := s.latestDeploymentOf(process); d != nil {
-			key, found = d.Key, true
-			ambiguous = untriggeredStartRefusal(d.cp)
-		}
-	})
-	if !found {
-		return fmt.Errorf("no deployed process with id %s", process)
-	}
-	if ambiguous != "" {
-		return fmt.Errorf("%s", ambiguous)
-	}
-	var instKey uint64
-	s.do(func() { s.proc.CreateInstanceReporting(key, &instKey, vars...) })
-	if err := s.drive(); err != nil {
+	// The attempt is counted before this start, so a return asked for again after
+	// it failed is a new trigger rather than a replay of the one that failed.
+	triggerID := positionTriggerID(orderID, position, catalog.OpDeprovision,
+		line.StartsOf(catalog.OpDeprovision)+1)
+	instKey, err := s.startBinding(b, triggerID, vars)
+	if err != nil {
 		return err
 	}
 	// The return is a process working this position like any other, and its tasks
 	// belong beside it in the shop (ADR-0416).
-	s.notePositionInstance(vars, instKey, process)
+	s.notePositionInstanceOp(vars, instKey, b.Process, catalog.OpDeprovision)
 	return nil
 }

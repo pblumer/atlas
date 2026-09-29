@@ -152,6 +152,14 @@ const (
 	//
 	// Appended last so every prior value type keeps its numeric value on the log.
 	VTEntitlementHistory
+
+	// VTTriggerReceipt records that a directed trigger was applied: the sender, its
+	// trigger id and the instance that answered (ADR-0425). It is what lets an
+	// at-least-once sender retry without starting a second instance. Receipts are
+	// dropped by an explicit prune event once they are older than the retention, so
+	// the set stays bounded. Appended last so every prior value type keeps its
+	// numeric value on the log.
+	VTTriggerReceipt
 )
 
 func (t ValueType) String() string {
@@ -176,6 +184,8 @@ func (t ValueType) String() string {
 		return "Entitlement"
 	case VTEntitlementHistory:
 		return "EntitlementHistory"
+	case VTTriggerReceipt:
+		return "TriggerReceipt"
 	case VTSignal:
 		return "Signal"
 	case VTError:
@@ -444,6 +454,23 @@ const (
 	// Appended at the end so every prior intent keeps its numeric value on the log.
 	IntentEntitlementGranted
 	IntentEntitlementRevoked
+
+	// IntentTriggering is a command-only intent (never persisted, like IntentForking):
+	// a directed trigger asks to start one deployed process at one of its message
+	// start events (ADR-0425). Its handler answers from a receipt when the sender
+	// already delivered this trigger, and otherwise creates the instance and records
+	// IntentTriggerReceived in the same batch, so the instance and the fact that it
+	// answered this trigger are durable together or not at all (I2).
+	IntentTriggering
+	// IntentTriggerReceived records a trigger's receipt: sender, trigger id, the
+	// instance that answered and when.
+	IntentTriggerReceived
+	// IntentTriggerReceiptsPruning is a command-only intent: drop the receipts older
+	// than a cutoff. IntentTriggerReceiptsPruned is its event, carrying that cutoff, so
+	// replay drops exactly what was dropped live (I6). Appended at the end so every
+	// prior intent keeps its numeric value on the log.
+	IntentTriggerReceiptsPruning
+	IntentTriggerReceiptsPruned
 )
 
 func (i Intent) String() string {
@@ -542,6 +569,14 @@ func (i Intent) String() string {
 		return "VariableElementSet"
 	case IntentForking:
 		return "Forking"
+	case IntentTriggering:
+		return "Triggering"
+	case IntentTriggerReceived:
+		return "TriggerReceived"
+	case IntentTriggerReceiptsPruning:
+		return "TriggerReceiptsPruning"
+	case IntentTriggerReceiptsPruned:
+		return "TriggerReceiptsPruned"
 	default:
 		return "Intent(?)"
 	}

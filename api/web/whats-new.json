@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-28",
   "entries": [
     {
+      "id": "a-product-can-be-one-process-for-its-whole-lifecycle-entered",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "One process per product: provisioning, change and deprovisioning in one model",
+        "de": "Ein Prozess pro Produkt: Provisionierung, Änderung und Deprovisionierung in einem Modell"
+      },
+      "summary": {
+        "en": "A product no longer needs a separate process for granting and for revoking. Bind one lifecycle process instead and name, per operation, the message start event it begins at. An order enters it at the provision start, a return at the deprovision start — and nothing else runs. Systems outside Atlas can start a process at a chosen start event too, and a retry with the same trigger id gets the first instance back instead of starting a second.",
+        "de": "Ein Produkt braucht keinen getrennten Prozess mehr für das Vergeben und das Entziehen. Stattdessen wird ein Lebenszyklusprozess gebunden und pro Operation das Nachrichten-Startereignis genannt, bei dem sie beginnt. Ein Auftrag steigt beim Startereignis für die Provisionierung ein, eine Rückgabe bei dem für die Deprovisionierung — und sonst läuft nichts. Auch Systeme ausserhalb von Atlas können einen Prozess an einem gewählten Startereignis starten; ein erneuter Aufruf mit derselben Trigger-ID erhält die erste Instanz zurück, statt eine zweite zu starten."
+      },
+      "link": {
+        "label": "ADR-0425",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0425-a-product-lifecycle-is-one-process-with-message-triggers.md"
+      },
+      "tags": [
+        "Catalogue",
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Console",
+          "de": "Console öffnen"
+        },
+        "route": "#/console"
+      }
+    },
+    {
       "id": "the-handbook-teaches-evolving-a-deployed-process",
       "version": "Unreleased",
       "date": null,
@@ -312,35 +341,6 @@
         "Decisions",
         "Engine"
       ]
-    },
-    {
-      "id": "a-decision-service-refuses-a-wrongly-typed-input-as-its-deci",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A decision service refuses a wrongly-typed input",
-        "de": "Ein Decision Service weist eine falsch typisierte Eingabe ab"
-      },
-      "summary": {
-        "en": "A business rule task that sends an input of the wrong type to a decision fails into an incident that names the input. The same task pointed at the decision service over that decision used to get a silent answer from the catch-all row instead, because the engine published no input schema for a service and there was nothing to check against. A service now publishes what its caller supplies — the input data read behind its interface and the results of its input decisions, each with its declared type — and is refused by the same rule. The schema also reaches an input decision the conversion could not see before: one declared as a date and sent as text now arrives as a date rather than as a string. The retained evaluations of the one deployed service were checked against the new rule first; none would have been refused.",
-        "de": "Ein Business Rule Task, der einer Decision eine Eingabe vom falschen Typ schickt, endet in einem Incident, der die Eingabe benennt. Derselbe Task, auf den Decision Service über dieser Decision gerichtet, bekam bisher stattdessen still die Antwort der Catch-all-Zeile, weil die Engine für einen Service kein Eingabeschema veröffentlichte und es nichts gab, wogegen geprüft werden konnte. Ein Service veröffentlicht jetzt, was sein Aufrufer liefert — die Input Data, die hinter seiner Schnittstelle gelesen werden, und die Ergebnisse seiner Input-Decisions, jeweils mit deklariertem Typ — und wird nach derselben Regel abgewiesen. Das Schema erreicht auch eine Input-Decision, die die Umwandlung bisher nicht sah: Eine als Datum deklarierte und als Text gesendete kommt jetzt als Datum an statt als Zeichenkette. Die aufbewahrten Auswertungen des einen deployten Service wurden vorher gegen die neue Regel geprüft; keine wäre abgewiesen worden."
-      },
-      "link": {
-        "label": "ADR-0419",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0419-a-declared-type-is-honoured-at-the-decision-boundary.md"
-      },
-      "tags": [
-        "Decisions",
-        "Engine"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the incidents",
-          "de": "Incidents öffnen"
-        },
-        "route": "#/operations/incidents"
-      }
     }
   ]
 }

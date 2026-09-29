@@ -129,6 +129,17 @@ func catalogItemProps() map[string]any {
 			"publish, and the requirement is the point: a catalogue that can only grant is not a " +
 			"lifecycle, and the day somebody must revoke at scale is the wrong day to find out " +
 			"the process was never written."),
+		"lifecycleProcess": stringProp("ONE BPMN process id for the whole lifecycle of this product, " +
+			"IN PLACE OF provisionProcess and deprovisionProcess (ADR-0425) — set this and leave those two " +
+			"empty, or the reverse; never both. Each operation is a message start event of that process, " +
+			"named in `operations`. Publishing checks the newest deployed version: every named start " +
+			"event must exist, and the process must have NO none start event (a start by hand would " +
+			"otherwise take it)."),
+		"operations": objectProp("For a lifecycleProcess: which message start event each operation " +
+			"enters, {\"provision\": \"<message name>\", \"deprovision\": \"<message name>\", " +
+			"\"change\": \"<message name>\"}. provision and deprovision are REQUIRED to publish, change " +
+			"is optional. The key is the contract an order asks for; the message name is the process's " +
+			"own business and may be renamed with the process."),
 		"lifecycle": objectProp("The window in which it may be ordered: {from, until} as Unix " +
 			"nanoseconds. Zero on a side means unbounded there, which is the ordinary case. " +
 			"BOTH ENDS ARE INCLUSIVE AND IT IS ENFORCED: an order placed outside the window is " +
