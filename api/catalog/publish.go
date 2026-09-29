@@ -348,23 +348,7 @@ func checkItems(in Input, add func(Problem)) {
 			add(Problem{Item: it.ID, Message: "has no name in any language; " +
 				"the shop would show its id, and there is nothing to fall back to"})
 		}
-		if it.ProvisionProcess == "" {
-			add(Problem{Item: it.ID, Message: "no provision process bound"})
-		}
-		if it.DeprovisionProcess == "" {
-			// A catalogue that can only grant is not a lifecycle.
-			add(Problem{Item: it.ID, Message: "no deprovision process bound"})
-		}
-		// The orchestration that works an order is never the process of a position
-		// in it. Bound as one, it starts itself for that position, the new copy asks
-		// what may start and starts the same position again, and every round adds
-		// another: one installation grew to hundreds of orchestrations and their
-		// provisioning tasks per minute before anybody could see why.
-		if it.ProvisionProcess == FulfilmentProcess || it.DeprovisionProcess == FulfilmentProcess {
-			add(Problem{Item: it.ID, Message: "is bound to " + FulfilmentProcess + ", the process " +
-				"that works the order itself; it would start itself for this position, again " +
-				"and again, without end"})
-		}
+		checkBindings(it, add)
 		switch it.Approval.Kind {
 		case KindFixed, KindRole:
 			if it.Approval.Ref == "" {
@@ -860,6 +844,7 @@ func freeze(items []Item) []Item {
 		// no reader of that language ever sees.
 		it.CategoryTexts = copyTexts(it.CategoryTexts)
 		it.ProductGroupTexts = copyTexts(it.ProductGroupTexts)
+		it.Operations = copyOperations(it.Operations)
 		if len(it.Variants) > 0 {
 			vs := make([]Variant, len(it.Variants))
 			for j, v := range it.Variants {

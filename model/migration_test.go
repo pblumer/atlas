@@ -175,6 +175,7 @@ func TestEveryValueRefusesATruncatedBuffer(t *testing.T) {
 		&DataObjectValue{ScopeKey: 1, Name: "d", Kind: VarNumber, Text: "1"},
 		&IncidentValue{ProcessInstanceKey: 1, ElementInstanceKey: 2, JobKey: 3, ElementId: 4, RaisedAt: 5, Message: "why"},
 		&InboundDeliveryValue{SourceID: "src", SourceSeq: 9},
+		&TriggerReceiptValue{Source: "s", TriggerID: "t", InstanceKey: 1, At: 2, Cutoff: 3},
 		&VariableAuditValue{ProcessInstanceKey: 1, ScopeKey: 2, Actor: "a", Name: "n", Kind: VarBool, Bool: true},
 		&CompensableValue{ProcessInstanceKey: 1, ProcessDefKey: 2, ScopeKey: 3, ElementInstanceKey: 4, Seq: 5, ElementId: 6, HandlerNode: 7},
 		&OperatorActionValue{ProcessInstanceKey: 1, ElementInstanceKey: 2, JobKey: 3, Kind: OperatorActionMigrate, Actor: "a", Reason: "r", FromProcessDefKey: 4},

@@ -26,6 +26,13 @@ import (
 // would be worked twice. What a failure costs is the shop's view of that
 // instance's tasks, and that is what the warning says.
 func (s *Server) notePositionInstance(vars []model.VariableValue, key uint64, processID string) {
+	s.notePositionInstanceOp(vars, key, processID, "")
+}
+
+// notePositionInstanceOp is [Server.notePositionInstance] for a starter that knows
+// which operation the instance performs (ADR-0425): one lifecycle process is every
+// operation's process, so the id alone no longer tells a return from a provisioning.
+func (s *Server) notePositionInstanceOp(vars []model.VariableValue, key uint64, processID, op string) {
 	if s.orders == nil || key == 0 {
 		return
 	}
@@ -48,6 +55,7 @@ func (s *Server) notePositionInstance(vars []model.VariableValue, key uint64, pr
 		Key:       key,
 		ProcessID: processID,
 		StartedAt: time.Now().UnixNano(),
+		Operation: op,
 	})
 	if err != nil {
 		logging.Warn(logging.OrderInstanceUnrecorded,

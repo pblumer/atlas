@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"encoding/json"
+	"errors"
 	"net/url"
 	"strconv"
 )
@@ -604,6 +605,54 @@ func runtimeTools() []Tool {
 					return "", err
 				}
 				return asText(c.post("/api/v1/messages", "application/json", body))
+			},
+		},
+		{
+			Name: "atlas_trigger_start",
+			Description: "Start the newest deployed version of a process at ONE of its message start " +
+				"events — a directed trigger (ADR-0425). Unlike atlas_publish_message, which broadcasts by " +
+				"name and answers the same whether or not anything started, this answers with the " +
+				"instance it started (201), with the instance an earlier call with the same 'triggerId' " +
+				"started (200, replayed), or with why it started nothing: 404 unknown process or start " +
+				"event, 409 for a start event a catalogue product binds (those start through the order), " +
+				"a singleton already running, or a deactivated process. 'triggerId' is REQUIRED — reuse it " +
+				"when retrying the same thing. Returns {instanceKey, replayed}.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"processId": stringProp("The BPMN process id."),
+					"message":   stringProp("The message name of the start event to enter."),
+					"triggerId": stringProp("Your id for this trigger; a retry with the same id starts nothing new."),
+					"variables": objectProp("Optional start variables, e.g. {\"employeeId\": \"E-1\"}."),
+				},
+				"required": []any{"processId", "message", "triggerId"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				processID, err := argString(args, "processId")
+				if err != nil {
+					return "", err
+				}
+				message, err := argString(args, "message")
+				if err != nil {
+					return "", err
+				}
+				triggerID, err := argString(args, "triggerId")
+				if err != nil {
+					return "", err
+				}
+				payload := map[string]any{"triggerId": triggerID}
+				if v, ok := args["variables"]; ok && v != nil {
+					if _, isObj := v.(map[string]any); !isObj {
+						return "", errors.New("variables must be an object")
+					}
+					payload["variables"] = v
+				}
+				body, err := json.Marshal(payload)
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/processes/"+url.PathEscape(processID)+"/triggers/"+
+					url.PathEscape(message), "application/json", body))
 			},
 		},
 		{

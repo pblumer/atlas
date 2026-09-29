@@ -25,7 +25,7 @@ Der Auftrag trägt alles, was hier gebraucht wird — die Wellen, die Vorbedingu
 
 Startvariablen: orderId (die Auftragsnummer, zugleich der Korrelationsschlüssel beider Nachrichten), orderer und recipient.
 
-Warum keine Call Activity: zeebe:calledElement processId ist ein statisches Attribut, der Prozess einer Position steht aber erst zur Laufzeit fest. Die Instanz wird deshalb über die API gestartet.
+Warum keine Call Activity: zeebe:calledElement processId ist ein statisches Attribut, der Prozess einer Position steht aber erst zur Laufzeit fest. Die Position wird deshalb über den Auftrag gestartet, der ihre Bindung kennt (ADR-0425).
 
 Warum kein Polling: die Provisionierungsprozesse melden ihr Ergebnis selbst, und dieses Melden veröffentlicht atlas.order.advanced. Der Prozess wartet darauf, statt in Intervallen zu fragen.
 
@@ -63,21 +63,20 @@ Schreibt: bereit (Liste von Positionen).</bpmn:documentation>
       <bpmn:outgoing>F_Gw_Ende</bpmn:outgoing>
     </bpmn:exclusiveGateway>
 
-    <bpmn:serviceTask id="Starten" name="Provisionierung starten">
-      <bpmn:documentation>POST /api/v1/instances, einmal je startbereiter Position, parallel. Startet den Prozess, an den die Position gebunden ist, und gibt ihm orderId, itemId und positionId mit — damit er sein Ergebnis am Ende selbst melden kann. itemId nennt das Produkt, positionId die Position: wurde dasselbe Produkt in zwei Ausfuehrungen bestellt, unterscheidet nur die positionId die beiden Zeilen.
+    <bpmn:serviceTask id="Starten" name="Positionen starten">
+      <bpmn:documentation>POST /api/v1/orders/{orderId}/lines/{positionId}/start, einmal je startbereiter Position, parallel. Der Auftrag startet seine Position selbst (ADR-0425): er weiss, an welchen Prozess und an welchen Startpunkt das Produkt gebunden war, ob noch eine Genehmigung aussteht und ob die Position schon gestartet wurde.
 
-Parallele Mehrfachausführung, weil nichts in dieser Menge auf etwas anderes darin wartet: das hat die Vorbedingungsprüfung bereits entschieden.
+Steht eine Genehmigung aus, startet er den Genehmigungsprozess der Position; der ruft denselben Aufruf mit approvedBy auf, sobald jemand zugestimmt hat. Sonst startet er die Provisionierung — einen von Hand gestarteten Prozess oder den Startpunkt „provision“ des Lebenszyklusprozesses des Produkts — und markiert die Position als laufend, damit /next sie nicht erneut anbietet.
 
-Gestartet wird nicht immer der Provisionierungsprozess: verlangt die Position eine Genehmigung, wird der Genehmigungsprozess ihrer Art gestartet, und der startet die Provisionierung, wenn zugestimmt wurde. Die Genehmigungsregel steht am Produkt und gehört dem Katalog — läge sie im Produktprozess, müsste jeder von ihnen sie mitmodellieren.
+Ein zweiter Aufruf für dieselbe Position startet nichts Zweites, sondern antwortet mit der Instanz, die schon läuft.
 
-Beide Prozessnamen kommen aus der Antwort von /next, nicht aus dem Katalog. Eingefroren ist, was der Katalog versprochen hat: das Produkt, die Variante und die Regel, unter der genehmigt wird. Welches Modell diese Regel ausfuehrt, ist dagegen die Verdrahtung dieser Installation und wird beim Lesen aufgelöst — sonst bräche ein Betreiber, der einen Genehmigungsprozess neu deployt, jeden bereits wartenden Auftrag. Ist approvalProcess leer, braucht die Position keine Genehmigung.</bpmn:documentation>
+Parallele Mehrfachausführung, weil nichts in dieser Menge auf etwas anderes darin wartet: das hat die Vorbedingungsprüfung bereits entschieden.</bpmn:documentation>
       <bpmn:extensionElements>
         <atlas:restConnector method="POST"
-          url="=atlasApiBase + &#34;/api/v1/instances&#34;"
+          url="=atlasApiBase + &#34;/api/v1/orders/&#34; + orderId + &#34;/lines/&#34; + position.id + &#34;/start&#34;"
           authType="bearer" authSecret="atlas" />
         <zeebe:ioMapping>
-          <zeebe:input source="=if position.approvalProcess = &#34;&#34; then position.provisionProcess else position.approvalProcess" target="processId" />
-          <zeebe:input source="={orderId: orderId, itemId: position.itemId, positionId: position.id, variantId: position.variantId, recipient: recipient, orderer: orderer, provisionProcess: position.provisionProcess, approvalRef: position.approval.ref, atlasApiBase: atlasApiBase, portalBaseUrl: portalBaseUrl}" target="variables" />
+          <zeebe:input source="=&#34;provision&#34;" target="operation" />
         </zeebe:ioMapping>
       </bpmn:extensionElements>
       <bpmn:incoming>F_Gw_Starten</bpmn:incoming>

@@ -173,6 +173,17 @@ type Item struct {
 	// the process was never written.
 	ProvisionProcess   string `json:"provisionProcess"`
 	DeprovisionProcess string `json:"deprovisionProcess"`
+	// LifecycleProcess binds ONE process for the whole of this item's lifecycle, in
+	// place of the two ids above (ADR-0425). Each operation is a message start event
+	// of it, named in Operations: provision and deprovision are required, change is
+	// optional. An item carries either the two ids or this, never both.
+	//
+	// The operation is the contract and the message name the process's own
+	// business, the way a published interface maps an entry-point name to an
+	// element (ADR-0373): renaming a start event changes the mapping, not what an
+	// order asks for.
+	LifecycleProcess string            `json:"lifecycleProcess,omitempty"`
+	Operations       map[string]string `json:"operations,omitempty"`
 	// MultipleAllowed says whether a principal may hold this item more than once —
 	// two licences, two mailboxes. Where it is false the basket marks an item the
 	// orderer already holds as held, and skips it.

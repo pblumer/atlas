@@ -3,9 +3,9 @@ package api
 import (
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
+	"github.com/pblumer/atlas/api/catalog"
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/model"
 )
@@ -166,7 +166,7 @@ func (s *Server) handleRevokeDiscrepancy(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleDeprovisionDiscrepancy(w http.ResponseWriter, r *http.Request) {
 	s.actOnDiscrepancy(w, r, recUnmanaged, closedDeprovisioning, func(rec discrepancyRecord) error {
 		var (
-			process string
+			binding catalog.Binding
 			opErr   error
 		)
 		s.do(func() {
@@ -177,18 +177,18 @@ func (s *Server) handleDeprovisionDiscrepancy(w http.ResponseWriter, r *http.Req
 			case !ok:
 				opErr = fmt.Errorf("deprovision: no product %s; it was withdrawn or removed since "+
 					"the finding was recorded", rec.ItemID)
-			case strings.TrimSpace(it.DeprovisionProcess) == "":
+			case !it.BindingFor(catalog.OpDeprovision).Bound():
 				opErr = fmt.Errorf("deprovision: product %s binds no deprovisioning process. "+
 					"Publishing a catalogue refuses that, so this product has never been "+
 					"published — bind one and publish before revoking rights through it", rec.ItemID)
 			default:
-				process = it.DeprovisionProcess
+				binding = it.BindingFor(catalog.OpDeprovision)
 			}
 		})
 		if opErr != nil {
 			return opErr
 		}
-		return s.startDeprovisioningFor(process, rec.ItemID, rec.Principal,
+		return s.startDeprovisioningFor(binding, rec.ItemID, rec.Principal,
 			"reconciliation: unmanaged in "+rec.System)
 	})
 }
@@ -205,29 +205,17 @@ func (s *Server) handleDeprovisionDiscrepancy(w http.ResponseWriter, r *http.Req
 // callers. It is not a code, deliberately: what a deprovisioning process does with
 // it is write it into a ticket or a log line for a person, and an enum would send
 // that person back here to look up what it meant.
-func (s *Server) startDeprovisioningFor(process, itemID, principal, reason string) error {
+func (s *Server) startDeprovisioningFor(b catalog.Binding, itemID, principal, reason string) error {
 	vars := []model.VariableValue{
 		{Name: "itemId", Kind: model.VarString, Text: itemID},
 		{Name: "recipient", Kind: model.VarString, Text: principal},
 		{Name: "reason", Kind: model.VarString, Text: reason},
 	}
-	var (
-		key       uint64
-		found     bool
-		ambiguous string
-	)
-	s.do(func() {
-		if d := s.latestDeploymentOf(process); d != nil {
-			key, found = d.Key, true
-			ambiguous = untriggeredStartRefusal(d.cp)
-		}
-	})
-	if !found {
-		return fmt.Errorf("deprovision: no deployed process with id %s", process)
+	// No order, so no attempt to count: each revocation asked for here is its own
+	// trigger. A trigger id that is only ever used once deduplicates nothing and
+	// costs a receipt, so none is given (ADR-0425).
+	if _, err := s.startBinding(b, "", vars); err != nil {
+		return fmt.Errorf("deprovision: %w", err)
 	}
-	if ambiguous != "" {
-		return fmt.Errorf("deprovision: %s", ambiguous)
-	}
-	s.do(func() { s.proc.CreateInstance(key, vars...) })
-	return s.drive()
+	return nil
 }

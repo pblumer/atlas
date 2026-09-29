@@ -42,6 +42,9 @@ type inflightValue struct {
 	// migration it never rides token movement, so it costs the hot path nothing but the
 	// field.
 	variableIndex model.VariableIndexValue
+	// trigger rides only on the directed-trigger command and the receipt events it
+	// and the prune command emit (ADR-0425). Never on token movement.
+	trigger model.TriggerReceiptValue
 }
 
 // asValue returns a model.Value pointing at the active field, for encoding. The
@@ -87,6 +90,8 @@ func (v *inflightValue) asValue(vt model.ValueType) model.Value {
 		return &v.entitlement
 	case model.VTEntitlementHistory:
 		return &v.entitlementEnd
+	case model.VTTriggerReceipt:
+		return &v.trigger
 	}
 	return nil
 }
@@ -179,6 +184,10 @@ func inflightFromRecord(rec model.Record) inflightValue {
 	case model.VTEntitlementHistory:
 		if v, ok := rec.Value.(*model.EntitlementHistoryValue); ok {
 			iv.entitlementEnd = *v
+		}
+	case model.VTTriggerReceipt:
+		if v, ok := rec.Value.(*model.TriggerReceiptValue); ok {
+			iv.trigger = *v
 		}
 	}
 	return iv
