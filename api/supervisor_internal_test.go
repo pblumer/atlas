@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -188,6 +189,78 @@ func TestRestartDuringBackoffTriesAgainImmediately(t *testing.T) {
 	}
 	waitFor(t, "another attempt without waiting out the backoff", func() bool {
 		return sup.list()[0].Starts > before
+	})
+}
+
+// A restart asked for while the child is still running cycles it at once. The run
+// ends because it was asked to, and the wait after it must not then sit out the
+// backoff: this is the ordinary press of the button on a worker that is up.
+func TestARestartWhileTheChildRunsStartsItAgainAtOnce(t *testing.T) {
+	quit := make(chan struct{})
+	sup := newSupervisor(quit)
+	sup.exe = "sh"
+	sup.backoff = 30 * time.Second // long enough that only the restart can shorten it
+	sup.add(SuperviseSpec{ID: "mailer-1", Kinds: []string{"send-email"}}, []string{"-c", "sleep 30"}, nil)
+	sup.start()
+	defer func() { close(quit); sup.wait() }()
+
+	waitFor(t, "the child to run", func() bool {
+		got := sup.list()[0]
+		return got.State == "running" && got.PID != 0
+	})
+	before := sup.list()[0].Starts
+	if err := sup.restart("mailer-1"); err != nil {
+		t.Fatalf("restart: %v", err)
+	}
+	waitFor(t, "another start without waiting out the backoff", func() bool {
+		return sup.list()[0].Starts > before
+	})
+}
+
+// restartOnceAfterRun lands one restart of id in the window between a child's exit
+// and the wait that follows it — the window a restart used to be lost in, because
+// the wait read the channel the restart had just replaced.
+func restartOnceAfterRun(sup *supervisor, id string) {
+	var once sync.Once
+	sup.afterRun = func(*child) {
+		once.Do(func() { _ = sup.restart(id) })
+	}
+}
+
+// A restart that lands after a crash, before the backoff wait has begun, still cuts
+// the backoff short.
+func TestARestartBetweenACrashAndItsBackoffIsNotLost(t *testing.T) {
+	quit := make(chan struct{})
+	sup := newSupervisor(quit)
+	sup.exe = "sh"
+	sup.backoff = 30 * time.Second
+	sup.add(SuperviseSpec{ID: "flappy", Kinds: []string{"send-email"}}, []string{"-c", "exit 1"}, nil)
+	restartOnceAfterRun(sup, "flappy")
+	sup.start()
+	defer func() { close(quit); sup.wait() }()
+
+	waitFor(t, "a second start without waiting out the backoff", func() bool {
+		return sup.list()[0].Starts >= 2
+	})
+}
+
+// A restart that lands as a worker with nothing to serve exits, before it has
+// parked, still starts it again. The console's refresh restarts a worker the moment
+// its kind is configured; lost here, the worker would stay parked until somebody
+// pressed the button that should not have been needed.
+func TestARestartAsAWorkerParksIsNotLost(t *testing.T) {
+	quit := make(chan struct{})
+	sup := newSupervisor(quit)
+	sup.exe = "sh"
+	sup.backoff = 30 * time.Second
+	sup.add(SuperviseSpec{ID: "mail", Connectors: []string{connectorKindMail}},
+		[]string{"-c", "exit " + strconv.Itoa(ExitNothingToServe)}, nil)
+	restartOnceAfterRun(sup, "mail")
+	sup.start()
+	defer func() { close(quit); sup.wait() }()
+
+	waitFor(t, "a second start instead of a park", func() bool {
+		return sup.list()[0].Starts >= 2
 	})
 }
 

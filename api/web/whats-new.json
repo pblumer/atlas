@@ -176,6 +176,35 @@
       }
     },
     {
+      "id": "restarting-a-supervised-worker-is-never-quietly-ignored",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Restarting a worker always restarts it",
+        "de": "Ein Worker-Neustart startet den Worker immer neu"
+      },
+      "summary": {
+        "en": "A restart asked for while a supervised worker was still running, or in the moment after it crashed, could be missed: the worker then waited out its full backoff, up to 30 seconds, before starting again, and a worker with nothing to serve stayed paused until Restart was pressed a second time. The same restart happens automatically when you configure a worker's kind in the Console, so a newly configured mail worker could stay asleep. A restart is now never missed, whenever it is asked for.",
+        "de": "Ein Neustart, der angefordert wurde, während ein überwachter Worker noch lief oder kurz nachdem er abgestürzt war, konnte verloren gehen: Der Worker wartete dann seine volle Wartezeit von bis zu 30 Sekunden ab, bevor er wieder startete, und ein Worker ohne Aufgabe blieb pausiert, bis „Restart“ ein zweites Mal gedrückt wurde. Derselbe Neustart erfolgt automatisch, wenn man in der Console die Art eines Workers konfiguriert; ein neu konfigurierter Mail-Worker konnte deshalb inaktiv bleiben. Ein Neustart geht jetzt nie mehr verloren, egal wann er angefordert wird."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Workers",
+        "Console"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the workers",
+          "de": "Worker öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
       "id": "camunda-s-versiontag-binding-is-refused-instead-of-read-as-l",
       "version": "Unreleased",
       "date": null,
@@ -297,35 +326,6 @@
         "Operations",
         "Security"
       ]
-    },
-    {
-      "id": "the-decision-picker-tells-a-decision-service-s-answer-from-i",
-      "version": "0.7.0",
-      "date": "2026-09-28",
-      "category": "Added",
-      "title": {
-        "en": "The picker tells a decision service's answer from its workings",
-        "de": "Die Auswahl unterscheidet die Antwort eines Decision Service von seinen Zwischenschritten"
-      },
-      "summary": {
-        "en": "A decision service publishes the decisions it answers with and encapsulates the ones it evaluates on the way there. The picker merged the two: every one of them read “inside <service>”. They are not the same offer. Calling a published decision gets the service's own answer by a longer route; calling an encapsulated one reaches past the interface into an arrangement the service exists to be free to change — and nothing later says a word about it, because it runs and it answers correctly. The two now read differently, “published by X” against “internal to X — bypasses it”, and a service's workings are listed last, after the decisions that are somebody's to call. All of them stay selectable: the decision id on a task is a free-text field and the picker is a convenience, so refusing one here would move the practice out of sight rather than stop it. The list makes the boundary-respecting pick the easy one and leaves the other reading as what it is.",
-        "de": "Ein Decision Service veröffentlicht die Decisions, mit denen er antwortet, und kapselt jene, die er auf dem Weg dorthin auswertet. Die Auswahl hat beide vermischt: Jede von ihnen las sich als „inside <Service>“. Es sind aber nicht dieselben Angebote. Eine veröffentlichte Decision aufzurufen liefert die Antwort des Service auf einem Umweg; eine gekapselte aufzurufen greift an der Schnittstelle vorbei in eine Anordnung, die der Service ändern können soll — und niemand sagt später ein Wort dazu, weil es läuft und korrekt antwortet. Beide lesen sich jetzt unterschiedlich, „published by X“ gegenüber „internal to X — bypasses it“, und die Zwischenschritte eines Service stehen zuletzt, nach den Decisions, die tatsächlich für Aufrufer gedacht sind. Auswählbar bleiben alle: Die decisionId am Task ist ein freies Textfeld und die Auswahl nur eine Bequemlichkeit — eine Sperre hier würde die Praxis aus dem Blick schieben statt sie zu beenden. Die Reihenfolge macht die grenzwahrende Auswahl zur bequemen und lässt die andere als das erscheinen, was sie ist."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
     }
   ]
 }
