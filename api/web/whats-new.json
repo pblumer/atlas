@@ -2,6 +2,48 @@
   "generatedAt": "2026-09-28",
   "entries": [
     {
+      "id": "the-live-view-migrates-the-running-instances-of-the-version-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Migrate a version's running instances straight from its live view",
+        "de": "Laufende Instanzen einer Version direkt aus der Live-Ansicht migrieren"
+      },
+      "summary": {
+        "en": "When you open a process version in Operations and see its tokens on the diagram, you can now move all of that version's running instances onto another deployed version from the same screen. The new button \"Migrate instances…\" opens the migration dialog with the version you are looking at already chosen as the source and the newest version as the target; each version shows how many instances it is running. The button is only offered when the process has more than one version deployed, and it always moves the whole version — a single instance is still moved from its replay.",
+        "de": "Wenn Sie in Operations eine Prozessversion öffnen und ihre Tokens im Diagramm sehen, können Sie jetzt alle laufenden Instanzen dieser Version direkt aus derselben Ansicht auf eine andere bereitgestellte Version verschieben. Die neue Schaltfläche «Migrate instances…» öffnet den Migrationsdialog mit der angezeigten Version als Quelle und der neuesten Version als Ziel; zu jeder Version steht, wie viele Instanzen darauf laufen. Die Schaltfläche erscheint nur, wenn mehr als eine Version bereitgestellt ist, und sie verschiebt immer die ganze Version — eine einzelne Instanz verschieben Sie weiterhin aus ihrem Replay."
+      },
+      "link": {
+        "label": "ADR-0162",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0162-process-instance-migration.md"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Operations and click a process that has more than one version deployed.",
+          "Pick the version whose instances should move in the Version selector.",
+          "Click \"Migrate instances…\", check the target version, give a reason and confirm.",
+          "Instances that cannot be moved stay where they are and are listed afterwards."
+        ],
+        "de": [
+          "Öffnen Sie Operations und klicken Sie auf einen Prozess mit mehr als einer bereitgestellten Version.",
+          "Wählen Sie im Feld «Version» die Version, deren Instanzen verschoben werden sollen.",
+          "Klicken Sie auf «Migrate instances…», prüfen Sie die Zielversion, geben Sie einen Grund an und bestätigen Sie.",
+          "Instanzen, die nicht verschoben werden können, bleiben unverändert und werden anschliessend aufgelistet."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "the-handbook-teaches-evolving-a-deployed-process",
       "version": "Unreleased",
       "date": null,
@@ -234,6 +276,34 @@
       }
     },
     {
+      "id": "migrate-running-instances-and-terminate-all-running-in-the-i",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The Instances list's row menu works again",
+        "de": "Das Zeilenmenü der Instanzliste funktioniert wieder"
+      },
+      "summary": {
+        "en": "In Operations → Instances, the ⋯ menu of a process row offers \"Migrate running instances…\" and \"Terminate all running\". Both only closed the menu and did nothing else. They open their dialogs again: migration asks for the source and target version and a reason, and terminating asks for a confirmation before anything is discarded.",
+        "de": "In Operations → Instances bietet das ⋯-Menü einer Prozesszeile «Migrate running instances…» und «Terminate all running» an. Beide schlossen nur das Menü und bewirkten sonst nichts. Sie öffnen ihre Dialoge jetzt wieder: Die Migration fragt nach Quell- und Zielversion sowie einem Grund, das Beenden verlangt eine Bestätigung, bevor etwas verworfen wird."
+      },
+      "link": {
+        "label": "ADR-0162",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0162-process-instance-migration.md"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Instances",
+          "de": "Instanzen öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "restarting-a-supervised-worker-is-never-quietly-ignored",
       "version": "Unreleased",
       "date": null,
@@ -289,57 +359,6 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "the-decision-registry-is-safe-to-read-while-a-decision-is-de",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Deploying a decision while tasks evaluate is safe",
-        "de": "Ein Decision-Deploy während laufender Auswertungen ist sicher"
-      },
-      "summary": {
-        "en": "Business rule tasks are evaluated in the background while the engine may be deploying a new decision version at the same moment. The two touched the same internal tables without coordination; the Go race detector reported it, and in the worst case the server could stop. The tables are now protected, and evaluations still run in parallel.",
-        "de": "Business Rule Tasks werden im Hintergrund ausgewertet, während die Engine gleichzeitig eine neue Decision-Version deployen kann. Beide griffen ohne Abstimmung auf dieselben internen Tabellen zu; der Race-Detector von Go hat das gemeldet, und im schlimmsten Fall konnte der Server stehen bleiben. Die Tabellen sind jetzt geschützt, und Auswertungen laufen weiterhin parallel."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Decisions",
-        "Engine"
-      ]
-    },
-    {
-      "id": "a-decision-service-refuses-a-wrongly-typed-input-as-its-deci",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A decision service refuses a wrongly-typed input",
-        "de": "Ein Decision Service weist eine falsch typisierte Eingabe ab"
-      },
-      "summary": {
-        "en": "A business rule task that sends an input of the wrong type to a decision fails into an incident that names the input. The same task pointed at the decision service over that decision used to get a silent answer from the catch-all row instead, because the engine published no input schema for a service and there was nothing to check against. A service now publishes what its caller supplies — the input data read behind its interface and the results of its input decisions, each with its declared type — and is refused by the same rule. The schema also reaches an input decision the conversion could not see before: one declared as a date and sent as text now arrives as a date rather than as a string. The retained evaluations of the one deployed service were checked against the new rule first; none would have been refused.",
-        "de": "Ein Business Rule Task, der einer Decision eine Eingabe vom falschen Typ schickt, endet in einem Incident, der die Eingabe benennt. Derselbe Task, auf den Decision Service über dieser Decision gerichtet, bekam bisher stattdessen still die Antwort der Catch-all-Zeile, weil die Engine für einen Service kein Eingabeschema veröffentlichte und es nichts gab, wogegen geprüft werden konnte. Ein Service veröffentlicht jetzt, was sein Aufrufer liefert — die Input Data, die hinter seiner Schnittstelle gelesen werden, und die Ergebnisse seiner Input-Decisions, jeweils mit deklariertem Typ — und wird nach derselben Regel abgewiesen. Das Schema erreicht auch eine Input-Decision, die die Umwandlung bisher nicht sah: Eine als Datum deklarierte und als Text gesendete kommt jetzt als Datum an statt als Zeichenkette. Die aufbewahrten Auswertungen des einen deployten Service wurden vorher gegen die neue Regel geprüft; keine wäre abgewiesen worden."
-      },
-      "link": {
-        "label": "ADR-0419",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0419-a-declared-type-is-honoured-at-the-decision-boundary.md"
-      },
-      "tags": [
-        "Decisions",
-        "Engine"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the incidents",
-          "de": "Incidents öffnen"
-        },
-        "route": "#/operations/incidents"
       }
     }
   ]

@@ -30,7 +30,7 @@ import { editWorkerFlow, workerShape, workerCreateBody, workerUsageHTML, openWor
 // just installed Atlas stands, so it is the surface that must not assume the reader has
 // already read the handbook.
 import { workerKindDocHTML } from "./workertypedocs.js";
-import { migrateProcessFlow } from "./migrationdialog.js";
+import { migrateProcessFlow, runningByDefinition } from "./migrationdialog.js";
 import { openPickModal } from "./pickmodal.js";
 import { refDeleteWarning } from "./dmnref-impact.js";
 import { versionDeleteState, holderNote } from "./decision-cleanup.js";
@@ -5428,16 +5428,6 @@ function summarizeFromServer(rows) {
   return byProc;
 }
 
-// runningByDefinition keeps the per-*version* running counts the rollup above sums
-// away. The overview only ever shows the process-level total, but migrating drains one
-// deployed version onto another, so its picker has to say which version is actually
-// holding instances — a choice the summed number cannot answer (ADR-0162).
-function runningByDefinition(rows) {
-  const byDef = new Map();
-  for (const r of rows) byDef.set(String(r.processDefKey), r.active || 0);
-  return byDef;
-}
-
 async function viewInstances() {
   view.innerHTML = `
     <div class="between">
@@ -5622,13 +5612,18 @@ async function viewInstances() {
         <td class="row-actions"><a class="btn ghost" href="${openHref}">Open</a>${dropdown("⋯", "icon-btn", menuItems)}</td>
       </tr>`;
     }).join("");
+    // Bound per render, because onMenuAction binds the buttons that exist *now* and the
+    // assignment above just replaced every one of them. Bound once at mount, it found
+    // only the "Loading…" row, and every row's migrate and terminate closed the menu
+    // and did nothing else.
+    onMenuAction(tbody, onRowAction);
   }
 
   // Bulk-terminate every running instance of a process straight from the overview —
   // the coarse "drain this process" action, no drilling into a version. It drains each
   // deployed version in bounded batches (the server caps per call, reports remaining).
   // Reached from the row's ⋯ menu, so it takes a confirm before it drains anything.
-  onMenuAction(tbody, async (act, b) => {
+  async function onRowAction(act, b) {
     // Move a version's running instances onto another version rather than discarding
     // them — the answer to "the model was wrong" that keeps the work (ADR-0162).
     if (act === "migrate") {
@@ -5666,7 +5661,7 @@ async function viewInstances() {
     } catch (err) {
       toast("terminate failed: " + err.message, "err");
     }
-  });
+  }
 
   const load = async () => {
     try {

@@ -318,6 +318,17 @@ function askMigration({ api, instanceKey, processId, fromVersion, targets }) {
   });
 }
 
+// runningByDefinition keeps the per-*version* running counts a process-level rollup
+// sums away, keyed by the definition key as a string. Migrating drains one deployed
+// version onto another, so its picker has to say which version is actually holding
+// instances — a choice the summed number cannot answer (ADR-0162). `rows` is what
+// GET /api/v1/instances/summary answers.
+export function runningByDefinition(rows) {
+  const byDef = new Map();
+  for (const r of rows || []) byDef.set(String(r.processDefKey), r.active || 0);
+  return byDef;
+}
+
 // migrateProcessFlow moves every running instance of one deployed version onto another,
 // in the bounded batches the server hands out. Each instance is its own command and its
 // own event, so a refusal on one does not roll back the rest — which is why this reports
@@ -327,13 +338,16 @@ function askMigration({ api, instanceKey, processId, fromVersion, targets }) {
 // its own refusal list, which the operator reads afterwards and works through one by
 // one. `versions` is the process's deployed versions; `runningOf` answers how many
 // instances a version has, so the picker can say which of them is worth draining.
-export async function migrateProcessFlow({ api, toast, processId, processName, versions, runningOf, onDone }) {
+// `fromKey` preselects the source: a caller that is showing one version — the live
+// view — has already said which version it means, and the picker must not second-guess
+// it.
+export async function migrateProcessFlow({ api, toast, processId, processName, versions, runningOf, fromKey, onDone }) {
   const deployed = (versions || []).slice().sort((a, b) => b.version - a.version);
   if (deployed.length < 2) {
     toast("Only one version of this process is deployed — deploy the fixed model first, then migrate.", "warn");
     return false;
   }
-  const choice = await askBatchMigration({ processId, processName, versions: deployed, runningOf });
+  const choice = await askBatchMigration({ processId, processName, versions: deployed, runningOf, fromKey });
   if (!choice) return false;
 
   let migrated = 0;
@@ -375,17 +389,26 @@ export async function migrateProcessFlow({ api, toast, processId, processName, v
 // askBatchMigration picks the two versions and the reason. Source first: draining a
 // version is the act, and which one is holding instances is the thing an operator is
 // looking at.
-function askBatchMigration({ processId, processName, versions, runningOf }) {
+function askBatchMigration({ processId, processName, versions, runningOf, fromKey }) {
   return new Promise((resolve) => {
     const running = (v) => (runningOf ? runningOf(v) : 0);
+    // Without counts the options say nothing about them: "none running" on every
+    // version would be a claim, and a false one exactly when the counts could not be read.
     const optionFor = (v) => {
       const n = running(v);
-      return `<option value="${esc(String(v.key))}">${esc(versionLabel(v))}${n ? ` — ${n} running` : " — none running"}</option>`;
+      const count = runningOf ? (n ? ` — ${n} running` : " — none running") : "";
+      return `<option value="${esc(String(v.key))}">${esc(versionLabel(v))}${count}</option>`;
     };
-    // Default: drain the oldest version that still holds instances onto the newest one,
-    // which is the shape of the job nearly every time this is opened.
+    // Default: the version the caller named, else drain the oldest version that still
+    // holds instances onto the newest one, which is the shape of the job nearly every
+    // time this is opened from the overview. The target stays the newest either way: when
+    // that is the source too, the dialog asks for a target rather than proposing to move
+    // instances back to an older version on the operator's behalf.
     const withRunning = versions.filter((v) => running(v) > 0);
-    const defaultFrom = (withRunning.length ? withRunning[withRunning.length - 1] : versions[versions.length - 1]).key;
+    const named = fromKey != null && versions.find((v) => String(v.key) === String(fromKey));
+    const defaultFrom = named
+      ? named.key
+      : (withRunning.length ? withRunning[withRunning.length - 1] : versions[versions.length - 1]).key;
 
     const ov = document.createElement("div");
     ov.className = "modal-ov";

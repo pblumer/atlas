@@ -14,6 +14,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The live view migrates the running instances of the version on screen.** Draining
+  one version onto another was reachable only from the ⋯ menu of a process row in the
+  Instances list, which made the operator pick the source version again after finding it
+  by opening that very version. The live view now carries **⇄ Migrate instances…**
+  whenever the process has another version deployed. It opens the same batch dialog with
+  the version on screen as the source, the newest version as the target, and each
+  version's running count read from the instance summary. On the newest version the
+  dialog asks for a target rather than proposing an older one, and the button always
+  means the whole version — a single instance still moves from its replay (ADR-0162).
+
 - **The handbook teaches evolving a deployed process.** Deploying a new version,
   migrating a running case to it, forking one that cannot be rebound, pausing a version,
   and versioning a decision were all in the product (ADR-0162, ADR-0389, ADR-0119,
@@ -123,6 +133,14 @@ _Changed_ / _Removed_ for each version.
   one written before that keeps resolving as it always has.
 
 ### Fixed
+
+- **"Migrate running instances…" and "Terminate all running" in the Instances list open
+  their dialogs again.** Both items of a process row's ⋯ menu closed the menu and did
+  nothing else. Their handlers were bound once, while the table still showed "Loading…",
+  so the rows drawn afterwards — and drawn again on every refresh — carried menu items
+  nothing listened to. They are bound with each render now. The dialog's own harness
+  could not have caught it, because it cannot load `app.js`; `e2e/migration-wiring.spec.mjs`
+  boots the real console and clicks what an operator clicks (ADR-0162).
 
 - **Restarting a supervised worker is never quietly ignored.** A restart asked for
   while the worker was still running, or in the moment after it crashed, closed a
