@@ -90,7 +90,7 @@ sagen und die Übungsumgebung entsprechend ausstatten.
 | 1 | Grundlagen und Nebenbefunde: dieser Plan, Beobachtungsmaterial; Beispielzahlen an den Katalog gebunden (`examples/handbookcounts_test.go`); Apps- und Rollenangaben im Handbuch nachgeführt (Rolle `productmanager`); ISDS-Konzept 5.2.3 und R-04 auf das Rollenmodell nachgeführt | gemergt (#1127) |
 | 2 | Testen als Code: Szenarien, Erwartungen, Regeln, Baseline, Vergleich, `atlas playground` in CI — Erweiterung «Testen & Simulieren» (Anker `#szenarien`); Flag-Tabelle und Exit-Code durch `cmd/atlas/playgroundhandbook_test.go` an den Code gebunden | gemergt (#1129) |
 | 3 | Ausliefern: Applikation, Release, Deployment-Ziele, Deploy-Token, Promotion, Quellbaum — neues Kapitel «Ausliefern» (Anker `#ausliefern`), nur Mechanik; Routentabelle und Token-Präfixe durch `api/deliveryhandbook_internal_test.go` an den Code gebunden | gemergt (#1134) |
-| 4 | Weiterentwickeln: neue Version, Migration inkl. Fork, Pausieren, DMN-Deployment und Versionierung — neues Kapitel «Weiterentwickeln» (Anker `#weiterentwickeln`), nur Mechanik; Routentabelle und Rollen durch `api/evolvehandbook_internal_test.go` an den Code gebunden | im Aufbau |
+| 4 | Weiterentwickeln: neue Version, Migration inkl. Fork, Pausieren, DMN-Deployment und Versionierung — neues Kapitel «Weiterentwickeln» (Anker `#weiterentwickeln`), nur Mechanik; Routentabelle und Rollen durch `api/evolvehandbook_internal_test.go` an den Code gebunden | im Review (#1137) |
 | 5 | Eigener Worker über die Job-API, Zustellgarantie, Idempotenz — Erweiterung «Formulare & Worker» | offen |
 | 6 | Überwachen: Metriken, Alarmierung, Export, Aufbewahrung, Sicherung — Erweiterung «Betrieb & Incidents» | offen |
 
