@@ -245,6 +245,8 @@ var productFieldControls = map[string]string{
 	"keywords":           `name="keywords"`,
 	"configForm":         `name="configForm"`,
 	"price":              `name="price"`,
+	"lifecycleProcess":   `procSelect("lifecycleProcess", v.lifecycleProcess)`,
+	"operations":         `name="opProvision"`,
 	// The two headings are one row of per-language boxes each, and that row
 	// maintains the key and the wordings together — the first box that has
 	// anything in it is the key. So both the key and its wordings are proved by
