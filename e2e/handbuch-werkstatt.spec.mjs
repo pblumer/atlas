@@ -285,3 +285,32 @@ test("the test chapter leads to scenarios and the pipeline runner", async ({ pag
   await expect(page.locator("#testen #playground-flags td:first-child code", { hasText: /^--scenario$/ }))
     .toHaveCount(1);
 });
+
+// The delivery chapter is the one that teaches an operator to publish, register a
+// target, and promote to another server. It sits between testing and operations —
+// you test, then you ship, then you watch — so it earns a table-of-contents entry
+// there, and its route table (guarded against the real routes in Go) has to be on
+// the page for that guard to mean anything to a reader.
+test("the deliver chapter is reachable and lists the promote route", async ({ page }) => {
+  const calls = [];
+  installMock(page, calls);
+  await page.goto("/handbuch.html");
+
+  await expect(page.locator('#toc a[href="#ausliefern"]')).toBeVisible();
+  await expect(page.locator("main section#ausliefern")).toHaveCount(1);
+
+  // The load-bearing fact of the chapter, in whichever language is on screen: a
+  // target is reached with a deploy token, not just any token.
+  for (const [lang, text] of [
+    ["de", "Deploy-Token"],
+    ["en", "deploy token"],
+  ]) {
+    await page.click(`#lang-${lang}`);
+    await expect(page.locator("#ausliefern").locator(`[data-l="${lang}"]`, { hasText: text }).first())
+      .toBeVisible();
+  }
+
+  // The first column only: the "For" cells name routes in prose too.
+  await expect(page.locator("#ausliefern #delivery-routes td:first-child code",
+    { hasText: /\/releases\/\{version\}\/promote$/ })).toHaveCount(1);
+});
