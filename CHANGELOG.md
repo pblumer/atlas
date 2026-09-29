@@ -148,6 +148,15 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A job failed back with retries left wakes the workers waiting for it.** A worker
+  that fails a job with retries left and no backoff gives it straight back to the
+  queue, but a second worker already long-polling that job type was not told: it slept
+  out its whole poll — up to the `waitMs` it asked for — while the job sat there. Every
+  other way a job becomes available (created, a backoff or a lease running out, an
+  incident resolved) already woke the waiting workers; a retryable failure now does too.
+  A fail with a backoff still wakes them when the backoff elapses, and an exhausting
+  one still waits for an operator.
+
 - **Restarting a supervised worker is never quietly ignored.** A restart asked for
   while the worker was still running, or in the moment after it crashed, closed a
   signal the supervisor had already stopped listening to: the worker then sat out its
