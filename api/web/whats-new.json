@@ -147,6 +147,35 @@
       }
     },
     {
+      "id": "a-process-only-its-triggers-can-start-is-no-longer-started-b",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "A process with several triggers is no longer started into all of them",
+        "de": "Ein Prozess mit mehreren Auslösern startet nicht mehr in alle zugleich"
+      },
+      "summary": {
+        "en": "A process can have several start events — one message for provisioning, one for deprovisioning. Started by hand, through a start link or from a call activity, none of them fired, and Atlas used to run every branch at once. Now such a start is refused and says which start events the process has; a call activity waits on an incident instead. Processes with a normal start event, or with only one start event, start as before.",
+        "de": "Ein Prozess kann mehrere Startereignisse haben — eine Nachricht für die Provisionierung, eine für die Deprovisionierung. Wurde er von Hand, über einen Startlink oder aus einer Call Activity gestartet, löste keines davon aus, und Atlas führte bisher alle Zweige gleichzeitig aus. Jetzt wird ein solcher Start abgelehnt und nennt die Startereignisse des Prozesses; eine Call Activity wartet stattdessen auf einem Incident. Prozesse mit einem normalen Startereignis oder mit nur einem Startereignis starten wie bisher."
+      },
+      "link": {
+        "label": "ADR-0426",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0426-an-untriggered-create-never-seeds-several-start-events.md"
+      },
+      "tags": [
+        "Operations",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "a-business-rule-task-bound-to-latest-runs-the-newest-decisio",
       "version": "Unreleased",
       "date": null,
@@ -303,28 +332,6 @@
       },
       "tags": [
         "Handbook"
-      ]
-    },
-    {
-      "id": "a-deployment-target-can-name-a-second-credential-for-reading",
-      "version": "0.7.0",
-      "date": "2026-09-28",
-      "category": "Added",
-      "title": {
-        "en": "A deployment target can name one credential for publishing and one for reading",
-        "de": "Ein Deployment-Ziel kann ein Credential zum Publizieren und eines zum Lesen nennen"
-      },
-      "summary": {
-        "en": "A target's credential does two jobs and they need credentials that cannot be the same one. Publishing reaches the import route and nothing else, because a deploy token is deliberately the narrowest thing that can publish; reading a peer needs its descriptor and, at the estate altitude, its derived landscape, and a credential that reaches those is refused the import route. A token carries one scope, so one reference could only ever do one of the two — measured against two installations, a deploy token answers 401 at both read routes and a landscape credential answers 403 at the import route. The consequence was quiet and wrong: a target configured for promotion, which is what a target is for, was drawn on the estate as unreachable while an operator could see the peer was plainly there. A target now takes an optional read credential reference beside the one it already had, and a read of the peer presents it. Leaving it empty means both jobs share one credential, which is what every target configured before this says, so nothing that exists moves. Both are handles into the vault rather than secrets, so naming two discloses no more than naming one.",
-        "de": "Das Credential eines Ziels erfüllt zwei Aufgaben, und die brauchen Credentials, die nicht dasselbe sein können. Publizieren erreicht die Import-Route und sonst nichts, weil ein Deploy-Token bewusst das Schmalste ist, was publizieren kann; das Lesen einer Gegenstelle braucht deren Deskriptor und, auf der Estate-Ebene, deren abgeleitete Landschaft — und ein Credential, das diese erreicht, wird an der Import-Route abgewiesen. Ein Token trägt einen Scope, eine Referenz konnte also immer nur eine der beiden Aufgaben erfüllen: an zwei Installationen gemessen antwortet ein Deploy-Token an beiden Leserouten mit 401 und ein Landscape-Credential an der Import-Route mit 403. Die Folge war still und falsch: ein für Promotionen konfiguriertes Ziel — und dafür sind Ziele da — wurde im Estate als nicht erreichbar gezeichnet, während der Betrieb die Gegenstelle offensichtlich vor sich hatte. Ein Ziel nimmt jetzt neben der bisherigen Referenz eine optionale Lese-Referenz, und ein Lesezugriff auf die Gegenstelle legt diese vor. Bleibt sie leer, teilen sich beide Aufgaben ein Credential — so, wie es jedes bisher konfigurierte Ziel sagt, es bewegt sich also nichts Bestehendes. Beides sind Handles in den Tresor und keine Geheimnisse; zwei zu nennen legt nicht mehr offen als eines."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-7-0"
-      },
-      "tags": [
-        "Operations",
-        "Security"
       ]
     }
   ]

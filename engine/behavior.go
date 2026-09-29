@@ -1242,6 +1242,12 @@ func resumeParkedElement(c *ProcessingContext, elKey uint64, reason model.Incide
 		// that still cannot route parks again on a fresh incident instead of
 		// quietly clearing, and one that now can takes its flow exactly once.
 		c.p.behavior(ei.BpmnElementType).OnActivated(c, elKey, ei)
+	case compiler.TypeCallActivity:
+		// A call activity whose target only its triggers can start parked without
+		// creating the child (ADR-0426). Re-running the activation resolves the
+		// target again, as it is now: a target that gained a none start or was
+		// redirected is called, one that still cannot say where to begin parks again.
+		c.p.behavior(ei.BpmnElementType).OnActivated(c, elKey, ei)
 	case compiler.TypeMockupTask:
 		// A resolved mockup-failure incident (ADR-0120): re-arm a fresh attempt. The
 		// new timer key drives an independent duration and failure draw, so a retry can
@@ -4777,6 +4783,17 @@ func (callActivityBehavior) OnActivated(c *ProcessingContext, key uint64, ei *mo
 		// deploy-then-retry / incident is a follow-up (ADR-0076).
 		return
 	}
+	// A call activity is an untriggered create: the child would be seeded by
+	// startElementsFor at its none starts, or, having none, at every start it has.
+	// With several, that runs branches nobody triggered — a product's lifecycle
+	// process would provision and deprovision at once — so the child is not created
+	// and the token parks on an incident instead (ADR-0426). The check reads the
+	// slice the create reads anyway; resolving re-runs this activation, so a target
+	// fixed and redeployed meanwhile is called then.
+	if child := c.process(childDefKey); child != nil && child.UntriggeredStartAmbiguous() {
+		raiseAmbiguousCallIncident(c, key, ei, child)
+		return
+	}
 	var startVars []model.VariableValue
 	if detail.PropagateAllParent {
 		c.VariablesOfScope(ei.ProcessInstanceKey, func(v model.VariableValue) {
@@ -4794,6 +4811,31 @@ func (callActivityBehavior) OnActivated(c *ProcessingContext, key uint64, ei *mo
 
 func (callActivityBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	completeAndTakeFlows(c, key, ei)
+}
+
+// raiseAmbiguousCallIncident parks a call activity whose target only its triggers
+// can start (ADR-0426). Job-less, like a mockup or gateway incident, so resolving
+// it goes through resumeParkedElement and re-runs the activation. The message names
+// the target's start events, because what the operator has to decide is which of
+// them the caller meant — and a call activity cannot say.
+func raiseAmbiguousCallIncident(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue, child *compiler.CompiledProcess) {
+	var names strings.Builder
+	for i, id := range child.StartEvents() {
+		if i > 0 {
+			names.WriteString(", ")
+		}
+		names.WriteString(child.ElementBpmnId(id))
+	}
+	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		ElementId:          ei.ElementId,
+		RaisedAt:           c.Now(),
+		Message: "called process " + child.ProcessId() + " has no none start event and " +
+			"several start events (" + names.String() + "); a call activity triggers none " +
+			"of them and would run every branch at once — start it through one of its " +
+			"triggers, or give it a none start (ADR-0426)",
+	})
 }
 
 // resumeCaller promotes a completed child instance's variables into its caller and

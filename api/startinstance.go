@@ -102,6 +102,7 @@ func (s *Server) startInstance(w http.ResponseWriter, key uint64, startVars []mo
 		instKey     uint64
 		processID   string
 		selfStart   bool
+		ambiguous   string
 	)
 	s.do(func() {
 		d, ok := s.deployments[key]
@@ -113,6 +114,9 @@ func (s *Server) startInstance(w http.ResponseWriter, key uint64, startVars []mo
 		// also hides it, but this guards the API and public start paths directly).
 		if d.cp != nil && !d.cp.IsExecutable() {
 			notExec = true
+			return
+		}
+		if ambiguous = untriggeredStartRefusal(d.cp); ambiguous != "" {
 			return
 		}
 		processID = d.ProcessID
@@ -139,6 +143,8 @@ func (s *Server) startInstance(w http.ResponseWriter, key uint64, startVars []mo
 		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
 	case notExec:
 		httpapi.Error(w, http.StatusConflict, "process is not executable and cannot be started")
+	case ambiguous != "":
+		httpapi.Error(w, http.StatusConflict, ambiguous)
 	case selfStart:
 		// The orchestration asked to start itself for one of its positions: the
 		// position is bound to the orchestration in the order it froze. Started, the

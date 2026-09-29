@@ -106,6 +106,8 @@ func (s *Server) handleCreateInstanceFromCSV(w http.ResponseWriter, r *http.Requ
 		runErr  error
 		statErr error
 		stats   statsResp
+		// ambiguous is ADR-0426's refusal: a process only its triggers can start.
+		ambiguous string
 	)
 	var driveNeeded bool
 	s.do(func() {
@@ -116,6 +118,9 @@ func (s *Server) handleCreateInstanceFromCSV(w http.ResponseWriter, r *http.Requ
 		found = true
 		if d.cp != nil && !d.cp.IsExecutable() {
 			notExec = true
+			return
+		}
+		if ambiguous = untriggeredStartRefusal(d.cp); ambiguous != "" {
 			return
 		}
 		s.proc.CreateInstance(key, startVars...)
@@ -135,6 +140,8 @@ func (s *Server) handleCreateInstanceFromCSV(w http.ResponseWriter, r *http.Requ
 		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
 	case notExec:
 		httpapi.Error(w, http.StatusConflict, "process is not executable and cannot be started")
+	case ambiguous != "":
+		httpapi.Error(w, http.StatusConflict, ambiguous)
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "run instance: "+runErr.Error())
 	case statErr != nil:

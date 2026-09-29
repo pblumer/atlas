@@ -78,6 +78,19 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **A process only its triggers can start is no longer started by hand into every branch.**
+  A create nobody triggered — `POST /api/v1/instances`, `POST /api/v1/processes/{key}/instances`,
+  the MCP create tool, a CSV upload, a public start link, a return or a reconciliation — seeds
+  a process at its none start events, and one without any at every start event it has. For a
+  process with one message start that is how it is tested by hand. For one with several start
+  events and no none start it ran every branch at once: a product's lifecycle process with a
+  message start each for provisioning, change and deprovisioning provisioned and deprovisioned
+  in the same instant. Such a create is now refused with **409**, naming the process's start
+  events, and creates nothing. A **call activity** into such a process creates no child either:
+  it parks on an incident naming the target's start events, and resolving the incident — after
+  the target was given a none start, or redirected — calls it again. Processes with a none
+  start, and processes with exactly one start event, start as before (ADR-0426).
+
 - **A business rule task bound to latest runs the newest decision version when it runs.**
   Since ADR-0319, "latest" was settled once, when the *process* was deployed, and frozen:
   a process deployed while a decision stood at v1 went on evaluating v1 after v2 and v3
