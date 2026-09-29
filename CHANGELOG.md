@@ -14,6 +14,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The handbook teaches evolving a deployed process.** Deploying a new version,
+  migrating a running case to it, forking one that cannot be rebound, pausing a version,
+  and versioning a decision were all in the product (ADR-0162, ADR-0389, ADR-0119,
+  ADR-0322/0423) and nowhere in the handbook, which left a reader thinking a redeploy
+  would carry the stuck cases along. A new chapter «Weiterentwickeln» / «Evolve» carries
+  the mechanics in German and English: a new deploy mints a version and does not touch
+  running instances; migration rebinds a case to another version, plan-then-apply, admin
+  and reason-required, and is refused as a whole when a token cannot be rebound (the
+  structural rules the server enforces); the fork continues in a new linked instance at
+  named resume points; pausing stops only auto-starts; and a decision is versioned per
+  id, latest resolving at run time, a bound deployment undeletable. Every call was run
+  against a live instance first. Its route table is held to the real routes and their
+  roles by `api/evolvehandbook_internal_test.go`; a renamed route or a changed role
+  fails the build.
+
 - **The handbook teaches delivering a process to another server.** Publishing an
   application, minting a release, registering a deployment target with a deploy token,
   promoting the frozen release, and moving the source tree were all in the product
