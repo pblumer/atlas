@@ -144,6 +144,9 @@ type supervisor struct {
 	exe     string
 	backoff time.Duration
 	quit    <-chan struct{}
+	// afterRun, when set, runs between a child's exit and the wait that follows it.
+	// It is a test's way to land a restart in exactly that window; nil in production.
+	afterRun func(c *child)
 
 	mu       sync.Mutex
 	children []*child
@@ -209,6 +212,17 @@ func (s *supervisor) supervise(c *child) {
 
 		stop := c.beginCycle()
 		err := s.runOnce(c, stop)
+		if s.afterRun != nil {
+			s.afterRun(c)
+		}
+		// Both waits below watch this cycle's own stop channel, not whichever one is
+		// current. A restart closes the channel that is current when it is asked for
+		// and installs a fresh one; asked for while the child ran, or after it exited
+		// but before a wait began, it has closed stop and replaced it already. Waiting
+		// on the replacement would lose the request — the worker would sit out its
+		// backoff, or stay parked with nothing to serve, until somebody asked again.
+		// Waiting on stop cannot: if nobody has asked, stop is still the current
+		// channel, and if somebody has, it is already closed.
 		switch {
 		case err == nil:
 			failures = 0 // it ran and was asked to stop; not a failure
@@ -221,7 +235,7 @@ func (s *supervisor) supervise(c *child) {
 			case <-s.quit:
 				c.set(func() { c.state = "stopped"; c.pid = 0 })
 				return
-			case <-c.currentStop():
+			case <-stop:
 			}
 			failures = 0
 			continue
@@ -237,7 +251,7 @@ func (s *supervisor) supervise(c *child) {
 		case <-s.quit:
 			c.set(func() { c.state = "stopped"; c.pid = 0 })
 			return
-		case <-c.currentStop():
+		case <-stop:
 		case <-time.After(restartDelay(s.backoff, maxRestartBackoff, failures)):
 		}
 	}
@@ -404,19 +418,12 @@ func (c *child) drain(r io.ReadCloser) {
 	}
 }
 
-// beginCycle hands out the channel this run watches for a restart request. It does
-// NOT replace it: replacing here is what would leave the running child watching a
-// channel nobody can close, since restart closes whatever is current. Installing
-// the fresh channel is restart's job, and the next cycle picks it up.
+// beginCycle hands out the channel this cycle — the run and the wait after it —
+// watches for a restart request. It does NOT replace it: replacing here is what would
+// leave the running child watching a channel nobody can close, since restart closes
+// whatever is current. Installing the fresh channel is restart's job, and the next
+// cycle picks it up.
 func (c *child) beginCycle() <-chan struct{} {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.stop
-}
-
-// currentStop is the restart channel to watch right now. Read under the lock
-// because restart replaces it.
-func (c *child) currentStop() <-chan struct{} {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.stop
