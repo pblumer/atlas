@@ -274,6 +274,15 @@ jobs:
   # directory fsync they share — on a Windows runner. Not the whole suite: the rest is
   # platform-neutral Go that the Linux jobs already stand for.
   #
+  # engine is here for its recovery tests: write through the processor, close, reopen,
+  # replay the log and compare with live state (ADR-0001). They are the only tests that
+  # drive the storage packages through a restart the way a server does, and a restart
+  # is exactly where the WAL failed. The whole package runs rather than a -run pattern:
+  # the recovery tests are named a dozen ways across as many files, and a pattern would
+  # quietly miss the next one. engine imports nothing that starts a process or talks to
+  # a network — only the log, the store, checkpoints and the compiler — so whatever
+  # else fails here on Windows is storage behaviour too.
+  #
   # CGO_ENABLED=0 because that is how release.yml builds atlas.exe, which also rules
   # out the race detector (it needs cgo). Races are the race job's to catch — nothing
   # about them is Windows-specific — and this job exists for what is. The shipped
@@ -285,8 +294,9 @@ jobs:
     if: needs.changes.outputs.docs_only != 'true'
     runs-on: windows-latest
     # Paired with the per-package limit on the Test step, which has to fire first so Go
-    # names the package. The packages take seconds on Linux; nearly all of this job is
-    # setting up Go and compiling on a Windows runner.
+    # names the package. The storage packages take seconds on Linux and engine about half
+    # a minute without the race detector; nearly all of this job is setting up Go and
+    # compiling on a Windows runner.
     timeout-minutes: 25
     env:
       CGO_ENABLED: '0'
@@ -302,8 +312,8 @@ jobs:
       - name: Build atlas.exe
         run: go build -o atlas.exe ./cmd/atlas
 
-      - name: Test storage packages
-        run: go test -timeout=10m ./wal/... ./checkpoint/... ./state/... ./api/sidecar/... ./internal/...
+      - name: Test storage packages and engine recovery
+        run: go test -timeout=10m ./wal/... ./checkpoint/... ./state/... ./api/sidecar/... ./internal/... ./engine/...
 
   # Everything a docs-only change can actually break, and nothing else.
   #
