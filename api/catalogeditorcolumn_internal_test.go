@@ -237,3 +237,30 @@ func TestTheProductFormSaysWhatPublishingNeeds(t *testing.T) {
 		t.Error("the list is drawn once and not kept current while the form is filled in")
 	}
 }
+
+// TestTheCataloguePageDropsItsListenersBeforeAddingNewOnes.
+//
+// The console's view element is shared and outlives every page, so a listener this
+// page hangs on it is added again on every render — and a save renders the page
+// again. The stale ones kept running: a product opened after a save showed its form
+// twice, and an action could run twice. Every listener on the view is tied to the
+// render that added it, and the next render (or leaving the page) removes them.
+func TestTheCataloguePageDropsItsListenersBeforeAddingNewOnes(t *testing.T) {
+	src := readWeb(t, "catalog-admin.js")
+	adds := strings.Count(src, "view.addEventListener(")
+	tied := strings.Count(src, "}, { signal: viewListeners.signal });")
+	if adds == 0 || adds != tied {
+		t.Errorf("%d listeners are added to the shared view and %d are tied to their render; "+
+			"an untied one runs again after every reload", adds, tied)
+	}
+	fresh := webRegion(t, src, "function freshViewListeners() {", "\n}")
+	for _, want := range []string{"viewListeners.abort()", "window.__atlasCleanup"} {
+		if !strings.Contains(fresh, want) {
+			t.Errorf("freshViewListeners no longer carries %s", want)
+		}
+	}
+	wire := webRegion(t, src, "function wire({", "freshViewListeners();")
+	if strings.Contains(wire, "addEventListener") {
+		t.Error("wire adds a listener before it has removed the last render's")
+	}
+}

@@ -1915,6 +1915,30 @@ function maintainersNote(cat, dir) {
 // the Content-Type carrying the format. Bending the shared helper for one caller
 // would put a third meaning on its fourth argument, which is already a boolean
 // named isXML.
+// The listeners this page hangs on the console's view element.
+//
+// That element is shared: every page of the console renders into it, and it
+// outlives each of them. A listener added to it is therefore added again on every
+// visit and every reload of this page — including the reload a save does — and the
+// ones from earlier renders kept running, each with its own closure over elements
+// that were no longer on screen. That stayed invisible while their effects landed
+// on detached nodes. Once the product form moved into a row under the product it
+// edits, the stale handlers found the live row too, and a product opened after a
+// save showed its form twice, once per render since the page was first opened.
+// The same stale handlers would also repeat an action, such as a publish.
+//
+// So every render starts by removing the previous render's listeners, and leaving
+// the page removes them too (__atlasCleanup, which the router calls on every
+// navigation).
+let viewListeners = null;
+function freshViewListeners() {
+  if (viewListeners) viewListeners.abort();
+  const own = new AbortController();
+  viewListeners = own;
+  window.__atlasCleanup = () => own.abort();
+  return own.signal;
+}
+
 function wireAppearance({ api, toast, view }, id, reload) {
   const form = view.querySelector(".cat-theme");
   if (!form) return;
@@ -1972,7 +1996,7 @@ function wireAppearance({ api, toast, view }, id, reload) {
     for (const box of form.querySelectorAll(".aref-for")) {
       box.hidden = box.dataset.kind !== sel.value;
     }
-  });
+  }, { signal: viewListeners.signal });
 
   view.addEventListener("click", async (e) => {
     const b = e.target.closest("button[data-act]");
@@ -2017,11 +2041,13 @@ function wireAppearance({ api, toast, view }, id, reload) {
         reload();
       } catch (err) { toast(err.message, "err"); } finally { b.disabled = false; }
     }
-  });
+  }, { signal: viewListeners.signal });
 }
 
 function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, formList, canShare, canTheme, dir, people) {
   const id = cat.id;
+  // Before anything is wired: this render's listeners replace the last one's.
+  freshViewListeners();
   const reload = () => { const h = location.hash; location.hash = "#/catalog"; location.hash = h; };
   // patch changes a catalogue with no precondition. That is right for a form whose
   // every field is on the screen: what it overwrites is what somebody is looking at.
@@ -2363,7 +2389,7 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
         report.innerHTML = refusalCard(err);
       } finally { b.disabled = false; }
     }
-  });
+  }, { signal: viewListeners.signal });
 
   const shareNew = view.querySelector(".share-new");
   if (shareNew) {
