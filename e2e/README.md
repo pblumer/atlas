@@ -195,7 +195,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   overview** tests in the same file drive the real app shell against a routed mock instead:
   the per-process Incidents column links to the version holding them (not the latest), a
   capped incident page says its counts are a lower bound, and a variable-search hit that is
-  parked is flagged apart from an equally "active" one.
+  parked is flagged apart from an equally "active" one. The **Incidents view's layout** is
+  measured on a fixture shaped like a production screen (long process ids, a URL inside a
+  message, a worker chip): at 1600px and 1280px both tables fit their cards with every
+  action control inside, the view drops the centred column while its explanation keeps its
+  measure, the other Operations views keep the column, and a timestamp stays on one line.
 
 - **`io-card.spec.mjs`** (ADR-0161 / [ADR-0219](../docs/adr/0219-variable-write-attribution.md)):
   the **in/out card on the diagram**, on the shape that made it lie — a parallel fork whose

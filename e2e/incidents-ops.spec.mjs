@@ -649,6 +649,127 @@ test.describe("incidents by cause", () => {
   });
 });
 
+// The Incidents view is two tables, and it has to fit the window it is opened in. It
+// used to sit in the console's centred 1120px column, where the cause table's
+// unbreakable cells — a long process id, a timestamp, a URL inside the message, three
+// controls on the action line — added up to more than the card: the table scrolled
+// inside it and the actions were cut off at its right edge, while the rest of a wide
+// screen stayed empty. The fixture is shaped like that production screen.
+const WIDE_CAUSES = [
+  ["proc_erster_stress_test", 1, 11, "Activity_16rrpt3", "timer", 7, "mockup task simulated failure", {}],
+  ["proc_marktleistung_auto", 3, 14, "event_karosserie", "job", 1, 'clio: no connector registered as "clio"', { connector: "clio", connectorKind: "clio" }],
+  ["proc_discord_stoerung", 3, 15, "Task_Antwort", "job", 1, "discord: send-message returned HTTP 400: Cannot send an empty message (code 50006)", { connector: "discord_pblumer", connectorKind: "discord", connectorId: "c9" }],
+  ["proc_benutzer_aufnahme", 9, 16, "ablehnung_mail", "job", 1, 'mail: token endpoint https://oauth2.googleapis.com/token returned HTTP 400: { "error": "invalid_grant", "error_description": "Bad Request" }', {}],
+].map(([processId, version, processDefKey, elementId, type, count, message, extra], i) => ({
+  processId, version, processDefKey, elementId, elementIndex: 3, type, count, message,
+  oldestRaisedAt: (1_789_000_000_000 + i * 60_000) * 1e6, newestRaisedAt: (1_789_000_000_000 + i * 60_000) * 1e6,
+  ...extra,
+}));
+const WIDE_ROWS = WIDE_CAUSES.map((g, i) => ({
+  elementInstanceKey: String(1000 + i), processInstanceKey: String(281474978841952 + i),
+  processDefKey: g.processDefKey, processId: g.processId, elementId: g.elementId,
+  elementIndex: g.elementIndex, type: g.type,
+  jobKey: g.type === "job" ? String(2251799813685248 + i) : undefined,
+  raisedAt: g.oldestRaisedAt, message: g.message,
+  connector: g.connector, connectorKind: g.connectorKind, connectorId: g.connectorId,
+}));
+
+const bootWide = async (page, size) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  page.__errors = errors;
+  await page.setViewportSize(size);
+  await page.route("**/api/v1/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
+    if (path === "/api/v1/stats") return route.fulfill({ json: { unresolvedIncidents: WIDE_ROWS.length } });
+    if (path === "/api/v1/incidents/summary") {
+      return route.fulfill({ json: { total: WIDE_ROWS.length, groups: WIDE_CAUSES, groupsTruncated: false, ungrouped: 0 } });
+    }
+    if (path === "/api/v1/incidents") return route.fulfill({ json: listing(WIDE_ROWS) });
+    if (path === "/api/v1/instances" || path === "/api/v1/tasks") return route.fulfill({ json: listing([]) });
+    return route.fulfill({ json: [] });
+  });
+  await page.goto("/index.html");
+  await page.waitForFunction(
+    () => document.querySelector("#view") && document.querySelector("#view").children.length > 0,
+    null, { timeout: 15000 });
+  await openIncidents(page);
+  await expect(page.locator("#causes td.row-actions")).toHaveCount(WIDE_CAUSES.length);
+  await expect(page.locator("#rows td.row-actions")).toHaveCount(WIDE_ROWS.length);
+};
+
+// fit measures one table against the card that holds it: whether the card had to
+// scroll it, and how far past the card's right edge any control of the action column
+// was laid out. A control past that edge is the cut-off "Reso…" an operator saw.
+const fit = (page, tbodyId) => page.evaluate((id) => {
+  const card = document.getElementById(id).closest(".card");
+  const edge = card.getBoundingClientRect().right;
+  const controls = [...card.querySelectorAll("td.row-actions > *")];
+  return {
+    clientWidth: card.clientWidth,
+    scrollWidth: card.scrollWidth,
+    controls: controls.length,
+    overhang: Math.max(0, ...controls.map((c) => c.getBoundingClientRect().right - edge)),
+  };
+}, tbodyId);
+
+test.describe("incidents layout", () => {
+  for (const width of [1600, 1280]) {
+    test(`both tables fit their cards at ${width}px, actions and all`, async ({ page }) => {
+      await bootWide(page, { width, height: 900 });
+      for (const id of ["causes", "rows"]) {
+        const f = await fit(page, id);
+        expect(f.controls).toBeGreaterThan(0);
+        expect(f.scrollWidth, `#${id} scrolls inside its card`).toBeLessThanOrEqual(f.clientWidth);
+        expect(f.overhang, `#${id} lays a control past its card`).toBeLessThanOrEqual(0);
+      }
+      expect(page.__errors).toEqual([]);
+    });
+  }
+
+  test("a wide window widens the tables, and the prose keeps its measure", async ({ page }) => {
+    await bootWide(page, { width: 1600, height: 900 });
+    const b = await page.evaluate(() => ({
+      main: document.querySelector("main").getBoundingClientRect().width,
+      card: document.getElementById("causes").closest(".card").getBoundingClientRect().width,
+      lead: document.querySelector("#view p.muted").getBoundingClientRect().width,
+      viewport: document.documentElement.clientWidth,
+    }));
+    // The column is gone: the view spans the window…
+    expect(b.main).toBeGreaterThan(1120);
+    expect(b.main).toBeGreaterThanOrEqual(b.viewport - 2);
+    expect(b.card).toBeGreaterThan(1120);
+    // …while the explanation above the tables stays as wide as it was in the column,
+    // rather than becoming one line across the screen.
+    expect(b.lead).toBeLessThanOrEqual(1076 + 1);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("the other Operations views keep the centred column", async ({ page }) => {
+    await bootWide(page, { width: 1600, height: 900 });
+    await page.evaluate(() => { location.hash = "#/operations"; });
+    await expect(page.locator("#view h1").first()).toHaveText("Instances");
+    const main = await page.evaluate(() => document.querySelector("main").getBoundingClientRect().width);
+    expect(main).toBeLessThanOrEqual(1120);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("a timestamp stays on one line", async ({ page }) => {
+    await bootWide(page, { width: 1280, height: 900 });
+    const lines = await page.evaluate(() => [...document.querySelectorAll("#rows tr")].map((tr) => {
+      const td = tr.children[4]; // Raised
+      const r = document.createRange();
+      r.selectNodeContents(td);
+      return r.getClientRects().length;
+    }));
+    // "9/11/2026, 11:39:16 AM" used to break into three lines, leaving "AM" on its own.
+    expect(lines.length).toBe(WIDE_ROWS.length);
+    for (const n of lines) expect(n).toBe(1);
+    expect(page.__errors).toEqual([]);
+  });
+});
+
 // The nav badge is the only incident surface that finds the operator rather than
 // waiting to be visited, so it has to be right without a view being opened, and it
 // has to survive the chrome being rebuilt on every navigation (ADR-0151 follow-up).

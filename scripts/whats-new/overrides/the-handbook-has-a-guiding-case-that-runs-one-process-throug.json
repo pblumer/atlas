@@ -1,0 +1,18 @@
+{
+  "tags": [
+    "Handbook",
+    "Examples"
+  ],
+  "link": {
+    "label": "examples/lehrgang/",
+    "url": "https://github.com/pblumer/atlas/tree/main/examples/lehrgang"
+  },
+  "title": {
+    "en": "One case through all six modules — the course's guiding process",
+    "de": "Ein Fall durch alle sechs Module – der Leitfall des Lehrgangs"
+  },
+  "summary": {
+    "en": "The reference chapters each teach one thing; a course needs one case they all apply to. `examples/lehrgang/` — an employee onboarding — is that case, and a new capstone chapter walks it module by module: modelling, testing, delivering, evolving, writing your own worker, and monitoring, each with a starting point and a scenario. A DMN maps the new hire's role to laptop, software, access and AD groups; one step is deliberately not a mockup but a job over the Job API, so it parks for your own worker and, on repeated failure, raises an incident. Install it from its card in the Beispiele chapter — every call was run against a live instance first.",
+    "de": "Die Referenzkapitel lehren je eine Sache; ein Lehrgang braucht einen Fall, auf den alle zutreffen. `examples/lehrgang/` – ein Mitarbeitereintritt – ist dieser Fall, und ein neues Abschlusskapitel geht ihn Modul für Modul durch: Modellieren, Testen, Ausliefern, Weiterentwickeln, ein eigener Worker und Überwachen, je mit Startpunkt und Szenario. Eine DMN bildet die Rolle auf Laptop, Software, Zugriffe und AD-Gruppen ab; ein Schritt ist bewusst kein Mockup, sondern ein Job über die Job-API – er parkt für den eigenen Worker und wirft bei wiederholtem Fehlschlag einen Incident. Installierbar über die Karte im Kapitel «Beispiele» – jeder Aufruf wurde zuerst an einer laufenden Instanz ausgeführt."
+  }
+}
