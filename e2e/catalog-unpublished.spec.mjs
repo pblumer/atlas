@@ -23,7 +23,7 @@ const open = async (page, diff) => {
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
   await page.evaluate((d) => { window.__unpublished = d; }, diff ?? null);
   await page.evaluate(() => window.__mount());
-  await page.waitForSelector(".product-cols tbody tr");
+  await page.waitForSelector(".product-list tbody tr");
   expect(errors).toEqual([]);
 };
 

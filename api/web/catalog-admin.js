@@ -965,26 +965,24 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
     <p class="muted" style="max-width:62ch">A product is edited through its home catalogue.
       Everything offered here is orderable once this catalogue is published — a product in
       <b>draft</b> or <b>withdrawn</b> state is not.</p>
-    <div class="product-cols cat-cols">
-      <div class="product-list cat-main">
-        ${offered.length ? `<div class="product-table"><table class="table">
-          <thead><tr><th>Product</th><th>State</th><th>Approval</th><th>Provisioned by</th><th></th></tr></thead>
-          <tbody>${offered.map((iid) => productRow(byID[iid], iid, langs, offered.length > 1)).join("")}</tbody></table></div>`
+    <div class="product-list">
+      ${offered.length ? `<div class="product-table"><table class="table">
+        <thead><tr><th>Product</th><th>State</th><th>Approval</th><th>Provisioned by</th><th></th></tr></thead>
+        <tbody>${offered.map((iid) => productRow(byID[iid], iid, langs, offered.length > 1)).join("")}</tbody></table></div>`
     : `<div class="empty"><p>Nothing offered yet.</p></div>`}
 
-        <div class="row" style="margin-top:10px">
-          <button class="btn" data-act="new-product">New product</button>
-          ${offerable.length ? `<button class="btn ghost" data-act="add-existing">Offer an existing product</button>` : ""}
-        </div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" data-act="new-product">New product</button>
+        ${offerable.length ? `<button class="btn ghost" data-act="add-existing">Offer an existing product</button>` : ""}
       </div>
-      <!-- One column, two panels, and never both at once: editing a product and
-           arranging what it is made of are two questions about the same row, and a
-           row has one answer open at a time. Both keep their own container so the
-           code that fills each one says which it means. -->
-      <aside class="product-side cat-side">
+      <!-- Two panels, and never both at once: editing a product and arranging what
+           it is made of are two questions about the same row, and a row has one
+           answer open at a time. They live here, under the button that opens a new
+           product, and move into a row under the product being edited. -->
+      <div class="product-panels">
         <div class="product-editor"></div>
         <div class="assemble-editor"></div>
-      </aside>
+      </div>
     </div>
 
     <h3 style="margin-top:26px">How the products relate</h3>
@@ -1155,9 +1153,9 @@ function assembleKit(pid, offered, byID, langs, edges) {
         <input type="radio" name="part-${esc(other)}" value="${esc(c.id)}"${
   c.id === now ? " checked" : ""} aria-label="${esc(name(other))}: ${esc(c.name)}"></label></td>`).join("")}</tr>`;
   }).join("");
-  // No margin spelled here: the card is read in two layouts — beside the list in a
-  // column of its own, and stacked under it on a narrow screen — and an inline style
-  // would win over both, standing the panel twelve pixels off the row it belongs to.
+  // No margin spelled here: the card is read in two places — in a row under its
+  // product, and under the list's buttons — and only the stylesheet knows which; an
+  // inline style would win over both.
   return `<form class="assemble card" data-product="${esc(pid)}">
     <h4 style="margin:0 0 4px">What ${esc(name(pid))} is made of</h4>
     <p class="muted" style="max-width:62ch; margin:0 0 10px">Every other product this catalogue
@@ -1524,9 +1522,9 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
       <summary class="form-sec">${esc(title)}</summary>
       ${hint ? `<p class="form-sec-hint">${hint}</p>` : ""}
       <div class="form-group-body">${body}</div></details>`;
-  // No width and no margin spelled here: the card is read in two layouts — beside the
-  // list in a column of its own, and stacked under it on a narrow screen — and only
-  // the stylesheet knows which one is in force. An inline style would win over both.
+  // No width and no margin spelled here: the card is read in two places — in a row
+  // under the product it edits, and under the list's buttons for a new product — and
+  // only the stylesheet knows which. An inline style would win over both.
   return `<div class="card">
     <div class="between" style="margin:0 0 10px">
       <h3 style="margin:0">${it ? "Edit product" : "New product"}</h3>
@@ -1990,15 +1988,14 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
 
   // ---- Where the editor panel sits ----
   //
-  // The panel is a column beside the list (app.css), and it opens level with the row
-  // it was opened from: a product edited from row thirty would otherwise put its form
-  // thirty rows further down the page, which is the scroll this layout exists to
-  // remove. CSS cannot know where a row ended up — the shared table enhancer sorts
-  // and filters the tbody underneath it — so the offset is measured here and handed
-  // over as --editor-top. app.css reads it only where the two columns exist at all;
-  // on a narrow viewport the property is ignored and the panel is stacked under the
-  // list, exactly as it used to be.
-  const cols = view.querySelector(".product-cols");
+  // Across the list's whole width, never in a column beside it. Beside the list the
+  // form was a third of a wide screen and scrolled inside itself, which is where the
+  // width of this page is. An existing product's form (and its kit) opens in a row of
+  // its own directly under the product; a new product, which has no row yet, opens
+  // directly under the button that asked for it, where the two containers live
+  // (.product-panels). Nothing is measured: a panel in the flow of the page is where
+  // it is, and the reader's row does not move when it opens.
+  //
   // listEl and not `list`: this module has a `list` helper at the top that splits a
   // comma-separated field, and the catalogue's own save calls it a hundred lines
   // below. A DOM element named `list` shadowed it for the whole of this function, so
@@ -2006,62 +2003,37 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
   // caught by the submit handler and shown as a toast, which is why it read as a
   // server refusal rather than as a page that could not run.
   const listEl = view.querySelector(".product-list");
-  // The column itself, which is what carries the offset: the two panels inside it are
-  // containers and only one of them holds anything at a time.
-  const side = view.querySelector(".product-side");
-  // The row the open panel belongs to, kept so the alignment survives what the list
-  // does afterwards.
+  const home = view.querySelector(".product-panels");
+  // The row the open panel belongs to, or null for a new product.
   let anchor = null;
 
-  const open = () => !!(editor.firstChild || assembler.firstChild);
-
   // The row a product was opened from gets a row of its own directly beneath it, and
-  // the panel moves into that. Beside the list the form was a third of the page wide
-  // and scrolled inside itself on a wide screen, which is where the width is; under
-  // its row it has the table's whole width and the row it belongs to directly above
-  // it. It is marked as a detail row (data-dt-detail), so the shared table enhancer
-  // sorts it with its product and hides it with it (table.js). Only a new product,
-  // which has no row yet, still opens in the column beside the list.
+  // the panel moves into that. It is marked as a detail row (data-dt-detail), so the
+  // shared table enhancer sorts it with its product and hides it with it (table.js).
   let detailRow = null;
   const inline = (row) => !!row && row.tagName === "TR";
   const dropDetail = () => {
-    // The two containers go back to the column they were rendered in, in their order,
-    // so the next panel finds them where the page put them.
-    side.append(editor, assembler);
+    // The two containers go back under the buttons, in their order, so the next
+    // panel — a new product's included — finds them where the page put them.
+    home.append(editor, assembler);
     if (detailRow) { detailRow.remove(); detailRow = null; }
   };
 
-  const align = () => {
-    if (!anchor || !open()) return;
-    if (detailRow) {
-      // A sort appends every row again, and a filter hides some: the panel stays
-      // under its product, and is shown again when a filter brings the product back.
-      if (anchor.nextElementSibling !== detailRow) anchor.after(detailRow);
-      detailRow.hidden = anchor.hidden;
-      return;
-    }
-    if (!cols || !side) return;
-    // offsetParent is null for a row a filter has hidden. Measuring against a hidden
-    // row would snap the panel to the top of the list while its product is still
-    // open in it, so the last good offset stands until the row is on screen again.
-    if (anchor.offsetParent === null) return;
-    const top = anchor.getBoundingClientRect().top - cols.getBoundingClientRect().top;
-    side.style.setProperty("--editor-top", `${Math.max(0, Math.round(top))}px`);
+  // keepUnder puts the panel back under its product after the list moved it. A sort
+  // appends every row again, and a filter hides some: the panel stays under its
+  // product, and is shown again when a filter brings the product back.
+  const keepUnder = () => {
+    if (!anchor || !detailRow) return;
+    if (anchor.nextElementSibling !== detailRow) anchor.after(detailRow);
+    detailRow.hidden = anchor.hidden;
   };
-  // Sorting a column reorders the rows and a filter hides some: either moves the row
-  // the panel is aligned to, and both arrive as ordinary events on the list. One
-  // frame later the table has been rebuilt, so this re-measures rather than predicts.
-  const realign = () => requestAnimationFrame(align);
+  // Both arrive as ordinary events on the list; one frame later the table has been
+  // rebuilt.
+  const realign = () => requestAnimationFrame(keepUnder);
   if (listEl) {
     listEl.addEventListener("click", realign);
     listEl.addEventListener("input", realign);
   }
-  // A viewport change moves the row with no event on the list at all, and a narrow
-  // one takes the second column away entirely. Observed rather than bound to
-  // window.resize so it ends with the view: the element goes when the page is
-  // re-rendered and the observer goes with it, where a window listener would outlive
-  // both and go on measuring nodes nobody can see.
-  if (cols && typeof ResizeObserver === "function") new ResizeObserver(realign).observe(cols);
 
   // markEditing keeps the highlight on exactly one row: the panel says which product
   // it is editing, and a second highlight would make that a guess.
@@ -2070,75 +2042,40 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
     if (row) row.classList.add("editing");
   };
 
-  // keepInPlace holds the row still while the layout changes under it.
-  //
-  // Opening the panel takes a column off the list, so every cell that was on one line
-  // and is now on two makes the rows above the reader taller — and a row at the
-  // bottom of a long list is then pushed a screenful down by text they are not even
-  // looking at. The panel is level with its row either way (align() measures after
-  // the reflow), but the *page* has moved, which reads as the list jumping away from
-  // the click. Measured before and after, the difference is exactly how far the row
-  // travelled, and scrolling by it puts it back under the cursor. app.css turns the
-  // browser's own scroll anchoring off here so this is the only correction applied
-  // and the two cannot fight over the same pixels.
-  const keepInPlace = (row, wasAt) => {
-    if (!row || wasAt === null || row.offsetParent === null) return;
-    const moved = row.getBoundingClientRect().top - wasAt;
-    if (Math.abs(moved) > 1) window.scrollBy(0, moved);
-  };
-
-  // stacked says the column is not there: below the layout's breakpoint the panel
-  // renders under the list, where nothing is level with anything and the reader has to
-  // be taken to it. Read off the layout rather than from a media query repeated here,
-  // because the breakpoint is app.css's and a second copy of it drifts.
-  const stacked = () => !cols || getComputedStyle(cols).display !== "flex";
-
-  // openPanel puts one panel in the column, empties the other, marks the row the two
-  // belong to and aligns them. One function for the product's form and for the kit,
-  // because they are one act and one place: a row has one answer open at a time, and
-  // a panel carrying the previous product's highlight — or the previous product's
-  // offset — is worse than no highlight at all.
+  // openPanel puts one panel in place, empties the other and marks the row the two
+  // belong to. One function for the product's form and for the kit, because they are
+  // one act and one place: a row has one answer open at a time, and a panel carrying
+  // the previous product's highlight is worse than no highlight at all.
   const openPanel = (into, html, row) => {
-    const wasAt = row && row.offsetParent !== null ? row.getBoundingClientRect().top : null;
     editor.innerHTML = "";
     assembler.innerHTML = "";
     dropDetail();
     into.innerHTML = html;
-    markEditing(inline(row) ? row : null);
-    anchor = row || null;
-    if (inline(row)) {
+    anchor = inline(row) ? row : null;
+    markEditing(anchor);
+    if (anchor) {
       detailRow = document.createElement("tr");
       detailRow.className = "product-edit-row";
       detailRow.setAttribute("data-dt-detail", "");
       const cell = document.createElement("td");
-      cell.colSpan = row.cells.length;
+      cell.colSpan = anchor.cells.length;
       cell.appendChild(into);
       detailRow.appendChild(cell);
-      row.after(detailRow);
-      side.style.removeProperty("--editor-top");
+      anchor.after(detailRow);
     } else {
-      align();
+      // Under the button that was pressed, which can be the bottom of the screen.
+      into.scrollIntoView({ block: "nearest" });
     }
-    keepInPlace(row, wasAt);
-    // Stacked, a new product's panel is below the list and can be a screen away; a
-    // row's panel is directly under the row that was clicked and needs no scroll.
-    if (stacked() && !inline(row)) into.scrollIntoView({ block: "nearest" });
   };
   const openEditor = (html, row) => { openPanel(editor, html, row); wireProductForm(); syncFoldButton(); };
   const openAssembler = (html, row) => openPanel(assembler, html, row);
 
   const closePanel = () => {
-    // Closing gives the width back and reflows the list the same way, so the row is
-    // held still on the way out too.
-    const row = anchor;
-    const wasAt = row && row.offsetParent !== null ? row.getBoundingClientRect().top : null;
     editor.innerHTML = "";
     assembler.innerHTML = "";
     dropDetail();
-    side.style.removeProperty("--editor-top");
     markEditing(null);
     anchor = null;
-    keepInPlace(row, wasAt);
   };
 
   // A section folded or unfolded is remembered for the next product (sectionOpen).

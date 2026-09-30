@@ -4,7 +4,7 @@
 // unusable with forty; then in a column beside the list, which on a wide screen was a
 // third of the page and scrolled inside itself. It now opens in a row of its own
 // directly under the product it edits, across the table's width, with sections that
-// fold. Only a new product, which has no row yet, opens in the column beside the list.
+// fold. A new product, which has no row yet, opens under the list's buttons, as wide.
 //
 // The regression this guards is geometric and silent — nothing throws when a panel
 // lands in the wrong place, and no Go test can see a bounding box.
@@ -20,7 +20,7 @@ const open = async (page, size = { width: 1600, height: 800 }) => {
   await page.goto("/catalog-editor-harness.html");
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
   await page.evaluate(() => window.__mount());
-  await page.waitForSelector(".product-cols tbody tr");
+  await page.waitForSelector(".product-list tbody tr");
 };
 
 test("the editor opens directly under the row it was opened from, across the list", async ({ page }) => {
@@ -47,8 +47,6 @@ test("the editor opens directly under the row it was opened from, across the lis
   expect(b.edit.width).toBeGreaterThan(b.list.width * 0.9);
   await expect(page.locator(".product-list tr.editing")).toHaveCount(1);
   await expect(page.locator(".product-editor input[name=id]")).toHaveValue("p10");
-  // The side column holds nothing, so the list keeps the page.
-  expect(await page.evaluate(() => document.querySelector(".product-side").getBoundingClientRect().width)).toBe(0);
   expect(page.__errors).toEqual([]);
 });
 
@@ -76,24 +74,38 @@ test("cancelling closes the panel and removes its row", async ({ page }) => {
   await expect(page.locator(".product-list tbody tr")).toHaveCount(rows);
 });
 
-test("a new product opens its form level with the button that asked for it", async ({ page }) => {
+test("a new product opens under the list's buttons, across the list", async ({ page }) => {
   await open(page);
   await page.click('button[data-act="new-product"]');
-  const b = await page.evaluate(() => ({
-    panel: document.querySelector(".product-side").getBoundingClientRect().top,
-    button: document.querySelector('button[data-act="new-product"]').closest(".row")
-      .getBoundingClientRect().top,
-  }));
-  expect(Math.abs(b.panel - b.button)).toBeLessThanOrEqual(4);
+  const b = await page.evaluate(() => {
+    const r = (el) => el.getBoundingClientRect();
+    const buttons = r(document.querySelector('button[data-act="new-product"]').closest(".row"));
+    const card = r(document.querySelector(".product-panels .product-editor .card"));
+    const list = r(document.querySelector(".product-list"));
+    return { gap: card.top - buttons.bottom, width: card.width, list: list.width };
+  });
+  // Directly under the buttons, and as wide as the form's measure allows rather than a
+  // third of the page.
+  expect(b.gap).toBeGreaterThanOrEqual(0);
+  expect(b.gap).toBeLessThanOrEqual(24);
+  expect(b.width).toBeGreaterThanOrEqual(Math.min(1280, b.list) - 2);
   await expect(page.locator(".product-editor input[name=id]")).toHaveValue("");
   // No row is claimed: the product has none yet.
   await expect(page.locator(".product-list tr.editing")).toHaveCount(0);
   await expect(page.locator(".product-list tr.product-edit-row")).toHaveCount(0);
 
-  // And editing a row afterwards takes the form out of the column and under the row.
+  // And editing a row afterwards takes the form out from under the buttons and under
+  // the row.
   await page.click('.product-list tbody tr:nth-child(3) button[data-act="edit"]');
   await expect(page.locator(".product-list tr.product-edit-row .product-form")).toHaveCount(1);
+  await expect(page.locator(".product-panels .product-form")).toHaveCount(0);
   await expect(page.locator(".product-editor input[name=id]")).toHaveValue("p3");
+
+  // Closing it puts the containers back, so the next new product opens where it should.
+  await page.click('.product-editor button[data-act="cancel-product"]');
+  await page.click('button[data-act="new-product"]');
+  await expect(page.locator(".product-panels .product-editor .product-form")).toHaveCount(1);
+  expect(page.__errors).toEqual([]);
 });
 
 test("on a narrow screen the form is still under its row", async ({ page }) => {
@@ -159,7 +171,7 @@ test("Save Draft stores the product, Save & Publish also publishes the catalogue
     window.__sent.some((c) => c.method === "POST" && /\/releases$/.test(c.url)))).toBe(false);
 
   await page.evaluate(() => window.__mount());
-  await page.waitForSelector(".product-cols tbody tr");
+  await page.waitForSelector(".product-list tbody tr");
   await page.click('.product-list tbody tr:nth-child(2) button[data-act="edit"]');
   await page.evaluate(() => { window.__sent.length = 0; });
   await page.click('.product-editor button[data-publish="yes"]');
@@ -234,33 +246,27 @@ test("closing the kit removes its row", async ({ page }) => {
   await expect(page.locator(".product-list tr.product-edit-row")).toHaveCount(0);
 });
 
-test("at the width the columns are offered, neither is drawn narrower than it holds", async ({ page }) => {
-  // The breakpoint is a measurement, not a taste: the list cannot be drawn under its
-  // min-content width and neither can the kit, and below the width where both fit the
-  // page stacks instead. A column added to either table, or a fourth button in a row,
-  // moves that number — and this is what says so, rather than a reader finding the
-  // remove button behind a horizontal scrollbar nobody notices.
+test("at 1440px neither the list nor a kit under its row scrolls sideways", async ({ page }) => {
+  // A column added to either table, or a fourth button in a row, would push the
+  // buttons behind a horizontal scrollbar nobody notices; this is what says so.
   await open(page, { width: 1440, height: 900 });
   await page.click('.product-list tbody tr:nth-child(4) button[data-act="assemble"]');
   const m = await page.evaluate(() => {
     const table = document.querySelector(".product-table");
     const kit = document.querySelector("form.assemble");
     return {
-      layout: getComputedStyle(document.querySelector(".product-cols")).display,
       list: table.scrollWidth - table.clientWidth,
       kit: kit.scrollWidth - kit.clientWidth,
     };
   });
-  expect(m.layout).toBe("flex"); // the two columns really are in force at this width
   expect(m.list).toBeLessThanOrEqual(1);
   expect(m.kit).toBeLessThanOrEqual(1);
 });
 
 test("every list on the catalogue page has its form beside it", async ({ page }) => {
   await open(page);
-  // Three pairs on this page: the products and the panel that edits them, the
-  // relations and the pair being related, the maintainers and the one being added.
-  // The products' panel is empty until a row is opened, so it is not counted here.
+  // The pairs on this page below the catalogue's own cards: the relations and the pair
+  // being related, the maintainers and the one being added.
   const pairs = await page.evaluate(() => [...document.querySelectorAll(".cat-cols")]
     .map((c) => {
       const main = c.querySelector(".cat-main");
