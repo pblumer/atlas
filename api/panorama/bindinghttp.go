@@ -72,7 +72,7 @@ func (s *Service) HandleSetBinding(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, known := allowedOn[payload.Key]; !known {
 		httpapi.Error(w, http.StatusBadRequest, fmt.Sprintf(
-			"unknown Atlas binding key %q; contract version %d defines %s",
+			"unknown atlas binding key %q; contract version %d defines %s",
 			payload.Key, BindingContractVersion, strings.Join(BindingKeys(), ", ")))
 		return
 	}
@@ -173,7 +173,7 @@ func (s *Service) HandleBindingCandidates(w http.ResponseWriter, r *http.Request
 	key := r.URL.Query().Get("key")
 	if _, known := allowedOn[key]; !known {
 		httpapi.Error(w, http.StatusBadRequest, fmt.Sprintf(
-			"unknown Atlas binding key %q; contract version %d defines %s",
+			"unknown atlas binding key %q; contract version %d defines %s",
 			key, BindingContractVersion, strings.Join(BindingKeys(), ", ")))
 		return
 	}

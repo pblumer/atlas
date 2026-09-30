@@ -339,7 +339,7 @@ func checkPath(vocab *Vocabulary, class Class, objName, path, element string) []
 		if mult, known := MultiplicityOf(attr.Multiplicity); known && mult.Collection {
 			return []compiler.Problem{{
 				Element: element, Severity: compiler.SeverityWarning, Rule: RuleDataMemberThroughCollection,
-				Message: fmt.Sprintf("This activity writes %s.%s, and %s.%s is a list. The write sets a member of the list value itself, not of each %s in it — Atlas does not address a list element by index yet.", objName, path, current.Name, seg, next.Name),
+				Message: fmt.Sprintf("This activity writes %s.%s, and %s.%s is a list. The write sets a member of the list value itself, not of each %s in it — atlas does not address a list element by index yet.", objName, path, current.Name, seg, next.Name),
 			}}
 		}
 		current = next

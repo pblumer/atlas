@@ -17,7 +17,7 @@ const XMI = `<?xml version="1.0" encoding="UTF-8"?>
 
 const PREVIEW = {
   format: "xmi",
-  notes: [{ level: "dropped", element: "Payable", message: "Payable is a uml:Interface, which Atlas does not author." }],
+  notes: [{ level: "dropped", element: "Payable", message: "Payable is a uml:Interface, which atlas does not author." }],
   validation: { valid: true, findings: [] },
   preview: { name: "Sales", classes: [{ id: "c1", name: "Order" }], associations: [], stores: [] },
 };

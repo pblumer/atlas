@@ -60,7 +60,7 @@ func runtimeTools() []Tool {
 	return []Tool{
 		{
 			Name:        "atlas_info",
-			Description: "Get Atlas server product and version information.",
+			Description: "Get atlas server product and version information.",
 			InputSchema: noArgs(),
 			Handler: func(c *Client, _ map[string]any) (string, error) {
 				return asText(c.get("/api/v1/info"))
@@ -68,8 +68,8 @@ func runtimeTools() []Tool {
 		},
 		{
 			Name: "atlas_deploy",
-			Description: "Deploy a BPMN 2.0 XML process definition to Atlas. The model is " +
-				"compiled and validated; only elements Atlas can execute are accepted. " +
+			Description: "Deploy a BPMN 2.0 XML process definition to atlas. The model is " +
+				"compiled and validated; only elements atlas can execute are accepted. " +
 				"Returns the assigned definition key, process id, and version.",
 			InputSchema: map[string]any{
 				"type": "object",
@@ -724,10 +724,10 @@ func runtimeTools() []Tool {
 			Description: "The Workers view — who is doing the engine's out-of-process work, and what is waiting. " +
 				"Returns {types, workers, breakers}. Each 'types' row is a job type with its 'parked' queue depth, " +
 				"'inFlight' count (leased to a worker right now), 'incidents', and 'servedInProcess' — true when " +
-				"Atlas works that type itself, in which case no external worker can lease it. Each 'workers' row " +
+				"atlas works that type itself, in which case no external worker can lease it. Each 'workers' row " +
 				"is a worker seen since this server started: the 'types' it pulls, how many it holds 'inFlight', " +
 				"and its 'pulled' / 'completed' / 'failed' counts with 'lastSeen'. " +
-				"CHECK 'breakers' FIRST when a queue is not moving: each row is a target whose jobs Atlas is " +
+				"CHECK 'breakers' FIRST when a queue is not moving: each row is a target whose jobs atlas is " +
 				"deliberately holding back because it kept failing (ADR-0340), with 'connector' (the Worker the " +
 				"model names), 'jobType', 'state' (\"open\" or \"probing\"), 'trippedAt', 'reason' (what it last " +
 				"failed with), 'probeAt' (when the next single job goes through to test it) and 'refused'. That " +

@@ -34,10 +34,13 @@ codebase is only an environment-variable prefix and is never the mark.
 sentence.** Write `atlas` in labels, headings and sentences (`Welcome to atlas`,
 `diese atlas-Instanz`), and `Atlas` only where it opens a sentence, or a heading
 or label that starts with the name (`Atlas keeps running.`, `Atlas bindings`).
-The Console's visible texts, including the handbook, follow this rule. Code
-comments, identifiers, values a program reads (such as `product` in
-`/api/v1/info`), messages the server returns, the ADRs, the developer docs and
-the examples under `examples/` were deliberately left as they are.
+The Console's visible texts, including the handbook, follow this rule, and so
+do the messages the server returns (errors, refusals, notes, the OpenAPI and MCP
+descriptions, the command-line help) and the mails and forms of the built-in
+system processes. Code comments, identifiers, values a program reads (such as
+`product` in `/api/v1/info`, a `vendor` field, an HTTP header or the user
+agent), the ADRs, the developer docs and the examples under `examples/` were
+deliberately left as they are.
 
 **The card is set in English.** It is read wherever the repository link is
 pasted, so the copy stays in English even where the surrounding docs are not.

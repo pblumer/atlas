@@ -599,7 +599,7 @@ func registerScope(
 		// parallel — which would run every activity at once, not what the model says — it is
 		// refused at deploy until the sequential driver lands.
 		if ah.Ordering == "Sequential" {
-			return fmt.Errorf("compiler: ad-hoc subprocess %q uses ordering=\"Sequential\", which Atlas can't execute yet "+
+			return fmt.Errorf("compiler: ad-hoc subprocess %q uses ordering=\"Sequential\", which atlas can't execute yet "+
 				"(only the default parallel ordering, where every entry activity is activated at once, is supported)", ah.Id)
 		}
 		d := AdHocDetail{
@@ -864,7 +864,7 @@ func registerScope(
 		{"complexGateway", c.ComplexGateways},
 	} {
 		if len(u.nodes) > 0 {
-			return fmt.Errorf("compiler: element %q is a <%s>, which Atlas can't execute yet "+
+			return fmt.Errorf("compiler: element %q is a <%s>, which atlas can't execute yet "+
 				"(supported: start/end events, tasks (undefined/manual pass-through, service, script, "+
 				"business rule, user), embedded and ad-hoc subprocesses, exclusive/parallel/inclusive gateways, and timer/message intermediate events)", u.nodes[0].Id, u.label)
 		}

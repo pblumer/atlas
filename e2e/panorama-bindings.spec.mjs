@@ -128,7 +128,7 @@ const contextDocument = {
     },
   ],
   limits: [
-    { limit: "not Atlas's memory", reason: "Both stores are external and retained on their own terms." },
+    { limit: "not atlas's memory", reason: "Both stores are external and retained on their own terms." },
     { limit: "a query, not a copy", reason: "Nothing here is stored or cached." },
     { limit: "only what a store can identify", reason: "Atlas's metrics carry no per-element labels by design." },
   ],
@@ -560,7 +560,7 @@ test("looks up history on demand and says which store answered", async ({ page }
 
   // And what the surface cannot do travels with the answer.
   const limits = panel.locator(".panorama-ctx-limits");
-  await expect(limits).toContainText("not Atlas's memory");
+  await expect(limits).toContainText("not atlas's memory");
   await expect(limits).toContainText("a query, not a copy");
   await expect(panel).toContainText("Nothing here is stored");
 });
