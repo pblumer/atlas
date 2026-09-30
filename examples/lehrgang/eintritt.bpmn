@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             id="defs_lg_eintritt" targetNamespace="http://atlas/examples">
+
+  <process id="lg-eintritt" name="Mitarbeitereintritt" isExecutable="true">
+    <documentation>Führt einen Mitarbeitereintritt von der Meldung bis zum bestätigten ersten Tag. Der Leitfall des Lehrgangs: an EINEM Prozess hängen alle sechs Referenzmodule.
+
+Startvariablen (Formular lg-eintritt-start): name, personalnummer, rolle ("entwicklung" | "vertrieb" | "produktion" | "verwaltung"), standort, eintrittsdatum.
+Ergebnisvariablen: ausstattung {laptop, software, adGruppen, zutritt}, kontoId, zutrittskarte, willkommen.
+
+Ein Schritt ist bewusst KEIN Mockup: "Konto anlegen" ist ein Job vom Typ konto-anlegen, den ein eigener Worker über die Job-API bedient (Modul "Eigener Worker"). Scheitert er wiederholt, parkt der Job einen Incident (Modul "Überwachen"). Alle Artefakte tragen das Präfix lg- und werden gemeinsam publiziert.</documentation>
+
+    <startEvent id="start" name="Eintritt gemeldet">
+      <documentation>Startet, sobald die Eintrittsmeldung abgeschickt wird. Das Start-Formular ist der Datenvertrag: rolle steuert die Ausstattung, personalnummer benennt das anzulegende Konto.</documentation>
+      <extensionElements>
+        <zeebe:formDefinition formId="lg-eintritt-start"/>
+      </extensionElements>
+      <outgoing>f_start_ausstattung</outgoing>
+    </startEvent>
+
+    <businessRuleTask id="ausstattung" name="Ausstattung &amp; Zugriffe">
+      <documentation>Bestimmt aus der Rolle, welcher Laptop, welche Software, welche AD-Gruppen und welcher Zutritt vorgesehen sind. Eine DMN-Tabelle statt eines Gateway-Gestrüpps: die Regel ändert sich häufiger als der Ablauf, und HR/IT kann sie ohne Modelländerung pflegen. Ergebnis ist der Kontext {laptop, software, adGruppen, zutritt} in der Variablen ausstattung.</documentation>
+      <extensionElements>
+        <zeebe:calledDecision decisionId="lg-ausstattung" resultVariable="ausstattung"/>
+        <zeebe:ioMapping>
+          <zeebe:input source="=rolle" target="rolle"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+      <incoming>f_start_ausstattung</incoming>
+      <outgoing>f_ausstattung_konto</outgoing>
+    </businessRuleTask>
+
+    <serviceTask id="konto" name="Konto anlegen">
+      <documentation>Der eine Schritt, der KEIN Mockup ist: ein Job vom Typ konto-anlegen. Die Engine parkt ihn, bis ein eigener Worker ihn über die Job-API least, ein Konto für personalnummer mit den AD-Gruppen aus der Ausstattung anlegt und den Job abschliesst. retries="2": nach zwei erfolglosen Versuchen (fail mit retries 0) parkt der Job einen Incident — der Einstieg ins Modul "Überwachen". Idempotenz liegt beim Worker: derselbe Job-Key darf kein zweites Konto anlegen.</documentation>
+      <extensionElements>
+        <zeebe:taskDefinition type="konto-anlegen" retries="2"/>
+        <zeebe:ioMapping>
+          <zeebe:input source="=personalnummer" target="personalnummer"/>
+          <zeebe:input source="=name" target="name"/>
+          <zeebe:input source="=ausstattung.adGruppen" target="adGruppen"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+      <incoming>f_ausstattung_konto</incoming>
+      <outgoing>f_konto_zutritt</outgoing>
+    </serviceTask>
+
+    <serviceTask id="zutrittskarte" name="Zutrittskarte bestellen">
+      <documentation>Bestellt die Zutrittskarte gemäss ausstattung.zutritt. Läuft im Mockup-Modus: die Engine simuliert das Kartensystem. Für den Produktivbetrieb wird hier ein REST-Worker gebunden — das Modell ändert sich dabei nur an diesem einen Element.</documentation>
+      <extensionElements>
+        <atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S"
+          resultExpression="={ karte: ausstattung.zutritt }"
+          resultVariable="zutrittskarte"/>
+      </extensionElements>
+      <incoming>f_konto_zutritt</incoming>
+      <outgoing>f_zutritt_willkommen</outgoing>
+    </serviceTask>
+
+    <serviceTask id="willkommen" name="Willkommenspaket senden">
+      <documentation>Schickt das Willkommenspaket an die neue Person. Ebenfalls ein Mockup, damit die Applikation end-to-end läuft, bevor eine einzige echte Anbindung existiert (ADR-0120).</documentation>
+      <extensionElements>
+        <atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S"
+          resultExpression="={ paket: &quot;Willkommensbox&quot;, an: name }"
+          resultVariable="willkommen"/>
+      </extensionElements>
+      <incoming>f_zutritt_willkommen</incoming>
+      <outgoing>f_willkommen_arbeitsplatz</outgoing>
+    </serviceTask>
+
+    <userTask id="arbeitsplatz" name="Arbeitsplatz vorbereiten">
+      <documentation>Menschliche Aufgabe für die IT/den Buddy: Laptop, Software und Zutritt gemäss der Ausstattung einrichten und bestätigen. Die Ausstattung steht in den Instanzvariablen, sichtbar in der Aufgabe.</documentation>
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="it"/>
+        <zeebe:formDefinition formId="lg-arbeitsplatz"/>
+      </extensionElements>
+      <incoming>f_willkommen_arbeitsplatz</incoming>
+      <outgoing>f_arbeitsplatz_bestaetigung</outgoing>
+    </userTask>
+
+    <boundaryEvent id="erinnerung_timer" name="nach 2 Tagen" attachedToRef="arbeitsplatz" cancelActivity="false">
+      <documentation>Nicht unterbrechend: die Erinnerung läuft neben der offenen Aufgabe her, statt sie abzubrechen. Ein Arbeitsplatz, der nicht rechtzeitig steht, soll nachgehakt, nicht verworfen werden.</documentation>
+      <outgoing>f_erinnerung</outgoing>
+      <timerEventDefinition>
+        <timeDuration>P2D</timeDuration>
+      </timerEventDefinition>
+    </boundaryEvent>
+
+    <serviceTask id="erinnerung" name="Erinnerung senden">
+      <documentation>Erinnert die IT an den noch offenen Arbeitsplatz. Mockup; im Betrieb ein Mail-Worker.</documentation>
+      <extensionElements>
+        <atlas:mockupConnector minDuration="PT1S" maxDuration="PT2S"
+          resultExpression="={ kanal: &quot;E-Mail&quot;, betreff: &quot;Arbeitsplatz noch offen&quot; }"
+          resultVariable="erinnerungGesendet"/>
+      </extensionElements>
+      <incoming>f_erinnerung</incoming>
+      <outgoing>f_erinnerung_ende</outgoing>
+    </serviceTask>
+
+    <userTask id="bestaetigung" name="Ersten Tag bestätigen">
+      <documentation>Abschluss durch HR/die Führungskraft: bestätigen, dass die Person begonnen hat und Arbeitsplatz und Zugriffe stimmen.</documentation>
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="hr"/>
+        <zeebe:formDefinition formId="lg-bestaetigung"/>
+      </extensionElements>
+      <incoming>f_arbeitsplatz_bestaetigung</incoming>
+      <outgoing>f_bestaetigung_ende</outgoing>
+    </userTask>
+
+    <endEvent id="ende" name="Eingetreten">
+      <incoming>f_bestaetigung_ende</incoming>
+    </endEvent>
+
+    <endEvent id="ende_erinnert" name="Erinnert">
+      <incoming>f_erinnerung_ende</incoming>
+    </endEvent>
+
+    <sequenceFlow id="f_start_ausstattung" sourceRef="start" targetRef="ausstattung"/>
+    <sequenceFlow id="f_ausstattung_konto" sourceRef="ausstattung" targetRef="konto"/>
+    <sequenceFlow id="f_konto_zutritt" sourceRef="konto" targetRef="zutrittskarte"/>
+    <sequenceFlow id="f_zutritt_willkommen" sourceRef="zutrittskarte" targetRef="willkommen"/>
+    <sequenceFlow id="f_willkommen_arbeitsplatz" sourceRef="willkommen" targetRef="arbeitsplatz"/>
+    <sequenceFlow id="f_arbeitsplatz_bestaetigung" sourceRef="arbeitsplatz" targetRef="bestaetigung"/>
+    <sequenceFlow id="f_bestaetigung_ende" sourceRef="bestaetigung" targetRef="ende"/>
+    <sequenceFlow id="f_erinnerung" sourceRef="erinnerung_timer" targetRef="erinnerung"/>
+    <sequenceFlow id="f_erinnerung_ende" sourceRef="erinnerung" targetRef="ende_erinnert"/>
+  </process>
+</definitions>

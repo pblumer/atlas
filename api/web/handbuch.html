@@ -388,6 +388,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <h4 data-l="de">Prozess-Developer</h4><h4 data-l="en">Process developer</h4>
     <a href="#rolle"><span data-l="de">Die Rolle</span><span data-l="en">The role</span></a>
     <a href="#werkstatt"><span data-l="de">Werkstatt: eine Applikation</span><span data-l="en">Workshop: an application</span></a>
+    <a href="#leitfall"><span data-l="de">Leitfall: alle Module</span><span data-l="en">Guiding case: all modules</span></a>
     <h4 data-l="de">Nachschlagen</h4><h4 data-l="en">Reference</h4>
     <a href="#glossar"><span data-l="de">Glossar</span><span data-l="en">Glossary</span></a>
     <a href="#ressourcen"><span data-l="de">Ressourcen</span><span data-l="en">Resources</span></a>
@@ -2168,12 +2169,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <!-- ==================== EXAMPLES ==================== -->
     <section id="beispiele">
       <h2 data-l="de">Beispiele</h2><h2 data-l="en">Examples</h2>
-      <p class="lead" data-l="de">Hier stehen <span data-count="examples">38</span> fertige Szenarien aus dem
+      <p class="lead" data-l="de">Hier stehen <span data-count="examples">39</span> fertige Szenarien aus dem
         atlas-Repository, vollständig beschrieben – <b>fachlich</b> (wofür ist das gut, wer hat etwas davon) und <b>technisch</b>
         (wie ist es gebaut, welche Variablen, welche Fallstricke). Jedes lässt sich mit einem Klick in deine eigene
         Instanz installieren, im Modeler öffnen und zu deinem Prozess umbauen. Vom Dreizeiler bis zur Applikation aus
         zwei Prozessen; vom Einzelunternehmen bis zum Konzernverzeichnis mit 50 000 Konten.</p>
-      <p class="lead" data-l="en">Here are <span data-count="examples">38</span> finished scenarios from the atlas
+      <p class="lead" data-l="en">Here are <span data-count="examples">39</span> finished scenarios from the atlas
         repository, described in full – <b>in business terms</b> (what it is good for, who benefits) and <b>technically</b> (how it is
         built, which variables, which traps). Each one installs into your own instance in one click, opens in the
         Modeler, and can be rebuilt into your process. From a three-liner to an application of two processes; from a
@@ -3234,6 +3235,39 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <a href="#werkstatt">Workshop: building a small application</a>. There it is <i>built</i> in ten steps –
             with the reasoning behind every decision, the subprocess in detail, and the data contract most call
             activities fail on. If this example interests you, the workshop is the right place, not this card.</p>
+        </details>
+      </div>
+
+      <div class="bsp" id="bsp-lehrgang">
+        <h4><span class="rz-emoji" aria-hidden="true">🎓</span>
+          <span data-l="de">Mitarbeitereintritt – der Leitfall des Lehrgangs</span><span data-l="en">Employee onboarding – the course's guiding case</span></h4>
+        <p class="bsp-tags">
+          <span class="tag" data-l="de">braucht einen Worker</span><span class="tag" data-l="en">needs a worker</span>
+          <span class="tag">DMN</span>
+          <span class="tag" data-l="de">eigener Worker</span><span class="tag" data-l="en">your own worker</span>
+          <span class="tag">Mockup</span>
+          <span class="tag" data-l="de">Boundary-Timer</span><span class="tag" data-l="en">boundary timer</span>
+          <span class="tag">examples/lehrgang/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Eine neue Person tritt ein. Aus der <b>Rolle</b> folgt die Ausstattung – Laptop, Software, Zutritt und die AD-Gruppen; ein <b>Konto</b> wird angelegt, Karte und Willkommenspaket gehen raus, die IT richtet den Arbeitsplatz ein, HR bestätigt den ersten Tag. Ein alltäglicher Fall, der jede Abteilung berührt – und genau deshalb der Leitfall, an dem der Lehrgang alle sechs Referenzmodule durchspielt.</p>
+            <p data-l="en">A new hire joins. Their <b>role</b> settles the equipment – laptop, software, access and the AD groups; an <b>account</b> is created, card and welcome package go out, IT sets up the workspace, HR confirms the first day. An everyday case that touches every department – and exactly why it is the guiding case the course runs all six reference modules on.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Eine <b>DMN-Entscheidung</b> bildet die Rolle auf einen Kontext {laptop, software, adGruppen, zutritt} ab. «Konto anlegen» ist bewusst <b>kein Mockup</b>, sondern ein <b>Job über die Job-API</b>: die Engine parkt ihn, bis ein <b>eigener Worker</b> ihn least – und nach zwei Fehlversuchen parkt er einen <b>Incident</b>. Die übrigen Umsysteme sind Mockups, dazu ein <b>nicht unterbrechender</b> Boundary-Timer und zwei Human-Tasks. So hängen Modellieren, Testen, Ausliefern, Weiterentwickeln, der eigene Worker und das Überwachen an einem einzigen Prozess.</p>
+            <p data-l="en">A <b>DMN decision</b> maps the role to a context {laptop, software, adGruppen, zutritt}. "Create account" is deliberately <b>not a mockup</b> but a <b>job over the Job API</b>: the engine parks it until <b>your own worker</b> leases it – and after two failed attempts it parks an <b>incident</b>. The other foreign systems are mockups, plus a <b>non-interrupting</b> boundary timer and two human tasks. So modelling, testing, delivering, evolving, your own worker and monitoring all hang on one process.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="bsp-more">
+          <summary><span data-l="de">Wo es ausführlich steht</span><span data-l="en">Where it is spelled out</span></summary>
+          <p data-l="de">Dieser Fall ist der <a href="#leitfall">Leitfall des Lehrgangs</a>: dort wird er Modul für Modul durchgegangen – mit dem Startpunkt und dem Szenario je Modul, von der ersten Modellierung bis zum Incident im Betrieb.</p>
+          <p data-l="en">This case is the <a href="#leitfall">course's guiding case</a>: there it is walked through module by module – with the starting point and scenario for each, from the first model to the incident in operations.</p>
         </details>
       </div>
 
@@ -9263,6 +9297,102 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
       </ul>
     </section>
 
+    <!-- ==================== GUIDING CASE ==================== -->
+    <section id="leitfall">
+      <h2 data-l="de">Leitfall: ein Prozess durch alle Module</h2>
+      <h2 data-l="en">Guiding case: one process through every module</h2>
+      <p class="lead" data-l="de">Die Werkstatt hat <i>eine</i> Applikation gebaut. Dieser Leitfall nimmt <i>einen</i>
+        alltäglichen Prozess – einen Mitarbeitereintritt – und zeigt, wie sich dieselbe Applikation durch alle sechs
+        Referenzmodule zieht: vom ersten Modell bis zum Incident im Betrieb.</p>
+      <p class="lead" data-l="en">The workshop built <i>one</i> application. This guiding case takes <i>one</i> everyday
+        process – an employee onboarding – and shows how the same application runs through all six reference modules:
+        from the first model to the incident in operations.</p>
+
+      <p data-l="de">Der Fall liegt fertig unter <a href="#bsp-lehrgang">Beispiele → Mitarbeitereintritt</a> (Quelle:
+        <code>examples/lehrgang/</code>) und lässt sich mit einem Knopf installieren. Ein Schritt ist bewusst kein
+        Mockup: «Konto anlegen» ist ein Job über die Job-API, den ein <b>eigener Worker</b> bedient – der rote Faden,
+        an dem die Betriebsmodule hängen.</p>
+      <p data-l="en">The case is ready under <a href="#bsp-lehrgang">Examples → Employee onboarding</a> (source:
+        <code>examples/lehrgang/</code>) and installs with a button. One step is deliberately not a mockup: "create
+        account" is a job over the Job API served by <b>your own worker</b> – the thread the operational modules hang
+        on.</p>
+
+      <pre><code>Start "Eintritt gemeldet"  →  [DMN] Ausstattung &amp; Zugriffe  →  [Job] Konto anlegen (eigener Worker)
+   →  [Mockup] Zutrittskarte  →  [Mockup] Willkommenspaket  →  🧑 Arbeitsplatz vorbereiten  →  🧑 Ersten Tag bestätigen  →  Ende</code></pre>
+
+      <h3 data-l="de">1 · Modellieren</h3><h3 data-l="en">1 · Modelling</h3>
+      <p data-l="de"><b>Startpunkt:</b> ein leeres Diagramm. <b>Szenario:</b> das Modell nachbauen – das Start-Formular
+        als Datenvertrag, die DMN als Business-Rule-Task, der Job-Task, zwei Human-Tasks mit Gruppen (<code>it</code>,
+        <code>hr</code>) und der nicht unterbrechende Boundary-Timer. Warum eine DMN und kein Gateway-Gestrüpp: die
+        Ausstattungsregel ändert sich häufiger als der Ablauf. Mehr unter <a href="#designen">Modellieren &amp;
+        Design</a>.</p>
+      <p data-l="en"><b>Starting point:</b> an empty diagram. <b>Scenario:</b> rebuild the model – the start form as the
+        data contract, the DMN as a business rule task, the job task, two human tasks with groups (<code>it</code>,
+        <code>hr</code>) and the non-interrupting boundary timer. Why a DMN and not a tangle of gateways: the equipment
+        rule changes more often than the flow. More under <a href="#designen">Modelling &amp; design</a>.</p>
+
+      <h3 data-l="de">2 · Testen</h3><h3 data-l="en">2 · Testing</h3>
+      <p data-l="de"><b>Startpunkt:</b> das deployte Modell im Playground. <b>Szenario:</b> ein Datensatz über
+        <code>rolle</code> (entwicklung, vertrieb, produktion, verwaltung, ein Unbekannter); Stubs beantworten den Job
+        und die Aufgaben, damit jeder Fall zu Ende läuft. Eine Regel je Fall –
+        <code>when rolle = "vertrieb" then ausstattung.laptop = "ThinkPad X1"</code> – und die Erwartungen
+        <i>no incidents</i> und <i>every case finishes</i>. Den Auffangfall einmal <b>rot</b> sehen: die Regel
+        absichtlich falsch schreiben. Mehr unter <a href="#szenarien">Testen als Code</a>.</p>
+      <p data-l="en"><b>Starting point:</b> the deployed model in the Playground. <b>Scenario:</b> a dataset over
+        <code>rolle</code> (entwicklung, vertrieb, produktion, verwaltung, and an unknown one); stubs answer the job
+        and the tasks so every case finishes. A rule per case –
+        <code>when rolle = "vertrieb" then ausstattung.laptop = "ThinkPad X1"</code> – with the expectations
+        <i>no incidents</i> and <i>every case finishes</i>. Watch the catch-all go <b>red</b> once by writing the rule
+        wrong on purpose. More under <a href="#szenarien">Testing as code</a>.</p>
+
+      <h3 data-l="de">3 · Ausliefern</h3><h3 data-l="en">3 · Delivering</h3>
+      <p data-l="de"><b>Startpunkt:</b> die geprüfte Applikation. <b>Szenario:</b> die Applikation <code>lehrgang</code>
+        publizieren, ein Release festhalten und mit einem Deploy-Token an ein zweites Ziel (Abnahme) promoten – die
+        Promotion wird über den Namen zugeordnet. Mehr unter <a href="#ausliefern">Ausliefern</a>.</p>
+      <p data-l="en"><b>Starting point:</b> the tested application. <b>Scenario:</b> publish the <code>lehrgang</code>
+        application, record a release, and promote it to a second target (staging) with a deploy token – the promotion
+        is matched by name. More under <a href="#ausliefern">Delivering</a>.</p>
+
+      <h3 data-l="de">4 · Weiterentwickeln</h3><h3 data-l="en">4 · Evolving</h3>
+      <p data-l="de"><b>Startpunkt:</b> eine laufende Instanz auf Version 1. <b>Szenario:</b> eine neue Rolle einführen
+        – eine Zeile in <code>ausstattung.dmn</code> –, neu deployen (Version 2) und die laufende Instanz migrieren.
+        Laufende Instanzen bleiben auf ihrer Version, bis man sie migriert. Mehr unter
+        <a href="#weiterentwickeln">Weiterentwickeln</a>.</p>
+      <p data-l="en"><b>Starting point:</b> a running instance on version 1. <b>Scenario:</b> introduce a new role – one
+        row in <code>ausstattung.dmn</code> –, redeploy (version 2) and migrate the running instance. Running instances
+        stay on their version until migrated. More under <a href="#weiterentwickeln">Evolving</a>.</p>
+
+      <h3 data-l="de">5 · Eigener Worker</h3><h3 data-l="en">5 · Your own worker</h3>
+      <p data-l="de"><b>Startpunkt:</b> der geparkte Job <code>konto-anlegen</code>. <b>Szenario:</b> einen Worker
+        schreiben, der den Job aktiviert, das Konto anlegt und ihn abschliesst – idempotent über den Job-Key, denn die
+        Zustellung ist mindestens einmal. Der Code steht sprachneutral (HTTP) und als Go in
+        <code>examples/lehrgang/README.md</code>. Mehr unter <a href="#eigener-worker">Eigener Worker</a>.</p>
+      <p data-l="en"><b>Starting point:</b> the parked <code>konto-anlegen</code> job. <b>Scenario:</b> write a worker
+        that activates the job, creates the account and completes it – idempotent by the job key, because delivery is
+        at-least-once. The code is in <code>examples/lehrgang/README.md</code>, language-neutral (HTTP) and as Go. More
+        under <a href="#eigener-worker">Your own worker</a>.</p>
+
+      <h3 data-l="de">6 · Überwachen</h3><h3 data-l="en">6 · Monitoring</h3>
+      <p data-l="de"><b>Startpunkt:</b> ein Worker, der scheitert. <b>Szenario:</b> den Job scheitern lassen – ein
+        <code>fail</code> mit <code>retries: 1</code> parkt ihn neu, ein <code>fail</code> mit <code>retries: 0</code>
+        parkt einen <b>Incident</b>. Ihn über <code>GET /api/v1/incidents</code> lesen, in <code>/metrics</code> an
+        <code>atlas_open_incidents</code> zählen und auflösen. Mehr unter <a href="#ueberwachen">Überwachen</a>.</p>
+      <p data-l="en"><b>Starting point:</b> a worker that fails. <b>Scenario:</b> let the job fail – a <code>fail</code>
+        with <code>retries: 1</code> re-parks it, a <code>fail</code> with <code>retries: 0</code> parks an
+        <b>incident</b>. Read it over <code>GET /api/v1/incidents</code>, count it as <code>atlas_open_incidents</code>
+        in <code>/metrics</code>, and resolve it. More under <a href="#ueberwachen">Monitoring</a>.</p>
+
+      <div class="note">
+        <div class="lbl" data-l="de">So folgst du mit</div><div class="lbl" data-l="en">How to follow along</div>
+        <p data-l="de">Installiere den Fall über die <a href="#bsp-lehrgang">Beispiel-Karte</a>, dann nimm dir die
+          Module der Reihe nach vor. Jedes verweist auf sein Referenzkapitel, in dem die Mechanik vollständig steht;
+          hier stehen nur der Startpunkt und das Szenario je Modul.</p>
+        <p data-l="en">Install the case from the <a href="#bsp-lehrgang">example card</a>, then take the modules in
+          order. Each links to its reference chapter, where the mechanics are spelled out in full; here are only the
+          starting point and the scenario for each module.</p>
+      </div>
+    </section>
+
     <!-- ==================== GLOSSARY ==================== -->
     <section id="glossar">
       <h2 data-l="de">Glossar</h2><h2 data-l="en">Glossary</h2>
@@ -9310,7 +9440,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
              <a class="applink" href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a></p>
         </div>
         <div class="card"><b data-l="de">Beispiele</b><b data-l="en">Examples</b>
-          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">38</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">38</span> examples in the handbook</span></a> ·
+          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">39</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">39</span> examples in the handbook</span></a> ·
              <a class="applink" href="#runbooks"><span data-l="de">Worker in Betrieb nehmen</span><span data-l="en">Putting a worker into service</span></a></p>
           <p class="lead" data-l="de">Die Dateien dazu liegen unter <code>examples/</code> im Repository.</p>
           <p class="lead" data-l="en">Their files live under <code>examples/</code> in the repository.</p>

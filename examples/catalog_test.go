@@ -143,6 +143,10 @@ var catalogSources = []catalogSource{
 	{ID: "pruefung", App: "Beispiel: Prüfung", Dir: "pruefung"},
 	{ID: "reisebuchung", App: "Beispiel: Reisebuchung", Dir: "reisebuchung", Main: "reisebuchung/reisebuchung.bpmn"},
 	{ID: "bewerbermanagement", App: "Bewerbermanagement", Dir: "bewerbermanagement", Main: "bewerbermanagement/bewerbung.bpmn"},
+	// The course's guiding case (docs/planning/lehrgang-prozessentwicklung.md, phase 3):
+	// one onboarding process the six reference modules all hang on. No Start button — the
+	// konto-anlegen job parks for a worker, which a bare start would leave hanging.
+	{ID: "lehrgang", App: "Lehrgang: Mitarbeitereintritt", Dir: "lehrgang", Main: "lehrgang/eintritt.bpmn"},
 	{
 		ID: "pruefe-datensaetze", App: "Beispiel: Datensätze prüfen",
 		Files: []string{"pruefe-datensaetze.bpmn", "pruefe-datensaetze.dmn",

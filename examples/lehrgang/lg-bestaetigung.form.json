@@ -1,0 +1,21 @@
+{
+  "type": "default",
+  "id": "lg-bestaetigung",
+  "components": [
+    {
+      "type": "text",
+      "text": "# 🎉 Ersten Tag bestätigen\n\nDer letzte Schritt: bestätigen, dass die neue Person am Eintrittsdatum tatsächlich angefangen hat und der Arbeitsplatz passt. Danach ist der Eintritt abgeschlossen."
+    },
+    {
+      "key": "ersterTagOk",
+      "type": "checkbox",
+      "label": "Person hat begonnen, Arbeitsplatz und Zugriffe sind in Ordnung",
+      "validate": { "required": true }
+    },
+    {
+      "key": "feedback",
+      "type": "textfield",
+      "label": "Rückmeldung zum Eintritt (optional)"
+    }
+  ]
+}
