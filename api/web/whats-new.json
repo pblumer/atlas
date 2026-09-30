@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-28",
+  "generatedAt": "2026-09-30",
   "entries": [
     {
       "id": "the-handbook-has-a-guiding-case-that-runs-one-process-throug",
@@ -25,8 +25,8 @@
     },
     {
       "id": "the-console-shows-how-atlas-is-built",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.8.0",
+      "date": "2026-09-30",
       "category": "Added",
       "title": {
         "en": "See how atlas is built, in one picture",
@@ -38,7 +38,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-8-0"
       },
       "tags": [
         "Console",
@@ -55,8 +55,8 @@
     },
     {
       "id": "a-held-per-position-right-can-be-changed-and-reads-as-held",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.8.0",
+      "date": "2026-09-30",
       "category": "Added",
       "title": {
         "en": "A held right can be changed in its own process",
@@ -84,8 +84,8 @@
     },
     {
       "id": "a-product-s-lifecycle-can-run-as-one-instance-per-order-posi",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.8.0",
+      "date": "2026-09-30",
       "category": "Added",
       "title": {
         "en": "One process instance for the whole life of a right",
@@ -113,8 +113,8 @@
     },
     {
       "id": "the-live-view-migrates-the-running-instances-of-the-version-",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.8.0",
+      "date": "2026-09-30",
       "category": "Added",
       "title": {
         "en": "Migrate a version's running instances straight from its live view",
@@ -155,8 +155,8 @@
     },
     {
       "id": "the-handbook-teaches-monitoring-an-atlas-installation",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.8.0",
+      "date": "2026-09-30",
       "category": "Added",
       "title": {
         "en": "Monitor an Atlas installation — the handbook now shows how",
@@ -184,8 +184,8 @@
     },
     {
       "id": "the-handbook-teaches-writing-your-own-worker-over-the-job-ap",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.8.0",
+      "date": "2026-09-30",
       "category": "Added",
       "title": {
         "en": "Write your own worker — the handbook now shows the Job API",
@@ -213,8 +213,8 @@
     },
     {
       "id": "converting-a-product-to-a-lifecycle-process-no-longer-lets-i",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.8.0",
+      "date": "2026-09-30",
       "category": "Added",
       "title": {
         "en": "Old processes stay as long as an order still needs them",
@@ -242,8 +242,8 @@
     },
     {
       "id": "a-product-can-be-one-process-for-its-whole-lifecycle-entered",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.8.0",
+      "date": "2026-09-30",
       "category": "Added",
       "title": {
         "en": "One process per product: provisioning, change and deprovisioning in one model",
@@ -271,8 +271,8 @@
     },
     {
       "id": "the-handbook-teaches-evolving-a-deployed-process",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.8.0",
+      "date": "2026-09-30",
       "category": "Added",
       "title": {
         "en": "Evolve a running process — the handbook now shows how",
@@ -300,8 +300,8 @@
     },
     {
       "id": "the-handbook-teaches-delivering-a-process-to-another-server",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.8.0",
+      "date": "2026-09-30",
       "category": "Added",
       "title": {
         "en": "Ship a process to another server — the handbook now shows how",
@@ -329,8 +329,8 @@
     },
     {
       "id": "a-process-still-frozen-on-an-old-decision-version-says-so",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.8.0",
+      "date": "2026-09-30",
       "category": "Added",
       "title": {
         "en": "A process still on an old decision version says so",
@@ -342,7 +342,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-8-0"
       },
       "tags": [
         "Decisions",
