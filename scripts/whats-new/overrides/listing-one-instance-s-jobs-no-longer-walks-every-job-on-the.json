@@ -1,0 +1,11 @@
+{
+  "tags": ["Operations", "Engine"],
+  "title": {
+    "en": "Looking up one instance's jobs no longer stalls the engine",
+    "de": "Die Jobs einer Instanz nachzuschlagen hält die Engine nicht mehr an"
+  },
+  "summary": {
+    "en": "Completing an incident by hand, or asking the MCP tool for an instance's jobs, used to read every waiting job on the server just to find the few of that one instance — and the engine did nothing else while it read. On a server with a large backlog that was a noticeable stall. The lookup now reads only the instance itself, and does so without holding the engine up. The answer is the same jobs as before.",
+    "de": "Einen Incident von Hand abzuschliessen oder die Jobs einer Instanz über das MCP-Werkzeug abzufragen, las bisher jeden wartenden Job des Servers, um die wenigen dieser einen Instanz zu finden — und die Engine tat währenddessen nichts anderes. Auf einem Server mit grossem Rückstand war das ein spürbarer Stillstand. Die Abfrage liest jetzt nur noch die Instanz selbst und hält die Engine dabei nicht mehr auf. Das Ergebnis sind dieselben Jobs wie zuvor."
+  }
+}

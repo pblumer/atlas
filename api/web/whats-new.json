@@ -47,6 +47,28 @@
       ]
     },
     {
+      "id": "listing-one-instance-s-jobs-no-longer-walks-every-job-on-the",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Looking up one instance's jobs no longer stalls the engine",
+        "de": "Die Jobs einer Instanz nachzuschlagen hält die Engine nicht mehr an"
+      },
+      "summary": {
+        "en": "Completing an incident by hand, or asking the MCP tool for an instance's jobs, used to read every waiting job on the server just to find the few of that one instance — and the engine did nothing else while it read. On a server with a large backlog that was a noticeable stall. The lookup now reads only the instance itself, and does so without holding the engine up. The answer is the same jobs as before.",
+        "de": "Einen Incident von Hand abzuschliessen oder die Jobs einer Instanz über das MCP-Werkzeug abzufragen, las bisher jeden wartenden Job des Servers, um die wenigen dieser einen Instanz zu finden — und die Engine tat währenddessen nichts anderes. Auf einem Server mit grossem Rückstand war das ein spürbarer Stillstand. Die Abfrage liest jetzt nur noch die Instanz selbst und hält die Engine dabei nicht mehr auf. Das Ergebnis sind dieselben Jobs wie zuvor."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations",
+        "Engine"
+      ]
+    },
+    {
       "id": "the-console-shows-how-atlas-is-built",
       "version": "0.8.0",
       "date": "2026-09-30",
@@ -319,35 +341,6 @@
           "de": "Operations öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "the-handbook-teaches-delivering-a-process-to-another-server",
-      "version": "0.8.0",
-      "date": "2026-09-30",
-      "category": "Added",
-      "title": {
-        "en": "Ship a process to another server — the handbook now shows how",
-        "de": "Einen Prozess auf einen anderen Server bringen – das Handbuch zeigt jetzt, wie"
-      },
-      "summary": {
-        "en": "Atlas could already publish an application as a versioned release, register another server as a deployment target with a deploy token, promote the frozen release to it, and move a source tree between servers — and the handbook stopped at running a process on the one server that modelled it. A new chapter explains all of it, in German and English: publish versus deploy, why a release is immutable, the token a target needs and where its secret lives, what travels on a promotion and what stays behind, and why an environment differs by its configuration rather than by the model. Every command in it was run against two instances first.",
-        "de": "Atlas konnte längst eine Applikation als versionierten Release publizieren, einen anderen Server mit einem Deploy-Token als Ziel eintragen, den eingefrorenen Release dorthin promoten und einen Quellbaum zwischen Servern bewegen – und das Handbuch endete beim Ausführen auf dem einen Server, der modelliert hat. Ein neues Kapitel erklärt das vollständig, auf Deutsch und Englisch: publizieren gegenüber deployen, warum ein Release unveränderlich ist, welchen Token ein Ziel braucht und wo dessen Secret liegt, was bei einer Promotion mitreist und was zurückbleibt, und warum sich eine Umgebung über ihre Konfiguration unterscheidet, nicht über das Modell. Jeder Befehl darin wurde zuerst an zwei Instanzen ausgeführt."
-      },
-      "link": {
-        "label": "ADR-0128",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0128-process-applications.md"
-      },
-      "tags": [
-        "Handbook",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]
