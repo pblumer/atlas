@@ -2,6 +2,28 @@
   "generatedAt": "2026-09-28",
   "entries": [
     {
+      "id": "the-handbook-has-a-guiding-case-that-runs-one-process-throug",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "One case through all six modules — the course's guiding process",
+        "de": "Ein Fall durch alle sechs Module – der Leitfall des Lehrgangs"
+      },
+      "summary": {
+        "en": "The reference chapters each teach one thing; a course needs one case they all apply to. `examples/lehrgang/` — an employee onboarding — is that case, and a new capstone chapter walks it module by module: modelling, testing, delivering, evolving, writing your own worker, and monitoring, each with a starting point and a scenario. A DMN maps the new hire's role to laptop, software, access and AD groups; one step is deliberately not a mockup but a job over the Job API, so it parks for your own worker and, on repeated failure, raises an incident. Install it from its card in the Beispiele chapter — every call was run against a live instance first.",
+        "de": "Die Referenzkapitel lehren je eine Sache; ein Lehrgang braucht einen Fall, auf den alle zutreffen. `examples/lehrgang/` – ein Mitarbeitereintritt – ist dieser Fall, und ein neues Abschlusskapitel geht ihn Modul für Modul durch: Modellieren, Testen, Ausliefern, Weiterentwickeln, ein eigener Worker und Überwachen, je mit Startpunkt und Szenario. Eine DMN bildet die Rolle auf Laptop, Software, Zugriffe und AD-Gruppen ab; ein Schritt ist bewusst kein Mockup, sondern ein Job über die Job-API – er parkt für den eigenen Worker und wirft bei wiederholtem Fehlschlag einen Incident. Installierbar über die Karte im Kapitel «Beispiele» – jeder Aufruf wurde zuerst an einer laufenden Instanz ausgeführt."
+      },
+      "link": {
+        "label": "examples/lehrgang/",
+        "url": "https://github.com/pblumer/atlas/tree/main/examples/lehrgang"
+      },
+      "tags": [
+        "Handbook",
+        "Examples"
+      ]
+    },
+    {
       "id": "a-held-per-position-right-can-be-changed-and-reads-as-held",
       "version": "Unreleased",
       "date": null,
@@ -323,35 +345,6 @@
       },
       "tags": [
         "Handbook",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-business-rule-task-can-be-bound-to-one-deployed-version-of",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Bind a task to one version of a decision",
-        "de": "Einen Task an eine Version einer Decision binden"
-      },
-      "summary": {
-        "en": "A business rule task can now be bound to one deployed version of its decision. The binding field in the Modeler offers three choices: the newest version each time the task runs, a deployed version you pick from a list, or the model deployed together with the process. A chosen version is checked when the process is deployed: if it is not deployed, the deploy is refused and says which versions exist, and the task never runs a different version. A version a task is bound to cannot be deleted. The choice is an Atlas setting; a Camunda engine ignores it and runs the newest version, and the panel says so.",
-        "de": "Ein Business Rule Task lässt sich jetzt an eine bestimmte deployte Version seiner Decision binden. Das Feld „Binding“ im Modeler bietet drei Möglichkeiten: die neueste Version bei jeder Ausführung, eine deployte Version aus einer Liste oder das Modell, das mit dem Prozess deployt wurde. Eine gewählte Version wird beim Deploy des Prozesses geprüft: Ist sie nicht deployt, wird der Deploy abgewiesen und nennt die vorhandenen Versionen, und der Task führt nie eine andere Version aus. Eine Version, an die ein Task gebunden ist, lässt sich nicht löschen. Die Wahl ist eine Atlas-Einstellung; eine Camunda-Engine ignoriert sie und führt die neueste Version aus, was das Feld auch sagt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Decisions",
         "Modeler"
       ],
       "try": {

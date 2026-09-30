@@ -14,6 +14,15 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The handbook has a guiding case that runs one process through all six modules.**
+  `examples/lehrgang/` — an employee onboarding — is a new reference application, and a
+  capstone chapter walks it module by module: modelling, testing, delivering, evolving,
+  writing your own worker, and monitoring, each with a starting point and a scenario. A
+  DMN maps the role to the equipment and access; one step is deliberately not a mockup but
+  a job over the Job API, so it parks for your own worker and, on repeated failure, raises
+  an incident. It installs from its card in the Beispiele chapter, and every call was run
+  against a live instance first.
+
 - **A held per-position right can be changed, and reads as held.** For a product whose
   lifecycle runs one instance per position (ADR-0428), `POST
   /api/v1/orders/{id}/lines/{item}/change` delivers the product's `change` message to
