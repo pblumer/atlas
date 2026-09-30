@@ -12,6 +12,17 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **The handbook has a guiding case that runs one process through all six modules.**
+  `examples/lehrgang/` — an employee onboarding — is a new reference application, and a
+  capstone chapter walks it module by module: modelling, testing, delivering, evolving,
+  writing your own worker, and monitoring, each with a starting point and a scenario. A
+  DMN maps the role to the equipment and access; one step is deliberately not a mockup but
+  a job over the Job API, so it parks for your own worker and, on repeated failure, raises
+  an incident. It installs from its card in the Beispiele chapter, and every call was run
+  against a live instance first.
+
 ## [0.8.0] — 2026-09-30
 
 **This release is about running Atlas on Windows.** 0.7.0 shipped a Windows binary that no

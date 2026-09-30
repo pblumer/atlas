@@ -1034,6 +1034,175 @@
       ]
     },
     {
+      "id": "lehrgang",
+      "path": "lehrgang",
+      "app": "Lehrgang: Mitarbeitereintritt",
+      "processes": [
+        {
+          "processId": "lg-eintritt",
+          "name": "Mitarbeitereintritt",
+          "file": "lehrgang/eintritt.bpmn",
+          "layout": true,
+          "xml": "\u003c?xml version=\"1.0\" encoding=\"UTF-8\"?\u003e\n\u003cdefinitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n             xmlns:zeebe=\"http://camunda.org/schema/zeebe/1.0\"\n             xmlns:atlas=\"http://atlas/schema/1.0\"\n             id=\"defs_lg_eintritt\" targetNamespace=\"http://atlas/examples\"\u003e\n\n  \u003cprocess id=\"lg-eintritt\" name=\"Mitarbeitereintritt\" isExecutable=\"true\"\u003e\n    \u003cdocumentation\u003eFührt einen Mitarbeitereintritt von der Meldung bis zum bestätigten ersten Tag. Der Leitfall des Lehrgangs: an EINEM Prozess hängen alle sechs Referenzmodule.\n\nStartvariablen (Formular lg-eintritt-start): name, personalnummer, rolle (\"entwicklung\" | \"vertrieb\" | \"produktion\" | \"verwaltung\"), standort, eintrittsdatum.\nErgebnisvariablen: ausstattung {laptop, software, adGruppen, zutritt}, kontoId, zutrittskarte, willkommen.\n\nEin Schritt ist bewusst KEIN Mockup: \"Konto anlegen\" ist ein Job vom Typ konto-anlegen, den ein eigener Worker über die Job-API bedient (Modul \"Eigener Worker\"). Scheitert er wiederholt, parkt der Job einen Incident (Modul \"Überwachen\"). Alle Artefakte tragen das Präfix lg- und werden gemeinsam publiziert.\u003c/documentation\u003e\n\n    \u003cstartEvent id=\"start\" name=\"Eintritt gemeldet\"\u003e\n      \u003cdocumentation\u003eStartet, sobald die Eintrittsmeldung abgeschickt wird. Das Start-Formular ist der Datenvertrag: rolle steuert die Ausstattung, personalnummer benennt das anzulegende Konto.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:formDefinition formId=\"lg-eintritt-start\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003coutgoing\u003ef_start_ausstattung\u003c/outgoing\u003e\n    \u003c/startEvent\u003e\n\n    \u003cbusinessRuleTask id=\"ausstattung\" name=\"Ausstattung \u0026amp; Zugriffe\"\u003e\n      \u003cdocumentation\u003eBestimmt aus der Rolle, welcher Laptop, welche Software, welche AD-Gruppen und welcher Zutritt vorgesehen sind. Eine DMN-Tabelle statt eines Gateway-Gestrüpps: die Regel ändert sich häufiger als der Ablauf, und HR/IT kann sie ohne Modelländerung pflegen. Ergebnis ist der Kontext {laptop, software, adGruppen, zutritt} in der Variablen ausstattung.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:calledDecision decisionId=\"lg-ausstattung\" resultVariable=\"ausstattung\"/\u003e\n        \u003czeebe:ioMapping\u003e\n          \u003czeebe:input source=\"=rolle\" target=\"rolle\"/\u003e\n        \u003c/zeebe:ioMapping\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_start_ausstattung\u003c/incoming\u003e\n      \u003coutgoing\u003ef_ausstattung_konto\u003c/outgoing\u003e\n    \u003c/businessRuleTask\u003e\n\n    \u003cserviceTask id=\"konto\" name=\"Konto anlegen\"\u003e\n      \u003cdocumentation\u003eDer eine Schritt, der KEIN Mockup ist: ein Job vom Typ konto-anlegen. Die Engine parkt ihn, bis ein eigener Worker ihn über die Job-API least, ein Konto für personalnummer mit den AD-Gruppen aus der Ausstattung anlegt und den Job abschliesst. retries=\"2\": nach zwei erfolglosen Versuchen (fail mit retries 0) parkt der Job einen Incident — der Einstieg ins Modul \"Überwachen\". Idempotenz liegt beim Worker: derselbe Job-Key darf kein zweites Konto anlegen.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:taskDefinition type=\"konto-anlegen\" retries=\"2\"/\u003e\n        \u003czeebe:ioMapping\u003e\n          \u003czeebe:input source=\"=personalnummer\" target=\"personalnummer\"/\u003e\n          \u003czeebe:input source=\"=name\" target=\"name\"/\u003e\n          \u003czeebe:input source=\"=ausstattung.adGruppen\" target=\"adGruppen\"/\u003e\n        \u003c/zeebe:ioMapping\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_ausstattung_konto\u003c/incoming\u003e\n      \u003coutgoing\u003ef_konto_zutritt\u003c/outgoing\u003e\n    \u003c/serviceTask\u003e\n\n    \u003cserviceTask id=\"zutrittskarte\" name=\"Zutrittskarte bestellen\"\u003e\n      \u003cdocumentation\u003eBestellt die Zutrittskarte gemäss ausstattung.zutritt. Läuft im Mockup-Modus: die Engine simuliert das Kartensystem. Für den Produktivbetrieb wird hier ein REST-Worker gebunden — das Modell ändert sich dabei nur an diesem einen Element.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003catlas:mockupConnector minDuration=\"PT1S\" maxDuration=\"PT2S\"\n          resultExpression=\"={ karte: ausstattung.zutritt }\"\n          resultVariable=\"zutrittskarte\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_konto_zutritt\u003c/incoming\u003e\n      \u003coutgoing\u003ef_zutritt_willkommen\u003c/outgoing\u003e\n    \u003c/serviceTask\u003e\n\n    \u003cserviceTask id=\"willkommen\" name=\"Willkommenspaket senden\"\u003e\n      \u003cdocumentation\u003eSchickt das Willkommenspaket an die neue Person. Ebenfalls ein Mockup, damit die Applikation end-to-end läuft, bevor eine einzige echte Anbindung existiert (ADR-0120).\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003catlas:mockupConnector minDuration=\"PT1S\" maxDuration=\"PT2S\"\n          resultExpression=\"={ paket: \u0026quot;Willkommensbox\u0026quot;, an: name }\"\n          resultVariable=\"willkommen\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_zutritt_willkommen\u003c/incoming\u003e\n      \u003coutgoing\u003ef_willkommen_arbeitsplatz\u003c/outgoing\u003e\n    \u003c/serviceTask\u003e\n\n    \u003cuserTask id=\"arbeitsplatz\" name=\"Arbeitsplatz vorbereiten\"\u003e\n      \u003cdocumentation\u003eMenschliche Aufgabe für die IT/den Buddy: Laptop, Software und Zutritt gemäss der Ausstattung einrichten und bestätigen. Die Ausstattung steht in den Instanzvariablen, sichtbar in der Aufgabe.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:assignmentDefinition candidateGroups=\"it\"/\u003e\n        \u003czeebe:formDefinition formId=\"lg-arbeitsplatz\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_willkommen_arbeitsplatz\u003c/incoming\u003e\n      \u003coutgoing\u003ef_arbeitsplatz_bestaetigung\u003c/outgoing\u003e\n    \u003c/userTask\u003e\n\n    \u003cboundaryEvent id=\"erinnerung_timer\" name=\"nach 2 Tagen\" attachedToRef=\"arbeitsplatz\" cancelActivity=\"false\"\u003e\n      \u003cdocumentation\u003eNicht unterbrechend: die Erinnerung läuft neben der offenen Aufgabe her, statt sie abzubrechen. Ein Arbeitsplatz, der nicht rechtzeitig steht, soll nachgehakt, nicht verworfen werden.\u003c/documentation\u003e\n      \u003coutgoing\u003ef_erinnerung\u003c/outgoing\u003e\n      \u003ctimerEventDefinition\u003e\n        \u003ctimeDuration\u003eP2D\u003c/timeDuration\u003e\n      \u003c/timerEventDefinition\u003e\n    \u003c/boundaryEvent\u003e\n\n    \u003cserviceTask id=\"erinnerung\" name=\"Erinnerung senden\"\u003e\n      \u003cdocumentation\u003eErinnert die IT an den noch offenen Arbeitsplatz. Mockup; im Betrieb ein Mail-Worker.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003catlas:mockupConnector minDuration=\"PT1S\" maxDuration=\"PT2S\"\n          resultExpression=\"={ kanal: \u0026quot;E-Mail\u0026quot;, betreff: \u0026quot;Arbeitsplatz noch offen\u0026quot; }\"\n          resultVariable=\"erinnerungGesendet\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_erinnerung\u003c/incoming\u003e\n      \u003coutgoing\u003ef_erinnerung_ende\u003c/outgoing\u003e\n    \u003c/serviceTask\u003e\n\n    \u003cuserTask id=\"bestaetigung\" name=\"Ersten Tag bestätigen\"\u003e\n      \u003cdocumentation\u003eAbschluss durch HR/die Führungskraft: bestätigen, dass die Person begonnen hat und Arbeitsplatz und Zugriffe stimmen.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:assignmentDefinition candidateGroups=\"hr\"/\u003e\n        \u003czeebe:formDefinition formId=\"lg-bestaetigung\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_arbeitsplatz_bestaetigung\u003c/incoming\u003e\n      \u003coutgoing\u003ef_bestaetigung_ende\u003c/outgoing\u003e\n    \u003c/userTask\u003e\n\n    \u003cendEvent id=\"ende\" name=\"Eingetreten\"\u003e\n      \u003cincoming\u003ef_bestaetigung_ende\u003c/incoming\u003e\n    \u003c/endEvent\u003e\n\n    \u003cendEvent id=\"ende_erinnert\" name=\"Erinnert\"\u003e\n      \u003cincoming\u003ef_erinnerung_ende\u003c/incoming\u003e\n    \u003c/endEvent\u003e\n\n    \u003csequenceFlow id=\"f_start_ausstattung\" sourceRef=\"start\" targetRef=\"ausstattung\"/\u003e\n    \u003csequenceFlow id=\"f_ausstattung_konto\" sourceRef=\"ausstattung\" targetRef=\"konto\"/\u003e\n    \u003csequenceFlow id=\"f_konto_zutritt\" sourceRef=\"konto\" targetRef=\"zutrittskarte\"/\u003e\n    \u003csequenceFlow id=\"f_zutritt_willkommen\" sourceRef=\"zutrittskarte\" targetRef=\"willkommen\"/\u003e\n    \u003csequenceFlow id=\"f_willkommen_arbeitsplatz\" sourceRef=\"willkommen\" targetRef=\"arbeitsplatz\"/\u003e\n    \u003csequenceFlow id=\"f_arbeitsplatz_bestaetigung\" sourceRef=\"arbeitsplatz\" targetRef=\"bestaetigung\"/\u003e\n    \u003csequenceFlow id=\"f_bestaetigung_ende\" sourceRef=\"bestaetigung\" targetRef=\"ende\"/\u003e\n    \u003csequenceFlow id=\"f_erinnerung\" sourceRef=\"erinnerung_timer\" targetRef=\"erinnerung\"/\u003e\n    \u003csequenceFlow id=\"f_erinnerung_ende\" sourceRef=\"erinnerung\" targetRef=\"ende_erinnert\"/\u003e\n  \u003c/process\u003e\n\u003c/definitions\u003e"
+        }
+      ],
+      "decisions": [
+        {
+          "name": "lg-ausstattung",
+          "handle": "lg-ausstattung",
+          "file": "lehrgang/ausstattung.dmn",
+          "xml": "\u003c?xml version=\"1.0\" encoding=\"UTF-8\"?\u003e\n\u003c!--\n  Ausstattung \u0026 Zugriffe — die Ausstattungsregeln der Lehrgangs-Applikation\n  \"Mitarbeitereintritt\" als DMN-Entscheidung.\n\n  Eingabe:  rolle (\"entwicklung\" | \"vertrieb\" | \"produktion\" | \"verwaltung\")\n  Ausgaben: laptop        (Text)\n            software      (Liste der Softwarepakete)\n            adGruppen     (Liste der AD-Gruppen — der Auftrag an den Worker\n                           \"Konto anlegen\")\n            zutritt       (Text — welche Zutrittskarte bestellt wird)\n\n  hitPolicy FIRST — je eine Regel pro Rolle, die letzte Regel ist der Auffangfall\n  und trifft immer, damit jeder Eintritt eine Ausstattung erhält.\n\n  id und name der Entscheidung sind identisch (\"lg-ausstattung\"); der\n  Business-Rule-Task verweist mit decisionId=\"lg-ausstattung\" darauf. Eine\n  Entscheidung wird über ihren NAMEN oder den Bezeichner ihrer \u003cvariable\u003e\n  adressiert, nicht über die Element-id (ADR-0385).\n\n  Die Ausgabe `adGruppen` ist der interessante Teil: eine FEEL-Liste, die der\n  eigene Worker \"Konto anlegen\" (Job-Typ konto-anlegen) verarbeitet. Eine neue\n  Rolle einzuführen heisst: eine Zeile hier ändern — nicht das Prozessmodell.\n--\u003e\n\u003cdefinitions xmlns=\"https://www.omg.org/spec/DMN/20191111/MODEL/\"\n             id=\"defs_lg_ausstattung\" name=\"lg-ausstattung\" namespace=\"http://atlas/dmn\"\u003e\n  \u003cinputData id=\"id_rolle\" name=\"rolle\"/\u003e\n  \u003cdecision id=\"lg-ausstattung\" name=\"lg-ausstattung\"\u003e\n    \u003cinformationRequirement\u003e\u003crequiredInput href=\"#id_rolle\"/\u003e\u003c/informationRequirement\u003e\n    \u003cdecisionTable id=\"dt_ausstattung\" hitPolicy=\"FIRST\"\u003e\n      \u003cinput id=\"in_rolle\" label=\"rolle\"\u003e\n        \u003cinputExpression id=\"ie_rolle\" typeRef=\"string\"\u003e\u003ctext\u003erolle\u003c/text\u003e\u003c/inputExpression\u003e\n      \u003c/input\u003e\n      \u003coutput id=\"out_laptop\" label=\"laptop\" name=\"laptop\" typeRef=\"string\"/\u003e\n      \u003coutput id=\"out_software\" label=\"software\" name=\"software\"/\u003e\n      \u003coutput id=\"out_adgruppen\" label=\"adGruppen\" name=\"adGruppen\"/\u003e\n      \u003coutput id=\"out_zutritt\" label=\"zutritt\" name=\"zutritt\" typeRef=\"string\"/\u003e\n      \u003crule id=\"r_entwicklung\"\u003e\n        \u003cdescription\u003eEntwicklung: Entwickler-Notebook, Toolchain, Zutritt bis Serverraum.\u003c/description\u003e\n        \u003cinputEntry id=\"i_ent_r\"\u003e\u003ctext\u003e\"entwicklung\"\u003c/text\u003e\u003c/inputEntry\u003e\n        \u003coutputEntry id=\"o_ent_laptop\"\u003e\u003ctext\u003e\"MacBook Pro 16\"\u003c/text\u003e\u003c/outputEntry\u003e\n        \u003coutputEntry id=\"o_ent_sw\"\u003e\u003ctext\u003e[\"IDE\", \"Docker\", \"VPN\"]\u003c/text\u003e\u003c/outputEntry\u003e\n        \u003coutputEntry id=\"o_ent_ad\"\u003e\u003ctext\u003e[\"dev\", \"git\", \"vpn\"]\u003c/text\u003e\u003c/outputEntry\u003e\n        \u003coutputEntry id=\"o_ent_zut\"\u003e\u003ctext\u003e\"Gebäude + Serverraum\"\u003c/text\u003e\u003c/outputEntry\u003e\n      \u003c/rule\u003e\n      \u003crule id=\"r_vertrieb\"\u003e\n        \u003cdescription\u003eVertrieb: mobiles Notebook, CRM, Zutritt Gebäude.\u003c/description\u003e\n        \u003cinputEntry id=\"i_ver_r\"\u003e\u003ctext\u003e\"vertrieb\"\u003c/text\u003e\u003c/inputEntry\u003e\n        \u003coutputEntry id=\"o_ver_laptop\"\u003e\u003ctext\u003e\"ThinkPad X1\"\u003c/text\u003e\u003c/outputEntry\u003e\n        \u003coutputEntry id=\"o_ver_sw\"\u003e\u003ctext\u003e[\"CRM\", \"Office\", \"VPN\"]\u003c/text\u003e\u003c/outputEntry\u003e\n        \u003coutputEntry id=\"o_ver_ad\"\u003e\u003ctext\u003e[\"crm\", \"vpn\"]\u003c/text\u003e\u003c/outputEntry\u003e\n        \u003coutputEntry id=\"o_ver_zut\"\u003e\u003ctext\u003e\"Gebäude\"\u003c/text\u003e\u003c/outputEntry\u003e\n      \u003c/rule\u003e\n      \u003crule id=\"r_produktion\"\u003e\n        \u003cdescription\u003eProduktion: robustes Notebook, MES, Zutritt bis Halle.\u003c/description\u003e\n        \u003cinputEntry id=\"i_pro_r\"\u003e\u003ctext\u003e\"produktion\"\u003c/text\u003e\u003c/inputEntry\u003e\n        \u003coutputEntry id=\"o_pro_laptop\"\u003e\u003ctext\u003e\"Standard-Notebook\"\u003c/text\u003e\u003c/outputEntry\u003e\n        \u003coutputEntry id=\"o_pro_sw\"\u003e\u003ctext\u003e[\"MES\", \"Office\"]\u003c/text\u003e\u003c/outputEntry\u003e\n        \u003coutputEntry id=\"o_pro_ad\"\u003e\u003ctext\u003e[\"mes\"]\u003c/text\u003e\u003c/outputEntry\u003e\n        \u003coutputEntry id=\"o_pro_zut\"\u003e\u003ctext\u003e\"Gebäude + Halle\"\u003c/text\u003e\u003c/outputEntry\u003e\n      \u003c/rule\u003e\n      \u003crule id=\"r_verwaltung\"\u003e\n        \u003cdescription\u003eVerwaltung: Büro-Notebook, ERP, Zutritt Gebäude.\u003c/description\u003e\n        \u003cinputEntry id=\"i_verw_r\"\u003e\u003ctext\u003e\"verwaltung\"\u003c/text\u003e\u003c/inputEntry\u003e\n        \u003coutputEntry id=\"o_verw_laptop\"\u003e\u003ctext\u003e\"Standard-Notebook\"\u003c/text\u003e\u003c/outputEntry\u003e\n        \u003coutputEntry id=\"o_verw_sw\"\u003e\u003ctext\u003e[\"Office\", \"ERP\"]\u003c/text\u003e\u003c/outputEntry\u003e\n        \u003coutputEntry id=\"o_verw_ad\"\u003e\u003ctext\u003e[\"erp\"]\u003c/text\u003e\u003c/outputEntry\u003e\n        \u003coutputEntry id=\"o_verw_zut\"\u003e\u003ctext\u003e\"Gebäude\"\u003c/text\u003e\u003c/outputEntry\u003e\n      \u003c/rule\u003e\n      \u003crule id=\"r_auffang\"\u003e\n        \u003cdescription\u003eAuffangfall: Grundausstattung, damit jeder Eintritt eine Antwort erhält.\u003c/description\u003e\n        \u003cinputEntry id=\"i_auf_r\"\u003e\u003ctext\u003e-\u003c/text\u003e\u003c/inputEntry\u003e\n        \u003coutputEntry id=\"o_auf_laptop\"\u003e\u003ctext\u003e\"Standard-Notebook\"\u003c/text\u003e\u003c/outputEntry\u003e\n        \u003coutputEntry id=\"o_auf_sw\"\u003e\u003ctext\u003e[\"Office\"]\u003c/text\u003e\u003c/outputEntry\u003e\n        \u003coutputEntry id=\"o_auf_ad\"\u003e\u003ctext\u003e[\"basis\"]\u003c/text\u003e\u003c/outputEntry\u003e\n        \u003coutputEntry id=\"o_auf_zut\"\u003e\u003ctext\u003e\"Gebäude\"\u003c/text\u003e\u003c/outputEntry\u003e\n      \u003c/rule\u003e\n    \u003c/decisionTable\u003e\n  \u003c/decision\u003e\n\u003c/definitions\u003e"
+        }
+      ],
+      "forms": [
+        {
+          "id": "lg-arbeitsplatz",
+          "name": "lg-arbeitsplatz",
+          "file": "lehrgang/lg-arbeitsplatz.form.json",
+          "schema": {
+            "type": "default",
+            "id": "lg-arbeitsplatz",
+            "components": [
+              {
+                "type": "text",
+                "text": "# 🧰 Arbeitsplatz vorbereiten\n\nDie DMN-Entscheidung *Ausstattung \u0026 Zugriffe* hat aus der Rolle bestimmt, was bereitzustellen ist. Laptop, Softwarepakete und Zutritt stehen in den Variablen `ausstattung.laptop`, `ausstattung.software` und `ausstattung.zutritt` der Instanz (in der Aufgabenansicht sichtbar). Bitte den Arbeitsplatz einrichten und hier bestätigen."
+              },
+              {
+                "key": "arbeitsplatzBereit",
+                "type": "checkbox",
+                "label": "Arbeitsplatz ist eingerichtet (Laptop, Software, Zutritt)",
+                "validate": {
+                  "required": true
+                }
+              },
+              {
+                "key": "bemerkung",
+                "type": "textfield",
+                "label": "Bemerkung (optional)"
+              }
+            ]
+          }
+        },
+        {
+          "id": "lg-bestaetigung",
+          "name": "lg-bestaetigung",
+          "file": "lehrgang/lg-bestaetigung.form.json",
+          "schema": {
+            "type": "default",
+            "id": "lg-bestaetigung",
+            "components": [
+              {
+                "type": "text",
+                "text": "# 🎉 Ersten Tag bestätigen\n\nDer letzte Schritt: bestätigen, dass die neue Person am Eintrittsdatum tatsächlich angefangen hat und der Arbeitsplatz passt. Danach ist der Eintritt abgeschlossen."
+              },
+              {
+                "key": "ersterTagOk",
+                "type": "checkbox",
+                "label": "Person hat begonnen, Arbeitsplatz und Zugriffe sind in Ordnung",
+                "validate": {
+                  "required": true
+                }
+              },
+              {
+                "key": "feedback",
+                "type": "textfield",
+                "label": "Rückmeldung zum Eintritt (optional)"
+              }
+            ]
+          }
+        },
+        {
+          "id": "lg-eintritt-start",
+          "name": "lg-eintritt-start",
+          "file": "lehrgang/lg-eintritt-start.form.json",
+          "schema": {
+            "type": "default",
+            "id": "lg-eintritt-start",
+            "components": [
+              {
+                "type": "text",
+                "text": "# 🚪 Eintritt melden\n\nDie Felder dieses Formulars sind der **Datenvertrag** des Prozesses: `rolle` steuert die DMN-Entscheidung *Ausstattung \u0026 Zugriffe*, `personalnummer` ist der Bezeichner, unter dem der Worker *Konto anlegen* das Konto erstellt."
+              },
+              {
+                "key": "name",
+                "type": "textfield",
+                "label": "Name",
+                "validate": {
+                  "required": true
+                }
+              },
+              {
+                "key": "personalnummer",
+                "type": "textfield",
+                "label": "Personalnummer",
+                "description": "Bezeichner für das anzulegende Konto (Idempotenzschlüssel des Worker-Jobs).",
+                "validate": {
+                  "required": true
+                }
+              },
+              {
+                "key": "rolle",
+                "type": "select",
+                "label": "Rolle",
+                "values": [
+                  {
+                    "label": "Entwicklung",
+                    "value": "entwicklung"
+                  },
+                  {
+                    "label": "Vertrieb",
+                    "value": "vertrieb"
+                  },
+                  {
+                    "label": "Produktion",
+                    "value": "produktion"
+                  },
+                  {
+                    "label": "Verwaltung",
+                    "value": "verwaltung"
+                  }
+                ],
+                "validate": {
+                  "required": true
+                }
+              },
+              {
+                "key": "standort",
+                "type": "select",
+                "label": "Standort",
+                "values": [
+                  {
+                    "label": "Zürich",
+                    "value": "zuerich"
+                  },
+                  {
+                    "label": "Bern",
+                    "value": "bern"
+                  },
+                  {
+                    "label": "Remote",
+                    "value": "remote"
+                  }
+                ],
+                "validate": {
+                  "required": true
+                }
+              },
+              {
+                "key": "eintrittsdatum",
+                "type": "textfield",
+                "label": "Eintrittsdatum",
+                "description": "Format JJJJ-MM-TT, z. B. 2026-11-01.",
+                "validate": {
+                  "required": true
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "id": "pruefe-datensaetze",
       "path": "pruefe-datensaetze.bpmn",
       "app": "Beispiel: Datensätze prüfen",
