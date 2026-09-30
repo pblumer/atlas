@@ -3,7 +3,7 @@
 Ein durchgängiges Beispiel für das, was man umgangssprachlich „abhängige
 Formulare" nennt: *ich wähle etwas, und davon hängt ab, was ich als Nächstes
 sehe oder ausfüllen muss.* Der Kniff ist, dass darin **zwei völlig
-verschiedene Dinge** stecken — und Atlas löst sie an zwei verschiedenen Stellen.
+verschiedene Dinge** stecken — und atlas löst sie an zwei verschiedenen Stellen.
 Dieses Beispiel zeigt beide in **einem** Modell.
 
 ## Die zwei Ebenen

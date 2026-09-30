@@ -1,6 +1,6 @@
 # Account-Bestellung (Entra ID) 🧩
 
-Eine Atlas-**Applikation mit öffentlichem Start-Formular**, **DMN-gesteuertem
+Eine atlas-**Applikation mit öffentlichem Start-Formular**, **DMN-gesteuertem
 Kontotyp-Mapping**, menschlicher Freigabe und **Entra-Provisionierung** — plus ein
 **einbettbares HTML+JS-Widget**, das die Bestellung von einer beliebigen Website aus
 startet. Schreibt scharf gegen **contoso.com**, und nur gegen klar benannte
@@ -76,7 +76,7 @@ steht nicht in der Tabelle, damit die **Test-Objekt-Grenze im Modell sichtbar** 
 Datei (kein externes CSS/JS): ein hübsches Bestellformular mit **dynamischem Verhalten
 je Kontotyp** und **Live-UPN-Vorschau**. Zwei Einbett-Wege:
 
-1. **Per `<iframe>`** (kein Serverumbau nötig) — bettet die von Atlas gerenderte
+1. **Per `<iframe>`** (kein Serverumbau nötig) — bettet die von atlas gerenderte
    Public-Form-Seite ein:
    ```html
    <iframe src="https://atlas.example.com/public/forms/DEIN_TOKEN"
@@ -85,7 +85,7 @@ je Kontotyp** und **Live-UPN-Vorschau**. Zwei Einbett-Wege:
    Oder das Widget selbst per iframe (es liest `?atlas=…&token=…` aus der URL).
 
 2. **Direkt auf einer fremden Seite** (das schöne Widget, cross-origin) — dafür muss
-   der Atlas-Server die Origin deiner Seite per CORS erlauben (ADR-0186):
+   der atlas-Server die Origin deiner Seite per CORS erlauben (ADR-0186):
    ```
    atlas serve --public-forms-cors "https://deine-seite.example"
    ```
@@ -94,7 +94,7 @@ je Kontotyp** und **Live-UPN-Vorschau**. Zwei Einbett-Wege:
 Beide Wege posten an `POST /public/forms/{token}/start` (ADR-0029) —
 token-basiert, rate-limited, ohne Login, ohne Cookie.
 
-## Deployen (über die Atlas-MCP-Tools)
+## Deployen (über die atlas-MCP-Tools)
 
 ```
 atlas_create_application     name="Account-Bestellung"                → appId

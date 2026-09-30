@@ -85,8 +85,8 @@
       <extensionElements>
         <atlas:mailConnector connector="mail"
           to="=email"
-          subject="Ihr Atlas-Zugang wurde angelegt"
-          body="=&quot;Hallo &quot; + vorname + &quot; &quot; + nachname + &quot;,\n\nIhr Atlas-Zugang wurde angelegt.\n\nBenutzername: &quot; + benutzername + &quot;\nInitiales Passwort: &quot; + initialpasswort + &quot;\n\nBitte aendern Sie das Passwort nach dem ersten Login.\n\nViele Gruesse\nIhre Benutzerverwaltung&quot;"/>
+          subject="Ihr atlas-Zugang wurde angelegt"
+          body="=&quot;Hallo &quot; + vorname + &quot; &quot; + nachname + &quot;,\n\nIhr atlas-Zugang wurde angelegt.\n\nBenutzername: &quot; + benutzername + &quot;\nInitiales Passwort: &quot; + initialpasswort + &quot;\n\nBitte aendern Sie das Passwort nach dem ersten Login.\n\nViele Gruesse\nIhre Benutzerverwaltung&quot;"/>
       </extensionElements>
       <incoming>f_anlegen_mail</incoming>
       <outgoing>f_zugang_join</outgoing>

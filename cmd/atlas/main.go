@@ -162,7 +162,7 @@ func usage() {
 Usage:
   atlas serve          [flags]      Run the engine, HTTP API, and web UI (default)
   atlas mcp            [flags]      Run the Model Context Protocol adapter on stdio
-  atlas worker         [flags]      Work service-task jobs for a running Atlas, out of process
+  atlas worker         [flags]      Work service-task jobs for a running atlas, out of process
   atlas reset-password [flags] USER Reset a local user's password from the shell
   atlas import-mim     [flags] FILE Convert a MIM/FIM XOML workflow to BPMN 2.0
   atlas check-job-types [flags]     Check a data directory's job-type table for index collisions
@@ -209,11 +209,12 @@ func runServe(args []string) error {
 	// back to plaintext on the port somebody believed they had just secured. Unset
 	// is today's behaviour exactly — plaintext, behind a reverse proxy. Turning this
 	// on removes the cryptographic reason to run that proxy and not the
-	// authorization one: /metrics, /healthz and /readyz stay unauthenticated by
-	// design (ADR-0142), because a kubelet has no credential to offer.
+	// authorization one: /healthz and /readyz stay unauthenticated by design
+	// (ADR-0142), because a kubelet has no credential to offer — /metrics moved
+	// behind the boundary in ADR-0198 and no longer does.
 	tlsCert := fs.String("tls-cert", os.Getenv("ATLAS_TLS_CERT"), "PEM certificate chain to serve --addr with, e.g. /etc/atlas/tls.crt. Set it together with --tls-key to have this server terminate TLS 1.3 itself instead of a reverse proxy doing it (ADR-0191); leave both unset for plaintext. The pair is re-read when either file changes, so a renewal needs no restart. TLS 1.3 only: there is no cipher list to configure and no --tls-min-version (or ATLAS_TLS_CERT)")
 	tlsKey := fs.String("tls-key", os.Getenv("ATLAS_TLS_KEY"), "PEM private key for --tls-cert, e.g. /etc/atlas/tls.key. Both or neither (or ATLAS_TLS_KEY)")
-	tlsCA := fs.String("tls-ca", os.Getenv("ATLAS_TLS_CA"), "PEM bundle of certificate authorities to trust *in addition to* the host's, when this server calls another Atlas — publishing an application to a deployment target, and reading that target's status back (ADR-0129). Point it at your internal CA where the other server's certificate comes from one; without it the host trust store is the only answer, and an internally issued certificate is refused. It never replaces the system roots, it is never a way to skip verification, and it does not touch the REST, mail or Graph workers, whose endpoints are somebody else's (or ATLAS_TLS_CA)")
+	tlsCA := fs.String("tls-ca", os.Getenv("ATLAS_TLS_CA"), "PEM bundle of certificate authorities to trust *in addition to* the host's, when this server calls another atlas — publishing an application to a deployment target, and reading that target's status back (ADR-0129). Point it at your internal CA where the other server's certificate comes from one; without it the host trust store is the only answer, and an internally issued certificate is refused. It never replaces the system roots, it is never a way to skip verification, and it does not touch the REST, mail or Graph workers, whose endpoints are somebody else's (or ATLAS_TLS_CA)")
 	dataDir := fs.String("data-dir", "atlas-data", "directory for the write-ahead log and state store")
 	shutdownTimeout := fs.Duration("shutdown-timeout", 10*time.Second, "grace period for in-flight requests on shutdown")
 	docs := fs.Bool("docs", true, "serve the OpenAPI spec (/api/v1/openapi.json) and the Scalar API explorer (/api/docs); pass --docs=false to disable")
@@ -235,7 +236,7 @@ func runServe(args []string) error {
 	// rather than by being refused (ADR-0200).
 	oauthRegistration := fs.Bool("oauth-dynamic-registration", os.Getenv("ATLAS_OAUTH_DYNAMIC_REGISTRATION") == "1", "let an OAuth client register itself (RFC 7591), so a hosted MCP worker can be connected with nothing but this server's URL; off by default, because it lets anyone who can reach this port create a client record and appear on your people's consent screen under a name they chose. Each such client is marked as self-registered on that screen, and the number kept is bounded (ADR-0200). Leave it off and register clients with POST /api/v1/oauth-clients instead (or ATLAS_OAUTH_DYNAMIC_REGISTRATION=1)")
 	publicFormsCORS := fs.String("public-forms-cors", os.Getenv("ATLAS_PUBLIC_FORMS_CORS_ORIGINS"), "comma-separated web origins allowed to embed a public start form cross-origin (ADR-0186); empty (default) blocks cross-origin access, \"*\" allows any origin. Opens only the cookieless /public/forms endpoints, never /api/v1 (or ATLAS_PUBLIC_FORMS_CORS_ORIGINS)")
-	userProvisioning := fs.Bool("user-provisioning", true, "enable the user-provisioning worker for the protected system project's processes (create/set-password/disable Atlas logins); on by default (opt-out) — disable with --user-provisioning=false. It only ever acts for the protected system project's processes, behind their human approval step, so the boundary it reopens stays gated (ADR-0123)")
+	userProvisioning := fs.Bool("user-provisioning", true, "enable the user-provisioning worker for the protected system project's processes (create/set-password/disable atlas logins); on by default (opt-out) — disable with --user-provisioning=false. It only ever acts for the protected system project's processes, behind their human approval step, so the boundary it reopens stays gated (ADR-0123)")
 	vault := fs.Bool("vault", true, "enable the encrypted secret vault; on by default (generates a key at <data-dir>/vault.key unless ATLAS_VAULT_KEY is set), --vault=false to disable (ADR-0070)")
 	powershell := fs.Bool("powershell", true, "run PowerShell script tasks by shelling out to pwsh; on by default, --powershell=false to disable (executes arbitrary interpreter code)")
 	python := fs.Bool("python", true, "run Python script tasks by shelling out to python3; on by default, --python=false to disable (executes arbitrary interpreter code)")
@@ -292,10 +293,10 @@ func runServe(args []string) error {
 	history := fs.String("worker-history", "", "name of a clio worker to append every settled job run to, so a worker's history outlives this process (ADR-0036). The console reads it back under a worker's recent jobs; retention and querying are then your clio's, not another flag here. Off unless given, in which case the console keeps only its in-memory tail")
 	historyScope := fs.String("worker-history-scope", api.HistoryScopeAll, "what --worker-history writes: \"all\" settled jobs, or \"failed\" only. All is what \"how long does a mail send take\" needs and the larger bill; failed is much less volume and still answers most of what a history is asked")
 	superviseConnectors := fs.String("supervise-connector", "", "comma-separated Worker Types this server runs a worker for itself, beyond the ones it supervises by default (e.g. ad,entra). Each named kind gets its own supervised worker — handed this server's token and environment at spawn, like the default ones — and is taken off the engine, so that worker is what leases its jobs. It is the missing half of --offload-connectors, which parks a kind's jobs for a worker somebody else runs: on a server with --auth there is no credential an outside worker could hold, so without this a kind outside the defaults cannot be served at all. An unknown kind is refused at startup rather than ignored")
-	inProcess := fs.Bool("in-process-connectors", false, "run every worker inside the engine, as before ADR-0164. Off by default: "+strings.Join(api.DefaultOffloadedKinds(), ", ")+" run in a worker this server starts and supervises itself, so the loop cannot stall behind them — behind an SMTP handshake above all — and trying Atlas still needs no configuration")
+	inProcess := fs.Bool("in-process-connectors", false, "run every worker inside the engine, as before ADR-0164. Off by default: "+strings.Join(api.DefaultOffloadedKinds(), ", ")+" run in a worker this server starts and supervises itself, so the loop cannot stall behind them — behind an SMTP handshake above all — and trying atlas still needs no configuration")
 	supervise := superviseFlag{}
 	fs.Var(&supervise, "supervise", "run a worker process for these job types and keep it running, as id=type=command; repeat for more workers, and repeat the type=command part for a worker that serves several types (ADR-0157). Off unless given: under systemd or Kubernetes the platform owns process lifecycle")
-	metricsOn := fs.Bool("metrics", true, "serve the Prometheus exposition at /metrics (ADR-0142); pass --metrics=false to disable. It is unauthenticated like /healthz — put a reverse proxy in front of anything exposed beyond the host")
+	metricsOn := fs.Bool("metrics", true, "serve the Prometheus exposition at /metrics (ADR-0142); pass --metrics=false to disable. With --auth on (the default) it sits behind the boundary like every other route: a scraper needs an API token of scope metrics (ADR-0198)")
 	// The read side of the exposition above, and a different server: this is where
 	// somebody else keeps what they scraped. Panorama queries it for a node's recent
 	// history (ADR-0189 P5b-ii) and stores none of the answer.
@@ -869,7 +870,7 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	}
 	if metricsOn {
 		logging.Info(logging.ServerMetrics,
-			"Prometheus metrics enabled (unauthenticated; proxy it if exposed beyond the host)",
+			"Prometheus metrics enabled (with --auth on, a scraper needs an API token of scope metrics; ADR-0198)",
 			slog.String("metrics", base+"/metrics"))
 	}
 	return serveUntil(ctx, shutdownTimeout, listeners...)
@@ -893,7 +894,7 @@ func runMCP(args []string) error {
 // a unit test of the mcp package cannot reach.
 func runMCPOn(args []string, in io.Reader, out io.Writer) error {
 	fs := flag.NewFlagSet("mcp", flag.ExitOnError)
-	server := fs.String("server", "http://localhost:8080", "base URL of the Atlas server to proxy to")
+	server := fs.String("server", "http://localhost:8080", "base URL of the atlas server to proxy to")
 	// The adapter is a per-agent process with one identity for its whole life, so
 	// unlike the HTTP transport — which forwards each request's own caller — it
 	// authenticates with a credential given here. Without one it cannot work against
@@ -1149,7 +1150,7 @@ const exitNothingToServe = api.ExitNothingToServe
 // latency of the work is paid by this process, not by every other request.
 func runWorker(args []string) error {
 	fs := flag.NewFlagSet("worker", flag.ExitOnError)
-	server := fs.String("server", "http://localhost:8080", "base URL of the Atlas server to work for")
+	server := fs.String("server", "http://localhost:8080", "base URL of the atlas server to work for")
 	id := fs.String("id", defaultWorkerID(), "worker id, shown in the Workers view; give each deployment its own")
 	token := fs.String("token", os.Getenv("ATLAS_TOKEN"), "bearer token, when the server requires authentication (or ATLAS_TOKEN)")
 	tlsCA := fs.String("tls-ca", os.Getenv("ATLAS_TLS_CA"), "PEM bundle of certificate authorities to trust *in addition to* the host's, when --server is https and its certificate comes from an internal CA (ADR-0191). Without it the host trust store is the only answer. It is never a way to skip verification: there is none (or ATLAS_TLS_CA)")
@@ -1159,7 +1160,7 @@ func runWorker(args []string) error {
 	once := fs.Bool("once", false, "poll each type once and exit, instead of working until interrupted")
 	handles := handleFlag{}
 	fs.Var(handles, "handle", "a job type and the command that works it, as type=command; repeat for each type")
-	connectors := fs.String("connector", "", "comma-separated built-in Worker Types this worker serves (currently: ad, csv, entra, jira, ldif, mail, mariadb, mssql, postgres, remedy, rest, script, webscrape). The server must be offloading them (it offloads ad, csv, jira, mail, remedy, script and webscrape by default; --in-process-connectors turns that off), or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus, per name, ATLAS_MAIL_<NAME>_PROVIDER with _ENDPOINT, _SENDER and _SECRET — or, in the SMTP-only form, ATLAS_MAIL_<NAME>_ENDPOINT with the optional _USERNAME, _PASSWORD and _FROM. Each SQL kind takes ATLAS_<KIND>_CONNECTORS plus ATLAS_<KIND>_<NAME>_DSN — or, with ATLAS_<KIND>_MOCK=1, no DSN at all: the worker then answers that product's statements from seeded answers in its own memory, so a model that reads or writes a database runs end to end without one, and ATLAS_<KIND>_MOCK_SEED names the JSON file of answers it starts with (a statement nobody seeded fails naming itself rather than answering no rows). entra takes ATLAS_ENTRA_CONNECTORS plus ATLAS_ENTRA_<NAME>_TENANT_ID, _CLIENT_ID and _CLIENT_SECRET, remedy takes ATLAS_REMEDY_CONNECTORS plus ATLAS_REMEDY_<NAME>_ENDPOINT, _USERNAME and _PASSWORD, and jira takes ATLAS_JIRA_CONNECTORS plus ATLAS_JIRA_<NAME>_URL and exactly one credential shape — _EMAIL with _API_TOKEN for Jira Cloud, or _TOKEN alone for a Data Center personal access token, because that shape also decides how an assignee is addressed and which search endpoint is used; ad and ldif need no startup configuration, ad resolving each task's bind-password reference from ATLAS_CONNECTOR_<REF>_TOKEN. Set ATLAS_AD_MOCK=1 to serve Active Directory tasks against a mock directory in this worker's memory instead of a real one — the models stay unchanged, nothing reaches a domain controller, and ATLAS_AD_MOCK_SEED names an LDIF or DSML file of entries it starts with. Point ATLAS_AD_MOCK_VIEW_URL at an Atlas's /api/v1/ad/mock-directory and the worker reports the forest it holds, so it shows up under Operations > Mock directory instead of only in this worker's log. A worker this server supervises is switched from Console > Workers instead, which needs no restart; these variables are for a worker you run yourself, and for what a server does before anyone has used that switch. A worker Atlas supervises is handed all of that at spawn from the worker store, so it needs none of it set by hand")
+	connectors := fs.String("connector", "", "comma-separated built-in Worker Types this worker serves (currently: ad, csv, entra, jira, ldif, mail, mariadb, mssql, postgres, remedy, rest, script, webscrape). The server must be offloading them (it offloads ad, csv, jira, mail, remedy, script and webscrape by default; --in-process-connectors turns that off), or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus, per name, ATLAS_MAIL_<NAME>_PROVIDER with _ENDPOINT, _SENDER and _SECRET — or, in the SMTP-only form, ATLAS_MAIL_<NAME>_ENDPOINT with the optional _USERNAME, _PASSWORD and _FROM. Each SQL kind takes ATLAS_<KIND>_CONNECTORS plus ATLAS_<KIND>_<NAME>_DSN — or, with ATLAS_<KIND>_MOCK=1, no DSN at all: the worker then answers that product's statements from seeded answers in its own memory, so a model that reads or writes a database runs end to end without one, and ATLAS_<KIND>_MOCK_SEED names the JSON file of answers it starts with (a statement nobody seeded fails naming itself rather than answering no rows). entra takes ATLAS_ENTRA_CONNECTORS plus ATLAS_ENTRA_<NAME>_TENANT_ID, _CLIENT_ID and _CLIENT_SECRET, remedy takes ATLAS_REMEDY_CONNECTORS plus ATLAS_REMEDY_<NAME>_ENDPOINT, _USERNAME and _PASSWORD, and jira takes ATLAS_JIRA_CONNECTORS plus ATLAS_JIRA_<NAME>_URL and exactly one credential shape — _EMAIL with _API_TOKEN for Jira Cloud, or _TOKEN alone for a Data Center personal access token, because that shape also decides how an assignee is addressed and which search endpoint is used; ad and ldif need no startup configuration, ad resolving each task's bind-password reference from ATLAS_CONNECTOR_<REF>_TOKEN. Set ATLAS_AD_MOCK=1 to serve Active Directory tasks against a mock directory in this worker's memory instead of a real one — the models stay unchanged, nothing reaches a domain controller, and ATLAS_AD_MOCK_SEED names an LDIF or DSML file of entries it starts with. Point ATLAS_AD_MOCK_VIEW_URL at an atlas's /api/v1/ad/mock-directory and the worker reports the forest it holds, so it shows up under Operations > Mock directory instead of only in this worker's log. A worker this server supervises is switched from Console > Workers instead, which needs no restart; these variables are for a worker you run yourself, and for what a server does before anyone has used that switch. A worker atlas supervises is handed all of that at spawn from the worker store, so it needs none of it set by hand")
 	scriptLanguages := fs.String("script-languages", "", "comma-separated script languages this worker serves (powershell, python, javascript); empty serves all for compatibility. atlas serve sets this automatically from its per-language flags")
 	scriptSandboxRaw := fs.String("script-sandbox", envOr(script.SandboxEnv, string(script.SandboxOff)), "operating-system isolation for script interpreters: off or strict (Linux Landlock/seccomp; or ATLAS_SCRIPT_SANDBOX)")
 	if err := fs.Parse(args); err != nil {
@@ -1251,7 +1252,7 @@ func runWorker(args []string) error {
 	}
 	w := worker.New(opts)
 
-	logging.Info(logging.WorkerStarting, "working jobs for a running Atlas",
+	logging.Info(logging.WorkerStarting, "working jobs for a running atlas",
 		slog.String("server", *server), slog.String("id", *id),
 		slog.String("types", strings.Join(sortedKeys(execs), ",")),
 		slog.String("connectors", strings.Join(builtin.Names, ",")), slog.Duration("lease", *lease))

@@ -179,7 +179,7 @@ func catalogItemProps() map[string]any {
 			"synonyms, the vendor's term, the abbreviation everybody uses, the thing it replaced. " +
 			"One flat list and not one per language, because a synonym list is for finding and a " +
 			"searcher's language is not the catalogue's."),
-		"configForm": stringProp("The id of an Atlas form the orderer fills in for this product — " +
+		"configForm": stringProp("The id of an atlas form the orderer fills in for this product — " +
 			"a cost centre, a site — whose answers travel with the order line. The catalogue names " +
 			"the id and never resolves it, so an id that exists is the caller's to verify."),
 		"price": stringProp("What it costs, written as the catalogue wants it read: \"CHF 1'200.–\", " +

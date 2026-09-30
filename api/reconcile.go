@@ -375,7 +375,7 @@ func decideReconcile(msg reconcileMessage, in reconcileInput) reconcilePlan {
 			Kind: recUnmanaged, System: system, Ref: refOf[key],
 			Principal: principal, ItemID: itemID,
 			Why: "held in " + system + " and not recorded here. Somebody has this and nothing " +
-				"in Atlas decided to give it to them — adopt it if it is legitimate, or run the " +
+				"in atlas decided to give it to them — adopt it if it is legitimate, or run the " +
 				"product's deprovisioning if it is not",
 		})
 	}

@@ -1181,7 +1181,7 @@ func (s *Server) handleTestConnector(w http.ResponseWriter, r *http.Request) {
 		err = client.Send(ctx, mail.Message{
 			To:      []string{to},
 			Subject: "Atlas worker test",
-			Body: "This is a test message from the Atlas worker \"" + req.Name + "\".\n\n" +
+			Body: "This is a test message from the atlas worker \"" + req.Name + "\".\n\n" +
 				"It was sent from the worker form, not by a process. If it reached you, " +
 				"the worker can deliver mail.\n",
 		})
@@ -1252,7 +1252,7 @@ func connectorTestDetail(provider, endpoint, to string) string {
 	case to != "" && provider == mail.ProviderPreview:
 		return "Test message delivered to the outbox (Operations › Outbox) — the preview provider sends nothing outward."
 	case to != "":
-		return "Test message sent to " + to + ". If it does not arrive, the message left Atlas and the provider still has it."
+		return "Test message sent to " + to + ". If it does not arrive, the message left atlas and the provider still has it."
 	case provider == mail.ProviderPreview:
 		return "Ready. The preview provider dials nothing: messages land in the outbox (Operations › Outbox)."
 	case provider == mail.ProviderSMTP:

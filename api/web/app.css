@@ -281,6 +281,40 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
 }
 .product-form > .form-sec:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 .product-form > .form-sec-hint { margin: 4px 0 4px; font-size: 12px; color: var(--muted); }
+/* Each section is a <details> a maintainer can fold away (catalog-admin.js remembers
+   which). The summary wears the section heading's look, with a marker that turns, and
+   the body keeps the form's own two-column grid so a field's .wide still spans it. */
+.product-form > .form-group { grid-column: 1 / -1; border-top: 1px solid var(--border); padding: 10px 0 4px; }
+.product-form > .form-group:first-child { border-top: 0; padding-top: 0; }
+/* What publishing needs, at the top of the form and kept current while it is filled
+   in (catalog-admin.js publishNeeds). Each entry is a button to its field. */
+.product-form > .publish-needs {
+  grid-column: 1 / -1; margin: 0 0 12px; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+}
+.product-form > .publish-needs + .form-group { border-top: 0; padding-top: 0; }
+.publish-needs-head { margin: 0 0 6px; font-weight: 600; }
+.publish-needs ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.publish-needs .publish-need { border-color: transparent; padding: 2px 4px; font-weight: 400; text-align: left; }
+.publish-needs li.ok .publish-need { color: var(--ok); }
+.publish-needs li.missing .publish-need { color: var(--danger); text-decoration: underline; }
+.publish-needs-note { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.product-form > .form-group > summary.form-sec {
+  cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
+  font-size: 13px; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted);
+  margin: 0; padding: 4px 0; user-select: none;
+}
+.product-form > .form-group > summary.form-sec::-webkit-details-marker { display: none; }
+.product-form > .form-group > summary.form-sec::before {
+  content: "\25B8"; display: inline-block; transition: transform 0.12s ease;
+}
+.product-form > .form-group[open] > summary.form-sec::before { transform: rotate(90deg); }
+.product-form > .form-group > summary.form-sec:hover { color: var(--text); }
+.product-form > .form-group > .form-sec-hint { margin: 0 0 6px; font-size: 12px; color: var(--muted); }
+.form-group-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
+.form-group-body > .wide,
+.form-group-body > .form-sec-hint,
+.form-group-body > .row { grid-column: 1 / -1; }
 /* The product's picture in its editor: bounded here rather than by the file, because
    what was uploaded is what is served. contain and not cover — a crop would cut the
    top off somebody's product. */
@@ -289,7 +323,7 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
   margin: 0 0 8px; border: 1px solid var(--border); border-radius: 8px;
   object-fit: contain; background: var(--surface);
 }
-@media (max-width: 760px) { .product-form { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .product-form, .form-group-body { grid-template-columns: 1fr; } }
 
 /* ---------- One box per language, side by side ----------
    Every text a product carries is a map keyed by the catalogue's declared language
@@ -346,96 +380,58 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
    2000px screen. */
 .catalog-mode main { max-width: none; }
 
-/* The editor used to render *under* the list, which is fine with three products and
+/* Where a product's form opens.
+
+   It first rendered under the whole list, which is fine with three products and
    unusable with forty: opening one near the bottom pushed the form below everything,
-   so it was read after a long scroll and with no sight of the row it belonged to.
+   read after a long scroll and with no sight of the row it belonged to. Then it took
+   a column beside the list, level with its row — which on a wide screen was a third
+   of the page, scrolling inside itself, while the width was on the list.
 
-   So the list and the editor are two columns, and the panel is pushed down to the
-   row it was opened from — the offset is measured against the list and handed over
-   as --editor-top by catalog-admin.js, because only the DOM knows where a row ended
-   up once the shared table enhancer has sorted or filtered it. CSS holds the rule,
-   the script holds the one number it cannot compute.
+   So an existing product's form and kit open in a row of their own directly under
+   the product (tr.product-edit-row), across the table's width, and a new product's
+   under the list's buttons (.product-panels), where the two containers live. Both are
+   in the flow of the page: nothing is measured, nothing sticks, and the row the
+   reader clicked does not move when the form opens under it.
 
-   Sticky, because the form is taller than most viewports: reading to its Save button
-   must not walk the panel off the top of the window. It carries its own scrollbar for
-   the same reason — a panel longer than the screen that cannot scroll inside hides
-   the button it exists for.
-
-   One breakpoint for the whole catalogue page, and the number is measured rather
-   than chosen. The widest of its pairs decides it: the product list cannot be drawn
-   under 853px — five columns, a provisioning process id, and a row offering edit,
-   assemble and remove — and the kit beside it needs 464px for its table and the
-   card's padding. At 35% of the page that is 1400px of window before both columns
-   hold what they contain. Below it one of the two is always narrower than its own
-   content, and a table that cannot be drawn narrower scrolls sideways inside its box
-   instead — where the column a reader loses first is the one holding the buttons.
-   Stacked, each of them gets the whole page, which is why a narrower window gets that
-   and not a worse version of this.
-
-   One number rather than one per section, although the smaller pairs would fit
-   earlier: a page that puts its lists beside their forms at three different widths is
-   three pages to a reader dragging a window edge, and nobody meant that.
-
-   Deliberately a min-width rule: stacked stays the default and this whole block is
-   the enhancement, so a viewport that never matches it reads exactly the page it read
-   before.
-
-   Inside the panel the form is one column at every width. The two-column form above
-   is for the full-width card; half a page cannot hold it. */
-/* The column holds two panels and shows whichever one is open: the product's form,
-   or the kit that says what the product is made of. It is gone when neither is, so a
-   closed panel costs the list nothing. :has() rather than a class set from the script,
-   because "is anything open" is a fact about the two containers and a class is a
-   second copy of it to forget to clear. */
-.product-side:not(:has(.product-editor > *, .assemble-editor > *)) { display: none; }
+   The card keeps a measure of its own, so a form on a 2000px screen does not run two
+   fields a metre apart. */
 .product-editor > .card,
-.assemble-editor > .card { margin: 14px 0; max-width: 960px; }
-/* The list's table is wider than its column on a narrow screen once the editor takes
-   a share of the page. Scroll it inside its own box, for the reason a card holding a
-   table does (ADR-0163): a table cannot be drawn narrower than its min-content width,
-   so without this it is laid out under the panel beside it. */
+.assemble-editor > .card { margin: 14px 0; max-width: 1280px; }
+/* A table cannot be drawn narrower than its min-content width, so on a narrow screen
+   it scrolls inside its own box, for the reason a card holding a table does
+   (ADR-0163). */
 .product-table { overflow-x: auto; }
 /* Stacked, a side form keeps the measure every other card on this page keeps, and the
-   air that separates it from the list above. The column above takes both away. */
+   air that separates it from the list above. The column below takes both away. */
 .cat-side > .card { margin-top: 18px; max-width: 640px; }
-/* Which row the open panel belongs to. The panel is aligned to this row, but an
-   alignment is not a statement — a reader scrolling past sees the highlight and not
-   the arithmetic. */
+/* Which row the open panel belongs to: the panel is directly under it, and the same
+   tint joins the two. */
 .product-list tr.editing > td { background: var(--accent-soft); }
+.product-list tr.product-edit-row > td { padding: 0 8px 14px; background: var(--accent-soft); white-space: normal; }
+.product-list tr.product-edit-row .card { margin: 0; }
 @media (min-width: 1400px) {
-  /* A list beside the form that acts on it. The catalogue page is four of these — the
-     catalogues and the one being created, the products and the one being edited, the
-     relations and the pair being related, who maintains it and who is being added —
-     so the shape is stated once and each section says which half it is.
+  /* A list beside the form that acts on it. The catalogue page has three of these —
+     the catalogues and the one being created, the relations and the pair being
+     related, who maintains it and who is being added — so the shape is stated once
+     and each section says which half it is. The breakpoint was measured when the
+     product list and its kit were one of the pairs; they no longer are, and the
+     remaining pairs fit within it.
 
      A share of the page with both ends held: never under 380px, where the labelled
      controls start to crowd, and never over 620px, because these forms are one column
      and a text field two thirds of a wide screen across is harder to read, not easier.
-     The list takes everything else, which is what the width of this page is for. */
+     The list takes everything else, which is what the width of this page is for.
+
+     Deliberately a min-width rule: stacked stays the default and this whole block is
+     the enhancement, so a viewport that never matches it reads exactly the page it
+     read before. */
   .cat-cols { display: flex; align-items: flex-start; gap: 18px; }
   .cat-cols > .cat-main { flex: 1 1 auto; min-width: 0; }
   .cat-cols > .cat-side { flex: 0 0 clamp(380px, 35%, 620px); }
   /* In a column the form starts level with the list beside it, and takes the column's
      width rather than the measure it keeps when it is stacked underneath. */
   .cat-cols > .cat-side > .card { margin: 0; max-width: none; }
-
-  /* overflow-anchor is off because the script corrects for this reflow itself
-     (catalog-admin.js): opening the panel narrows the list and rewraps the rows above
-     the reader, and two mechanisms undoing the same shift — the browser's anchoring
-     and the script's measured scroll — would each undo part of it and land nowhere. */
-  .product-cols { overflow-anchor: none; }
-  .product-cols > .product-side {
-    /* Under the top bar rather than behind it: the bar is itself sticky at the top of
-       the window, so a panel sticking at the window's own top would slide beneath it
-       and lose its first field. Read from --topbar-h rather than repeating the
-       number, so the two cannot drift; the fallback is only for a page that renders
-       this section without declaring one. */
-    position: sticky; top: calc(var(--topbar-h, 48px) + 16px);
-    max-height: calc(100vh - var(--topbar-h, 48px) - 32px); overflow: auto;
-    margin-top: var(--editor-top, 0px);
-  }
-  .product-cols > .product-side .card { margin: 0; }
-  .product-cols > .product-side .product-form { grid-template-columns: 1fr; }
 }
 
 h1 { font-size: 20px; margin: 0 0 12px; }

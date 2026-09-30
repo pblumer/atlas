@@ -60,7 +60,7 @@ func SetBinding(data []byte, elementID, key string, values []string) ([]byte, er
 	}
 	types, allowed := allowedOn[key]
 	if !allowed {
-		return nil, fmt.Errorf("unknown Atlas binding key %q; contract version %d defines %s",
+		return nil, fmt.Errorf("unknown atlas binding key %q; contract version %d defines %s",
 			key, BindingContractVersion, strings.Join(BindingKeys(), ", "))
 	}
 	clean := make([]string, 0, len(values))

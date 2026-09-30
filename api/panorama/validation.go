@@ -91,7 +91,7 @@ func describeRoot(space, local string) string {
 		// The 2.x exchange namespace. Close enough to the 3.x one that the old
 		// message showed two nearly identical URIs and left the reader to spot the
 		// difference.
-		return "it is an ArchiMate 2.x Model Exchange file, and Atlas reads the 3.x " +
+		return "it is an ArchiMate 2.x Model Exchange file, and atlas reads the 3.x " +
 			"format. Re-export the model as ArchiMate 3 Open Exchange."
 	case strings.Contains(ns, "archimatetool.com"):
 		// Archi's native save format, and the single most likely mistake an

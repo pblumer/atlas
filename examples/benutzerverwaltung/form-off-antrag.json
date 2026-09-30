@@ -4,7 +4,7 @@
   "components": [
     {
       "type": "text",
-      "text": "# 👋 Benutzer offboarden\n\nBeantrage die geregelte Deaktivierung eines Atlas-Benutzers. Ein Administrator sperrt das Konto und bestätigt."
+      "text": "# 👋 Benutzer offboarden\n\nBeantrage die geregelte Deaktivierung eines atlas-Benutzers. Ein Administrator sperrt das Konto und bestätigt."
     },
     {
       "key": "benutzername",

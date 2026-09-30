@@ -90,9 +90,9 @@
                   id="defs_bestandsaufnahme"
                   targetNamespace="http://atlas/examples">
   <bpmn:process id="proc_bestandsaufnahme" name="Bestandsaufnahme: Entra-Gruppen" isExecutable="true">
-    <bpmn:documentation>Liest einmalig, welche Entra-Gruppen wer hält, und meldet das dieser Atlas-Instanz als vorbestehenden Bestand.
+    <bpmn:documentation>Liest einmalig, welche Entra-Gruppen wer hält, und meldet das dieser atlas-Instanz als vorbestehenden Bestand.
 
-Was eingetragen wird, trägt den Ursprung `legacy`: Atlas hat es nicht vergeben und sagt das auch. Der Unterschied ist nicht kosmetisch — der spätere Abgleich muss unterscheiden können, was Atlas erteilt hat und was es bloss vorgefunden hat, sonst wird eine Annahme als Beweis abgelegt.
+Was eingetragen wird, trägt den Ursprung `legacy`: Atlas hat es nicht vergeben und sagt das auch. Der Unterschied ist nicht kosmetisch — der spätere Abgleich muss unterscheiden können, was atlas erteilt hat und was es bloss vorgefunden hat, sonst wird eine Annahme als Beweis abgelegt.
 
 Der Prozess startet von Hand und nicht auf einer Uhr. Er ist eine Handlung mit einem Verantwortlichen, und der Trockenlauf ist nur dann ein Schutz, wenn jemand den Bericht tatsächlich liest.
 
@@ -110,7 +110,7 @@ Worker-only (ADR-0172): der Mandanten-Zugang liegt nie in der Engine.</bpmn:docu
 
 Der dabei entstehende Cursor wird bewusst nicht gespeichert. Dieser Prozess führt keinen fort: er liest einen Stand, keine Änderungsfolge.
 
-maxUsers begrenzt den Lauf am Worker. Ein zu grosser Bestand scheitert dort, statt eine gekürzte Menge zu liefern, die Atlas als vollständigen Bestand verbuchen würde.
+maxUsers begrenzt den Lauf am Worker. Ein zu grosser Bestand scheitert dort, statt eine gekürzte Menge zu liefern, die atlas als vollständigen Bestand verbuchen würde.
 
 Schreibt: gruppen = { value, deltaLink }.</bpmn:documentation>
       <bpmn:extensionElements>
@@ -128,7 +128,7 @@ Schreibt: gruppen = { value, deltaLink }.</bpmn:documentation>
 
 apply: false — hier steht der Schalter. Der Nullwert des Feldes bedeutet "nichts schreiben": wer es vergisst, bekommt einen Bericht und nicht die halbe Mitgliederliste eines Mandanten in einem Beweisspeicher, der Jahre gehalten wird.
 
-Als Referenz steht die Objekt-Id der Gruppe und nicht ihr Anzeigename. Ein Name wird umbenannt, eine Objekt-Id nicht — und der Katalog vergleicht wörtlich, ohne zu normalisieren. Ein Verweis, der sich nur in der Schreibweise unterscheidet, ist für das ausstellende Verzeichnis eine andere Zeichenkette, und eine Ähnlichkeit, die Atlas erfindet, wäre ein zugeordnetes Recht, das niemand entschieden hat.
+Als Referenz steht die Objekt-Id der Gruppe und nicht ihr Anzeigename. Ein Name wird umbenannt, eine Objekt-Id nicht — und der Katalog vergleicht wörtlich, ohne zu normalisieren. Ein Verweis, der sich nur in der Schreibweise unterscheidet, ist für das ausstellende Verzeichnis eine andere Zeichenkette, und eine Ähnlichkeit, die atlas erfindet, wäre ein zugeordnetes Recht, das niemand entschieden hat.
 
 Verschachtelte Gruppen erscheinen als Mitglied und lösen sich auf kein Konto auf; sie werden als `noSubject` gemeldet und nicht stillschweigend verworfen.
 
@@ -150,7 +150,7 @@ Schreibt: bericht = { applied, mode, system, reason, everApplied, counts, unmapp
     </bpmn:serviceTask>
 
     <bpmn:endEvent id="ende" name="Bericht liegt vor">
-      <bpmn:documentation>`bericht` steht in den Instanzvariablen. Zuerst zu lesen ist `unmapped`: was der Betrieb vergibt, ohne dass es im Katalog steht. Danach `counts.noSubject` — Menschen ohne Atlas-Konto — und erst dann die Zeilen. Solange `applied` false ist, sagt `reason` warum.</bpmn:documentation>
+      <bpmn:documentation>`bericht` steht in den Instanzvariablen. Zuerst zu lesen ist `unmapped`: was der Betrieb vergibt, ohne dass es im Katalog steht. Danach `counts.noSubject` — Menschen ohne atlas-Konto — und erst dann die Zeilen. Solange `applied` false ist, sagt `reason` warum.</bpmn:documentation>
       <bpmn:incoming>f_melden_ende</bpmn:incoming>
     </bpmn:endEvent>
 

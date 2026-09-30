@@ -121,7 +121,7 @@ func infomodelTools() []Tool {
 		{
 			Name: "atlas_import_information_model",
 			Description: "Import a UML class diagram as a NEW information model of an application. Two " +
-				"documents are read: Atlas's own JSON (what atlas_get_information_model returns, so a " +
+				"documents are read: atlas's own JSON (what atlas_get_information_model returns, so a " +
 				"model moves between applications and installations), and the XMI 2.5.1 a UML tool " +
 				"exports. The format is detected from the document unless you state it. Reading a " +
 				"foreign notation into a declared subset is LOSSY: everything outside the subset is " +
@@ -132,7 +132,7 @@ func infomodelTools() []Tool {
 				"type": "object",
 				"properties": map[string]any{
 					"applicationId": stringProp("The process application that will own the imported model."),
-					"document":      stringProp("The whole source document: Atlas JSON, or UML XMI."),
+					"document":      stringProp("The whole source document: atlas JSON, or UML XMI."),
 					"format":        stringProp("Optional: \"json\" or \"xmi\". Detected from the document when omitted."),
 					"name":          stringProp("Optional: a name for the model, overriding the one the document carries."),
 					"documentation": stringProp("Optional: what part of the business these classes describe."),

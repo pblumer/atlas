@@ -437,3 +437,28 @@ func TestStoreLoadAllRacesADelete(t *testing.T) {
 		t.Errorf("a listing failed while records were being deleted: %v", err)
 	}
 }
+
+// TestABrokenStoreDirectoryIsNeverAnEmptyStore: with a regular file where the store's
+// directory belongs, a read, a remove and a listing all fail. On Windows each of them
+// used to answer as if the store were merely empty — "not found", "nothing to
+// remove", no records — because Windows reports a path through a file as missing
+// rather than as ENOTDIR, and lists a file as an empty directory. An empty store is
+// an answer the callers act on; a store that cannot be read is not.
+func TestABrokenStoreDirectoryIsNeverAnEmptyStore(t *testing.T) {
+	s := newItemStore(t)
+	if err := os.RemoveAll(s.Dir()); err != nil {
+		t.Fatalf("RemoveAll: %v", err)
+	}
+	if err := os.WriteFile(s.Dir(), []byte("not a directory"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if _, ok, err := s.Get("item-01"); err == nil {
+		t.Errorf("Get = ok %v, nil error; want an error", ok)
+	}
+	if err := s.Delete("item-01"); err == nil {
+		t.Error("Delete = nil; want an error")
+	}
+	if recs, err := s.LoadAll(); err == nil {
+		t.Errorf("LoadAll = %v, nil error; want an error", recs)
+	}
+}

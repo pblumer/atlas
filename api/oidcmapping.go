@@ -192,7 +192,7 @@ func (m oidcMapping) validate(groupExists func(id string) bool) error {
 		}
 		for _, role := range rule.Roles {
 			if !isGrantableRole(role) {
-				return fmt.Errorf("rule %d (%q) names role %q, which Atlas does not enforce",
+				return fmt.Errorf("rule %d (%q) names role %q, which atlas does not enforce",
 					i+1, rule.Value, role)
 			}
 		}

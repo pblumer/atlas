@@ -40,7 +40,7 @@ const pollInterval = 500 * time.Millisecond
 // behind on every red build leaves a lot of them.
 func runPlaygroundScenario(args []string, out io.Writer) error {
 	fs := flag.NewFlagSet("playground", flag.ExitOnError)
-	server := fs.String("server", "http://localhost:8080", "base URL of the Atlas server to run against")
+	server := fs.String("server", "http://localhost:8080", "base URL of the atlas server to run against")
 	token := fs.String("token", os.Getenv("ATLAS_TOKEN"),
 		"bearer token, when the server requires authentication (or ATLAS_TOKEN)")
 	id := fs.String("scenario", "", "id of the saved scenario to run")

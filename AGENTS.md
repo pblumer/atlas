@@ -59,12 +59,13 @@ go test ./engine/ -run TestProcessorRecovery -v
 
 CI also runs the storage packages — `wal/`, `checkpoint/`, `state/`, `api/sidecar/`,
 `internal/` — and `engine/`, for its recovery tests, on a Windows runner
-(`windows · storage` in `.github/workflows/ci.yml`), because a Windows binary ships and
-those packages are file-system behaviour. Linux cannot run that job for you; the closest
+(`windows · storage` in `.github/workflows/ci.yml`), and the whole `api/` tree in a
+second Windows job beside it (`windows · api`), because a Windows binary ships and those
+packages are file-system behaviour. Linux cannot run those jobs for you; the closest
 local check is that the tests still compile there:
 
 ```bash
-GOOS=windows go vet ./wal/... ./checkpoint/... ./state/... ./api/sidecar/... ./internal/... ./engine/...
+GOOS=windows go vet ./wal/... ./checkpoint/... ./state/... ./api/... ./internal/... ./engine/...
 ```
 
 Browser end-to-end tests for the web UI (the Design-view token simulation) live in
@@ -120,6 +121,8 @@ internal/dirsync/ Opening a directory so it can be fsynced — the one step that
             on Windows, shared by wal/, checkpoint/ and api/sidecar/
 internal/sharedread/ Reading a file without blocking a delete of it or a rename over it,
             which an os.Open handle does on Windows — api/sidecar/'s readers use it
+internal/ownerfile/ Making a file this account's alone, and checking it is: mode 0600,
+            and on Windows, which ignores modes, an access list — the vault key uses it
 ```
 
 **`connector/` holds the Worker Types.** Every capability a model can put on a

@@ -198,7 +198,7 @@ func checkDecisionBindings(cp *CompiledProcess) []Problem {
 			continue
 		}
 		ps = append(ps, problem(cp, int32(id), SeverityError, RuleDecisionVersionTag,
-			fmt.Sprintf("%s binds decision %q by versionTag, which Atlas does not support; bind it to Latest, to a deployed version (atlas:version), or to Deployment",
+			fmt.Sprintf("%s binds decision %q by versionTag, which atlas does not support; bind it to Latest, to a deployed version (atlas:version), or to Deployment",
 				describeNode(cp, int32(id)), cp.Intern(d.DecisionId))))
 	}
 	return ps

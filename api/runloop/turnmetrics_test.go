@@ -82,6 +82,10 @@ func TestHeldCoversTheWorkTheClosureDid(t *testing.T) {
 	if got := len(r.snapshot()); got != 0 {
 		t.Fatalf("reported %d turns while the closure was still running, want 0", got)
 	}
+	// Held long enough for any clock to see it. Go's monotonic clock on Windows moves
+	// only with the system timer, up to 15.6ms a tick, so a closure released at once
+	// could begin and end on the same tick and measure zero there.
+	time.Sleep(20 * time.Millisecond)
 	close(release)
 
 	deadline := time.After(5 * time.Second)

@@ -79,9 +79,9 @@
   <bpmn:process id="proc_produkt_erfassung" name="Produkt erfassen" isExecutable="true">
 
     <bpmn:startEvent id="start" name="Erfassung begonnen">
-      <bpmn:documentation>Das Startformular fragt eine einzige Angabe ab: die Adresse dieses Atlas.
+      <bpmn:documentation>Das Startformular fragt eine einzige Angabe ab: die Adresse dieses atlas.
 
-Jeder Service-Task hier ruft Atlas' eigene HTTP-API auf, und ein Modell kann die Adresse seiner Installation nicht in sich tragen. Der mitgelieferte Auftragserfüllungsprozess bekommt sie vom Server mitgegeben, weil der Server ihn startet; dieser Prozess wird von Hand gestartet und hat niemanden, der sie mitgäbe.
+Jeder Service-Task hier ruft atlas' eigene HTTP-API auf, und ein Modell kann die Adresse seiner Installation nicht in sich tragen. Der mitgelieferte Auftragserfüllungsprozess bekommt sie vom Server mitgegeben, weil der Server ihn startet; dieser Prozess wird von Hand gestartet und hat niemanden, der sie mitgäbe.
 
 Voraussetzung beim Betreiber: ein API-Token mit Katalogpflege-Recht, hinterlegt unter ATLAS_CONNECTOR_ATLAS_TOKEN (ADR-0041). Ohne dieses Token antwortet die API mit 401, der Job scheitert und meldet einen Incident — sichtbar, statt stumm zu parken.</bpmn:documentation>
       <bpmn:extensionElements>
@@ -336,7 +336,7 @@ Die Bytes werden nie eine Prozessvariable: ein halbes Megabyte im Token-Umfang s
     <bpmn:sequenceFlow id="f_kein_theme" name="bestehend" sourceRef="gw_theme" targetRef="theme_fertig"/>
 
     <bpmn:userTask id="theme_erfassen" name="Erscheinungsbild festlegen">
-      <bpmn:documentation>Eine eigene Aufgabe für eine andere Gruppe, weil das Theme in Atlas der Administration gehört und nicht der Katalogpflege (ADR-0316, Entscheidung 12).
+      <bpmn:documentation>Eine eigene Aufgabe für eine andere Gruppe, weil das Theme in atlas der Administration gehört und nicht der Katalogpflege (ADR-0316, Entscheidung 12).
 
 Sie liegt hinter der Freigabe des Produkts und vor der Publikation: vorne stehend liesse sie eine Produkterfassung auf eine Farbwahl warten, hier wartet nur die Publikation — und ein neuer Katalog geht nicht ungebrandet live.
 

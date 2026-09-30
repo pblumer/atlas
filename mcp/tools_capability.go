@@ -57,7 +57,7 @@ func capabilityRecordProps() map[string]any {
 			"derived: from the caller's side a required capability is normally a service task or a " +
 			"message, not a call activity."),
 		"kpis": arrayProp("Optional targets: [{name, metric, goal, direction: up|down, note}]. " +
-			"DECLARATIONS — Atlas computes none of them."),
+			"DECLARATIONS — atlas computes none of them."),
 		"slas": arrayProp("Optional commitments: [{name, metric, threshold, window, " +
 			"scope: internal|external, counterparty, note}]. The difference from a KPI is commitment: an " +
 			"SLA is how an end-to-end target is distributed across the capabilities beneath it."),
@@ -197,7 +197,7 @@ func capabilityTools() []Tool {
 				"(1..400): a reading over all history costs seconds at volume, so it is not offered. " +
 				"An SLA is measured only where it carries thresholdSeconds; one whose threshold is " +
 				"prose is listed under notMeasured with the reason, and every KPI is listed there too " +
-				"because Atlas will not guess which recorded figure a goal refers to. Read countedBasis " +
+				"because atlas will not guess which recorded figure a goal refers to. Read countedBasis " +
 				"and walkedBasis before presenting any number: the response mixes two kinds on purpose " +
 				"and says which is which.",
 			InputSchema: map[string]any{
@@ -428,7 +428,7 @@ func capabilityTools() []Tool {
 				"caller never declared. It is a comparison, never a merge: a declared dependency with no " +
 				"call activity is the ordinary case and raises nothing. It also reports records nobody " +
 				"has confirmed within the installation's horizon — the one finding that is NOT something " +
-				"Atlas verified, because the owner, the scope and the SLAs are prose it cannot check, so " +
+				"atlas verified, because the owner, the scope and the SLAs are prose it cannot check, so " +
 				"the only honest thing it can say is that nobody has stood behind them. Nothing is " +
 				"stored; the answer says which horizon it applied, how much your own access hid from it, " +
 				"and what it looked at.",

@@ -27,7 +27,7 @@
              xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
              xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
              id="defs_onboarding_atlas" targetNamespace="http://atlas/examples">
-  <process id="onboarding-atlas" name="Onboarding: Willkommen bei Atlas 🚀" isExecutable="true">
+  <process id="onboarding-atlas" name="Onboarding: Willkommen bei atlas 🚀" isExecutable="true">
 
     <startEvent id="start" name="Account erstellt">
       <extensionElements>

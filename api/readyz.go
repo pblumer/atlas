@@ -33,9 +33,10 @@ import (
 const readyTimeoutDefault = 2 * time.Second
 
 // handleReadyz reports whether this server should be routed traffic. It is
-// unauthenticated for the same reason /healthz and /metrics are: a kubelet has no
-// session, and the body carries a fixed reason string — no instance data, no counts, no
-// identifiers.
+// unauthenticated for the same reason /healthz is: a kubelet has no session, and
+// the body carries a fixed reason string — no instance data, no counts, no
+// identifiers. (/metrics used to share this posture; ADR-0198 moved it behind the
+// boundary.)
 func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	if reason := s.notReady(r.Context()); reason != "" {
