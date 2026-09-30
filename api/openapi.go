@@ -721,7 +721,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		// the model so a caller who wants the drawing does not pay for a scan of
 		// every live instance.
 		{"GET", "/api/v1/panorama/models/{id}/observations", s.panorama.HandleObservations, apiOp{
-			summary: "Observe what a Panorama model's bound Atlas resources are currently doing (ADR-0189)",
+			summary: "Observe what a Panorama model's bound atlas resources are currently doing (ADR-0189)",
 			tag:     "Panorama", role: RoleModeler,
 			resp: jsonBody("Observation document", tObject())}},
 		// What has been seen to change (ADR-0189 P5). A separate route from the
@@ -735,7 +735,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		// because every bound value costs a query against somebody else's cluster,
 		// and a model-wide answer would multiply that by the whole landscape.
 		{"GET", "/api/v1/panorama/models/{id}/context", s.panorama.HandleContext, apiOp{
-			summary: "Read historical context for one element from the stores outside Atlas (ADR-0189)",
+			summary: "Read historical context for one element from the stores outside atlas (ADR-0189)",
 			tag:     "Panorama", role: RoleModeler,
 			resp: jsonBody("Historical context document", tObject())}},
 		// The authoring subset (ADR-0189 §2): the palette and the relationship matrix
@@ -743,7 +743,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		// rule the canvas applies during a drag and the rule the server applies on
 		// write cannot disagree.
 		{"GET", "/api/v1/panorama/subset", s.panorama.HandleSubset, apiOp{
-			summary: "The ArchiMate element and relationship subset Atlas can author (ADR-0189)",
+			summary: "The ArchiMate element and relationship subset atlas can author (ADR-0189)",
 			tag:     "Panorama", role: RoleModeler,
 			resp: jsonBody("Authoring subset and relationship matrix", tObject())}},
 		// Moving shapes on a view (ADR-0189 §2). Separate from the model update
@@ -769,13 +769,13 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  jsonBody("The relationship to draw", tObject()),
 			resp: jsonBody("The updated model and the relationship's identifier", tObject())}},
 		{"GET", "/api/v1/panorama/models/{id}/bindings", s.panorama.HandleBindings, apiOp{
-			summary: "Resolve a Panorama model's Atlas bindings for the caller (ADR-0189)", tag: "Panorama", role: RoleModeler,
-			resp: jsonBody("Resolved Atlas bindings", tObject())}},
+			summary: "Resolve a Panorama model's atlas bindings for the caller (ADR-0189)", tag: "Panorama", role: RoleModeler,
+			resp: jsonBody("Resolved atlas bindings", tObject())}},
 		{"GET", "/api/v1/panorama/models/{id}/bindings/candidates", s.panorama.HandleBindingCandidates, apiOp{
-			summary: "List the Atlas resources the caller may bind one key to (ADR-0189)", tag: "Panorama", role: RoleModeler,
+			summary: "List the atlas resources the caller may bind one key to (ADR-0189)", tag: "Panorama", role: RoleModeler,
 			resp: jsonBody("Binding candidates", tObject())}},
 		{"PUT", "/api/v1/panorama/models/{id}/bindings", s.panorama.HandleSetBinding, apiOp{
-			summary: "Set one Atlas binding on one ArchiMate element (ADR-0189)", tag: "Panorama", role: RoleModeler,
+			summary: "Set one atlas binding on one ArchiMate element (ADR-0189)", tag: "Panorama", role: RoleModeler,
 			req: jsonBody("Binding assignment", schemaObj(map[string]any{
 				"expectedRevision": tInteger(), "elementId": tString(), "key": tString(), "values": tArray(),
 			}, "expectedRevision", "elementId", "key")), resp: jsonBody("Updated Panorama model metadata", tObject())}},
@@ -813,7 +813,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "applicationId", "name")),
 			resp: jsonBody("Information model", tObject()), status: http.StatusCreated}},
 		{"POST", "/api/v1/infomodel/import", s.infomodel.HandleImport, apiOp{
-			summary: "Import a UML class diagram as a new information model: Atlas's own JSON, or the XMI 2.5.1 a UML tool exports. It goes through the same subset the canvas writes through, so anything outside it is dropped with a note naming the element; dryRun reports what an import would do and stores nothing (ADR-0232)", tag: "Information model", role: RoleModeler,
+			summary: "Import a UML class diagram as a new information model: atlas's own JSON, or the XMI 2.5.1 a UML tool exports. It goes through the same subset the canvas writes through, so anything outside it is dropped with a note naming the element; dryRun reports what an import would do and stores nothing (ADR-0232)", tag: "Information model", role: RoleModeler,
 			req: jsonBody("Document to import", schemaObj(map[string]any{
 				"applicationId": tString(), "name": tString(), "documentation": tString(),
 				"format": tString(), "document": tString(), "dryRun": tBool(),
@@ -890,7 +890,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			tag:     "Business architecture", role: roleAny,
 			resp: jsonBody("Coverage", tObject())}},
 		{"GET", "/api/v1/capabilities/{key}/measurement", s.capabilities.HandleMeasurement, apiOp{
-			summary: "Measure one capability against what actually ran: the outcome distribution and cancellation counts from the maintained per-element counters (all-time, because a counter holds a total and not a series), cycle time over the window, and each declared SLA's attainment where it carries a machine-readable thresholdSeconds. ?windowDays= is required and at most 400 — an unbounded reading costs seconds at volume, which is what the measurement behind ADR-0305 established. Every figure says which basis it rests on, and every declared figure Atlas could not compute is listed with the reason",
+			summary: "Measure one capability against what actually ran: the outcome distribution and cancellation counts from the maintained per-element counters (all-time, because a counter holds a total and not a series), cycle time over the window, and each declared SLA's attainment where it carries a machine-readable thresholdSeconds. ?windowDays= is required and at most 400 — an unbounded reading costs seconds at volume, which is what the measurement behind ADR-0305 established. Every figure says which basis it rests on, and every declared figure atlas could not compute is listed with the reason",
 			tag:     "Business architecture", role: roleAny,
 			resp: jsonBody("Measurement", tObject())}},
 		{"GET", "/api/v1/value-streams", s.capabilities.HandleListValueStreams, apiOp{
@@ -1018,7 +1018,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/catalog-products/{id}/picture", s.catalogs.HandleDeletePicture, apiOp{
 			summary: "Remove a product's picture, so the shop falls back to showing none. Same gate as setting one", tag: "Catalogue", role: RoleProductManager, status: http.StatusNoContent}},
 		{"POST", "/api/v1/catalog-products", s.catalogs.HandleSaveItem, apiOp{
-			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule, the processes that provision and deprovision it, the groups eligible to receive it, and the `keywords` somebody might search for that are not its name — synonyms, the vendor's term, the abbreviation everybody uses. Keywords are one flat list rather than one per language, because a synonym list is for finding and a searcher's language is not the catalogue's. `configForm` names an Atlas form the orderer fills in for this product — a cost centre, a site — whose answers travel with the order line. `price` is what it costs, written as the catalogue wants it read and never computed: it is displayed, frozen into the release and copied onto the order line, so an approver's figure stays the figure they decided on. `category` is the heading the shop groups it under and `productGroup` the group one level below it — headings and nothing else, with no ordering and no entity behind them. Both are **keys**: the shop groups by them and renders `categoryTexts` and `productGroupTexts`, each a heading per language tag, where the catalogue has them. Leave the texts out and the key renders in every language. They are optional as a whole and all-or-nothing once present: publishing refuses a heading translated into one declared language and not another. The write is a full **replace**, so a field left out is a field cleared: read the product first, change what you mean to change, and send the whole record back. Optionally state the `revision` you read — the write is then refused with 409 unless the stored product is still on it, which is what makes a read-modify-write safe against a second maintainer. Omitting it replaces unconditionally", tag: "Catalogue", role: RoleProductManager,
+			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule, the processes that provision and deprovision it, the groups eligible to receive it, and the `keywords` somebody might search for that are not its name — synonyms, the vendor's term, the abbreviation everybody uses. Keywords are one flat list rather than one per language, because a synonym list is for finding and a searcher's language is not the catalogue's. `configForm` names an atlas form the orderer fills in for this product — a cost centre, a site — whose answers travel with the order line. `price` is what it costs, written as the catalogue wants it read and never computed: it is displayed, frozen into the release and copied onto the order line, so an approver's figure stays the figure they decided on. `category` is the heading the shop groups it under and `productGroup` the group one level below it — headings and nothing else, with no ordering and no entity behind them. Both are **keys**: the shop groups by them and renders `categoryTexts` and `productGroupTexts`, each a heading per language tag, where the catalogue has them. Leave the texts out and the key renders in every language. They are optional as a whole and all-or-nothing once present: publishing refuses a heading translated into one declared language and not another. The write is a full **replace**, so a field left out is a field cleared: read the product first, change what you mean to change, and send the whole record back. Optionally state the `revision` you read — the write is then refused with 409 unless the stored product is still on it, which is what makes a read-modify-write safe against a second maintainer. Omitting it replaces unconditionally", tag: "Catalogue", role: RoleProductManager,
 			req: jsonBody("Product", schemaObj(map[string]any{
 				"id": tString(), "homeCatalog": tString(), "state": tString(),
 				"texts": tObject(), "lifecycle": tObject(), "variants": tArray(),
@@ -1283,14 +1283,14 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "What this application currently has deployed on this server, with per-definition instance counts (ADR-0128)", tag: "Applications", role: roleAny, resp: jsonBody("Application deployments", tObject())}},
 
 		{"POST", "/api/v1/applications/import", s.handleImportBundle, apiOp{
-			summary: "Receive a published application bundle from a peer Atlas: validate and deploy it all-or-nothing, then record the publisher's release (ADR-0129). The only operation a deploy token may reach.", tag: "Applications", role: RoleModeler,
+			summary: "Receive a published application bundle from a peer atlas: validate and deploy it all-or-nothing, then record the publisher's release (ADR-0129). The only operation a deploy token may reach.", tag: "Applications", role: RoleModeler,
 			req: jsonBody("Bundle", schemaObj(map[string]any{
 				"application": tString(), "release": tObject(), "artifacts": tArray(),
 			}, "application", "release", "artifacts")),
 			resp: jsonBody("Import result", tObject())}},
 
 		{"POST", "/api/v1/applications/{id}/releases/{version}/promote", s.handlePromoteRelease, apiOp{
-			summary: "Promote an existing release to one or more deployment targets: ship the frozen artifacts to peer Atlas servers, reported per target (ADR-0129)", tag: "Applications", role: RoleModeler,
+			summary: "Promote an existing release to one or more deployment targets: ship the frozen artifacts to peer atlas servers, reported per target (ADR-0129)", tag: "Applications", role: RoleModeler,
 			req:  jsonBody("Targets", schemaObj(map[string]any{"targetIds": tArray()}, "targetIds")),
 			resp: jsonBody("Per-target promotion results", tObject())}},
 
@@ -1307,7 +1307,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Per-target status", tArray())}},
 
 		{"POST", "/api/v1/targets", s.handleCreateTarget, apiOp{
-			summary: "Register a deployment target: a peer Atlas this server can promote releases to; credentials are stored by reference, never by value (admin-only, ADR-0129). credentialRef is what a promotion presents and readCredentialRef what a read of the peer presents — its descriptor, and the estate altitude's landscape (ADR-0402) — because a token carries one scope and the two jobs need different ones: a deploy credential is refused both read routes, and a landscape credential is refused the import route. Leave readCredentialRef empty to present the same credential for both, which is what every target configured before it did", tag: "Deployment targets", role: RoleAdmin,
+			summary: "Register a deployment target: a peer atlas this server can promote releases to; credentials are stored by reference, never by value (admin-only, ADR-0129). credentialRef is what a promotion presents and readCredentialRef what a read of the peer presents — its descriptor, and the estate altitude's landscape (ADR-0402) — because a token carries one scope and the two jobs need different ones: a deploy credential is refused both read routes, and a landscape credential is refused the import route. Leave readCredentialRef empty to present the same credential for both, which is what every target configured before it did", tag: "Deployment targets", role: RoleAdmin,
 			req: jsonBody("Target", schemaObj(map[string]any{
 				"name": tString(), "baseUrl": tString(), "kind": tString(),
 				"credentialRef": tString(), "readCredentialRef": tString(),
@@ -1320,7 +1320,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Remove a deployment target (admin-only, ADR-0129)", tag: "Deployment targets", role: RoleAdmin, status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/deploy-tokens", s.handleCreateDeployToken, apiOp{
-			summary: "Mint a deploy token for a peer Atlas to publish here; the secret is returned once and never again (admin-only, ADR-0129)", tag: "Deploy tokens", role: RoleAdmin,
+			summary: "Mint a deploy token for a peer atlas to publish here; the secret is returned once and never again (admin-only, ADR-0129)", tag: "Deploy tokens", role: RoleAdmin,
 			req:  jsonBody("Token name", schemaObj(map[string]any{"name": tString()}, "name")),
 			resp: jsonBody("Minted token, including its one-time secret", tObject())}},
 		{"GET", "/api/v1/deploy-tokens", s.handleListDeployTokens, apiOp{
@@ -1640,7 +1640,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Upload the org-wide brand logo — raw PNG or SVG body, max 512 KiB (admin-only when auth is on) (ADR-0148)", tag: "System", role: RoleAdmin, status: http.StatusNoContent,
 			req: &bodySpec{mediaType: "image/png", desc: "PNG or SVG logo bytes (Content-Type sets the format)", schema: map[string]any{"type": "string", "format": "binary"}}}},
 		{"DELETE", "/api/v1/settings/logo", s.handleDeleteLogo, apiOp{
-			summary: "Remove the org-wide brand logo, restoring the built-in Atlas mark (admin-only when auth is on) (ADR-0148)", tag: "System", role: RoleAdmin, status: http.StatusNoContent}},
+			summary: "Remove the org-wide brand logo, restoring the built-in atlas mark (admin-only when auth is on) (ADR-0148)", tag: "System", role: RoleAdmin, status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/settings/ad-mock", s.handleGetADMock, apiOp{
 			summary: "The org-wide Active Directory mockup switch: whether directory writes are simulated in the worker's memory instead of reaching a domain controller, and the seed file it starts from (ADR-0181)", tag: "Settings", role: roleAny,
@@ -1679,10 +1679,10 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  jsonBody("Horizon", schemaObj(map[string]any{"horizonMonths": tInteger()}, "horizonMonths")),
 			resp: jsonBody("Confirmation horizon", tObject())}},
 		{"GET", "/api/v1/settings/oidc-mapping", s.handleGetOIDCMapping, apiOp{
-			summary: "Read the rule set that turns an identity provider's claim into Atlas roles and group membership (ADR-0210)", tag: "Auth", role: RoleAdmin,
+			summary: "Read the rule set that turns an identity provider's claim into atlas roles and group membership (ADR-0210)", tag: "Auth", role: RoleAdmin,
 			resp: jsonBody("Claim mapping", tObject())}},
 		{"PUT", "/api/v1/settings/oidc-mapping", s.handleSetOIDCMapping, apiOp{
-			summary: "Store that rule set. While it is on, whoever administers the provider's groups administers this instance's roles; a rule naming a role Atlas does not enforce or a group that does not exist is refused here rather than granting nothing on every login (ADR-0210)", tag: "Auth", role: RoleAdmin,
+			summary: "Store that rule set. While it is on, whoever administers the provider's groups administers this instance's roles; a rule naming a role atlas does not enforce or a group that does not exist is refused here rather than granting nothing on every login (ADR-0210)", tag: "Auth", role: RoleAdmin,
 			req:  jsonBody("Claim mapping", tObject()),
 			resp: jsonBody("Claim mapping", tObject())}},
 
@@ -1808,7 +1808,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			tag:     "Catalogue", role: RoleOperator,
 			resp: jsonBody("Open findings", tArray())}},
 		{"POST", "/api/v1/reconciliation/{id}/adopt", s.handleAdoptDiscrepancy, apiOp{
-			summary: "Accept an unmanaged right into the inventory, recorded with origin `adopted` — Atlas did not grant it and does not claim to. For a finding of kind `unmanaged` only",
+			summary: "Accept an unmanaged right into the inventory, recorded with origin `adopted` — atlas did not grant it and does not claim to. For a finding of kind `unmanaged` only",
 			tag:     "Catalogue", role: RoleOperator,
 			resp: jsonBody("The finding, now closed", tObject())}},
 		{"POST", "/api/v1/reconciliation/{id}/deprovision", s.handleDeprovisionDiscrepancy, apiOp{
@@ -1816,7 +1816,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			tag:     "Catalogue", role: RoleOperator,
 			resp: jsonBody("The finding, now closed", tObject())}},
 		{"POST", "/api/v1/reconciliation/{id}/revoke", s.handleRevokeDiscrepancy, apiOp{
-			summary: "Stop asserting a right the target system does not have: remove the inventory record. It touches no target system — there is nothing there to touch, which is the finding — and the journal keeps what Atlas used to claim. For a finding of kind `missing` only",
+			summary: "Stop asserting a right the target system does not have: remove the inventory record. It touches no target system — there is nothing there to touch, which is the finding — and the journal keeps what atlas used to claim. For a finding of kind `missing` only",
 			tag:     "Catalogue", role: RoleOperator,
 			resp: jsonBody("The finding, now closed", tObject())}},
 
@@ -1826,7 +1826,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Who holds a forbidden pair, oldest combination first", tObject())}},
 
 		{"GET", "/api/v1/pending-work", s.handlePendingWork, apiOp{
-			summary: "What is waiting for you across Atlas: open approvals addressed to you, and recertification rows you still owe. `?principal=` asks about somebody else and is the **operator's** — a portal where any user can enumerate any other user's pending work has turned an inbox into an organisation chart with workloads attached. Nothing is listed that the person cannot act on right now: not a row in a closed campaign, not one somebody already decided. It counts as well as lists, because the first decision a reminder makes is whether to send at all. Atlas does not send: `examples/erinnerung.bpmn` does, with the mail task that already exists",
+			summary: "What is waiting for you across atlas: open approvals addressed to you, and recertification rows you still owe. `?principal=` asks about somebody else and is the **operator's** — a portal where any user can enumerate any other user's pending work has turned an inbox into an organisation chart with workloads attached. Nothing is listed that the person cannot act on right now: not a row in a closed campaign, not one somebody already decided. It counts as well as lists, because the first decision a reminder makes is whether to send at all. Atlas does not send: `examples/erinnerung.bpmn` does, with the mail task that already exists",
 			tag:     "Order", role: RoleUser,
 			resp: jsonBody("The items waiting, oldest first, and the counts", tObject())}},
 
@@ -1841,7 +1841,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("The ended holds, or what the record said at a moment", tObject())}},
 
 		{"POST", "/api/v1/recertification", s.handleOpenRecertification, apiOp{
-			summary: "Open a recertification campaign: turn what the inventory records into questions somebody has to answer. Narrow it with `items` and `principals`, or leave both out for the whole inventory — this route concludes nothing from absence, so a campaign over everything is a big campaign rather than a wrong one. `reviewers` maps each holder to the person who answers for them; Atlas does not derive it, because a line-manager lookup is a directory question and belongs to a modelled process. A holder nobody names gives an unassigned row, which lands with the campaign's owner rather than stopping the campaign — or, when `reviewerGroup` names a group (by name or id), with that group: any member may decide it. An unknown group is refused",
+			summary: "Open a recertification campaign: turn what the inventory records into questions somebody has to answer. Narrow it with `items` and `principals`, or leave both out for the whole inventory — this route concludes nothing from absence, so a campaign over everything is a big campaign rather than a wrong one. `reviewers` maps each holder to the person who answers for them; atlas does not derive it, because a line-manager lookup is a directory question and belongs to a modelled process. A holder nobody names gives an unassigned row, which lands with the campaign's owner rather than stopping the campaign — or, when `reviewerGroup` names a group (by name or id), with that group: any member may decide it. An unknown group is refused",
 			tag:     "Catalogue", role: RoleOperator,
 			req: jsonBody("What to certify and who answers for it", schemaObj(map[string]any{
 				"name": tString(), "items": tArray(), "principals": tArray(),
@@ -1909,7 +1909,7 @@ func (s *Server) openapiDoc() map[string]any {
 		"info": map[string]any{
 			"title":   "Atlas HTTP API",
 			"version": Version,
-			"description": "The Atlas single-binary HTTP API: deploy BPMN models, run " +
+			"description": "The atlas single-binary HTTP API: deploy BPMN models, run " +
 				"instances, and inspect live runtime state. This surface is " +
 				"unauthenticated by design — put auth in front before exposing it " +
 				"publicly (see ADR-0016).",

@@ -151,7 +151,7 @@ const (
 	// ReasonKPIsAreDirections: a KPI is a direction with a goal, and Atlas has no way
 	// to know which recorded number it refers to. The cycle time and outcome counts in
 	// the same response are what a reader compares it against by hand.
-	ReasonKPIsAreDirections = "a KPI names a goal in the business's own words; Atlas reports what it recorded beside it rather than guessing which figure the goal means"
+	ReasonKPIsAreDirections = "a KPI names a goal in the business's own words; atlas reports what it recorded beside it rather than guessing which figure the goal means"
 )
 
 // ProcessMeasurement is what one realising process recorded. A capability realised by

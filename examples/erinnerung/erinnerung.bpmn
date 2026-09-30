@@ -79,7 +79,7 @@ Worker-only (ADR-0172): der Mailzugang liegt nie in der Engine.</bpmn:documentat
     <bpmn:startEvent id="start_woche" name="wöchentlich">
       <bpmn:documentation>Wiederholungszyklus R/P7D (ADR-0051). Wöchentlich, weil eine Kampagne in Wochen läuft.
 
-NICHT GEPRÜFT: ob das die richtige Häufigkeit ist. Nichts in Atlas entscheidet das, und der Datensatz nimmt es dem Betreiber ausdrücklich nicht ab — wer täglich erinnert, erinnert täglich.</bpmn:documentation>
+NICHT GEPRÜFT: ob das die richtige Häufigkeit ist. Nichts in atlas entscheidet das, und der Datensatz nimmt es dem Betreiber ausdrücklich nicht ab — wer täglich erinnert, erinnert täglich.</bpmn:documentation>
       <bpmn:outgoing>f_start_liste</bpmn:outgoing>
       <bpmn:timerEventDefinition id="timer_woche">
         <bpmn:timeCycle>R/P7D</bpmn:timeCycle>

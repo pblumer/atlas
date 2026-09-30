@@ -1,59 +1,54 @@
 package api
 
 import (
-	"regexp"
 	"strings"
 	"testing"
 )
 
-// The product editor opens beside the list, not under it.
+// Where the product editor opens.
 //
-// It used to render under the product table, which is fine with three products and
-// unusable with forty: opening a row near the bottom put the form below everything
-// offered, so it was read after a long scroll and with no sight of the row it
-// belonged to. The list and the editor are therefore two columns, and the panel is
-// pushed down to the row it was opened from.
+// It first rendered under the whole list, which is fine with three products and
+// unusable with forty; then in a column beside the list, level with its row, which on
+// a wide screen was a third of the page and scrolled inside itself. It now opens
+// across the list's width: an existing product in a row directly under its own, a new
+// product under the list's buttons, where the two panel containers live.
 //
 // The geometry itself is proven in the browser (e2e/catalog-editor-layout.spec.mjs),
 // which is the only place a bounding box exists. What is held here is what that
-// geometry rests on — a structure and an offset that a tidy-up could take out
-// without anything failing in the Go suite.
+// geometry rests on.
 
-// TestTheProductEditorIsAColumnBesideTheList.
+// TestTheProductPanelsLiveUnderTheList.
 //
-// The markup is the layout: two columns only exist if the editor is a sibling of the
-// list rather than a block after it. An editor moved back below the table would still
-// render, still save, and silently be the page this change was made to replace.
-func TestTheProductEditorIsAColumnBesideTheList(t *testing.T) {
+// The containers sit in the list's own flow, after its buttons: that is where a new
+// product opens, and where an edited product's panel goes back to when it closes.
+func TestTheProductPanelsLiveUnderTheList(t *testing.T) {
 	src := readWeb(t, "catalog-admin.js")
-	page := webRegion(t, src, `<div class="product-cols cat-cols">`, "How the products relate")
+	page := webRegion(t, src, `<div class="product-list">`, "How the products relate")
 
 	for _, want := range []struct{ frag, what string }{
-		{`<div class="product-list cat-main">`, "the list column"},
-		{`<aside class="product-side cat-side">`, "the panel column beside it"},
-		{`<div class="product-editor"></div>`, "the product's form in that column"},
-		{`<div class="assemble-editor"></div>`, "the kit in the same column, beside the same row"},
-		{`<div class="product-table">`, "the table's own scroll box, so it cannot run under the panel"},
+		{`<div class="product-panels">`, "the place the panels live"},
+		{`<div class="product-editor"></div>`, "the product's form"},
+		{`<div class="assemble-editor"></div>`, "the kit, in the same place"},
+		{`<div class="product-table">`, "the table's own scroll box"},
 		{`data-act="new-product"`, "the button that opens an empty form"},
 	} {
 		if !strings.Contains(page, want.frag) {
-			t.Errorf("the products section no longer carries %s (%q), so the editor is not a "+
-				"column beside the list", want.what, want.frag)
+			t.Errorf("the products section no longer carries %s (%q)", want.what, want.frag)
 		}
 	}
-	// One row, one answer open. The two panels share a column, so whichever is opened
-	// has to empty the other — otherwise the second stacks under the first, and the one
-	// the reader is looking at is no longer level with anything.
+	if strings.Index(page, `data-act="new-product"`) > strings.Index(page, `class="product-panels"`) {
+		t.Error("the panels are emitted before the list's buttons, so a new product's form " +
+			"opens above the button that asked for it")
+	}
+	if strings.Contains(src, "product-side") || strings.Contains(src, "--editor-top") {
+		t.Error("the product list is laid out beside a column again; the form opens across " +
+			"its width, under the row or the buttons")
+	}
+	// One row, one answer open: whichever panel is opened empties the other.
 	open := webRegion(t, src, "const openPanel = (into, html, row) => {", "\n  };")
 	if !strings.Contains(open, `editor.innerHTML = ""`) || !strings.Contains(open, `assembler.innerHTML = ""`) {
 		t.Error("opening a panel no longer empties the other, so one row can have both the " +
-			"form and the kit open in one column")
-	}
-
-	// The editor's index in the section says which side it is on: a panel emitted
-	// before the list is a column, and the wrong one.
-	if strings.Index(page, `class="product-list"`) > strings.Index(page, `class="product-side"`) {
-		t.Error("the editor column is emitted before the list, so it opens to its left")
+			"form and the kit open")
 	}
 }
 
@@ -67,9 +62,9 @@ func TestTheProductEditorIsAColumnBesideTheList(t *testing.T) {
 // here rather than in somebody's afternoon.
 func TestEveryListOnTheCataloguePageCarriesItsFormBesideIt(t *testing.T) {
 	src := readWeb(t, "catalog-admin.js")
-	if n := strings.Count(src, `class="cat-cols"`) + strings.Count(src, `class="product-cols cat-cols"`); n < 4 {
+	if n := strings.Count(src, `class="cat-cols"`); n < 3 {
 		t.Errorf("only %d of the page's lists are paired with their form; the catalogues, the "+
-			"products, the relations and the maintainers are all that shape", n)
+			"relations and the maintainers are all that shape", n)
 	}
 	if a, b := strings.Count(src, `class="cat-main"`), strings.Count(src, `class="cat-side"`); a < 3 || b < 3 {
 		t.Errorf("%d halves are marked as the list and %d as the form beside it; a pair needs "+
@@ -129,51 +124,11 @@ func TestTheCataloguePageTakesTheSharedActionColumn(t *testing.T) {
 	}
 }
 
-// TestTheEditorOpensLevelWithItsRow.
-//
-// The offset is the feature, and it cannot be a stylesheet's: the shared table
-// enhancer sorts and filters the tbody, so only the DOM knows where a row ended up.
-// The script measures it and hands it over; app.css reads it. Both halves are held
-// here because either one alone is a panel that opens at the top of the list.
-func TestTheEditorOpensLevelWithItsRow(t *testing.T) {
-	src := readWeb(t, "catalog-admin.js")
-	if !strings.Contains(src, `side.style.setProperty("--editor-top"`) {
-		t.Fatal("nothing measures where the row is any more, so the panel opens at the top of " +
-			"the list whichever product was clicked")
-	}
-	if !strings.Contains(src, "new ResizeObserver(realign)") {
-		t.Error("the alignment is never re-measured, so a resized window leaves the panel " +
-			"pointing at a row that has moved")
-	}
-	if !strings.Contains(src, "window.scrollBy(0, moved)") {
-		t.Error("nothing holds the row still while the list reflows, so opening the panel " +
-			"pushes the row that was clicked off the reader's screen")
-	}
-
-	css := readWeb(t, "app.css")
-	if !strings.Contains(css, "margin-top: var(--editor-top, 0px);") {
-		t.Error("the stylesheet no longer reads --editor-top, so the measured offset is taken " +
-			"and thrown away")
-	}
-	if !strings.Contains(css, "overflow-anchor: none") {
-		t.Error("the browser's own scroll anchoring is back on beside the script's correction; " +
-			"two mechanisms undoing one shift each undo part of it")
-	}
-	// The stacked layout is the default and the two columns are the enhancement, so a
-	// viewport that never matches reads exactly the page it read before. A max-width
-	// rule here would invert that and make the narrow screen the special case.
-	if !regexp.MustCompile(`@media \(min-width: \d+px\) \{[^@]*\.product-cols \{`).MatchString(css) {
-		t.Error("the two-column layout is no longer introduced by a min-width rule, so the " +
-			"narrow screen is no longer the fallback")
-	}
-}
-
 // TestTheEditorCardStatesNoWidthOfItsOwn.
 //
-// The card is read in two layouts — beside the list, and stacked under it on a narrow
-// screen — and only the stylesheet knows which is in force. An inline width or margin
-// wins over both, which is how the panel ends up 14px out of line with its row for
-// reasons nobody can find in the CSS.
+// The card is read in two places — in a row under its product, and under the list's
+// buttons — and only the stylesheet knows which. An inline width or margin wins over
+// both, for reasons nobody can then find in the CSS.
 func TestTheEditorCardStatesNoWidthOfItsOwn(t *testing.T) {
 	form := webRegion(t, readWeb(t, "catalog-admin.js"), "function productForm(", "\n}")
 	open := strings.Index(form, `return `+"`"+`<div class="card`)
@@ -191,5 +146,121 @@ func TestTheEditorCardStatesNoWidthOfItsOwn(t *testing.T) {
 			t.Errorf("the editor card spells its own %s inline, which overrides both layouts "+
 				"it is rendered in", bad)
 		}
+	}
+}
+
+// TestAProductOpensUnderItsOwnRow.
+//
+// An existing product opens in a row of its own directly under it, across the table's
+// width. The row is a detail row for the shared table enhancer, which is what keeps it
+// under its product when the list is sorted and hides it with its product when a
+// filter removes that. The geometry is proven in e2e/catalog-editor-layout.
+func TestAProductOpensUnderItsOwnRow(t *testing.T) {
+	src := readWeb(t, "catalog-admin.js")
+	open := webRegion(t, src, "const openPanel = (into, html, row) => {", "\n  };")
+	for _, want := range []struct{ frag, what string }{
+		{`detailRow.setAttribute("data-dt-detail", "")`, "the table enhancer's mark for a row that belongs to the one above it"},
+		{`cell.colSpan = anchor.cells.length`, "the table's whole width"},
+		{`anchor.after(detailRow)`, "the place directly under the row"},
+		{`cell.appendChild(into)`, "the panel moved into that row"},
+	} {
+		if !strings.Contains(open, want.frag) {
+			t.Errorf("opening a product no longer uses %s (%q)", want.what, want.frag)
+		}
+	}
+	// Closing puts the containers back where the page rendered them, or the next new
+	// product opens its form into a row that no longer exists.
+	if !strings.Contains(src, "home.append(editor, assembler)") {
+		t.Error("closing a panel no longer returns the containers to where they live")
+	}
+	// A sort appends every row again: the panel is put back under its product.
+	if !strings.Contains(src, "if (anchor.nextElementSibling !== detailRow) anchor.after(detailRow);") {
+		t.Error("nothing keeps the form under its product once the list has been re-ordered")
+	}
+}
+
+// TestTheProductFormFoldsAndCanPublish.
+//
+// The form is long, so its sections fold and a folded one stays folded for the next
+// product; a required field inside a folded section opens it rather than stopping
+// the save with a message pointing at nothing. Beside Save Draft, Save & Publish
+// freezes the catalogue straight after the save and carries a refusal across the
+// reload to where the Publish button reports its own.
+func TestTheProductFormFoldsAndCanPublish(t *testing.T) {
+	src := readWeb(t, "catalog-admin.js")
+	form := webRegion(t, src, "function productForm(", "\n}")
+	for _, key := range []string{"shows", "filing", "offer", "order", "fulfil"} {
+		if !strings.Contains(form, `group("`+key+`", `) {
+			t.Errorf("the form no longer draws the %q section as one that folds", key)
+		}
+	}
+	for _, want := range []string{`data-publish="no">Save Draft</button>`, `data-publish="yes"`, `data-act="fold-sections"`} {
+		if !strings.Contains(form, want) {
+			t.Errorf("the form no longer carries %q", want)
+		}
+	}
+	for _, want := range []string{
+		`localStorage.setItem(SECTIONS_KEY`,
+		`if (d && !d.open) d.open = true;`,
+		`e.submitter && e.submitter.dataset.publish === "yes"`,
+		"carriedRefusal = { catalog: id, err: pubErr };",
+		"report.innerHTML = refusalCard(carriedRefusal.err);",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("catalog-admin.js no longer carries %q", want)
+		}
+	}
+}
+
+// TestTheProductFormSaysWhatPublishingNeeds.
+//
+// Save & Publish on a product that lacks what publishing checks saves it and is then
+// refused. The form states the product's half of those checks up front and keeps the
+// list current, so the rules are learned beside the fields rather than from a refusal.
+// The checks it mirrors are catalog.Publish's; if one is added there and not here, the
+// list is incomplete but not wrong — which is why it says publishing checks more.
+func TestTheProductFormSaysWhatPublishingNeeds(t *testing.T) {
+	src := readWeb(t, "catalog-admin.js")
+	if !strings.Contains(webRegion(t, src, "function productForm(", "\n}"), `<div class="publish-needs"`) {
+		t.Fatal("the product form no longer carries the list of what publishing needs")
+	}
+	needs := webRegion(t, src, "function publishNeeds(form) {", "\n}")
+	for _, want := range []string{`val("id")`, `[name^="t-"]`, `val("state") === "active"`,
+		`val("provisionProcess")`, `val("deprovisionProcess")`, `val("opProvision")`,
+		`val("opDeprovision")`, `kind === "fixed" || kind === "role"`} {
+		if !strings.Contains(needs, want) {
+			t.Errorf("publishNeeds no longer checks %s", want)
+		}
+	}
+	wire := webRegion(t, src, "function wireProductForm() {", "\n  }\n")
+	if !strings.Contains(wire, `pform.addEventListener("input", refresh)`) {
+		t.Error("the list is drawn once and not kept current while the form is filled in")
+	}
+}
+
+// TestTheCataloguePageDropsItsListenersBeforeAddingNewOnes.
+//
+// The console's view element is shared and outlives every page, so a listener this
+// page hangs on it is added again on every render — and a save renders the page
+// again. The stale ones kept running: a product opened after a save showed its form
+// twice, and an action could run twice. Every listener on the view is tied to the
+// render that added it, and the next render (or leaving the page) removes them.
+func TestTheCataloguePageDropsItsListenersBeforeAddingNewOnes(t *testing.T) {
+	src := readWeb(t, "catalog-admin.js")
+	adds := strings.Count(src, "view.addEventListener(")
+	tied := strings.Count(src, "}, { signal: viewListeners.signal });")
+	if adds == 0 || adds != tied {
+		t.Errorf("%d listeners are added to the shared view and %d are tied to their render; "+
+			"an untied one runs again after every reload", adds, tied)
+	}
+	fresh := webRegion(t, src, "function freshViewListeners() {", "\n}")
+	for _, want := range []string{"viewListeners.abort()", "window.__atlasCleanup"} {
+		if !strings.Contains(fresh, want) {
+			t.Errorf("freshViewListeners no longer carries %s", want)
+		}
+	}
+	wire := webRegion(t, src, "function wire({", "freshViewListeners();")
+	if strings.Contains(wire, "addEventListener") {
+		t.Error("wire adds a listener before it has removed the last render's")
 	}
 }

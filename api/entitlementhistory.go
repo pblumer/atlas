@@ -224,7 +224,7 @@ func emptyHistoryNote(at int64) string {
 	if at != 0 {
 		return "the record says this principal held nothing at " +
 			time.Unix(0, at).UTC().Format(time.RFC3339) + ". That is an answer about " +
-			"what Atlas recorded, not about what a target system contained — the two " +
+			"what atlas recorded, not about what a target system contained — the two " +
 			"are the same only where reconciliation has run"
 	}
 	return "no hold recorded against this principal has ended. A hold enters this " +

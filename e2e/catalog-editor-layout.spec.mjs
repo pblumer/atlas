@@ -1,9 +1,10 @@
 // Where the product editor opens.
 //
 // It used to render under the product list, which is fine with three products and
-// unusable with forty: opening a row near the bottom put the form below everything,
-// so it was read after a long scroll and with no sight of the product it belonged to.
-// It now takes a column beside the list and opens level with its row.
+// unusable with forty; then in a column beside the list, which on a wide screen was a
+// third of the page and scrolled inside itself. It now opens in a row of its own
+// directly under the product it edits, across the table's width, with sections that
+// fold. A new product, which has no row yet, opens under the list's buttons, as wide.
 //
 // The regression this guards is geometric and silent — nothing throws when a panel
 // lands in the wrong place, and no Go test can see a bounding box.
@@ -19,142 +20,168 @@ const open = async (page, size = { width: 1600, height: 800 }) => {
   await page.goto("/catalog-editor-harness.html");
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
   await page.evaluate(() => window.__mount());
-  await page.waitForSelector(".product-cols tbody tr");
+  await page.waitForSelector(".product-list tbody tr");
 };
 
-// The geometry of the open panel, the row it belongs to and the list beside it.
-const boxes = async (page) => page.evaluate(() => {
-  const r = (sel) => {
-    const el = document.querySelector(sel);
-    return el ? el.getBoundingClientRect().toJSON() : null;
-  };
-  return {
-    panel: r(".product-side"),
-    row: r(".product-list tr.editing"),
-    list: r(".product-list"),
-  };
-});
-
-test("the editor opens beside the product list, level with the row it was opened from", async ({ page }) => {
+test("the editor opens directly under the row it was opened from, across the list", async ({ page }) => {
   await open(page);
 
-  // The tenth product, deliberately: the first row would pass with the old layout too.
+  // The tenth product, deliberately: the first row would pass with any layout.
   await page.click('.product-list tbody tr:nth-child(10) button[data-act="edit"]');
   await expect(page.locator(".product-editor .product-form")).toBeVisible();
 
-  const b = await boxes(page);
-  // Beside, not below: the panel starts to the right of the list's column.
-  expect(b.panel.left).toBeGreaterThanOrEqual(b.list.right - 1);
-  // And level with the row, which is the point of the alignment.
-  expect(Math.abs(b.panel.top - b.row.top)).toBeLessThanOrEqual(4);
-  // The row it belongs to is named rather than implied.
+  const b = await page.evaluate(() => {
+    const r = (el) => el.getBoundingClientRect().toJSON();
+    const row = document.querySelector(".product-list tr.editing");
+    const edit = document.querySelector(".product-list tr.product-edit-row");
+    return {
+      row: r(row), edit: r(edit), list: r(document.querySelector(".product-list")),
+      next: edit.previousElementSibling === row,
+      inside: !!edit.querySelector(".product-editor .product-form"),
+    };
+  });
+  // Directly under its row, in a row of its own, and the table's full width.
+  expect(b.next).toBe(true);
+  expect(b.inside).toBe(true);
+  expect(Math.abs(b.edit.top - b.row.bottom)).toBeLessThanOrEqual(2);
+  expect(b.edit.width).toBeGreaterThan(b.list.width * 0.9);
   await expect(page.locator(".product-list tr.editing")).toHaveCount(1);
   await expect(page.locator(".product-editor input[name=id]")).toHaveValue("p10");
   expect(page.__errors).toEqual([]);
 });
 
-test("opening a row puts the form where the reader already is", async ({ page }) => {
+test("opening a row leaves it where the reader clicked it", async ({ page }) => {
   await open(page);
-  // Where a reader would be: scrolled to the row they mean to edit. Measured against
-  // the viewport rather than as a scroll offset, because scrollY is *expected* to
-  // change here — opening the panel narrows the list and the rows above rewrap, and
-  // the page is scrolled back by exactly what that added so the row stays put. What
-  // the reader sees is the question; scrollY is the wrong instrument for it.
   const row = page.locator(".product-list tbody tr:nth-child(10)");
   await row.scrollIntoViewIfNeeded();
   const before = await row.evaluate((el) => el.getBoundingClientRect().top);
-
   await row.locator('button[data-act="edit"]').click();
-  const after = await page.evaluate(() => ({
-    row: document.querySelector(".product-list tr.editing").getBoundingClientRect().top,
-    panel: document.querySelector(".product-side").getBoundingClientRect().top,
-    height: window.innerHeight,
-  }));
-  // The row stayed where it was read, and the form is beside it rather than below the
-  // scroll the old layout cost.
-  expect(Math.abs(after.row - before)).toBeLessThanOrEqual(4);
-  expect(after.panel).toBeGreaterThanOrEqual(0);
-  expect(after.panel).toBeLessThan(after.height);
+  const after = await page.evaluate(() =>
+    document.querySelector(".product-list tr.editing").getBoundingClientRect().top);
+  expect(Math.abs(after - before)).toBeLessThanOrEqual(4);
 });
 
-test("cancelling closes the panel and gives the width back to the list", async ({ page }) => {
+test("cancelling closes the panel and removes its row", async ({ page }) => {
   await open(page);
-  const wide = await page.evaluate(() => document.querySelector(".product-list").getBoundingClientRect().width);
-
+  const rows = await page.locator(".product-list tbody tr").count();
   await page.click('.product-list tbody tr:nth-child(2) button[data-act="edit"]');
-  const narrow = await page.evaluate(() => document.querySelector(".product-list").getBoundingClientRect().width);
-  expect(narrow).toBeLessThan(wide);
+  await expect(page.locator(".product-list tbody tr")).toHaveCount(rows + 1);
 
   await page.click('.product-editor button[data-act="cancel-product"]');
   await expect(page.locator(".product-editor .product-form")).toHaveCount(0);
   await expect(page.locator(".product-list tr.editing")).toHaveCount(0);
-  const back = await page.evaluate(() => document.querySelector(".product-list").getBoundingClientRect().width);
-  expect(Math.round(back)).toBe(Math.round(wide));
+  await expect(page.locator(".product-list tr.product-edit-row")).toHaveCount(0);
+  await expect(page.locator(".product-list tbody tr")).toHaveCount(rows);
 });
 
-test("a new product opens its form level with the button that asked for it", async ({ page }) => {
+test("a new product opens under the list's buttons, across the list", async ({ page }) => {
   await open(page);
   await page.click('button[data-act="new-product"]');
-  const b = await page.evaluate(() => ({
-    panel: document.querySelector(".product-side").getBoundingClientRect().top,
-    button: document.querySelector('button[data-act="new-product"]').closest(".row")
-      .getBoundingClientRect().top,
-  }));
-  expect(Math.abs(b.panel - b.button)).toBeLessThanOrEqual(4);
+  const b = await page.evaluate(() => {
+    const r = (el) => el.getBoundingClientRect();
+    const buttons = r(document.querySelector('button[data-act="new-product"]').closest(".row"));
+    const card = r(document.querySelector(".product-panels .product-editor .card"));
+    const list = r(document.querySelector(".product-list"));
+    return { gap: card.top - buttons.bottom, width: card.width, list: list.width };
+  });
+  // Directly under the buttons, and as wide as the form's measure allows rather than a
+  // third of the page.
+  expect(b.gap).toBeGreaterThanOrEqual(0);
+  expect(b.gap).toBeLessThanOrEqual(24);
+  expect(b.width).toBeGreaterThanOrEqual(Math.min(1280, b.list) - 2);
   await expect(page.locator(".product-editor input[name=id]")).toHaveValue("");
   // No row is claimed: the product has none yet.
   await expect(page.locator(".product-list tr.editing")).toHaveCount(0);
+  await expect(page.locator(".product-list tr.product-edit-row")).toHaveCount(0);
+
+  // And editing a row afterwards takes the form out from under the buttons and under
+  // the row.
+  await page.click('.product-list tbody tr:nth-child(3) button[data-act="edit"]');
+  await expect(page.locator(".product-list tr.product-edit-row .product-form")).toHaveCount(1);
+  await expect(page.locator(".product-panels .product-form")).toHaveCount(0);
+  await expect(page.locator(".product-editor input[name=id]")).toHaveValue("p3");
+
+  // Closing it puts the containers back, so the next new product opens where it should.
+  await page.click('.product-editor button[data-act="cancel-product"]');
+  await page.click('button[data-act="new-product"]');
+  await expect(page.locator(".product-panels .product-editor .product-form")).toHaveCount(1);
+  expect(page.__errors).toEqual([]);
 });
 
-test("on a narrow screen it falls back to the stacked layout", async ({ page }) => {
+test("on a narrow screen the form is still under its row", async ({ page }) => {
   await open(page, { width: 800, height: 800 });
   await page.click('.product-list tbody tr:nth-child(2) button[data-act="edit"]');
-  const b = await boxes(page);
-  // Under the list, full width, and no offset applied — one column is one column.
-  expect(b.panel.top).toBeGreaterThanOrEqual(b.list.bottom - 1);
-  expect(Math.round(b.panel.width)).toBeGreaterThan(Math.round(b.list.width * 0.9));
+  const b = await page.evaluate(() => ({
+    row: document.querySelector(".product-list tr.editing").getBoundingClientRect().bottom,
+    edit: document.querySelector(".product-list tr.product-edit-row").getBoundingClientRect().top,
+  }));
+  expect(Math.abs(b.edit - b.row)).toBeLessThanOrEqual(2);
 });
 
-test("sorting the list keeps the panel level with its product", async ({ page }) => {
+test("sorting the list keeps the form under its product", async ({ page }) => {
   await open(page);
   await page.click('.product-list tbody tr:nth-child(10) button[data-act="edit"]');
 
-  // The shared table enhancer sorts the tbody underneath the panel (table.js), which
-  // moves the row it is aligned to — the alignment has to be re-measured, not kept.
+  // The shared table enhancer sorts the tbody (table.js); the form's row is a detail
+  // row and travels with its product.
   await page.click(".product-list thead th:first-child");
-  // The panel re-measures one frame after the click (catalog-admin.js realign), so the
-  // alignment is awaited rather than read after a fixed 120 ms a loaded machine can
-  // overrun.
-  await expect.poll(async () => {
-    const b = await boxes(page);
-    return b.row ? Math.abs(b.panel.top - b.row.top) : Infinity;
-  }).toBeLessThanOrEqual(4);
+  await expect.poll(() => page.evaluate(() => {
+    const edit = document.querySelector(".product-list tr.product-edit-row");
+    return !!edit && edit.previousElementSibling === document.querySelector(".product-list tr.editing");
+  })).toBe(true);
   await expect(page.locator(".product-editor input[name=id]")).toHaveValue("p10");
 });
 
-test("the panel resists the scroll rather than leaving with it", async ({ page }) => {
+test("sections fold, and a folded section stays folded for the next product", async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => localStorage.removeItem("atlas.catalog.productSections"));
+  await page.click('.product-list tbody tr:nth-child(2) button[data-act="edit"]');
+  const offer = page.locator('.product-editor details.form-group[data-sec="offer"]');
+  await expect(offer).toHaveAttribute("open", "");
+  await expect(page.locator('.product-editor input[name="price"]')).toBeVisible();
+
+  await offer.locator("summary").click();
+  await expect(offer).not.toHaveAttribute("open", "");
+  await expect(page.locator('.product-editor input[name="price"]')).toBeHidden();
+
+  // The next product opens with the same section folded.
+  await page.click('.product-list tbody tr:nth-child(5) button[data-act="edit"]');
+  await expect(page.locator('.product-editor details.form-group[data-sec="offer"]')).not.toHaveAttribute("open", "");
+
+  // Collapse all folds every section; the button then offers the opposite.
+  await page.click('.product-editor button[data-act="fold-sections"]');
+  await expect(page.locator(".product-editor details.form-group[open]")).toHaveCount(0);
+  await expect(page.locator('.product-editor button[data-act="fold-sections"]')).toHaveText("Expand all");
+  await page.click('.product-editor button[data-act="fold-sections"]');
+  await expect(page.locator(".product-editor details.form-group:not([open])")).toHaveCount(0);
+  await page.evaluate(() => localStorage.removeItem("atlas.catalog.productSections"));
+  expect(page.__errors).toEqual([]);
+});
+
+test("Save Draft stores the product, Save & Publish also publishes the catalogue", async ({ page }) => {
   await open(page);
   await page.click('.product-list tbody tr:nth-child(2) button[data-act="edit"]');
+  await expect(page.locator('.product-editor button[data-publish="no"]')).toHaveText("Save Draft");
 
-  // Brought to the top of the window first, so what is measured afterwards is the
-  // sticking and not the distance it still had to travel.
-  await page.locator(".product-side").scrollIntoViewIfNeeded();
-  const before = await page.evaluate(() => document.querySelector(".product-side").getBoundingClientRect().top);
-  await page.evaluate(() => window.scrollBy(0, 120));
-  await page.waitForTimeout(80);
-  const after = await page.evaluate(() => {
-    const r = document.querySelector(".product-side").getBoundingClientRect();
-    return { top: r.top, bottom: r.bottom, height: window.innerHeight };
-  });
+  await page.evaluate(() => { window.__sent.length = 0; });
+  await page.click('.product-editor button[data-publish="no"]');
+  await expect.poll(() => page.evaluate(() =>
+    window.__sent.some((c) => c.method === "POST" && /\/catalog-products$/.test(c.url)))).toBe(true);
+  expect(await page.evaluate(() =>
+    window.__sent.some((c) => c.method === "POST" && /\/releases$/.test(c.url)))).toBe(false);
 
-  // It held its place instead of travelling the full 120px with the page: the form is
-  // longer than most screens, and reading to its Save button must not lose the form.
-  // (Sticky only within the products section — scrolled past that, it leaves with the
-  // section it belongs to, which is the behaviour and not a limit worth defeating.)
-  expect(after.top).toBeGreaterThan(before - 100);
-  expect(after.top).toBeGreaterThanOrEqual(0);
-  // And it is bounded by the window, so what does not fit scrolls inside the panel.
-  expect(after.bottom).toBeLessThanOrEqual(after.height + 1);
+  await page.evaluate(() => window.__mount());
+  await page.waitForSelector(".product-list tbody tr");
+  await page.click('.product-list tbody tr:nth-child(2) button[data-act="edit"]');
+  await page.evaluate(() => { window.__sent.length = 0; });
+  await page.click('.product-editor button[data-publish="yes"]');
+  await expect.poll(() => page.evaluate(() => {
+    const posts = window.__sent.filter((c) => c.method === "POST");
+    const save = posts.findIndex((c) => /\/catalog-products$/.test(c.url));
+    const pub = posts.findIndex((c) => /\/catalogs\/c1\/releases$/.test(c.url));
+    return save >= 0 && pub > save;
+  })).toBe(true);
+  expect(page.__errors).toEqual([]);
 });
 
 test("the row's actions sit at the table's right edge", async ({ page }) => {
@@ -185,17 +212,13 @@ test("the row's actions sit at the table's right edge", async ({ page }) => {
   expect(b.cellHeight).toBeLessThanOrEqual(b.rowHeight);
 });
 
-test("the kit opens beside its row too, and takes the panel from the form", async ({ page }) => {
+test("the kit opens under its row too, and takes the panel from the form", async ({ page }) => {
   await open(page);
 
   // The kit answers a question about one row exactly as the form does — what this
-  // product is made of — so it opens in the same place, level with that row.
+  // product is made of — so it opens in the same place, directly under that row.
   await page.click('.product-list tbody tr:nth-child(8) button[data-act="assemble"]');
-  await expect(page.locator(".assemble-editor form.assemble")).toBeVisible();
-
-  const b = await boxes(page);
-  expect(b.panel.left).toBeGreaterThanOrEqual(b.list.right - 1);
-  expect(Math.abs(b.panel.top - b.row.top)).toBeLessThanOrEqual(4);
+  await expect(page.locator(".product-list tr.product-edit-row form.assemble")).toBeVisible();
   await expect(page.locator(".assemble-editor form.assemble")).toHaveAttribute("data-product", "p8");
 
   // One row, one answer open: the form gives the panel up rather than queueing behind
@@ -204,6 +227,7 @@ test("the kit opens beside its row too, and takes the panel from the form", asyn
   await expect(page.locator(".assemble-editor form.assemble")).toHaveCount(0);
   await expect(page.locator(".product-editor input[name=id]")).toHaveValue("p3");
   await expect(page.locator(".product-list tr.editing")).toHaveCount(1);
+  await expect(page.locator(".product-list tr.product-edit-row")).toHaveCount(1);
 
   // And back the other way.
   await page.click('.product-list tbody tr:nth-child(3) button[data-act="assemble"]');
@@ -212,47 +236,37 @@ test("the kit opens beside its row too, and takes the panel from the form", asyn
   expect(page.__errors).toEqual([]);
 });
 
-test("closing the kit gives the width back to the list", async ({ page }) => {
+test("closing the kit removes its row", async ({ page }) => {
   await open(page);
-  const wide = await page.evaluate(() => document.querySelector(".product-list").getBoundingClientRect().width);
   await page.click('.product-list tbody tr:nth-child(2) button[data-act="assemble"]');
-  expect(await page.evaluate(() => document.querySelector(".product-list").getBoundingClientRect().width))
-    .toBeLessThan(wide);
-
+  await expect(page.locator(".product-list tr.product-edit-row")).toHaveCount(1);
   await page.click('.assemble-editor button[data-act="assemble-cancel"]');
   await expect(page.locator(".assemble-editor form.assemble")).toHaveCount(0);
   await expect(page.locator(".product-list tr.editing")).toHaveCount(0);
-  const back = await page.evaluate(() => document.querySelector(".product-list").getBoundingClientRect().width);
-  expect(Math.round(back)).toBe(Math.round(wide));
+  await expect(page.locator(".product-list tr.product-edit-row")).toHaveCount(0);
 });
 
-test("at the width the columns are offered, neither is drawn narrower than it holds", async ({ page }) => {
-  // The breakpoint is a measurement, not a taste: the list cannot be drawn under its
-  // min-content width and neither can the kit, and below the width where both fit the
-  // page stacks instead. A column added to either table, or a fourth button in a row,
-  // moves that number — and this is what says so, rather than a reader finding the
-  // remove button behind a horizontal scrollbar nobody notices.
+test("at 1440px neither the list nor a kit under its row scrolls sideways", async ({ page }) => {
+  // A column added to either table, or a fourth button in a row, would push the
+  // buttons behind a horizontal scrollbar nobody notices; this is what says so.
   await open(page, { width: 1440, height: 900 });
   await page.click('.product-list tbody tr:nth-child(4) button[data-act="assemble"]');
   const m = await page.evaluate(() => {
     const table = document.querySelector(".product-table");
     const kit = document.querySelector("form.assemble");
     return {
-      layout: getComputedStyle(document.querySelector(".product-cols")).display,
       list: table.scrollWidth - table.clientWidth,
       kit: kit.scrollWidth - kit.clientWidth,
     };
   });
-  expect(m.layout).toBe("flex"); // the two columns really are in force at this width
   expect(m.list).toBeLessThanOrEqual(1);
   expect(m.kit).toBeLessThanOrEqual(1);
 });
 
 test("every list on the catalogue page has its form beside it", async ({ page }) => {
   await open(page);
-  // Three pairs on this page: the products and the panel that edits them, the
-  // relations and the pair being related, the maintainers and the one being added.
-  // The products' panel is empty until a row is opened, so it is not counted here.
+  // The pairs on this page below the catalogue's own cards: the relations and the pair
+  // being related, the maintainers and the one being added.
   const pairs = await page.evaluate(() => [...document.querySelectorAll(".cat-cols")]
     .map((c) => {
       const main = c.querySelector(".cat-main");
@@ -345,4 +359,60 @@ test("a number field is drawn like every other field", async ({ page }) => {
   });
   expect(Math.round(b.rank)).toBe(Math.round(b.text));
   expect(b.border).toBe("1px");
+});
+
+test("the form says what publishing needs, and keeps saying it while it is filled in", async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => localStorage.removeItem("atlas.catalog.productSections"));
+  await page.click('button[data-act="new-product"]');
+  const needs = page.locator(".product-editor .publish-needs");
+  await expect(needs.locator("li.missing")).toHaveCount(4); // id, name, state, processes
+  await expect(needs.locator(".publish-needs-head")).toContainText("4 still missing");
+
+  // An entry takes the reader to its field, opening the section it is folded in.
+  await page.locator('.product-editor details.form-group[data-sec="fulfil"] > summary').click();
+  await expect(page.locator('.product-editor details.form-group[data-sec="fulfil"]')).not.toHaveAttribute("open", "");
+  await needs.locator('button[data-need-field="provisionProcess"]').click();
+  await expect(page.locator('.product-editor details.form-group[data-sec="fulfil"]')).toHaveAttribute("open", "");
+  await expect(page.locator('.product-editor select[name="provisionProcess"]')).toBeFocused();
+
+  await page.fill('.product-editor input[name="id"]', "neu");
+  await page.fill('.product-editor input[name="t-de"]', "Neues Produkt");
+  await page.selectOption('.product-editor select[name="state"]', "active");
+  await page.selectOption('.product-editor select[name="provisionProcess"]', "proc_demo_2");
+  await expect(needs.locator("li.missing")).toHaveCount(1);
+  await page.selectOption('.product-editor select[name="deprovisionProcess"]', "proc_demo_3");
+  await expect(needs.locator("li.missing")).toHaveCount(0);
+  await expect(needs.locator(".publish-needs-head")).toContainText("Everything this product needs");
+
+  // An approval rule that names nobody is one more thing missing.
+  await page.selectOption('.product-editor select[name="akind"]', "role");
+  await expect(needs.locator("li.missing")).toHaveCount(1);
+  await page.evaluate(() => localStorage.removeItem("atlas.catalog.productSections"));
+  expect(page.__errors).toEqual([]);
+});
+
+test("a page drawn again does not answer a click once per time it was drawn", async ({ page }) => {
+  // The page hangs its listeners on the console's shared view element, which
+  // outlives every render; a save reloads the page. Listeners from earlier renders
+  // used to keep running, so after a reload a product opened its form twice and an
+  // action ran twice. Drawn three times here, it must still answer once.
+  await open(page);
+  await page.evaluate(() => window.__mount());
+  await page.waitForSelector(".product-list tbody tr");
+  await page.evaluate(() => window.__mount());
+  await page.waitForSelector(".product-list tbody tr");
+
+  await page.click('.product-list tbody tr:nth-child(4) button[data-act="edit"]');
+  await expect(page.locator(".product-list tr.product-edit-row")).toHaveCount(1);
+  await expect(page.locator(".product-form")).toHaveCount(1);
+
+  await page.evaluate(() => { window.__sent.length = 0; });
+  await page.click('button[data-act="publish"]');
+  await expect.poll(() => page.evaluate(() =>
+    window.__sent.filter((c) => c.method === "POST" && /\/releases$/.test(c.url)).length)).toBe(1);
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() =>
+    window.__sent.filter((c) => c.method === "POST" && /\/releases$/.test(c.url)).length)).toBe(1);
+  expect(page.__errors).toEqual([]);
 });

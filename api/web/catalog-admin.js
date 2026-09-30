@@ -32,6 +32,20 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
 
 const fmtTime = (unix) => unix ? new Date(unix * 1000).toLocaleString() : "—";
 
+// refusalCard is a refused publish as the page shows it, whichever button asked:
+// Publish below the release list, or Save & Publish in the product form.
+function refusalCard(err) {
+  return `<div class="card" style="margin-top:12px; border-color:var(--danger)">
+    <b>Not published.</b>
+    <p class="muted" style="margin:6px 0 0">Nothing was frozen; the catalogue is unchanged.</p>
+    ${publishRefusal(err)}</div>`;
+}
+
+// carriedRefusal is a Save & Publish whose publish was refused. The save reloads the
+// page, which would take the report with it, so it is carried across the reload and
+// shown where the Publish button shows its own.
+let carriedRefusal = null;
+
 // publishRefusal renders why a publish was refused.
 //
 // The server proves a catalogue at publish and answers 422 with every problem at
@@ -443,10 +457,28 @@ function shareWhoField(dir, cat) {
 // "a named person" to "the orderer's superior": the old username would otherwise
 // ride along in a rule that has no use for it, and sit in the catalogue looking
 // like an answer to a question nobody asked.
+//
+// A kind that is not one of the four built-in ones names an approval process of the
+// installation's own (order.Line.ApprovalProcess), and its approver is whatever
+// that process reads — so it is kept in its own field and sent back as it was.
 function approvalFrom(f) {
   const kind = String(f.get("akind") || "none");
-  const field = { fixed: "aref-fixed", role: "aref-role" }[kind];
+  const field = isProcessKind(kind) ? "aref-process" : { fixed: "aref-fixed", role: "aref-role" }[kind];
   return { kind, ref: field ? String(f.get(field) || "").trim() : "" };
+}
+
+// isProcessKind is true for an approval kind this form has no built-in meaning for:
+// a registered approval process named directly.
+const isProcessKind = (kind) => !!kind && !APPROVAL_KINDS.some((k) => k.id === kind);
+
+// approvalKindOptions is the kind select's options. The four built-in kinds, plus
+// the product's own kind where it names an approval process: without it the select
+// would show "No approval", and saving any other field would silently store that.
+function approvalKindOptions(ap, opt) {
+  const kind = ap.kind || "none";
+  const own = isProcessKind(kind)
+    ? opt(kind, kind, `${kind} — approval process of this installation`) : "";
+  return APPROVAL_KINDS.map((k) => opt(k.id, kind, `${k.name} — ${k.what}`)).join("") + own;
 }
 
 // audienceFrom reads whichever of the two controls was rendered. The picker names
@@ -951,26 +983,24 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
     <p class="muted" style="max-width:62ch">A product is edited through its home catalogue.
       Everything offered here is orderable once this catalogue is published — a product in
       <b>draft</b> or <b>withdrawn</b> state is not.</p>
-    <div class="product-cols cat-cols">
-      <div class="product-list cat-main">
-        ${offered.length ? `<div class="product-table"><table class="table">
-          <thead><tr><th>Product</th><th>State</th><th>Approval</th><th>Provisioned by</th><th></th></tr></thead>
-          <tbody>${offered.map((iid) => productRow(byID[iid], iid, langs, offered.length > 1)).join("")}</tbody></table></div>`
+    <div class="product-list">
+      ${offered.length ? `<div class="product-table"><table class="table">
+        <thead><tr><th>Product</th><th>State</th><th>Approval</th><th>Provisioned by</th><th></th></tr></thead>
+        <tbody>${offered.map((iid) => productRow(byID[iid], iid, langs, offered.length > 1)).join("")}</tbody></table></div>`
     : `<div class="empty"><p>Nothing offered yet.</p></div>`}
 
-        <div class="row" style="margin-top:10px">
-          <button class="btn" data-act="new-product">New product</button>
-          ${offerable.length ? `<button class="btn ghost" data-act="add-existing">Offer an existing product</button>` : ""}
-        </div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" data-act="new-product">New product</button>
+        ${offerable.length ? `<button class="btn ghost" data-act="add-existing">Offer an existing product</button>` : ""}
       </div>
-      <!-- One column, two panels, and never both at once: editing a product and
-           arranging what it is made of are two questions about the same row, and a
-           row has one answer open at a time. Both keep their own container so the
-           code that fills each one says which it means. -->
-      <aside class="product-side cat-side">
+      <!-- Two panels, and never both at once: editing a product and arranging what
+           it is made of are two questions about the same row, and a row has one
+           answer open at a time. They live here, under the button that opens a new
+           product, and move into a row under the product being edited. -->
+      <div class="product-panels">
         <div class="product-editor"></div>
         <div class="assemble-editor"></div>
-      </aside>
+      </div>
     </div>
 
     <h3 style="margin-top:26px">How the products relate</h3>
@@ -1141,9 +1171,9 @@ function assembleKit(pid, offered, byID, langs, edges) {
         <input type="radio" name="part-${esc(other)}" value="${esc(c.id)}"${
   c.id === now ? " checked" : ""} aria-label="${esc(name(other))}: ${esc(c.name)}"></label></td>`).join("")}</tr>`;
   }).join("");
-  // No margin spelled here: the card is read in two layouts — beside the list in a
-  // column of its own, and stacked under it on a narrow screen — and an inline style
-  // would win over both, standing the panel twelve pixels off the row it belongs to.
+  // No margin spelled here: the card is read in two places — in a row under its
+  // product, and under the list's buttons — and only the stylesheet knows which; an
+  // inline style would win over both.
   return `<form class="assemble card" data-product="${esc(pid)}">
     <h4 style="margin:0 0 4px">What ${esc(name(pid))} is made of</h4>
     <p class="muted" style="max-width:62ch; margin:0 0 10px">Every other product this catalogue
@@ -1473,6 +1503,78 @@ function partOfNote(it, cat, items, langs) {
     <b>assemble</b>.</p>`;
 }
 
+// publishNeeds is what a product must carry before a catalogue offering it can be
+// published, read off the form as it stands. It is the product's half of what
+// publishing checks (catalog.Publish and its lifecycle checks), stated up front:
+// Save & Publish on a product without them saves it and is then refused, and a
+// refusal after the fact is a worse way to learn the rules than a list beside the
+// fields. Each entry names the section and the field it is about, so the list can
+// take a reader to it. It does not claim to be all of publishing — languages,
+// cycles and ranks are the catalogue's, not the product's — and says so.
+function publishNeeds(form) {
+  const val = (n) => {
+    const el = form.elements.namedItem(n);
+    return el && "value" in el ? String(el.value || "").trim() : "";
+  };
+  const firstName = form.querySelector('[name^="t-"]');
+  const life = val("lifecycleProcess");
+  const kind = val("akind");
+  const needs = [
+    { sec: "shows", field: "id", what: "an id", ok: val("id") !== "" },
+    { sec: "shows", field: firstName ? firstName.name : "", what: "a name in at least one language",
+      ok: [...form.querySelectorAll('[name^="t-"]')].some((el) => el.value.trim() !== "") },
+    { sec: "order", field: "state", what: "the state Active (a draft is saved but never published)",
+      ok: val("state") === "active" },
+    life
+      ? { sec: "fulfil", field: val("opProvision") ? "opDeprovision" : "opProvision",
+        what: "a provision and a deprovision start event for the lifecycle process",
+        ok: val("opProvision") !== "" && val("opDeprovision") !== "" }
+      : { sec: "fulfil", field: val("provisionProcess") ? "deprovisionProcess" : "provisionProcess",
+        what: "a process that provisions it and one that revokes it",
+        ok: val("provisionProcess") !== "" && val("deprovisionProcess") !== "" },
+  ];
+  if (kind === "fixed" || kind === "role") {
+    needs.push({ sec: "order", field: `aref-${kind}`, what: "an approver for the approval rule",
+      ok: val(`aref-${kind}`) !== "" });
+  }
+  return needs;
+}
+
+// publishNeedsHTML draws that list: what is missing first in words, then every entry
+// with whether it is there, each one a button that opens its section at the field.
+function publishNeedsHTML(needs) {
+  const missing = needs.filter((n) => !n.ok).length;
+  const head = missing
+    ? `Required to publish &mdash; ${missing} still missing:`
+    : "Everything this product needs to be published is filled in.";
+  return `<p class="publish-needs-head">${head}</p>
+    <ul>${needs.map((n) => `<li class="${n.ok ? "ok" : "missing"}"><button type="button"
+      class="btn ghost small publish-need" data-need-sec="${esc(n.sec)}" data-need-field="${esc(n.field)}"
+      aria-label="${esc(n.what)}: ${n.ok ? "done" : "missing"}"><span
+      aria-hidden="true">${n.ok ? "&#10003;" : "&#10007;"}</span> ${esc(n.what)}</button></li>`).join("")}</ul>
+    <p class="publish-needs-note">Publishing also checks the catalogue as a whole &mdash; its
+      languages, the structure between products &mdash; so it can still refuse for a reason
+      outside this product, and says which.</p>`;
+}
+
+// Which sections of the product form a maintainer has folded away, per browser. The
+// form explains every field, which is right the first time and a scroll every time
+// after, so a section closed once stays closed on the next product opened. Kept in
+// localStorage and not on the server: it is how one person reads the form, not a fact
+// about the catalogue. A storage that cannot be read (a private window) opens all.
+const SECTIONS_KEY = "atlas.catalog.productSections";
+function foldedSections() {
+  try { return JSON.parse(localStorage.getItem(SECTIONS_KEY) || "{}") || {}; } catch { return {}; }
+}
+function sectionOpen(key) { return foldedSections()[key] !== true; }
+function rememberSection(key, open) {
+  try {
+    const folded = foldedSections();
+    if (open) delete folded[key]; else folded[key] = true;
+    localStorage.setItem(SECTIONS_KEY, JSON.stringify(folded));
+  } catch { /* the fold still works; it is only not remembered */ }
+}
+
 function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
   const v = it || { state: "draft", approval: { kind: "none" }, texts: {} };
   const ap = v.approval || {};
@@ -1483,16 +1585,27 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
       ${procIDs.map((p) => opt(p, sel || "", p)).join("")}
       ${sel && !procIDs.includes(sel) ? opt(sel, sel, `${sel} (not deployed)`) : ""}
     </select>`;
-  const section = (title, hint) => `<h4 class="form-sec">${esc(title)}</h4>
-    <p class="form-sec-hint">${hint}</p>`;
-  // No width and no margin spelled here: the card is read in two layouts — beside the
-  // list in a column of its own, and stacked under it on a narrow screen — and only
-  // the stylesheet knows which one is in force. An inline style would win over both.
+  // group draws one section of the form as something a maintainer can fold away. The
+  // form is long — every field explains itself, which is right the first time and a
+  // scroll every time after — so a section somebody has closed stays closed on the
+  // next product they open (sectionOpen). The body keeps the form's two-column grid.
+  const group = (key, title, hint, body) => `<details class="form-group" data-sec="${esc(key)}"${
+    sectionOpen(key) ? " open" : ""}>
+      <summary class="form-sec">${esc(title)}</summary>
+      ${hint ? `<p class="form-sec-hint">${hint}</p>` : ""}
+      <div class="form-group-body">${body}</div></details>`;
+  // No width and no margin spelled here: the card is read in two places — in a row
+  // under the product it edits, and under the list's buttons for a new product — and
+  // only the stylesheet knows which. An inline style would win over both.
   return `<div class="card">
-    <h3 style="margin:0 0 10px">${it ? "Edit product" : "New product"}</h3>
+    <div class="between" style="margin:0 0 10px">
+      <h3 style="margin:0">${it ? "Edit product" : "New product"}</h3>
+      <button class="btn ghost" type="button" data-act="fold-sections">Collapse all</button>
+    </div>
     <form class="product-form" data-editing="${esc(it ? it.id : "")}">
-      ${section("What the catalogue shows",
-    "The product as somebody browsing it meets it. Everything here is read by whoever orders.")}
+      <div class="publish-needs" aria-live="polite"></div>
+      ${group("shows", "What the catalogue shows",
+    "The product as somebody browsing it meets it. Everything here is read by whoever orders.", `
       <label class="field">Id${it ? "" : " (short, stable, never renamed)"}
         <input name="id" value="${esc(v.id || "")}" ${it ? "readonly" : "required"} autocomplete="off"
           placeholder="laptop"></label>
@@ -1509,6 +1622,9 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
           still publishes, and the reader of the other language is shown the one that
           exists rather than an empty panel.</span>
         ${langFields("d", langs, v.descriptions, { rows: 3 })}</label>
+      `)}
+      ${group("filing", "Where the shop files it",
+    "The heading and group it is listed under, and the words it is found by.", `
       ${partOfNote(it, cat, items, langs)}
       <label class="field wide">Category
         <span class="muted" style="display:block; margin:2px 0 6px">The heading the
@@ -1553,6 +1669,9 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
           catalogue types <code>laptop</code> as readily as <code>Notebook</code>.</span>
         <input name="keywords" value="${esc((v.keywords || []).join(", "))}"
           autocomplete="off" placeholder="Notebook, mobiles Gerät, M365"></label>
+      `)}
+      ${group("offer", "What is offered",
+    "Its cost, its shapes and its picture: what somebody choosing it compares.", `
       <label class="field wide">Cost
         <span class="muted" style="display:block; margin:2px 0 6px">Written as you want it
           read — <code>CHF 1'200.&ndash;</code>, <code>49.&ndash; / Monat</code>,
@@ -1593,10 +1712,10 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
         <input type="file" name="picture" accept="image/png,image/jpeg,image/svg+xml">
         ${it ? `<label class="field inline"><input type="checkbox" name="dropPicture">
           Remove the picture this product has</label>` : ""}</div>
-
-      ${section("How an order is handled",
+      `)}
+      ${group("order", "How an order is handled",
     "What happens after somebody puts it in the basket. None of it is shown in the catalogue, " +
-    "except that an approval is needed at all.")}
+    "except that an approval is needed at all.", `
       <label class="field wide">Orderable window
         <span class="muted" style="display:block; margin:2px 0 6px">The days between
           which this product may be ordered. Both ends are <b>inclusive</b> and either
@@ -1618,7 +1737,7 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
         ${STATES.map((s) => opt(s.id, v.state || "draft", `${s.name} — ${s.what}`)).join("")}
       </select></label>
       <label class="field">Approval<select name="akind">
-        ${APPROVAL_KINDS.map((k) => opt(k.id, ap.kind || "none", `${k.name} — ${k.what}`)).join("")}
+        ${approvalKindOptions(ap, opt)}
       </select></label>
       ${approverField(ap, dir, people)}
       ${eligibleField(dir, v.eligible)}
@@ -1635,6 +1754,10 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
           ${v.configForm && !formList.some((f) => f.id === v.configForm)
     ? opt(v.configForm, v.configForm, `${v.configForm} (no such form)`) : ""}
         </select></label>
+      `)}
+      ${group("fulfil", "How it is fulfilled",
+    "The processes that grant and revoke it, how long a right lasts, and what it is called " +
+    "in the systems that hold it.", `
       <label class="field">Provisioned by${procSelect("provisionProcess", v.provisionProcess)}</label>
       <label class="field">Revoked by${procSelect("deprovisionProcess", v.deprovisionProcess)}</label>
       <label class="field wide">Or one lifecycle process for everything
@@ -1681,9 +1804,11 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
           is attributed to neither.</span>
         <textarea name="targets" rows="3" spellcheck="false"
           placeholder="ad:CN=VPN-Users">${esc(targetLines(v.targets))}</textarea></label>
+      `)}
       ${maintainersNote(cat, dir)}
       <div class="row">
-        <button class="btn" type="submit">Save</button>
+        <button class="btn" type="submit" data-publish="no">Save Draft</button>
+        <button class="btn" type="submit" data-publish="yes" title="Save this product and publish the catalogue, so the shop offers what was just saved">Save &amp; Publish</button>
         <button class="btn neutral" type="button" data-act="cancel-product">Cancel</button>
       </div>
     </form>
@@ -1746,7 +1871,15 @@ function approverField(ap, dir, people) {
        <span class="muted" style="display:block; margin:4px 0 0">Whoever in the group picks it
          up. Stored as the group's id, so renaming the group does not lose the approver.</span>`;
 
-  return box("fixed", person) + box("role", groups);
+  // An approval process of the installation's own reads its approver however it
+  // was written to, so the value is shown and sent back as it is stored.
+  const process = isProcessKind(kind)
+    ? box(kind, `<input name="aref-process" value="${esc(ref)}" autocomplete="off">
+       <span class="muted" style="display:block; margin:4px 0 0">Passed to the approval
+         process ${esc(kind)} as it is written here.</span>`)
+    : "";
+
+  return box("fixed", person) + box("role", groups) + process;
 }
 
 // maintainersNote answers, where it is asked, a question this form has no field
@@ -1782,6 +1915,30 @@ function maintainersNote(cat, dir) {
 // the Content-Type carrying the format. Bending the shared helper for one caller
 // would put a third meaning on its fourth argument, which is already a boolean
 // named isXML.
+// The listeners this page hangs on the console's view element.
+//
+// That element is shared: every page of the console renders into it, and it
+// outlives each of them. A listener added to it is therefore added again on every
+// visit and every reload of this page — including the reload a save does — and the
+// ones from earlier renders kept running, each with its own closure over elements
+// that were no longer on screen. That stayed invisible while their effects landed
+// on detached nodes. Once the product form moved into a row under the product it
+// edits, the stale handlers found the live row too, and a product opened after a
+// save showed its form twice, once per render since the page was first opened.
+// The same stale handlers would also repeat an action, such as a publish.
+//
+// So every render starts by removing the previous render's listeners, and leaving
+// the page removes them too (__atlasCleanup, which the router calls on every
+// navigation).
+let viewListeners = null;
+function freshViewListeners() {
+  if (viewListeners) viewListeners.abort();
+  const own = new AbortController();
+  viewListeners = own;
+  window.__atlasCleanup = () => own.abort();
+  return own.signal;
+}
+
 function wireAppearance({ api, toast, view }, id, reload) {
   const form = view.querySelector(".cat-theme");
   if (!form) return;
@@ -1839,7 +1996,7 @@ function wireAppearance({ api, toast, view }, id, reload) {
     for (const box of form.querySelectorAll(".aref-for")) {
       box.hidden = box.dataset.kind !== sel.value;
     }
-  });
+  }, { signal: viewListeners.signal });
 
   view.addEventListener("click", async (e) => {
     const b = e.target.closest("button[data-act]");
@@ -1884,11 +2041,13 @@ function wireAppearance({ api, toast, view }, id, reload) {
         reload();
       } catch (err) { toast(err.message, "err"); } finally { b.disabled = false; }
     }
-  });
+  }, { signal: viewListeners.signal });
 }
 
 function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, formList, canShare, canTheme, dir, people) {
   const id = cat.id;
+  // Before anything is wired: this render's listeners replace the last one's.
+  freshViewListeners();
   const reload = () => { const h = location.hash; location.hash = "#/catalog"; location.hash = h; };
   // patch changes a catalogue with no precondition. That is right for a form whose
   // every field is on the screen: what it overwrites is what somebody is looking at.
@@ -1925,18 +2084,25 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
   };
   const editor = view.querySelector(".product-editor");
   const assembler = view.querySelector(".assemble-editor");
+  if (carriedRefusal && carriedRefusal.catalog === id) {
+    const report = view.querySelector(".publish-report");
+    if (report) {
+      report.innerHTML = refusalCard(carriedRefusal.err);
+      report.scrollIntoView({ block: "center" });
+    }
+    carriedRefusal = null;
+  }
 
   // ---- Where the editor panel sits ----
   //
-  // The panel is a column beside the list (app.css), and it opens level with the row
-  // it was opened from: a product edited from row thirty would otherwise put its form
-  // thirty rows further down the page, which is the scroll this layout exists to
-  // remove. CSS cannot know where a row ended up — the shared table enhancer sorts
-  // and filters the tbody underneath it — so the offset is measured here and handed
-  // over as --editor-top. app.css reads it only where the two columns exist at all;
-  // on a narrow viewport the property is ignored and the panel is stacked under the
-  // list, exactly as it used to be.
-  const cols = view.querySelector(".product-cols");
+  // Across the list's whole width, never in a column beside it. Beside the list the
+  // form was a third of a wide screen and scrolled inside itself, which is where the
+  // width of this page is. An existing product's form (and its kit) opens in a row of
+  // its own directly under the product; a new product, which has no row yet, opens
+  // directly under the button that asked for it, where the two containers live
+  // (.product-panels). Nothing is measured: a panel in the flow of the page is where
+  // it is, and the reader's row does not move when it opens.
+  //
   // listEl and not `list`: this module has a `list` helper at the top that splits a
   // comma-separated field, and the catalogue's own save calls it a hundred lines
   // below. A DOM element named `list` shadowed it for the whole of this function, so
@@ -1944,38 +2110,37 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
   // caught by the submit handler and shown as a toast, which is why it read as a
   // server refusal rather than as a page that could not run.
   const listEl = view.querySelector(".product-list");
-  // The column itself, which is what carries the offset: the two panels inside it are
-  // containers and only one of them holds anything at a time.
-  const side = view.querySelector(".product-side");
-  // The row the open panel belongs to, kept so the alignment survives what the list
-  // does afterwards.
+  const home = view.querySelector(".product-panels");
+  // The row the open panel belongs to, or null for a new product.
   let anchor = null;
 
-  const open = () => !!(editor.firstChild || assembler.firstChild);
-
-  const align = () => {
-    if (!anchor || !cols || !side || !open()) return;
-    // offsetParent is null for a row a filter has hidden. Measuring against a hidden
-    // row would snap the panel to the top of the list while its product is still
-    // open in it, so the last good offset stands until the row is on screen again.
-    if (anchor.offsetParent === null) return;
-    const top = anchor.getBoundingClientRect().top - cols.getBoundingClientRect().top;
-    side.style.setProperty("--editor-top", `${Math.max(0, Math.round(top))}px`);
+  // The row a product was opened from gets a row of its own directly beneath it, and
+  // the panel moves into that. It is marked as a detail row (data-dt-detail), so the
+  // shared table enhancer sorts it with its product and hides it with it (table.js).
+  let detailRow = null;
+  const inline = (row) => !!row && row.tagName === "TR";
+  const dropDetail = () => {
+    // The two containers go back under the buttons, in their order, so the next
+    // panel — a new product's included — finds them where the page put them.
+    home.append(editor, assembler);
+    if (detailRow) { detailRow.remove(); detailRow = null; }
   };
-  // Sorting a column reorders the rows and a filter hides some: either moves the row
-  // the panel is aligned to, and both arrive as ordinary events on the list. One
-  // frame later the table has been rebuilt, so this re-measures rather than predicts.
-  const realign = () => requestAnimationFrame(align);
+
+  // keepUnder puts the panel back under its product after the list moved it. A sort
+  // appends every row again, and a filter hides some: the panel stays under its
+  // product, and is shown again when a filter brings the product back.
+  const keepUnder = () => {
+    if (!anchor || !detailRow) return;
+    if (anchor.nextElementSibling !== detailRow) anchor.after(detailRow);
+    detailRow.hidden = anchor.hidden;
+  };
+  // Both arrive as ordinary events on the list; one frame later the table has been
+  // rebuilt.
+  const realign = () => requestAnimationFrame(keepUnder);
   if (listEl) {
     listEl.addEventListener("click", realign);
     listEl.addEventListener("input", realign);
   }
-  // A viewport change moves the row with no event on the list at all, and a narrow
-  // one takes the second column away entirely. Observed rather than bound to
-  // window.resize so it ends with the view: the element goes when the page is
-  // re-rendered and the observer goes with it, where a window listener would outlive
-  // both and go on measuring nodes nobody can see.
-  if (cols && typeof ResizeObserver === "function") new ResizeObserver(realign).observe(cols);
 
   // markEditing keeps the highlight on exactly one row: the panel says which product
   // it is editing, and a second highlight would make that a guess.
@@ -1984,61 +2149,65 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
     if (row) row.classList.add("editing");
   };
 
-  // keepInPlace holds the row still while the layout changes under it.
-  //
-  // Opening the panel takes a column off the list, so every cell that was on one line
-  // and is now on two makes the rows above the reader taller — and a row at the
-  // bottom of a long list is then pushed a screenful down by text they are not even
-  // looking at. The panel is level with its row either way (align() measures after
-  // the reflow), but the *page* has moved, which reads as the list jumping away from
-  // the click. Measured before and after, the difference is exactly how far the row
-  // travelled, and scrolling by it puts it back under the cursor. app.css turns the
-  // browser's own scroll anchoring off here so this is the only correction applied
-  // and the two cannot fight over the same pixels.
-  const keepInPlace = (row, wasAt) => {
-    if (!row || wasAt === null || row.offsetParent === null) return;
-    const moved = row.getBoundingClientRect().top - wasAt;
-    if (Math.abs(moved) > 1) window.scrollBy(0, moved);
-  };
-
-  // stacked says the column is not there: below the layout's breakpoint the panel
-  // renders under the list, where nothing is level with anything and the reader has to
-  // be taken to it. Read off the layout rather than from a media query repeated here,
-  // because the breakpoint is app.css's and a second copy of it drifts.
-  const stacked = () => !cols || getComputedStyle(cols).display !== "flex";
-
-  // openPanel puts one panel in the column, empties the other, marks the row the two
-  // belong to and aligns them. One function for the product's form and for the kit,
-  // because they are one act and one place: a row has one answer open at a time, and
-  // a panel carrying the previous product's highlight — or the previous product's
-  // offset — is worse than no highlight at all.
+  // openPanel puts one panel in place, empties the other and marks the row the two
+  // belong to. One function for the product's form and for the kit, because they are
+  // one act and one place: a row has one answer open at a time, and a panel carrying
+  // the previous product's highlight is worse than no highlight at all.
   const openPanel = (into, html, row) => {
-    const wasAt = row && row.offsetParent !== null ? row.getBoundingClientRect().top : null;
     editor.innerHTML = "";
     assembler.innerHTML = "";
+    dropDetail();
     into.innerHTML = html;
-    markEditing(row && row.tagName === "TR" ? row : null);
-    anchor = row || null;
-    align();
-    keepInPlace(row, wasAt);
-    // Stacked, the panel is below the list and can be a screen away; beside it, it is
-    // already level with the row that was clicked and scrolling would undo that.
-    if (stacked()) into.scrollIntoView({ block: "nearest" });
+    anchor = inline(row) ? row : null;
+    markEditing(anchor);
+    if (anchor) {
+      detailRow = document.createElement("tr");
+      detailRow.className = "product-edit-row";
+      detailRow.setAttribute("data-dt-detail", "");
+      const cell = document.createElement("td");
+      cell.colSpan = anchor.cells.length;
+      cell.appendChild(into);
+      detailRow.appendChild(cell);
+      anchor.after(detailRow);
+    } else {
+      // Under the button that was pressed, which can be the bottom of the screen.
+      into.scrollIntoView({ block: "nearest" });
+    }
   };
-  const openEditor = (html, row) => { openPanel(editor, html, row); wireProductForm(); };
+  const openEditor = (html, row) => { openPanel(editor, html, row); wireProductForm(); syncFoldButton(); };
   const openAssembler = (html, row) => openPanel(assembler, html, row);
 
   const closePanel = () => {
-    // Closing gives the width back and reflows the list the same way, so the row is
-    // held still on the way out too.
-    const row = anchor;
-    const wasAt = row && row.offsetParent !== null ? row.getBoundingClientRect().top : null;
     editor.innerHTML = "";
     assembler.innerHTML = "";
-    side.style.removeProperty("--editor-top");
+    dropDetail();
     markEditing(null);
     anchor = null;
-    keepInPlace(row, wasAt);
+  };
+
+  // A section folded or unfolded is remembered for the next product (sectionOpen).
+  // toggle does not bubble, so it is caught on the way down; the container is wired
+  // once here and not per form, or every product opened would add a listener.
+  editor.addEventListener("toggle", (e) => {
+    const d = e.target;
+    if (d.matches && d.matches("details.form-group")) {
+      rememberSection(d.dataset.sec, d.open);
+      syncFoldButton();
+    }
+  }, true);
+  // A required field inside a folded section would stop the save with a message
+  // pointing at nothing on screen, so the section holding it opens first.
+  editor.addEventListener("invalid", (e) => {
+    const d = e.target.closest && e.target.closest("details.form-group");
+    if (d && !d.open) d.open = true;
+  }, true);
+  // syncFoldButton names what the button would do next: collapse while anything is
+  // open, expand once everything is folded.
+  const syncFoldButton = () => {
+    const b = editor.querySelector('[data-act="fold-sections"]');
+    if (!b) return;
+    const anyOpen = [...editor.querySelectorAll("details.form-group")].some((d) => d.open);
+    b.textContent = anyOpen ? "Collapse all" : "Expand all";
   };
 
   view.querySelector(".cat-meta").addEventListener("submit", async (e) => {
@@ -2079,6 +2248,12 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
       return;
     }
     if (act === "cancel-product") { closePanel(); return; }
+    if (act === "fold-sections") {
+      const groups = [...editor.querySelectorAll("details.form-group")];
+      const fold = groups.some((d) => d.open);
+      for (const d of groups) d.open = !fold;
+      return;
+    }
 
     if (act === "assemble") {
       openAssembler(assembleKit(
@@ -2211,13 +2386,10 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
         // a card with an empty box under it — the screen said "not published" and
         // withheld the entire reason, which is the one thing its own comment above
         // says it must never do.
-        report.innerHTML = `<div class="card" style="margin-top:12px; border-color:var(--danger)">
-          <b>Not published.</b>
-          <p class="muted" style="margin:6px 0 0">Nothing was frozen; the catalogue is unchanged.</p>
-          ${publishRefusal(err)}</div>`;
+        report.innerHTML = refusalCard(err);
       } finally { b.disabled = false; }
     }
-  });
+  }, { signal: viewListeners.signal });
 
   const shareNew = view.querySelector(".share-new");
   if (shareNew) {
@@ -2262,6 +2434,26 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
   }
 
   function wireProductForm() {
+    // The list of what publishing needs, kept current while the form is filled in.
+    const pform = editor.querySelector(".product-form");
+    const needsBox = editor.querySelector(".publish-needs");
+    if (pform && needsBox) {
+      const refresh = () => { needsBox.innerHTML = publishNeedsHTML(publishNeeds(pform)); };
+      pform.addEventListener("input", refresh);
+      pform.addEventListener("change", refresh);
+      refresh();
+      // An entry takes the reader to its field, opening the section it is folded in.
+      needsBox.addEventListener("click", (e) => {
+        const b = e.target.closest("[data-need-field]");
+        if (!b) return;
+        const d = pform.querySelector(`details.form-group[data-sec="${b.dataset.needSec}"]`);
+        if (d) d.open = true;
+        const f = b.dataset.needField ? pform.elements.namedItem(b.dataset.needField) : null;
+        const el = f && f.focus ? f : null;
+        if (el) { el.scrollIntoView({ block: "center" }); el.focus(); }
+      });
+    }
+
     // One more row of shape boxes. Two blank ones are drawn with the grid, which
     // covers adding a shape to a product that has some; this is for the rest, and
     // it appends rather than re-rendering so that nothing already typed is lost.
@@ -2360,6 +2552,24 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
         // the step last means the only thing a throw here can still cost is the
         // picture — one upload, and visibly missing.
         await savePicture({ api, apiBytes, toast }, pid, f);
+        // Save & Publish freezes the catalogue straight after the product is stored,
+        // so a change reaches the shop in one act rather than two screens. The save
+        // stands either way: a refused publish is reported with every problem, on the
+        // page the reload brings back, exactly where the Publish button reports its
+        // own (refusalCard) — the product was saved, and saying only "not published"
+        // would hide the one thing somebody needs to fix.
+        if (e.submitter && e.submitter.dataset.publish === "yes") {
+          try {
+            const rel = await api("POST", `/api/v1/catalogs/${encodeURIComponent(id)}/releases`);
+            toast(`Saved and published ${(rel && rel.id) || ""}`.trim());
+          } catch (pubErr) {
+            carriedRefusal = { catalog: id, err: pubErr };
+            toast("Saved, but the catalogue was not published — the reasons are below " +
+              "the release list.", "err");
+          }
+          reload();
+          return;
+        }
         toast("Saved");
         reload();
       } catch (err) {

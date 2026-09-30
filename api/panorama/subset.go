@@ -405,7 +405,7 @@ var subsetLimits = []SubsetLimit{
 	{
 		Limit: "reading is not restricted by it",
 		Reason: "A document may contain anything the standard allows. This constrains only " +
-			"what Atlas creates; unsupported content round-trips untouched.",
+			"what atlas creates; unsupported content round-trips untouched.",
 	},
 	{
 		Limit: "no motivation elements",

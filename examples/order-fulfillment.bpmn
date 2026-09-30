@@ -15,7 +15,7 @@
             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
             id="defs_order_fulfillment" targetNamespace="http://atlas/examples">
-  <process id="order-fulfillment" name="Order Fulfillment (Atlas showcase)" isExecutable="true">
+  <process id="order-fulfillment" name="Order Fulfillment (atlas showcase)" isExecutable="true">
 
     <!-- Entry point. -->
     <startEvent id="order_received" name="Order received"/>

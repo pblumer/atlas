@@ -1,9 +1,9 @@
-# Benutzerverwaltung als Atlas-Prozesse 👤
+# Benutzerverwaltung als atlas-Prozesse 👤
 
 Atlas bildet seine **eigenen Verwaltungsabläufe** als BPMN + Formulare ab
 (Dogfooding, wie [`examples/onboarding`](../onboarding/)): Der **Lebenszyklus**
-eines Benutzers — Aufnahme, Zugriffs-Review, Offboarding — läuft als Atlas-Prozess
-mit Atlas-Formularen. Die Prozesse sind die **Koordinations- und Audit-Schicht**;
+eines Benutzers — Aufnahme, Zugriffs-Review, Offboarding — läuft als atlas-Prozess
+mit atlas-Formularen. Die Prozesse sind die **Koordinations- und Audit-Schicht**;
 die eigentlichen privilegierten Mutationen (Konto anlegen/sperren) bleiben bewusst
 Admin-Handlungen.
 
@@ -33,7 +33,7 @@ Ein Buttton wie „Disable" wird also **nicht** zum Prozess; der *Ablauf* rundhe
 
 ## Freigabe bleibt menschlich, Anlage ist automatisiert
 
-Die Atlas-Benutzerverwaltung (`api/users.go`) ist **admin-gated**. Bis ADR-0123
+Die atlas-Benutzerverwaltung (`api/users.go`) ist **admin-gated**. Bis ADR-0123
 blieb auch die Konto-Anlage eine reine Admin-Handhabung. Mit ADR-0123 gibt es
 einen **sanktionierten, engen** Schreibpfad: den `userConnector` (create /
 set-password / disable), der **nur** für Prozesse des geschützten System-Projekts
@@ -66,7 +66,7 @@ kennt kein Rollen-Feld. So ist derselbe Prozess auch als **öffentliches
 Registrierungs-Formular** tragfähig: die Login-Seite zeigt einen
 „Registrieren"-Link auf die öffentliche Start-URL dieses Prozesses (ADR-0029 /
 ADR-0126). Der Admin vergibt die Rolle erst bei der Freigabe — zur Auswahl stehen
-die vier Rollen, die Atlas durchsetzt: `user` (Aufgaben), `modeler` (modellieren
+die vier Rollen, die atlas durchsetzt: `user` (Aufgaben), `modeler` (modellieren
 und deployen), `operator` (Instanzen betreiben) und `admin`. Das Feld trägt eine
 kommagetrennte Liste, weil ein Konto mehrere Rollen hält; `modeler,user` ist
 deshalb ein einziger Wert und keine Ausnahme.
@@ -109,7 +109,7 @@ den Mail-Worker `mail` — das Attribut heisst weiterhin `connector="…"`
 Alle BPMN-Diagramme tragen **hand-gesetztes BPMN-DI** (gerade Hauptachse, Zweige
 auf eigener Spur).
 
-## Deployen & starten (über die Atlas-MCP-Tools)
+## Deployen & starten (über die atlas-MCP-Tools)
 
 ```
 atlas_create_project  name="Benutzerverwaltung"                → projektId

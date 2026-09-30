@@ -61,18 +61,18 @@
                   id="defs_entra_verzeichnis_abgleich"
                   targetNamespace="http://atlas/examples">
   <bpmn:process id="proc_entra_verzeichnis_abgleich" name="Entra ID: Verzeichnis-Abgleich" isExecutable="true">
-    <bpmn:documentation>Führt die Atlas-Konten und -Gruppen stündlich aus einem Entra-Mandanten nach: liest über Graph-Delta-Abfragen nur, was sich seit dem letzten Lauf geändert hat, und meldet es an diese Atlas-Instanz.
+    <bpmn:documentation>Führt die atlas-Konten und -Gruppen stündlich aus einem Entra-Mandanten nach: liest über Graph-Delta-Abfragen nur, was sich seit dem letzten Lauf geändert hat, und meldet es an diese atlas-Instanz.
 
-Der Prozess startet ohne Variablen — der Timer erzeugt die Instanz, und alles, was der Lauf braucht, holt der erste Task von Atlas selbst. Insbesondere die beiden Cursor: sie leben im Server und nicht im Modell, weil sie Neustarts überleben müssen und weil nur der Server weiss, ob der letzte Lauf tatsächlich geschrieben hat.
+Der Prozess startet ohne Variablen — der Timer erzeugt die Instanz, und alles, was der Lauf braucht, holt der erste Task von atlas selbst. Insbesondere die beiden Cursor: sie leben im Server und nicht im Modell, weil sie Neustarts überleben müssen und weil nur der Server weiss, ob der letzte Lauf tatsächlich geschrieben hat.
 
 Der erste Lauf meldet mit apply=false und schreibt daher nichts; er entscheidet aber vollständig, und `bericht` sagt, was ein Lauf mit apply=true getan hätte. Erst wenn dieser Bericht gelesen ist, wird in der eigenen Kopie des Modells apply auf true gesetzt und neu deployt.
 
-Ein wiederholt zugestellter Lauf ist harmlos: die Meldung trägt mit fromRevision die Revision, gegen die sie gelesen wurde, und Atlas schreibt nur, solange diese noch aktuell ist. Eine zweite Zustellung meldet „bereits verarbeitet" und bewegt den Cursor nicht.
+Ein wiederholt zugestellter Lauf ist harmlos: die Meldung trägt mit fromRevision die Revision, gegen die sie gelesen wurde, und atlas schreibt nur, solange diese noch aktuell ist. Eine zweite Zustellung meldet „bereits verarbeitet" und bewegt den Cursor nicht.
 
 Worker-only (ADR-0172): der Mandanten-Zugang liegt nie in der Engine.</bpmn:documentation>
 
     <bpmn:startEvent id="start_stuendlich" name="stündlich">
-      <bpmn:documentation>Wiederholungszyklus R/PT1H: der Timer erzeugt jede Stunde eine Instanz (ADR-0051). Das Intervall ist die Verzögerung, mit der ein ausgeschiedener Mensch sein Atlas-Konto behält — wer sie anders braucht, ändert sie hier und nicht im Quelltext.</bpmn:documentation>
+      <bpmn:documentation>Wiederholungszyklus R/PT1H: der Timer erzeugt jede Stunde eine Instanz (ADR-0051). Das Intervall ist die Verzögerung, mit der ein ausgeschiedener Mensch sein atlas-Konto behält — wer sie anders braucht, ändert sie hier und nicht im Quelltext.</bpmn:documentation>
       <bpmn:outgoing>f_start_stand</bpmn:outgoing>
       <bpmn:timerEventDefinition id="timer_stuendlich">
         <bpmn:timeCycle>R/PT1H</bpmn:timeCycle>
@@ -103,7 +103,7 @@ Schreibt: stand.</bpmn:documentation>
     <bpmn:serviceTask id="konten_lesen" name="Konten lesen (Delta)">
       <bpmn:documentation>delta-users ab stand.usersDeltaLink. Leerer Cursor heisst: den ganzen Mandanten einmal aufzählen und dabei den Cursor setzen — der Lauf, der nichts schreiben darf.
 
-Das $select ist bewusst schmal: jedes Feld mehr ist Speicher in einer Prozessvariablen, und die ist durch das Budget ATLAS_LIMIT_VARIABLE begrenzt. maxUsers lässt einen zu grossen Lauf am Worker scheitern, statt eine gekürzte Änderungsmenge zu liefern, die Atlas als vollständig verbuchen würde.
+Das $select ist bewusst schmal: jedes Feld mehr ist Speicher in einer Prozessvariablen, und die ist durch das Budget ATLAS_LIMIT_VARIABLE begrenzt. maxUsers lässt einen zu grossen Lauf am Worker scheitern, statt eine gekürzte Änderungsmenge zu liefern, die atlas als vollständig verbuchen würde.
 
 Gelöschte Objekte kommen mit @removed markiert mit; sie sind das eine der beiden Austrittssignale (das andere ist accountEnabled: false).
 
@@ -120,7 +120,7 @@ Schreibt: konten = { value, deltaLink }.</bpmn:documentation>
     </bpmn:serviceTask>
 
     <bpmn:serviceTask id="gruppen_lesen" name="Gruppen lesen (Delta)">
-      <bpmn:documentation>delta-groups ab stand.groupsDeltaLink. Die Mitgliedschaften kommen als members@delta mit — Entra-Objekt-Ids, nicht Atlas-Benutzer-Ids; die Übersetzung macht Atlas.
+      <bpmn:documentation>delta-groups ab stand.groupsDeltaLink. Die Mitgliedschaften kommen als members@delta mit — Entra-Objekt-Ids, nicht atlas-Benutzer-Ids; die Übersetzung macht atlas.
 
 Konten werden vor den Gruppen gelesen, aber darauf kommt es nicht an: eine Mitgliedschaft, deren Konto noch niemand gelesen hat, bleibt am Gruppendatensatz stehen und löst sich in einem späteren Lauf von selbst auf. Verworfen wird sie nie — eine Delta-Abfrage nennt sie kein zweites Mal.
 

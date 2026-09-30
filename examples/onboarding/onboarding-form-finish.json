@@ -4,12 +4,12 @@
   "components": [
     {
       "type": "text",
-      "text": "# 🎓 Fast geschafft!\n\nDu hast die Kernkonzepte gesehen — und dabei *live* erlebt, wie sich ein Atlas-Prozess anfühlt: **Start → User-Tasks → Script-Task → Gateway → Ende**. Genau so wird in Atlas Arbeit orchestriert.\n\nEine letzte Frage, dann bist du durch:"
+      "text": "# 🎓 Fast geschafft!\n\nDu hast die Kernkonzepte gesehen — und dabei *live* erlebt, wie sich ein atlas-Prozess anfühlt: **Start → User-Tasks → Script-Task → Gateway → Ende**. Genau so wird in atlas Arbeit orchestriert.\n\nEine letzte Frage, dann bist du durch:"
     },
     {
       "key": "erstesZiel",
       "type": "textarea",
-      "label": "Was möchtest du als Erstes mit Atlas bauen oder ausprobieren?"
+      "label": "Was möchtest du als Erstes mit atlas bauen oder ausprobieren?"
     },
     {
       "type": "text",

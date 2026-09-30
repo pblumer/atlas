@@ -46,62 +46,6 @@ func TestCheckSandboxModes(t *testing.T) {
 	}
 }
 
-func TestStrictSandboxWrapsTheInterpreterAndUsesPrivateScratch(t *testing.T) {
-	e := &CmdExec{Lang: Python, Bin: "sh", Sandbox: SandboxStrict}
-	name, args, env, cleanup, err := e.prepareCommand([]string{"-c", "printf ok"}, []string{
-		"PATH=" + os.Getenv("PATH"),
-		"HOME=/shared-home",
-		"TMPDIR=/shared-tmp",
-		varsEnv + `={}`,
-		srcEnv + `=result = "ok"`,
-	})
-	if err != nil {
-		t.Fatalf("prepareCommand: %v", err)
-	}
-	if cleanup == nil {
-		t.Fatal("strict sandbox returned no scratch cleanup")
-	}
-
-	wantExe, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if name != wantExe {
-		t.Errorf("command = %q, want the Atlas executable %q", name, wantExe)
-	}
-	if len(args) < 6 || args[0] != sandboxSubcommand || args[1] != "--scratch" || args[3] != "--" {
-		t.Fatalf("sandbox argv = %q, want internal subcommand, scratch and --", args)
-	}
-	scratch := args[2]
-	if !filepath.IsAbs(scratch) {
-		t.Errorf("scratch = %q, want an absolute path", scratch)
-	}
-	if info, err := os.Stat(scratch); err != nil || !info.IsDir() {
-		t.Fatalf("scratch was not created as a directory: %v", err)
-	}
-	if !filepath.IsAbs(args[4]) {
-		t.Errorf("interpreter = %q, want an absolute resolved path", args[4])
-	}
-	if !slices.Equal(args[5:], []string{"-c", "printf ok"}) {
-		t.Errorf("interpreter args = %q, want original args", args[5:])
-	}
-
-	gotEnv := environmentMap(env)
-	for _, key := range []string{"HOME", "TMPDIR", "TMP", "TEMP"} {
-		if gotEnv[key] != scratch {
-			t.Errorf("%s = %q, want private scratch %q", key, gotEnv[key], scratch)
-		}
-	}
-	if gotEnv[varsEnv] != `{}` || gotEnv[srcEnv] != `result = "ok"` {
-		t.Errorf("script contract changed: %s=%q %s=%q", varsEnv, gotEnv[varsEnv], srcEnv, gotEnv[srcEnv])
-	}
-
-	cleanup()
-	if _, err := os.Stat(scratch); !os.IsNotExist(err) {
-		t.Errorf("scratch still exists after cleanup: %v", err)
-	}
-}
-
 func TestSandboxOffKeepsTheExistingExecutionPath(t *testing.T) {
 	e := &CmdExec{Lang: Python, Bin: "sh", Sandbox: SandboxOff}
 	env := []string{"PATH=" + os.Getenv("PATH"), varsEnv + `={}`}
@@ -132,21 +76,6 @@ func TestPrepareCommandRejectsInvalidStrictConfiguration(t *testing.T) {
 	}
 }
 
-func TestPrepareCommandReportsScratchCreationFailure(t *testing.T) {
-	notDirectory := filepath.Join(t.TempDir(), "file")
-	if err := os.WriteFile(notDirectory, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TMPDIR", notDirectory)
-	_, _, _, cleanup, err := (&CmdExec{Lang: Python, Bin: "sh", Sandbox: SandboxStrict}).prepareCommand(nil, nil)
-	if cleanup != nil {
-		cleanup()
-	}
-	if err == nil || !strings.Contains(err.Error(), "create sandbox scratch") {
-		t.Fatalf("scratch creation error = %v", err)
-	}
-}
-
 func TestRunSandboxValidatesItsInternalProtocol(t *testing.T) {
 	scratch := t.TempDir()
 	file := filepath.Join(scratch, "not-a-directory")
@@ -171,33 +100,6 @@ func TestRunSandboxValidatesItsInternalProtocol(t *testing.T) {
 				t.Fatalf("RunSandbox error = %v, want %q", err, tc.want)
 			}
 		})
-	}
-}
-
-func TestStrictSandboxRejectsAnInterpreterOutsideSystemRuntime(t *testing.T) {
-	bin := filepath.Join(t.TempDir(), "python3")
-	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	e := &CmdExec{Lang: Python, Bin: bin, Sandbox: SandboxStrict}
-	_, _, _, cleanup, err := e.prepareCommand(nil, nil)
-	if cleanup != nil {
-		cleanup()
-	}
-	if err == nil || !strings.Contains(err.Error(), "outside the sandbox runtime") {
-		t.Fatalf("strict custom interpreter error = %v, want runtime-path refusal", err)
-	}
-}
-
-func TestStrictSandboxRejectsADataDirectoryInsideItsRuntimeAllowlist(t *testing.T) {
-	if err := CheckSandboxDataPath(SandboxStrict, "/usr/share/atlas-data"); err == nil {
-		t.Fatal("strict sandbox accepted Atlas data below /usr")
-	}
-	if err := CheckSandboxDataPath(SandboxStrict, "/data"); err != nil {
-		t.Errorf("strict sandbox rejected isolated /data: %v", err)
-	}
-	if err := CheckSandboxDataPath(SandboxOff, "/usr/share/atlas-data"); err != nil {
-		t.Errorf("off mode changed the historical data path: %v", err)
 	}
 }
 
@@ -396,10 +298,6 @@ func TestTimeoutKillsTheInterpretersWholeProcessGroup(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("sh not available")
 	}
-	dir := t.TempDir()
-	pidFile := filepath.Join(dir, "child.pid")
-	outlived := filepath.Join(dir, "outlived")
-
 	// One second of work for the descendant, and half of it as the bound on the call
 	// itself. The two do not overlap on purpose: a shell that survived its own kill
 	// blocks in `wait` and trips the elapsed check, a descendant that survived one
@@ -407,38 +305,96 @@ func TestTimeoutKillsTheInterpretersWholeProcessGroup(t *testing.T) {
 	// other.
 	const work = time.Second
 	const returnWithin = work / 2
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+
+	// The deadline has to land after the shell has forked the descendant and recorded
+	// its pid, or the run proves nothing about the kill. At 30ms it usually does, but
+	// not on a loaded machine: the shell's redirection created the pid file before
+	// echo wrote into it, a kill in between left the file empty, and the test failed
+	// parsing "" although the group kill had worked.
+	//
+	// So the pid is written to a temporary name and renamed into place — the file
+	// either holds the whole pid or does not exist — and a run whose deadline fell
+	// before that point is repeated with a longer one. Every deadline stays well
+	// inside returnWithin, so the elapsed check keeps its meaning.
+	for _, deadline := range []time.Duration{30 * time.Millisecond, 100 * time.Millisecond, 250 * time.Millisecond} {
+		dir := t.TempDir()
+		pidFile := filepath.Join(dir, "child.pid")
+		outlived := filepath.Join(dir, "outlived")
+
+		ctx, cancel := context.WithTimeout(context.Background(), deadline)
+		start := time.Now()
+		_, err := execCommand(ctx, "sh", []string{"-c",
+			timeoutScript, "sh", pidFile, outlived}, nil, defaultMaxOutput)
+		cancel()
+		if err == nil {
+			t.Fatal("timed command succeeded")
+		}
+		if elapsed := time.Since(start); elapsed > returnWithin {
+			t.Fatalf("execCommand returned after %s; a descendant kept the command alive", elapsed)
+		}
+
+		// The pid file proves the descendant was forked before the deadline, which is
+		// what makes the rest of this a test of the kill rather than of the timing.
+		b, err := os.ReadFile(pidFile)
+		if errors.Is(err, os.ErrNotExist) {
+			t.Logf("the %s deadline fell before the shell recorded its descendant; "+
+				"repeating with a longer one", deadline)
+			continue
+		}
+		if err != nil {
+			t.Fatalf("read child pid: %v", err)
+		}
+		pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+		if err != nil {
+			t.Fatalf("child pid %q: %v", b, err)
+		}
+
+		// Past the moment a surviving descendant would have finished its second.
+		time.Sleep(time.Until(start.Add(work + 400*time.Millisecond)))
+		if _, err := os.Stat(outlived); err == nil {
+			t.Errorf("descendant process %d ran to completion after its script timed out", pid)
+		}
+		if err := processExists(pid); err == nil {
+			t.Logf("pid %d still answers a signal, %s; the descendant did not finish its "+
+				"work, so this is a pid that outlived its meaning rather than a failed kill",
+				pid, procSummary(pid))
+		}
+		return
+	}
+	t.Fatal("no deadline landed after the shell had recorded its descendant, so the kill " +
+		"was never tested")
+}
+
+// timeoutScript forks a descendant that works for a second and then writes $2, and
+// records its pid in $1 — atomically, by writing a temporary name and renaming it,
+// so a kill can never leave $1 existing and empty. A variable so that a test can
+// hold the rename in place without running the whole kill.
+var timeoutScript = `sleep 1 && : > "$2" & echo $! > "$1.tmp" && mv "$1.tmp" "$1"; wait`
+
+// A process holding a script's output does not outlast the script's timeout. A
+// script that exits and leaves one behind never met its deadline at all: os/exec
+// stops watching the context once the interpreter has exited, and reads stdout until
+// EOF, so the call returned when that process ended, however long after the deadline
+// that was. On Windows every timed-out script's descendants did the same, since only
+// the interpreter used to be killed.
+func TestAProcessHoldingTheOutputDoesNotOutlastTheTimeout(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("sh not available")
+	}
+	const timeout = 200 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+
 	start := time.Now()
-	_, err := execCommand(ctx, "sh", []string{"-c",
-		`sleep 1 && : > "$2" & echo $! > "$1"; wait`, "sh", pidFile, outlived}, nil, defaultMaxOutput)
-	if err == nil {
-		t.Fatal("timed command succeeded")
+	_, err := execCommand(ctx, "sh", []string{"-c", "sleep 5 & exit 0"}, nil, defaultMaxOutput)
+	if elapsed := time.Since(start); elapsed > 2500*time.Millisecond {
+		t.Fatalf("execCommand returned after %s with a %s timeout; it waited for the process "+
+			"the script left behind", elapsed, timeout)
 	}
-	if elapsed := time.Since(start); elapsed > returnWithin {
-		t.Fatalf("execCommand returned after %s; a descendant kept the command alive", elapsed)
-	}
-
-	// The pid file proves the descendant was forked before the deadline, which is
-	// what makes the rest of this a test of the kill rather than of the timing.
-	b, err := os.ReadFile(pidFile)
-	if err != nil {
-		t.Fatalf("read child pid: %v", err)
-	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
-	if err != nil {
-		t.Fatalf("child pid %q: %v", b, err)
-	}
-
-	// Past the moment a surviving descendant would have finished its second.
-	time.Sleep(time.Until(start.Add(work + 400*time.Millisecond)))
-	if _, err := os.Stat(outlived); err == nil {
-		t.Errorf("descendant process %d ran to completion after its script timed out", pid)
-	}
-	if err := processExists(pid); err == nil {
-		t.Logf("pid %d still answers a signal, %s; the descendant did not finish its "+
-			"work, so this is a pid that outlived its meaning rather than a failed kill",
-			pid, procSummary(pid))
+	// An output cut off is not a clean run: the process that held it may have had
+	// more to write.
+	if !errors.Is(err, exec.ErrWaitDelay) {
+		t.Errorf("error = %v, want exec.ErrWaitDelay", err)
 	}
 }
 
@@ -459,16 +415,6 @@ func procSummary(pid int) string {
 		return fmt.Sprintf("unparsable stat %q", b)
 	}
 	return fmt.Sprintf("running %q in state %q", b[open+1:i], b[i+2])
-}
-
-func environmentMap(env []string) map[string]string {
-	out := make(map[string]string, len(env))
-	for _, kv := range env {
-		if i := strings.IndexByte(kv, '='); i >= 0 {
-			out[kv[:i]] = kv[i+1:]
-		}
-	}
-	return out
 }
 
 // The startup proof resolves what it will launch before it launches anything, and

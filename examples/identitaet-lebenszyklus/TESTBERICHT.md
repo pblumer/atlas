@@ -1,8 +1,8 @@
 # Testbericht — Identitäts-Lebenszyklus als Prozessinstanz je Mitarbeiter
 
 **Datum:** 2026-09-03
-**Server:** `atlas.example.com` (server01), Atlas `0.4.0-dev`, Revision `1020986`
-**Zugang:** ausschliesslich über die Atlas-MCP-Werkzeuge
+**Server:** `atlas.example.com` (server01), atlas `0.4.0-dev`, Revision `1020986`
+**Zugang:** ausschliesslich über die atlas-MCP-Werkzeuge
 **Frage:** Trägt eine Prozessinstanz je Identität (bei 50.000 Mitarbeitern also
 50.000 Instanzen) den kompletten Lebenszyklus samt aller bestellten Business
 Services mit deren Zuständen?
@@ -242,7 +242,7 @@ Vor einem Rollout auf 50.000 sind drei Dinge zu klären:
 
 1. **Lesepfad** (Abschnitt 5) — ohne indizierte Suche fehlt die
    Auswertungsfähigkeit, die den ganzen Ansatz attraktiv macht.
-2. **Ereigniszustellung** — Atlas puffert nicht und meldet dem Absender nicht,
+2. **Ereigniszustellung** — atlas puffert nicht und meldet dem Absender nicht,
    ob korreliert wurde. Die SAP/CIS-Kopplung braucht Reihenfolge- und
    Zustellgarantie auf ihrer Seite, plus eine Abgleichmöglichkeit.
 3. **Produkt-Lebenszyklus** — reicht ein Status je Produkt im Register, oder

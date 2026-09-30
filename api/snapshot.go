@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/pblumer/atlas/checkpoint"
@@ -336,6 +337,13 @@ func ApplyPendingRestore(dataDir string) (bool, error) {
 	staging := filepath.Join(dataDir, restorePendingDir)
 	if _, err := os.Stat(filepath.Join(staging, restoreReady)); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
+			// Windows reports a regular file in the staging directory's place as the
+			// marker being absent, where Unix fails the Stat with ENOTDIR. Either way
+			// it is not a staging this code wrote, and deleting it as "leftovers" would
+			// hide whatever put it there.
+			if fi, serr := os.Stat(staging); serr == nil && !fi.IsDir() {
+				return false, &fs.PathError{Op: "stat", Path: staging, Err: syscall.ENOTDIR}
+			}
 			// No complete staging. Discard any marker-less leftovers from an
 			// interrupted upload so they cannot accumulate.
 			return false, os.RemoveAll(staging)

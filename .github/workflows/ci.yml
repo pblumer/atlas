@@ -315,6 +315,55 @@ jobs:
       - name: Test storage packages and engine recovery
         run: go test -timeout=10m ./wal/... ./checkpoint/... ./state/... ./api/sidecar/... ./internal/... ./engine/...
 
+  # The api tree on Windows, in a job beside the storage one rather than inside it.
+  #
+  # api is most of the server: the HTTP handlers, logins, the design-time stores and
+  # their files, the worker supervisor. It had never run on Windows either, and every
+  # defect the storage job has found so far was a file-system difference that showed
+  # only once the code ran there — so it runs there too.
+  #
+  # Its own job for the reason the cover job is its own job: api is a long run, and
+  # sequenced behind the storage packages it would hold their answer back and share
+  # their limits. On Linux without the race detector it takes about four and a half
+  # minutes; engine took seven times as long on the Windows runner as on Linux, and
+  # nothing says api will do better. So the limits are the race job's pair, for the
+  # race job's reason — 45m per package so Go names a stuck one before the 60-minute
+  # cap cancels the job without a word. They bound a hang, not a duration measured
+  # here.
+  #
+  # CGO_ENABLED=0 as in the storage job: it is how atlas.exe is built, and races stay
+  # the race job's. The worker-supervisor tests start their worker through `sh` and
+  # skip themselves where there is none.
+  #
+  # The Worker Types (connector/) run here too. They are what a server executes on its
+  # tasks' behalf — in process or supervised by it — so on a Windows server they run on
+  # Windows as well; the script Worker Type in particular starts interpreters, and
+  # process handling is where Windows differs most. They cost this job next to nothing:
+  # api imports every one of them — all but two mocks and a template the tests use —
+  # so they are compiled anyway, and their tests take under twenty seconds on Linux and
+  # run beside api's rather than after them. The job keeps
+  # its name so a branch rule that requires it keeps matching. Their tests skip an
+  # interpreter the runner does not have, so what runs is what this image provides.
+  windows-api:
+    name: windows · api
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          check-latest: true
+
+      - name: Test api and the Worker Types
+        run: go test -timeout=45m ./api/... ./connector/...
+
   # Everything a docs-only change can actually break, and nothing else.
   #
   # "Documentation" is not inert here. docs/adr is a Go package whose tests read every

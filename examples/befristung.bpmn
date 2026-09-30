@@ -70,7 +70,7 @@
   <bpmn:process id="proc_befristung" name="Befristung: zurückgeben, was hätte enden sollen" isExecutable="true">
     <bpmn:documentation>Gibt täglich die Rechte zurück, deren Ende vorbei ist.
 
-Ablauf ist nicht Entzug. Ein abgelaufenes Recht bleibt geführt, bis tatsächlich etwas gelaufen ist: das Zielsystem hat die Mitgliedschaft noch, und den Datensatz beim Ticken der Uhr zu löschen hiesse, dass Atlas das Gegenteil behauptet.
+Ablauf ist nicht Entzug. Ein abgelaufenes Recht bleibt geführt, bis tatsächlich etwas gelaufen ist: das Zielsystem hat die Mitgliedschaft noch, und den Datensatz beim Ticken der Uhr zu löschen hiesse, dass atlas das Gegenteil behauptet.
 
 Zurückgegeben wird über die Bestellzeile. Nur ein bestelltes Recht trägt je ein Ende, also hat ein ablaufendes Recht immer eine Bestellung hinter sich — und deren Rückgabe entzieht nach der eingefrorenen Freigabe, gegen die bestellt wurde. Das ist stärker als der Weg, den Abgleich und Rezertifizierung nehmen müssen.
 
