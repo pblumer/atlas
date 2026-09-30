@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Ausstattung & Zugriffe — die Ausstattungsregeln der Lehrgangs-Applikation
+  "Mitarbeitereintritt" als DMN-Entscheidung.
+
+  Eingabe:  rolle ("entwicklung" | "vertrieb" | "produktion" | "verwaltung")
+  Ausgaben: laptop        (Text)
+            software      (Liste der Softwarepakete)
+            adGruppen     (Liste der AD-Gruppen — der Auftrag an den Worker
+                           "Konto anlegen")
+            zutritt       (Text — welche Zutrittskarte bestellt wird)
+
+  hitPolicy FIRST — je eine Regel pro Rolle, die letzte Regel ist der Auffangfall
+  und trifft immer, damit jeder Eintritt eine Ausstattung erhält.
+
+  id und name der Entscheidung sind identisch ("lg-ausstattung"); der
+  Business-Rule-Task verweist mit decisionId="lg-ausstattung" darauf. Eine
+  Entscheidung wird über ihren NAMEN oder den Bezeichner ihrer <variable>
+  adressiert, nicht über die Element-id (ADR-0385).
+
+  Die Ausgabe `adGruppen` ist der interessante Teil: eine FEEL-Liste, die der
+  eigene Worker "Konto anlegen" (Job-Typ konto-anlegen) verarbeitet. Eine neue
+  Rolle einzuführen heisst: eine Zeile hier ändern — nicht das Prozessmodell.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+             id="defs_lg_ausstattung" name="lg-ausstattung" namespace="http://atlas/dmn">
+  <inputData id="id_rolle" name="rolle"/>
+  <decision id="lg-ausstattung" name="lg-ausstattung">
+    <informationRequirement><requiredInput href="#id_rolle"/></informationRequirement>
+    <decisionTable id="dt_ausstattung" hitPolicy="FIRST">
+      <input id="in_rolle" label="rolle">
+        <inputExpression id="ie_rolle" typeRef="string"><text>rolle</text></inputExpression>
+      </input>
+      <output id="out_laptop" label="laptop" name="laptop" typeRef="string"/>
+      <output id="out_software" label="software" name="software"/>
+      <output id="out_adgruppen" label="adGruppen" name="adGruppen"/>
+      <output id="out_zutritt" label="zutritt" name="zutritt" typeRef="string"/>
+      <rule id="r_entwicklung">
+        <description>Entwicklung: Entwickler-Notebook, Toolchain, Zutritt bis Serverraum.</description>
+        <inputEntry id="i_ent_r"><text>"entwicklung"</text></inputEntry>
+        <outputEntry id="o_ent_laptop"><text>"MacBook Pro 16"</text></outputEntry>
+        <outputEntry id="o_ent_sw"><text>["IDE", "Docker", "VPN"]</text></outputEntry>
+        <outputEntry id="o_ent_ad"><text>["dev", "git", "vpn"]</text></outputEntry>
+        <outputEntry id="o_ent_zut"><text>"Gebäude + Serverraum"</text></outputEntry>
+      </rule>
+      <rule id="r_vertrieb">
+        <description>Vertrieb: mobiles Notebook, CRM, Zutritt Gebäude.</description>
+        <inputEntry id="i_ver_r"><text>"vertrieb"</text></inputEntry>
+        <outputEntry id="o_ver_laptop"><text>"ThinkPad X1"</text></outputEntry>
+        <outputEntry id="o_ver_sw"><text>["CRM", "Office", "VPN"]</text></outputEntry>
+        <outputEntry id="o_ver_ad"><text>["crm", "vpn"]</text></outputEntry>
+        <outputEntry id="o_ver_zut"><text>"Gebäude"</text></outputEntry>
+      </rule>
+      <rule id="r_produktion">
+        <description>Produktion: robustes Notebook, MES, Zutritt bis Halle.</description>
+        <inputEntry id="i_pro_r"><text>"produktion"</text></inputEntry>
+        <outputEntry id="o_pro_laptop"><text>"Standard-Notebook"</text></outputEntry>
+        <outputEntry id="o_pro_sw"><text>["MES", "Office"]</text></outputEntry>
+        <outputEntry id="o_pro_ad"><text>["mes"]</text></outputEntry>
+        <outputEntry id="o_pro_zut"><text>"Gebäude + Halle"</text></outputEntry>
+      </rule>
+      <rule id="r_verwaltung">
+        <description>Verwaltung: Büro-Notebook, ERP, Zutritt Gebäude.</description>
+        <inputEntry id="i_verw_r"><text>"verwaltung"</text></inputEntry>
+        <outputEntry id="o_verw_laptop"><text>"Standard-Notebook"</text></outputEntry>
+        <outputEntry id="o_verw_sw"><text>["Office", "ERP"]</text></outputEntry>
+        <outputEntry id="o_verw_ad"><text>["erp"]</text></outputEntry>
+        <outputEntry id="o_verw_zut"><text>"Gebäude"</text></outputEntry>
+      </rule>
+      <rule id="r_auffang">
+        <description>Auffangfall: Grundausstattung, damit jeder Eintritt eine Antwort erhält.</description>
+        <inputEntry id="i_auf_r"><text>-</text></inputEntry>
+        <outputEntry id="o_auf_laptop"><text>"Standard-Notebook"</text></outputEntry>
+        <outputEntry id="o_auf_sw"><text>["Office"]</text></outputEntry>
+        <outputEntry id="o_auf_ad"><text>["basis"]</text></outputEntry>
+        <outputEntry id="o_auf_zut"><text>"Gebäude"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

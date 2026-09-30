@@ -107,12 +107,19 @@ ISDS-Konzept verlangt getrennte Umgebungen und einen engen Kreis von `modeler`- 
 `admin`-Konten auf der Produktion (M-05). Modul M5 wird erst nach diesem Entscheid
 geschrieben.
 
-### Phase 3 — Leitfall (nach der Beobachtungssitzung)
+### Phase 3 — Leitfall
 
-Referenz-Applikation unter `examples/lehrgang/` mit Startpunkt und Szenario je Modul,
-nach dem Muster der Werkstatt: die Dateien sind die Quelle, die Seite trägt einen
-daraus erzeugten Block, ein Test verhindert, dass beide auseinanderlaufen
-(`examples/handbook_test.go`).
+**Gebaut.** Referenz-Applikation `examples/lehrgang/` (Mitarbeitereintritt): ein Prozess,
+eine DMN und drei Formulare, an denen alle sechs Referenzmodule hängen. Ein Schritt
+(«Konto anlegen») ist bewusst kein Mockup, sondern ein Job über die Job-API für einen
+eigenen Worker, der bei wiederholtem Fehlschlag einen Incident parkt — so hängen Modul 5
+(Eigener Worker) und Modul 6 (Überwachen) an einem Datenfluss. Das Handbuch trägt die
+Beispiel-Karte `bsp-lehrgang` (Kapitel «Beispiele») und ein Abschlusskapitel `#leitfall`,
+das den Fall Modul für Modul durchgeht — Startpunkt und Szenario je Modul, mit Verweis auf
+das jeweilige Referenzkapitel. Guard nach dem Muster der Werkstatt: die Dateien sind die
+Quelle, `api/web/examples-catalog.json` wird daraus erzeugt, `examples/catalog_test.go`
+verhindert Drift und kompiliert die Modelle. Auf Wunsch vor der Beobachtungssitzung gebaut;
+deren Ergebnis kann das Thema später schärfen.
 
 ### Phase 4 — Lehrgangsseite
 

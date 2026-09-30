@@ -2,6 +2,28 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "the-handbook-has-a-guiding-case-that-runs-one-process-throug",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "One case through all six modules — the course's guiding process",
+        "de": "Ein Fall durch alle sechs Module – der Leitfall des Lehrgangs"
+      },
+      "summary": {
+        "en": "The reference chapters each teach one thing; a course needs one case they all apply to. `examples/lehrgang/` — an employee onboarding — is that case, and a new capstone chapter walks it module by module: modelling, testing, delivering, evolving, writing your own worker, and monitoring, each with a starting point and a scenario. A DMN maps the new hire's role to laptop, software, access and AD groups; one step is deliberately not a mockup but a job over the Job API, so it parks for your own worker and, on repeated failure, raises an incident. Install it from its card in the Beispiele chapter — every call was run against a live instance first.",
+        "de": "Die Referenzkapitel lehren je eine Sache; ein Lehrgang braucht einen Fall, auf den alle zutreffen. `examples/lehrgang/` – ein Mitarbeitereintritt – ist dieser Fall, und ein neues Abschlusskapitel geht ihn Modul für Modul durch: Modellieren, Testen, Ausliefern, Weiterentwickeln, ein eigener Worker und Überwachen, je mit Startpunkt und Szenario. Eine DMN bildet die Rolle auf Laptop, Software, Zugriffe und AD-Gruppen ab; ein Schritt ist bewusst kein Mockup, sondern ein Job über die Job-API – er parkt für den eigenen Worker und wirft bei wiederholtem Fehlschlag einen Incident. Installierbar über die Karte im Kapitel «Beispiele» – jeder Aufruf wurde zuerst an einer laufenden Instanz ausgeführt."
+      },
+      "link": {
+        "label": "examples/lehrgang/",
+        "url": "https://github.com/pblumer/atlas/tree/main/examples/lehrgang"
+      },
+      "tags": [
+        "Handbook",
+        "Examples"
+      ]
+    },
+    {
       "id": "listing-one-instance-s-jobs-no-longer-walks-every-job-on-the",
       "version": "Unreleased",
       "date": null,
@@ -318,35 +340,6 @@
       "tags": [
         "Handbook",
         "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-process-still-frozen-on-an-old-decision-version-says-so",
-      "version": "0.8.0",
-      "date": "2026-09-30",
-      "category": "Added",
-      "title": {
-        "en": "A process still on an old decision version says so",
-        "de": "Ein Prozess auf einer alten Decision-Version zeigt das an"
-      },
-      "summary": {
-        "en": "A process deployed while \"Latest\" was still fixed at deploy time keeps evaluating the decision version that was newest back then, although its binding reads \"Latest\". Such a process is now marked where you meet it: on its row in the Modeler, on the deployment opened in the Modeler, and in its live view in Operations, each naming the version it runs and the newest one, as a warning once a newer version is deployed. When you deploy a decision, the processes that will not follow it are named, and a decision's version list says of each process holding a version whether it was frozen there or chose it. Deploy the process again to have it follow each new version; nothing is changed without that deploy.",
-        "de": "Ein Prozess, der deployt wurde, als „Latest“ noch beim Deploy festgelegt wurde, wertet weiterhin die Decision-Version aus, die damals die neueste war, obwohl seine Bindung „Latest“ lautet. Ein solcher Prozess wird jetzt dort gekennzeichnet, wo man ihm begegnet: in seiner Zeile im Modeler, im Deployment, das im Modeler geöffnet ist, und in seiner Live-Ansicht in Operations, jeweils mit der Version, die er ausführt, und der neuesten; sobald eine neuere Version deployt ist, als Warnung. Beim Deploy einer Decision werden die Prozesse genannt, die ihr nicht folgen, und die Versionsliste einer Decision sagt bei jedem Prozess, der eine Version festhält, ob sie dort eingefroren oder bewusst gewählt ist. Ein erneuter Deploy des Prozesses lässt ihn jeder neuen Version folgen; ohne diesen Deploy wird nichts geändert."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-8-0"
-      },
-      "tags": [
-        "Decisions",
-        "Operations"
       ],
       "try": {
         "label": {

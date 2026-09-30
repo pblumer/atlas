@@ -398,3 +398,22 @@ test("the operations chapter teaches monitoring and lists the backup route", asy
   await expect(page.locator("#betrieb #monitor-routes td:first-child code",
     { hasText: /\/backup$/ })).toHaveCount(1);
 });
+
+test("the guiding-case chapter ties one process to all six modules", async ({ page }) => {
+  const calls = [];
+  installMock(page, calls);
+  await page.goto("/handbuch.html");
+
+  await expect(page.locator("#leitfall")).toHaveCount(1);
+
+  for (const lang of ["de", "en"]) {
+    await page.click(`#lang-${lang}`);
+    // The load-bearing thread: the one step that is not a mockup is the job an own worker
+    // serves — konto-anlegen — named in whichever language is on screen.
+    await expect(page.locator("#leitfall").locator(`[data-l="${lang}"]`, { hasText: "konto-anlegen" }).first())
+      .toBeVisible();
+    // The capstone links back to a reference chapter and to the installable example card.
+    await expect(page.locator(`#leitfall [data-l="${lang}"] a[href="#eigener-worker"]`).first()).toBeVisible();
+    await expect(page.locator(`#leitfall [data-l="${lang}"] a[href="#bsp-lehrgang"]`).first()).toBeVisible();
+  }
+});
