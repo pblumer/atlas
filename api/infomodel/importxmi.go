@@ -303,7 +303,7 @@ func (d *xmiDocument) model(notes *noteList) Model {
 			if label == "" {
 				label = e.id
 			}
-			notes.add(NoteDropped, label, "%s is a uml:%s, which Atlas does not author: an information model has business objects, value types and enumerations.", label, e.kind)
+			notes.add(NoteDropped, label, "%s is a uml:%s, which atlas does not author: an information model has business objects, value types and enumerations.", label, e.kind)
 			continue
 		}
 		class, gens := d.readClass(e, stereotype, classIDs, notes)
@@ -461,7 +461,7 @@ func multiplicityOf(n xmlNode, label string, notes *noteList) (string, bool) {
 	}
 	mapped := boundsToMultiplicity(lower, upper)
 	if lower > 1 || upper > 1 {
-		notes.add(NoteAdjusted, label, "%s is %s; Atlas authors 0..1, 1, 0..* and 1..*, so it was read as %s. What it keeps is whether a value is required and whether there can be more than one.",
+		notes.add(NoteAdjusted, label, "%s is %s; atlas authors 0..1, 1, 0..* and 1..*, so it was read as %s. What it keeps is whether a value is required and whether there can be more than one.",
 			label, boundsText(lower, upper), mapped)
 	}
 	return mapped, true
@@ -591,7 +591,7 @@ func (d *xmiDocument) readAssociation(e xmiElement, notes *noteList) (Associatio
 	}
 
 	if len(ids) != 2 {
-		notes.add(NoteDropped, label, "%s has %d ends. Every relationship Atlas authors has exactly two; an n-ary association is modeled as a class between the participants.", label, len(ids))
+		notes.add(NoteDropped, label, "%s has %d ends. Every relationship atlas authors has exactly two; an n-ary association is modeled as a class between the participants.", label, len(ids))
 		return Association{}, false
 	}
 	ends := make([]xmiProperty, 0, 2)

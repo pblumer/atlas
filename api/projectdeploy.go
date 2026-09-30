@@ -527,10 +527,10 @@ func decisionCoverage(missing, bundleBound []string, deployed map[string]bool) s
 	}
 	switch {
 	case len(needModel) > 0 && len(needBundle) > 0:
-		return fmt.Sprintf("this diagram's business rule task(s) reference decision(s) %v that no DMN model provides, and %v that are bound to `deployment` and so need the model bundled with this process — create the decision (or add its reference) in Atlas, then deploy",
+		return fmt.Sprintf("this diagram's business rule task(s) reference decision(s) %v that no DMN model provides, and %v that are bound to `deployment` and so need the model bundled with this process — create the decision (or add its reference) in atlas, then deploy",
 			needModel, needBundle)
 	case len(needModel) > 0:
-		return fmt.Sprintf("this diagram's business rule task(s) reference decision(s) %v that no DMN model provides — create the decision (or add its reference) in Atlas, then deploy", needModel)
+		return fmt.Sprintf("this diagram's business rule task(s) reference decision(s) %v that no DMN model provides — create the decision (or add its reference) in atlas, then deploy", needModel)
 	case len(needBundle) > 0:
 		return fmt.Sprintf("this diagram's business rule task(s) bound to `deployment` reference decision(s) %v that no DMN model provides. A deployed decision cannot satisfy `deployment` binding, which evaluates the model bundled with this process — add the decision's reference, or bind the task to `latest`",
 			needBundle)

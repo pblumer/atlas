@@ -177,9 +177,9 @@ type ContextLimit struct {
 // request, so the list is fixed.
 var contextLimits = []ContextLimit{
 	{
-		Limit: "not Atlas's memory",
+		Limit: "not atlas's memory",
 		Reason: "Both stores are external and retained on their own terms. What they have " +
-			"aged out, this cannot show, and Atlas does not know what they dropped.",
+			"aged out, this cannot show, and atlas does not know what they dropped.",
 	},
 	{
 		Limit: "a query, not a copy",

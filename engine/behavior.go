@@ -4671,7 +4671,7 @@ func parkClearPersonalWrite(c *ProcessingContext, scope uint64, name string) {
 		ElementInstanceKey: scope,
 		RaisedAt:           c.Now(),
 		Message: "the value written to \"" + name + "\" is declared personal (atlas:personal) and arrived in the clear. " +
-			"A personal value is enciphered where it enters Atlas — a form submission, a worker's result, an operator's write — " +
+			"A personal value is enciphered where it enters atlas — a form submission, a worker's result, an operator's write — " +
 			"and the engine cannot encipher it, because it holds no key. This write came from a path with no such edge, " +
 			"most likely a message payload or an inbound event. Deliver the value through a task or a worker result, " +
 			"or stop declaring it personal; then resolve to retry the write",

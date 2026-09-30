@@ -65,7 +65,7 @@ func (s *Server) directoryAuthRequired(w http.ResponseWriter, r *http.Request) b
 	auditRefusal(r, logging.AuthDirectorySync,
 		"directory synchronisation refused: this server runs without authentication")
 	httpapi.Error(w, http.StatusForbidden,
-		"directory synchronisation needs authentication to be enabled: start Atlas with authentication "+
+		"directory synchronisation needs authentication to be enabled: start atlas with authentication "+
 			"on and give the scheduled process an API token of the \"directory\" scope. There is no "+
 			"unauthenticated path into account provisioning, deliberately")
 	return false

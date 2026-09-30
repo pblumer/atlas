@@ -247,7 +247,7 @@ func ExtractBindings(data []byte) (BindingSet, error) {
 		if !allowed {
 			// Deliberately does not echo the value: a rejected secret is still a
 			// secret, and this message reaches logs and an API response.
-			add("unknown Atlas binding key %q on %q is not part of contract version %d",
+			add("unknown atlas binding key %q on %q is not part of contract version %d",
 				name, occ.elementID, BindingContractVersion)
 			continue
 		}
