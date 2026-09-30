@@ -344,10 +344,11 @@ func (m *runLoopMetrics) TurnTaken(waited, held time.Duration) {
 	m.held.Observe(held.Seconds())
 }
 
-// handleMetrics serves the Prometheus exposition. It is unauthenticated, like /healthz:
-// that is what a scrape expects, and the cardinality rule (ADR-0142) means the body
-// carries only aggregates — no instance data, no variable payloads, no identifiers.
-// Put a reverse proxy in front of anything exposed beyond the host.
+// handleMetrics serves the Prometheus exposition. The handler itself does no auth;
+// the route is mounted with accessAuthenticated (ADR-0198), so with --auth on a
+// scraper reaches it with an API token of scope metrics and a signed-in person
+// reaches it too. The cardinality rule (ADR-0142) means the body carries only
+// aggregates — no instance data, no variable payloads, no identifiers.
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	s.metrics.Handler().ServeHTTP(w, r)
 }
