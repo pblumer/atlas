@@ -1,0 +1,13 @@
+{
+  "tags": [
+    "Operations"
+  ],
+  "title": {
+    "en": "On Windows, a script's time limit now ends everything the script started",
+    "de": "Unter Windows beendet das Zeitlimit eines Skripts jetzt alles, was das Skript gestartet hat"
+  },
+  "summary": {
+    "en": "When a script task ran past its time limit, Windows stopped only the script itself. A program the script had started kept running and could keep the task waiting until that program ended. Atlas now stops the script together with everything it started, as it already did on Linux. And on every system, a program that a finished script leaves behind can no longer keep the task waiting past its time limit.",
+    "de": "Überschritt eine Skriptaufgabe ihr Zeitlimit, beendete Windows nur das Skript selbst. Ein Programm, das das Skript gestartet hatte, lief weiter und konnte die Aufgabe warten lassen, bis es endete. Atlas beendet das Skript jetzt zusammen mit allem, was es gestartet hat, wie bereits unter Linux. Zudem kann auf allen Systemen ein Programm, das ein beendetes Skript zurücklässt, die Aufgabe nicht mehr über ihr Zeitlimit hinaus warten lassen."
+  }
+}

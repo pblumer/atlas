@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -574,4 +575,112 @@ func TestStrictSandboxAllowsTheOpenSSLConfigurationAnInterpreterReads(t *testing
 			t.Errorf("%s is allowed", path)
 		}
 	}
+}
+
+func TestStrictSandboxWrapsTheInterpreterAndUsesPrivateScratch(t *testing.T) {
+	e := &CmdExec{Lang: Python, Bin: "sh", Sandbox: SandboxStrict}
+	name, args, env, cleanup, err := e.prepareCommand([]string{"-c", "printf ok"}, []string{
+		"PATH=" + os.Getenv("PATH"),
+		"HOME=/shared-home",
+		"TMPDIR=/shared-tmp",
+		varsEnv + `={}`,
+		srcEnv + `=result = "ok"`,
+	})
+	if err != nil {
+		t.Fatalf("prepareCommand: %v", err)
+	}
+	if cleanup == nil {
+		t.Fatal("strict sandbox returned no scratch cleanup")
+	}
+
+	wantExe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name != wantExe {
+		t.Errorf("command = %q, want the Atlas executable %q", name, wantExe)
+	}
+	if len(args) < 6 || args[0] != sandboxSubcommand || args[1] != "--scratch" || args[3] != "--" {
+		t.Fatalf("sandbox argv = %q, want internal subcommand, scratch and --", args)
+	}
+	scratch := args[2]
+	if !filepath.IsAbs(scratch) {
+		t.Errorf("scratch = %q, want an absolute path", scratch)
+	}
+	if info, err := os.Stat(scratch); err != nil || !info.IsDir() {
+		t.Fatalf("scratch was not created as a directory: %v", err)
+	}
+	if !filepath.IsAbs(args[4]) {
+		t.Errorf("interpreter = %q, want an absolute resolved path", args[4])
+	}
+	if !slices.Equal(args[5:], []string{"-c", "printf ok"}) {
+		t.Errorf("interpreter args = %q, want original args", args[5:])
+	}
+
+	gotEnv := environmentMap(env)
+	for _, key := range []string{"HOME", "TMPDIR", "TMP", "TEMP"} {
+		if gotEnv[key] != scratch {
+			t.Errorf("%s = %q, want private scratch %q", key, gotEnv[key], scratch)
+		}
+	}
+	if gotEnv[varsEnv] != `{}` || gotEnv[srcEnv] != `result = "ok"` {
+		t.Errorf("script contract changed: %s=%q %s=%q", varsEnv, gotEnv[varsEnv], srcEnv, gotEnv[srcEnv])
+	}
+
+	cleanup()
+	if _, err := os.Stat(scratch); !os.IsNotExist(err) {
+		t.Errorf("scratch still exists after cleanup: %v", err)
+	}
+}
+
+func TestPrepareCommandReportsScratchCreationFailure(t *testing.T) {
+	notDirectory := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(notDirectory, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMPDIR", notDirectory)
+	_, _, _, cleanup, err := (&CmdExec{Lang: Python, Bin: "sh", Sandbox: SandboxStrict}).prepareCommand(nil, nil)
+	if cleanup != nil {
+		cleanup()
+	}
+	if err == nil || !strings.Contains(err.Error(), "create sandbox scratch") {
+		t.Fatalf("scratch creation error = %v", err)
+	}
+}
+
+func TestStrictSandboxRejectsAnInterpreterOutsideSystemRuntime(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "python3")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	e := &CmdExec{Lang: Python, Bin: bin, Sandbox: SandboxStrict}
+	_, _, _, cleanup, err := e.prepareCommand(nil, nil)
+	if cleanup != nil {
+		cleanup()
+	}
+	if err == nil || !strings.Contains(err.Error(), "outside the sandbox runtime") {
+		t.Fatalf("strict custom interpreter error = %v, want runtime-path refusal", err)
+	}
+}
+
+func TestStrictSandboxRejectsADataDirectoryInsideItsRuntimeAllowlist(t *testing.T) {
+	if err := CheckSandboxDataPath(SandboxStrict, "/usr/share/atlas-data"); err == nil {
+		t.Fatal("strict sandbox accepted Atlas data below /usr")
+	}
+	if err := CheckSandboxDataPath(SandboxStrict, "/data"); err != nil {
+		t.Errorf("strict sandbox rejected isolated /data: %v", err)
+	}
+	if err := CheckSandboxDataPath(SandboxOff, "/usr/share/atlas-data"); err != nil {
+		t.Errorf("off mode changed the historical data path: %v", err)
+	}
+}
+
+func environmentMap(env []string) map[string]string {
+	out := make(map[string]string, len(env))
+	for _, kv := range env {
+		if i := strings.IndexByte(kv, '='); i >= 0 {
+			out[kv[:i]] = kv[i+1:]
+		}
+	}
+	return out
 }

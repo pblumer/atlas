@@ -59,13 +59,14 @@ go test ./engine/ -run TestProcessorRecovery -v
 
 CI also runs the storage packages — `wal/`, `checkpoint/`, `state/`, `api/sidecar/`,
 `internal/` — and `engine/`, for its recovery tests, on a Windows runner
-(`windows · storage` in `.github/workflows/ci.yml`), and the whole `api/` tree in a
-second Windows job beside it (`windows · api`), because a Windows binary ships and those
-packages are file-system behaviour. Linux cannot run those jobs for you; the closest
-local check is that the tests still compile there:
+(`windows · storage` in `.github/workflows/ci.yml`), and the whole `api/` tree and the
+Worker Types in `connector/` in a second Windows job beside it (`windows · api`), because
+a Windows binary ships and those packages are file-system and process behaviour. Linux
+cannot run those jobs for you; the closest local check is that the tests still compile
+there:
 
 ```bash
-GOOS=windows go vet ./wal/... ./checkpoint/... ./state/... ./api/... ./internal/... ./engine/...
+GOOS=windows go vet ./wal/... ./checkpoint/... ./state/... ./api/... ./connector/... ./internal/... ./engine/...
 ```
 
 Browser end-to-end tests for the web UI (the Design-view token simulation) live in

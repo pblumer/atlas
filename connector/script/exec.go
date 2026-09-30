@@ -251,15 +251,32 @@ func interpreterEnvironment(varsJSON, source string) []string {
 // through [capped] instead, so what a runaway script costs is the budget, once.
 // The process is left to finish or hit its deadline; the bytes past the ceiling are
 // dropped as they arrive, never held.
+//
+// The deadline ends the script's whole process group, or its Job Object on Windows.
+// That alone did not end the call. os/exec reads stdout until EOF, and it stops
+// watching the deadline once the interpreter has exited, so a process that had
+// inherited stdout and outlived the interpreter held the call for as long as it
+// ran: one a finished script left behind, or one that got away from the kill.
+// WaitDelay bounds that wait by the script's own timeout. It is measured from the
+// interpreter's exit or the deadline, whichever comes first, so it never cuts off
+// output before the deadline has passed.
 func execCommand(ctx context.Context, name string, args, env []string, max int64) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
-	configureProcessGroup(cmd)
+	group := configureProcessGroup(cmd)
+	defer group.release()
+	if deadline, ok := ctx.Deadline(); ok {
+		cmd.WaitDelay = time.Until(deadline)
+	}
 	cmd.Env = env
 	// stderr is quoted into an error message, so it needs far less room than the
 	// result — the same reasoning os/exec applies when it caps ExitError.Stderr.
 	stdout, stderr := &capped{max: max}, &capped{max: maxStderr}
 	cmd.Stdout, cmd.Stderr = stdout, stderr
-	err := cmd.Run()
+	err := cmd.Start()
+	if err == nil {
+		group.adopt()
+		err = cmd.Wait()
+	}
 	if stdout.dropped {
 		return nil, fmt.Errorf("script: output exceeded %d bytes", max)
 	}

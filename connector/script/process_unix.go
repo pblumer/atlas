@@ -11,10 +11,17 @@ import (
 	"syscall"
 )
 
+// processGroup needs nothing once the process has started on Unix: Setpgid made the
+// group when the process was created, and the kernel removes it with its last member.
+type processGroup struct{}
+
+func (*processGroup) adopt()   {}
+func (*processGroup) release() {}
+
 // configureProcessGroup gives one script and every subprocess it starts a group
 // of their own. CommandContext's cancellation then kills the group instead of
 // leaving grandchildren behind after the wall-clock deadline.
-func configureProcessGroup(cmd *exec.Cmd) {
+func configureProcessGroup(cmd *exec.Cmd) *processGroup {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
@@ -26,6 +33,7 @@ func configureProcessGroup(cmd *exec.Cmd) {
 		}
 		return err
 	}
+	return &processGroup{}
 }
 
 // processExists reports whether pid is still a live process, as the error nil.
