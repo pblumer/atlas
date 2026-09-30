@@ -1242,6 +1242,13 @@ function setChrome(appId, route) {
   // that shape: the catalogues and the one being created, then the products, the
   // relations and the maintainers of one catalogue.
   document.body.classList.toggle("catalog-mode", route.startsWith("#/catalog"));
+  // The Incidents view is two tables an operator works in, and the cause table's
+  // cells that cannot wrap — the process id, the timestamp, the controls on the action
+  // line — add up to more than the centred column holds: it scrolled inside its card,
+  // with the actions cut off at the card's edge, while a wide screen stayed empty
+  // beside it. It drops the column like the Tasks inbox does, and keeps the padding;
+  // the message column is the one that takes what the window adds.
+  document.body.classList.toggle("incidents-mode", route === "#/operations/incidents");
 }
 
 // ---------- What's New ----------
@@ -6151,7 +6158,7 @@ async function viewIncidents() {
       <h1>Incidents</h1>
       <button class="btn neutral" id="refresh" title="Reload the causes and the incident list">Refresh</button>
     </div>
-    <p class="muted">Where a token is stuck waiting for an operator (ADR-0061). A <b>job</b>
+    <p class="muted inc-lead">Where a token is stuck waiting for an operator (ADR-0061). A <b>job</b>
     incident is a service task whose retries ran out and parked; a <b>timer</b> incident is a
     recurring boundary or event-subprocess timer whose FEEL schedule stopped resolving
     (ADR-0111). The table below groups them by <b>cause</b> — the element that parked — because
@@ -6216,9 +6223,9 @@ async function viewIncidents() {
           <td>${incidentPill(g)}</td>
           <td data-sort="${g.count}"><b>${g.count}</b></td>
           <td data-sort="${g.oldestRaisedAt || 0}" class="muted nowrap" title="The oldest incident of this cause; the newest is ${esc(fmtRaised(g.newestRaisedAt))}">${esc(fmtRaised(g.oldestRaisedAt))}</td>
-          <td>${msg}</td>
+          <td class="inc-msg">${msg}</td>
           <td class="row-actions">
-            <button class="btn ghost" data-show="${i}" title="List this cause's incidents below">Show</button>
+            <button class="btn ghost sm" data-show="${i}" title="List this cause's incidents below">Show</button>
             ${g.processDefKey
               ? `<button class="btn sm" data-resolve-cause="${i}" title="Clear every incident of this cause and retry its work">Resolve all…</button>`
               // Without a definition there is nothing to scope the resolve by — every
@@ -6298,8 +6305,8 @@ async function viewIncidents() {
         <td>${inst}</td>
         <td>${el}</td>
         <td>${cause}</td>
-        <td data-sort="${r.raisedAt || 0}">${esc(fmtRaised(r.raisedAt))}</td>
-        <td>${esc(r.message || "—")}${incidentWorkerChip(r)}</td>
+        <td data-sort="${r.raisedAt || 0}" class="nowrap">${esc(fmtRaised(r.raisedAt))}</td>
+        <td class="inc-msg">${esc(r.message || "—")}${incidentWorkerChip(r)}</td>
         <td class="row-actions">
           <button class="btn sm" data-resolve="${i}" title="Resolve this incident">Resolve…</button>
           ${dropdown("⋯", "icon-btn", incidentMenu(r, i))}</td>
