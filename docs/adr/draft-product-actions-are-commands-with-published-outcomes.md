@@ -1,7 +1,7 @@
 # ADR-DRAFT: A product declares its actions, each a command whose outcome is a fact published beyond Atlas
 
 - **Status:** Proposed
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-09-30
 - **Deciders:** Atlas maintainers
 - **Open question:** what the portal costs the run loop at production order rates. The
@@ -109,7 +109,7 @@ type Action struct {
     Key      string            `json:"key"`      // "storage-extend": the contract
     Message  string            `json:"message"`  // "mailbox.storage.extend": the process's business
     Effect   string            `json:"effect"`   // provision | deprovision | change | service
-    Triggers []string          `json:"triggers"` // customer | operator
+    Triggers []string          `json:"triggers"` // customer | operator | system
     Labels   map[string]string `json:"labels"`   // language → what the button says
     Form     string            `json:"form,omitempty"`     // an Atlas form for what the action needs (ADR-0358)
     Outcomes map[string]string `json:"outcomes,omitempty"` // outcome → event type; see §3
@@ -139,11 +139,42 @@ Actions []Action `json:"actions,omitempty"`
   inactivation is either a `service` action the process carries out, or a
   `deprovision`.
 - **Triggers:** `customer` is whoever may return the line today (the orderer, or an
-  operator for any order); `operator` is `RoleOperator`. The system triggers —
-  expiry (ADR-0344), recertification (ADR-0341), reconciliation (ADR-0334) — keep
-  using the `deprovision` action and are not declared.
+  operator for any order); `operator` is `RoleOperator`; `system` is something
+  observed about the held right rather than asked for by a person — see below. The
+  inventory's own sweeps — expiry (ADR-0344), recertification (ADR-0341),
+  reconciliation (ADR-0334) — keep using the `deprovision` action and are not
+  declared.
 - **The editor pre-fills** `<item>.provision` and `<item>.deprovision` and does not let
   either be removed.
+
+**A `system` trigger is a threshold on what is held**: a mailbox above nine tenths of
+its quota, a certificate a month from expiry. Four rules keep it runnable and keep it
+from loading the engine:
+
+- **The condition lives inside the position's instance.** A per-position strand has the
+  right's context; a conditional catch, boundary event or event subprocess reads the
+  measurement as a variable and starts the action's branch (ADR-0137). A conditional
+  start event at process level has no instance to read from; it used to compile as a
+  plain start with its condition dropped, and is now refused at deploy (§9).
+- **Atlas receives crossings, not samples.** The observer — a Worker reading the target
+  system on a schedule, or a monitoring system — reports through the action act of §2,
+  under an operator credential as every external caller does until scoped grants exist
+  (ADR-0425 §8). Each report is a directed delivery with a receipt and a condition
+  re-check. Ten thousand mailboxes measured every five minutes are 2.88 million of those
+  a day; one report per crossing is a handful. Filtering belongs at the source.
+- **The threshold is not a literal in the model.** A per-position strand runs for years
+  on the version it was issued on (ADR-0428 §5), so `usedGB > 100` would stay in force for
+  every mailbox issued under it until each is migrated. It is stated relative to what the
+  right holds (`usedGB > quotaGB * 0.9`), or delivered with the measurement from where it
+  is maintained.
+- **Repeated crossings need a loop, not a re-armed event.** A non-interrupting conditional
+  boundary or event subprocess fires once per arm (ADR-0137). A strand that must react
+  again waits at a conditional catch in a loop — which counts as a wait for ADR-0428's
+  cycle rule (`waitsForOutside`, `compiler/lifecycleshape.go`) — and the relative
+  threshold keeps it from firing again the moment the quota grew. A conditional catch
+  cannot be one alternative of an event-based gateway, which accepts message, timer and
+  signal catches only (`isCatchEvent`, `compiler/validation.go`); it runs as a boundary
+  or event subprocess beside the strand's wait, or in a branch of its own.
 
 **Existing products are read, not migrated.** An item with `operations` is read as the
 actions `provision`, `change` and `deprovision` it names, with the effect of the same
@@ -411,6 +442,37 @@ If the open question's measurement shows the portal crowding the engine, the rem
 portal only reads (ADR-0239, ADR-0382) — not a log of its own. That is a separate
 record, and it is the one this record's open question exists to trigger.
 
+### 9. A conditional start event at process level is refused at deploy
+
+The `system` trigger was first drawn as a conditional start event — "Mailbox Storage >
+100GB" in front of the process. It compiled without a word: the start became a plain
+start and its condition was dropped (`registerScope`, `compiler/scope_compile.go`), so
+the model deployed, never started on its own, and ran unconditionally when started by
+hand. The Modeler had no entry for it either (`UNSUPPORTED_EVENT_DEFS` was empty).
+
+Atlas runs a conditional event only inside an instance (ADR-0137), and at process level
+there is nothing for the condition to read. The fault is therefore closed where every
+other rule the compiler gains later is closed (ADR-0177, ADR-0393):
+
+- **The compile marks it and stage 5 refuses it.** A root-scope start that carries a
+  conditional event definition still compiles to the plain start it has always been,
+  and is recorded on the compiled process; the stage-5 rule `start.conditional`
+  (`checkConditionalStarts`, `compiler/validation.go`) reports it as an error anchored
+  to the start event. A deploy and the Modeler's dry run refuse it; a definition
+  already deployed with one is brought back on reload unchanged, with the finding
+  logged beside it.
+- **An event subprocess is untouched.** Its conditional start is its trigger and runs
+  while the parent scope does; it is never in root scope, so the mark never reaches it.
+- **The Modeler warns while the author draws.** `conditionalStartReason`
+  (`api/web/editor.js`) puts the unsupported badge and a Problems warning on any
+  conditional start outside an event subprocess; the server's finding on the same
+  element replaces the warning once validation answers, so it is not listed twice.
+- A test in `api` holds the two halves together, since nothing else links a rule in Go
+  to a warning in JavaScript.
+
+This part of the record is built; the rest is not, which is why the record is
+`Partial`.
+
 ### Consequences
 
 - **Positive:** a product has as many actions as it needs, and the order layer still
@@ -426,6 +488,11 @@ record, and it is the one this record's open question exists to trigger.
 - **Negative / trade-offs accepted:** a new value type, a new column family and a prune
   event — new durable state and a new recovery path, justified because consumers outside
   Atlas are in scope.
+- **Positive:** a threshold on a held right becomes an action with a place in the
+  model, and the conditional start that looked like one is refused instead of deployed
+  as a start that never fires.
+- **Negative:** a model deployed today with a process-level conditional start is refused
+  at its next deploy. It keeps running as it did until then, and the reload names it.
 - **Negative:** two binding shapes on the product (the operation map and actions) for as
   long as a line froze the old one.
 - **Negative:** a public event contract is a compatibility promise; a breaking change to

@@ -139,7 +139,16 @@ func registerScope(
 			reg.node(s.Id, b.AddTimerStartEvent(schedule))
 			continue
 		}
-		reg.node(s.Id, b.AddStartEvent())
+		startID := b.AddStartEvent()
+		reg.node(s.Id, startID)
+		// A process-level start with a condition compiles as the plain start it has
+		// always run as, and is marked so stage 5 refuses it at deploy: a condition
+		// reads variables, and before an instance exists there are none
+		// (RuleConditionalStart). An event subprocess's conditional start is its
+		// trigger and is compiled with the subprocess below; it is never in root scope.
+		if s.Conditional != nil && b.CurrentScope() == -1 {
+			b.markConditionalStart(startID)
+		}
 		// A none start event may carry a start form; the first one that does wins as
 		// the process's start form (ADR-0028). Only a root-scope start is a process
 		// entry, so a form on a subprocess start is ignored.

@@ -533,6 +533,7 @@ type Builder struct {
 	lanes              []LaneDetail                // organizational lanes (ADR-0121)
 	documentation      int32                       // interned <bpmn:documentation> of the process itself, -1 if none
 	startFormId        int32                       // interned start-form id (ADR-0028), -1 if the process has none
+	conditionalStarts  []int32                     // process-level start nodes that carried a conditional event definition (RuleConditionalStart)
 	versionTag         int32                       // interned atlas:versionTag revision label, -1 if none
 	instanceTtlNanos   int64                       // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
 	historyTtlNanos    int64                       // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
@@ -853,6 +854,14 @@ func (b *Builder) AddStartEvent() int32 { return b.addNode(TypeStartEvent, -1) }
 // before creating an instance, whose data becomes the start variables (ADR-0028).
 // It is design-time metadata the engine ignores.
 func (b *Builder) SetStartFormId(id string) { b.startFormId = b.intern(id) }
+
+// markConditionalStart records that the process-level start node id carried a
+// conditional event definition. The node stays the plain start it has always
+// compiled to; the mark is what lets stage 5 refuse it at deploy while a reload
+// brings a stored definition back unchanged (RuleConditionalStart, ADR-0177).
+func (b *Builder) markConditionalStart(id int32) {
+	b.conditionalStarts = append(b.conditionalStarts, id)
+}
 
 // SetExecutable records the process's bpmn:isExecutable flag. A non-executable
 // process is descriptive-only — the API refuses to start it and hides it from the
@@ -3049,6 +3058,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		lanes:              b.lanes,
 		documentation:      b.documentation,
 		startFormId:        b.startFormId,
+		conditionalStarts:  b.conditionalStarts,
 		versionTag:         b.versionTag,
 		instanceTtlNanos:   b.instanceTtlNanos,
 		historyTtlNanos:    b.historyTtlNanos,

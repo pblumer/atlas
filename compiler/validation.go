@@ -121,6 +121,17 @@ const (
 	// brought back on reload and keeps the behaviour it had (ADR-0177,
 	// ADR-0423).
 	RuleDecisionVersionTag = "decision.version-tag"
+
+	// RuleConditionalStart marks a process-level start event carrying a conditional
+	// event definition. Atlas runs a conditional event only inside an instance — a
+	// catch, a boundary or an event subprocess (ADR-0137) — because a condition reads
+	// variables, and before an instance exists there are none. The start used to be
+	// compiled as a plain start with its condition dropped, so the model deployed,
+	// never started on its own, and ran unconditionally when started by hand. A
+	// deploy refuses it; a definition already deployed with one is brought back on
+	// reload and keeps the behaviour it had (ADR-0177, ADR-0393,
+	// ADR-draft-product-actions-are-commands-with-published-outcomes).
+	RuleConditionalStart = "start.conditional"
 )
 
 // Rule slugs for whole-model dry-run findings that [ValidateModel] raises outside
@@ -175,6 +186,7 @@ func Validate(cp *CompiledProcess) []Problem {
 	ps = append(ps, checkErrorHandling(cp)...)
 	ps = append(ps, checkTransactions(cp)...)
 	ps = append(ps, checkTimerStartSchedules(cp)...)
+	ps = append(ps, checkConditionalStarts(cp)...)
 	ps = append(ps, checkLoopBounds(cp)...)
 	ps = append(ps, checkLoopCounterMappings(cp)...)
 	ps = append(ps, checkDottedTargets(cp)...)
@@ -686,6 +698,20 @@ func checkTimerStartSchedules(cp *CompiledProcess) []Problem {
 				fmt.Sprintf("%s has a constant FEEL timer schedule that does not resolve: %s",
 					describeNode(cp, s.ElementId), err)))
 		}
+	}
+	return ps
+}
+
+// checkConditionalStarts refuses a process-level conditional start event
+// (RuleConditionalStart). The compile keeps it as the plain start it has always run
+// as, and records that it carried a condition, so this check can say so at deploy
+// while a reload still brings the definition back unchanged.
+func checkConditionalStarts(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	for _, id := range cp.conditionalStarts {
+		ps = append(ps, problem(cp, id, SeverityError, RuleConditionalStart,
+			fmt.Sprintf("%s is a conditional start event, which atlas does not run: a condition reads variables, and before an instance exists there are none, so it would deploy as a plain start and never start on its own; put the condition inside a running instance (a conditional intermediate catch, boundary event or event subprocess), or start the process with the message or timer that observes it",
+				describeNode(cp, id))))
 	}
 	return ps
 }

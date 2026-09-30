@@ -1,6 +1,7 @@
 package compiler
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -210,5 +211,109 @@ func TestParseConditionalInvalidFeel(t *testing.T) {
 		if !strings.Contains(err.Error(), "condition") {
 			t.Errorf("%s: error %q should mention the condition", name, err.Error())
 		}
+	}
+}
+
+// conditionalStartModel starts its process at a conditional start event. Atlas runs a
+// conditional event only inside an instance (ADR-0137); at process level there are no
+// variables for the condition to read, so the start compiles as the plain start it has
+// always been and stage 5 says so (RuleConditionalStart).
+const conditionalStartModel = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="p" isExecutable="true">
+    <startEvent id="full">
+      <conditionalEventDefinition><condition>= mailboxStorageGB &gt; 100</condition></conditionalEventDefinition>
+    </startEvent>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="full" targetRef="e"/>
+  </process>
+</definitions>`
+
+// TestParseRefusesAProcessLevelConditionalStart is the point of the rule: the model
+// used to deploy, never start on its own, and run unconditionally when started by
+// hand. A deploy now refuses it, anchored to the start event.
+func TestParseRefusesAProcessLevelConditionalStart(t *testing.T) {
+	_, err := Parse(1, 1, strings.NewReader(conditionalStartModel))
+	var ve *ValidationError
+	if !errors.As(err, &ve) {
+		t.Fatalf("Parse err = %v, want a ValidationError", err)
+	}
+	var found bool
+	for _, p := range ve.Problems {
+		if p.Rule == RuleConditionalStart {
+			found = true
+			if p.Severity != SeverityError || p.Element != "full" {
+				t.Errorf("problem = %+v, want an error anchored to %q", p, "full")
+			}
+			if !strings.Contains(p.Message, "conditional start event") {
+				t.Errorf("message = %q, want it to name the conditional start event", p.Message)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("problems = %+v, want %s", ve.Problems, RuleConditionalStart)
+	}
+}
+
+// TestValidateModelReportsAProcessLevelConditionalStart keeps the Modeler's Problems
+// panel telling the same truth as a deploy: the dry run raises the same finding on the
+// same element.
+func TestValidateModelReportsAProcessLevelConditionalStart(t *testing.T) {
+	ps, err := ValidateModel(strings.NewReader(conditionalStartModel))
+	if err != nil {
+		t.Fatalf("ValidateModel: %v", err)
+	}
+	for _, p := range ps {
+		if p.Rule == RuleConditionalStart && p.Element == "full" && p.Severity == SeverityError {
+			return
+		}
+	}
+	t.Fatalf("problems = %+v, want %s on %q", ps, RuleConditionalStart, "full")
+}
+
+// TestReloadKeepsAProcessLevelConditionalStart draws the ADR-0177 line: a definition
+// deployed before the rule existed comes back on reload as the plain start it has
+// always run as, with the finding reported beside it rather than in place of it.
+func TestReloadKeepsAProcessLevelConditionalStart(t *testing.T) {
+	cp, problems, err := ReloadNamed(1, 1, strings.NewReader(conditionalStartModel), "p")
+	if err != nil {
+		t.Fatalf("ReloadNamed: %v", err)
+	}
+	if cp == nil {
+		t.Fatal("ReloadNamed returned no compiled process")
+	}
+	if n := nodeByBpmnId(t, cp, "full"); n.Type != TypeStartEvent {
+		t.Fatalf("start type = %v, want the plain StartEvent it has always compiled to", n.Type)
+	}
+	var found bool
+	for _, p := range problems {
+		found = found || p.Rule == RuleConditionalStart
+	}
+	if !found {
+		t.Fatalf("problems = %+v, want %s reported", problems, RuleConditionalStart)
+	}
+}
+
+// TestConditionalStartRuleLeavesEventSubprocessesAlone guards the one place a
+// conditional start is correct: an event subprocess's start is its trigger, armed
+// while its parent scope runs, and must not be refused.
+func TestConditionalStartRuleLeavesEventSubprocessesAlone(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <process id="p" isExecutable="true">
+	    <startEvent id="s"/>
+	    <userTask id="work"/>
+	    <endEvent id="e"/>
+	    <sequenceFlow id="f1" sourceRef="s" targetRef="work"/>
+	    <sequenceFlow id="f2" sourceRef="work" targetRef="e"/>
+	    <subProcess id="es" triggeredByEvent="true">
+	      <startEvent id="es_start" isInterrupting="false">
+	        <conditionalEventDefinition><condition>= usedGB &gt; quotaGB * 0.9</condition></conditionalEventDefinition>
+	      </startEvent>
+	      <endEvent id="es_end"/>
+	      <sequenceFlow id="ef1" sourceRef="es_start" targetRef="es_end"/>
+	    </subProcess>
+	  </process>
+	</definitions>`
+	if _, err := Parse(1, 1, strings.NewReader(xml)); err != nil {
+		t.Fatalf("Parse: %v", err)
 	}
 }
