@@ -46,6 +46,7 @@ func newServerAtDir(t *testing.T, dir string) (*Server, error) {
 	if err != nil {
 		t.Fatalf("wal.Open: %v", err)
 	}
+	t.Cleanup(func() { _ = lg.Close() })
 	store, err := state.Open(filepath.Join(dir, "state"))
 	if err != nil {
 		t.Fatalf("state.Open: %v", err)

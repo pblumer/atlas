@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"testing/fstest"
 
@@ -510,17 +511,28 @@ func TestMigrateRepositoryDirOnAFreshInstall(t *testing.T) {
 // cannot happen, so construction must hear about it rather than start on an empty
 // repository and silently strand the operator's installed templates.
 func TestMigrateRepositoryDirReportsAFailedMove(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("running as root: a read-only data dir would not deny the rename")
-	}
 	dataDir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dataDir, "marketplace"), 0o755); err != nil {
+	old := filepath.Join(dataDir, "marketplace")
+	if err := os.MkdirAll(old, 0o755); err != nil {
 		t.Fatalf("seed old dir: %v", err)
 	}
-	if err := os.Chmod(dataDir, 0o500); err != nil { // r-x: the rename cannot write the entry
-		t.Fatalf("chmod data dir: %v", err)
+	if runtime.GOOS == "windows" {
+		// Windows ignores a directory's mode bits, but will not rename a directory
+		// while a file inside it is open, which denies the move just as well.
+		held, err := os.Create(filepath.Join(old, "held"))
+		if err != nil {
+			t.Fatalf("hold a file open: %v", err)
+		}
+		t.Cleanup(func() { _ = held.Close() })
+	} else {
+		if os.Geteuid() == 0 {
+			t.Skip("running as root: a read-only data dir would not deny the rename")
+		}
+		if err := os.Chmod(dataDir, 0o500); err != nil { // r-x: the rename cannot write the entry
+			t.Fatalf("chmod data dir: %v", err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(dataDir, 0o700) })
 	}
-	t.Cleanup(func() { _ = os.Chmod(dataDir, 0o700) })
 
 	if err := migrateRepositoryDir(dataDir); err == nil {
 		t.Fatal("migrateRepositoryDir on an unwritable data dir: got nil, want an error")
