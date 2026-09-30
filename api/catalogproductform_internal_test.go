@@ -30,18 +30,21 @@ func TestTheProductFormAsksWhatIsShownBeforeWhatIsAdministered(t *testing.T) {
 	body := webRegion(t, readWeb(t, "catalog-admin.js"), "function productForm(", "\n}")
 
 	order := []struct{ frag, what string }{
-		{`section("What the catalogue shows"`, "the heading for what a reader meets"},
+		{`group("shows", "What the catalogue shows"`, "the section for what a reader meets"},
 		{`name="id"`, "the id"},
 		{`langFields("t", langs, v.texts)`, "the name per language"},
+		{`group("filing", `, "the section for where the shop files it"},
 		{`langFields("cat", langs,`, "the heading it sits under"},
 		{`name="keywords"`, "what it can be found by"},
+		{`group("offer", `, "the section for what is offered"},
 		{`name="price"`, "what it costs"},
 		{`variantRows(v.variants, langs)`, "the shapes it is ordered in"},
-		{`section("How an order is handled"`, "the heading for what an order does"},
+		{`group("order", "How an order is handled"`, "the section for what an order does"},
 		{`name="state"`, "whether it is orderable"},
 		{`name="akind"`, "whether it needs approval"},
 		{`eligibleField(dir, v.eligible)`, "who may receive it"},
 		{`name="configForm"`, "what the orderer is asked"},
+		{`group("fulfil", `, "the section for how it is fulfilled"},
 		{`procSelect("provisionProcess"`, "what runs to grant it"},
 		{`name="maxDays"`, "how long the right may last"},
 		{`name="targets"`, "what the target systems call it"},

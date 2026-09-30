@@ -8,6 +8,10 @@ import (
 
 // The product editor opens beside the list, not under it.
 //
+// Since then an existing product opens in a row under its own row instead (see
+// TestAProductOpensUnderItsOwnRow at the end of this file); the column below is
+// what a new product, which has no row yet, still opens in.
+//
 // It used to render under the product table, which is fine with three products and
 // unusable with forty: opening a row near the bottom put the form below everything
 // offered, so it was read after a long scroll and with no sight of the row it
@@ -190,6 +194,71 @@ func TestTheEditorCardStatesNoWidthOfItsOwn(t *testing.T) {
 		if strings.Contains(head, bad) {
 			t.Errorf("the editor card spells its own %s inline, which overrides both layouts "+
 				"it is rendered in", bad)
+		}
+	}
+}
+
+// TestAProductOpensUnderItsOwnRow.
+//
+// Beside the list, the form was a third of a wide screen and scrolled inside itself;
+// it now opens in a row of its own directly under the product it edits, across the
+// table's width. The row is a detail row for the shared table enhancer, which is what
+// keeps it under its product when the list is sorted and hides it with its product
+// when a filter removes that. Only a new product, which has no row yet, still opens in
+// the column beside the list. The geometry is proven in e2e/catalog-editor-layout.
+func TestAProductOpensUnderItsOwnRow(t *testing.T) {
+	src := readWeb(t, "catalog-admin.js")
+	open := webRegion(t, src, "const openPanel = (into, html, row) => {", "\n  };")
+	for _, want := range []struct{ frag, what string }{
+		{`detailRow.setAttribute("data-dt-detail", "")`, "the table enhancer's mark for a row that belongs to the one above it"},
+		{`cell.colSpan = row.cells.length`, "the table's whole width"},
+		{`row.after(detailRow)`, "the place directly under the row"},
+		{`cell.appendChild(into)`, "the panel moved into that row"},
+	} {
+		if !strings.Contains(open, want.frag) {
+			t.Errorf("opening a product no longer uses %s (%q)", want.what, want.frag)
+		}
+	}
+	// Closing puts the containers back where the page rendered them, or the next new
+	// product opens its form into a row that no longer exists.
+	if !strings.Contains(src, "side.append(editor, assembler)") {
+		t.Error("closing a panel no longer returns the containers to the column they came from")
+	}
+	// A sort appends every row again: the panel is put back under its product.
+	if !strings.Contains(src, "if (anchor.nextElementSibling !== detailRow) anchor.after(detailRow);") {
+		t.Error("nothing keeps the form under its product once the list has been re-ordered")
+	}
+}
+
+// TestTheProductFormFoldsAndCanPublish.
+//
+// The form is long, so its sections fold and a folded one stays folded for the next
+// product; a required field inside a folded section opens it rather than stopping
+// the save with a message pointing at nothing. Beside Save Draft, Save & Publish
+// freezes the catalogue straight after the save and carries a refusal across the
+// reload to where the Publish button reports its own.
+func TestTheProductFormFoldsAndCanPublish(t *testing.T) {
+	src := readWeb(t, "catalog-admin.js")
+	form := webRegion(t, src, "function productForm(", "\n}")
+	for _, key := range []string{"shows", "filing", "offer", "order", "fulfil"} {
+		if !strings.Contains(form, `group("`+key+`", `) {
+			t.Errorf("the form no longer draws the %q section as one that folds", key)
+		}
+	}
+	for _, want := range []string{`data-publish="no">Save Draft</button>`, `data-publish="yes"`, `data-act="fold-sections"`} {
+		if !strings.Contains(form, want) {
+			t.Errorf("the form no longer carries %q", want)
+		}
+	}
+	for _, want := range []string{
+		`localStorage.setItem(SECTIONS_KEY`,
+		`if (d && !d.open) d.open = true;`,
+		`e.submitter && e.submitter.dataset.publish === "yes"`,
+		"carriedRefusal = { catalog: id, err: pubErr };",
+		"report.innerHTML = refusalCard(carriedRefusal.err);",
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("catalog-admin.js no longer carries %q", want)
 		}
 	}
 }

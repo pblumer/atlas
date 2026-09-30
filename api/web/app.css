@@ -281,6 +281,27 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
 }
 .product-form > .form-sec:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 .product-form > .form-sec-hint { margin: 4px 0 4px; font-size: 12px; color: var(--muted); }
+/* Each section is a <details> a maintainer can fold away (catalog-admin.js remembers
+   which). The summary wears the section heading's look, with a marker that turns, and
+   the body keeps the form's own two-column grid so a field's .wide still spans it. */
+.product-form > .form-group { grid-column: 1 / -1; border-top: 1px solid var(--border); padding: 10px 0 4px; }
+.product-form > .form-group:first-child { border-top: 0; padding-top: 0; }
+.product-form > .form-group > summary.form-sec {
+  cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
+  font-size: 13px; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted);
+  margin: 0; padding: 4px 0; user-select: none;
+}
+.product-form > .form-group > summary.form-sec::-webkit-details-marker { display: none; }
+.product-form > .form-group > summary.form-sec::before {
+  content: "\25B8"; display: inline-block; transition: transform 0.12s ease;
+}
+.product-form > .form-group[open] > summary.form-sec::before { transform: rotate(90deg); }
+.product-form > .form-group > summary.form-sec:hover { color: var(--text); }
+.product-form > .form-group > .form-sec-hint { margin: 0 0 6px; font-size: 12px; color: var(--muted); }
+.form-group-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
+.form-group-body > .wide,
+.form-group-body > .form-sec-hint,
+.form-group-body > .row { grid-column: 1 / -1; }
 /* The product's picture in its editor: bounded here rather than by the file, because
    what was uploaded is what is served. contain and not cover — a crop would cut the
    top off somebody's product. */
@@ -289,7 +310,7 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
   margin: 0 0 8px; border: 1px solid var(--border); border-radius: 8px;
   object-fit: contain; background: var(--surface);
 }
-@media (max-width: 760px) { .product-form { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .product-form, .form-group-body { grid-template-columns: 1fr; } }
 
 /* ---------- One box per language, side by side ----------
    Every text a product carries is a map keyed by the catalogue's declared language
@@ -350,6 +371,12 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
    unusable with forty: opening one near the bottom pushed the form below everything,
    so it was read after a long scroll and with no sight of the row it belonged to.
 
+   An existing product's form and kit now open in a row of their own directly under
+   the product (tr.product-edit-row, below), because beside the list the form was a
+   third of a wide screen and scrolled inside itself. What follows still lays out the
+   column for a new product, which has no row to open under, and for the page's other
+   list-and-form pairs.
+
    So the list and the editor are two columns, and the panel is pushed down to the
    row it was opened from — the offset is measured against the list and handed over
    as --editor-top by catalog-admin.js, because only the DOM knows where a row ended
@@ -402,6 +429,11 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
    alignment is not a statement — a reader scrolling past sees the highlight and not
    the arithmetic. */
 .product-list tr.editing > td { background: var(--accent-soft); }
+/* The panel under the row it was opened from: the table's whole width, joined to its
+   row by the same tint, and bounded so a form on a 2000px screen keeps a readable
+   measure rather than running two fields a metre apart. */
+.product-list tr.product-edit-row > td { padding: 0 8px 14px; background: var(--accent-soft); white-space: normal; }
+.product-list tr.product-edit-row .card { margin: 0; max-width: 1280px; }
 @media (min-width: 1400px) {
   /* A list beside the form that acts on it. The catalogue page is four of these — the
      catalogues and the one being created, the products and the one being edited, the
@@ -436,6 +468,7 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
   }
   .product-cols > .product-side .card { margin: 0; }
   .product-cols > .product-side .product-form { grid-template-columns: 1fr; }
+  .product-cols > .product-side .form-group-body { grid-template-columns: 1fr; }
 }
 
 h1 { font-size: 20px; margin: 0 0 12px; }
