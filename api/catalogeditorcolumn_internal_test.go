@@ -211,3 +211,29 @@ func TestTheProductFormFoldsAndCanPublish(t *testing.T) {
 		}
 	}
 }
+
+// TestTheProductFormSaysWhatPublishingNeeds.
+//
+// Save & Publish on a product that lacks what publishing checks saves it and is then
+// refused. The form states the product's half of those checks up front and keeps the
+// list current, so the rules are learned beside the fields rather than from a refusal.
+// The checks it mirrors are catalog.Publish's; if one is added there and not here, the
+// list is incomplete but not wrong — which is why it says publishing checks more.
+func TestTheProductFormSaysWhatPublishingNeeds(t *testing.T) {
+	src := readWeb(t, "catalog-admin.js")
+	if !strings.Contains(webRegion(t, src, "function productForm(", "\n}"), `<div class="publish-needs"`) {
+		t.Fatal("the product form no longer carries the list of what publishing needs")
+	}
+	needs := webRegion(t, src, "function publishNeeds(form) {", "\n}")
+	for _, want := range []string{`val("id")`, `[name^="t-"]`, `val("state") === "active"`,
+		`val("provisionProcess")`, `val("deprovisionProcess")`, `val("opProvision")`,
+		`val("opDeprovision")`, `kind === "fixed" || kind === "role"`} {
+		if !strings.Contains(needs, want) {
+			t.Errorf("publishNeeds no longer checks %s", want)
+		}
+	}
+	wire := webRegion(t, src, "function wireProductForm() {", "\n  }\n")
+	if !strings.Contains(wire, `pform.addEventListener("input", refresh)`) {
+		t.Error("the list is drawn once and not kept current while the form is filled in")
+	}
+}

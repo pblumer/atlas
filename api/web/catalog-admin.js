@@ -1485,6 +1485,60 @@ function partOfNote(it, cat, items, langs) {
     <b>assemble</b>.</p>`;
 }
 
+// publishNeeds is what a product must carry before a catalogue offering it can be
+// published, read off the form as it stands. It is the product's half of what
+// publishing checks (catalog.Publish and its lifecycle checks), stated up front:
+// Save & Publish on a product without them saves it and is then refused, and a
+// refusal after the fact is a worse way to learn the rules than a list beside the
+// fields. Each entry names the section and the field it is about, so the list can
+// take a reader to it. It does not claim to be all of publishing — languages,
+// cycles and ranks are the catalogue's, not the product's — and says so.
+function publishNeeds(form) {
+  const val = (n) => {
+    const el = form.elements.namedItem(n);
+    return el && "value" in el ? String(el.value || "").trim() : "";
+  };
+  const firstName = form.querySelector('[name^="t-"]');
+  const life = val("lifecycleProcess");
+  const kind = val("akind");
+  const needs = [
+    { sec: "shows", field: "id", what: "an id", ok: val("id") !== "" },
+    { sec: "shows", field: firstName ? firstName.name : "", what: "a name in at least one language",
+      ok: [...form.querySelectorAll('[name^="t-"]')].some((el) => el.value.trim() !== "") },
+    { sec: "order", field: "state", what: "the state Active (a draft is saved but never published)",
+      ok: val("state") === "active" },
+    life
+      ? { sec: "fulfil", field: val("opProvision") ? "opDeprovision" : "opProvision",
+        what: "a provision and a deprovision start event for the lifecycle process",
+        ok: val("opProvision") !== "" && val("opDeprovision") !== "" }
+      : { sec: "fulfil", field: val("provisionProcess") ? "deprovisionProcess" : "provisionProcess",
+        what: "a process that provisions it and one that revokes it",
+        ok: val("provisionProcess") !== "" && val("deprovisionProcess") !== "" },
+  ];
+  if (kind === "fixed" || kind === "role") {
+    needs.push({ sec: "order", field: `aref-${kind}`, what: "an approver for the approval rule",
+      ok: val(`aref-${kind}`) !== "" });
+  }
+  return needs;
+}
+
+// publishNeedsHTML draws that list: what is missing first in words, then every entry
+// with whether it is there, each one a button that opens its section at the field.
+function publishNeedsHTML(needs) {
+  const missing = needs.filter((n) => !n.ok).length;
+  const head = missing
+    ? `Required to publish &mdash; ${missing} still missing:`
+    : "Everything this product needs to be published is filled in.";
+  return `<p class="publish-needs-head">${head}</p>
+    <ul>${needs.map((n) => `<li class="${n.ok ? "ok" : "missing"}"><button type="button"
+      class="btn ghost small publish-need" data-need-sec="${esc(n.sec)}" data-need-field="${esc(n.field)}"
+      aria-label="${esc(n.what)}: ${n.ok ? "done" : "missing"}"><span
+      aria-hidden="true">${n.ok ? "&#10003;" : "&#10007;"}</span> ${esc(n.what)}</button></li>`).join("")}</ul>
+    <p class="publish-needs-note">Publishing also checks the catalogue as a whole &mdash; its
+      languages, the structure between products &mdash; so it can still refuse for a reason
+      outside this product, and says which.</p>`;
+}
+
 // Which sections of the product form a maintainer has folded away, per browser. The
 // form explains every field, which is right the first time and a scroll every time
 // after, so a section closed once stays closed on the next product opened. Kept in
@@ -1531,6 +1585,7 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
       <button class="btn ghost" type="button" data-act="fold-sections">Collapse all</button>
     </div>
     <form class="product-form" data-editing="${esc(it ? it.id : "")}">
+      <div class="publish-needs" aria-live="polite"></div>
       ${group("shows", "What the catalogue shows",
     "The product as somebody browsing it meets it. Everything here is read by whoever orders.", `
       <label class="field">Id${it ? "" : " (short, stable, never renamed)"}
@@ -2327,6 +2382,26 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
   }
 
   function wireProductForm() {
+    // The list of what publishing needs, kept current while the form is filled in.
+    const pform = editor.querySelector(".product-form");
+    const needsBox = editor.querySelector(".publish-needs");
+    if (pform && needsBox) {
+      const refresh = () => { needsBox.innerHTML = publishNeedsHTML(publishNeeds(pform)); };
+      pform.addEventListener("input", refresh);
+      pform.addEventListener("change", refresh);
+      refresh();
+      // An entry takes the reader to its field, opening the section it is folded in.
+      needsBox.addEventListener("click", (e) => {
+        const b = e.target.closest("[data-need-field]");
+        if (!b) return;
+        const d = pform.querySelector(`details.form-group[data-sec="${b.dataset.needSec}"]`);
+        if (d) d.open = true;
+        const f = b.dataset.needField ? pform.elements.namedItem(b.dataset.needField) : null;
+        const el = f && f.focus ? f : null;
+        if (el) { el.scrollIntoView({ block: "center" }); el.focus(); }
+      });
+    }
+
     // One more row of shape boxes. Two blank ones are drawn with the grid, which
     // covers adding a shape to a product that has some; this is for the rest, and
     // it appends rather than re-rendering so that nothing already typed is lost.

@@ -360,3 +360,34 @@ test("a number field is drawn like every other field", async ({ page }) => {
   expect(Math.round(b.rank)).toBe(Math.round(b.text));
   expect(b.border).toBe("1px");
 });
+
+test("the form says what publishing needs, and keeps saying it while it is filled in", async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => localStorage.removeItem("atlas.catalog.productSections"));
+  await page.click('button[data-act="new-product"]');
+  const needs = page.locator(".product-editor .publish-needs");
+  await expect(needs.locator("li.missing")).toHaveCount(4); // id, name, state, processes
+  await expect(needs.locator(".publish-needs-head")).toContainText("4 still missing");
+
+  // An entry takes the reader to its field, opening the section it is folded in.
+  await page.locator('.product-editor details.form-group[data-sec="fulfil"] > summary').click();
+  await expect(page.locator('.product-editor details.form-group[data-sec="fulfil"]')).not.toHaveAttribute("open", "");
+  await needs.locator('button[data-need-field="provisionProcess"]').click();
+  await expect(page.locator('.product-editor details.form-group[data-sec="fulfil"]')).toHaveAttribute("open", "");
+  await expect(page.locator('.product-editor select[name="provisionProcess"]')).toBeFocused();
+
+  await page.fill('.product-editor input[name="id"]', "neu");
+  await page.fill('.product-editor input[name="t-de"]', "Neues Produkt");
+  await page.selectOption('.product-editor select[name="state"]', "active");
+  await page.selectOption('.product-editor select[name="provisionProcess"]', "proc_demo_2");
+  await expect(needs.locator("li.missing")).toHaveCount(1);
+  await page.selectOption('.product-editor select[name="deprovisionProcess"]', "proc_demo_3");
+  await expect(needs.locator("li.missing")).toHaveCount(0);
+  await expect(needs.locator(".publish-needs-head")).toContainText("Everything this product needs");
+
+  // An approval rule that names nobody is one more thing missing.
+  await page.selectOption('.product-editor select[name="akind"]', "role");
+  await expect(needs.locator("li.missing")).toHaveCount(1);
+  await page.evaluate(() => localStorage.removeItem("atlas.catalog.productSections"));
+  expect(page.__errors).toEqual([]);
+});

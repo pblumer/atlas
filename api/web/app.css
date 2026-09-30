@@ -286,6 +286,19 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
    the body keeps the form's own two-column grid so a field's .wide still spans it. */
 .product-form > .form-group { grid-column: 1 / -1; border-top: 1px solid var(--border); padding: 10px 0 4px; }
 .product-form > .form-group:first-child { border-top: 0; padding-top: 0; }
+/* What publishing needs, at the top of the form and kept current while it is filled
+   in (catalog-admin.js publishNeeds). Each entry is a button to its field. */
+.product-form > .publish-needs {
+  grid-column: 1 / -1; margin: 0 0 12px; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+}
+.product-form > .publish-needs + .form-group { border-top: 0; padding-top: 0; }
+.publish-needs-head { margin: 0 0 6px; font-weight: 600; }
+.publish-needs ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.publish-needs .publish-need { border-color: transparent; padding: 2px 4px; font-weight: 400; text-align: left; }
+.publish-needs li.ok .publish-need { color: var(--ok); }
+.publish-needs li.missing .publish-need { color: var(--danger); text-decoration: underline; }
+.publish-needs-note { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
 .product-form > .form-group > summary.form-sec {
   cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
   font-size: 13px; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted);
