@@ -1319,6 +1319,7 @@ async function viewConsoleDashboard() {
           hasLogoCached() ? `<img class="mark-img" alt="" src="${esc(LOGO_URL)}" />` : BUILTIN_MARK
         }</span>
         <h1>Welcome to atlas</h1>
+        <span id="welcome-version" class="welcome-version muted"></span>
       </div>
       <p class="muted">Atlas is a durable, high-throughput BPMN&nbsp;2.x workflow engine that runs
       from a single self-contained binary. This Console manages deployments and shows engine health;
@@ -1355,6 +1356,13 @@ async function viewConsoleDashboard() {
   // someone who arrived here without having read the README. Fills its own slot,
   // and is silent if the asset is missing.
   renderKeyFeatures(document.getElementById("key-features-slot"), wnLang(), setConsoleLang);
+  // The running version next to the heading, so "which build is this?" is answered
+  // on the first screen rather than only on the admin-only Engine view. Loaded on
+  // its own and silent on failure: a missing badge must not cost the dashboard.
+  api("GET", "/api/v1/info").then((i) => {
+    const el = document.getElementById("welcome-version");
+    if (el) el.textContent = versionLabel(i);
+  }).catch(() => {});
   try {
     const [procs, stats] = await Promise.all([
       api("GET", "/api/v1/processes"),
@@ -1472,6 +1480,16 @@ function mountNodeCard(node) {
 // buildInfoHTML renders the version/VCS metadata from GET /api/v1/info: the version
 // string, the git commit (short) with a dirty marker, the build time, and the Go
 // toolchain. A missing revision means the binary was built outside a git checkout.
+// versionLabel is the short form of the build metadata for the dashboard heading:
+// the product version and, when the binary carries one, the same 12-character
+// commit prefix the Engine view's Build card shows, so the two can be compared.
+function versionLabel(i) {
+  i = i || {};
+  const parts = [i.version ? "v" + i.version : ""];
+  if (i.revision) parts.push(i.revision.slice(0, 12) + (i.modified ? " (modified)" : ""));
+  return parts.filter(Boolean).join(" · ");
+}
+
 function buildInfoHTML(i) {
   i = i || {};
   const rev = i.revision ? i.revision.slice(0, 12) + (i.modified ? " (modified)" : "") : "unknown (built outside a git checkout)";
