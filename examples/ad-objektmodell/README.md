@@ -1,4 +1,4 @@
-# AD-Objektmodell: ArchiMate-Export nach Atlas
+# AD-Objektmodell: ArchiMate-Export nach atlas
 
 Ein Enterprise-Architect-Export des Active-Directory-Objektmodells lag als
 **ArchiMate 3.1 Model Exchange File** vor und liess sich nicht als
@@ -153,7 +153,7 @@ ergibt 18 Klassen, 527 Attribute und 22 Generalisierungen.
 * **`objectGUID` als Geschaeftsschluessel.** Microsoft fuehrt das Attribut als
   optional, weil das Verzeichnis es selbst setzt. Atlas verlangt von einem
   Business Key, dass er vorhanden und einwertig ist, also steht er hier auf
-  Multiplizitaet 1. Er haengt an `Top`; Atlas vererbt den Schluessel nicht ueber
+  Multiplizitaet 1. Er haengt an `Top`; atlas vererbt den Schluessel nicht ueber
   die Generalisierung, wer also einen `User` als Datenobjekt fuehrt, deklariert
   ihn dort erneut.
 * **Grobe Typen.** `Interval` ist in AD eine 64-Bit-Zahl in
@@ -163,7 +163,7 @@ ergibt 18 Klassen, 527 Attribute und 22 Generalisierungen.
 * **Layout.** Die JSON-Variante bringt Koordinaten mit: Spalte nach
   Vererbungstiefe, in der Spalte gestapelt nach Kastenhoehe. Atlas uebernimmt
   sie. Die XMI-Variante kann das nicht -- XMI haelt die Geometrie in einer
-  eigenen Datei -- dort legt Atlas ein Raster an.
+  eigenen Datei -- dort legt atlas ein Raster an.
 * **Textbereinigung.** Microsofts Markdown-Quellen enthalten Escapes und
   Reste kaputter HTML-Entities (`\ 8211;` statt eines Gedankenstrichs, ein
   doppelt escapter UNC-Pfad). `unescape()` raeumt beides auf, laesst die
@@ -173,7 +173,7 @@ ergibt 18 Klassen, 527 Attribute und 22 Generalisierungen.
 
 `atlas_import_information_model` und `atlas_save_information_model` tragen das
 Dokument inline im Aufruf. Die vollstaendige Datei mit allen 527
-Attributbeschreibungen ist 161 KB und damit zu gross dafuer. In Atlas steht
+Attributbeschreibungen ist 161 KB und damit zu gross dafuer. In atlas steht
 deshalb je Attribut der erste Satz der Microsoft-Beschreibung, auf 130 Zeichen
 begrenzt; die Dateien hier tragen den vollen Text samt LDAP-Syntax. Wer den
 will, importiert `ad-identity.json` ueber die Oberflaeche.

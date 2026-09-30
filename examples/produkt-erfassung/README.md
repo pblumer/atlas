@@ -9,7 +9,7 @@ bestellbar wird, und eine Spur, wer was wann entschieden hat.
 
 ## Voraussetzungen
 
-Jeder Service-Task hier schreibt über Atlas' **eigene HTTP-API** zurück, als
+Jeder Service-Task hier schreibt über atlas' **eigene HTTP-API** zurück, als
 `<atlas:restConnector>`-Task auf dem reservierten Job-Typ `io.atlas.http.rest` —
 denselben, den der mitgelieferte Auftragserfüllungsprozess
 (`api/systemprocesses/auftrag-erfuellung.bpmn`) benutzt. Die Engine bedient ihn
@@ -18,7 +18,7 @@ selbst; wo der Betreiber diese Art ausgelagert hat, bedient sie der mitgeliefert
 
 Zwei Dinge braucht der Ablauf trotzdem:
 
-**Die Adresse dieses Atlas.** Ein Modell kann sie nicht in sich tragen, und dieser
+**Die Adresse dieses atlas.** Ein Modell kann sie nicht in sich tragen, und dieser
 Ablauf wird von Hand gestartet — er hat also niemanden, der sie mitgäbe. Das
 Startformular `pe-start` fragt sie als einzige Angabe ab und legt sie unter
 `atlasApiBase` ab; jeder Aufruf baut seine URL daraus. Der
@@ -103,7 +103,7 @@ Deshalb wird die `revision` mitgeführt: sie macht aus einem lautlosen
 
 ### Das Erscheinungsbild ist eine eigene Aufgabe, und sie liegt hinten
 
-Ein Katalog-Theme setzt in Atlas die **Administration** und nicht die
+Ein Katalog-Theme setzt in atlas die **Administration** und nicht die
 Katalogpflege (ADR-0316, Entscheidung 12); der Endpunkt antwortet sonst mit
 `403`.
 

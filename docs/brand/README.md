@@ -39,8 +39,10 @@ do the messages the server returns (errors, refusals, notes, the OpenAPI and MCP
 descriptions, the command-line help) and the mails and forms of the built-in
 system processes. Code comments, identifiers, values a program reads (such as
 `product` in `/api/v1/info`, a `vendor` field, an HTTP header or the user
-agent), the ADRs, the developer docs and the examples under `examples/` were
-deliberately left as they are.
+agent), the ADRs and the developer docs were deliberately left as they are.
+The examples under `examples/` follow the rule in what they show a person
+(process and form texts, mails, their READMEs and pages); their XML comments
+and script docstrings are code comments and stay as they are.
 
 **The card is set in English.** It is read wherever the repository link is
 pasted, so the copy stays in English even where the surrounding docs are not.

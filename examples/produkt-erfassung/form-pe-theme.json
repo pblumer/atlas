@@ -4,7 +4,7 @@
   "components": [
     {
       "type": "text",
-      "text": "# Erscheinungsbild des Katalogs\n\nDiese Aufgabe liegt bei der Administration und nicht bei der Katalogpflege — so trennt Atlas die beiden (ADR-0316). Ein Katalog ohne eigenes Erscheinungsbild übernimmt das der Instanz."
+      "text": "# Erscheinungsbild des Katalogs\n\nDiese Aufgabe liegt bei der Administration und nicht bei der Katalogpflege — so trennt atlas die beiden (ADR-0316). Ein Katalog ohne eigenes Erscheinungsbild übernimmt das der Instanz."
     },
     {
       "key": "akzentfarbe",

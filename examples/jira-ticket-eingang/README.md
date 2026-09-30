@@ -1,7 +1,7 @@
 # Jira-Demo: Ticket-Eingang 📥
 
-Die Gegenrichtung zum [Zugangsantrag](../jira-zugangsantrag/): dort schreibt Atlas
-nach Jira, hier **hört Atlas auf Jira**. Ein neuer Vorgang startet eine
+Die Gegenrichtung zum [Zugangsantrag](../jira-zugangsantrag/): dort schreibt atlas
+nach Jira, hier **hört atlas auf Jira**. Ein neuer Vorgang startet eine
 Prozessinstanz ([ADR-0214](../../docs/adr/0214-jira-inbound-issue-watch.md)), die
 den Eingang quittiert, das Konto des Melders nachschlägt
 ([ADR-0223](../../docs/adr/0223-jira-account-lookup.md)) und ihm den Vorgang

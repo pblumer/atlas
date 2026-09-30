@@ -1,6 +1,6 @@
 # Onboarding-Self-Service (Entra ID) 🚀
 
-Eine Atlas-**Applikation mit Formularen**, die einen neuen Arbeitsplatz im Tenant
+Eine atlas-**Applikation mit Formularen**, die einen neuen Arbeitsplatz im Tenant
 **contoso.com** über den Entra-Worker (ADR-0172) anlegt — **scharf**, aber
 ausschließlich gegen klar benannte **Test-Objekte**.
 
@@ -62,7 +62,7 @@ Entra-Tenant, `contoso` für den Namen, unter dem der Entra-Worker konfiguriert 
 Beides ist vor dem Deployen im Modell, in den Formularen und in der UPN-Prüfung auf
 die eigenen Werte zu setzen.
 
-## Deployen (über die Atlas-MCP-Tools)
+## Deployen (über die atlas-MCP-Tools)
 
 ```
 atlas_create_application  name="Onboarding-Self-Service"        → appId

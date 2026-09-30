@@ -36,7 +36,7 @@ Die beiden Felder stammen wörtlich aus der Schlüsseldatei (`client_email` und
 ```
 
 Die Zeilenumbrüche im Schlüssel bleiben als `\n` stehen — genau so steht es auch in
-der Schlüsseldatei. `tokenUrl` und `scope` füllt Atlas selbst aus. Wer als
+der Schlüsseldatei. `tokenUrl` und `scope` füllt atlas selbst aus. Wer als
 Workspace-Benutzer handeln will (domänenweite Delegierung), ergänzt `"subject"`.
 
 Wer als der eigene Google-Benutzer handeln will statt als Dienstkonto, nimmt
@@ -123,7 +123,7 @@ benennt; ohne Kopfzeile stünde dort `= row[1]`.
 ## Was man wissen sollte, bevor es produktiv geht
 
 - **Zustellung ist „mindestens einmal", und eine Tabelle hat keinen
-  Idempotenzschlüssel.** Stürzt Atlas zwischen „Google hat die Zeile angehängt" und
+  Idempotenzschlüssel.** Stürzt atlas zwischen „Google hat die Zeile angehängt" und
   „Job fertig" ab, wird beim Wiederholen erneut angehängt und die Zeile steht zweimal
   da. Google bietet nichts dagegen an. Wo das nicht tragbar ist: eine Merkspalte
   schreiben und vor dem Anhängen lesen — genau das Muster, das `antragseingang.bpmn`
