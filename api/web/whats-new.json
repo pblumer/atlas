@@ -24,6 +24,28 @@
       ]
     },
     {
+      "id": "listing-one-instance-s-jobs-no-longer-walks-every-job-on-the",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Looking up one instance's jobs no longer stalls the engine",
+        "de": "Die Jobs einer Instanz nachzuschlagen hält die Engine nicht mehr an"
+      },
+      "summary": {
+        "en": "Completing an incident by hand, or asking the MCP tool for an instance's jobs, used to read every waiting job on the server just to find the few of that one instance — and the engine did nothing else while it read. On a server with a large backlog that was a noticeable stall. The lookup now reads only the instance itself, and does so without holding the engine up. The answer is the same jobs as before.",
+        "de": "Einen Incident von Hand abzuschliessen oder die Jobs einer Instanz über das MCP-Werkzeug abzufragen, las bisher jeden wartenden Job des Servers, um die wenigen dieser einen Instanz zu finden — und die Engine tat währenddessen nichts anderes. Auf einem Server mit grossem Rückstand war das ein spürbarer Stillstand. Die Abfrage liest jetzt nur noch die Instanz selbst und hält die Engine dabei nicht mehr auf. Das Ergebnis sind dieselben Jobs wie zuvor."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations",
+        "Engine"
+      ]
+    },
+    {
       "id": "the-console-shows-how-atlas-is-built",
       "version": "0.8.0",
       "date": "2026-09-30",
@@ -318,35 +340,6 @@
       "tags": [
         "Handbook",
         "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-process-still-frozen-on-an-old-decision-version-says-so",
-      "version": "0.8.0",
-      "date": "2026-09-30",
-      "category": "Added",
-      "title": {
-        "en": "A process still on an old decision version says so",
-        "de": "Ein Prozess auf einer alten Decision-Version zeigt das an"
-      },
-      "summary": {
-        "en": "A process deployed while \"Latest\" was still fixed at deploy time keeps evaluating the decision version that was newest back then, although its binding reads \"Latest\". Such a process is now marked where you meet it: on its row in the Modeler, on the deployment opened in the Modeler, and in its live view in Operations, each naming the version it runs and the newest one, as a warning once a newer version is deployed. When you deploy a decision, the processes that will not follow it are named, and a decision's version list says of each process holding a version whether it was frozen there or chose it. Deploy the process again to have it follow each new version; nothing is changed without that deploy.",
-        "de": "Ein Prozess, der deployt wurde, als „Latest“ noch beim Deploy festgelegt wurde, wertet weiterhin die Decision-Version aus, die damals die neueste war, obwohl seine Bindung „Latest“ lautet. Ein solcher Prozess wird jetzt dort gekennzeichnet, wo man ihm begegnet: in seiner Zeile im Modeler, im Deployment, das im Modeler geöffnet ist, und in seiner Live-Ansicht in Operations, jeweils mit der Version, die er ausführt, und der neuesten; sobald eine neuere Version deployt ist, als Warnung. Beim Deploy einer Decision werden die Prozesse genannt, die ihr nicht folgen, und die Versionsliste einer Decision sagt bei jedem Prozess, der eine Version festhält, ob sie dort eingefroren oder bewusst gewählt ist. Ein erneuter Deploy des Prozesses lässt ihn jeder neuen Version folgen; ohne diesen Deploy wird nichts geändert."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-8-0"
-      },
-      "tags": [
-        "Decisions",
-        "Operations"
       ],
       "try": {
         "label": {

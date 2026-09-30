@@ -23,6 +23,20 @@ _Changed_ / _Removed_ for each version.
   an incident. It installs from its card in the Beispiele chapter, and every call was run
   against a live instance first.
 
+### Fixed
+
+- **Listing one instance's jobs no longer walks every job on the server.**
+  `GET /api/v1/instances/{key}/jobs` — behind the incident's "complete manually" action and
+  the `atlas_instance_jobs` MCP tool — read the whole activatable-job index and kept the
+  rows of one instance, holding the run loop for the entire walk, so on a server with a
+  large backlog of parked jobs a single call stalled the engine. It now reads through the
+  instance's own element index and the element→job reverse index, costing that instance's
+  live tokens rather than the server's job population, and it reads off the run loop; only
+  the job-type names are resolved on it, one map lookup per row. The rows are the same:
+  every activatable job of the instance, a subprocess's included, without leased,
+  backing-off or incident-parked jobs. They are now ordered by element instance rather
+  than by job type, and a call made while the server shuts down answers `503`.
+
 ## [0.8.0] — 2026-09-30
 
 **This release is about running Atlas on Windows.** 0.7.0 shipped a Windows binary that no

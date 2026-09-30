@@ -232,10 +232,21 @@ func (q queries) JobOfElement(elKey uint64) (uint64, bool, error) {
 	return binary.BigEndian.Uint64(raw), true, nil
 }
 
+// JobActivatable reports whether one job is on the jobActivatable index — whether a
+// worker's pull would be handed it now. It asks the index itself rather than
+// restating the rule [Tx.PutJob] applies to it (retries left, no backoff, no lease),
+// so a caller that reached the job some other way, such as through the element→job
+// reverse index, reads exactly what a scan of the index would have found.
+func (q queries) JobActivatable(jobType int32, jobKey uint64) (bool, error) {
+	_, ok, err := getCopy(q.r, keyJobActivatable(jobType, jobKey))
+	return ok, err
+}
+
 // AllActivatableJobs calls fn with the key of every open job of ANY type, via the
 // same jobActivatable index — the whole column family rather than one job type's
-// slice. It backs the read side of the operator complete/fail affordance (listing
-// the jobs an instance is parked on); worker polling still uses the type-scoped
+// slice, so it costs the server's whole job population. No request path uses it:
+// listing the jobs one instance is parked on goes through that instance's element
+// index and [queries.JobOfElement] instead, and worker polling uses the type-scoped
 // ActivatableJobs.
 func (q queries) AllActivatableJobs(fn func(jobKey uint64) error) error {
 	return q.scanPrefix([]byte{byte(cfJobActivatable)}, func(k, _ []byte) error {
