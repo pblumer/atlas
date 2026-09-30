@@ -396,10 +396,6 @@ func TestTimeoutKillsTheInterpretersWholeProcessGroup(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("sh not available")
 	}
-	dir := t.TempDir()
-	pidFile := filepath.Join(dir, "child.pid")
-	outlived := filepath.Join(dir, "outlived")
-
 	// One second of work for the descendant, and half of it as the bound on the call
 	// itself. The two do not overlap on purpose: a shell that survived its own kill
 	// blocks in `wait` and trips the elapsed check, a descendant that survived one
@@ -407,40 +403,71 @@ func TestTimeoutKillsTheInterpretersWholeProcessGroup(t *testing.T) {
 	// other.
 	const work = time.Second
 	const returnWithin = work / 2
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
-	defer cancel()
-	start := time.Now()
-	_, err := execCommand(ctx, "sh", []string{"-c",
-		`sleep 1 && : > "$2" & echo $! > "$1"; wait`, "sh", pidFile, outlived}, nil, defaultMaxOutput)
-	if err == nil {
-		t.Fatal("timed command succeeded")
-	}
-	if elapsed := time.Since(start); elapsed > returnWithin {
-		t.Fatalf("execCommand returned after %s; a descendant kept the command alive", elapsed)
-	}
 
-	// The pid file proves the descendant was forked before the deadline, which is
-	// what makes the rest of this a test of the kill rather than of the timing.
-	b, err := os.ReadFile(pidFile)
-	if err != nil {
-		t.Fatalf("read child pid: %v", err)
-	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
-	if err != nil {
-		t.Fatalf("child pid %q: %v", b, err)
-	}
+	// The deadline has to land after the shell has forked the descendant and recorded
+	// its pid, or the run proves nothing about the kill. At 30ms it usually does, but
+	// not on a loaded machine: the shell's redirection created the pid file before
+	// echo wrote into it, a kill in between left the file empty, and the test failed
+	// parsing "" although the group kill had worked.
+	//
+	// So the pid is written to a temporary name and renamed into place — the file
+	// either holds the whole pid or does not exist — and a run whose deadline fell
+	// before that point is repeated with a longer one. Every deadline stays well
+	// inside returnWithin, so the elapsed check keeps its meaning.
+	for _, deadline := range []time.Duration{30 * time.Millisecond, 100 * time.Millisecond, 250 * time.Millisecond} {
+		dir := t.TempDir()
+		pidFile := filepath.Join(dir, "child.pid")
+		outlived := filepath.Join(dir, "outlived")
 
-	// Past the moment a surviving descendant would have finished its second.
-	time.Sleep(time.Until(start.Add(work + 400*time.Millisecond)))
-	if _, err := os.Stat(outlived); err == nil {
-		t.Errorf("descendant process %d ran to completion after its script timed out", pid)
+		ctx, cancel := context.WithTimeout(context.Background(), deadline)
+		start := time.Now()
+		_, err := execCommand(ctx, "sh", []string{"-c",
+			timeoutScript, "sh", pidFile, outlived}, nil, defaultMaxOutput)
+		cancel()
+		if err == nil {
+			t.Fatal("timed command succeeded")
+		}
+		if elapsed := time.Since(start); elapsed > returnWithin {
+			t.Fatalf("execCommand returned after %s; a descendant kept the command alive", elapsed)
+		}
+
+		// The pid file proves the descendant was forked before the deadline, which is
+		// what makes the rest of this a test of the kill rather than of the timing.
+		b, err := os.ReadFile(pidFile)
+		if errors.Is(err, os.ErrNotExist) {
+			t.Logf("the %s deadline fell before the shell recorded its descendant; "+
+				"repeating with a longer one", deadline)
+			continue
+		}
+		if err != nil {
+			t.Fatalf("read child pid: %v", err)
+		}
+		pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+		if err != nil {
+			t.Fatalf("child pid %q: %v", b, err)
+		}
+
+		// Past the moment a surviving descendant would have finished its second.
+		time.Sleep(time.Until(start.Add(work + 400*time.Millisecond)))
+		if _, err := os.Stat(outlived); err == nil {
+			t.Errorf("descendant process %d ran to completion after its script timed out", pid)
+		}
+		if err := processExists(pid); err == nil {
+			t.Logf("pid %d still answers a signal, %s; the descendant did not finish its "+
+				"work, so this is a pid that outlived its meaning rather than a failed kill",
+				pid, procSummary(pid))
+		}
+		return
 	}
-	if err := processExists(pid); err == nil {
-		t.Logf("pid %d still answers a signal, %s; the descendant did not finish its "+
-			"work, so this is a pid that outlived its meaning rather than a failed kill",
-			pid, procSummary(pid))
-	}
+	t.Fatal("no deadline landed after the shell had recorded its descendant, so the kill " +
+		"was never tested")
 }
+
+// timeoutScript forks a descendant that works for a second and then writes $2, and
+// records its pid in $1 — atomically, by writing a temporary name and renaming it,
+// so a kill can never leave $1 existing and empty. A variable so that a test can
+// hold the rename in place without running the whole kill.
+var timeoutScript = `sleep 1 && : > "$2" & echo $! > "$1.tmp" && mv "$1.tmp" "$1"; wait`
 
 // procSummary is what /proc knows about a pid, for a message that would otherwise be
 // a bare number. A recycled pid names a different program here, which is the first
