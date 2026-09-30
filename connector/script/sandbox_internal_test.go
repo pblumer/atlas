@@ -283,9 +283,9 @@ func isZombieAccordingToProc(t *testing.T, pid int) bool {
 // answers a signal" and "the descendant survived" were being treated as one fact
 // when they are two.
 //
-// So the assertion is the descendant's own evidence instead. It is given a second of
-// work and a file to write at the end of it; if the group kill reached it, the file
-// is never written. That cannot be confounded by anything the pid namespace does,
+// So the assertion is the descendant's own evidence instead. It is given a few seconds
+// of work and a file to write at the end of them; if the group kill reached it, the
+// file is never written. That cannot be confounded by anything the pid namespace does,
 // and it fails loudly in the one case the test is for — a descendant that outlives
 // the script and goes on running.
 //
@@ -298,12 +298,13 @@ func TestTimeoutKillsTheInterpretersWholeProcessGroup(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("sh not available")
 	}
-	// One second of work for the descendant, and half of it as the bound on the call
-	// itself. The two do not overlap on purpose: a shell that survived its own kill
-	// blocks in `wait` and trips the elapsed check, a descendant that survived one
-	// its shell did not writes the file, and neither failure can be mistaken for the
-	// other.
-	const work = time.Second
+	// Three seconds of work for the descendant, and half of it as the bound on the
+	// call itself. The two do not overlap on purpose: a shell that survived its own
+	// kill blocks in `wait` and trips the elapsed check, a descendant that survived
+	// one its shell did not writes the file, and neither failure can be mistaken for
+	// the other. The work is that long so that the longest deadline below still fits
+	// inside returnWithin with room left for the kill itself.
+	const work = 3 * time.Second
 	const returnWithin = work / 2
 
 	// The deadline has to land after the shell has forked the descendant and recorded
@@ -316,15 +317,24 @@ func TestTimeoutKillsTheInterpretersWholeProcessGroup(t *testing.T) {
 	// either holds the whole pid or does not exist — and a run whose deadline fell
 	// before that point is repeated with a longer one. Every deadline stays well
 	// inside returnWithin, so the elapsed check keeps its meaning.
-	for _, deadline := range []time.Duration{30 * time.Millisecond, 100 * time.Millisecond, 250 * time.Millisecond} {
+	//
+	// The ladder reaches a second because of Windows. The runner's sh is MSYS, which
+	// emulates fork and starts `mv` as a process of its own, and on a runner busy with
+	// the api package those took longer than 250ms together: no deadline landed after
+	// the pid was recorded, and the test failed without having tested the kill (CI,
+	// 2026-09-30, on a head that changed no Go in this package). A rung that misses
+	// costs only its own deadline, since it does not sleep, so a fast machine still
+	// finishes on the first.
+	for _, deadline := range []time.Duration{30 * time.Millisecond, 100 * time.Millisecond,
+		250 * time.Millisecond, 600 * time.Millisecond, time.Second} {
 		dir := t.TempDir()
 		pidFile := filepath.Join(dir, "child.pid")
 		outlived := filepath.Join(dir, "outlived")
 
 		ctx, cancel := context.WithTimeout(context.Background(), deadline)
 		start := time.Now()
-		_, err := execCommand(ctx, "sh", []string{"-c",
-			timeoutScript, "sh", pidFile, outlived}, nil, defaultMaxOutput)
+		_, err := execCommand(ctx, "sh", []string{"-c", timeoutScript, "sh",
+			pidFile, outlived, strconv.Itoa(int(work / time.Second))}, nil, defaultMaxOutput)
 		cancel()
 		if err == nil {
 			t.Fatal("timed command succeeded")
@@ -349,8 +359,10 @@ func TestTimeoutKillsTheInterpretersWholeProcessGroup(t *testing.T) {
 			t.Fatalf("child pid %q: %v", b, err)
 		}
 
-		// Past the moment a surviving descendant would have finished its second.
-		time.Sleep(time.Until(start.Add(work + 400*time.Millisecond)))
+		// Past the moment a surviving descendant would have finished its work. It was
+		// forked before the deadline, so that moment is at most deadline+work after
+		// start; with a deadline of up to a second, work alone is no longer enough.
+		time.Sleep(time.Until(start.Add(deadline + work + 400*time.Millisecond)))
 		if _, err := os.Stat(outlived); err == nil {
 			t.Errorf("descendant process %d ran to completion after its script timed out", pid)
 		}
@@ -365,11 +377,11 @@ func TestTimeoutKillsTheInterpretersWholeProcessGroup(t *testing.T) {
 		"was never tested")
 }
 
-// timeoutScript forks a descendant that works for a second and then writes $2, and
+// timeoutScript forks a descendant that works for $3 seconds and then writes $2, and
 // records its pid in $1 — atomically, by writing a temporary name and renaming it,
 // so a kill can never leave $1 existing and empty. A variable so that a test can
 // hold the rename in place without running the whole kill.
-var timeoutScript = `sleep 1 && : > "$2" & echo $! > "$1.tmp" && mv "$1.tmp" "$1"; wait`
+var timeoutScript = `sleep "$3" && : > "$2" & echo $! > "$1.tmp" && mv "$1.tmp" "$1"; wait`
 
 // A process holding a script's output does not outlast the script's timeout. A
 // script that exits and leaves one behind never met its deadline at all: os/exec
