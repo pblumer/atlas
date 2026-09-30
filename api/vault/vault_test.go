@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/internal/ownerfile"
 )
 
 func testVaultKey(t *testing.T) []byte {
@@ -263,9 +265,9 @@ func TestLoadOrCreateKeyFile(t *testing.T) {
 	if err != nil || src1 != "generated" || len(k1) != 32 {
 		t.Fatalf("first call: key=%d src=%q err=%v, want 32-byte generated", len(k1), src1, err)
 	}
-	info, err := os.Stat(path)
-	if err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("key file: mode=%v err=%v, want 0600", info.Mode().Perm(), err)
+	// Mode 0600 on Unix; on Windows, which ignores modes, a DACL for this account only.
+	if err := ownerfile.Check(path); err != nil {
+		t.Fatalf("key file: %v, want it readable by this account only", err)
 	}
 	k2, src2, err := loadOrCreateKeyFile(path)
 	if err != nil || src2 != "file" || !bytes.Equal(k1, k2) {

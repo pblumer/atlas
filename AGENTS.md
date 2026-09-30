@@ -121,6 +121,8 @@ internal/dirsync/ Opening a directory so it can be fsynced — the one step that
             on Windows, shared by wal/, checkpoint/ and api/sidecar/
 internal/sharedread/ Reading a file without blocking a delete of it or a rename over it,
             which an os.Open handle does on Windows — api/sidecar/'s readers use it
+internal/ownerfile/ Making a file this account's alone, and checking it is: mode 0600,
+            and on Windows, which ignores modes, an access list — the vault key uses it
 ```
 
 **`connector/` holds the Worker Types.** Every capability a model can put on a

@@ -376,6 +376,16 @@ Two ways to handle it, pick one:
   disk, which is the stronger posture — see
   [ADR-0070](adr/0070-vault-on-by-default-with-generated-key.md).
 
+A generated key is readable by the account `atlas serve` runs as and nobody else. On
+Windows that is an access list rather than a file mode, and releases up to and
+including 0.7.0 did not set one: a key they generated kept the rights of the data
+directory, which can include every local user. Restrict it once, as that account or
+an administrator, before relying on it:
+
+```powershell
+icacls <data-dir>\vault.key /inheritance:r /grant:r "<account>:F"
+```
+
 ### 8. TLS: in the binary, or in front of it
 
 Two answers, and the one you want depends on what else is on the host.
@@ -1012,7 +1022,7 @@ unit; the parts are not independently consistent.
 | `wal/` | The write-ahead log — the source of truth |
 | `state/` | Materialized state (embedded LSM store), rebuildable from the WAL |
 | `checkpoints/` | Recovery checkpoints, so a restart replays only the log after the newest one |
-| `vault.key` | Vault master key, mode `0600`, only when generated rather than supplied |
+| `vault.key` | Vault master key, only when generated rather than supplied — readable by the account `atlas serve` runs as and nobody else: mode `0600`, on Windows an access list for that account alone |
 | `vault/` | Encrypted worker secrets |
 | `deployments/`, `drafts/`, `forms/`, `projects/`, `releases/`, `users/`, `connectors/`, `settings/`, … | Design-time and administrative stores |
 | `dmn-models/` | DMN models, unless resolved remotely |

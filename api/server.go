@@ -1794,7 +1794,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		}
 		if source == "generated" {
 			logging.Info(logging.VaultKeyGenerated,
-				"generated a vault master key (mode 0600); set ATLAS_VAULT_KEY for a stronger "+
+				"generated a vault master key readable by this account only; set ATLAS_VAULT_KEY for a stronger "+
 					"at-rest posture or pass --vault=false to disable (ADR-0070)",
 				slog.String("path", filepath.Join(dataDir, "vault.key")))
 		}
