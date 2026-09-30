@@ -3448,6 +3448,21 @@ tr[hidden] { display: none; }
 .usage-live { margin-left: auto; flex: 0 0 auto; }
 .usage-empty { color: var(--muted); margin: 14px 0; text-align: center; }
 
+/* The system overview dialog (welcome card, help menu). The diagram is shown whole: it is
+   capped by the viewport's height as well as the dialog's width, so the overview never
+   needs scrolling; "Full size" in the footer is where it is read in detail. The dialog
+   takes the diagram's width rather than a fixed one, so a short viewport does not leave
+   it floating in empty space. */
+.modal.sysov-modal { width: fit-content; max-width: min(1600px, 100%); max-height: 94vh; }
+.sysov-modal .modal-foot { justify-content: flex-end; }
+.sysov-body { padding: 12px 16px; }
+/* 160px is the head, the foot and the body's padding: what the dialog spends besides the
+   diagram, so the two together stay inside the dialog's own 94vh. */
+.sysov-body img {
+  display: block; margin: 0 auto; max-width: 100%; max-height: calc(94vh - 160px);
+  width: auto; height: auto; border-radius: 8px; border: 1px solid var(--border);
+}
+
 /* The process's own start form, opened by Deploy & run (ADR-0028). Wider than a confirm
    dialog because it is a real form somebody laid out — a two-column layout squeezed into
    520px is a worse form than the Tasks app shows for the same schema. */

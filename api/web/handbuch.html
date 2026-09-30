@@ -90,6 +90,10 @@ kbd{font-family:ui-monospace,monospace;font-size:.82em;background:var(--card);
 .card .checked{margin:14px 0 0;padding-top:9px;border-top:1px solid var(--border);
   color:var(--muted);font-size:12.5px;line-height:1.5}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+/* The system overview figure (#systemuebersicht): the Console's architecture diagram, shown
+   whole and linked to itself at full size, where its small labels can be zoomed. */
+.sysov{display:block;margin:14px 0 6px}
+.sysov img{display:block;width:100%;height:auto;border:1px solid var(--border);border-radius:10px}
 .steps{counter-reset:step;list-style:none;padding:0;max-width:none}
 .steps>li{counter-increment:step;position:relative;padding:14px 16px 14px 56px;margin:12px 0;
   background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow)}
@@ -484,6 +488,31 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <i>is</i> in your landscape – a UML class diagram above every process of an application.</p>
           <a class="applink" href="/#/data">→ Data</a></div>
       </div>
+
+      <div id="systemuebersicht" style="scroll-margin-top:66px"></div>
+      <h3 data-l="de">Systemübersicht: wie atlas gebaut ist</h3>
+      <h3 data-l="en">System overview: how atlas is built</h3>
+      <p data-l="de">Atlas ist <b>ein einziges Programm</b>: Apps, Schnittstellen, Workflow-Engine und
+        Datenhaltung laufen im selben Prozess, ohne externe Datenbank und ohne Message Broker. Jede
+        Zustandsänderung schreibt atlas zuerst als Ereignis in ein <b>Write-Ahead-Log</b> und sichert sie auf
+        der Platte; erst danach wird sie sichtbar. Den aktuellen Zustand hält atlas in <b>Pebble</b>, einer
+        eingebetteten Speicher-Engine, die seit CockroachDB v20.2 (2020) auch die Standard-Engine dieser
+        Datenbank ist. Arbeit an fremden Systemen wie Mail, Jira oder einem Verzeichnis erledigen
+        <a href="#formulare">Worker</a>, und zwar erst, wenn der Schritt gesichert ist.</p>
+      <p data-l="en">Atlas is <b>a single program</b>: apps, interfaces, the workflow engine and its storage run
+        in one process, with no external database and no message broker. Every change of state is first
+        written as an event to a <b>write-ahead log</b> and secured on disk; only then does it become visible.
+        Atlas keeps the current state in <b>Pebble</b>, an embedded storage engine that has also been the
+        default engine of the CockroachDB database since its v20.2 (2020). Work on other systems such as mail,
+        Jira or a directory is done by <a href="#formulare">workers</a>, and only once the step is secured.</p>
+      <a class="sysov" href="system-overview.svg" target="_blank" rel="noopener"
+        title="Grafik in voller Grösse öffnen / Open the diagram at full size">
+        <img src="system-overview.svg" loading="lazy"
+          alt="Systemübersicht von atlas: Nutzer und Clients, Apps und Schnittstellen, die Workflow-Engine, ihre eingebettete Persistenz aus Write-Ahead-Log und Pebble State Store sowie das Worker-Modell"></a>
+      <p class="lead" data-l="de">Ein Klick öffnet die Grafik in voller Grösse. Dieselbe Übersicht zeigt die
+        Console auf der Startseite und im Hilfe-Menü (?) unter <b>System Overview</b>.</p>
+      <p class="lead" data-l="en">Click to open the diagram at full size; its labels are in German. The Console
+        shows the same overview on its welcome page and in the help menu (?) under <b>System Overview</b>.</p>
     </section>
 
     <!-- ==================== TRAINING NUGGETS ==================== -->

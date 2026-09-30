@@ -1067,11 +1067,64 @@ function initHelpMenu(docsEnabled) {
     : `<span class="help-note">API Explorer is disabled<br><span class="muted">start the server without <code>--docs=false</code></span></span>`;
   const gallery = `<a role="menuitem" href="/conformance-gallery.html" target="_blank" rel="noopener">Conformance Gallery <span class="ext" aria-hidden="true">↗</span></a>`;
   const handbook = `<a role="menuitem" href="/handbuch.html" target="_blank" rel="noopener">Handbook <span class="ext" aria-hidden="true">↗</span></a>`;
+  // Not a link like its neighbours: it opens the overview dialog over the current view
+  // rather than leaving it, so it carries no "opens elsewhere" mark.
+  const overview = `<button type="button" role="menuitem" data-system-overview>System Overview</button>`;
   const context = `<div class="mlabel">On this page</div>` +
     `<a id="help-ctx" role="menuitem" target="_blank" rel="noopener" href="/handbuch.html"></a>` +
     `<div class="sep"></div>`;
-  menu.innerHTML = context + handbook + explorer + gallery;
+  menu.innerHTML = context + handbook + overview + explorer + gallery;
+  // The shared document click closes the menu after this runs, as for any entry.
+  // Focus goes back to the "?" button on close — the entry itself is gone with the menu.
+  menu.querySelector("[data-system-overview]").addEventListener("click", () =>
+    openSystemOverview(document.getElementById("help-btn")));
   setHelpContext(helpRoutePath); // fill the contextual entry for the current view
+}
+
+// SYSTEM_OVERVIEW_URL is the architecture diagram as the Console serves it: a copy of
+// docs/architecture/system-overview.svg, held to that file by
+// TestTheConsoleShowsTheCurrentSystemOverview, because `//go:embed web` cannot reach
+// docs/.
+const SYSTEM_OVERVIEW_URL = "/system-overview.svg";
+
+// openSystemOverview shows the architecture diagram — apps, interfaces, the engine, its
+// embedded persistence and the worker model — in a dialog over whatever is on screen.
+// The welcome card and the help menu both open it. The diagram is sized to fit the
+// viewport whole, since what it is for is the overview; its labels are small at that
+// size, so the dialog also offers it on its own, where the browser can zoom it.
+function openSystemOverview(returnTo = document.activeElement) {
+  const ov = document.createElement("div");
+  ov.className = "modal-ov";
+  ov.innerHTML = `
+    <div class="modal sysov-modal" role="dialog" aria-modal="true" aria-label="System overview">
+      <div class="modal-head">
+        <h2>System Overview</h2>
+        <button type="button" class="icon-btn" data-x aria-label="Close" title="Close">✕</button>
+      </div>
+      <div class="modal-body sysov-body">
+        <img src="${SYSTEM_OVERVIEW_URL}" alt="Atlas system overview: users and clients, the apps and interfaces, the workflow engine, its embedded persistence (write-ahead log and Pebble state store) and the worker model." />
+      </div>
+      <div class="modal-foot">
+        <div class="modal-actions">
+          <a class="btn ghost" href="${SYSTEM_OVERVIEW_URL}" target="_blank" rel="noopener" title="Open the diagram on its own, where it can be zoomed">Full size ↗</a>
+          <button type="button" class="btn" data-done title="Close this dialog">Close</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = () => {
+    ov.remove();
+    document.removeEventListener("keydown", onKey);
+    // Back to where the person was, so a keyboard user is not dropped at the top of the page.
+    if (returnTo && returnTo.isConnected && typeof returnTo.focus === "function") returnTo.focus();
+  };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(); });
+  ov.querySelector("[data-x]").addEventListener("click", close);
+  const done = ov.querySelector("[data-done]");
+  done.addEventListener("click", close);
+  done.focus();
 }
 
 // ---------- Operations nav incident badge ----------
@@ -1333,6 +1386,7 @@ async function viewConsoleDashboard() {
         <a class="btn" href="#/modeler">Open Modeler</a>
         <a class="btn ghost" href="#/console/engine">View engine</a>
         <a class="btn ghost" href="/handbuch.html" target="_blank" rel="noopener">Handbook ↗</a>
+        <button type="button" class="btn ghost" data-system-overview title="Show how atlas is built, from the apps down to its persistence">System Overview</button>
       </div>
     </div>
     <div id="whats-new-slot"></div>
@@ -1351,6 +1405,7 @@ async function viewConsoleDashboard() {
       </div>
     </div>
     <div id="key-features-slot"></div>`;
+  view.querySelector("[data-system-overview]").addEventListener("click", () => openSystemOverview());
   renderWhatsNew(document.getElementById("whats-new-slot")); // fills its own slot; safe if it fails
   // The key-features tile sits below the dashboard's own tiles: what Atlas is, for
   // someone who arrived here without having read the README. Fills its own slot,
