@@ -220,6 +220,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **On Windows, a script's timeout ends everything the script started.** The deadline
+  (`--script-timeout`, 30 s by default) killed only the interpreter. A program the script
+  had started ran on, and one that had inherited the script's output held the script
+  task, and the Worker's slot with it, until that program ended, however long after the
+  deadline. Each script now runs in a Job Object of its own, and the deadline ends the
+  whole job, as it ends the process group on Linux (ADR-0303). On every system, a
+  process a finished script left behind still holding its output held the call for as
+  long as it ran, because the deadline stopped counting once the interpreter had
+  exited. The wait for output is now bounded by the script's own timeout, and such a
+  task fails instead of waiting.
+
 - **On Windows, a store Atlas cannot read is reported, not read as empty.** When a
   design-time store's directory had been replaced by a regular file — a restore unpacked
   wrongly, a volume mounted one level too deep — Linux failed every read with "not a
