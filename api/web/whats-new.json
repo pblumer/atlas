@@ -2,6 +2,36 @@
   "generatedAt": "2026-09-28",
   "entries": [
     {
+      "id": "the-console-shows-how-atlas-is-built",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "See how atlas is built, in one picture",
+        "de": "Wie atlas gebaut ist, auf einen Blick"
+      },
+      "summary": {
+        "en": "A new System Overview button on this page, and the same entry in the help menu (?), shows the architecture in one diagram: the apps and interfaces, the workflow engine, where your data is kept, and how work on other systems is done by workers. It also shows what the storage rests on: every change is first written to a log on disk, and the current state is kept in Pebble, the storage engine CockroachDB has used by default since 2020. Full size opens the diagram on its own for the detail; the handbook shows it in its welcome chapter.",
+        "de": "Der neue Button System Overview auf dieser Seite und derselbe Eintrag im Hilfe-Menü (?) zeigen die Architektur in einer Grafik: die Apps und Schnittstellen, die Workflow-Engine, wo Ihre Daten liegen und wie Worker die Arbeit an anderen Systemen erledigen. Sie zeigt auch, worauf die Datenhaltung aufbaut: Jede Änderung wird zuerst in ein Log auf der Platte geschrieben, und den aktuellen Zustand hält Pebble, die Speicher-Engine, die CockroachDB seit 2020 standardmässig verwendet. Full size öffnet die Grafik für die Details einzeln; das Handbuch zeigt sie im Kapitel Willkommen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Console",
+        "Handbook",
+        "Architecture"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Console",
+          "de": "Console öffnen"
+        },
+        "route": "#/console"
+      }
+    },
+    {
       "id": "a-held-per-position-right-can-be-changed-and-reads-as-held",
       "version": "Unreleased",
       "date": null,
@@ -323,35 +353,6 @@
       },
       "tags": [
         "Handbook",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-business-rule-task-can-be-bound-to-one-deployed-version-of",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Bind a task to one version of a decision",
-        "de": "Einen Task an eine Version einer Decision binden"
-      },
-      "summary": {
-        "en": "A business rule task can now be bound to one deployed version of its decision. The binding field in the Modeler offers three choices: the newest version each time the task runs, a deployed version you pick from a list, or the model deployed together with the process. A chosen version is checked when the process is deployed: if it is not deployed, the deploy is refused and says which versions exist, and the task never runs a different version. A version a task is bound to cannot be deleted. The choice is an Atlas setting; a Camunda engine ignores it and runs the newest version, and the panel says so.",
-        "de": "Ein Business Rule Task lässt sich jetzt an eine bestimmte deployte Version seiner Decision binden. Das Feld „Binding“ im Modeler bietet drei Möglichkeiten: die neueste Version bei jeder Ausführung, eine deployte Version aus einer Liste oder das Modell, das mit dem Prozess deployt wurde. Eine gewählte Version wird beim Deploy des Prozesses geprüft: Ist sie nicht deployt, wird der Deploy abgewiesen und nennt die vorhandenen Versionen, und der Task führt nie eine andere Version aus. Eine Version, an die ein Task gebunden ist, lässt sich nicht löschen. Die Wahl ist eine Atlas-Einstellung; eine Camunda-Engine ignoriert sie und führt die neueste Version aus, was das Feld auch sagt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Decisions",
         "Modeler"
       ],
       "try": {

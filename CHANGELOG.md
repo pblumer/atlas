@@ -14,6 +14,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The Console shows how atlas is built.** A **System Overview** button on the welcome
+  card, and an entry of the same name in the help menu (?) right after Handbook, open the
+  architecture diagram in a dialog: the apps and interfaces, the workflow engine, its
+  embedded persistence — the write-ahead log that is the source of truth and the Pebble
+  state store it is replayed into — and the worker model. The dialog fits the whole
+  diagram into the window and offers it at full size for reading the detail. The
+  handbook's welcome chapter carries the same diagram under «Systemübersicht» /
+  «System overview». The Console serves a copy of `docs/architecture/system-overview.svg`,
+  and a test holds that copy to the original byte for byte.
+
 - **A held per-position right can be changed, and reads as held.** For a product whose
   lifecycle runs one instance per position (ADR-0428), `POST
   /api/v1/orders/{id}/lines/{item}/change` delivers the product's `change` message to
