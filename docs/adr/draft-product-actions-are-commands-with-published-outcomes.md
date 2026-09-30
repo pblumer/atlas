@@ -277,8 +277,14 @@ What the kind gives that a REST task cannot:
 
 The command a `command` send task issues carries a command id derived from its job key,
 which is stable across the job's retries, so a retried job answers with the first
-outcome (ADR-0425 §3). It passes every check the order act makes; a process can ask for
-nothing a person at the portal could not.
+outcome (ADR-0425 §3). It passes every check the order act makes about the line.
+
+**Not settled: in whose name a `command` send task acts.** The order act checks that the
+caller is one of the action's triggers (§2), and a process has no caller in that sense:
+it runs as whoever deployed it, and anybody allowed to deploy could author one that
+returns every right of every person. Until a record binds the command mode to an
+identity and a scope — the deploying project, a grant per product, or operator actions
+only — the `outcome` mode is built and the `command` mode is not.
 
 Considered and not taken: a REST task with an element template generated from Atlas's
 own OpenAPI description (ADR-0300). It passes ADR-0299's gates no better — its surface is
