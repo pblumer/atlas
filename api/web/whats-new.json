@@ -2,6 +2,28 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "listing-one-instance-s-jobs-no-longer-walks-every-job-on-the",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Looking up one instance's jobs no longer stalls the engine",
+        "de": "Die Jobs einer Instanz nachzuschlagen hält die Engine nicht mehr an"
+      },
+      "summary": {
+        "en": "Completing an incident by hand, or asking the MCP tool for an instance's jobs, used to read every waiting job on the server just to find the few of that one instance — and the engine did nothing else while it read. On a server with a large backlog that was a noticeable stall. The lookup now reads only the instance itself, and does so without holding the engine up. The answer is the same jobs as before.",
+        "de": "Einen Incident von Hand abzuschliessen oder die Jobs einer Instanz über das MCP-Werkzeug abzufragen, las bisher jeden wartenden Job des Servers, um die wenigen dieser einen Instanz zu finden — und die Engine tat währenddessen nichts anderes. Auf einem Server mit grossem Rückstand war das ein spürbarer Stillstand. Die Abfrage liest jetzt nur noch die Instanz selbst und hält die Engine dabei nicht mehr auf. Das Ergebnis sind dieselben Jobs wie zuvor."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations",
+        "Engine"
+      ]
+    },
+    {
       "id": "the-console-shows-how-atlas-is-built",
       "version": "0.8.0",
       "date": "2026-09-30",
@@ -325,35 +347,6 @@
       "tags": [
         "Decisions",
         "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "the-handbook-teaches-a-process-test-that-can-fail-a-build",
-      "version": "0.8.0",
-      "date": "2026-09-30",
-      "category": "Added",
-      "title": {
-        "en": "Test a process the way you test code — the handbook now shows how",
-        "de": "Einen Prozess testen wie Code – das Handbuch zeigt jetzt, wie"
-      },
-      "summary": {
-        "en": "The Playground can do more than show a report: it holds a run to expectations, checks every case against a rule of your own, keeps a run as the baseline for the next one, and replays the whole scenario from the command line, where a missed expectation fails the build. The handbook's test chapter now explains all of it, in German and English — including the trap you are likely to meet first: a rule with a typo that selects no case still counts as passed.",
-        "de": "Der Playground kann mehr als einen Bericht zeigen: Er prüft einen Lauf gegen Erwartungen, hält jeden Fall an eine eigene Regel, bewahrt einen Lauf als Baseline für den nächsten auf und spielt das ganze Szenario über die Kommandozeile ab, wo eine verfehlte Erwartung den Build rot färbt. Das Testkapitel des Handbuchs erklärt das jetzt vollständig, auf Deutsch und Englisch – samt dem Stolperstein, auf den man zuerst trifft: Eine Regel mit Tippfehler, die keinen Fall auswählt, gilt trotzdem als erfüllt."
-      },
-      "link": {
-        "label": "ADR-0215",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0215-modeler-playground.md"
-      },
-      "tags": [
-        "Handbook",
-        "Modeler"
       ],
       "try": {
         "label": {

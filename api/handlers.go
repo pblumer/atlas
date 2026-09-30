@@ -4447,12 +4447,6 @@ type jobResp struct {
 	Retries            int32  `json:"retries"`
 }
 
-// handleListInstanceJobs lists the activatable jobs one instance is parked on,
-// regardless of type — the read side of POST /jobs/{key}/complete. It mirrors
-// handleListTasks but is scoped to one instance and not limited to user tasks, so
-// a client that only speaks HTTP can discover the job keys of parked service tasks
-// and finish them by hand. The scan runs on the run-loop goroutine (state's sole
-// owner) via do.
 // jobTypeName turns the job-type index on a job record back into the name an
 // operator authored. The engine-wide table is authoritative: since job types are
 // resolved at deploy (ADR-0007/0157) every job created from then on carries an
@@ -4470,6 +4464,19 @@ func (s *Server) jobTypeName(cp *compiler.CompiledProcess, jobType int32) string
 	return cp.Intern(jobType)
 }
 
+// handleListInstanceJobs lists the activatable jobs one instance is parked on,
+// regardless of type — the read side of POST /jobs/{key}/complete. It mirrors
+// handleListTasks but is scoped to one instance and not limited to user tasks, so
+// a client that only speaks HTTP can discover the job keys of parked service tasks
+// and finish them by hand.
+//
+// It walks the instance's own element index and asks the element→job reverse index
+// for each token, so it costs the instance's live token count rather than the
+// server's whole job population. That count is not small by construction — one
+// multi-instance activity alone may hold limits.Iterations tokens — so the walk
+// runs off the run loop (readOffLoop). Only the job-type names need the loop — the
+// registry that holds them is loop-owned and has no lock — so they are resolved
+// afterwards in one short dispatch that does a map lookup per row found.
 func (s *Server) handleListInstanceJobs(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
@@ -4477,27 +4484,62 @@ func (s *Server) handleListInstanceJobs(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	jobs := []jobResp{}
-	var scanErr error
-	s.do(func() {
-		scanErr = s.store.AllActivatableJobs(func(jobKey uint64) error {
-			jv, ok, err := s.store.GetJob(jobKey)
-			if err != nil || !ok || jv.ProcessInstanceKey != key {
-				return err // err is nil for the skip cases (missing job / other instance)
+	// The job-type index of each row and the compiled process its name falls back to,
+	// kept beside the rows until the names are resolved on the loop. A row whose
+	// definition is not deployed carries no cp and stays unnamed.
+	type jobTypeRef struct {
+		cp      *compiler.CompiledProcess
+		jobType int32
+	}
+	var refs []jobTypeRef
+	scanErr := s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
+		return rv.ElementInstancesOfProcess(key, func(elKey uint64) error {
+			jobKey, ok, err := rv.JobOfElement(elKey)
+			if err != nil || !ok {
+				return err // no job on this element (or a read error)
+			}
+			jv, ok, err := rv.GetJob(jobKey)
+			if err != nil || !ok {
+				return err
+			}
+			// Activatable exactly as a worker's pull sees it: a leased, backing-off or
+			// incident-parked job is off the index, and so off this list.
+			if on, err := rv.JobActivatable(jv.JobType, jobKey); err != nil || !on {
+				return err
 			}
 			jr := jobResp{Key: jobKey, ProcessInstanceKey: jv.ProcessInstanceKey, Retries: jv.Retries}
-			if ei, ok, err := s.store.GetElementInstance(jv.ElementInstanceKey); err == nil && ok {
+			ref := jobTypeRef{jobType: jv.JobType}
+			if ei, ok, err := rv.GetElementInstance(elKey); err == nil && ok {
 				jr.ProcessDefKey = ei.ProcessDefKey
-				if d, dok := s.deployments[ei.ProcessDefKey]; dok {
-					cp := d.cp
-					jr.ElementID = cp.ElementBpmnId(ei.ElementId)
-					jr.JobType = s.jobTypeName(cp, jv.JobType)
+				if d, dok := defs[ei.ProcessDefKey]; dok && d.cp != nil {
+					ref.cp = d.cp
+					jr.ElementID = d.cp.ElementBpmnId(ei.ElementId)
 				}
 			}
 			jobs = append(jobs, jr)
+			refs = append(refs, ref)
 			return nil
 		})
 	})
-	if scanErr != nil {
+	if scanErr == nil && len(jobs) > 0 {
+		resolved := false
+		s.do(func() {
+			for i, ref := range refs {
+				if ref.cp != nil {
+					jobs[i].JobType = s.jobTypeName(ref.cp, ref.jobType)
+				}
+			}
+			resolved = true
+		})
+		if !resolved {
+			scanErr = errLoopClosing
+		}
+	}
+	switch {
+	case errors.Is(scanErr, errLoopClosing):
+		httpapi.Error(w, http.StatusServiceUnavailable, scanErr.Error())
+		return
+	case scanErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "list jobs: "+scanErr.Error())
 		return
 	}
