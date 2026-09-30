@@ -473,3 +473,17 @@ func TestVaultListSortByCreatedAt(t *testing.T) {
 		t.Errorf("List order = %+v, want older (createdAt 100) first", metas)
 	}
 }
+
+// TestAKeyFileThatCannotBeCreatedIsAnError: a generated key that never reached the
+// disk must fail the start, not be handed back as if it would be there next time —
+// the next start would generate another and every secret sealed with this one would
+// be lost.
+func TestAKeyFileThatCannotBeCreatedIsAnError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "vault.key")
+	if err := os.Mkdir(path, 0o700); err != nil { // a directory where the file belongs
+		t.Fatalf("Mkdir: %v", err)
+	}
+	if err := writeKeyFile(path, []byte("key")); err == nil {
+		t.Fatal("writeKeyFile over a directory = nil, want an error")
+	}
+}
