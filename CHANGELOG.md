@@ -12,6 +12,34 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **The handbook teaches TLS and certificates.** A new chapter «TLS & Zertifikate» /
+  «TLS & certificates», in German and English, gathers what ADR-0191 built and
+  `docs/install.md` § 8 only sketched: the built-in TLS 1.3 listener and what it accepts
+  (PEM, server certificate first, an unencrypted key, one certificate for every name),
+  renewal without a restart and the two log events that report it, that expiry is
+  checked nowhere and has to be watched from outside, the internal loopback listener,
+  `--tls-ca` for the three connections where Atlas is the client, and the Helm switch.
+  A section on Windows Server behind a load balancer compares re-encryption, TCP
+  passthrough and IIS as a local proxy — Server 2019's SChannel has no TLS 1.3, which
+  rules out anything that connects through it — and walks the first step by step: PFX
+  to PEM, a directory only the service account can read, the WinSW environment, the
+  firewall rule, and the load balancer's health check and timeouts. It also names what
+  a load balancer changes besides the transport: every user shares the per-address
+  limits, and it does not make Atlas highly available. The server side was run against
+  a live instance (TLS 1.2 refused, the chain served, a renewal picked up, PEM converted
+  from a PFX file accepted with its bag attributes and CRLF line endings); the Windows
+  commands were not run on Windows. The chapter's flag table is held to the flags
+  `serve`, `worker` and `mcp` define, and to their environment variables, by
+  `cmd/atlas/tlshandbook_test.go`.
+
+### Fixed
+
+- **`docs/install.md` no longer calls `/metrics` unauthenticated.** The opening rules
+  and § 8 still said so after ADR-0198 moved the exposition behind `--auth` and a
+  `metrics`-scoped token.
+
 ## [0.8.0] — 2026-09-30
 
 **This release is about running Atlas on Windows.** 0.7.0 shipped a Windows binary that no

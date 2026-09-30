@@ -2,6 +2,29 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "the-handbook-teaches-tls-and-certificates",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Secure Atlas with TLS — the handbook now shows how",
+        "de": "Atlas mit TLS absichern – das Handbuch zeigt jetzt, wie"
+      },
+      "summary": {
+        "en": "Atlas can speak HTTPS itself from a certificate, reload it without a restart, and verify another Atlas against your own CA — and until now that was spread across an ADR and a few paragraphs of the install guide. A new chapter «TLS & certificates» explains it in German and English, including one thing worth knowing first: Atlas does not check the expiry date, so you watch it from outside. A section on Windows Server behind a load balancer compares three ways to encrypt that last hop and walks through one of them step by step, from the PFX file to the load balancer's health check.",
+        "de": "Atlas kann mit einem Zertifikat selbst HTTPS sprechen, es ohne Neustart neu laden und ein anderes Atlas gegen die eigene CA prüfen – bisher stand das verteilt in einem ADR und ein paar Absätzen der Installationsanleitung. Ein neues Kapitel «TLS & Zertifikate» erklärt es auf Deutsch und Englisch, samt einer Sache, die man zuerst wissen sollte: Atlas prüft das Ablaufdatum nicht, das überwacht man von aussen. Ein Abschnitt zu Windows Server hinter einem Load Balancer vergleicht drei Wege, diese letzte Strecke zu verschlüsseln, und führt einen davon Schritt für Schritt durch, von der PFX-Datei bis zum Health Check des Load Balancers."
+      },
+      "link": {
+        "label": "ADR-0191",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0191-built-in-tls-listener.md"
+      },
+      "tags": [
+        "Handbook",
+        "Operations",
+        "Security"
+      ]
+    },
+    {
       "id": "the-console-shows-how-atlas-is-built",
       "version": "0.8.0",
       "date": "2026-09-30",
@@ -325,35 +348,6 @@
       "tags": [
         "Decisions",
         "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "the-handbook-teaches-a-process-test-that-can-fail-a-build",
-      "version": "0.8.0",
-      "date": "2026-09-30",
-      "category": "Added",
-      "title": {
-        "en": "Test a process the way you test code — the handbook now shows how",
-        "de": "Einen Prozess testen wie Code – das Handbuch zeigt jetzt, wie"
-      },
-      "summary": {
-        "en": "The Playground can do more than show a report: it holds a run to expectations, checks every case against a rule of your own, keeps a run as the baseline for the next one, and replays the whole scenario from the command line, where a missed expectation fails the build. The handbook's test chapter now explains all of it, in German and English — including the trap you are likely to meet first: a rule with a typo that selects no case still counts as passed.",
-        "de": "Der Playground kann mehr als einen Bericht zeigen: Er prüft einen Lauf gegen Erwartungen, hält jeden Fall an eine eigene Regel, bewahrt einen Lauf als Baseline für den nächsten auf und spielt das ganze Szenario über die Kommandozeile ab, wo eine verfehlte Erwartung den Build rot färbt. Das Testkapitel des Handbuchs erklärt das jetzt vollständig, auf Deutsch und Englisch – samt dem Stolperstein, auf den man zuerst trifft: Eine Regel mit Tippfehler, die keinen Fall auswählt, gilt trotzdem als erfüllt."
-      },
-      "link": {
-        "label": "ADR-0215",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0215-modeler-playground.md"
-      },
-      "tags": [
-        "Handbook",
-        "Modeler"
       ],
       "try": {
         "label": {

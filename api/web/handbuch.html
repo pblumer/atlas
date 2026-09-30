@@ -384,6 +384,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <a href="#testen"><span data-l="de">Testen &amp; Simulieren</span><span data-l="en">Test &amp; simulate</span></a>
     <a href="#ausliefern"><span data-l="de">Ausliefern</span><span data-l="en">Deliver</span></a>
     <a href="#betrieb"><span data-l="de">Betrieb &amp; Incidents</span><span data-l="en">Operations &amp; incidents</span></a>
+    <a href="#tls"><span data-l="de">TLS &amp; Zertifikate</span><span data-l="en">TLS &amp; certificates</span></a>
     <a href="#weiterentwickeln"><span data-l="de">Weiterentwickeln</span><span data-l="en">Evolve</span></a>
     <a href="#konten"><span data-l="de">Konten, Rollen &amp; Anmeldung</span><span data-l="en">Accounts, roles &amp; sign-in</span></a>
     <h4 data-l="de">Landschaft &amp; Daten</h4><h4 data-l="en">Landscape &amp; data</h4>
@@ -7644,11 +7645,11 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
         <li data-l="de"><b>Nichts erreicht atlas im Klartext.</b> Entweder terminiert atlas TLS selbst –
           <code>--tls-cert</code> und <code>--tls-key</code> machen aus dem Port einen TLS-1.3-Listener, beide
           Dateien oder keine – oder ein Reverse Proxy davor tut es. Eins von beidem, bevor jemand von aussen
-          darauf zugreifen kann. Verschlüsselung ist keine Autorisierung: <code>/healthz</code> und <code>/readyz</code> antworten jedem, der den Port erreicht; <code>/metrics</code> dagegen verlangt seit ADR-0198 einen API-Token mit Scope <code>metrics</code> (siehe <a href="#ueberwachen">Überwachen</a>).</li>
+          darauf zugreifen kann; wie, steht unter <a href="#tls">TLS &amp; Zertifikate</a>. Verschlüsselung ist keine Autorisierung: <code>/healthz</code> und <code>/readyz</code> antworten jedem, der den Port erreicht; <code>/metrics</code> dagegen verlangt seit ADR-0198 einen API-Token mit Scope <code>metrics</code> (siehe <a href="#ueberwachen">Überwachen</a>).</li>
         <li data-l="en"><b>Nothing should reach atlas in the clear.</b> Either atlas terminates TLS itself –
           <code>--tls-cert</code> and <code>--tls-key</code> turn the port into a TLS 1.3 listener, both files or
           neither – or a reverse proxy in front of it does. One of the two, before anyone outside the host can
-          reach it. Encryption is not authorization: <code>/healthz</code> and <code>/readyz</code> answer whoever can reach the port; <code>/metrics</code>, since ADR-0198, requires an API token of scope <code>metrics</code> (see <a href="#ueberwachen">Monitoring</a>).</li>
+          reach it; <a href="#tls">TLS &amp; certificates</a> shows how. Encryption is not authorization: <code>/healthz</code> and <code>/readyz</code> answer whoever can reach the port; <code>/metrics</code>, since ADR-0198, requires an API token of scope <code>metrics</code> (see <a href="#ueberwachen">Monitoring</a>).</li>
         <li data-l="de"><b>Sichere den Vault-Key.</b> Ein Datenverzeichnis ohne seinen <code>vault.key</code> ist
           nicht wiederherstellbar – die darin gespeicherten Worker-Secrets sind dann nicht mehr lesbar.</li>
         <li data-l="en"><b>Back up the vault key.</b> A data directory without its <code>vault.key</code> is not
@@ -7815,6 +7816,438 @@ curl -H "Authorization: Bearer $ATLAS_METRICS_TOKEN" https://atlas.example.com/m
         <p data-l="en"><b>A design-time backup holds no running cases.</b> To move a whole instance, or restore one
           as a whole, use the <i>full</i> backup – the regular one carries models, not the WAL.</p>
       </div>
+    </section>
+
+    <!-- ==================== TLS & CERTIFICATES ==================== -->
+    <section id="tls">
+      <h2 data-l="de">TLS &amp; Zertifikate</h2><h2 data-l="en">TLS &amp; certificates</h2>
+      <p class="lead" data-l="de">Nichts sollte atlas im Klartext erreichen. Dieses Kapitel zeigt, wie atlas mit
+        einem Zertifikat selbst HTTPS spricht, wie es das Zertifikat eines anderen atlas prüft, und wie du einen
+        Server auf Windows hinter einem Load Balancer absicherst.</p>
+      <p class="lead" data-l="en">Nothing should reach atlas in the clear. This chapter shows how atlas speaks HTTPS
+        itself from a certificate, how it verifies another atlas's certificate, and how to secure a server on
+        Windows behind a load balancer.</p>
+
+      <h3 data-l="de">Zwei Wege</h3><h3 data-l="en">Two ways</h3>
+      <ul>
+        <li data-l="de"><b>Im Binary.</b> Mit <code>--tls-cert</code> und <code>--tls-key</code> terminiert atlas
+          TLS selbst (ADR-0191) – kein zweiter Prozess, keine zusätzliche Abhängigkeit. Ohne die beiden Flags
+          spricht atlas HTTP.</li>
+        <li data-l="en"><b>In the binary.</b> With <code>--tls-cert</code> and <code>--tls-key</code> atlas
+          terminates TLS itself (ADR-0191) – no second process, no added dependency. Without the two flags atlas
+          speaks HTTP.</li>
+        <li data-l="de"><b>Davor.</b> Ein Reverse Proxy, Load Balancer oder Ingress terminiert TLS, und atlas
+          spricht dahinter HTTP. Eine gute Antwort, wo ein solcher ohnehin läuft und die Zertifikate für alles
+          andere verwaltet.</li>
+        <li data-l="en"><b>In front of it.</b> A reverse proxy, load balancer or ingress terminates TLS, and atlas
+          speaks HTTP behind it. A good answer wherever one runs anyway and manages the certificates for
+          everything else.</li>
+      </ul>
+      <p data-l="de">Beides lässt sich verbinden: Der Load Balancer terminiert TLS für die Clients und baut zu
+        atlas eine neue TLS-Verbindung auf. Diesen Fall zeigt <a href="#tls-windows">Windows Server hinter einem
+        Load Balancer</a> Schritt für Schritt.</p>
+      <p data-l="en">The two combine: the load balancer terminates TLS for the clients and opens a new TLS
+        connection to atlas. <a href="#tls-windows">Windows Server behind a load balancer</a> walks through that
+        case step by step.</p>
+
+      <h3 data-l="de">atlas legt ein Zertifikat vor</h3><h3 data-l="en">atlas presents a certificate</h3>
+      <pre><code>atlas serve --data-dir /var/lib/atlas/data \
+  --tls-cert /etc/atlas/tls.crt --tls-key /etc/atlas/tls.key</code></pre>
+      <ul>
+        <li data-l="de"><b>Beide Dateien oder keine.</b> Ist nur eine gesetzt, startet atlas nicht – statt im
+          Klartext auf dem Port zu lauschen, den du für gesichert hältst.</li>
+        <li data-l="en"><b>Both files or neither.</b> With only one set, atlas does not start – rather than
+          listening in the clear on the port you believe you have just secured.</li>
+        <li data-l="de"><b>Nur TLS 1.3.</b> Die Cipher Suites legt das Protokoll fest; es gibt keine Liste zu
+          konfigurieren und keine Option für ältere Versionen. Ein Client, der TLS 1.3 nicht aushandeln kann, wird
+          abgewiesen statt herabgestuft. Das betrifft TLS-inspizierende Middleboxes, alte Java-Clients, Windows
+          PowerShell 5.1, .NET-Framework-Anwendungen und alles, was auf Windows Server 2019 über SChannel
+          verbindet.</li>
+        <li data-l="en"><b>TLS 1.3 only.</b> The protocol fixes the cipher suites; there is no list to configure
+          and no option for older versions. A client that cannot negotiate TLS 1.3 is refused rather than
+          downgraded. That affects TLS-inspecting middleboxes, old Java clients, Windows PowerShell 5.1, .NET
+          Framework applications, and anything on Windows Server 2019 that connects through SChannel.</li>
+        <li data-l="de"><b>Geprüft beim Start.</b> Ein falscher Pfad oder ein Schlüssel, der nicht zum Zertifikat
+          passt, hält den Server an, bevor er das Datenverzeichnis anfasst.</li>
+        <li data-l="en"><b>Checked at startup.</b> A wrong path, or a key that does not belong to the certificate,
+          stops the server before it touches the data directory.</li>
+        <li data-l="de"><b>Format.</b> PEM. Die Zertifikatsdatei beginnt mit dem Serverzertifikat, danach folgen
+          die Zwischenzertifikate; atlas liefert die Kette so aus, wie sie in der Datei steht, und prüft sie nicht.
+          Der Schlüssel ist unverschlüsselt (PKCS#1, PKCS#8 oder SEC1) – eine Passphrase kann atlas nicht
+          abfragen. PFX-Dateien und den Windows-Zertifikatsspeicher liest atlas nicht.</li>
+        <li data-l="en"><b>Format.</b> PEM. The certificate file starts with the server certificate, followed by
+          the intermediates; atlas serves the chain as it stands in the file and does not check it. The key is
+          unencrypted (PKCS#1, PKCS#8 or SEC1) – atlas has no way to ask for a passphrase. atlas reads neither PFX
+          files nor the Windows certificate store.</li>
+        <li data-l="de"><b>Ein Zertifikat für alle Namen.</b> atlas wählt nicht nach dem angefragten Namen (SNI)
+          aus. Jeder Name, unter dem der Server erreicht wird, gehört als SAN in dasselbe Zertifikat.</li>
+        <li data-l="en"><b>One certificate for every name.</b> atlas does not choose by the requested name (SNI).
+          Every name the server is reached by belongs in the same certificate as a SAN.</li>
+        <li data-l="de"><b>Rechte.</b> Das Konto, unter dem atlas läuft, liest beide Dateien. Der Schlüssel gehört
+          diesem Konto allein – unter Linux <code>0600</code>, unter Windows eine ACL wie
+          <a href="#tls-windows">unten</a>.</li>
+        <li data-l="en"><b>Permissions.</b> The account atlas runs as reads both files. The key belongs to that
+          account alone – <code>0600</code> on Linux, an ACL on Windows as <a href="#tls-windows">below</a>.</li>
+      </ul>
+      <p data-l="de">Die Startzeile <code>server.listening</code> trägt <code>tls=true</code> und nennt die
+        <code>https://</code>-Adresse. HTTP/2 wird über ALPN ausgehandelt, ohne dass du etwas einstellst.</p>
+      <p data-l="en">The <code>server.listening</code> start line carries <code>tls=true</code> and names the
+        <code>https://</code> address. HTTP/2 is negotiated over ALPN without anything to set.</p>
+
+      <h3 data-l="de">Erneuern ohne Neustart</h3><h3 data-l="en">Renewing without a restart</h3>
+      <p data-l="de">atlas prüft bei jedem TLS-Handshake, ob sich Zertifikat oder Schlüssel auf der Platte geändert
+        haben, und lädt das Paar dann neu. <code>certbot renew</code>, cert-manager oder eine geplante Aufgabe
+        genügen; der Dienst läuft weiter.</p>
+      <p data-l="en">On every TLS handshake atlas checks whether the certificate or key changed on disk, and then
+        reloads the pair. <code>certbot renew</code>, cert-manager or a scheduled task is enough; the service
+        keeps running.</p>
+      <ul>
+        <li data-l="de"><b>Gelungen:</b> <code>server.tls_reloaded</code> im Log, mit <code>not_after</code>, dem
+          Ablaufdatum des Zertifikats, das jetzt ausgeliefert wird.</li>
+        <li data-l="en"><b>Succeeded:</b> <code>server.tls_reloaded</code> in the log, with <code>not_after</code>,
+          the expiry of the certificate now being served.</li>
+        <li data-l="de"><b>Misslungen:</b> <code>server.tls_reload_failed</code> (WARN). atlas liefert das bisherige
+          Paar weiter aus und versucht es erneut, sobald sich die Dateien wieder ändern. Der übliche Grund ist eine
+          Erneuerung, die gerade halb geschrieben ist: neues Zertifikat, alter Schlüssel.</li>
+        <li data-l="en"><b>Failed:</b> <code>server.tls_reload_failed</code> (WARN). atlas keeps serving the previous
+          pair and tries again once the files change again. The usual cause is a renewal caught half-written: new
+          certificate, old key.</li>
+        <li data-l="de"><b>Dateien ersetzen, nicht überschreiben:</b> in eine temporäre Datei im selben Verzeichnis
+          schreiben und sie dann umbenennen. So liest atlas nie eine halbe Datei.</li>
+        <li data-l="en"><b>Replace files, do not overwrite them:</b> write a temporary file in the same directory,
+          then rename it. That way atlas never reads half a file.</li>
+      </ul>
+      <div class="note warn">
+        <div class="lbl" data-l="de">Den Ablauf überwachst du selbst</div><div class="lbl" data-l="en">Expiry is yours to watch</div>
+        <p data-l="de">atlas prüft das Ablaufdatum nicht: Ein abgelaufenes Zertifikat wird geladen und
+          ausgeliefert. Und bleibt eine Erneuerung ganz aus, ändert sich keine Datei – dann steht auch nichts im
+          Log. Überwache das Ablaufdatum ausserhalb von atlas, zum Beispiel mit einem Blackbox-Exporter
+          (<code>probe_ssl_earliest_cert_expiry</code>) oder den Metriken von cert-manager.</p>
+        <p data-l="en">atlas does not check the expiry date: an expired certificate is loaded and served. And when a
+          renewal never happens at all, no file changes – so nothing reaches the log either. Watch the expiry
+          outside atlas, for example with a blackbox exporter (<code>probe_ssl_earliest_cert_expiry</code>) or
+          cert-manager's metrics.</p>
+      </div>
+
+      <h3 data-l="de">Der interne Listener auf 127.0.0.1</h3><h3 data-l="en">The internal listener on 127.0.0.1</h3>
+      <p data-l="de">Mit TLS öffnet atlas zusätzlich einen Listener ohne TLS auf <code>127.0.0.1</code> mit einem
+        zufälligen Port. Ihn benutzen nur die eigenen Kindprozesse: der MCP-Adapter und die Worker, die atlas
+        selbst startet. Der Grund ist der Name: Ein Zertifikat für <code>atlas.example.com</code> enthält keinen
+        Namen für <code>127.0.0.1</code>, und eine Option, die Prüfung abzuschalten, hat atlas bewusst nicht. Der
+        Listener ist von keinem anderen Host erreichbar und braucht weder Konfiguration noch Firewall-Regel.</p>
+      <p data-l="en">With TLS on, atlas also opens a listener without TLS on <code>127.0.0.1</code> on a random
+        port. Only its own child processes use it: the MCP adapter and the workers atlas starts itself. The reason
+        is naming: a certificate for <code>atlas.example.com</code> carries no name for <code>127.0.0.1</code>, and
+        atlas deliberately has no option to switch verification off. The listener is unreachable from any other
+        host and needs neither configuration nor a firewall rule.</p>
+
+      <h3 data-l="de">atlas prüft ein Zertifikat</h3><h3 data-l="en">atlas verifies a certificate</h3>
+      <p data-l="de">Wo atlas selbst Client ist, prüft es das Zertifikat der Gegenseite gegen den
+        Zertifikatsspeicher des Hosts. Stammt es von einer internen CA, die der Host nicht kennt, übergibst du deren
+        PEM-Bündel mit <code>--tls-ca</code>. Das gilt für drei Verbindungen:</p>
+      <p data-l="en">Where atlas is the client, it verifies the other side's certificate against the host's trust
+        store. When that certificate comes from an internal CA the host does not know, hand atlas the CA's PEM
+        bundle with <code>--tls-ca</code>. That applies to three connections:</p>
+      <ul>
+        <li data-l="de"><code>atlas serve</code>, wenn es eine Applikation an ein
+          <a href="#ausliefern">Deployment-Ziel</a> publiziert und dessen Status liest (ADR-0129). Ein Ziel muss
+          <code>https://</code> sein, ausser auf Loopback.</li>
+        <li data-l="en"><code>atlas serve</code>, when it publishes an application to a
+          <a href="#ausliefern">deployment target</a> and reads its status back (ADR-0129). A target must be
+          <code>https://</code>, except on loopback.</li>
+        <li data-l="de"><code>atlas worker --server https://…</code> auf einem anderen Host.</li>
+        <li data-l="en"><code>atlas worker --server https://…</code> on another host.</li>
+        <li data-l="de"><code>atlas mcp --server https://…</code>, der Adapter, über den ein KI-Assistent atlas
+          bedient.</li>
+        <li data-l="en"><code>atlas mcp --server https://…</code>, the adapter an AI assistant drives atlas
+          through.</li>
+      </ul>
+      <pre><code>atlas worker --server https://atlas.example.com --tls-ca /etc/atlas/internal-ca.pem …</code></pre>
+      <p data-l="de">Das Bündel <b>ergänzt</b> den Zertifikatsspeicher des Hosts, es ersetzt ihn nie. Eine Option,
+        die Prüfung abzuschalten, gibt es nirgends in atlas. In die Worker Types, die Dritte aufrufen – REST, Mail,
+        Graph und die übrigen –, reicht <code>--tls-ca</code> nicht: Deren Gegenstelle gehört jemand anderem. Sie
+        vertrauen dem Zertifikatsspeicher des Hosts oder, wo ein Worker Type das anbietet, einer eigenen CA in
+        seiner Konfiguration, etwa bei LDAP.</p>
+      <p data-l="en">The bundle is <b>added to</b> the host's trust store, never a replacement for it. There is no
+        option anywhere in atlas to switch verification off. <code>--tls-ca</code> does not reach the Worker Types
+        that call third parties – REST, mail, Graph and the rest: their endpoint belongs to somebody else. They
+        trust the host's store or, where a Worker Type offers it, a CA of its own in its configuration, LDAP for
+        one.</p>
+      <table id="tls-flags">
+        <thead><tr>
+          <th>Flag</th>
+          <th data-l="de">Umgebungsvariable</th><th data-l="en">Environment variable</th>
+          <th data-l="de">Befehl</th><th data-l="en">Command</th>
+          <th data-l="de">Wofür</th><th data-l="en">For</th>
+        </tr></thead>
+        <tbody>
+          <tr><td><code>--tls-cert</code></td><td><code>ATLAS_TLS_CERT</code></td><td><code>serve</code></td>
+            <td data-l="de">PEM-Zertifikatskette, mit der atlas <code>--addr</code> bedient</td>
+            <td data-l="en">PEM certificate chain atlas serves <code>--addr</code> with</td></tr>
+          <tr><td><code>--tls-key</code></td><td><code>ATLAS_TLS_KEY</code></td><td><code>serve</code></td>
+            <td data-l="de">der private Schlüssel dazu, PEM, unverschlüsselt</td>
+            <td data-l="en">its private key, PEM, unencrypted</td></tr>
+          <tr><td><code>--tls-ca</code></td><td><code>ATLAS_TLS_CA</code></td><td><code>serve</code>, <code>worker</code>, <code>mcp</code></td>
+            <td data-l="de">CA-Bündel, dem atlas zusätzlich zum Host vertraut, wenn es ein anderes atlas aufruft</td>
+            <td data-l="en">CA bundle atlas trusts in addition to the host's when it calls another atlas</td></tr>
+        </tbody>
+      </table>
+
+      <h3 data-l="de">Kubernetes (Helm)</h3><h3 data-l="en">Kubernetes (Helm)</h3>
+      <p data-l="de">Im Cluster hält meist der Ingress das Zertifikat, und atlas spricht HTTP auf einer ClusterIP.
+        Soll auch die letzte Strecke verschlüsselt sein, schaltet <code>atlas.tls.enabled</code> TLS im Pod
+        ein:</p>
+      <p data-l="en">In a cluster the ingress usually holds the certificate and atlas speaks HTTP on a ClusterIP.
+        Where the last hop must be encrypted too, <code>atlas.tls.enabled</code> turns TLS on in the pod:</p>
+      <ul>
+        <li data-l="de">Das Paar kommt aus einem Secret vom Typ <code>kubernetes.io/tls</code>
+          (<code>atlas.tls.existingSecret</code>), wie cert-manager es schreibt. <code>caKey</code> nennt optional
+          ein Bündel darin für <code>--tls-ca</code>.</li>
+        <li data-l="en">The pair comes from a Secret of type <code>kubernetes.io/tls</code>
+          (<code>atlas.tls.existingSecret</code>), the kind cert-manager writes. <code>caKey</code> optionally names
+          a bundle in it for <code>--tls-ca</code>.</li>
+        <li data-l="de">Ohne Secret schlägt das Rendern fehl, statt einen Klartext-Server zu starten.</li>
+        <li data-l="en">Without a Secret the render fails rather than starting a plaintext server.</li>
+        <li data-l="de">Die Probes wechseln von selbst auf <code>scheme: HTTPS</code>.</li>
+        <li data-l="en">The probes switch to <code>scheme: HTTPS</code> on their own.</li>
+        <li data-l="de">Setze <code>--external-url</code> über <code>atlas.extraArgs</code> auf den Namen im
+          Zertifikat.</li>
+        <li data-l="en">Set <code>--external-url</code> through <code>atlas.extraArgs</code> to the name on the
+          certificate.</li>
+        <li data-l="de">Eine Erneuerung durch cert-manager erreicht den laufenden Pod ohne Neustart.</li>
+        <li data-l="en">A cert-manager renewal reaches the running pod without a restart.</li>
+      </ul>
+
+      <div id="tls-windows" style="scroll-margin-top:66px"></div>
+      <h3 data-l="de">Windows Server hinter einem Load Balancer</h3>
+      <h3 data-l="en">Windows Server behind a load balancer</h3>
+      <p data-l="de">Windows Server 2019 kennt in SChannel, seiner TLS-Bibliothek, kein TLS 1.3 – das kommt erst
+        mit Windows Server 2022. Für atlas selbst spielt das keine Rolle: Es bringt die TLS-Implementierung von Go
+        mit und bietet TLS 1.3 auch auf Server 2019 an. Eine Rolle spielt es für alles, was <i>auf Windows-Seite</i>
+        über SChannel zu atlas verbindet: IIS mit ARR, Windows PowerShell 5.1, .NET-Framework-Anwendungen und das
+        mitgelieferte <code>curl.exe</code> erreichen einen atlas mit TLS nicht.</p>
+      <p data-l="en">Windows Server 2019 has no TLS 1.3 in SChannel, its TLS library – that arrives with Windows
+        Server 2022. For atlas itself this does not matter: it brings Go's TLS implementation along and offers TLS
+        1.3 on Server 2019 too. It matters for everything that connects to atlas <i>from the Windows side</i>
+        through SChannel: IIS with ARR, Windows PowerShell 5.1, .NET Framework applications and the bundled
+        <code>curl.exe</code> cannot reach an atlas that speaks TLS.</p>
+      <p data-l="de">Für die Strecke vom Load Balancer (LB) zu atlas gibt es drei Varianten:</p>
+      <p data-l="en">For the hop from the load balancer (LB) to atlas there are three variants:</p>
+      <table>
+        <thead><tr>
+          <th></th>
+          <th data-l="de">A: Re-Encryption am LB</th><th data-l="en">A: re-encryption at the LB</th>
+          <th data-l="de">B: TCP-Passthrough</th><th data-l="en">B: TCP passthrough</th>
+          <th data-l="de">C: IIS als lokaler Proxy</th><th data-l="en">C: IIS as a local proxy</th>
+        </tr></thead>
+        <tbody>
+          <tr><td data-l="de">TLS für die Clients terminiert</td><td data-l="en">TLS for the clients ends at</td>
+            <td>LB</td><td>atlas</td><td>LB</td></tr>
+          <tr><td data-l="de">Strecke LB → Server</td><td data-l="en">Hop LB → server</td>
+            <td data-l="de">TLS 1.3 zu atlas</td><td data-l="en">TLS 1.3 to atlas</td>
+            <td data-l="de">TLS 1.3, Client ↔ atlas durchgehend</td><td data-l="en">TLS 1.3, client ↔ atlas end to end</td>
+            <td data-l="de">TLS 1.2 zu IIS, dann HTTP auf 127.0.0.1</td><td data-l="en">TLS 1.2 to IIS, then HTTP on 127.0.0.1</td></tr>
+          <tr><td data-l="de">Zertifikat auf dem Server</td><td data-l="en">Certificate on the server</td>
+            <td data-l="de">interne CA genügt</td><td data-l="en">an internal CA will do</td>
+            <td data-l="de">muss allen Clients vertrauenswürdig sein</td><td data-l="en">must be trusted by every client</td>
+            <td data-l="de">im Windows-Zertifikatsspeicher (IIS)</td><td data-l="en">in the Windows certificate store (IIS)</td></tr>
+          <tr><td data-l="de">TLS 1.3 zwingend für</td><td data-l="en">TLS 1.3 required of</td>
+            <td data-l="de">nur den LB</td><td data-l="en">the LB only</td>
+            <td data-l="de">alle Clients</td><td data-l="en">every client</td>
+            <td data-l="de">niemanden</td><td data-l="en">nobody</td></tr>
+          <tr><td data-l="de">HTTP-Funktionen am LB (WAF, Pfadregeln)</td><td data-l="en">HTTP features at the LB (WAF, path rules)</td>
+            <td data-l="de">ja</td><td data-l="en">yes</td>
+            <td data-l="de">nein</td><td data-l="en">no</td>
+            <td data-l="de">ja</td><td data-l="en">yes</td></tr>
+        </tbody>
+      </table>
+      <p data-l="de"><b>A</b>, wenn dein LB zum Backend TLS 1.3 spricht und das Backend-Zertifikat prüfen kann – das
+        sagt die Dokumentation des Produkts, bei manchen erst ab einer bestimmten Version. <b>C</b>, wenn nicht.
+        <b>B</b> nur, wenn alle Clients TLS 1.3 beherrschen und am LB keine HTTP-Funktion gebraucht wird.</p>
+      <p data-l="en"><b>A</b> when your LB speaks TLS 1.3 to its backends and can verify the backend certificate –
+        the product's documentation says so, for some products only from a certain version. <b>C</b> when it
+        cannot. <b>B</b> only when every client can do TLS 1.3 and no HTTP feature is needed at the LB.</p>
+
+      <h4 data-l="de">Variante A Schritt für Schritt</h4><h4 data-l="en">Variant A step by step</h4>
+      <ol class="steps">
+        <li>
+          <b data-l="de">Zertifikat ausstellen</b>
+          <b data-l="en">Issue the certificate</b>
+          <p data-l="de">Eine interne CA genügt, etwa AD CS: Nur der LB sieht dieses Zertifikat. Als SAN trägst du
+            den Namen ein, unter dem der LB den Server anspricht (<code>atlas01.corp.example</code>); spricht er ihn
+            per IP an, die IP-Adresse. Markiere den privaten Schlüssel als exportierbar.</p>
+          <p data-l="en">An internal CA will do, AD CS for example: only the LB ever sees this certificate. Put the
+            name the LB addresses the server by into the SAN (<code>atlas01.corp.example</code>); if it addresses it
+            by IP, the IP address. Mark the private key as exportable.</p>
+        </li>
+        <li>
+          <b data-l="de">Ein Verzeichnis nur für das Dienstkonto</b>
+          <b data-l="en">A directory for the service account only</b>
+          <p data-l="de">Lege das Verzeichnis an und beschränke es, bevor der Schlüssel darin landet – so hat er nie
+            weitere Rechte. <code>CORP\svc-atlas</code> steht für das Konto, unter dem der Dienst läuft; die
+            SIDs stehen für Administratoren und SYSTEM, damit der Befehl auch auf einem deutschen Windows
+            funktioniert.</p>
+          <p data-l="en">Create the directory and restrict it before the key lands in it – so the key never has
+            wider rights. <code>CORP\svc-atlas</code> stands for the account the service runs as; the SIDs stand
+            for Administrators and SYSTEM, so the command works on a localized Windows too.</p>
+          <pre><code>New-Item -ItemType Directory -Force -Path C:\Atlas\tls | Out-Null
+icacls C:\Atlas\tls /inheritance:r /grant:r `
+  "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" "CORP\svc-atlas:(OI)(CI)R"</code></pre>
+        </li>
+        <li>
+          <b data-l="de">In PEM umwandeln</b>
+          <b data-l="en">Convert to PEM</b>
+          <p data-l="de">Mit OpenSSL – etwa dem aus Git for Windows – wird aus der exportierten PFX-Datei ein
+            Paar:</p>
+          <p data-l="en">With OpenSSL – the one that comes with Git for Windows, for example – the exported PFX file
+            becomes a pair:</p>
+          <pre><code>openssl pkcs12 -in atlas.pfx -clcerts -nokeys -out leaf.pem
+openssl pkcs12 -in atlas.pfx -cacerts -nokeys -out chain.pem
+openssl pkcs12 -in atlas.pfx -nocerts -nodes -out C:\Atlas\tls\tls.key
+Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.crt</code></pre>
+          <p data-l="de">Serverzertifikat zuerst, dann die Zwischenzertifikate – eine fehlende Zwischen-CA fällt
+            sonst erst am LB auf. <code>-Encoding ascii</code> ist nötig: <code>&gt;</code> und <code>Out-File</code>
+            schreiben in Windows PowerShell 5.1 UTF-16, und darin findet atlas kein PEM. <code>-nodes</code> lässt
+            den Schlüssel unverschlüsselt. Meldet OpenSSL&nbsp;3 bei einer älteren PFX-Datei einen Fehler zum
+            Verschlüsselungsverfahren, hilft <code>-legacy</code>. Die Zeilen «Bag Attributes» vor den PEM-Blöcken
+            stören atlas nicht. Lösche die PFX-Datei danach.</p>
+          <p data-l="en">Server certificate first, then the intermediates – a missing intermediate otherwise only
+            shows up at the LB. <code>-Encoding ascii</code> is needed: <code>&gt;</code> and <code>Out-File</code>
+            write UTF-16 in Windows PowerShell 5.1, and atlas finds no PEM in that. <code>-nodes</code> leaves the
+            key unencrypted. If OpenSSL&nbsp;3 reports an error about the encryption algorithm of an older PFX file,
+            add <code>-legacy</code>. The "Bag Attributes" lines in front of the PEM blocks do not bother atlas.
+            Delete the PFX file afterwards.</p>
+        </li>
+        <li>
+          <b data-l="de">Den Dienst konfigurieren</b>
+          <b data-l="en">Configure the service</b>
+          <p data-l="de">In der WinSW-Konfiguration aus <code>docs/install.md</code> (die Umgebungsvariablen aus
+            der Tabelle oben ersetzen die Flags):</p>
+          <p data-l="en">In the WinSW configuration from <code>docs/install.md</code> (the environment variables
+            from the table above stand in for the flags):</p>
+          <pre><code>&lt;arguments&gt;serve --addr 10.0.0.21:8443 --data-dir C:\Atlas\data --auth&lt;/arguments&gt;
+&lt;env name="ATLAS_TLS_CERT" value="C:\Atlas\tls\tls.crt"/&gt;
+&lt;env name="ATLAS_TLS_KEY" value="C:\Atlas\tls\tls.key"/&gt;
+&lt;env name="ATLAS_EXTERNAL_URL" value="https://atlas.example.com"/&gt;</code></pre>
+          <p data-l="de"><code>--addr</code> ist die Adresse der Schnittstelle, auf der der LB ankommt – das
+            <code>127.0.0.1:8080</code> der Grundanleitung erreicht er nicht. <code>ATLAS_EXTERNAL_URL</code> ist
+            die Adresse, unter der die Clients atlas über den LB erreichen; daraus baut atlas seine absoluten URLs,
+            etwa für den <a href="#konten">KI-Zugang</a>. Lege mit <code>&lt;serviceaccount&gt;</code> ein eigenes
+            Dienstkonto fest, statt den Dienst mit weitreichenden Rechten laufen zu lassen.</p>
+          <p data-l="en"><code>--addr</code> is the address of the interface the LB arrives on – the basic guide's
+            <code>127.0.0.1:8080</code> is out of its reach. <code>ATLAS_EXTERNAL_URL</code> is the address clients
+            reach atlas by through the LB; atlas builds its absolute URLs from it, for <a href="#konten">AI
+            access</a> for instance. Name a dedicated account with <code>&lt;serviceaccount&gt;</code> rather than
+            running the service with far-reaching rights.</p>
+        </li>
+        <li>
+          <b data-l="de">Die Firewall auf den LB beschränken</b>
+          <b data-l="en">Restrict the firewall to the LB</b>
+          <pre><code>New-NetFirewallRule -DisplayName "atlas HTTPS (LB)" -Direction Inbound -Protocol TCP `
+  -LocalPort 8443 -RemoteAddress 10.0.0.5,10.0.0.6 -Action Allow</code></pre>
+          <p data-l="de">Den internen Listener auf 127.0.0.1 brauchst du nicht freizugeben.</p>
+          <p data-l="en">The internal listener on 127.0.0.1 needs no rule.</p>
+        </li>
+        <li>
+          <b data-l="de">Den Load Balancer einrichten</b>
+          <b data-l="en">Set up the load balancer</b>
+          <ul>
+            <li data-l="de"><b>Backend über HTTPS</b>, mit TLS 1.3 im Profil für die Verbindung zum Server.</li>
+            <li data-l="en"><b>Backend over HTTPS</b>, with TLS 1.3 in the profile for the connection to the
+              server.</li>
+            <li data-l="de"><b>Backend-Zertifikat prüfen</b> – gegen die interne CA und den Namen im SAN. Viele LBs
+              prüfen es ab Werk nicht; dann ist die Strecke verschlüsselt, aber nicht dagegen geschützt, dass sich
+              jemand im Netz als Server ausgibt.</li>
+            <li data-l="en"><b>Verify the backend certificate</b> – against the internal CA and the name in the SAN.
+              Many LBs do not by default; the hop is then encrypted but not protected against somebody on the
+              network posing as the server.</li>
+            <li data-l="de"><b>Health Check</b> <code>GET /readyz</code> über HTTPS, erwartet <code>200</code>.
+              Nicht <code>/healthz</code> – das antwortet immer mit <code>200</code>.</li>
+            <li data-l="en"><b>Health check</b> <code>GET /readyz</code> over HTTPS, expecting <code>200</code>. Not
+              <code>/healthz</code> – that one always answers <code>200</code>.</li>
+            <li data-l="de"><b>Timeouts</b> von mindestens 300 Sekunden und keine Pufferung der Antworten:
+              Kollaborationssitzungen, das Log und wartende Worker halten Verbindungen lange offen.</li>
+            <li data-l="en"><b>Timeouts</b> of at least 300 seconds and no response buffering: collaboration
+              sessions, the log and waiting workers hold connections open for a long time.</li>
+          </ul>
+        </li>
+        <li>
+          <b data-l="de">Prüfen und erneuern</b>
+          <b data-l="en">Check it, and renew it</b>
+          <p data-l="de">Vom Server aus prüfst du mit <code>openssl s_client -connect
+            atlas01.corp.example:8443</code>: Die Ausgabe nennt <code>TLSv1.3</code> und die ganze Kette. Für die
+            Erneuerung exportiert eine geplante Aufgabe das neue Zertifikat, wandelt es wie in Schritt 3 um und
+            ersetzt die beiden Dateien per <code>Move-Item -Force</code> aus einer temporären Datei im selben
+            Verzeichnis. atlas meldet <code>server.tls_reloaded</code>.</p>
+          <p data-l="en">From the server, check with <code>openssl s_client -connect
+            atlas01.corp.example:8443</code>: the output names <code>TLSv1.3</code> and the whole chain. For
+            renewals, a scheduled task exports the new certificate, converts it as in step 3 and replaces both
+            files with <code>Move-Item -Force</code> from a temporary file in the same directory. atlas reports
+            <code>server.tls_reloaded</code>.</p>
+        </li>
+      </ol>
+
+      <h4 data-l="de">Variante C in Kürze</h4><h4 data-l="en">Variant C in brief</h4>
+      <p data-l="de">IIS mit URL Rewrite und ARR wird Reverse Proxy; das Zertifikat bleibt im
+        Windows-Zertifikatsspeicher und hängt am HTTPS-Binding von IIS. atlas läuft mit
+        <code>--addr 127.0.0.1:8080</code> und ohne <code>--tls-cert</code>, IIS leitet an
+        <code>http://127.0.0.1:8080</code> weiter – <b>nicht</b> an <code>https://</code>, denn IIS verbindet über
+        SChannel und kann auf Server 2019 kein TLS 1.3. Setze <code>--external-url</code> und stelle in ARR
+        Timeout und Pufferung für die lang offenen Verbindungen ein.</p>
+      <p data-l="en">IIS with URL Rewrite and ARR becomes the reverse proxy; the certificate stays in the Windows
+        certificate store on the IIS HTTPS binding. atlas runs with <code>--addr 127.0.0.1:8080</code> and without
+        <code>--tls-cert</code>, and IIS forwards to <code>http://127.0.0.1:8080</code> – <b>not</b> to
+        <code>https://</code>, because IIS connects through SChannel and cannot do TLS 1.3 on Server 2019. Set
+        <code>--external-url</code>, and set the ARR timeout and buffering for the long-lived connections.</p>
+
+      <div class="note warn">
+        <div class="lbl" data-l="de">Stolpersteine</div><div class="lbl" data-l="en">Traps</div>
+        <p data-l="de"><b>Hinter dem LB haben alle dieselbe Adresse.</b> atlas nimmt die Client-Adresse aus der
+          TCP-Verbindung und wertet <code>X-Forwarded-For</code> bewusst nicht aus – ein Client könnte den Header
+          frei setzen. Bei A kommt jede Verbindung vom LB, sofern er die Client-Adresse nicht transparent
+          durchreicht, bei C von <code>127.0.0.1</code>. Dann teilen sich alle Benutzer die Begrenzungen pro
+          Adresse: bei der Anmeldung mit Passwort 20 Versuche sofort, danach einer alle zwei Sekunden, bei
+          öffentlichen Links 20 und danach einer pro Sekunde. Das Audit-Log nennt als <code>client_ip</code> nur
+          diese eine Adresse.</p>
+        <p data-l="en"><b>Behind the LB everybody has the same address.</b> atlas takes the client address from the
+          TCP connection and deliberately ignores <code>X-Forwarded-For</code> – a client could set that header to
+          anything. With A every connection comes from the LB, unless it passes the client address through
+          transparently; with C from <code>127.0.0.1</code>. Every user then shares the per-address limits: 20
+          password sign-in attempts at once, then one every two seconds; for public links 20, then one per second.
+          The audit log names only that one address as <code>client_ip</code>.</p>
+        <p data-l="de"><b>Ein LB macht atlas nicht hochverfügbar.</b> Genau ein Prozess besitzt ein
+          Datenverzeichnis; zwei Server auf demselben Verzeichnis beschädigen es, und zwei Server mit je eigenem
+          Verzeichnis sind zwei getrennte Engines. Hinter dem LB ist höchstens ein Backend aktiv.</p>
+        <p data-l="en"><b>An LB does not make atlas highly available.</b> Exactly one process owns a data
+          directory; two servers on the same directory corrupt it, and two with a directory each are two separate
+          engines. At most one backend behind the LB is active.</p>
+        <p data-l="de"><b>Testen mit dem mitgelieferten <code>curl.exe</code> scheitert.</b> Es verbindet über
+          SChannel, und das kann auf Server 2019 kein TLS 1.3. Eine Fehlermeldung von dort sagt nichts über
+          atlas; prüfe mit <code>openssl s_client</code>.</p>
+        <p data-l="en"><b>Testing with the bundled <code>curl.exe</code> fails.</b> It connects through SChannel,
+          which cannot do TLS 1.3 on Server 2019. An error from it says nothing about atlas; check with
+          <code>openssl s_client</code>.</p>
+      </div>
+
+      <h3 data-l="de">Was TLS nicht leistet</h3><h3 data-l="en">What TLS does not do</h3>
+      <ul>
+        <li data-l="de"><b>Verschlüsselung ist keine Autorisierung.</b> <code>/healthz</code> und
+          <code>/readyz</code> antworten jedem, der den Port erreicht; <code>/metrics</code> verlangt unter
+          <code>--auth</code> einen API-Token mit Scope <code>metrics</code> (ADR-0198, siehe
+          <a href="#ueberwachen">Überwachen</a>).</li>
+        <li data-l="en"><b>Encryption is not authorization.</b> <code>/healthz</code> and <code>/readyz</code>
+          answer whoever reaches the port; <code>/metrics</code> requires an API token of scope
+          <code>metrics</code> under <code>--auth</code> (ADR-0198, see <a href="#ueberwachen">Monitoring</a>).</li>
+        <li data-l="de"><b>Nicht enthalten:</b> Client-Zertifikate (mTLS), automatische Zertifikate (ACME), ein
+          selbst erzeugtes Zertifikat als Vorgabe, eine Umleitung von HTTP auf HTTPS, HSTS und der
+          Windows-Zertifikatsspeicher.</li>
+        <li data-l="en"><b>Not included:</b> client certificates (mTLS), automatic certificates (ACME), a generated
+          certificate by default, an HTTP-to-HTTPS redirect, HSTS, and the Windows certificate store.</li>
+      </ul>
+      <p data-l="de">Die Referenz für Linux mit systemd und ein nginx-Beispiel für den Weg davor stehen in
+        <a class="applink" href="https://github.com/pblumer/atlas/blob/main/docs/install.md#8-tls-in-the-binary-or-in-front-of-it" target="_blank" rel="noopener"><code>docs/install.md</code>&nbsp;§&nbsp;8&nbsp;↗</a>.</p>
+      <p data-l="en">The reference for Linux with systemd and an nginx example for the way in front are in
+        <a class="applink" href="https://github.com/pblumer/atlas/blob/main/docs/install.md#8-tls-in-the-binary-or-in-front-of-it" target="_blank" rel="noopener"><code>docs/install.md</code>&nbsp;§&nbsp;8&nbsp;↗</a>.</p>
     </section>
 
 

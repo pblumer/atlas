@@ -53,7 +53,7 @@ StatefulSet and must never become a Deployment.
 `--tls-cert` and `--tls-key` make `--addr` a TLS 1.3 listener — but it does not by
 default, and a TLS-terminating reverse proxy is still the other good answer. Pick
 one before anyone outside the host can reach it. TLS is not authorization either
-way: `/metrics`, `/healthz` and `/readyz` answer whoever can reach the port. See
+way: `/healthz` and `/readyz` answer whoever can reach the port. See
 [TLS: in the binary, or in front of it](#8-tls-in-the-binary-or-in-front-of-it).
 
 ## Quick try
@@ -466,11 +466,13 @@ location /mcp { deny all; }
 ```
 
 **What TLS does not cover, whichever way you terminate it.** Encryption is not
-authorization. `/metrics` is unauthenticated by design
-([ADR-0142](adr/0142-prometheus-metrics.md)), as are `/healthz` and `/readyz`,
-because a kubelet has no credential to offer. Turning the built-in listener on
-does not change that, so on a port that is reachable beyond the host either keep a
-proxy in front of those paths or run with `--metrics=false`.
+authorization. `/healthz` and `/readyz` are unauthenticated by design, because a
+kubelet has no credential to offer, and turning the built-in listener on does not
+change that: on a port that is reachable beyond the host, keep a proxy in front of
+them if their answers are not for everyone. `/metrics` is not among them any more —
+since [ADR-0198](adr/0198-metrics-behind-the-boundary.md) it is gated by `--auth`
+like the API, and a scraper presents a token scoped `metrics` (see
+[Credentials for machines](#credentials-for-machines)).
 
 **Publishing to another Atlas whose CA is your own.** A deployment target must be
 `https://` ([ADR-0129](adr/0129-remote-deployment-targets.md)), and the certificate
