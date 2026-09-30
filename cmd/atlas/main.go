@@ -209,8 +209,9 @@ func runServe(args []string) error {
 	// back to plaintext on the port somebody believed they had just secured. Unset
 	// is today's behaviour exactly — plaintext, behind a reverse proxy. Turning this
 	// on removes the cryptographic reason to run that proxy and not the
-	// authorization one: /metrics, /healthz and /readyz stay unauthenticated by
-	// design (ADR-0142), because a kubelet has no credential to offer.
+	// authorization one: /healthz and /readyz stay unauthenticated by design
+	// (ADR-0142), because a kubelet has no credential to offer — /metrics moved
+	// behind the boundary in ADR-0198 and no longer does.
 	tlsCert := fs.String("tls-cert", os.Getenv("ATLAS_TLS_CERT"), "PEM certificate chain to serve --addr with, e.g. /etc/atlas/tls.crt. Set it together with --tls-key to have this server terminate TLS 1.3 itself instead of a reverse proxy doing it (ADR-0191); leave both unset for plaintext. The pair is re-read when either file changes, so a renewal needs no restart. TLS 1.3 only: there is no cipher list to configure and no --tls-min-version (or ATLAS_TLS_CERT)")
 	tlsKey := fs.String("tls-key", os.Getenv("ATLAS_TLS_KEY"), "PEM private key for --tls-cert, e.g. /etc/atlas/tls.key. Both or neither (or ATLAS_TLS_KEY)")
 	tlsCA := fs.String("tls-ca", os.Getenv("ATLAS_TLS_CA"), "PEM bundle of certificate authorities to trust *in addition to* the host's, when this server calls another Atlas — publishing an application to a deployment target, and reading that target's status back (ADR-0129). Point it at your internal CA where the other server's certificate comes from one; without it the host trust store is the only answer, and an internally issued certificate is refused. It never replaces the system roots, it is never a way to skip verification, and it does not touch the REST, mail or Graph workers, whose endpoints are somebody else's (or ATLAS_TLS_CA)")
@@ -295,7 +296,7 @@ func runServe(args []string) error {
 	inProcess := fs.Bool("in-process-connectors", false, "run every worker inside the engine, as before ADR-0164. Off by default: "+strings.Join(api.DefaultOffloadedKinds(), ", ")+" run in a worker this server starts and supervises itself, so the loop cannot stall behind them — behind an SMTP handshake above all — and trying Atlas still needs no configuration")
 	supervise := superviseFlag{}
 	fs.Var(&supervise, "supervise", "run a worker process for these job types and keep it running, as id=type=command; repeat for more workers, and repeat the type=command part for a worker that serves several types (ADR-0157). Off unless given: under systemd or Kubernetes the platform owns process lifecycle")
-	metricsOn := fs.Bool("metrics", true, "serve the Prometheus exposition at /metrics (ADR-0142); pass --metrics=false to disable. It is unauthenticated like /healthz — put a reverse proxy in front of anything exposed beyond the host")
+	metricsOn := fs.Bool("metrics", true, "serve the Prometheus exposition at /metrics (ADR-0142); pass --metrics=false to disable. With --auth on (the default) it sits behind the boundary like every other route: a scraper needs an API token of scope metrics (ADR-0198)")
 	// The read side of the exposition above, and a different server: this is where
 	// somebody else keeps what they scraped. Panorama queries it for a node's recent
 	// history (ADR-0189 P5b-ii) and stores none of the answer.
@@ -869,7 +870,7 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	}
 	if metricsOn {
 		logging.Info(logging.ServerMetrics,
-			"Prometheus metrics enabled (unauthenticated; proxy it if exposed beyond the host)",
+			"Prometheus metrics enabled (with --auth on, a scraper needs an API token of scope metrics; ADR-0198)",
 			slog.String("metrics", base+"/metrics"))
 	}
 	return serveUntil(ctx, shutdownTimeout, listeners...)
