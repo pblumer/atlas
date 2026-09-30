@@ -391,3 +391,28 @@ test("the form says what publishing needs, and keeps saying it while it is fille
   await page.evaluate(() => localStorage.removeItem("atlas.catalog.productSections"));
   expect(page.__errors).toEqual([]);
 });
+
+test("a page drawn again does not answer a click once per time it was drawn", async ({ page }) => {
+  // The page hangs its listeners on the console's shared view element, which
+  // outlives every render; a save reloads the page. Listeners from earlier renders
+  // used to keep running, so after a reload a product opened its form twice and an
+  // action ran twice. Drawn three times here, it must still answer once.
+  await open(page);
+  await page.evaluate(() => window.__mount());
+  await page.waitForSelector(".product-list tbody tr");
+  await page.evaluate(() => window.__mount());
+  await page.waitForSelector(".product-list tbody tr");
+
+  await page.click('.product-list tbody tr:nth-child(4) button[data-act="edit"]');
+  await expect(page.locator(".product-list tr.product-edit-row")).toHaveCount(1);
+  await expect(page.locator(".product-form")).toHaveCount(1);
+
+  await page.evaluate(() => { window.__sent.length = 0; });
+  await page.click('button[data-act="publish"]');
+  await expect.poll(() => page.evaluate(() =>
+    window.__sent.filter((c) => c.method === "POST" && /\/releases$/.test(c.url)).length)).toBe(1);
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() =>
+    window.__sent.filter((c) => c.method === "POST" && /\/releases$/.test(c.url)).length)).toBe(1);
+  expect(page.__errors).toEqual([]);
+});
