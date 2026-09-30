@@ -334,6 +334,16 @@ jobs:
   # CGO_ENABLED=0 as in the storage job: it is how atlas.exe is built, and races stay
   # the race job's. The worker-supervisor tests start their worker through `sh` and
   # skip themselves where there is none.
+  #
+  # The Worker Types (connector/) run here too. They are what a server executes on its
+  # tasks' behalf — in process or supervised by it — so on a Windows server they run on
+  # Windows as well; the script Worker Type in particular starts interpreters, and
+  # process handling is where Windows differs most. They cost this job next to nothing:
+  # api imports every one of them — all but two mocks and a template the tests use —
+  # so they are compiled anyway, and their tests take under twenty seconds on Linux and
+  # run beside api's rather than after them. The job keeps
+  # its name so a branch rule that requires it keeps matching. Their tests skip an
+  # interpreter the runner does not have, so what runs is what this image provides.
   windows-api:
     name: windows · api
     needs: changes
@@ -351,8 +361,8 @@ jobs:
           go-version: '1.26'
           check-latest: true
 
-      - name: Test api
-        run: go test -timeout=45m ./api/...
+      - name: Test api and the Worker Types
+        run: go test -timeout=45m ./api/... ./connector/...
 
   # Everything a docs-only change can actually break, and nothing else.
   #

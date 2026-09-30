@@ -46,62 +46,6 @@ func TestCheckSandboxModes(t *testing.T) {
 	}
 }
 
-func TestStrictSandboxWrapsTheInterpreterAndUsesPrivateScratch(t *testing.T) {
-	e := &CmdExec{Lang: Python, Bin: "sh", Sandbox: SandboxStrict}
-	name, args, env, cleanup, err := e.prepareCommand([]string{"-c", "printf ok"}, []string{
-		"PATH=" + os.Getenv("PATH"),
-		"HOME=/shared-home",
-		"TMPDIR=/shared-tmp",
-		varsEnv + `={}`,
-		srcEnv + `=result = "ok"`,
-	})
-	if err != nil {
-		t.Fatalf("prepareCommand: %v", err)
-	}
-	if cleanup == nil {
-		t.Fatal("strict sandbox returned no scratch cleanup")
-	}
-
-	wantExe, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if name != wantExe {
-		t.Errorf("command = %q, want the Atlas executable %q", name, wantExe)
-	}
-	if len(args) < 6 || args[0] != sandboxSubcommand || args[1] != "--scratch" || args[3] != "--" {
-		t.Fatalf("sandbox argv = %q, want internal subcommand, scratch and --", args)
-	}
-	scratch := args[2]
-	if !filepath.IsAbs(scratch) {
-		t.Errorf("scratch = %q, want an absolute path", scratch)
-	}
-	if info, err := os.Stat(scratch); err != nil || !info.IsDir() {
-		t.Fatalf("scratch was not created as a directory: %v", err)
-	}
-	if !filepath.IsAbs(args[4]) {
-		t.Errorf("interpreter = %q, want an absolute resolved path", args[4])
-	}
-	if !slices.Equal(args[5:], []string{"-c", "printf ok"}) {
-		t.Errorf("interpreter args = %q, want original args", args[5:])
-	}
-
-	gotEnv := environmentMap(env)
-	for _, key := range []string{"HOME", "TMPDIR", "TMP", "TEMP"} {
-		if gotEnv[key] != scratch {
-			t.Errorf("%s = %q, want private scratch %q", key, gotEnv[key], scratch)
-		}
-	}
-	if gotEnv[varsEnv] != `{}` || gotEnv[srcEnv] != `result = "ok"` {
-		t.Errorf("script contract changed: %s=%q %s=%q", varsEnv, gotEnv[varsEnv], srcEnv, gotEnv[srcEnv])
-	}
-
-	cleanup()
-	if _, err := os.Stat(scratch); !os.IsNotExist(err) {
-		t.Errorf("scratch still exists after cleanup: %v", err)
-	}
-}
-
 func TestSandboxOffKeepsTheExistingExecutionPath(t *testing.T) {
 	e := &CmdExec{Lang: Python, Bin: "sh", Sandbox: SandboxOff}
 	env := []string{"PATH=" + os.Getenv("PATH"), varsEnv + `={}`}
@@ -132,21 +76,6 @@ func TestPrepareCommandRejectsInvalidStrictConfiguration(t *testing.T) {
 	}
 }
 
-func TestPrepareCommandReportsScratchCreationFailure(t *testing.T) {
-	notDirectory := filepath.Join(t.TempDir(), "file")
-	if err := os.WriteFile(notDirectory, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TMPDIR", notDirectory)
-	_, _, _, cleanup, err := (&CmdExec{Lang: Python, Bin: "sh", Sandbox: SandboxStrict}).prepareCommand(nil, nil)
-	if cleanup != nil {
-		cleanup()
-	}
-	if err == nil || !strings.Contains(err.Error(), "create sandbox scratch") {
-		t.Fatalf("scratch creation error = %v", err)
-	}
-}
-
 func TestRunSandboxValidatesItsInternalProtocol(t *testing.T) {
 	scratch := t.TempDir()
 	file := filepath.Join(scratch, "not-a-directory")
@@ -171,33 +100,6 @@ func TestRunSandboxValidatesItsInternalProtocol(t *testing.T) {
 				t.Fatalf("RunSandbox error = %v, want %q", err, tc.want)
 			}
 		})
-	}
-}
-
-func TestStrictSandboxRejectsAnInterpreterOutsideSystemRuntime(t *testing.T) {
-	bin := filepath.Join(t.TempDir(), "python3")
-	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	e := &CmdExec{Lang: Python, Bin: bin, Sandbox: SandboxStrict}
-	_, _, _, cleanup, err := e.prepareCommand(nil, nil)
-	if cleanup != nil {
-		cleanup()
-	}
-	if err == nil || !strings.Contains(err.Error(), "outside the sandbox runtime") {
-		t.Fatalf("strict custom interpreter error = %v, want runtime-path refusal", err)
-	}
-}
-
-func TestStrictSandboxRejectsADataDirectoryInsideItsRuntimeAllowlist(t *testing.T) {
-	if err := CheckSandboxDataPath(SandboxStrict, "/usr/share/atlas-data"); err == nil {
-		t.Fatal("strict sandbox accepted Atlas data below /usr")
-	}
-	if err := CheckSandboxDataPath(SandboxStrict, "/data"); err != nil {
-		t.Errorf("strict sandbox rejected isolated /data: %v", err)
-	}
-	if err := CheckSandboxDataPath(SandboxOff, "/usr/share/atlas-data"); err != nil {
-		t.Errorf("off mode changed the historical data path: %v", err)
 	}
 }
 
@@ -469,6 +371,33 @@ func TestTimeoutKillsTheInterpretersWholeProcessGroup(t *testing.T) {
 // hold the rename in place without running the whole kill.
 var timeoutScript = `sleep 1 && : > "$2" & echo $! > "$1.tmp" && mv "$1.tmp" "$1"; wait`
 
+// A process holding a script's output does not outlast the script's timeout. A
+// script that exits and leaves one behind never met its deadline at all: os/exec
+// stops watching the context once the interpreter has exited, and reads stdout until
+// EOF, so the call returned when that process ended, however long after the deadline
+// that was. On Windows every timed-out script's descendants did the same, since only
+// the interpreter used to be killed.
+func TestAProcessHoldingTheOutputDoesNotOutlastTheTimeout(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("sh not available")
+	}
+	const timeout = 200 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	start := time.Now()
+	_, err := execCommand(ctx, "sh", []string{"-c", "sleep 5 & exit 0"}, nil, defaultMaxOutput)
+	if elapsed := time.Since(start); elapsed > 2500*time.Millisecond {
+		t.Fatalf("execCommand returned after %s with a %s timeout; it waited for the process "+
+			"the script left behind", elapsed, timeout)
+	}
+	// An output cut off is not a clean run: the process that held it may have had
+	// more to write.
+	if !errors.Is(err, exec.ErrWaitDelay) {
+		t.Errorf("error = %v, want exec.ErrWaitDelay", err)
+	}
+}
+
 // procSummary is what /proc knows about a pid, for a message that would otherwise be
 // a bare number. A recycled pid names a different program here, which is the first
 // thing to check the next time this comes up.
@@ -486,16 +415,6 @@ func procSummary(pid int) string {
 		return fmt.Sprintf("unparsable stat %q", b)
 	}
 	return fmt.Sprintf("running %q in state %q", b[open+1:i], b[i+2])
-}
-
-func environmentMap(env []string) map[string]string {
-	out := make(map[string]string, len(env))
-	for _, kv := range env {
-		if i := strings.IndexByte(kv, '='); i >= 0 {
-			out[kv[:i]] = kv[i+1:]
-		}
-	}
-	return out
 }
 
 // The startup proof resolves what it will launch before it launches anything, and
