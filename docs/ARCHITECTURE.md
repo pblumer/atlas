@@ -44,7 +44,7 @@ See [ADR-0001](adr/0001-event-sourcing-and-log-structured-state.md), [ADR-0002](
 
 ## System overview
 
-![Atlas system overview: users, applications, interfaces, workflow engine, workers and target systems](architecture/system-overview.svg)
+![Atlas system overview: users, applications, interfaces, workflow engine, embedded persistence (WAL and Pebble state store), workers and target systems](architecture/system-overview.svg)
 
 A client never talks to the state store directly. Everything is a **command** submitted to a partition. The processor turns commands into **events**, makes them durable, and applies them to state. External work (service tasks) is handed out to **Worker Instances** as durable jobs over the HTTP Worker API, and their results come back as new commands.
 
