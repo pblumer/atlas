@@ -82,7 +82,7 @@
                   id="defs_abgleich"
                   targetNamespace="http://atlas/examples">
   <bpmn:process id="proc_abgleich" name="Abgleich: Entra-Gruppen gegen das Inventar" isExecutable="true">
-    <bpmn:documentation>Vergleicht täglich, was Atlas über Zugriffsrechte führt, mit dem, was ein Entra-Mandant tatsächlich hält, und hält die Unterschiede fest.
+    <bpmn:documentation>Vergleicht täglich, was atlas über Zugriffsrechte führt, mit dem, was ein Entra-Mandant tatsächlich hält, und hält die Unterschiede fest.
 
 Der Lauf verändert nichts. Er schreibt kein Recht und greift auf kein Zielsystem zu — er meldet, worüber die beiden Seiten uneinig sind. Gehandelt wird einzeln, von einem Menschen, über drei eigene Routen.
 

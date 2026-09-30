@@ -8,7 +8,7 @@ Punkt.
 |---|---|---|
 | Prozess | mehrere `userTask`s, DMN + Inclusive-Gateways verzweigen | **ein** `userTask` |
 | „welches Formular als Nächstes?" | die **Engine** entscheidet (persistiert, auditierbar) | der **Client** entscheidet (reine UI) |
-| Abgaben an Atlas | eine `complete` pro Schritt (hier: 4) | **eine** `complete`, ganz am Ende |
+| Abgaben an atlas | eine `complete` pro Schritt (hier: 4) | **eine** `complete`, ganz am Ende |
 | Wann | verschiedene Akteure, Warten/Genehmigung dazwischen, tagelang wiederaufnehmbar | dieselbe Person, eine Sitzung, atomar |
 
 ## Das Modell

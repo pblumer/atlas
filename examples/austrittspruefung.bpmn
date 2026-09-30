@@ -79,7 +79,7 @@
   <bpmn:process id="proc_austrittspruefung" name="Austrittsprüfung: hält diese Person noch etwas?" isExecutable="true">
     <bpmn:documentation>Weist nach, dass eine austretende Person in einem Zielsystem nichts mehr hält — und benennt, was sie noch hält, falls doch.
 
-Der tägliche Abgleich fragt je Gruppe, ob noch stimmt, was Atlas über sie führt. Diese Frage ist eine andere und aus Gruppenlesungen nicht zusammensetzbar: hält diese Person irgendwo noch etwas? Der Abgleich hat dafür eine zweite Achse — `subjects` nennt die Personen, deren Bestand dieser Lauf vollständig gelesen hat.
+Der tägliche Abgleich fragt je Gruppe, ob noch stimmt, was atlas über sie führt. Diese Frage ist eine andere und aus Gruppenlesungen nicht zusammensetzbar: hält diese Person irgendwo noch etwas? Der Abgleich hat dafür eine zweite Achse — `subjects` nennt die Personen, deren Bestand dieser Lauf vollständig gelesen hat.
 
 Der Lauf verändert nichts. Er stellt fest; gehandelt wird einzeln und von einem Menschen, über die drei bekannten Routen.
 
@@ -115,7 +115,7 @@ Schreibt: gruppen = { value, deltaLink }.</bpmn:documentation>
     <bpmn:serviceTask id="austritt_pruefen" name="Austritt prüfen">
       <bpmn:documentation>POST /api/v1/reconciliation, diesmal mit `subjects` statt `refs`.
 
-`subjects` nennt die Person in der Sprache des Zielsystems — dieselbe Objekt-Id, die in den Mitgliederlisten steht, und keine Atlas-Kennung. Der Abgleich löst sie selbst gegen die gespiegelten Konten auf.
+`subjects` nennt die Person in der Sprache des Zielsystems — dieselbe Objekt-Id, die in den Mitgliederlisten steht, und keine atlas-Kennung. Der Abgleich löst sie selbst gegen die gespiegelten Konten auf.
 
 Die Beobachtungen werden auf genau diese Person gefiltert. Das ist wieder die Einhaltung der Zusicherung: `subjects` sagt, was vollständig gelesen wurde, der Filter stellt her, dass genau das gemeldet wird. Was andere halten, geht diesen Lauf nichts an und würde als ungeprüft gemeldet.
 
@@ -139,7 +139,7 @@ Schreibt: bericht = { system, scope, subjects, counts, opened, closed, notRecord
     <bpmn:exclusiveGateway id="gw_draussen" name="draussen?" default="f_gw_offen">
       <bpmn:documentation>Geprüft werden alle fünf Zähler und nicht nur die Befunde.
 
-`agrees` ist kein Befund — Atlas führt das Recht und das Zielsystem hält es —, aber es ist gehaltener Zugriff, und genau danach wird hier gefragt. `noSubject` ist ebenfalls kein Befund, sondern eine nicht durchgeführte Prüfung: die Objekt-Id löste sich auf kein Konto auf. Beide als „draussen“ zu lesen wäre der Fehler, den dieser Prozess zu verhindern hat.
+`agrees` ist kein Befund — atlas führt das Recht und das Zielsystem hält es —, aber es ist gehaltener Zugriff, und genau danach wird hier gefragt. `noSubject` ist ebenfalls kein Befund, sondern eine nicht durchgeführte Prüfung: die Objekt-Id löste sich auf kein Konto auf. Beide als „draussen“ zu lesen wäre der Fehler, den dieser Prozess zu verhindern hat.
 
 Der offene Ausgang ist der Vorgabeweg. Ein Gateway, dessen Vorgabe „erledigt“ lautet, meldet jede unerwartete Form einer Antwort als Erfolg.</bpmn:documentation>
       <bpmn:incoming>f_pruefen_gw</bpmn:incoming>

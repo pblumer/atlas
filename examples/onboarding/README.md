@@ -1,7 +1,7 @@
-# Onboarding: Willkommen bei Atlas 🚀
+# Onboarding: Willkommen bei atlas 🚀
 
-Ein **selbst-referenzielles Onboarding** für neue Kolleg:innen: Sie lernen Atlas,
-indem sie eine echte Atlas-Instanz durchlaufen. Atlas onboardet mit Atlas
+Ein **selbst-referenzielles Onboarding** für neue Kolleg:innen: Sie lernen atlas,
+indem sie eine echte atlas-Instanz durchlaufen. Atlas onboardet mit atlas
 (Dogfooding). Nach dem Anlegen eines Accounts findet die Person eine
 Willkommens-Aufgabe in der Tasks-App und wird Schritt für Schritt durch die
 Grundlagen geführt.
@@ -39,7 +39,7 @@ wer im Start-Formular „nur benutzen" wählt, überspringt ihn. So ist
 | `onboarding-form-devsetup.json` | 🔧 Setup & Definition of Done |
 | `onboarding-form-finish.json` | 🎓 Abschluss |
 
-## Deployen & starten (über die Atlas-MCP-Tools)
+## Deployen & starten (über die atlas-MCP-Tools)
 
 ```
 atlas_create_project  name="Onboarding"                 → projektId
