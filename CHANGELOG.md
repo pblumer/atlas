@@ -220,6 +220,14 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Saving a product in the Console no longer drops an approval process of its own.**
+  A product's approval kind may name an approval process of the installation directly
+  (for example `genehmigung_ohne_mail`), but the Console's approval select offered only
+  the four built-in kinds. Such a product opened showing "No approval", and saving it —
+  for any change, a price or a process binding — stored kind `none` and dropped the
+  approver, so its next orders went through unapproved without anything saying so. The
+  select now offers the product's own kind, and its approver is kept and sent back.
+
 - **Repairing a version's search index reaches past its first page.**
   `POST /api/v1/processes/{key}/reindex-instances` selected the newest instances of the
   version on every call, and a repaired instance stays on its version — so on a version

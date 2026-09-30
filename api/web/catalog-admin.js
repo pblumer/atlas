@@ -443,10 +443,28 @@ function shareWhoField(dir, cat) {
 // "a named person" to "the orderer's superior": the old username would otherwise
 // ride along in a rule that has no use for it, and sit in the catalogue looking
 // like an answer to a question nobody asked.
+//
+// A kind that is not one of the four built-in ones names an approval process of the
+// installation's own (order.Line.ApprovalProcess), and its approver is whatever
+// that process reads — so it is kept in its own field and sent back as it was.
 function approvalFrom(f) {
   const kind = String(f.get("akind") || "none");
-  const field = { fixed: "aref-fixed", role: "aref-role" }[kind];
+  const field = isProcessKind(kind) ? "aref-process" : { fixed: "aref-fixed", role: "aref-role" }[kind];
   return { kind, ref: field ? String(f.get(field) || "").trim() : "" };
+}
+
+// isProcessKind is true for an approval kind this form has no built-in meaning for:
+// a registered approval process named directly.
+const isProcessKind = (kind) => !!kind && !APPROVAL_KINDS.some((k) => k.id === kind);
+
+// approvalKindOptions is the kind select's options. The four built-in kinds, plus
+// the product's own kind where it names an approval process: without it the select
+// would show "No approval", and saving any other field would silently store that.
+function approvalKindOptions(ap, opt) {
+  const kind = ap.kind || "none";
+  const own = isProcessKind(kind)
+    ? opt(kind, kind, `${kind} — approval process of this installation`) : "";
+  return APPROVAL_KINDS.map((k) => opt(k.id, kind, `${k.name} — ${k.what}`)).join("") + own;
 }
 
 // audienceFrom reads whichever of the two controls was rendered. The picker names
@@ -1618,7 +1636,7 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
         ${STATES.map((s) => opt(s.id, v.state || "draft", `${s.name} — ${s.what}`)).join("")}
       </select></label>
       <label class="field">Approval<select name="akind">
-        ${APPROVAL_KINDS.map((k) => opt(k.id, ap.kind || "none", `${k.name} — ${k.what}`)).join("")}
+        ${approvalKindOptions(ap, opt)}
       </select></label>
       ${approverField(ap, dir, people)}
       ${eligibleField(dir, v.eligible)}
@@ -1746,7 +1764,15 @@ function approverField(ap, dir, people) {
        <span class="muted" style="display:block; margin:4px 0 0">Whoever in the group picks it
          up. Stored as the group's id, so renaming the group does not lose the approver.</span>`;
 
-  return box("fixed", person) + box("role", groups);
+  // An approval process of the installation's own reads its approver however it
+  // was written to, so the value is shown and sent back as it is stored.
+  const process = isProcessKind(kind)
+    ? box(kind, `<input name="aref-process" value="${esc(ref)}" autocomplete="off">
+       <span class="muted" style="display:block; margin:4px 0 0">Passed to the approval
+         process ${esc(kind)} as it is written here.</span>`)
+    : "";
+
+  return box("fixed", person) + box("role", groups) + process;
 }
 
 // maintainersNote answers, where it is asked, a question this form has no field

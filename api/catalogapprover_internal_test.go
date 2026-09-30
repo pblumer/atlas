@@ -82,3 +82,28 @@ func TestTheApproverControlFollowsTheKindWithoutAReload(t *testing.T) {
 		t.Error("the control shown does not follow the kind chosen")
 	}
 }
+
+// TestAnApprovalProcessKindIsOfferedAsItIs.
+//
+// A kind that is not one of the four built-in ones names an approval process of the
+// installation's own. The select must offer it as an option, or it renders as "No
+// approval" and the next save stores that — dropping an approval nobody asked to
+// drop. Its approver is kept in a field of its own for the same reason.
+func TestAnApprovalProcessKindIsOfferedAsItIs(t *testing.T) {
+	src := readWeb(t, "catalog-admin.js")
+	options := webRegion(t, src, "function approvalKindOptions(ap, opt)", "\n}")
+	if !strings.Contains(options, "isProcessKind(kind)") || !strings.Contains(options, "opt(kind, kind,") {
+		t.Error("a product's own approval process is not offered as a kind, so saving it stores none")
+	}
+	if !strings.Contains(src, "${approvalKindOptions(ap, opt)}") {
+		t.Error("the kind select is not drawn from approvalKindOptions")
+	}
+	field := webRegion(t, src, "function approverField(ap, dir, people)", "\n}")
+	if !strings.Contains(field, `name="aref-process"`) {
+		t.Error("the approver of an approval process has no field and is dropped on save")
+	}
+	from := webRegion(t, src, "function approvalFrom(f)", "\n}")
+	if !strings.Contains(from, `isProcessKind(kind) ? "aref-process"`) {
+		t.Error("the save does not read the approver of an approval process")
+	}
+}
