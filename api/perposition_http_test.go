@@ -299,3 +299,166 @@ func TestAPerPositionReturnTheStrandCannotTakeIsRefused(t *testing.T) {
 		t.Fatalf("instances = %v, want the strand alone and no return recorded", got)
 	}
 }
+
+// A strand that waits at an event-based gateway for a change or its return; a change
+// runs its step and goes back to waiting.
+const changingStrandBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <message id="m_prov" name="kit.provision"/>
+  <message id="m_deprov" name="kit.deprovision">
+    <extensionElements><zeebe:subscription correlationKey="=orderId + &#34;/&#34; + positionId"/></extensionElements>
+  </message>
+  <message id="m_change" name="kit.change">
+    <extensionElements><zeebe:subscription correlationKey="=orderId + &#34;/&#34; + positionId"/></extensionElements>
+  </message>
+  <process id="kit-strand" isExecutable="true">
+    <startEvent id="Provision" name="Ordered"><messageEventDefinition messageRef="m_prov"/></startEvent>
+    <exclusiveGateway id="Wait"/>
+    <eventBasedGateway id="Gate" name="Held"/>
+    <intermediateCatchEvent id="AskChange" name="Change asked"><messageEventDefinition messageRef="m_change"/></intermediateCatchEvent>
+    <scriptTask id="C"><extensionElements><zeebe:script expression="=size" resultVariable="changedTo"/></extensionElements></scriptTask>
+    <intermediateCatchEvent id="AskReturn" name="Return asked"><messageEventDefinition messageRef="m_deprov"/></intermediateCatchEvent>
+    <startEvent id="Fallback"><messageEventDefinition messageRef="m_deprov"/></startEvent>
+    <exclusiveGateway id="Return"/>
+    <endEvent id="End"/>
+    <sequenceFlow id="s1" sourceRef="Provision" targetRef="Wait"/>
+    <sequenceFlow id="s2" sourceRef="Wait" targetRef="Gate"/>
+    <sequenceFlow id="s3" sourceRef="Gate" targetRef="AskChange"/>
+    <sequenceFlow id="s4" sourceRef="AskChange" targetRef="C"/>
+    <sequenceFlow id="s5" sourceRef="C" targetRef="Wait"/>
+    <sequenceFlow id="s6" sourceRef="Gate" targetRef="AskReturn"/>
+    <sequenceFlow id="s7" sourceRef="AskReturn" targetRef="Return"/>
+    <sequenceFlow id="s8" sourceRef="Fallback" targetRef="Return"/>
+    <sequenceFlow id="s9" sourceRef="Return" targetRef="End"/>
+  </process>
+</definitions>`
+
+// aHeldKit publishes a per-position product with a change operation, orders it,
+// provisions it and reports it done.
+func aHeldKit(t *testing.T) (ts *httptest.Server, admin *http.Client, ord string, strand uint64) {
+	t.Helper()
+	ts, _ = newAuthServerWith(t, "root", "rootpassword")
+	admin = newClient(t)
+	if login(t, admin, ts, "root", "rootpassword") != http.StatusOK {
+		t.Fatal("admin login failed")
+	}
+	if code, b := cReqTyped(t, admin, ts, "POST", "/api/v1/deployments", "application/xml", changingStrandBPMN); code != http.StatusOK {
+		t.Fatalf("deploy: %d (%s)", code, b)
+	}
+	code, body := cReq(t, admin, ts, "POST", "/api/v1/catalogs", `{"rank":1,"languages":["de"],"texts":{"de":"A"}}`)
+	if code != http.StatusCreated {
+		t.Fatalf("catalogue: %d (%s)", code, body)
+	}
+	cat := idOf(t, body)
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/catalog-products",
+		`{"id":"kit","homeCatalog":"`+cat+`","state":"active","texts":{"de":"Kit"},`+
+			`"approval":{"kind":"none"},"lifecycleProcess":"kit-strand","lifecycleForm":"per-position",`+
+			`"operations":{"provision":"kit.provision","deprovision":"kit.deprovision","change":"kit.change"}}`); code != http.StatusOK {
+		t.Fatalf("save: %d (%s)", code, b)
+	}
+	if code, b := cReq(t, admin, ts, "PATCH", "/api/v1/catalogs/"+cat, `{"items":["kit"]}`); code != http.StatusOK {
+		t.Fatalf("offer: %d (%s)", code, b)
+	}
+	code, body = cReq(t, admin, ts, "POST", "/api/v1/catalogs/"+cat+"/releases", "")
+	if code != http.StatusCreated {
+		t.Fatalf("publish: %d (%s)", code, body)
+	}
+	code, body = cReq(t, admin, ts, "POST", "/api/v1/orders", `{"releaseId":"`+idOf(t, body)+`","items":["kit"]}`)
+	if code != http.StatusCreated {
+		t.Fatalf("order: %d (%s)", code, body)
+	}
+	ord = idOf(t, body)
+	code, body = cReq(t, admin, ts, "POST", "/api/v1/orders/"+ord+"/lines/kit/start", `{"operation":"provision"}`)
+	var started startAnswer
+	if code != http.StatusOK || json.Unmarshal(body, &started) != nil || started.InstanceKey == 0 {
+		t.Fatalf("start: %d (%s)", code, body)
+	}
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/orders/"+ord+"/lines/kit", `{"status":"done"}`); code != http.StatusOK {
+		t.Fatalf("report done: %d (%s)", code, b)
+	}
+	return ts, admin, ord, started.InstanceKey
+}
+
+// TestAHeldPositionIsChangedInItsStrand: a change reaches the instance that carries
+// the right, runs its step and returns the strand to waiting; a retry with the same
+// changeId answers with the first delivery; the position reads as held, not as work
+// under way; and a change without an id, or to a strand that is gone, is refused.
+func TestAHeldPositionIsChangedInItsStrand(t *testing.T) {
+	ts, admin, ord, strand := aHeldKit(t)
+	change := "/api/v1/orders/" + ord + "/lines/kit/change"
+
+	code, got, body := progressOf(t, admin, ts, ord, "kit")
+	if code != http.StatusOK || got.State != "held" {
+		t.Fatalf("progress of a waiting strand: %d (%s), want held", code, body)
+	}
+
+	if code, b := cReq(t, admin, ts, "POST", change, `{"reason":"bigger"}`); code != http.StatusBadRequest {
+		t.Fatalf("change without an id: %d (%s), want 400", code, b)
+	}
+	code, body = cReq(t, admin, ts, "POST", change, `{"changeId":"c-1","reason":"bigger","variables":{"size":"L"}}`)
+	var took struct {
+		InstanceKey uint64 `json:"instanceKey"`
+	}
+	if code != http.StatusOK || json.Unmarshal(body, &took) != nil || took.InstanceKey != strand {
+		t.Fatalf("change: %d (%s), want delivered to %d", code, body, strand)
+	}
+	if vars := variablesOf(t, admin, ts, strand); !strings.Contains(vars, `"changedTo"`) || !strings.Contains(vars, `"L"`) {
+		t.Fatalf("the strand did not run the change: %s", vars)
+	}
+	if code, b := cReq(t, admin, ts, "POST", change, `{"changeId":"c-1","variables":{"size":"XL"}}`); code != http.StatusOK {
+		t.Fatalf("retried change: %d (%s), want the first answer", code, b)
+	}
+	if vars := variablesOf(t, admin, ts, strand); strings.Contains(vars, `"XL"`) {
+		t.Fatalf("a retried change was delivered twice: %s", vars)
+	}
+	if got := instancesOf(t, ts, admin, ord); len(got["change"]) != 1 || got["change"][0] != strand {
+		t.Fatalf("instances = %v, want the change recorded on the strand", got)
+	}
+
+	if code, b := cReq(t, admin, ts, "DELETE", fmt.Sprintf("/api/v1/instances/%d", strand), ""); code != http.StatusOK && code != http.StatusNoContent {
+		t.Fatalf("cancel the strand: %d (%s)", code, b)
+	}
+	code, body = cReq(t, admin, ts, "POST", change, `{"changeId":"c-2"}`)
+	if code != http.StatusConflict || !strings.Contains(string(body), "no longer running") {
+		t.Fatalf("change after the strand is gone: %d (%s), want 409", code, body)
+	}
+}
+
+// TestAChangeIsOnlyForAHeldPerPositionRight: a line of the per-operation form, and
+// a per-position line not yet held, are refused; so is an unknown order.
+func TestAChangeIsOnlyForAHeldPerPositionRight(t *testing.T) {
+	ts, admin, ord, _ := aLifecycleOrder(t)
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/orders/"+ord+"/lines/laptop/change", `{"changeId":"c"}`); code != http.StatusConflict {
+		t.Fatalf("per-operation line: %d (%s), want 409", code, b)
+	}
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/orders/nope/lines/laptop/change", `{"changeId":"c"}`); code != http.StatusNotFound {
+		t.Fatalf("unknown order: %d (%s), want 404", code, b)
+	}
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/orders/"+ord+"/lines/no-such-line/change", `{"changeId":"c"}`); code != http.StatusConflict {
+		t.Fatalf("unknown line: %d (%s), want 409", code, b)
+	}
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/orders/"+ord+"/lines/laptop/change", `{`); code != http.StatusBadRequest {
+		t.Fatalf("malformed body: %d (%s), want 400", code, b)
+	}
+
+	ts2, admin2, rel := aPerPositionCatalogue(t)
+	code, body := cReq(t, admin2, ts2, "POST", "/api/v1/orders", `{"releaseId":"`+rel+`","items":["hull"]}`)
+	if code != http.StatusCreated {
+		t.Fatalf("order: %d (%s)", code, body)
+	}
+	pending := idOf(t, body)
+	if code, b := cReq(t, admin2, ts2, "POST", "/api/v1/orders/"+pending+"/lines/hull/change", `{"changeId":"c"}`); code != http.StatusConflict {
+		t.Fatalf("per-position product without a change operation: %d (%s), want 409", code, b)
+	}
+}
+
+// TestRedeployingAPerPositionProcessSaysWhatStaysOnTheOldVersion: a new version of a
+// process a per-position product binds is deployed with a warning that counts the
+// rights still held on the older one.
+func TestRedeployingAPerPositionProcessSaysWhatStaysOnTheOldVersion(t *testing.T) {
+	ts, admin, _, _ := aHeldKit(t)
+	code, body := cReqTyped(t, admin, ts, "POST", "/api/v1/deployments", "application/xml", changingStrandBPMN)
+	if code != http.StatusOK || !strings.Contains(string(body), "1 instance(s) of kit-strand still run on older versions") {
+		t.Fatalf("redeploy: %d (%s), want the held right counted", code, body)
+	}
+}

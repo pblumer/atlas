@@ -14,6 +14,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A held per-position right can be changed, and reads as held.** For a product whose
+  lifecycle runs one instance per position (ADR-0428), `POST
+  /api/v1/orders/{id}/lines/{item}/change` delivers the product's `change` message to
+  the instance that carries the right — by key, with a required `changeId` so a retry
+  changes nothing twice, and a 409 when the instance is gone or busy. The position's
+  progress in the shop now says `held` while that instance only waits for a change or
+  the return, instead of showing it as work under way for as long as the right lasts.
+  And deploying a new version of such a process warns how many rights still run on the
+  older versions, which keep the version they were issued on until migrated.
+
 - **A product's lifecycle can run as one instance per order position.** A lifecycle
   process (ADR-0425) may now be bound with `lifecycleForm: "per-position"`: provisioning
   starts one instance per position, which then waits for the position's change or return

@@ -1070,6 +1070,12 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"POST", "/api/v1/orders/{id}/lines/{item}/return", s.handleReturnLine, apiOp{
 			summary: "Give back one provisioned line: start the deprovisioning the order froze when it was placed, so a grant is revoked by the rules that were in force when it was made. Refused while something still held requires it — the precedence graph read backwards", tag: "Order", role: RoleUser,
 			resp: jsonBody("The order, and the process now revoking the line", tObject())}},
+		{"POST", "/api/v1/orders/{id}/lines/{item}/change", s.handleChangeLine, apiOp{
+			summary: "Change one held position whose product runs one lifecycle instance per position (ADR-0428): the product's change message is delivered to the instance that carries the right, by key, and never started anew. changeId is required and makes a retry answer with the first delivery. 409 when the position is not per-position, not held, binds no change, or its instance is gone or not waiting for a change now", tag: "Order", role: RoleUser,
+			req: jsonBody("The change: an idempotency id, why, and what the process needs", schemaObj(map[string]any{
+				"changeId": tString(), "reason": tString(), "variables": tObject(),
+			}, "changeId")),
+			resp: jsonBody("The instance that took the change", tObject())}},
 		{"POST", "/api/v1/orders/{id}/lines/{item}/escalate", s.handleEscalateApproval, apiOp{
 			summary: "Move one line's approval to the superior the caller names, or stall it when there is none — one hop per call, because each call is one deadline that elapsed. Never decides: silence is not a refusal", tag: "Order", role: RoleOperator,
 			req: jsonBody("Whom the caller's directory says the current approver reports to; empty means nobody does", schemaObj(map[string]any{

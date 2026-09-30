@@ -134,24 +134,44 @@ func positionCorrelationKey(orderID, position string) string { return orderID + 
 // instance that took the operation.
 func (s *Server) deliverOrStart(strand uint64, b catalog.Binding, correlationKey, triggerID string, vars []model.VariableValue) (uint64, error) {
 	if strand != 0 && b.Triggered() {
-		var res engine.DeliveryResult
-		s.do(func() {
-			s.proc.DeliverMessage(strand, b.Message, correlationKey, orderTriggerSource, triggerID, &res, vars...)
-		})
-		if err := s.drive(); err != nil {
-			return 0, err
+		key, gone, err := s.deliverToStrand(strand, b, correlationKey, triggerID, vars)
+		if !gone {
+			return key, err
 		}
-		switch res.Outcome {
-		case engine.DeliveryDelivered, engine.DeliveryReplayed:
-			return res.InstanceKey, nil
-		case engine.DeliveryNotWaiting:
-			return 0, errTriggerRefused{fmt.Sprintf("the instance %d that carries this position "+
-				"is running but does not wait for %s now; nothing was delivered — retry once "+
-				"it reaches a step that listens for it", strand, b.Message)}
-		case engine.DeliveryNotProcessed:
-			return 0, errors.New("the delivery was not processed")
-		}
-		// DeliveryGone falls through to the start event.
 	}
 	return s.startBinding(b, triggerID, vars)
+}
+
+// deliverChange delivers a change to the strand and to nothing else: a change has
+// no start event to fall back to, so a strand that is gone is a refusal.
+func (s *Server) deliverChange(strand uint64, b catalog.Binding, correlationKey, triggerID string, vars []model.VariableValue) (uint64, error) {
+	key, gone, err := s.deliverToStrand(strand, b, correlationKey, triggerID, vars)
+	if gone {
+		return 0, errTriggerRefused{fmt.Sprintf("the instance %d that carried this position is "+
+			"no longer running; there is nothing to change", strand)}
+	}
+	return key, err
+}
+
+// deliverToStrand hands b's message to the strand instance and answers with the
+// instance that took it, or says the strand is gone.
+func (s *Server) deliverToStrand(strand uint64, b catalog.Binding, correlationKey, triggerID string, vars []model.VariableValue) (uint64, bool, error) {
+	var res engine.DeliveryResult
+	s.do(func() {
+		s.proc.DeliverMessage(strand, b.Message, correlationKey, orderTriggerSource, triggerID, &res, vars...)
+	})
+	if err := s.drive(); err != nil {
+		return 0, false, err
+	}
+	switch res.Outcome {
+	case engine.DeliveryDelivered, engine.DeliveryReplayed:
+		return res.InstanceKey, false, nil
+	case engine.DeliveryNotWaiting:
+		return 0, false, errTriggerRefused{fmt.Sprintf("the instance %d that carries this position "+
+			"is running but does not wait for %s now; nothing was delivered — retry once "+
+			"it reaches a step that listens for it", strand, b.Message)}
+	case engine.DeliveryGone:
+		return 0, true, nil
+	}
+	return 0, false, errors.New("the delivery was not processed")
 }

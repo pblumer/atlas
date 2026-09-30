@@ -55,8 +55,12 @@ const (
 // the order id, and none of that is this route's to hand back — the caller already
 // knows their own order, and the route exists to say *where*, not *what*.
 type positionProgress struct {
-	// State is "active" while a process is working on this position and "none"
-	// when none is.
+	// State is "active" while a process is working on this position, "none" when
+	// none is, and "held" for a position whose product runs one instance per
+	// position (ADR-0428) when that instance only waits — for a change or the
+	// return — while the right is held. Such an instance is active for as long as
+	// the right lasts, and reading it as work under way would say the position is
+	// still being delivered, years after it was.
 	//
 	// Two words and not three. "Finished" would be a third, and answering it means
 	// walking the retained history for every call to distinguish an instance that
@@ -106,7 +110,13 @@ func (s *Server) handleLineProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out, err := s.progressOf(id, position)
+	var held bool
+	for _, l := range ord.Lines {
+		if l.Key() == position {
+			held = l.PerPosition() && l.Status == order.StatusDone
+		}
+	}
+	out, err := s.progressOf(id, position, held)
 	switch {
 	case errors.Is(err, errLoopClosing):
 		httpapi.Error(w, http.StatusServiceUnavailable, err.Error())
@@ -124,11 +134,12 @@ func (s *Server) handleLineProgress(w http.ResponseWriter, r *http.Request) {
 // loop. Dispatching onto the loop while holding a view keeps a snapshot open
 // across a rendezvous, which is what [Server.readOffLoop] asks callers not to do.
 // So the view is closed first, and the ids it found are turned into names after.
-func (s *Server) progressOf(orderID, position string) (positionProgress, error) {
+func (s *Server) progressOf(orderID, position string, held bool) (positionProgress, error) {
 	var (
-		defKey uint64
-		ids    []string
-		found  bool
+		defKey  uint64
+		ids     []string
+		found   bool
+		working bool
 	)
 	err := s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
 		instKey, ok, err := positionInstance(rv, orderID, position)
@@ -136,7 +147,7 @@ func (s *Server) progressOf(orderID, position string) (positionProgress, error) 
 			return err
 		}
 		found = true
-		ids, defKey, err = liveElementsOf(rv, defs, instKey)
+		ids, defKey, working, err = liveElementsOf(rv, defs, instKey)
 		return err
 	})
 	if err != nil {
@@ -157,6 +168,9 @@ func (s *Server) progressOf(orderID, position string) (positionProgress, error) 
 		steps = append(steps, id)
 	}
 	sort.Strings(steps)
+	if held && !working {
+		return positionProgress{State: "held", Steps: steps}, nil
+	}
 	return positionProgress{State: "active", Steps: steps}, nil
 }
 
@@ -222,8 +236,11 @@ func positionInstance(rv *state.ReadView, orderID, position string) (uint64, boo
 // boundary event is attached beside its host rather than being where the work is.
 // Reporting any of them would answer "where are you" with the room rather than
 // with the desk.
-func liveElementsOf(rv *state.ReadView, defs defIndex, instKey uint64) ([]string, uint64, error) {
-	var defKey uint64
+func liveElementsOf(rv *state.ReadView, defs defIndex, instKey uint64) ([]string, uint64, bool, error) {
+	var (
+		defKey  uint64
+		working bool
+	)
 	seen := map[string]bool{}
 	ids := []string{}
 	err := rv.ElementInstancesOfProcess(instKey, func(elKey uint64) error {
@@ -239,6 +256,9 @@ func liveElementsOf(rv *state.ReadView, defs defIndex, instKey uint64) ([]string
 			return nil
 		}
 		defKey = ei.ProcessDefKey
+		if !waitsOnly(ei) {
+			working = true
+		}
 		id := d.cp.ElementBpmnId(ei.ElementId)
 		if id == "" || seen[id] {
 			// One element twice is one step: a multi-instance activity running ten
@@ -249,7 +269,20 @@ func liveElementsOf(rv *state.ReadView, defs defIndex, instKey uint64) ([]string
 		ids = append(ids, id)
 		return nil
 	})
-	return ids, defKey, err
+	return ids, defKey, working, err
+}
+
+// waitsOnly reports whether a step only waits for something from outside — a
+// message, a timer, a signal — rather than being work somebody or something does.
+// A per-position strand that sits only on such steps is a held right, not a
+// position being delivered (ADR-0428).
+func waitsOnly(ei *model.ElementInstanceValue) bool {
+	switch compiler.BpmnType(ei.BpmnElementType) {
+	case compiler.TypeMessageCatchEvent, compiler.TypeEventBasedGateway, compiler.TypeReceiveTask,
+		compiler.TypeTimerCatchEvent, compiler.TypeSignalCatchEvent, compiler.TypeConditionalCatchEvent:
+		return true
+	}
+	return false
 }
 
 // isStep reports whether one live element instance is somewhere a reader would

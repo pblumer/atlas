@@ -189,6 +189,7 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/orders/{id}/cancel":                        "withdrawing an order records the person who did it, and an agent is not one; it is also the one order act whose author a reader will care about years later",
 	"POST /api/v1/orders/{id}/lines/{item}/cancel":           "the same act as withdrawing the whole order, aimed at one position: it records the person who did it, and an agent is not one",
 	"POST /api/v1/orders/{id}/lines/{item}/details":          "correcting what somebody said when they ordered is theirs to correct; on a position already held it is kept as an amendment naming who made it, and an agent is not a who",
+	"POST /api/v1/orders/{id}/lines/{item}/change":           "changing a right somebody holds reaches the target system like a return does; it is the orderer's to ask for, not an agent's",
 	"POST /api/v1/orders/{id}/lines/{item}/return":           "revoking an access somebody is using is the one order act with a blast radius outside Atlas; it is the orderer's to ask for, not an agent's",
 	"POST /api/v1/orders/fulfilment/repair":                  "a repair that ends running processes and starts others; it is an operator looking at their own installation and deciding, and the dry run exists so that a person reads the list first",
 	"GET /api/v1/shop/orders/{id}/lines/{position}/progress": "gated on owning the order and on nothing else, so the answer depends on who is asking; an agent is nobody's orderer, and the instance surface it would otherwise need is already a tool",

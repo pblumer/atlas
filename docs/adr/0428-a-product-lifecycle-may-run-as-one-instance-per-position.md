@@ -1,7 +1,7 @@
 # ADR-0428: A product lifecycle may run as one instance per position, and its later operations are delivered to that instance
 
 - **Status:** Accepted
-- **Implementation:** Partial
+- **Implementation:** Landed
 - **Date:** 2026-09-29
 - **Deciders:** Atlas maintainers
 - **Open question:** Whether ADR-0162 migration can move an instance that waits at an
@@ -282,12 +282,21 @@ Landed:
 - **Surfaces.** The product form offers the form; the MCP save tool declares
   `lifecycleForm`.
 
-Not yet built:
+Landed in a second step:
 
-- the deploy answer's count of active instances left on older versions (§5);
-- a route that delivers `change` (the strand has a place for it; nothing sends it yet);
-- position progress (ADR-0390) naming a waiting strand as held rather than showing it
-  as a running instance.
+- **Deploy.** Deploying a version of a process a per-position product binds warns how
+  many instances still run on older versions of it (`heldOnOlderVersionsOnLoop`, part
+  of the deploy warnings), so the choice between leaving them and migrating them is
+  made knowingly (§5).
+- **Change.** `POST /api/v1/orders/{id}/lines/{item}/change` delivers the product's
+  `change` message to the strand of a held per-position line, with a required
+  `changeId` as the delivery's idempotency key. It has no fallback: a strand that is
+  gone, or not waiting for a change, is a 409 (`deliverChange`). It is not an MCP tool,
+  for the reason a return is not: changing a right somebody holds reaches the target
+  system.
+- **Progress.** Position progress (ADR-0390) answers `held` for a held per-position line
+  whose strand only waits — at catch events, an event-based gateway, a receive task or a
+  timer — and `active` while a change runs.
 
 ## Pros and cons of the options
 
