@@ -14,6 +14,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The Console shows how atlas is built.** A **System Overview** button on the welcome
+  card, and an entry of the same name in the help menu (?) right after Handbook, open the
+  architecture diagram in a dialog: the apps and interfaces, the workflow engine, its
+  embedded persistence — the write-ahead log that is the source of truth and the Pebble
+  state store it is replayed into — and the worker model. The dialog fits the whole
+  diagram into the window and offers it at full size for reading the detail. The
+  handbook's welcome chapter carries the same diagram under «Systemübersicht» /
+  «System overview». The Console serves a copy of `docs/architecture/system-overview.svg`,
+  and a test holds that copy to the original byte for byte.
+
 - **A held per-position right can be changed, and reads as held.** For a product whose
   lifecycle runs one instance per position (ADR-0428), `POST
   /api/v1/orders/{id}/lines/{item}/change` delivers the product's `change` message to
@@ -219,6 +229,14 @@ _Changed_ / _Removed_ for each version.
   one written before that keeps resolving as it always has.
 
 ### Fixed
+
+- **Saving a product in the Console no longer drops an approval process of its own.**
+  A product's approval kind may name an approval process of the installation directly
+  (for example `genehmigung_ohne_mail`), but the Console's approval select offered only
+  the four built-in kinds. Such a product opened showing "No approval", and saving it —
+  for any change, a price or a process binding — stored kind `none` and dropped the
+  approver, so its next orders went through unapproved without anything saying so. The
+  select now offers the product's own kind, and its approver is kept and sent back.
 
 - **On Windows, a script's timeout ends everything the script started.** The deadline
   (`--script-timeout`, 30 s by default) killed only the interpreter. A program the script

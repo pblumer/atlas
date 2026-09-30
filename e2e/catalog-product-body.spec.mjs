@@ -228,6 +228,20 @@ test("the two headings and the price still reach the body", async ({ page }) => 
   expect(body.approval).toEqual({ kind: "role", ref: "grp_it" });
 });
 
+test("an approval process of the installation's own survives a save", async ({ page }) => {
+  // A kind outside the four built-in ones names an approval process directly
+  // (order.Line.ApprovalProcess). The select used to know only the four, so it
+  // showed "No approval" for such a product and every save — of the price, of a
+  // binding — stored kind "none" and dropped the approver. The order then went
+  // through unapproved, and nothing said so.
+  const body = await build(page, {
+    "t-de": "Funktionsaccount", akind: "genehmigung_ohne_mail", "aref-process": " IntMgr ",
+    "aref-fixed": "someone", "aref-role": "grp_it",
+  });
+  expect(body.approval, "the kind and its approver, and not a built-in field's leftover")
+    .toEqual({ kind: "genehmigung_ohne_mail", ref: "IntMgr" });
+});
+
 // The orderable window, whose boundary is the part that would go wrong quietly.
 //
 // The record keeps nanoseconds and the form asks for days, so the form decides
