@@ -1,0 +1,13 @@
+{
+  "tags": [
+    "Operations"
+  ],
+  "title": {
+    "en": "On Windows, a store that cannot be read is reported, not shown as empty",
+    "de": "Unter Windows wird ein unlesbarer Speicher gemeldet statt als leer angezeigt"
+  },
+  "summary": {
+    "en": "If a folder in the data directory had been replaced by a file, for example after a restore gone wrong, Windows showed its catalogues, orders or workers as simply missing, and sharing looked like \"not shared\". Atlas now reports an error there, as it already did on Linux.",
+    "de": "Wurde ein Ordner im Datenverzeichnis durch eine Datei ersetzt, etwa nach einer fehlerhaften Wiederherstellung, zeigte Windows dessen Kataloge, Bestellungen oder Worker einfach als nicht vorhanden an, und eine Freigabe sah aus wie «nicht freigegeben». Atlas meldet dort jetzt einen Fehler, wie bereits unter Linux."
+  }
+}
