@@ -467,6 +467,21 @@ td.row-actions .icon-btn { margin-left: 4px; }
 th.row-pick, td.row-pick { width: 28px; text-align: center; padding-left: 10px; padding-right: 0; }
 td.row-pick input { cursor: pointer; }
 
+/* The Incidents view drops the centred content column (app.js sets the class on its
+   route). Its cause table did not fit 1120px once a process id, a timestamp and the
+   action line were on it — the card scrolled it and cut the actions off — and the
+   width a wide window adds is what its messages need. The explanation above the
+   tables is prose, so it keeps the measure it had in the column (1120px less the
+   padding) rather than becoming one line across the screen. */
+.incidents-mode main { max-width: none; }
+.inc-lead { max-width: 1076px; }
+/* An incident message is the one free-text cell of those tables, and the one holding
+   the longest unbroken strings — a token endpoint's URL, a JSON error body. Wrapping
+   only at spaces, one such string set the whole table's minimum width; breaking
+   anywhere, the message is the column that gives. The min-width stops it giving so
+   much that nothing in it can be read: below that, the card scrolls (ADR-0163). */
+td.inc-msg { overflow-wrap: anywhere; min-width: 24ch; }
+
 /* Operations instances toolbar: a process filter and a jump-to-instance box. */
 .ops-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; }
 .ops-search { position: relative; flex: 1 1 240px; min-width: 180px; }
