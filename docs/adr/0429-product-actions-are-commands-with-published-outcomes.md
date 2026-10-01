@@ -201,7 +201,10 @@ editing a watch refuses such a name — closing the gap in the context above. *A
 `catalogOwnerOfName` refuses a watch's create, rename and enable with 409 naming the product
 and the action (`api/inbound.go`, `api/triggerroute.go`); the gap in the context reproduced
 before the gate (`TestAWatchMayNotPublishAProductsMessage`). Publishing refuses the reverse —
-an action whose message an enabled watch publishes — through `WatchLookup`.
+an action whose message an enabled watch publishes — through `WatchLookup`. The same door
+now stands on `POST /api/v1/messages`: it refused only what a per-position product delivers,
+so a per-operation product's provision or return could be started by name, outside the order;
+it now refuses every name `catalogOwnerOfName` finds.
 
 ### 2. Triggering an action
 

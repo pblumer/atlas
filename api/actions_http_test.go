@@ -93,3 +93,26 @@ func TestPublishingRefusesAnActionAWatchPublishes(t *testing.T) {
 		t.Fatalf("publish: %d (%s), want 422 naming the watched message", code, body)
 	}
 }
+
+// TestAProductsMessageIsNotPublishedByName: a per-operation product's message is a start
+// event the order enters — through its start act, a return or an action — and published
+// by name it started the lifecycle process outside the order: a provisioning no line knew
+// of, or a return the inventory never heard about (ADR-0425 §8, ADR-0429 §1). The publish
+// route now refuses it, naming the product and the action, and starts nothing.
+func TestAProductsMessageIsNotPublishedByName(t *testing.T) {
+	ts, admin, _, _ := aLifecycleOrder(t)
+	for _, name := range []string{"laptop.provision", "laptop.deprovision"} {
+		code, body := cReq(t, admin, ts, "POST", "/api/v1/messages", `{"name":"`+name+`","correlationKey":"x"}`)
+		if code != http.StatusConflict || !strings.Contains(string(body), "product laptop") {
+			t.Fatalf("publish %s: %d (%s), want 409 naming the product", name, code, body)
+		}
+	}
+	code, body := cReq(t, admin, ts, "GET", "/api/v1/instances?processId=laptop-lifecycle", "")
+	if code != http.StatusOK || strings.Contains(string(body), `"processId":"laptop-lifecycle"`) {
+		t.Fatalf("instances: %d (%s), want none of the lifecycle process", code, body)
+	}
+	// A name no product owns is published as before.
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/messages", `{"name":"nobody.listens","correlationKey":"x"}`); code != http.StatusOK {
+		t.Fatalf("publish an unowned name: %d (%s)", code, b)
+	}
+}

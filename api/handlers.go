@@ -4045,14 +4045,19 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 	var (
 		driveNeeded bool
 		owner       string
+		action      string
 		ownerErr    error
 	)
 	s.do(func() {
-		// A message a per-position product delivers to its running instances is the
-		// catalogue's to send, addressed to one instance and reported. By name it
-		// would reach whatever waits under the key it carries, and say "published"
-		// if nothing did (ADR-0428).
-		if owner, ownerErr = s.catalogOwnerOfDelivered(payload.Name); ownerErr != nil || owner != "" {
+		// A message a catalogue product's action starts or waits at is the order's to
+		// send. A per-position product's later actions are delivered to the one
+		// instance that carries a position, and reported; by name they would reach
+		// whatever waits under the key they carry (ADR-0428). A per-operation
+		// product's actions are start events the order enters through its start act,
+		// a return or an action; by name they would start the lifecycle process
+		// outside the order — a provisioning no line knows of, a return the inventory
+		// never hears about (ADR-0425 §8, ADR-0429 §1).
+		if owner, action, ownerErr = s.catalogOwnerOfName(payload.Name); ownerErr != nil || owner != "" {
 			return
 		}
 		s.proc.PublishMessage(payload.Name, payload.CorrelationKey, vars...)
@@ -4064,8 +4069,8 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	case owner != "":
 		httpapi.Error(w, http.StatusConflict, "message "+payload.Name+" is product "+owner+
-			"'s operation, delivered by the catalogue to the one instance that carries a "+
-			"position; it is never published by name")
+			"'s action "+action+"; the order sends it — through its start act, a return or "+
+			"the action — and it is never published by name")
 		return
 	}
 	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
