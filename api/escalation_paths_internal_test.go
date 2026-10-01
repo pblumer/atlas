@@ -159,3 +159,58 @@ func TestEscalationStalledListFailsWhenTheOrdersCannotBeRead(t *testing.T) {
 		t.Errorf("unreadable orders: %d (%s), want 500 'read orders'", code, body)
 	}
 }
+
+// TestEscalationFailsWhenTheOrdersCannotBeRead: which open task is the approval for
+// a line is a question about the orders. With them unreadable the honest answer is
+// that the server cannot tell — not "no open approval", which would send a deadline
+// model off to report a decided approval while it still sits, unmoved, with its
+// approver. Both doors fail the same way and the task stays where it was.
+func TestEscalationFailsWhenTheOrdersCannotBeRead(t *testing.T) {
+	srv := newServerForErrors(t)
+	approvalsPathsDeploy(t, srv)
+	key := approvalsPathsStart(t, srv, `{"orderId":"ord-1","itemId":"vpn"}`)
+	approvalsPathsOrder(t, srv, order.Order{ID: "ord-1", Lines: []order.Line{approvalsPathsLine("vpn", "")}})
+	approvalsPathsDirAsFile(t, filepath.Join(srv.dataDir, "orders"))
+
+	code, body := escalationPathsMove(t, srv, "ord-1", "vpn", "escalate", `{"superior":"carla"}`)
+	if code != http.StatusInternalServerError || !strings.Contains(string(body), "find the approval") {
+		t.Errorf("escalate over unreadable orders: %d (%s), want 500 'find the approval'", code, body)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/orders/ord-1/lines/vpn/reassign", strings.NewReader(`{"to":"bruno"}`))
+	req.SetPathValue("id", "ord-1")
+	req.SetPathValue("item", "vpn")
+	req = req.WithContext(httpapi.WithPrincipal(req.Context(), &httpapi.Principal{UserID: "usr_ops", Username: "ops"}))
+	rec := httptest.NewRecorder()
+	srv.handleReassignApproval(rec, req)
+	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), "find the approval") {
+		t.Errorf("reassign over unreadable orders: %d (%s), want 500 'find the approval'", rec.Code, rec.Body)
+	}
+
+	if who := escalationPathsAssignee(t, srv, key); who != "alice" {
+		t.Errorf("the task moved to %q although the approval could not be found", who)
+	}
+}
+
+// TestEscalationRefusesAProductTheOrderCarriesTwice: naming the product when the
+// order carries two positions of it does not say which position's approval is meant.
+// That is the caller's ambiguity, answered as a conflict that names both positions so
+// the caller can choose — not a server fault — and nothing is recorded or moved.
+func TestEscalationRefusesAProductTheOrderCarriesTwice(t *testing.T) {
+	srv := newServerForErrors(t)
+	approvalsPathsDeploy(t, srv)
+	key := approvalsPathsStart(t, srv, `{"orderId":"ord-1","itemId":"phone","positionId":"phone#black"}`)
+	approvalsPathsOrder(t, srv, order.Order{ID: "ord-1", Lines: []order.Line{
+		approvalsPathsLine("phone", "black"), approvalsPathsLine("phone", "silver")}})
+
+	code, body := escalationPathsMove(t, srv, "ord-1", "phone", "escalate", `{"superior":"carla"}`)
+	if code != http.StatusConflict || !strings.Contains(string(body), "phone#black") || !strings.Contains(string(body), "phone#silver") {
+		t.Fatalf("escalate by an ambiguous product: %d (%s), want 409 naming both positions", code, body)
+	}
+	if o := escalationPathsOrder(t, srv, "ord-1"); len(o.Assignments) != 0 {
+		t.Errorf("assignments = %+v after a refused move, want none", o.Assignments)
+	}
+	if who := escalationPathsAssignee(t, srv, key); who != "alice" {
+		t.Errorf("the task moved to %q on a refused move", who)
+	}
+}

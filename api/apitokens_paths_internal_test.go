@@ -167,3 +167,27 @@ func TestAPITokensStopTheServerWhenTheyCannotBeLoaded(t *testing.T) {
 		t.Errorf("err = %v, want it to name the token store", err)
 	}
 }
+
+// TestAPITokensFailWhenTheReachCannotBeChecked: whether a reach names projects the
+// minter may see is read from the projects. A store that cannot be read is the
+// server's fault, not something wrong with the request — a 400 would send the caller
+// off to fix a body that is fine — and no credential is minted over an unchecked reach.
+func TestAPITokensFailWhenTheReachCannotBeChecked(t *testing.T) {
+	srv := newServerForErrors(t)
+	approvalsPathsDirAsFile(t, srv.projects.Dir())
+
+	code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/api-tokens",
+		`{"name":"reader","scope":"landscape","reach":["p1"]}`, "application/json")
+	if code != http.StatusInternalServerError || !strings.Contains(string(body), "read projects") {
+		t.Fatalf("reach over unreadable projects: %d (%s), want 500 'read projects'", code, body)
+	}
+	if recs := apiTokensPathsStored(t, srv); len(recs) != 0 {
+		t.Errorf("tokens after a failed mint = %v, want none", recs)
+	}
+	srv.apiTokens.mu.RLock()
+	n := len(srv.apiTokens.byHash)
+	srv.apiTokens.mu.RUnlock()
+	if n != 0 {
+		t.Errorf("%d token(s) authenticate although none was minted", n)
+	}
+}
