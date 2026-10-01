@@ -50,6 +50,7 @@
 
 .PARAMETER WinSWPath
     Lokale WinSW-x64.exe (fuer Server ohne Internetzugang). Ohne Angabe wird
+    eine einzelne WinSW*.exe direkt unter -InstallRoot verwendet, sonst
     WinSW v2.12.0 von GitHub geladen.
 
 .PARAMETER WinSWSha256
@@ -502,6 +503,31 @@ if ($Uninstall) {
 Write-Step 'Voraussetzungen pruefen'
 
 if (-not [Environment]::Is64BitOperatingSystem) { throw 'Atlas wird nur fuer Windows x64 (windows_amd64) ausgeliefert.' }
+
+# WinSW: expliziter Pfad muss existieren; ohne Angabe wird eine bereits unter
+# -InstallRoot abgelegte WinSW*.exe verwendet, bevor ein Download versucht wird.
+if (-not [string]::IsNullOrWhiteSpace($WinSWPath)) {
+    if (-not (Test-Path -LiteralPath $WinSWPath -PathType Leaf)) {
+        $near = @()
+        foreach ($d in @($InstallRoot, (Join-Path $env:USERPROFILE 'Downloads'))) {
+            if (Test-Path -LiteralPath $d) {
+                $near += @(Get-ChildItem -LiteralPath $d -Filter 'WinSW*.exe*' -File -Recurse -Depth 2 -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+            }
+        }
+        $found = 'keine'
+        if ($near.Count -gt 0) { $found = $near -join ', ' }
+        throw "-WinSWPath '$WinSWPath' existiert nicht. Gefundene WinSW-Dateien unter $InstallRoot und im Download-Ordner: $found"
+    }
+    $WinSWPath = (Resolve-Path -LiteralPath $WinSWPath).Path
+} elseif (-not (Test-Path -LiteralPath $WrapperExe)) {
+    $local = @(Get-ChildItem -LiteralPath $InstallRoot -Filter 'WinSW*.exe' -File -ErrorAction SilentlyContinue)
+    if ($local.Count -eq 1) {
+        $WinSWPath = $local[0].FullName
+        Write-Info "WinSW gefunden: $WinSWPath"
+    } elseif ($local.Count -gt 1) {
+        throw "Mehrere WinSW-Dateien unter ${InstallRoot}: $(($local | ForEach-Object { $_.Name }) -join ', '). Bitte mit -WinSWPath eine angeben."
+    }
+}
 
 $listen = Split-ListenAddr $Addr
 $UseTls = -not [string]::IsNullOrWhiteSpace($TlsCert)
