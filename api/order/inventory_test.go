@@ -35,13 +35,14 @@ type revocation struct {
 	principal, itemID string
 	at                int64
 	by                string
+	outcome           Outcome
 }
 
-func (i *recordedInventory) revoke(principal, itemID string, at int64, by string) error {
+func (i *recordedInventory) revoke(principal, itemID string, at int64, by string, outcome Outcome) error {
 	if i.err != nil {
 		return i.err
 	}
-	i.revoked = append(i.revoked, revocation{principal, itemID, at, by})
+	i.revoked = append(i.revoked, revocation{principal, itemID, at, by, outcome})
 	return nil
 }
 
@@ -120,8 +121,15 @@ func TestAProvisionedLineIsRecordedAgainstTheRecipient(t *testing.T) {
 	if len(inv.granted) != 1 {
 		t.Fatalf("%d rights granted, want 1", len(inv.granted))
 	}
+	// The grant carries the provision's outcome, so the engine writes both in one
+	// batch (ADR-0429 §3): the first attempt, completed, published under the
+	// item's name because a product of two processes has no message to name it by.
 	want := Grant{Principal: "usr_ada", ItemID: "laptop", VariantID: "14zoll",
-		OrderID: "ord_1", At: 1700}
+		OrderID: "ord_1", At: 1700, Outcome: Outcome{
+			CommandID: "order:ord_1:laptop#14zoll:provision:1", Action: "provision", Effect: "provision",
+			Outcome: "completed", EventType: "laptop.provision.completed", OrderID: "ord_1",
+			Position: "laptop#14zoll", Principal: "usr_ada", ItemID: "laptop", VariantID: "14zoll", At: 1700,
+		}}
 	if inv.granted[0] != want {
 		t.Errorf("granted = %+v, want %+v", inv.granted[0], want)
 	}

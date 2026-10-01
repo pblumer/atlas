@@ -295,6 +295,11 @@ var (
 	// open tasks, so this is a warning and not a failed start — failing the start would
 	// make the caller retry and start the work twice.
 	OrderInstanceUnrecorded = newEvent("order.instance_unrecorded")
+	// OrderOutcomeConflict: one of the order's own acts — a provision or a return —
+	// reached an ending different from the outcome already recorded for the same
+	// attempt (ADR-0429 §3). The first ending stands; the second is reported here
+	// rather than written, because an action ends once.
+	OrderOutcomeConflict = newEvent("order.outcome_conflict")
 )
 
 // History retention (ADR-0115/0144) and the OpenSearch exporter (ADR-0114).

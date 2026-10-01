@@ -51,6 +51,7 @@ var continuationCarries = map[string]string{
 	"Created":       "external", // a caller's pointer, set only on an API start
 	"Triggered":     "external", // a caller's pointer, set only on a directed trigger
 	"Delivered":     "external", // a caller's pointer, set only on a directed delivery
+	"Reported":      "external", // a caller's pointer, set only on an outcome report
 }
 
 // schedulingIsDurable reports whether a queued command must survive a restart.

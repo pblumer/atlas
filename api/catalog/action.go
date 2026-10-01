@@ -155,6 +155,9 @@ func (it Item) actionFor(name string) (Action, bool) {
 // own acts and have routes of their own.
 func (a Action) AskedOfHeld() bool { return deliveredToStrand(a.Effect) }
 
+// KnownOutcome reports whether o is one of the Outcome constants.
+func KnownOutcome(o string) bool { return knownOutcomes[o] }
+
 // KnownTrigger reports whether t is one of the Trigger constants.
 func KnownTrigger(t string) bool { return knownTriggers[t] }
 

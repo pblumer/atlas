@@ -297,6 +297,26 @@ A new value type records it:
   personal data beyond the principal id (ADR-0314); that is a rule for the product's
   author, stated here because the log cannot enforce it.
 
+*As built — slice C1.* `model.ActionOutcomeValue` (`VTActionOutcome`; the command intent
+`IntentActionReporting`, the event `IntentActionCompleted`), folded into its own column
+family keyed by order, position and command id (`state/actionoutcome.go`), outside instance
+retention. The idempotency and the conflict are decided on the command path against state
+(`engine/actionoutcome.go`): a repeated identical report answers *replayed* and writes
+nothing, a different ending answers *conflict*. The processor has no batch API, so "the same
+batch" is one command whose handler appends both events — `GrantEntitlementWithOutcome` and
+`RevokeEntitlementWithOutcome` — the way a directed trigger writes its instance and its
+receipt. The order's own acts take their attempt id as their command id
+(`order.AttemptID`, the trigger id they already used): `done` and `returned` ride the grant
+and the revocation, `failed` and `returnFailed` and an approver's refusal are reported on
+their own. Every act now seeds `commandId` into the process, and the line records the
+command on the instance that took it (`LineInstance.CommandID`), which is how the outcome
+route knows which action a command id names. The route is
+`POST /api/v1/orders/{id}/lines/{item}/actions/{commandId}/outcome` (`RoleOperator`, the
+credential a REST reporter already holds; a result is a JSON object of scalars of at most
+4 KiB) and refuses the provision and the return, which keep the line's report route;
+`GET …/outcomes` and the MCP tool `atlas_order_line_outcomes` read a position's outcomes.
+Reporting is not an MCP tool: it asserts a target system's outcome.
+
 ### 4. The shop's receive task and send task
 
 A product's process meets the shop at exactly two kinds of point: where it **takes** a

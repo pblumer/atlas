@@ -69,6 +69,11 @@ func handleEntitlementGranted(c *ProcessingContext) {
 	}
 	c.appendEvent(0, model.VTEntitlement, model.IntentEntitlementGranted,
 		inflightValue{entitlement: v})
+	// A grant that ends a provision carries its outcome, appended by this same
+	// handler so one fsync commits both (ADR-0429 §3, I2).
+	if o := c.cmd.Value.actionOutcome; o.Valid() {
+		appendActionOutcome(c, o)
+	}
 }
 
 // handleEntitlementRevoked records a revocation.
@@ -79,4 +84,7 @@ func handleEntitlementRevoked(c *ProcessingContext) {
 	}
 	c.appendEvent(0, model.VTEntitlementHistory, model.IntentEntitlementRevoked,
 		inflightValue{entitlementEnd: v})
+	if o := c.cmd.Value.actionOutcome; o.Valid() {
+		appendActionOutcome(c, o)
+	}
 }

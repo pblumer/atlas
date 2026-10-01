@@ -14,6 +14,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **How an action ended is a fact.** Whatever is asked of a held position — its
+  provision, its return, a change, a service — now ends in an engine record: completed,
+  rejected or failed, under the event type the product declares for it (by default the
+  action's message and the outcome, `mailbox.storage.extend.completed`). A provision or a
+  return that succeeds writes its outcome in the same command as the grant or the
+  revocation, so the log holds both or neither; a failure, a failed return and an
+  approver's refusal are recorded too. The record is idempotent per command: a process that
+  reports twice writes once, and a second, different ending is refused. Every act now
+  hands its process a `commandId`, and a process that reports over REST uses
+  `POST /api/v1/orders/{id}/lines/{item}/actions/{commandId}/outcome` with an optional
+  result of at most 4 KiB of scalars. `GET …/outcomes` and the MCP tool
+  `atlas_order_line_outcomes` read how a position's commands ended. The outcome outlives
+  the order, as the right does. The first part of ADR-0429's third slice; the shop's own
+  send task that reports without REST follows.
+
 - **A held service can be asked for its actions in the shop.** Under a position somebody
   holds, the shop now shows a button for each change or service its product declares for
   the customer — more storage, a password reset — labelled in the reader's language. A

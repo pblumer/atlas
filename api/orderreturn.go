@@ -154,6 +154,7 @@ func (s *Server) startReturn(b catalog.Binding, orderID, ref string, o order.Ord
 	// it failed is a new trigger rather than a replay of the one that failed.
 	triggerID := positionTriggerID(orderID, position, catalog.OpDeprovision,
 		line.StartsOf(catalog.OpDeprovision)+1)
+	vars = append(vars, model.VariableValue{Name: commandIDVar, Kind: model.VarString, Text: triggerID})
 	var instKey uint64
 	if line.PerPosition() {
 		// A per-position line's return is delivered to the instance that carries it,

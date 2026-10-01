@@ -61,6 +61,7 @@ type actionResp struct {
 // they name — a caller choosing them would file its instance on somebody else's order.
 var seededActionVars = map[string]bool{
 	"itemId": true, progressPositionVar: true, progressOrderVar: true, "recipient": true, "reason": true,
+	commandIDVar: true,
 }
 
 // handleLineAction asks one held position for one of its product's actions.
@@ -252,6 +253,8 @@ func (s *Server) actOnLine(p *httpapi.Principal, id, item, key string, req actio
 		{Name: progressPositionVar, Kind: model.VarString, Text: position},
 		{Name: progressOrderVar, Kind: model.VarString, Text: id},
 		{Name: "recipient", Kind: model.VarString, Text: h.ord.Recipient},
+		// What the process reports the outcome against (ADR-0429 §4).
+		{Name: commandIDVar, Kind: model.VarString, Text: req.CommandID},
 	}
 	if reason := strings.TrimSpace(req.Reason); reason != "" {
 		vars = append(vars, model.VariableValue{Name: "reason", Kind: model.VarString, Text: reason})

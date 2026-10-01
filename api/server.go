@@ -1634,7 +1634,15 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		// right, and a package that cannot name another origin cannot mislabel one.
 		func(g order.Grant) error {
 			s.do(func() {
-				s.proc.GrantEntitlement(model.EntitlementValue{
+				grant := s.proc.GrantEntitlement
+				if g.Outcome.Set() {
+					// The provision's outcome rides the same command as its grant,
+					// so one fsync commits both (ADR-0429 §3, I2).
+					grant = func(v model.EntitlementValue) {
+						s.proc.GrantEntitlementWithOutcome(v, outcomeValue(g.Outcome, orderTriggerSource))
+					}
+				}
+				grant(model.EntitlementValue{
 					Principal: g.Principal, ItemID: g.ItemID, VariantID: g.VariantID,
 					OrderID: g.OrderID, Since: g.At, Origin: model.OriginOrdered,
 					// The end travels with the grant, computed from the ceiling the
@@ -1655,8 +1663,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		// reconciliation found the target system does not have — goes through
 		// handleRevokeDiscrepancy and says so there, because the two rows assert
 		// different things (ADR-0346).
-		func(principal, itemID string, at int64, by string) error {
+		func(principal, itemID string, at int64, by string, outcome order.Outcome) error {
 			s.do(func() {
+				if outcome.Set() {
+					s.proc.RevokeEntitlementWithOutcome(principal, itemID, at, model.EndReturned, by,
+						outcomeValue(outcome, orderTriggerSource))
+					return
+				}
 				s.proc.RevokeEntitlement(principal, itemID, at, model.EndReturned, by)
 			})
 			return s.drive()
@@ -1777,6 +1790,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.catalogs.EntryPoints = processLookup{s: s}
 	s.catalogs.Remainders = remainderLookup{s: s}
 	s.orders.Limits = s.budgets()
+	// An outcome that comes without a right changing hands — a provision that
+	// failed or was refused, a return that failed — is written on its own
+	// (ADR-0429 §3).
+	s.orders.ReportOutcomesTo(func(o order.Outcome) error {
+		_, err := s.recordOutcome(o, orderTriggerSource)
+		return err
+	})
 	s.capabilities.Limits = s.budgets()
 	s.playground.Limits = s.budgets()
 	// The encrypted secret vault (ADR-0069) is on by default (ADR-0070) unless

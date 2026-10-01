@@ -160,6 +160,12 @@ const (
 	// the set stays bounded. Appended last so every prior value type keeps its
 	// numeric value on the log.
 	VTTriggerReceipt
+
+	// VTActionOutcome records how one action asked of an order position ended —
+	// completed, rejected or failed — with the event type it is published under
+	// (ADR-0429 §3). It outlives the order it came from, as an entitlement does.
+	// Appended last so every prior value type keeps its numeric value on the log.
+	VTActionOutcome
 )
 
 func (t ValueType) String() string {
@@ -186,6 +192,8 @@ func (t ValueType) String() string {
 		return "EntitlementHistory"
 	case VTTriggerReceipt:
 		return "TriggerReceipt"
+	case VTActionOutcome:
+		return "ActionOutcome"
 	case VTSignal:
 		return "Signal"
 	case VTError:
@@ -479,6 +487,13 @@ const (
 	// receipt instead of delivering twice. Appended at the end so every prior intent
 	// keeps its numeric value on the log.
 	IntentDelivering
+	// IntentActionReporting is a command-only intent: somebody reports how an action
+	// asked of a position ended (ADR-0429 §3). Its handler answers a repeated
+	// identical report from state and refuses a different outcome for the same
+	// command, so only a first report becomes IntentActionCompleted.
+	IntentActionReporting
+	// IntentActionCompleted is the fact that an action ended, with its outcome.
+	IntentActionCompleted
 )
 
 func (i Intent) String() string {
@@ -587,6 +602,10 @@ func (i Intent) String() string {
 		return "TriggerReceiptsPruned"
 	case IntentDelivering:
 		return "Delivering"
+	case IntentActionReporting:
+		return "ActionReporting"
+	case IntentActionCompleted:
+		return "ActionCompleted"
 	default:
 		return "Intent(?)"
 	}

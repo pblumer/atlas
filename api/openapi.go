@@ -1087,6 +1087,15 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/orders/{id}/lines/{item}/actions", s.handleLineActions, apiOp{
 			summary: "The actions the caller may ask of one position, each with whether the position takes it now — for a per-position product, whether its instance waits for the action's message at this moment, so the model decides when an action is possible (ADR-0429 §2). Read off the run loop", tag: "Order", role: RoleUser,
 			resp: jsonBody("The position and its actions", tObject())}},
+		{"POST", "/api/v1/orders/{id}/lines/{item}/actions/{commandId}/outcome", s.handleReportOutcome, apiOp{
+			summary: "Record how one action asked of a position ended (ADR-0429 §3): completed, rejected or failed, with an optional result — a JSON object of scalars, at most 4 KiB. The ending becomes an engine fact published under the event type the action declares (default <message>.<outcome>). For a process that reports over REST; idempotent per command: the same outcome again answers with the first (replayed), a different one is 409. The provision and the return are reported through the line's own report route, which records the right they change", tag: "Order", role: RoleOperator,
+			req: jsonBody("The ending and what it carries", schemaObj(map[string]any{
+				"outcome": tString(), "result": tObject(),
+			}, "outcome")),
+			resp: jsonBody("The outcome as recorded", tObject())}},
+		{"GET", "/api/v1/orders/{id}/lines/{item}/outcomes", s.handleLineOutcomes, apiOp{
+			summary: "How the commands of one position ended — the provision, the return and every action asked of it — each with its command id, action, outcome, event type, source and moment (ADR-0429 §3). Whoever may act on the order may read it. Read off the run loop", tag: "Order", role: RoleUser,
+			resp: jsonBody("The position and its outcomes", tObject())}},
 		{"POST", "/api/v1/orders/{id}/lines/{item}/escalate", s.handleEscalateApproval, apiOp{
 			summary: "Move one line's approval to the superior the caller names, or stall it when there is none — one hop per call, because each call is one deadline that elapsed. Never decides: silence is not a refusal", tag: "Order", role: RoleOperator,
 			req: jsonBody("Whom the caller's directory says the current approver reports to; empty means nobody does", schemaObj(map[string]any{
