@@ -2039,8 +2039,9 @@ actions with closed effects, each a command whose outcome is a fact published be
 - ✅ **Slice B — the action act, availability and portal buttons.**
   `POST /api/v1/orders/{id}/lines/{item}/actions/{action}` with a required `commandId`,
   delivered to the strand or started at the action's start event; `GET …/actions` reads from
-  the strand's live elements whether each action is possible now (also the MCP tool
-  `atlas_order_line_actions`); a shop button per offered customer action, with its form or a
+  the strand's live elements whether each action is possible now; MCP reads it
+  (`atlas_order_line_actions`) and asks operator and system actions
+  (`atlas_ask_order_line_action`), never a customer's; a shop button per offered customer action, with its form or a
   confirmation. `/change` is the act for the key `change`; the recipient may return and act
   (§10, decision 4); a directed delivery to a catch that lost an event-based gateway's race
   is now refused instead of reported delivered.

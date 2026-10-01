@@ -155,6 +155,9 @@ func (it Item) actionFor(name string) (Action, bool) {
 // own acts and have routes of their own.
 func (a Action) AskedOfHeld() bool { return deliveredToStrand(a.Effect) }
 
+// KnownTrigger reports whether t is one of the Trigger constants.
+func KnownTrigger(t string) bool { return knownTriggers[t] }
+
 // TriggeredBy reports whether t is one of the action's triggers.
 func (a Action) TriggeredBy(t string) bool {
 	for _, tr := range a.Triggers {

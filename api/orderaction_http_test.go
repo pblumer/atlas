@@ -343,3 +343,40 @@ func TestAPerOperationActionStartsItsProcess(t *testing.T) {
 		t.Fatalf("instances = %v, want the repair recorded once", got)
 	}
 }
+
+// TestAnActionAskedAsATriggerIsCheckedByTheServer: a caller may name which of the
+// action's triggers it asks as — the MCP tool always names operator or system. The
+// server refuses a trigger the action does not declare, an operator's or the system's
+// trigger from somebody who is not an operator, and a trigger that does not exist, so
+// a customer's action cannot be asked as the system to get around who it is for.
+func TestAnActionAskedAsATriggerIsCheckedByTheServer(t *testing.T) {
+	ts, admin, rita, _, ord, strand := aToolHeldForRita(t, `["customer","operator"]`)
+	act := func(c *http.Client, key, body string) (int, []byte) {
+		return cReq(t, c, ts, "POST", "/api/v1/orders/"+ord+"/lines/tool/actions/"+key, body)
+	}
+
+	if code, b := act(admin, "password-reset", `{"commandId":"r-1","trigger":"system"}`); code != http.StatusForbidden ||
+		!strings.Contains(string(b), "not by system") {
+		t.Fatalf("a customer's action asked as the system: %d (%s), want 403", code, b)
+	}
+	if code, b := act(rita, "audit", `{"commandId":"a-1","trigger":"operator"}`); code != http.StatusForbidden ||
+		!strings.Contains(string(b), "only an operator may ask as operator") {
+		t.Fatalf("rita asks as an operator: %d (%s), want 403", code, b)
+	}
+	if code, b := act(admin, "audit", `{"commandId":"a-1","trigger":"robot"}`); code != http.StatusBadRequest {
+		t.Fatalf("an unknown trigger: %d (%s), want 400", code, b)
+	}
+	if vars := variablesOf(t, admin, ts, strand); strings.Contains(vars, `"audited"`) || strings.Contains(vars, `"resetFor"`) {
+		t.Fatalf("a refused ask reached the strand: %s", vars)
+	}
+
+	if code, b := act(admin, "audit", `{"commandId":"a-1","trigger":"operator"}`); code != http.StatusOK {
+		t.Fatalf("an operator asks as operator: %d (%s)", code, b)
+	}
+	if code, b := act(rita, "password-reset", `{"commandId":"r-2","trigger":"customer","reason":"locked out"}`); code != http.StatusOK {
+		t.Fatalf("rita asks as the customer: %d (%s)", code, b)
+	}
+	if vars := variablesOf(t, admin, ts, strand); !strings.Contains(vars, `"audited"`) || !strings.Contains(vars, "locked out") {
+		t.Fatalf("the strand did not run both: %s", vars)
+	}
+}

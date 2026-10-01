@@ -252,9 +252,14 @@ catch that lost an event-based gateway's race — and answered «delivered» for
 no step received; `handleDelivering` now counts live elements only, so the act and the
 availability agree. The portal draws the buttons under a held position (`shop.js`,
 `actionButtons`); the operator's surface in the Console waits for an order view the
-Console does not have yet. Reading the availability is the MCP tool
-`atlas_order_line_actions`; asking is not an MCP tool, for the reason the change and the
-return are not (ADR-0428).
+Console does not have yet. The act takes an optional `trigger` — which of the action's
+triggers the caller asks as — and refuses one the action does not declare, or `operator` and
+`system` from somebody who is not an operator. On MCP, reading the availability is
+`atlas_order_line_actions` and asking is `atlas_ask_order_line_action`, which always names
+`operator` or `system`: the maintainers decided on 2026-10-01 that an agent may ask for
+what an operator or an observer asks for, and never for a customer's action, which stays
+the person's in the shop. That lifts ADR-0428's exclusion for those two triggers only, and
+the server, not the adapter, is what holds the line.
 
 ### 3. The outcome is a fact
 

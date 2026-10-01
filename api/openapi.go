@@ -1079,9 +1079,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "changeId")),
 			resp: jsonBody("The instance that took the change", tObject())}},
 		{"POST", "/api/v1/orders/{id}/lines/{item}/actions/{action}", s.handleLineAction, apiOp{
-			summary: "Ask one held position for one of the actions its product declares (ADR-0429): a change or a service. Delivered to the instance that carries the right for a per-position product, started at the action's start event for a per-operation one. commandId is required and makes a retry answer with the first outcome. Whoever placed the order, the recipient who holds it, or an operator may ask for a customer action; an operator for any other. 403 when the caller is not one of the action's triggers; 409 when the line does not declare the action, is not held, or its instance does not wait for it now; the provision and the return are refused with the route that does them", tag: "Order", role: RoleUser,
-			req: jsonBody("The action: an idempotency id, why, and what the process needs", schemaObj(map[string]any{
-				"commandId": tString(), "reason": tString(), "variables": tObject(),
+			summary: "Ask one held position for one of the actions its product declares (ADR-0429): a change or a service. Delivered to the instance that carries the right for a per-position product, started at the action's start event for a per-operation one. commandId is required and makes a retry answer with the first outcome. Whoever placed the order, the recipient who holds it, or an operator may ask for a customer action; an operator for any other. trigger, when given, names which of the action's triggers the caller asks as — the action must declare it, and operator and system are an operator's (the MCP tool always sends one of those two). 403 when the caller is not one of the action's triggers; 409 when the line does not declare the action, is not held, or its instance does not wait for it now; the provision and the return are refused with the route that does them", tag: "Order", role: RoleUser,
+			req: jsonBody("The action: an idempotency id, why, what the process needs, and optionally which trigger the caller asks as", schemaObj(map[string]any{
+				"commandId": tString(), "reason": tString(), "variables": tObject(), "trigger": tString(),
 			}, "commandId")),
 			resp: jsonBody("The action and the instance that took it", tObject())}},
 		{"GET", "/api/v1/orders/{id}/lines/{item}/actions", s.handleLineActions, apiOp{

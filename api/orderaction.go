@@ -39,6 +39,13 @@ type actionReq struct {
 	Reason string `json:"reason"`
 	// Variables are what the action needs — what its form asked.
 	Variables map[string]any `json:"variables"`
+	// Trigger, when set, is which of the action's triggers the caller asks as:
+	// `customer`, `operator` or `system`. The action must declare it and the caller
+	// must be one — an operator for the last two. An agent asks through MCP with
+	// `operator` or `system` only, so a customer's action is never an agent's to ask
+	// (ADR-0429 §2, maintainers' decision of 2026-10-01). Left out, the caller asks
+	// as whichever trigger they are.
+	Trigger string `json:"trigger"`
 }
 
 // actionResp names the instance that took the action.
@@ -181,12 +188,25 @@ func (s *Server) mayTrigger(p *httpapi.Principal, o order.Order, a catalog.Actio
 	return a.TriggeredBy(catalog.TriggerCustomer) && s.mayAskOf(p, o)
 }
 
+// mayActAs reports whether p may ask as trigger t on order o: as `customer` whoever
+// may act on the order at all, as `operator` or `system` an operator.
+func (s *Server) mayActAs(p *httpapi.Principal, o order.Order, t string) bool {
+	if t == catalog.TriggerCustomer {
+		return s.mayAskOf(p, o)
+	}
+	return s.actsAsOperator(p)
+}
+
 // actOnLine runs the act: check, then fire. It answers the response or the status
 // and the words of a refusal.
 func (s *Server) actOnLine(p *httpapi.Principal, id, item, key string, req actionReq) (actionResp, int, string) {
 	extra, err := startVarsFromMap(req.Variables)
 	if err != nil {
 		return actionResp{}, http.StatusBadRequest, err.Error()
+	}
+	asked := strings.TrimSpace(req.Trigger)
+	if asked != "" && !catalog.KnownTrigger(asked) {
+		return actionResp{}, http.StatusBadRequest, "trigger must be one of customer, operator, system"
 	}
 	for _, v := range extra {
 		if seededActionVars[v.Name] {
@@ -210,7 +230,12 @@ func (s *Server) actOnLine(p *httpapi.Principal, id, item, key string, req actio
 	case a.Effect == catalog.EffectDeprovision:
 		return actionResp{}, http.StatusConflict, "a held position is given back through its return " +
 			"(POST /api/v1/orders/" + id + "/lines/" + position + "/return), which the order records"
-	case !s.mayTrigger(p, h.ord, a):
+	case asked != "" && !a.TriggeredBy(asked):
+		return actionResp{}, http.StatusForbidden, "action " + key + " of product " + line.ItemID +
+			" is asked for by " + strings.Join(a.Triggers, ", ") + ", not by " + asked
+	case asked != "" && !s.mayActAs(p, h.ord, asked):
+		return actionResp{}, http.StatusForbidden, "only an operator may ask as " + asked
+	case asked == "" && !s.mayTrigger(p, h.ord, a):
 		return actionResp{}, http.StatusForbidden, "action " + key + " of product " + line.ItemID +
 			" is asked for by " + strings.Join(a.Triggers, ", ") + ", not by the person it is held for"
 	case line.Status != order.StatusDone:

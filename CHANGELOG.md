@@ -26,9 +26,13 @@ _Changed_ / _Removed_ for each version.
   `commandId` so a retry is answered with the first outcome, delivering it to the instance
   that holds the right or starting it at the action's start event for a per-operation
   product; `GET …/actions` says which actions the caller may ask for and whether each is
-  possible now, and the MCP tool `atlas_order_line_actions` reads the same. Whoever placed
-  the order, the person it was ordered for and an operator may ask for a customer action;
-  an operator asks for the operator's and the system's. The second slice of ADR-0429.
+  possible now. Whoever placed the order, the person it was ordered for and an operator
+  may ask for a customer action; an operator asks for the operator's and the system's, and
+  a caller may name which trigger it asks as. An agent reads the availability with the MCP
+  tool `atlas_order_line_actions` and asks with `atlas_ask_order_line_action` — for an
+  operator's or a system's action only: the server refuses any action that does not declare
+  the trigger the tool names, so what a person asks of what they hold stays theirs. The
+  second slice of ADR-0429.
 
 - **A product declares its actions.** A lifecycle product used to name three start
   events — provision, deprovision and an optional change. It now lists its actions: the
