@@ -283,17 +283,19 @@ func TestPendingWorkAStoreThatCannotBeReadIsAFault(t *testing.T) {
 }
 
 // TestPendingWorkAServerShuttingDownSaysSo. Both halves report the shutdown
-// rather than an empty list, for the caller and for a named person.
+// rather than an empty list, for the caller and for a named person — and as the
+// 503 every other route gives a stopping server, so a reminder process retries
+// rather than treating it as a fault.
 func TestPendingWorkAServerShuttingDownSaysSo(t *testing.T) {
 	srv, closeSrv := newOffLoopServer(t)
 	closeSrv()
 
 	code, body := recertifyHTTPPathsCall(t, srv.Handler(), http.MethodGet, "/api/v1/pending-work", nil)
-	if code != http.StatusInternalServerError || !strings.Contains(body, "pending work") {
-		t.Errorf("own = %d %s, want 500", code, body)
+	if code != http.StatusServiceUnavailable || !strings.Contains(body, "shutting down") {
+		t.Errorf("own = %d %s, want 503 naming the shutdown", code, body)
 	}
 	code, body = recertifyHTTPPathsCall(t, srv.Handler(), http.MethodGet, "/api/v1/pending-work?principal=ada", nil)
-	if code != http.StatusInternalServerError || !strings.Contains(body, "shutting down") {
-		t.Errorf("named = %d %s, want 500 naming the shutdown", code, body)
+	if code != http.StatusServiceUnavailable || !strings.Contains(body, "shutting down") {
+		t.Errorf("named = %d %s, want 503 naming the shutdown", code, body)
 	}
 }

@@ -312,11 +312,17 @@ func TestRecertifyHTTPAServerShuttingDownSaysSo(t *testing.T) {
 	if code != http.StatusServiceUnavailable || !strings.Contains(body, "shutting down") {
 		t.Errorf("list = %d %s, want 503 shutting down", code, body)
 	}
-	// Reading one campaign reports the shutdown as a failure to read rather than as
-	// "no campaign": the campaign may well exist.
-	code, body = recertifyHTTPPathsCall(t, h, http.MethodGet, "/api/v1/recertification/cmp_any", nil)
-	if code == http.StatusNotFound || code < 500 || !strings.Contains(body, "shutting down") {
-		t.Errorf("read = %d %s, want a server error naming the shutdown", code, body)
+	// Reading, closing or deciding on one campaign reports the shutdown too, and not
+	// as "no campaign": the campaign may well exist.
+	for _, req := range []struct{ method, path string }{
+		{http.MethodGet, "/api/v1/recertification/cmp_any"},
+		{http.MethodPost, "/api/v1/recertification/cmp_any/close"},
+		{http.MethodPost, "/api/v1/recertification/cmp_any/rows/row_any/keep"},
+	} {
+		code, body = recertifyHTTPPathsCall(t, h, req.method, req.path, nil)
+		if code != http.StatusServiceUnavailable || !strings.Contains(body, "shutting down") {
+			t.Errorf("%s %s = %d %s, want 503 naming the shutdown", req.method, req.path, code, body)
+		}
 	}
 }
 

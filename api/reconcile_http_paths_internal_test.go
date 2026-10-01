@@ -171,3 +171,44 @@ func TestReconcileHTTPTheListNarrowsToOneSystem(t *testing.T) {
 		t.Errorf("?system=ldap = %+v, want nothing", none)
 	}
 }
+
+// TestReconcileHTTPAContestedReferenceLeavesNothingToActOn. Over the route, a
+// reading under a group two products claim records no finding: the journal holds
+// nothing for Ada's vpn-a that adopting or deprovisioning could be pointed at.
+func TestReconcileHTTPAContestedReferenceLeavesNothingToActOn(t *testing.T) {
+	srv := newServerForErrors(t)
+	reconcileHTTPPathsEstate(t, srv) // vpn claims CN=VPN, and Ada holds it
+	var err error
+	srv.do(func() {
+		err = srv.catalogStore.SaveItem(catalog.Item{ID: "vpn-too", State: catalog.StateActive,
+			ProvisionProcess: "p", DeprovisionProcess: "d",
+			Targets: []catalog.TargetRef{{System: "ad", Ref: "CN=VPN"}}})
+	})
+	if err != nil {
+		t.Fatalf("seed second claimant: %v", err)
+	}
+
+	code, raw := reconcileHTTPPathsPost(t, srv, `{"system":"ad","refs":["CN=VPN"],"observations":[
+		{"subject":"oid-ada","ref":"CN=VPN"}]}`)
+	if code != http.StatusOK {
+		t.Fatalf("run = %d %s", code, raw)
+	}
+	var rep reconcileReport
+	if err := json.Unmarshal([]byte(raw), &rep); err != nil {
+		t.Fatalf("decode report: %v", err)
+	}
+	if rep.Counts.Unmanaged != 0 || rep.Counts.Ambiguous != 1 || rep.Opened != 0 {
+		t.Errorf("counts = %+v opened = %d, want the reference noted and nothing recorded", rep.Counts, rep.Opened)
+	}
+	if open := reconcileHTTPPathsOpen(t, srv, ""); len(open) != 0 {
+		t.Errorf("journal = %+v, want nothing to act on", open)
+	}
+	for _, kind := range []string{recUnmanaged, recMissing} {
+		for _, item := range []string{"vpn", "vpn-too"} {
+			id := discrepancyID(kind, "ad", "usr_ada", item)
+			if code, body := reconcileActionsPathsAct(t, srv, id, "adopt"); code != http.StatusNotFound {
+				t.Errorf("adopt %s = %d %s, want 404", id, code, body)
+			}
+		}
+	}
+}

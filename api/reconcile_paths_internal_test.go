@@ -75,6 +75,64 @@ func TestReconcileAReferenceTwoProductsClaimComparesNothing(t *testing.T) {
 	}
 }
 
+// reconcilePathsTwoClaimants is Ada holding vpn-a, where vpn-a and vpn-b both
+// claim AD's CN=VPN.
+func reconcilePathsTwoClaimants() reconcileInput {
+	return reconcileInput{
+		Users: []User{ada()},
+		Items: []catalog.Item{
+			{ID: "vpn-a", State: catalog.StateActive, Targets: []catalog.TargetRef{{System: "ad", Ref: "CN=VPN"}}},
+			{ID: "vpn-b", State: catalog.StateActive, Targets: []catalog.TargetRef{{System: "ad", Ref: "CN=VPN"}}},
+		},
+		Held: []model.EntitlementValue{heldBy("usr_ada", "vpn-a", model.OriginOrdered)},
+	}
+}
+
+// TestReconcileAnObservationUnderAContestedReferenceIsAttributedToNobody, in ref
+// scope. The reference is noted once as ambiguous, and what was read under it is
+// not then credited to whichever claimant sorts first: doing so reported Ada's
+// recorded vpn-a as "held and not recorded" — a finding an operator could adopt
+// or deprovision, about a right the inventory holds.
+func TestReconcileAnObservationUnderAContestedReferenceIsAttributedToNobody(t *testing.T) {
+	plan := decideReconcile(reading("ad", []string{"CN=VPN"},
+		rightObservation{Subject: "oid-ada", Ref: "CN=VPN"}), reconcilePathsTwoClaimants())
+
+	if plan.Counts.Unmanaged != 0 || plan.Counts.Missing != 0 || len(plan.Found) != 0 {
+		t.Errorf("counts = %+v found = %+v; an observation under a contested reference was "+
+			"attributed to a product", plan.Counts, plan.Found)
+	}
+	if plan.Counts.Ambiguous != 1 || len(plan.Notes) != 1 || plan.Notes[0].Kind != recAmbiguous ||
+		plan.Notes[0].Principal != "" {
+		t.Errorf("counts = %+v notes = %+v, want the reference noted as ambiguous exactly once",
+			plan.Counts, plan.Notes)
+	}
+}
+
+// TestReconcileAContestedReferenceInASubjectsEstateIsNotedAgainstThem. A run that
+// read Ada's whole estate found her in a group two products claim: that is said
+// against her, naming both products, and neither product is concluded about — not
+// as unmanaged, and not as missing for the vpn-a she is recorded as holding.
+func TestReconcileAContestedReferenceInASubjectsEstateIsNotedAgainstThem(t *testing.T) {
+	plan := decideReconcile(reconcileMessage{
+		System:       "ad",
+		Subjects:     []string{"oid-ada"},
+		Observations: []rightObservation{{Subject: "oid-ada", Ref: "CN=VPN"}},
+	}, reconcilePathsTwoClaimants())
+
+	if len(plan.Found) != 0 || plan.Counts.Unmanaged != 0 || plan.Counts.Missing != 0 || plan.Counts.Agrees != 0 {
+		t.Errorf("counts = %+v found = %+v, want nothing concluded about either claimant",
+			plan.Counts, plan.Found)
+	}
+	if plan.Counts.Ambiguous != 1 || len(plan.Notes) != 1 {
+		t.Fatalf("counts = %+v notes = %+v, want one ambiguity note", plan.Counts, plan.Notes)
+	}
+	n := plan.Notes[0]
+	if n.Kind != recAmbiguous || n.Principal != "oid-ada" || n.Ref != "CN=VPN" ||
+		!strings.Contains(n.Why, "vpn-a, vpn-b") {
+		t.Errorf("note = %+v, want an ambiguity against oid-ada naming both claimants", n)
+	}
+}
+
 // TestReconcileASubjectsUnmodelledHoldingIsNotedAgainstThem. A run that read one
 // person's whole estate and found a group no product claims has found something
 // about that person, and the note carries their name — unlike the same group in
