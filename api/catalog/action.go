@@ -290,9 +290,9 @@ func (it Item) actionNoun() string {
 	return "operation"
 }
 
-// copyActions copies an item's actions, so a release does not share their slices
-// and maps with the row it was frozen from.
-func copyActions(in []Action) []Action {
+// CopyActions copies a list of actions, so a release does not share their slices
+// and maps with the row it was frozen from, nor an order line with its release.
+func CopyActions(in []Action) []Action {
 	if in == nil {
 		return nil
 	}

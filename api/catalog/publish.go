@@ -845,7 +845,7 @@ func freeze(items []Item) []Item {
 		it.CategoryTexts = copyTexts(it.CategoryTexts)
 		it.ProductGroupTexts = copyTexts(it.ProductGroupTexts)
 		it.Operations = copyOperations(it.Operations)
-		it.Actions = copyActions(it.Actions)
+		it.Actions = CopyActions(it.Actions)
 		if len(it.Variants) > 0 {
 			vs := make([]Variant, len(it.Variants))
 			for j, v := range it.Variants {

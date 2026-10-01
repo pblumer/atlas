@@ -610,6 +610,120 @@ const parseVariants = (f, langs, stored) => {
   return out;
 };
 
+// The product's actions (ADR-0429): everything that can be asked of a position. The
+// first two rows are the order's own — the provision it starts and the return — and
+// keep their key and effect; every further row is a change or a service somebody asks
+// for, with the message the lifecycle process starts or waits at, who may ask, and
+// what the button says in each language this catalogue declares.
+//
+// It replaces three boxes for ADR-0425's operation map. A product that still carries
+// that map opens as the actions it means — the same reading the server's ActionList
+// gives — and is saved as actions, so nothing is migrated and nothing is lost.
+//
+// Rows work like the shapes above: the index in every control's name ties a row
+// together across a FormData that has no rows, a blank row is drawn for the common
+// case, and clearing a row's key and message removes it.
+
+const ACTION_TRIGGERS = ["customer", "operator", "system"];
+
+// legacyActions reads the operation map as actions.
+function legacyActions(ops) {
+  const o = ops || {};
+  const out = [];
+  if (o.provision) out.push({ key: "provision", message: o.provision, effect: "provision" });
+  if (o.deprovision) {
+    out.push({ key: "deprovision", message: o.deprovision, effect: "deprovision", triggers: ["customer", "operator"] });
+  }
+  if (o.change) out.push({ key: "change", message: o.change, effect: "change", triggers: ["customer", "operator"] });
+  return out;
+}
+
+// actionsOf is the rows the editor draws: the declared actions, or the operation map
+// read as actions, always led by the provision and the return.
+export function actionsOf(v) {
+  const declared = (v.actions && v.actions.length) ? v.actions : legacyActions(v.operations);
+  const fixed = ["provision", "deprovision"].map((k) => declared.find((a) => a.key === k)
+    || { key: k, message: "", effect: k, triggers: k === "deprovision" ? ["customer"] : [] });
+  return [...fixed, ...declared.filter((a) => a.key !== "provision" && a.key !== "deprovision")];
+}
+
+// actionRows draws the grid, with one blank row after the stored ones.
+export function actionRows(v, langs) {
+  const ls = (langs || []).length ? langs : [""];
+  const rows = [...actionsOf(v), { key: "", message: "", effect: "change", triggers: [] }];
+  const head = `<div class="actrow acthead" style="--langs:${ls.length}">
+    <span>Key</span><span>Message</span><span>Effect</span><span>Who may ask</span>
+    ${ls.map((l) => `<span>${esc(l ? `Label ${l}` : "Label")}</span>`).join("")}</div>`;
+  return `<div class="actgrid">${head}${rows.map((a, n) => actionRow(a, ls, n)).join("")}</div>`;
+}
+
+// actionRow is one action. The first two rows are the order's: their key and effect
+// are fixed, the provision is asked for by nobody but the order, and neither carries a
+// label — the portal names the return in its own words.
+export function actionRow(a, ls, n) {
+  const fixed = n < 2;
+  const trig = new Set(a.triggers || []);
+  const who = fixed && a.effect === "provision" ? ["the order"]
+    : (fixed ? ["customer", "operator"] : ACTION_TRIGGERS);
+  const triggers = who[0] === "the order"
+    ? `<span class="muted">the order</span>`
+    : who.map((t) => `<label class="acttrig"><input type="checkbox" name="act-${n}-trig-${t}"${trig.has(t) ? " checked" : ""}> ${t}</label>`).join("");
+  const effect = fixed
+    ? `<input type="hidden" name="act-${n}-effect" value="${esc(a.effect)}"><span class="acteffect">${esc(a.effect)}</span>`
+    : `<select name="act-${n}-effect">${["change", "service"].map((e) =>
+      `<option value="${e}"${a.effect === e ? " selected" : ""}>${e}</option>`).join("")}</select>`;
+  const labels = a.labels || {};
+  return `<div class="actrow" style="--langs:${ls.length}" data-action-row="${n}">
+    <input name="act-${n}-key" value="${esc(a.key || "")}" autocomplete="off" spellcheck="false"
+      placeholder="storage-extend"${fixed ? " readonly" : ""}>
+    <input name="act-${n}-msg" value="${esc(a.message || "")}" autocomplete="off" spellcheck="false"
+      placeholder="${esc(fixed ? `laptop.${a.key}` : "laptop.storage.extend")}">
+    ${effect}<span class="acttrigs">${triggers}</span>
+    ${ls.map((l) => fixed ? "<span></span>" : `<input name="act-${n}-label-${esc(l)}"
+      value="${esc(labels[l] || "")}" autocomplete="off">`).join("")}</div>`;
+}
+
+// parseActions reads the grid back, or nothing for a product with no lifecycle
+// process. Labels in languages this catalogue does not declare, and the form and the
+// outcomes this grid has no controls for yet, are carried from the stored action of
+// the same key, so a save made here keeps what another catalogue or a later slice
+// wrote.
+export function parseActions(f, langs, stored) {
+  if (!f.get("lifecycleProcess")) return undefined;
+  const was = {};
+  for (const a of actionsOf(stored || {})) was[a.key] = a;
+  const ls = (langs || []).length ? langs : [""];
+  const indexes = [];
+  for (const key of f.keys()) {
+    const m = /^act-(\d+)-key$/.exec(key);
+    if (m) indexes.push(Number(m[1]));
+  }
+  indexes.sort((a, b) => a - b);
+  const out = [];
+  for (const n of indexes) {
+    const key = String(f.get(`act-${n}-key`) || "").trim();
+    const message = String(f.get(`act-${n}-msg`) || "").trim();
+    if (!key && !message) continue;
+    const effect = String(f.get(`act-${n}-effect`) || "").trim();
+    const prior = was[key] || {};
+    const a = { key, message, effect };
+    const triggers = ACTION_TRIGGERS.filter((t) => f.get(`act-${n}-trig-${t}`));
+    if (triggers.length) a.triggers = triggers;
+    const labels = { ...(prior.labels || {}) };
+    for (const l of ls) {
+      const box = f.get(`act-${n}-label-${l}`);
+      if (box === null) continue;
+      const val = String(box).trim();
+      if (val) labels[l] = val; else delete labels[l];
+    }
+    if (Object.keys(labels).length) a.labels = labels;
+    if (prior.form) a.form = prior.form;
+    if (prior.outcomes && Object.keys(prior.outcomes).length) a.outcomes = prior.outcomes;
+    out.push(a);
+  }
+  return out;
+}
+
 // eligibleField is who may RECEIVE this product, as a picker over the directory
 // and as an id field when there is no directory to pick from.
 //
@@ -783,19 +897,6 @@ export function headingFrom(f, prefix, langs, was) {
 // still a heading to reuse, and typing a second spelling of one is how a category
 // becomes two.
 
-// operationsFrom reads the lifecycle start events back from the form (ADR-0425). An
-// empty box is left out rather than sent as "", so a product without a change start
-// event stores none, and one that binds no lifecycle process sends no map at all.
-function operationsFrom(f) {
-  if (!f.get("lifecycleProcess")) return undefined;
-  const ops = {};
-  for (const [op, field] of [["provision", "opProvision"], ["deprovision", "opDeprovision"], ["change", "opChange"]]) {
-    const v = String(f.get(field) || "").trim();
-    if (v) ops[op] = v;
-  }
-  return ops;
-}
-
 function knownHeadingsIn(items, field, lang, first) {
   const out = new Set();
   for (const i of items) {
@@ -863,7 +964,9 @@ export function productBody(f, { productID, homeCatalog, langs, stored }) {
     provisionProcess: f.get("provisionProcess") || "",
     deprovisionProcess: f.get("deprovisionProcess") || "",
     lifecycleProcess: f.get("lifecycleProcess") || "",
-    operations: operationsFrom(f),
+    // The operation map is read as actions and saved as actions (ADR-0429).
+    operations: undefined,
+    actions: parseActions(f, langs, was),
     lifecycleForm: f.get("lifecycleProcess") ? (f.get("lifecycleForm") || "") : "",
     multipleAllowed: !!f.get("multipleAllowed"),
     targets: parseTargets(f.get("targets")),
@@ -1526,9 +1629,9 @@ function publishNeeds(form) {
     { sec: "order", field: "state", what: "the state Active (a draft is saved but never published)",
       ok: val("state") === "active" },
     life
-      ? { sec: "fulfil", field: val("opProvision") ? "opDeprovision" : "opProvision",
-        what: "a provision and a deprovision start event for the lifecycle process",
-        ok: val("opProvision") !== "" && val("opDeprovision") !== "" }
+      ? { sec: "fulfil", field: val("act-0-msg") ? "act-1-msg" : "act-0-msg",
+        what: "a message for the provision and the deprovision action of the lifecycle process",
+        ok: val("act-0-msg") !== "" && val("act-1-msg") !== "" }
       : { sec: "fulfil", field: val("provisionProcess") ? "deprovisionProcess" : "provisionProcess",
         what: "a process that provisions it and one that revokes it",
         ok: val("provisionProcess") !== "" && val("deprovisionProcess") !== "" },
@@ -1763,24 +1866,26 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
       <label class="field wide">Or one lifecycle process for everything
         <span class="muted" style="display:block; margin:2px 0 6px">Instead of the two
           processes above: <b>one</b> process whose operations are message start events.
-          Leave the two above empty when you choose one here. Name the start event each
-          operation enters — provision and deprovision are required, change is optional.
-          Publishing checks that the process has those start events and no plain start.</span>
+          Leave the two above empty when you choose one here. Its actions are listed
+          below. Publishing checks that the process starts or waits at each action's
+          message and has no plain start.</span>
         ${procSelect("lifecycleProcess", v.lifecycleProcess)}</label>
       <label class="field">How the process runs
         <select name="lifecycleForm">
           <option value=""${(v.lifecycleForm || "") === "" ? " selected" : ""}>One instance per operation</option>
           <option value="per-position"${v.lifecycleForm === "per-position" ? " selected" : ""}>One instance per position, for as long as it is held</option>
         </select></label>
-      <label class="field">Provision start event
-        <input name="opProvision" value="${esc((v.operations || {}).provision || "")}"
-          autocomplete="off" placeholder="laptop.provision"></label>
-      <label class="field">Deprovision start event
-        <input name="opDeprovision" value="${esc((v.operations || {}).deprovision || "")}"
-          autocomplete="off" placeholder="laptop.deprovision"></label>
-      <label class="field">Change start event (optional)
-        <input name="opChange" value="${esc((v.operations || {}).change || "")}"
-          autocomplete="off" placeholder="laptop.change"></label>
+      <div class="field wide">Actions of the lifecycle process
+        <span class="muted" style="display:block; margin:2px 0 6px">What can be asked of
+          a position (ADR-0429). The first two are the order's: it starts the
+          <b>provision</b>, and the <b>deprovision</b> is the return. Add a row for every
+          <b>change</b> of what is held (more storage) and every <b>service</b> that
+          changes nothing held (a password reset, an inactivation) &mdash; with the message
+          the process starts or waits at, who may ask for it, and what its button says.
+          A change never changes the product or its variant: that is a return and a new
+          order. <b>Clear the key and the message to remove an action.</b></span>
+        ${actionRows(v, langs)}
+        <button type="button" class="btn ghost" data-add-action>Add an action</button></div>
       <label class="field wide">How long the right may last
         <span class="muted" style="display:block; margin:2px 0 6px">In days, or
           <code>0</code> for a right that does not end &mdash; which is the ordinary case.
@@ -2451,6 +2556,38 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
         const f = b.dataset.needField ? pform.elements.namedItem(b.dataset.needField) : null;
         const el = f && f.focus ? f : null;
         if (el) { el.scrollIntoView({ block: "center" }); el.focus(); }
+      });
+    }
+
+    // One more action row, appended for the reason a shape row is: nothing already
+    // typed is lost, and the index comes from the rows that are there.
+    const actGrid = editor.querySelector(".actgrid");
+    const addAction = editor.querySelector("[data-add-action]");
+    if (actGrid && addAction) {
+      addAction.addEventListener("click", () => {
+        const used = [...actGrid.querySelectorAll('input[name$="-key"]')]
+          .map((i) => Number(/^act-(\d+)-key$/.exec(i.name)[1]));
+        const next = used.length ? Math.max(...used) + 1 : 0;
+        const holder = document.createElement("div");
+        holder.innerHTML = actionRow({ key: "", message: "", effect: "change", triggers: [] },
+          langs.length ? langs : [""], next);
+        const row = holder.firstElementChild;
+        actGrid.appendChild(row);
+        row.querySelector("input").focus();
+      });
+    }
+    // Choosing a lifecycle process pre-fills the two messages every lifecycle has,
+    // named after the product, where nobody has written one yet (ADR-0429 §1).
+    const lifeSel = pform && pform.elements.namedItem("lifecycleProcess");
+    if (pform && lifeSel) {
+      lifeSel.addEventListener("change", () => {
+        const id = String((pform.elements.namedItem("id") || {}).value || "").trim();
+        if (!lifeSel.value || !id) return;
+        for (const [n, key] of [[0, "provision"], [1, "deprovision"]]) {
+          const box = pform.elements.namedItem(`act-${n}-msg`);
+          if (box && !box.value.trim()) box.value = `${id}.${key}`;
+        }
+        pform.dispatchEvent(new Event("input"));
       });
     }
 

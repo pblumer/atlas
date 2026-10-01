@@ -183,6 +183,14 @@ type ShapeLookup interface {
 	WaitlessCycle(processID string) []string
 }
 
+// WatchLookup answers which message names the server's inbound watches publish. A
+// lookup that implements it lets [LifecycleProblems] refuse an action whose message a
+// Worker's event already publishes: that event would drive the lifecycle around the
+// order (ADR-0425 §8, ADR-0429 §1). The watch side refuses the same pair from its end.
+type WatchLookup interface {
+	WatchedMessages() map[string]bool
+}
+
 // CatchPoint is one element of a process that waits for a message.
 type CatchPoint struct {
 	Element    string
@@ -200,9 +208,20 @@ func LifecycleProblems(items []Item, look EntryPointLookup) []Problem {
 		return nil
 	}
 	var out []Problem
+	var watched map[string]bool
+	if w, ok := look.(WatchLookup); ok {
+		watched = w.WatchedMessages()
+	}
 	for _, it := range items {
 		if !it.UsesLifecycleProcess() {
 			continue
+		}
+		for _, a := range it.ActionList() {
+			if msg := strings.TrimSpace(a.Message); watched[msg] {
+				out = append(out, Problem{Item: it.ID, Message: it.actionNoun() + " " + a.Key +
+					" names " + msg + ", which an inbound watch publishes; a Worker's event would " +
+					"drive this lifecycle around the order — rename the action's message or the watch's"})
+			}
 		}
 		messages, hasNone, deployed := look.EntryPoints(it.LifecycleProcess)
 		if !deployed {

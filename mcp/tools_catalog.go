@@ -135,11 +135,26 @@ func catalogItemProps() map[string]any {
 			"named in `operations`. Publishing checks the newest deployed version: every named start " +
 			"event must exist, and the process must have NO none start event (a start by hand would " +
 			"otherwise take it)."),
-		"operations": objectProp("For a lifecycleProcess: which message start event each operation " +
+		"operations": objectProp("LEGACY form of `actions` (ADR-0425), still read: for a lifecycleProcess, which message start event each operation " +
 			"enters, {\"provision\": \"<message name>\", \"deprovision\": \"<message name>\", " +
 			"\"change\": \"<message name>\"}. provision and deprovision are REQUIRED to publish, change " +
 			"is optional. The key is the contract an order asks for; the message name is the process's " +
 			"own business and may be renamed with the process."),
+		"actions": arrayProp("For a lifecycleProcess, IN PLACE OF `operations` (ADR-0429): the product's " +
+			"actions, each {key, message, effect, triggers, labels, form, outcomes}. effect is one of " +
+			"\"provision\" (exactly one, keyed \"provision\", no triggers — the order starts it), " +
+			"\"deprovision\" (exactly one, keyed \"deprovision\", triggers among \"customer\" and " +
+			"\"operator\"), \"change\" (changes the configuration of what is held, never the item or " +
+			"variant) or \"service\" (changes nothing that is held, e.g. a password reset or an " +
+			"inactivation). triggers says who may ask for a change or service: \"customer\" (the orderer " +
+			"or the recipient), \"operator\", \"system\". key is [a-z0-9-], unique; message is the " +
+			"message the process starts or waits at, unique within the product. labels are button texts " +
+			"per language (a missing one is reported, not refused). form is an Atlas form id for what the " +
+			"action needs. outcomes maps \"completed\" / \"rejected\" / \"failed\" to the event type it " +
+			"is published under (default <message>.<outcome>). Publishing checks each message against the " +
+			"newest deployed version: a message start in the per-operation form; in the per-position form " +
+			"a correlated catch for change and service, a catch and a start for deprovision. A message an " +
+			"inbound watch publishes is refused. Send either operations or actions, never both."),
 		"lifecycleForm": stringProp("For a lifecycleProcess: how it runs. \"per-operation\" (the default, " +
 			"also what empty means) starts an instance for every operation. \"per-position\" starts ONE " +
 			"instance per order position at provisioning and DELIVERS every later operation to it: the " +

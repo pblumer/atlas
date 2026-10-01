@@ -184,6 +184,11 @@ type Line struct {
 	// converted keeps the two ids (ADR-0427).
 	LifecycleProcess string            `json:"lifecycleProcess,omitempty"`
 	Operations       map[string]string `json:"operations,omitempty"`
+	// Actions are the product's actions as the release declared them (ADR-0429),
+	// frozen for the same reason: what may later be asked of this position is what
+	// was offered when it was ordered. A line carries Operations or Actions, as its
+	// product did.
+	Actions []catalog.Action `json:"actions,omitempty"`
 	// LifecycleForm is how the lifecycle process runs for this line, frozen with the
 	// binding: a per-position line's later operations are delivered to the instance
 	// its provisioning started
@@ -338,14 +343,30 @@ type LineInstance struct {
 }
 
 // BindingFor is where an operation of this line starts: its frozen binding, in
-// whichever form the product had when the line was placed (ADR-0425).
+// whichever form the product had when the line was placed (ADR-0425). On a lifecycle
+// process, provision and deprovision are the actions of those effects and any other
+// name is an action's key (ADR-0429).
 func (l Line) BindingFor(op string) catalog.Binding {
+	return l.frozenItem().BindingFor(op)
+}
+
+// ActionNamed is the action this line froze under key, in either shape its product
+// said it in.
+func (l Line) ActionNamed(key string) (catalog.Action, bool) {
+	return l.frozenItem().ActionNamed(key)
+}
+
+// frozenItem is the line's frozen binding as the catalogue item it was taken from,
+// so the line answers every binding question the way the catalogue does.
+func (l Line) frozenItem() catalog.Item {
 	return catalog.Item{
 		ProvisionProcess:   l.ProvisionProcess,
 		DeprovisionProcess: l.DeprovisionProcess,
 		LifecycleProcess:   l.LifecycleProcess,
 		Operations:         l.Operations,
-	}.BindingFor(op)
+		Actions:            l.Actions,
+		LifecycleForm:      l.LifecycleForm,
+	}
 }
 
 // PerPosition reports whether this line's lifecycle runs as one instance per

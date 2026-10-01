@@ -174,3 +174,27 @@ func TestActionLabelsAreTranslationGaps(t *testing.T) {
 		t.Fatalf("a missing label refused the publish: %v", problems)
 	}
 }
+
+type fakeWatched struct {
+	fakeEntryPoints
+	watched map[string]bool
+}
+
+func (f fakeWatched) WatchedMessages() map[string]bool { return f.watched }
+
+// TestAWatchedMessageIsNoAction: a name an inbound watch publishes would let a Worker's
+// event drive the lifecycle around the order (ADR-0425 §8, ADR-0429 §1), so publishing
+// refuses an action that uses it — whichever of the two came first.
+func TestAWatchedMessageIsNoAction(t *testing.T) {
+	it := actionItem("mailbox")
+	look := fakeWatched{
+		fakeEntryPoints: fakeEntryPoints{"mailbox-lifecycle": {messages: []string{
+			"mailbox.provision", "mailbox.deprovision", "mailbox.storage.extend", "mailbox.password.reset"}}},
+		watched: map[string]bool{"mailbox.password.reset": true},
+	}
+	contains(t, LifecycleProblems([]Item{it}, look), "action password-reset names mailbox.password.reset, which an inbound watch publishes")
+	look.watched = map[string]bool{"jira.ticket.created": true}
+	if got := LifecycleProblems([]Item{it}, look); len(got) != 0 {
+		t.Fatalf("problems = %v, want none", got)
+	}
+}
