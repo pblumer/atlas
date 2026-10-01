@@ -130,7 +130,7 @@ const (
 	// never started on its own, and ran unconditionally when started by hand. A
 	// deploy refuses it; a definition already deployed with one is brought back on
 	// reload and keeps the behaviour it had (ADR-0177, ADR-0393,
-	// ADR-draft-product-actions-are-commands-with-published-outcomes).
+	// ADR-0429).
 	RuleConditionalStart = "start.conditional"
 )
 

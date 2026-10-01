@@ -1,4 +1,4 @@
-# ADR-DRAFT: A product declares its actions, each a command whose outcome is a fact published beyond Atlas
+# ADR-0429: A product declares its actions, each a command whose outcome is a fact published beyond Atlas
 
 - **Status:** Proposed
 - **Implementation:** Partial
@@ -104,7 +104,7 @@ and in which external consumers read state rather than the log.
 `catalog.Item` gains a list that replaces the operation map:
 
 ```go
-// Action is one thing that can be asked of what somebody holds (ADR-draft-product-actions-are-commands-with-published-outcomes).
+// Action is one thing that can be asked of what somebody holds (ADR-0429).
 type Action struct {
     Key      string            `json:"key"`      // "storage-extend": the contract
     Message  string            `json:"message"`  // "mailbox.storage.extend": the process's business

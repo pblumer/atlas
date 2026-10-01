@@ -60,8 +60,8 @@
         "de": "Ein Startereignis mit Bedingung vor einem Prozess – etwa Mailbox-Speicher über 100 GB – wurde bisher als gewöhnlicher Start deployt und die Bedingung stillschweigend verworfen: Es startete nie von selbst, und von Hand gestartet lief es ohne Rücksicht auf die Bedingung. Eine Bedingung liest Variablen, und bevor eine Instanz existiert, gibt es keine; Atlas führt bedingte Ereignisse deshalb nur innerhalb einer laufenden Instanz aus. Der Modeler markiert ein solches Startereignis jetzt schon beim Zeichnen, und das Deployment weist es ab. Bereits deployte Prozesse laufen bis zum nächsten Deployment unverändert weiter."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0429",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
       },
       "tags": [
         "Modeler",

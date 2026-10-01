@@ -57,7 +57,7 @@ _Changed_ / _Removed_ for each version.
   unsupported badge on it while it is being drawn. A definition already deployed with one
   keeps running exactly as before and is named in the log when the server loads it; its
   next deploy is refused. An event subprocess's conditional start, which is its trigger, is
-  unchanged (ADR-draft-product-actions-are-commands-with-published-outcomes).
+  unchanged (ADR-0429).
 
 ### Fixed
 
