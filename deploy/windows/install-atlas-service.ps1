@@ -1,23 +1,23 @@
-﻿<#
+<#
 .SYNOPSIS
-    Installiert Atlas als Windows-Dienst (über den Service-Wrapper WinSW),
+    Installiert Atlas als Windows-Dienst (ueber den Service-Wrapper WinSW),
     aktualisiert eine bestehende Installation oder entfernt sie wieder.
 
 .DESCRIPTION
     atlas.exe ist ein Konsolenprogramm und implementiert das Protokoll des
     Windows Service Control Manager nicht. Ein Dienst, der mit sc.exe direkt auf
     atlas.exe zeigt, startet daher nicht. Dieses Skript verwendet WinSW als
-    Wrapper und führt alle Schritte aus docs/install.md ("Windows Server") aus:
+    Wrapper und fuehrt alle Schritte aus docs/install.md ("Windows Server") aus:
 
-      1.  Voraussetzungen prüfen (Administratorrechte, kein fremder atlas-Prozess,
+      1.  Voraussetzungen pruefen (Administratorrechte, kein fremder atlas-Prozess,
           kein fremder Dienst gleichen Namens)
       2.  Verzeichnisstruktur unter -InstallRoot anlegen
       3.  atlas.exe finden (vorhandene Datei unter -InstallRoot) oder herunterladen
-          und prüfen, nach <InstallRoot>\bin kopieren
-      4.  WinSW bereitstellen und Prüfsumme kontrollieren
+          und pruefen, nach <InstallRoot>\bin kopieren
+      4.  WinSW bereitstellen und Pruefsumme kontrollieren
       5.  Testlauf im Vordergrund mit einem Wegwerf-Datenverzeichnis
-      6.  Script-Interpreter (pwsh, python3, node) im Maschinen-PATH prüfen
-      7.  Vault-Schlüssel und Bootstrap-Administrator vorbereiten
+      6.  Script-Interpreter (pwsh, python3, node) im Maschinen-PATH pruefen
+      7.  Vault-Schluessel und Bootstrap-Administrator vorbereiten
       8.  WinSW-Konfiguration schreiben, Dienst installieren, auf das virtuelle
           Konto NT SERVICE\<Dienstname> umstellen
       9.  Zugriffsrechte (ACL) setzen
@@ -29,7 +29,7 @@
     Dienst stoppen, Datenverzeichnis sichern, atlas.exe ersetzen (falls eine
     andere Datei gefunden wurde), Konfiguration neu schreiben, Dienst starten.
 
-    Das Skript ist für Windows PowerShell 5.1 geschrieben und läuft auch unter
+    Das Skript ist fuer Windows PowerShell 5.1 geschrieben und laeuft auch unter
     PowerShell 7.
 
 .PARAMETER InstallRoot
@@ -40,8 +40,8 @@
     (ohne bin, data, backup, service); bei mehreren Treffern gewinnt die neueste.
 
 .PARAMETER Version
-    Nur nötig, wenn keine atlas.exe vorhanden ist: lädt diese Release-Version
-    von GitHub herunter und prüft sie gegen SHA256SUMS, z.B. 0.8.0
+    Nur noetig, wenn keine atlas.exe vorhanden ist: laedt diese Release-Version
+    von GitHub herunter und prueft sie gegen SHA256SUMS, z.B. 0.8.0
 
 .PARAMETER DataDir
     Datenverzeichnis. Ohne Angabe: <InstallRoot>\data, oder ein vorhandenes
@@ -49,11 +49,11 @@
     --data-dir aus diesem Ordner).
 
 .PARAMETER WinSWPath
-    Lokale WinSW-x64.exe (für Server ohne Internetzugang). Ohne Angabe wird
+    Lokale WinSW-x64.exe (fuer Server ohne Internetzugang). Ohne Angabe wird
     WinSW v2.12.0 von GitHub geladen.
 
 .PARAMETER WinSWSha256
-    Erwartete SHA-256-Prüfsumme von WinSW. Leer = keine Prüfung.
+    Erwartete SHA-256-Pruefsumme von WinSW. Leer = keine Pruefung.
 
 .PARAMETER Addr
     Listen-Adresse. Standard: 127.0.0.1:8080 (nur lokal erreichbar).
@@ -62,10 +62,10 @@
     PEM-Zertifikatskette. Wird nach <InstallRoot>\config\tls.crt kopiert.
 
 .PARAMETER TlsKey
-    PEM-Schlüssel zu -TlsCert. Wird nach <InstallRoot>\config\tls.key kopiert.
+    PEM-Schluessel zu -TlsCert. Wird nach <InstallRoot>\config\tls.key kopiert.
 
 .PARAMETER ExternalUrl
-    Öffentliche Adresse, z.B. https://atlas.example.ch. Hinter einem
+    Oeffentliche Adresse, z.B. https://atlas.example.ch. Hinter einem
     Reverse-Proxy (IIS/ARR) zwingend.
 
 .PARAMETER AdminUsername
@@ -73,19 +73,19 @@
 
 .PARAMETER AdminPassword
     Passwort des Bootstrap-Administrators als SecureString. Ohne Angabe wird
-    ein zufälliges Passwort erzeugt und am Ende einmal angezeigt. Wird nur
+    ein zufaelliges Passwort erzeugt und am Ende einmal angezeigt. Wird nur
     verwendet, solange noch kein Benutzer existiert.
 
 .PARAMETER VaultKeyMode
     Generated (Standard): Atlas erzeugt <DataDir>\vault.key selbst.
-    File: das Skript erzeugt <InstallRoot>\config\vault.key und übergibt ihn
-    über ATLAS_VAULT_KEY_FILE. Nur bei einer Neuinstallation wählbar.
+    File: das Skript erzeugt <InstallRoot>\config\vault.key und uebergibt ihn
+    ueber ATLAS_VAULT_KEY_FILE. Nur bei einer Neuinstallation waehlbar.
 
 .PARAMETER OpenFirewall
-    Legt eine eingehende Firewall-Regel für den Port aus -Addr an.
+    Legt eine eingehende Firewall-Regel fuer den Port aus -Addr an.
 
 .PARAMETER FirewallProfile
-    Firewall-Profile für die Regel. Standard: Domain, Private
+    Firewall-Profile fuer die Regel. Standard: Domain, Private
 
 .PARAMETER AllowPlaintext
     Erlaubt eine nicht-lokale -Addr ohne TLS. Nicht empfohlen.
@@ -97,10 +97,10 @@
     Script-Interpreter, die im Maschinen-PATH fehlen, nicht deaktivieren.
 
 .PARAMETER ExtraArgs
-    Zusätzliche Argumente für "atlas serve", z.B. @('--checkpoint-keep','5')
+    Zusaetzliche Argumente fuer "atlas serve", z.B. @('--checkpoint-keep','5')
 
 .PARAMETER SkipSmokeTest
-    Testlauf im Vordergrund überspringen.
+    Testlauf im Vordergrund ueberspringen.
 
 .PARAMETER SkipBackup
     Im Update-Modus keine Sicherung des Datenverzeichnisses anlegen.
@@ -109,7 +109,7 @@
     Dienst und Firewall-Regel entfernen. Daten bleiben erhalten.
 
 .PARAMETER RemoveData
-    Zusammen mit -Uninstall: bin, config, data, logs und service löschen.
+    Zusammen mit -Uninstall: bin, config, data, logs und service loeschen.
     Das Verzeichnis backup bleibt erhalten.
 
 .EXAMPLE
@@ -128,6 +128,9 @@
 .EXAMPLE
     .\install-atlas-service.ps1 -Uninstall
 #>
+# Diese Datei ist bewusst reines ASCII (Umlaute als ae/oe/ue): Windows PowerShell
+# 5.1 liest eine Datei ohne erkannte UTF-8-BOM als Windows-1252, und schon ein
+# einziges Umlaut-Byte zerlegt dann den Hilfeblock oben in Code.
 #Requires -RunAsAdministrator
 [CmdletBinding()]
 param(
@@ -183,7 +186,7 @@ function Write-Info([string]$Text) {
 }
 
 function Invoke-Native {
-    # Führt ein natives Programm aus und bricht bei Exit-Code <> 0 ab.
+    # Fuehrt ein natives Programm aus und bricht bei Exit-Code <> 0 ab.
     # Windows PowerShell 5.1 wertet stderr-Ausgaben nativer Programme bei
     # ErrorActionPreference=Stop als Fehler; massgeblich ist hier der Exit-Code.
     param([string]$File, [string[]]$Arguments, [int[]]$OkCodes = @(0))
@@ -202,7 +205,7 @@ function Invoke-Icacls {
 }
 
 function Get-ExeVersion([string]$Path) {
-    # Erste Zeile von "atlas.exe version"; $null, wenn das Programm nicht läuft.
+    # Erste Zeile von "atlas.exe version"; $null, wenn das Programm nicht laeuft.
     $ErrorActionPreference = 'Continue'
     $output = @(& $Path version 2>&1 | ForEach-Object { "$_" })
     if ($LASTEXITCODE -ne 0 -or $output.Count -eq 0) { return $null }
@@ -210,8 +213,8 @@ function Get-ExeVersion([string]$Path) {
 }
 
 function Invoke-Download([string]$Uri, [string]$OutFile, [string]$OfflineHint) {
-    # Lädt eine Datei herunter. Bei einem Fehler wird eine halb geschriebene
-    # Datei entfernt, damit ein erneuter Lauf sie nicht ungeprüft weiterverwendet.
+    # Laedt eine Datei herunter. Bei einem Fehler wird eine halb geschriebene
+    # Datei entfernt, damit ein erneuter Lauf sie nicht ungeprueft weiterverwendet.
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
     Write-Info "Download $Uri"
     try {
@@ -221,9 +224,9 @@ function Invoke-Download([string]$Uri, [string]$OutFile, [string]$OfflineHint) {
         $msg = $_.Exception.Message
         $hint = ''
         if ($msg -match 'trust relationship|Vertrauensstellung') {
-            $hint = " Das Serverzertifikat wird von diesem Server nicht als vertrauenswürdig eingestuft (TLS-Inspection durch einen Proxy oder fehlende Stammzertifikate). Die Zertifikatsprüfung nicht abschalten."
+            $hint = " Das Serverzertifikat wird von diesem Server nicht als vertrauenswuerdig eingestuft (TLS-Inspection durch einen Proxy oder fehlende Stammzertifikate). Die Zertifikatspruefung nicht abschalten."
         } elseif ($msg -match 'SSL/TLS') {
-            $hint = ' TLS-Verbindung nicht möglich (Protokoll oder Proxy).'
+            $hint = ' TLS-Verbindung nicht moeglich (Protokoll oder Proxy).'
         }
         throw "Download von $Uri fehlgeschlagen: $msg$hint Alternative: Datei auf einem anderen Rechner herunterladen und $OfflineHint verwenden."
     }
@@ -267,11 +270,11 @@ function Write-Utf8NoBom([string]$Path, [string]$Content) {
 
 function Split-ListenAddr([string]$Value) {
     $i = $Value.LastIndexOf(':')
-    if ($i -lt 0) { throw "Ungültige -Addr '$Value' (erwartet z.B. 127.0.0.1:8080 oder :8443)." }
+    if ($i -lt 0) { throw "Ungueltige -Addr '$Value' (erwartet z.B. 127.0.0.1:8080 oder :8443)." }
     $h = $Value.Substring(0, $i).Trim('[', ']')
     $p = 0
     if (-not [int]::TryParse($Value.Substring($i + 1), [ref]$p) -or $p -lt 1 -or $p -gt 65535) {
-        throw "Ungültiger Port in -Addr '$Value'."
+        throw "Ungueltiger Port in -Addr '$Value'."
     }
     $loopback = @('127.0.0.1', 'localhost', '::1') -contains $h.ToLowerInvariant()
     $probe = $h
@@ -340,7 +343,7 @@ function Show-LogTail([int]$Lines = 40) {
 
 function Wait-AtlasReady([hashtable]$Offsets) {
     # Bereit ist Atlas, wenn die Logzeile "recovery is complete" erscheint;
-    # ohne TLS zusätzlich über /readyz geprüft.
+    # ohne TLS zusaetzlich ueber /readyz geprueft.
     $deadline = (Get-Date).AddSeconds($ReadyTimeoutSec)
     while ((Get-Date) -lt $deadline) {
         Start-Sleep -Seconds 2
@@ -359,13 +362,13 @@ function Wait-AtlasReady([hashtable]$Offsets) {
 function Stop-AtlasService {
     $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
     if ($null -ne $svc -and $svc.Status -ne 'Stopped') {
-        Write-Info "Dienst '$ServiceName' wird gestoppt (bis zu 30 s für ein geordnetes Herunterfahren) ..."
+        Write-Info "Dienst '$ServiceName' wird gestoppt (bis zu 30 s fuer ein geordnetes Herunterfahren) ..."
         Stop-Service -Name $ServiceName
     }
     $deadline = (Get-Date).AddSeconds(60)
     while ((Get-AtlasProcesses).Count -gt 0 -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 1 }
     if ((Get-AtlasProcesses).Count -gt 0) {
-        throw "Nach dem Stoppen des Dienstes läuft noch ein atlas.exe-Prozess aus $BinDir."
+        throw "Nach dem Stoppen des Dienstes laeuft noch ein atlas.exe-Prozess aus $BinDir."
     }
 }
 
@@ -381,10 +384,10 @@ function Get-ServiceSid {
 }
 
 function Protect-VaultKey([string]$Path, [string]$Sid) {
-    # Nur das Dienstkonto darf den Schlüssel lesen (vgl. docs/install.md, Schritt 7).
-    # Gehört die Datei bereits dem Dienstkonto, darf ein Administrator ihre ACL
-    # erst nach takeown ändern. Der Eigentümer (Administratoren) steht nicht in
-    # der DACL; diese enthält danach genau einen Eintrag.
+    # Nur das Dienstkonto darf den Schluessel lesen (vgl. docs/install.md, Schritt 7).
+    # Gehoert die Datei bereits dem Dienstkonto, darf ein Administrator ihre ACL
+    # erst nach takeown aendern. Der Eigentuemer (Administratoren) steht nicht in
+    # der DACL; diese enthaelt danach genau einen Eintrag.
     if (Test-Path -LiteralPath $Path) {
         Invoke-Native -File 'takeown.exe' -Arguments @('/F', $Path, '/A') | Out-Null
         Invoke-Icacls -Path $Path -Arguments @('/inheritance:r', '/grant:r', "${Sid}:F")
@@ -392,7 +395,7 @@ function Protect-VaultKey([string]$Path, [string]$Sid) {
 }
 
 function Unlock-ForAdmins([string]$Path) {
-    # Holt eine Datei zurück, auf die nur das Dienstkonto Zugriff hat (vault.key).
+    # Holt eine Datei zurueck, auf die nur das Dienstkonto Zugriff hat (vault.key).
     if (Test-Path -LiteralPath $Path) {
         Invoke-Native -File 'takeown.exe' -Arguments @('/F', $Path, '/A') | Out-Null
         Invoke-Icacls -Path $Path -Arguments @('/grant', "${SidAdmins}:F")
@@ -404,7 +407,7 @@ function New-ServiceXml([string[]]$AtlasArgs, $EnvVars) {
     $argLine = ($AtlasArgs | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
     $lines = New-Object Collections.Generic.List[string]
     $lines.Add('<?xml version="1.0" encoding="utf-8"?>')
-    $lines.Add('<!-- Erzeugt von install-atlas-service.ps1. Änderungen werden beim nächsten Lauf überschrieben. -->')
+    $lines.Add('<!-- Erzeugt von install-atlas-service.ps1. Aenderungen werden beim naechsten Lauf ueberschrieben. -->')
     $lines.Add('<service>')
     $lines.Add("  <id>$(& $esc $ServiceName)</id>")
     $lines.Add('  <name>Atlas BPMN workflow engine</name>')
@@ -417,7 +420,7 @@ function New-ServiceXml([string[]]$AtlasArgs, $EnvVars) {
     $lines.Add('  <onfailure action="restart" delay="30 sec"/>')
     $lines.Add('  <onfailure action="restart" delay="60 sec"/>')
     $lines.Add('  <resetfailure>1 hour</resetfailure>')
-    # Atlas hat 10 s Grace-Period (--shutdown-timeout); der Wrapper wartet länger.
+    # Atlas hat 10 s Grace-Period (--shutdown-timeout); der Wrapper wartet laenger.
     $lines.Add('  <stoptimeout>30 sec</stoptimeout>')
     $lines.Add("  <logpath>$(& $esc $LogsDir)</logpath>")
     $lines.Add('  <log mode="roll-by-size">')
@@ -477,15 +480,15 @@ if ($Uninstall) {
     }
     Get-NetFirewallRule -DisplayName $FirewallName -ErrorAction SilentlyContinue | Remove-NetFirewallRule
     if ($RemoveData) {
-        Write-Warning "Folgende Verzeichnisse werden endgültig gelöscht: $BinDir, $ConfigDir, $DataDir, $LogsDir, $SvcDir"
-        $answer = Read-Host 'Zur Bestätigung JA eingeben'
+        Write-Warning "Folgende Verzeichnisse werden endgueltig geloescht: $BinDir, $ConfigDir, $DataDir, $LogsDir, $SvcDir"
+        $answer = Read-Host 'Zur Bestaetigung JA eingeben'
         if ($answer -ne 'JA') { Write-Info 'Abgebrochen, Daten bleiben erhalten.'; return }
         Unlock-ForAdmins $DataKey
         Unlock-ForAdmins $ConfigKey
         foreach ($d in @($BinDir, $ConfigDir, $DataDir, $LogsDir, $SvcDir)) {
             if (Test-Path -LiteralPath $d) { Remove-Item -LiteralPath $d -Recurse -Force }
         }
-        Write-Info "Gelöscht. $BackupDir und sonstige Dateien unter $InstallRoot bleiben erhalten."
+        Write-Info "Geloescht. $BackupDir und sonstige Dateien unter $InstallRoot bleiben erhalten."
     } else {
         Write-Info "Daten unter $InstallRoot bleiben erhalten."
     }
@@ -496,14 +499,14 @@ if ($Uninstall) {
 # 1. Voraussetzungen
 # ---------------------------------------------------------------------------
 
-Write-Step 'Voraussetzungen prüfen'
+Write-Step 'Voraussetzungen pruefen'
 
-if (-not [Environment]::Is64BitOperatingSystem) { throw 'Atlas wird nur für Windows x64 (windows_amd64) ausgeliefert.' }
+if (-not [Environment]::Is64BitOperatingSystem) { throw 'Atlas wird nur fuer Windows x64 (windows_amd64) ausgeliefert.' }
 
 $listen = Split-ListenAddr $Addr
 $UseTls = -not [string]::IsNullOrWhiteSpace($TlsCert)
 if ($UseTls -xor (-not [string]::IsNullOrWhiteSpace($TlsKey))) {
-    throw '-TlsCert und -TlsKey müssen gemeinsam angegeben werden (Atlas startet sonst nicht).'
+    throw '-TlsCert und -TlsKey muessen gemeinsam angegeben werden (Atlas startet sonst nicht).'
 }
 if (-not $listen.Loopback -and -not $UseTls -and -not $AllowPlaintext) {
     throw "-Addr '$Addr' ist von aussen erreichbar, aber ohne TLS. Entweder -TlsCert/-TlsKey angeben, an 127.0.0.1 binden (Reverse-Proxy) oder bewusst -AllowPlaintext setzen."
@@ -514,14 +517,14 @@ $existing = Get-CimInstance -ClassName Win32_Service -Filter "Name='$ServiceName
 $UpdateMode = $null -ne $existing
 if ($UpdateMode) {
     if ($existing.PathName -notlike "*$WrapperExe*") {
-        throw "Es existiert bereits ein Dienst '$ServiceName' mit dem Programmpfad $($existing.PathName). Dieser wurde nicht von diesem Skript angelegt. Bitte prüfen und gegebenenfalls mit 'sc.exe delete $ServiceName' entfernen."
+        throw "Es existiert bereits ein Dienst '$ServiceName' mit dem Programmpfad $($existing.PathName). Dieser wurde nicht von diesem Skript angelegt. Bitte pruefen und gegebenenfalls mit 'sc.exe delete $ServiceName' entfernen."
     }
     Write-Info "Dienst '$ServiceName' existiert bereits: Update-Modus."
 } else {
     Write-Info 'Neuinstallation.'
     $running = Get-AtlasProcesses -All
     if ($running.Count -gt 0) {
-        throw "Es läuft bereits atlas.exe (PID $($running.Id -join ', ')). Pro Datenverzeichnis darf nur ein Prozess laufen; bitte zuerst beenden."
+        throw "Es laeuft bereits atlas.exe (PID $($running.Id -join ', ')). Pro Datenverzeichnis darf nur ein Prozess laufen; bitte zuerst beenden."
     }
 }
 
@@ -570,10 +573,10 @@ if ($null -eq $sourceExe -and -not [string]::IsNullOrWhiteSpace($Version)) {
     Invoke-Download -Uri "$base/$zipName" -OutFile $zip -OfflineHint '-AtlasExe <Pfad zu atlas.exe>'
     Invoke-Download -Uri "$base/SHA256SUMS" -OutFile $sums -OfflineHint '-AtlasExe <Pfad zu atlas.exe>'
     $line = Select-String -LiteralPath $sums -Pattern ([regex]::Escape($zipName)) | Select-Object -First 1
-    if ($null -eq $line) { throw "$zipName ist nicht in SHA256SUMS aufgeführt." }
+    if ($null -eq $line) { throw "$zipName ist nicht in SHA256SUMS aufgefuehrt." }
     $expected = ($line.Line -split '\s+')[0].ToLowerInvariant()
-    if ($expected -ne (Get-FileSha256 $zip)) { throw "Prüfsumme von $zipName stimmt nicht - Download nicht verwenden." }
-    Write-Info 'Prüfsumme in Ordnung.'
+    if ($expected -ne (Get-FileSha256 $zip)) { throw "Pruefsumme von $zipName stimmt nicht - Download nicht verwenden." }
+    Write-Info 'Pruefsumme in Ordnung.'
     Expand-Archive -LiteralPath $zip -DestinationPath $relDir -Force
     $found = Get-ChildItem -LiteralPath $relDir -Filter 'atlas.exe' -File -Recurse | Select-Object -First 1
     if ($null -eq $found) { throw "atlas.exe nicht im Archiv $zipName gefunden." }
@@ -599,7 +602,7 @@ if ($binExists) { $oldVersion = Get-ExeVersion $BinExe }
 if ($replaceBinary) {
     Unblock-File -LiteralPath $sourceExe
     $newVersion = Get-ExeVersion $sourceExe
-    if ($null -eq $newVersion) { throw "$sourceExe lässt sich nicht ausführen (falsche Architektur oder beschädigt?)." }
+    if ($null -eq $newVersion) { throw "$sourceExe laesst sich nicht ausfuehren (falsche Architektur oder beschaedigt?)." }
     Write-Info "Quelle:  $sourceExe"
     Write-Info "Version: $newVersion"
     if ($oldVersion) { Write-Info "bisher:  $oldVersion" }
@@ -622,9 +625,9 @@ if (-not (Test-Path -LiteralPath $WrapperExe)) {
         $actual = Get-FileSha256 $WrapperExe
         if ($actual -ne $WinSWSha256.ToLowerInvariant()) {
             Remove-Item -LiteralPath $WrapperExe -Force
-            throw "Prüfsumme von WinSW stimmt nicht (erwartet $WinSWSha256, erhalten $actual). Bei bewusst anderer WinSW-Version -WinSWSha256 anpassen."
+            throw "Pruefsumme von WinSW stimmt nicht (erwartet $WinSWSha256, erhalten $actual). Bei bewusst anderer WinSW-Version -WinSWSha256 anpassen."
         }
-        Write-Info 'Prüfsumme in Ordnung.'
+        Write-Info 'Pruefsumme in Ordnung.'
     }
     Unblock-File -LiteralPath $WrapperExe
 } else {
@@ -638,13 +641,13 @@ if (-not (Test-Path -LiteralPath $WrapperExe)) {
 # Interpreter vorab bestimmen, damit Testlauf und Dienst dieselben Flags haben.
 $interpreterArgs = @()
 foreach ($i in @(
-        @{ Flag = 'powershell'; File = 'pwsh.exe';    Hint = 'PowerShell 7 (pwsh) installieren; Windows PowerShell 5.1 genügt nicht.' },
+        @{ Flag = 'powershell'; File = 'pwsh.exe';    Hint = 'PowerShell 7 (pwsh) installieren; Windows PowerShell 5.1 genuegt nicht.' },
         @{ Flag = 'python';     File = 'python3.exe'; Hint = 'Atlas sucht python3.exe; der Python-Installer legt meist nur python.exe an.' },
-        @{ Flag = 'javascript'; File = 'node.exe';    Hint = 'Node.js für alle Benutzer installieren.' })) {
+        @{ Flag = 'javascript'; File = 'node.exe';    Hint = 'Node.js fuer alle Benutzer installieren.' })) {
     $path = Find-OnMachinePath $i.File
     if ($null -ne $path) { continue }
     if ($KeepAllInterpreters) {
-        Write-Warning "$($i.File) fehlt im Maschinen-PATH; $($i.Flag)-Script-Tasks bleiben hängen, bis er installiert ist. $($i.Hint)"
+        Write-Warning "$($i.File) fehlt im Maschinen-PATH; $($i.Flag)-Script-Tasks bleiben haengen, bis er installiert ist. $($i.Hint)"
     } else {
         $interpreterArgs += "--$($i.Flag)=false"
         Write-Warning "$($i.File) fehlt im Maschinen-PATH; $($i.Flag)-Script-Tasks werden deaktiviert (--$($i.Flag)=false). $($i.Hint)"
@@ -699,13 +702,13 @@ if ($UpdateMode) {
     if ($hasData -and -not $SkipBackup) {
         Write-Step 'Datenverzeichnis sichern'
         $target = Join-Path $BackupDir ("data-" + (Get-Date -Format 'yyyyMMdd-HHmmss'))
-        # /B (Backup-Modus) liest auch vault.key, das nur dem Dienstkonto gehört.
+        # /B (Backup-Modus) liest auch vault.key, das nur dem Dienstkonto gehoert.
         Invoke-Native -File 'robocopy.exe' -Arguments @($DataDir, $target, '/E', '/B', '/COPY:DATS', '/DCOPY:DAT', '/R:1', '/W:1', '/NP', '/NFL', '/NDL', '/NJH', '/NJS') -OkCodes @(0, 1, 2, 3, 4, 5, 6, 7) | Out-Null
         if (Test-Path -LiteralPath $ConfigKey) {
             Invoke-Native -File 'robocopy.exe' -Arguments @($ConfigDir, (Join-Path $target '_config'), 'vault.key', '/B', '/COPY:DATS', '/R:1', '/W:1', '/NP', '/NFL', '/NDL', '/NJH', '/NJS') -OkCodes @(0, 1, 2, 3, 4, 5, 6, 7) | Out-Null
         }
         Write-Info "Sicherung: $target"
-        Write-Info 'Alte Sicherungen werden nicht automatisch gelöscht.'
+        Write-Info 'Alte Sicherungen werden nicht automatisch geloescht.'
     }
 }
 
@@ -734,30 +737,30 @@ if ($UseTls) {
         throw "$crtDst ist keine PEM-Datei. Atlas liest PEM, nicht PFX und nicht den Windows-Zertifikatsspeicher."
     }
     if (-not ((Get-Content -LiteralPath $keyDst -Raw) -match '-----BEGIN [A-Z ]*PRIVATE KEY-----')) {
-        throw "$keyDst ist kein PEM-Schlüssel."
+        throw "$keyDst ist kein PEM-Schluessel."
     }
     $tlsArgs = @('--tls-cert', $crtDst, '--tls-key', $keyDst)
-    Write-Info 'Für eine Zertifikatserneuerung genügt es, diese beiden Dateien zu ersetzen; Atlas lädt sie ohne Neustart nach.'
+    Write-Info 'Fuer eine Zertifikatserneuerung genuegt es, diese beiden Dateien zu ersetzen; Atlas laedt sie ohne Neustart nach.'
 }
 
 # ---------------------------------------------------------------------------
-# 7. Vault-Schlüssel und Bootstrap-Administrator
+# 7. Vault-Schluessel und Bootstrap-Administrator
 # ---------------------------------------------------------------------------
 
-Write-Step 'Vault-Schlüssel und Administrator vorbereiten'
+Write-Step 'Vault-Schluessel und Administrator vorbereiten'
 
 $envVars = [ordered]@{}
 
 if (Test-Path -LiteralPath $ConfigKey) {
     $VaultKeyMode = 'File'
-    Write-Info "Bestehender Schlüssel $ConfigKey wird verwendet (ATLAS_VAULT_KEY_FILE)."
+    Write-Info "Bestehender Schluessel $ConfigKey wird verwendet (ATLAS_VAULT_KEY_FILE)."
 } elseif ($VaultKeyMode -eq 'File') {
     if (Test-Path -LiteralPath $DataKey) {
-        throw "$DataKey existiert bereits; die Daten sind mit diesem Schlüssel verschlüsselt. -VaultKeyMode File ist nur bei einer Neuinstallation möglich."
+        throw "$DataKey existiert bereits; die Daten sind mit diesem Schluessel verschluesselt. -VaultKeyMode File ist nur bei einer Neuinstallation moeglich."
     }
     $hex = ((New-RandomBytes 32) | ForEach-Object { $_.ToString('x2') }) -join ''
     Write-Utf8NoBom -Path $ConfigKey -Content $hex
-    Write-Info "Neuer Schlüssel erzeugt: $ConfigKey"
+    Write-Info "Neuer Schluessel erzeugt: $ConfigKey"
 } else {
     Write-Info "Atlas erzeugt bzw. verwendet $DataKey."
 }
@@ -791,11 +794,11 @@ $atlasArgs += $ExtraArgs
 
 Write-Step 'Zugriffsrechte vorbereiten'
 # Das Basisverzeichnis wird gegen Schreibzugriffe normaler Benutzer gesperrt:
-# Wer atlas.exe oder die WinSW-Konfiguration ändern kann, kann Code als
-# Dienstkonto ausführen. Auf Datenlaufwerken erlaubt die Standard-ACL von D:\
-# "Authentifizierten Benutzern" oft das Ändern.
+# Wer atlas.exe oder die WinSW-Konfiguration aendern kann, kann Code als
+# Dienstkonto ausfuehren. Auf Datenlaufwerken erlaubt die Standard-ACL von D:\
+# "Authentifizierten Benutzern" oft das Aendern.
 Invoke-Icacls -Path $InstallRoot -Arguments @('/inheritance:r', '/grant:r', "${SidAdmins}:(OI)(CI)F", "${SidSystem}:(OI)(CI)F")
-Write-Info "$InstallRoot ist nur noch für Administratoren und SYSTEM zugänglich."
+Write-Info "$InstallRoot ist nur noch fuer Administratoren und SYSTEM zugaenglich."
 
 $adminEnv = [ordered]@{}
 foreach ($k in $envVars.Keys) { $adminEnv[$k] = $envVars[$k] }
@@ -814,14 +817,14 @@ if (-not $UpdateMode) {
     Invoke-Native -File $WrapperExe -Arguments @('install') | Out-Null
     # Virtuelles Dienstkonto: kein Passwort, eigene SID, minimale Rechte.
     Invoke-Native -File 'sc.exe' -Arguments @('config', $ServiceName, 'obj=', "NT SERVICE\$ServiceName") | Out-Null
-    Write-Info "Dienst läuft als NT SERVICE\$ServiceName."
+    Write-Info "Dienst laeuft als NT SERVICE\$ServiceName."
 }
 
 # ---------------------------------------------------------------------------
-# 9. Zugriffsrechte für das Dienstkonto
+# 9. Zugriffsrechte fuer das Dienstkonto
 # ---------------------------------------------------------------------------
 
-Write-Step 'Zugriffsrechte für das Dienstkonto setzen'
+Write-Step 'Zugriffsrechte fuer das Dienstkonto setzen'
 $ServiceSid = Get-ServiceSid
 Invoke-Icacls -Path $InstallRoot -Arguments @('/grant', "${ServiceSid}:(OI)(CI)RX")
 Invoke-Icacls -Path $DataDir     -Arguments @('/grant', "${ServiceSid}:(OI)(CI)M")
@@ -831,7 +834,7 @@ Protect-VaultKey -Path $ConfigKey -Sid $ServiceSid
 if ($UseTls) {
     Invoke-Icacls -Path (Join-Path $ConfigDir 'tls.key') -Arguments @('/inheritance:r', '/grant:r', "${ServiceSid}:R", "${SidAdmins}:F", "${SidSystem}:F")
 }
-Write-Info "Lesen/Ausführen: $InstallRoot; Ändern: $DataDir, $LogsDir"
+Write-Info "Lesen/Ausfuehren: $InstallRoot; Aendern: $DataDir, $LogsDir"
 
 if ($DefenderExclusion) {
     try {
@@ -851,7 +854,7 @@ $offsets = Get-LogOffsets
 Start-Service -Name $ServiceName
 if (-not (Wait-AtlasReady -Offsets $offsets)) {
     Show-LogTail
-    if ($seedAdmin) { Write-Warning "$WrapperXml enthält noch das Bootstrap-Passwort. Nach der Fehlerbehebung das Skript erneut ausführen; es entfernt das Passwort danach." }
+    if ($seedAdmin) { Write-Warning "$WrapperXml enthaelt noch das Bootstrap-Passwort. Nach der Fehlerbehebung das Skript erneut ausfuehren; es entfernt das Passwort danach." }
     throw "Atlas ist innerhalb von $ReadyTimeoutSec s nicht bereit geworden. Log: $LogsDir"
 }
 Write-Info 'Atlas ist bereit.'
@@ -872,7 +875,7 @@ if ($seedAdmin) {
         Show-LogTail
         throw "Atlas ist nach dem Neustart nicht bereit geworden. Log: $LogsDir"
     }
-    Write-Info 'Konfiguration enthält kein Passwort mehr; Dienst neu gestartet.'
+    Write-Info 'Konfiguration enthaelt kein Passwort mehr; Dienst neu gestartet.'
 }
 
 # ---------------------------------------------------------------------------
@@ -887,7 +890,7 @@ if ($OpenFirewall) {
         Get-NetFirewallRule -DisplayName $FirewallName -ErrorAction SilentlyContinue | Remove-NetFirewallRule
         New-NetFirewallRule -DisplayName $FirewallName -Direction Inbound -Protocol TCP -LocalPort $listen.Port `
             -Program $BinExe -Action Allow -Profile $FirewallProfile | Out-Null
-        Write-Info "Eingehend TCP $($listen.Port) für $BinExe (Profile $($FirewallProfile -join ', '))."
+        Write-Info "Eingehend TCP $($listen.Port) fuer $BinExe (Profile $($FirewallProfile -join ', '))."
     }
 }
 
@@ -902,7 +905,7 @@ if (-not [string]::IsNullOrWhiteSpace($ExternalUrl)) { $url = $ExternalUrl }
 
 Write-Host ''
 Write-Host '==========================================================================' -ForegroundColor Green
-Write-Host " Atlas läuft als Dienst '$ServiceName' (NT SERVICE\$ServiceName)" -ForegroundColor Green
+Write-Host " Atlas laeuft als Dienst '$ServiceName' (NT SERVICE\$ServiceName)" -ForegroundColor Green
 Write-Host '==========================================================================' -ForegroundColor Green
 Write-Host "  Version:       $(Get-ExeVersion $BinExe)"
 Write-Host "  URL:           $url"
@@ -913,7 +916,7 @@ if ($seedAdmin) {
     Write-Host "  Administrator: $AdminUsername"
     if ($generatedPassword) {
         Write-Host "  Passwort:      $adminPlain" -ForegroundColor Yellow
-        Write-Host '                 (wird nur jetzt angezeigt - sofort nach dem ersten Login ändern)' -ForegroundColor Yellow
+        Write-Host '                 (wird nur jetzt angezeigt - sofort nach dem ersten Login aendern)' -ForegroundColor Yellow
     }
 }
 Write-Host ''
@@ -923,10 +926,10 @@ if ($VaultKeyMode -eq 'File') {
 } else {
     Write-Host "  - $DataKey getrennt von den Daten sichern. Ohne ihn sind die Secrets verloren."
 }
-Write-Host '  - Backup: Dienst stoppen, Datenverzeichnis vollständig sichern, Dienst starten.'
-Write-Host "    (Dieses Skript erneut ausführen = Update inkl. Sicherung nach $BackupDir.)"
+Write-Host '  - Backup: Dienst stoppen, Datenverzeichnis vollstaendig sichern, Dienst starten.'
+Write-Host "    (Dieses Skript erneut ausfuehren = Update inkl. Sicherung nach $BackupDir.)"
 if (-not $UseTls -and $listen.Loopback) {
-    Write-Host '  - Atlas ist nur lokal erreichbar. Für Zugriff von aussen: -TlsCert/-TlsKey oder'
+    Write-Host '  - Atlas ist nur lokal erreichbar. Fuer Zugriff von aussen: -TlsCert/-TlsKey oder'
     Write-Host '    IIS/ARR als Reverse-Proxy mit -ExternalUrl.'
 }
 Write-Host ''
