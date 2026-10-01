@@ -1,0 +1,11 @@
+{
+  "tags": ["Service catalogue", "Operations"],
+  "title": {
+    "en": "A contested reference no longer produces a false finding",
+    "de": "Eine umstrittene Referenz erzeugt keinen falschen Befund mehr"
+  },
+  "summary": {
+    "en": "When two products target the same group or role in a system, a reconciliation cannot tell which of them a person holds there — and said so, but then still attributed what it read to the first product. Somebody who held that product, properly recorded, appeared as holding it unmanaged, a finding that could be adopted or even revoked. What is read under such a reference is now attributed to nobody and compared with nothing.",
+    "de": "Zielen zwei Produkte auf dieselbe Gruppe oder Rolle in einem System, kann ein Abgleich nicht sagen, welches davon eine Person dort hält – das meldete er auch, ordnete das Gelesene dann aber trotzdem dem ersten Produkt zu. Wer dieses Produkt ordentlich erfasst hielt, erschien als unverwalteter Besitz, ein Befund, der übernommen oder sogar entzogen werden konnte. Was unter einer solchen Referenz gelesen wird, wird jetzt niemandem zugeordnet und mit nichts verglichen."
+  }
+}
