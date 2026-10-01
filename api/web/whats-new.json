@@ -295,24 +295,25 @@
       ]
     },
     {
-      "id": "some-refusals-now-say-whose-fault-they-are",
+      "id": "on-windows-a-broken-dmn-model-folder-is-no-longer-listed-as-",
       "version": "Unreleased",
       "date": null,
       "category": "Fixed",
       "title": {
-        "en": "Errors now say whose fault they are",
-        "de": "Fehlermeldungen sagen jetzt, wessen Fehler es ist"
+        "en": "On Windows, a broken model folder is no longer shown as empty",
+        "de": "Unter Windows erscheint ein defekter Modellordner nicht mehr als leer"
       },
       "summary": {
-        "en": "A few routes answered with the wrong kind of error: an unreadable order store looked like a missing approval, an ambiguous product name in an escalation looked like a server fault, an unreadable project store refused an API token as if the request were wrong, and some routes answered 500 instead of 503 while the server was stopping. Each now answers what actually happened.",
-        "de": "Einige Routen antworteten mit der falschen Art von Fehler: Ein unlesbarer Bestellspeicher sah aus wie eine fehlende Genehmigung, ein mehrdeutiger Produktname bei einer Eskalation wie ein Serverfehler, ein unlesbarer Projektspeicher wies ein API-Token ab, als wäre die Anfrage falsch, und einige Routen antworteten während des Herunterfahrens mit 500 statt 503. Jede antwortet jetzt mit dem, was tatsächlich geschah."
+        "en": "When a file stood where the local DMN model folder should be, Windows reported the folder as missing, and the model list showed an empty store — every uploaded model seemed gone. Atlas now tells a missing folder from a broken one and reports the broken one as an error, as it already did on Linux.",
+        "de": "Stand eine Datei an der Stelle des lokalen DMN-Modellordners, meldete Windows den Ordner als fehlend, und die Modellliste zeigte einen leeren Speicher – alle hochgeladenen Modelle schienen weg. Atlas unterscheidet jetzt einen fehlenden von einem defekten Ordner und meldet den defekten als Fehler, wie bisher schon unter Linux."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       },
       "tags": [
-        "API"
+        "Decisions",
+        "Operations"
       ]
     }
   ]
