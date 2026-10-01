@@ -192,6 +192,13 @@ type Item struct {
 	// rather than read off the diagram, so a catch event somebody adds to a model
 	// cannot silently change how a product is returned.
 	LifecycleForm string `json:"lifecycleForm,omitempty"`
+	// Actions is the product's open list of actions, in place of Operations
+	// (ADR-0429): every thing that can be asked of a position, each with an
+	// effect the order interprets, the triggers that may ask for it, and the
+	// message the lifecycle process starts or waits at. An item carries either
+	// Operations or Actions, never both; one that still carries Operations is
+	// read as the actions they mean (ActionList), so nothing is migrated.
+	Actions []Action `json:"actions,omitempty"`
 	// MultipleAllowed says whether a principal may hold this item more than once —
 	// two licences, two mailboxes. Where it is false the basket marks an item the
 	// orderer already holds as held, and skips it.

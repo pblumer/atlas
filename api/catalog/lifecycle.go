@@ -61,12 +61,15 @@ func (b Binding) Triggered() bool { return b.Message != "" }
 func (it Item) UsesLifecycleProcess() bool { return strings.TrimSpace(it.LifecycleProcess) != "" }
 
 // BindingFor is where an operation of this item starts, in whichever form the item
-// binds. The two-process form offers provision and deprovision; change exists only
-// on a lifecycle process that names it.
+// binds. The two-process form offers provision and deprovision. On a lifecycle
+// process, provision and deprovision are the actions of those effects and any other
+// name is an action's key (ADR-0429), read from either shape the product says its
+// actions in.
 func (it Item) BindingFor(op string) Binding {
 	if it.UsesLifecycleProcess() {
-		msg := strings.TrimSpace(it.Operations[op])
-		if msg == "" {
+		a, ok := it.actionFor(op)
+		msg := strings.TrimSpace(a.Message)
+		if !ok || msg == "" {
 			return Binding{}
 		}
 		return Binding{Process: it.LifecycleProcess, Message: msg}
@@ -89,22 +92,31 @@ func checkBindings(it Item, add func(Problem)) {
 				"deprovision process at once; bind one form — two answers to where an order " +
 				"starts are no answer"})
 		}
-		for _, op := range []string{OpProvision, OpDeprovision} {
-			if strings.TrimSpace(it.Operations[op]) == "" {
-				add(Problem{Item: it.ID, Message: "lifecycle process " + it.LifecycleProcess +
-					" names no start event for " + op})
+		switch {
+		case len(it.Operations) > 0 && len(it.Actions) > 0:
+			// Two answers to what a product's actions are is no answer (ADR-0429).
+			add(Problem{Item: it.ID, Message: "carries an operation map and actions; bind one " +
+				"shape — the actions say everything the map did"})
+		case len(it.Actions) > 0:
+			checkActions(it, add)
+		default:
+			for _, op := range []string{OpProvision, OpDeprovision} {
+				if strings.TrimSpace(it.Operations[op]) == "" {
+					add(Problem{Item: it.ID, Message: "lifecycle process " + it.LifecycleProcess +
+						" names no start event for " + op})
+				}
 			}
-		}
-		var unknown []string
-		for op := range it.Operations {
-			if !knownOperations[op] {
-				unknown = append(unknown, op)
+			var unknown []string
+			for op := range it.Operations {
+				if !knownOperations[op] {
+					unknown = append(unknown, op)
+				}
 			}
-		}
-		sort.Strings(unknown)
-		for _, op := range unknown {
-			add(Problem{Item: it.ID, Message: "operation " + op + " is not one a product offers " +
-				"(provision, change, deprovision)"})
+			sort.Strings(unknown)
+			for _, op := range unknown {
+				add(Problem{Item: it.ID, Message: "operation " + op + " is not one a product offers " +
+					"(provision, change, deprovision)"})
+			}
 		}
 		if it.LifecycleProcess == FulfilmentProcess {
 			add(Problem{Item: it.ID, Message: "is bound to " + FulfilmentProcess + ", the process " +
@@ -131,6 +143,11 @@ func checkBindings(it Item, add func(Problem)) {
 	}
 	if len(it.Operations) > 0 {
 		add(Problem{Item: it.ID, Message: "names operations but binds no lifecycle process"})
+	}
+	if len(it.Actions) > 0 {
+		// The two-process form starts its processes by hand; there is no message an
+		// action could name.
+		add(Problem{Item: it.ID, Message: "names actions but binds no lifecycle process"})
 	}
 	// The orchestration that works an order is never the process of a position
 	// in it. Bound as one, it starts itself for that position, the new copy asks
@@ -197,17 +214,14 @@ func LifecycleProblems(items []Item, look EntryPointLookup) []Problem {
 		for _, m := range messages {
 			have[m] = true
 		}
-		ops := make([]string, 0, len(it.Operations))
-		for op := range it.Operations {
-			ops = append(ops, op)
-		}
-		sort.Strings(ops)
-		for _, op := range ops {
-			msg := strings.TrimSpace(it.Operations[op])
-			if msg == "" || have[msg] || (it.PerPosition() && op == OpChange) {
+		for _, a := range it.ActionList() {
+			msg := strings.TrimSpace(a.Message)
+			// In the per-position form a change or a service is delivered to the
+			// running strand, so it is a catch there, checked below — not a start.
+			if msg == "" || have[msg] || (it.PerPosition() && deliveredToStrand(a.Effect)) {
 				continue
 			}
-			out = append(out, Problem{Item: it.ID, Message: "operation " + op + " names " +
+			out = append(out, Problem{Item: it.ID, Message: it.actionNoun() + " " + a.Key + " names " +
 				msg + ", which is not a message start event of " + it.LifecycleProcess})
 		}
 		if it.PerPosition() {
@@ -238,14 +252,14 @@ func perPositionProblems(it Item, look EntryPointLookup) []Problem {
 	for _, c := range shape.CatchPoints(it.LifecycleProcess) {
 		catches[c.Message] = append(catches[c.Message], c)
 	}
-	for _, op := range []string{OpChange, OpDeprovision} {
-		msg := strings.TrimSpace(it.Operations[op])
-		if msg == "" {
+	for _, a := range it.ActionList() {
+		msg := strings.TrimSpace(a.Message)
+		if msg == "" || (a.Effect != EffectDeprovision && !deliveredToStrand(a.Effect)) {
 			continue
 		}
 		points := catches[msg]
 		if len(points) == 0 {
-			out = append(out, Problem{Item: it.ID, Message: "operation " + op + " names " + msg +
+			out = append(out, Problem{Item: it.ID, Message: it.actionNoun() + " " + a.Key + " names " + msg +
 				", which " + it.LifecycleProcess + " never waits for; a per-position lifecycle " +
 				"delivers it to the running instance, so the strand must catch it"})
 			continue
@@ -264,6 +278,13 @@ func perPositionProblems(it Item, look EntryPointLookup) []Problem {
 			"an instance that lives as long as the right would run until the engine stops it"})
 	}
 	return out
+}
+
+// deliveredToStrand reports whether an action of this effect reaches a per-position
+// product's running instance rather than starting one: a change and a service do;
+// a provision starts the strand, and a deprovision does both (ADR-0428 §3).
+func deliveredToStrand(effect string) bool {
+	return effect == EffectChange || effect == EffectService
 }
 
 // copyOperations copies an item's operation map, so a release does not share it
