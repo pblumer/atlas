@@ -195,7 +195,9 @@ change the other two build on:
 - Mode `command` with the product's allow-list of process applications, limited to
   `operator` / `system` actions (§10, decision 1).
 
-## Slice D — The modeler
+## Slice D — The modeler — ✅ landed
+
+See ADR-0429 §6's as-built note for slice D.
 
 - `sourceKind` on `GET /api/v1/message-sources`: `product-action` and `process` beside
   `inbound-watch`; the picker groups by source.

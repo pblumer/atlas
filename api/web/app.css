@@ -2417,6 +2417,17 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 }
 .impl-badge svg { display: block; width: 16px; height: 16px; border-radius: 3px; }
 
+/* The shop badge on a send or receive task the shop's commands run through (ADR-0429 §6,
+   drawShopBadges). Smaller than the implementation badge and placed beside the task's
+   top-left envelope rather than over it: that envelope is the BPMN marker saying which way
+   the message goes, and it has to stay readable. */
+.shop-badge {
+  display: grid; place-items: center; width: 20px; height: 20px;
+  background: var(--surface); border-radius: 50%; box-shadow: 0 0 0 1px var(--border-strong);
+  cursor: default;
+}
+.shop-badge svg { display: block; width: 13px; height: 13px; border-radius: 3px; }
+
 /* Label naming the process a collaboration pool runs (drawPoolProcessCaptions). A pool is a
    participant; the canvas draws its name vertically in the left band but never the process it
    executes. This writes the process name the same way — vertical, bottom-to-top — just inside

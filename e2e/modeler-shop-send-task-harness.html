@@ -98,6 +98,7 @@
         if (method === "GET" && /\/drafts$/.test(url)) return [];
         if (method === "GET" && /\/decisions/.test(url)) return [];
         if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
+        if (method === "GET" && /\/message-sources$/.test(url)) return window.__sources || [];
         return {};
       };
 

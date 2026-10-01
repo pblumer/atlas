@@ -14,6 +14,19 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The modeler offers a message name from where it comes from.** The message picker now
+  groups the names it knows by source: a step that waits for a message is offered the
+  events Workers publish and the messages of products' actions; a step that sends one is
+  offered the processes already waiting for it, at a start or a catch, and never a product's
+  action, whose message only the order sends. In a process a product binds, an event from a
+  Worker is marked as not usable for an action — publishing the catalogue would refuse it.
+  The hint under the name says every source at once. A Shop task suggests the action keys
+  the catalogue declares, and a shop task, or a receive task waiting for a product's message,
+  carries a small shop badge beside its envelope in the Implement view and in the runtime
+  views. Behind it, `GET /api/v1/message-sources` tags each row with `sourceKind`:
+  `inbound-watch`, `product-action` (shown to whoever maintains the catalogue) or
+  `process`. The fourth slice of ADR-0429.
+
 - **A process can ask somebody's held service for an action — in the name of an application
   the product trusts.** The Shop send task has a second mode, *command*: name the product and
   the action, and say where the order and the position come from, and the task asks that
