@@ -462,6 +462,16 @@
       ]
     },
     {
+      "name": "ShopTask",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:SendTask"] },
+      "properties": [
+        { "name": "mode", "type": "String", "isAttr": true },
+        { "name": "action", "type": "String", "isAttr": true },
+        { "name": "outcome", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "MockupConnector",
       "superClass": ["Element"],
       "meta": { "allowedIn": ["bpmn:ServiceTask"] },

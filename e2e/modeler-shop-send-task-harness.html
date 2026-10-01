@@ -1,0 +1,106 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas shop send task modeler e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountEditor against a mock `api`, with a
+         diagram holding one send task of each shape the Shop kind has to replace or
+         read: a message send, a job-worker send, and a send task that already states
+         an outcome. The compiler parses <atlas:shopTask mode action outcome/> and
+         nothing else (ADR-0429 §4), so the tests assert on the exported XML. A second,
+         bare diagram declares no atlas namespace at all, for a send task drawn fresh.
+         Mounted in deployment mode (key set, draftId null) so no live collaboration SSE
+         is attached. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountEditor } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+
+      // Send_msg publishes a declared message; Send_worker hands a job to a job worker,
+      // with a retry budget; Send_shop reports that storage-extend failed.
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:atlas="http://atlas/schema/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_shop" targetNamespace="http://atlas/bpmn">
+  <bpmn:message id="Message_done" name="mailbox.done"/>
+  <bpmn:process id="mailbox" name="Test Shop Send Task" isExecutable="true">
+    <bpmn:startEvent id="Start_1" name="Start"><bpmn:outgoing>f0</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:sendTask id="Send_msg" name="Announce" messageRef="Message_done"><bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing></bpmn:sendTask>
+    <bpmn:sendTask id="Send_worker" name="Notify">
+      <bpmn:extensionElements><zeebe:taskDefinition type="notify" retries="4"/></bpmn:extensionElements>
+      <bpmn:incoming>f1</bpmn:incoming><bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:sendTask id="Send_shop" name="Report failed">
+      <bpmn:extensionElements><atlas:shopTask mode="outcome" action="storage-extend" outcome="failed"/></bpmn:extensionElements>
+      <bpmn:incoming>f2</bpmn:incoming><bpmn:outgoing>f3</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="End_1" name="End"><bpmn:incoming>f3</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="Send_msg"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="Send_msg" targetRef="Send_worker"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="Send_worker" targetRef="Send_shop"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="Send_shop" targetRef="End_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="mailbox">
+    <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Send_msg_di" bpmnElement="Send_msg"><dc:Bounds x="260" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Send_worker_di" bpmnElement="Send_worker"><dc:Bounds x="420" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Send_shop_di" bpmnElement="Send_shop"><dc:Bounds x="580" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="740" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="260" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="360" y="138"/><di:waypoint x="420" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="520" y="138"/><di:waypoint x="580" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><di:waypoint x="680" y="138"/><di:waypoint x="740" y="138"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // A start and an end and no atlas namespace: what a new model looks like before
+      // anything in it is Atlas's own.
+      const BARE = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" id="Definitions_bare" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="bare" name="Bare" isExecutable="true">
+    <bpmn:startEvent id="Start_1" name="Start"/>
+    <bpmn:endEvent id="End_1" name="End"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="bare">
+    <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="560" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      let served = XML;
+      const api = async (method, url) => {
+        if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return served;
+        if (method === "GET" && /\/processes$/.test(url)) return [];
+        if (method === "GET" && /\/drafts$/.test(url)) return [];
+        if (method === "GET" && /\/decisions/.test(url)) return [];
+        if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
+        return {};
+      };
+
+      window.__mount = (which) => {
+        served = which === "bare" ? BARE : XML;
+        return mountEditor(view, { api, toast: noop, key: 42 });
+      };
+      window.__select = (id) =>
+        window.__atlasModeler.get("selection").select(window.__atlasModeler.get("elementRegistry").get(id));
+      // __drawSendTask puts a new send task on the canvas the way the palette does —
+      // through bpmn-js's element factory and modeling — and returns its id.
+      window.__drawSendTask = () => {
+        const m = window.__atlasModeler;
+        const shape = m.get("elementFactory").createShape({ type: "bpmn:SendTask" });
+        const root = m.get("canvas").getRootElement();
+        return m.get("modeling").createShape(shape, { x: 380, y: 138 }, root).id;
+      };
+      // The exported XML is what the deploy sends, so the tests assert against it.
+      window.__xml = async () => (await window.__atlasModeler.saveXML({ format: true })).xml;
+      window.__ready = true;
+    </script>
+  </body>
+</html>
