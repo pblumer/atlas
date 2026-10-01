@@ -81,3 +81,26 @@ func TestRebindCarriesTheActions(t *testing.T) {
 		t.Error("the rebound line shares its actions with the catalogue")
 	}
 }
+
+// TestALineListsTheActionsItFroze: a line answers its actions in either shape its
+// product said them in — the declared list, or the actions an operation map means —
+// and a line whose product has no lifecycle process has none.
+func TestALineListsTheActionsItFroze(t *testing.T) {
+	declared := Line{LifecycleProcess: "mailbox-lc", Actions: mailboxActions().Actions}
+	if got := declared.ActionList(); len(got) != len(declared.Actions) || got[0].Key != catalog.ActionProvision {
+		t.Fatalf("declared actions = %+v", got)
+	}
+	legacy := Line{LifecycleProcess: "laptop-lc", Operations: map[string]string{
+		catalog.OpProvision: "laptop.provision", catalog.OpDeprovision: "laptop.deprovision", catalog.OpChange: "laptop.change",
+	}}
+	var keys []string
+	for _, a := range legacy.ActionList() {
+		keys = append(keys, a.Key)
+	}
+	if len(keys) != 3 || keys[0] != "provision" || keys[1] != "deprovision" || keys[2] != "change" {
+		t.Fatalf("an operation map read as %v, want provision, deprovision, change", keys)
+	}
+	if got := (Line{ProvisionProcess: "prov"}).ActionList(); got != nil {
+		t.Fatalf("a line of two processes lists %+v, want none", got)
+	}
+}

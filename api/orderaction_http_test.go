@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -75,6 +76,12 @@ func toolActions(deprovisionTriggers string) string {
 // and reports it done. It answers rita's client and a stranger's beside the admin's.
 func aToolHeldForRita(t *testing.T, deprovisionTriggers string) (ts *httptest.Server, admin, rita, stranger *http.Client, ord string, strand uint64) {
 	t.Helper()
+	return aHeldTool(t, actingStrandBPMN, toolActions(deprovisionTriggers))
+}
+
+// aHeldTool is aToolHeldForRita over any strand and any list of actions.
+func aHeldTool(t *testing.T, bpmn, actions string) (ts *httptest.Server, admin, rita, stranger *http.Client, ord string, strand uint64) {
+	t.Helper()
 	ts, _ = newAuthServerWith(t, "root", "rootpassword")
 	admin = newClient(t)
 	if login(t, admin, ts, "root", "rootpassword") != http.StatusOK {
@@ -85,7 +92,7 @@ func aToolHeldForRita(t *testing.T, deprovisionTriggers string) (ts *httptest.Se
 	rita = signInAs(t, ts.URL, "rita", "a-password-that-is-long")
 	stranger = signInAs(t, ts.URL, "sam", "a-password-that-is-long")
 
-	if code, b := cReqTyped(t, admin, ts, "POST", "/api/v1/deployments", "application/xml", actingStrandBPMN); code != http.StatusOK {
+	if code, b := cReqTyped(t, admin, ts, "POST", "/api/v1/deployments", "application/xml", bpmn); code != http.StatusOK {
 		t.Fatalf("deploy: %d (%s)", code, b)
 	}
 	code, body := cReq(t, admin, ts, "POST", "/api/v1/catalogs", `{"rank":1,"languages":["de"],"texts":{"de":"A"}}`)
@@ -96,7 +103,7 @@ func aToolHeldForRita(t *testing.T, deprovisionTriggers string) (ts *httptest.Se
 	if code, b := cReq(t, admin, ts, "POST", "/api/v1/catalog-products",
 		`{"id":"tool","homeCatalog":"`+cat+`","state":"active","texts":{"de":"Werkzeug"},`+
 			`"approval":{"kind":"none"},"lifecycleProcess":"tool-strand","lifecycleForm":"per-position",`+
-			`"actions":`+toolActions(deprovisionTriggers)+`}`); code != http.StatusOK {
+			`"actions":`+actions+`}`); code != http.StatusOK {
 		t.Fatalf("save: %d (%s)", code, b)
 	}
 	if code, b := cReq(t, admin, ts, "PATCH", "/api/v1/catalogs/"+cat, `{"items":["tool"]}`); code != http.StatusOK {
@@ -378,5 +385,125 @@ func TestAnActionAskedAsATriggerIsCheckedByTheServer(t *testing.T) {
 	}
 	if vars := variablesOf(t, admin, ts, strand); !strings.Contains(vars, `"audited"`) || !strings.Contains(vars, "locked out") {
 		t.Fatalf("the strand did not run both: %s", vars)
+	}
+}
+
+// TestTheActionActRefusesABodyItCannotRead: a body that is not JSON, and one that
+// names no command id, are the caller's to fix before anything is looked up.
+func TestTheActionActRefusesABodyItCannotRead(t *testing.T) {
+	ts, _, rita, _, ord, _ := aToolHeldForRita(t, `["customer","operator"]`)
+	reset := "/api/v1/orders/" + ord + "/lines/tool/actions/password-reset"
+	if code, b := cReq(t, rita, ts, "POST", reset, `{"commandId":`); code != http.StatusBadRequest || !strings.Contains(string(b), "invalid JSON body") {
+		t.Fatalf("a body that is not JSON: %d (%s), want 400", code, b)
+	}
+	if code, b := cReq(t, rita, ts, "POST", reset, ``); code != http.StatusBadRequest || !strings.Contains(string(b), "commandId is required") {
+		t.Fatalf("no body at all: %d (%s), want 400 asking for the command id", code, b)
+	}
+}
+
+// TestAPositionThatCannotTakeAnActionSaysWhy: the availability names the reason when
+// no action can be asked whatever the process does — the position is not held yet,
+// or the instance that carried it is gone — and a product whose actions are all the
+// order's offers none.
+func TestAPositionThatCannotTakeAnActionSaysWhy(t *testing.T) {
+	ts, admin, _, _, ord, strand := aToolHeldForRita(t, `["customer","operator"]`)
+	if code, b := cReq(t, admin, ts, "DELETE", fmt.Sprintf("/api/v1/instances/%d", strand), ""); code != http.StatusOK && code != http.StatusNoContent {
+		t.Fatalf("cancel the strand: %d (%s)", code, b)
+	}
+	code, offered, body := actionsOf(t, admin, ts, ord)
+	if code != http.StatusOK || offered["password-reset"].Available || !strings.Contains(offered["password-reset"].Why, "no longer running") {
+		t.Fatalf("after the strand is gone: %d (%s), want nothing available and why", code, body)
+	}
+
+	ts2, admin2, ord2, cat := aLifecycleOrder(t)
+	code, body2 := cReq(t, admin2, ts2, "GET", "/api/v1/orders/"+ord2+"/lines/laptop/actions", "")
+	if code != http.StatusOK || !strings.Contains(string(body2), `"actions":[]`) {
+		t.Fatalf("a product whose actions are the order's: %d (%s), want none offered", code, body2)
+	}
+	repair := `,{"key":"repair","message":"laptop.repair","effect":"service","triggers":["customer"],"labels":{"de":"Reparieren"}}`
+	if code, b := cReqTyped(t, admin2, ts2, "POST", "/api/v1/deployments", "application/xml", repairingLaptopBPMN); code != http.StatusOK {
+		t.Fatalf("deploy: %d (%s)", code, b)
+	}
+	if code, b := cReq(t, admin2, ts2, "POST", "/api/v1/catalog-products", laptopActions(cat, repair)); code != http.StatusOK {
+		t.Fatalf("save product: %d (%s)", code, b)
+	}
+	code, rel := cReq(t, admin2, ts2, "POST", "/api/v1/catalogs/"+cat+"/releases", "")
+	if code != http.StatusCreated {
+		t.Fatalf("publish: %d (%s)", code, rel)
+	}
+	code, placed := cReq(t, admin2, ts2, "POST", "/api/v1/orders", `{"releaseId":"`+idOf(t, rel)+`","items":["laptop"]}`)
+	if code != http.StatusCreated {
+		t.Fatalf("order: %d (%s)", code, placed)
+	}
+	code, body2 = cReq(t, admin2, ts2, "GET", "/api/v1/orders/"+idOf(t, placed)+"/lines/laptop/actions", "")
+	if code != http.StatusOK || !strings.Contains(string(body2), `"key":"repair"`) ||
+		!strings.Contains(string(body2), `"available":false`) || !strings.Contains(string(body2), "the position is pending") {
+		t.Fatalf("a position not held yet: %d (%s), want repair offered, not available, and why", code, body2)
+	}
+}
+
+// A strand that listens at a receive task for a reset, with a non-interrupting
+// message boundary on it for an audit and an interrupting one for its return. Neither
+// is an intermediate catch, which is what the availability has to see through.
+const listeningStrandBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <message id="m_prov" name="tool.provision"/>
+  <message id="m_deprov" name="tool.deprovision">
+    <extensionElements><zeebe:subscription correlationKey="=orderId + &#34;/&#34; + positionId"/></extensionElements>
+  </message>
+  <message id="m_reset" name="tool.reset">
+    <extensionElements><zeebe:subscription correlationKey="=orderId + &#34;/&#34; + positionId"/></extensionElements>
+  </message>
+  <message id="m_audit" name="tool.audit">
+    <extensionElements><zeebe:subscription correlationKey="=orderId + &#34;/&#34; + positionId"/></extensionElements>
+  </message>
+  <process id="tool-strand" isExecutable="true">
+    <startEvent id="Provision"><messageEventDefinition messageRef="m_prov"/></startEvent>
+    <exclusiveGateway id="Wait"/>
+    <receiveTask id="Listen" messageRef="m_reset"/>
+    <scriptTask id="R"><extensionElements><zeebe:script expression="=true" resultVariable="wasReset"/></extensionElements></scriptTask>
+    <boundaryEvent id="Audit" attachedToRef="Listen" cancelActivity="false"><messageEventDefinition messageRef="m_audit"/></boundaryEvent>
+    <scriptTask id="A"><extensionElements><zeebe:script expression="=true" resultVariable="audited"/></extensionElements></scriptTask>
+    <endEvent id="AEnd"/>
+    <boundaryEvent id="Returned" attachedToRef="Listen"><messageEventDefinition messageRef="m_deprov"/></boundaryEvent>
+    <startEvent id="Fallback"><messageEventDefinition messageRef="m_deprov"/></startEvent>
+    <exclusiveGateway id="Return"/>
+    <endEvent id="End"/>
+    <sequenceFlow id="s1" sourceRef="Provision" targetRef="Wait"/>
+    <sequenceFlow id="s2" sourceRef="Wait" targetRef="Listen"/>
+    <sequenceFlow id="s3" sourceRef="Listen" targetRef="R"/>
+    <sequenceFlow id="s4" sourceRef="R" targetRef="Wait"/>
+    <sequenceFlow id="a1" sourceRef="Audit" targetRef="A"/>
+    <sequenceFlow id="a2" sourceRef="A" targetRef="AEnd"/>
+    <sequenceFlow id="r1" sourceRef="Returned" targetRef="Return"/>
+    <sequenceFlow id="r2" sourceRef="Fallback" targetRef="Return"/>
+    <sequenceFlow id="r3" sourceRef="Return" targetRef="End"/>
+  </process>
+</definitions>`
+
+// TestAnActionIsAvailableWhereverTheStrandListensForIt: a strand that waits at a
+// receive task, with a message boundary beside it, takes both actions — the
+// availability reads the receive task and the armed boundary as listening — and the
+// boundary's action reaches the strand without ending what it waits at.
+func TestAnActionIsAvailableWhereverTheStrandListensForIt(t *testing.T) {
+	actions := `[{"key":"provision","message":"tool.provision","effect":"provision"},` +
+		`{"key":"deprovision","message":"tool.deprovision","effect":"deprovision","triggers":["customer","operator"]},` +
+		`{"key":"password-reset","message":"tool.reset","effect":"service","triggers":["customer"],"labels":{"de":"Zurücksetzen"}},` +
+		`{"key":"audit","message":"tool.audit","effect":"service","triggers":["operator"],"labels":{"de":"Prüfen"}}]`
+	ts, admin, _, _, ord, strand := aHeldTool(t, listeningStrandBPMN, actions)
+
+	code, offered, body := actionsOf(t, admin, ts, ord)
+	if code != http.StatusOK || !offered["password-reset"].Available || !offered["audit"].Available {
+		t.Fatalf("a strand at a receive task with a boundary: %d (%s), want both available", code, body)
+	}
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/orders/"+ord+"/lines/tool/actions/audit",
+		`{"commandId":"a-1","trigger":"operator"}`); code != http.StatusOK {
+		t.Fatalf("audit through the boundary: %d (%s)", code, b)
+	}
+	if vars := variablesOf(t, admin, ts, strand); !strings.Contains(vars, `"audited"`) {
+		t.Fatalf("the boundary's branch did not run: %s", vars)
+	}
+	if code, offered, body := actionsOf(t, admin, ts, ord); code != http.StatusOK || !offered["password-reset"].Available {
+		t.Fatalf("after the audit: %d (%s), want the receive task still listening", code, body)
 	}
 }
