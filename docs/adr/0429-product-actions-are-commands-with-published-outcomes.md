@@ -445,7 +445,11 @@ the timer tick runs within a second. The result variable receives the command id
 outcome will be recorded under — for a return, the order's attempt id. A command carries
 no variables of its own in this cut: the process it reaches is seeded as the act seeds it,
 with the reason `asked by application <key>`, so an action whose process needs a form's
-answers is still asked by a person or over the route. Building it found
+answers is still asked by a person or over the route. In the modeler the Shop kind has
+the mode as its second entry: product, action, order and position — an =expression behind
+the same fx toggle the Worker fields use — and the result variable; switching modes clears
+the other mode's attributes, and a command task offers the loop section, so a leaver
+process can return each right it finds. Building it found
 that the worker breaker (ADR-0340) counted the failures of engine-only job types, which
 have no target to be down; three refusals for their data held every other instance's task
 of the kind back. They are no longer counted.

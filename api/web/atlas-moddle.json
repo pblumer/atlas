@@ -472,7 +472,8 @@
         { "name": "product", "type": "String", "isAttr": true },
         { "name": "order", "type": "String", "isAttr": true },
         { "name": "position", "type": "String", "isAttr": true },
-        { "name": "resultVariable", "type": "String", "isAttr": true }
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
       ]
     },
     {
