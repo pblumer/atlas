@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/url"
 )
 
@@ -390,6 +391,118 @@ func catalogTools() []Tool {
 			InputSchema: noArgs(),
 			Handler: func(c *Client, _ map[string]any) (string, error) {
 				return asText(c.get("/api/v1/catalog-products/translation-gaps"))
+			},
+		},
+		{
+			Name: "atlas_order_line_actions",
+			Description: "Which actions one held order position offers you, and whether it takes " +
+				"each one now (ADR-0429): a product declares what can be asked of what somebody " +
+				"holds — a larger mailbox, a password reset — and for a product that runs one " +
+				"instance per position, whether the action is possible right now is the " +
+				"process's answer, read from where its instance stands. Each action carries its " +
+				"key, effect, triggers, labels, form, `available` and, when it is not, `why`. " +
+				"READ-ONLY. To ask for an operator's or a system's action use " +
+				"atlas_ask_order_line_action; a customer's action is the person's to ask for, " +
+				"in the shop.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"orderId": map[string]any{"type": "string", "description": "The order id."},
+					"item": map[string]any{
+						"type": "string",
+						"description": "The position: the product id, or itemId#variantId where " +
+							"one order carries the product in two shapes.",
+					},
+				},
+				"required": []any{"orderId", "item"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "orderId")
+				if err != nil {
+					return "", err
+				}
+				item, err := argString(args, "item")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/orders/" + url.PathEscape(id) + "/lines/" +
+					url.PathEscape(item) + "/actions"))
+			},
+		},
+		{
+			Name: "atlas_ask_order_line_action",
+			Description: "Ask one held order position for an action its product declares for an " +
+				"OPERATOR or the SYSTEM (ADR-0429) — a password reset an operator runs, a " +
+				"threshold crossing an observer reports. It reaches the target system: the " +
+				"action is delivered to the process that carries the right, which acts on it. " +
+				"Customer actions are NOT available here, by the maintainers' decision: what a " +
+				"person asks of what they hold is theirs to ask in the shop. The server refuses " +
+				"(403) an action that does not declare the trigger you name, and a caller who is " +
+				"not an operator. Read atlas_order_line_actions first: it says which actions exist " +
+				"and whether the position takes each NOW — a 409 means it does not. commandId " +
+				"makes a retry answer with the first outcome instead of asking twice: reuse it " +
+				"when you retry, and choose a new one only for a new request.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"orderId": map[string]any{"type": "string", "description": "The order id."},
+					"item": map[string]any{
+						"type": "string",
+						"description": "The position: the product id, or itemId#variantId where " +
+							"one order carries the product in two shapes.",
+					},
+					"action":    map[string]any{"type": "string", "description": "The action's key, e.g. password-reset."},
+					"commandId": map[string]any{"type": "string", "description": "Idempotency id for this request."},
+					"trigger": map[string]any{
+						"type": "string", "enum": []any{"operator", "system"},
+						"description": "Which of the action's triggers you ask as: operator for a " +
+							"person running the service, system for an observed condition.",
+					},
+					"reason":    map[string]any{"type": "string", "description": "Why; it reaches the process."},
+					"variables": map[string]any{"type": "object", "description": "What the action needs."},
+				},
+				"required": []any{"orderId", "item", "action", "commandId", "trigger"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "orderId")
+				if err != nil {
+					return "", err
+				}
+				item, err := argString(args, "item")
+				if err != nil {
+					return "", err
+				}
+				action, err := argString(args, "action")
+				if err != nil {
+					return "", err
+				}
+				commandID, err := argString(args, "commandId")
+				if err != nil {
+					return "", err
+				}
+				trigger, err := argString(args, "trigger")
+				if err != nil {
+					return "", err
+				}
+				// Checked here as well as by the server, so a customer's action is refused
+				// before any request leaves the adapter.
+				if trigger != "operator" && trigger != "system" {
+					return "", fmt.Errorf("trigger must be operator or system; a customer's action " +
+						"is the person's to ask for, not an agent's")
+				}
+				body := map[string]any{"commandId": commandID, "trigger": trigger}
+				if reason, ok := args["reason"].(string); ok && reason != "" {
+					body["reason"] = reason
+				}
+				if vars, ok := args["variables"].(map[string]any); ok && len(vars) > 0 {
+					body["variables"] = vars
+				}
+				raw, err := json.Marshal(body)
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/orders/"+url.PathEscape(id)+"/lines/"+
+					url.PathEscape(item)+"/actions/"+url.PathEscape(action), "application/json", raw))
 			},
 		},
 		{

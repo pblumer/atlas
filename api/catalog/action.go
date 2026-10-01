@@ -150,6 +150,24 @@ func (it Item) actionFor(name string) (Action, bool) {
 	return Action{}, false
 }
 
+// AskedOfHeld reports whether the action is one somebody asks of a held position —
+// a change or a service (ADR-0429 §2). The provision and the return are the order's
+// own acts and have routes of their own.
+func (a Action) AskedOfHeld() bool { return deliveredToStrand(a.Effect) }
+
+// KnownTrigger reports whether t is one of the Trigger constants.
+func KnownTrigger(t string) bool { return knownTriggers[t] }
+
+// TriggeredBy reports whether t is one of the action's triggers.
+func (a Action) TriggeredBy(t string) bool {
+	for _, tr := range a.Triggers {
+		if tr == t {
+			return true
+		}
+	}
+	return false
+}
+
 // ActionNamed is the action this product declares under key, in either shape.
 func (it Item) ActionNamed(key string) (Action, bool) {
 	for _, a := range it.ActionList() {

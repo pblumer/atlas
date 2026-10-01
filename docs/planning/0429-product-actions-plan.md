@@ -144,7 +144,20 @@ because `handlePublishMessage` refuses only what a per-position product *deliver
 watch's door on this route: refuse any name `catalogOwnerOfName` finds, with the same 409.
 One small pull request of its own, before slice B makes the action act the sanctioned path.
 
-## Slice B — The action act, availability and the portal
+## Slice B — The action act, availability and the portal — ✅ landed
+
+Built as planned below, with these decisions recorded in ADR-0429 §2's as-built note:
+the provision and the return keep their own routes and are refused by the act; the
+return follows the deprovision action's triggers (the recipient may give back); the act
+refuses caller variables under the names it seeds; a directed delivery to a catch that
+lost an event-based gateway's race now answers "not waiting" (it answered "delivered").
+**MCP (decided 2026-10-01):** `atlas_order_line_actions` reads the availability and
+`atlas_ask_order_line_action` asks for an `operator` or `system` action; the act's optional
+`trigger` field is what the server checks, so a customer's action cannot be asked by an
+agent.
+**Not in this slice:** the Console's surface for operator actions, because the Console has
+no order view to put it in — operators use the route (and, for reading, the MCP tool
+`atlas_order_line_actions`) until one exists.
 
 - `POST /api/v1/orders/{id}/lines/{item}/actions/{action}` (`commandId` required) and
   `GET …/actions` (availability, read off the loop), per ADR-0429 §2; `/change` stays as the

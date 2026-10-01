@@ -232,6 +232,35 @@ copy of that rule. The route reads off the loop (ADR-0239).
 Triggering one operator action for every held position of a product is not decided
 here.
 
+*As built — slice B.* The act is `handleLineAction` (`api/orderaction.go`), and `/change`
+is the same act under the key `change`, with the trigger id it always had. The checks run
+in the order above; a caller who may not act on the order is answered 404, as every order
+route answers, and one who may but is not among the action's triggers 403. An operator
+may ask for every action — `customer` includes an operator for any order, and a `system`
+crossing is reported under an operator credential (§1) — while the orderer and the
+recipient may ask for the `customer` ones (§10, decision 4). The provision and the return
+are refused with the route that does them: the return keeps its own route because the
+order records it (`returning`), and it now follows the deprovision action's triggers, so
+the recipient may give back what they hold and a return that names only `operator` is an
+operator's. The act refuses a caller's variable under a name it seeds (`orderId`,
+`positionId`, `itemId`, `recipient`, `reason`): the server files the instance on the
+position those name. Availability (`api/orderactionavail.go`) reads the strand's live
+element instances off the loop — message catches, receive tasks, armed message boundaries
+and message event subprocesses, each against the version the instance runs. Building it
+found that a directed delivery counted a subscription its element no longer held — a
+catch that lost an event-based gateway's race — and answered «delivered» for a message
+no step received; `handleDelivering` now counts live elements only, so the act and the
+availability agree. The portal draws the buttons under a held position (`shop.js`,
+`actionButtons`); the operator's surface in the Console waits for an order view the
+Console does not have yet. The act takes an optional `trigger` — which of the action's
+triggers the caller asks as — and refuses one the action does not declare, or `operator` and
+`system` from somebody who is not an operator. On MCP, reading the availability is
+`atlas_order_line_actions` and asking is `atlas_ask_order_line_action`, which always names
+`operator` or `system`: the maintainers decided on 2026-10-01 that an agent may ask for
+what an operator or an observer asks for, and never for a customer's action, which stays
+the person's in the shop. That lifts ADR-0428's exclusion for those two triggers only, and
+the server, not the adapter, is what holds the line.
+
 ### 3. The outcome is a fact
 
 The process states how an action ended with the shop send task (§4); a process that

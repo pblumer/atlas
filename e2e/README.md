@@ -268,6 +268,14 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   Drives the real `viewCatalogDetail` through the editor harness, which lets a spec reshape
   a product before it mounts (`window.__patchItems`).
 
+- **`shop-actions.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
+  the **actions on a held position** in the shop. A held position shows a button per action
+  the server offers the reader, labelled in the reader's language, and one the position does
+  not take now is greyed out with the server's reason as its title; an action without a form
+  asks first and sends a command id, one with a form opens it under the position, refuses
+  to send it empty and sends its answers; and a product whose return only an operator gives
+  is not offered for return. Loads the real `shop.html` with only the network replaced.
+
 - **`worker-events-modeler.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
   the **Worker events in the message picker**. An element that waits for a message — a
   message start, a catch, a boundary event, a receive task — is offered the names the

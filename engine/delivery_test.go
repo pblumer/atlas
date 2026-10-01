@@ -205,3 +205,68 @@ func TestDeliveryFollowsTheStrandThroughGatewayAndBoundary(t *testing.T) {
 		t.Fatal("the return during a change did not end the strand through the return path")
 	}
 }
+
+// changeOrResetStrand waits at an event-based gateway for a change, which a person
+// then works, or a password reset, which runs at once and waits again.
+func changeOrResetStrand(t *testing.T, h *harness) *engine.Processor {
+	t.Helper()
+	b := compiler.NewBuilder(9, "strand", 1)
+	key := mustCompile(t, "positionKey")
+	s := b.AddMessageStartEvent("strand.provision", nil, false)
+	wait := b.AddExclusiveGateway()
+	gw := b.AddEventBasedGateway()
+	askChange := b.AddMessageCatchEvent("strand.change", key)
+	change := b.AddUserTask("Change", compiler.Assignment{Literal: ""}, compiler.Assignment{Literal: ""}, "", 0, 0, 3)
+	askReset := b.AddMessageCatchEvent("strand.reset", key)
+	reset := b.AddScriptTask(mustCompile(t, "true"), "ran_reset")
+	b.Connect(s, wait)
+	b.Connect(wait, gw)
+	b.Connect(gw, askChange)
+	b.Connect(gw, askReset)
+	b.Connect(askChange, change)
+	b.Connect(change, wait)
+	b.Connect(askReset, reset)
+	b.Connect(reset, wait)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	return p
+}
+
+// TestADeliveryToACatchThatLostItsRaceDeliversNothing: once a change wins the
+// event-based gateway, the reset branch is terminated but its subscription stays
+// behind until a later correlation clears it. A reset delivered while the change is
+// worked must be answered "not waiting" — before, it was "delivered": the payload
+// was written into the strand, a receipt recorded it, and nothing ran.
+func TestADeliveryToACatchThatLostItsRaceDeliversNothing(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	p := changeOrResetStrand(t, h)
+	key := issue(t, p, "o1/laptop")
+
+	if res := deliver(t, p, key, "strand.change", "o1/laptop", "chg-1"); res.Outcome != engine.DeliveryDelivered {
+		t.Fatalf("change = %+v, want delivered at the gateway", res)
+	}
+	var res engine.DeliveryResult
+	p.DeliverMessage(key, "strand.reset", "o1/laptop", "caller:test", "rst-1", &res, strVar("resetFor", "locked out"))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if res.Outcome != engine.DeliveryNotWaiting {
+		t.Fatalf("reset during the change = %+v, want not waiting", res)
+	}
+	if readVar(t, h.store, key, "resetFor") != nil {
+		t.Fatal("a delivery nothing received wrote its payload into the strand")
+	}
+	// Refused, not received: the same command id is free to arrive once the strand
+	// waits for it again, rather than replaying a delivery that never happened.
+	if res := deliver(t, p, key, "strand.reset", "o1/laptop", "rst-1"); res.Outcome != engine.DeliveryNotWaiting {
+		t.Fatalf("retry = %+v, want not waiting again rather than replayed", res)
+	}
+}

@@ -37,20 +37,27 @@ var mcpToolRoutes = map[string]string{
 	// the model and not an omission: a catalogue has none, and a product is
 	// withdrawn through the ordinary save because an order placed years ago still
 	// resolves through it.
-	"atlas_list_catalogs":              "GET /api/v1/catalogs",
-	"atlas_get_catalog":                "GET /api/v1/catalogs/{id}",
-	"atlas_create_catalog":             "POST /api/v1/catalogs",
-	"atlas_update_catalog":             "PATCH /api/v1/catalogs/{id}",
-	"atlas_list_catalog_products":      "GET /api/v1/catalog-products",
-	"atlas_catalog_approver_report":    "GET /api/v1/catalog-products/approver-report",
-	"atlas_catalog_fulfilment_report":  "GET /api/v1/catalog-products/fulfilment-report",
-	"atlas_catalog_translation_gaps":   "GET /api/v1/catalog-products/translation-gaps",
-	"atlas_save_catalog_product":       "POST /api/v1/catalog-products",
-	"atlas_publish_catalog":            "POST /api/v1/catalogs/{id}/releases",
-	"atlas_rebind_catalog_product":     "POST /api/v1/catalog-products/{id}/rebind",
-	"atlas_catalog_releases":           "GET /api/v1/catalogs/{id}/releases",
-	"atlas_catalog_unpublished":        "GET /api/v1/catalogs/{id}/unpublished",
-	"atlas_import_catalog_archimate":   "POST /api/v1/catalogs/{id}/import",
+	"atlas_list_catalogs":             "GET /api/v1/catalogs",
+	"atlas_get_catalog":               "GET /api/v1/catalogs/{id}",
+	"atlas_create_catalog":            "POST /api/v1/catalogs",
+	"atlas_update_catalog":            "PATCH /api/v1/catalogs/{id}",
+	"atlas_list_catalog_products":     "GET /api/v1/catalog-products",
+	"atlas_catalog_approver_report":   "GET /api/v1/catalog-products/approver-report",
+	"atlas_catalog_fulfilment_report": "GET /api/v1/catalog-products/fulfilment-report",
+	"atlas_catalog_translation_gaps":  "GET /api/v1/catalog-products/translation-gaps",
+	"atlas_save_catalog_product":      "POST /api/v1/catalog-products",
+	"atlas_publish_catalog":           "POST /api/v1/catalogs/{id}/releases",
+	"atlas_rebind_catalog_product":    "POST /api/v1/catalog-products/{id}/rebind",
+	"atlas_catalog_releases":          "GET /api/v1/catalogs/{id}/releases",
+	"atlas_catalog_unpublished":       "GET /api/v1/catalogs/{id}/unpublished",
+	"atlas_import_catalog_archimate":  "POST /api/v1/catalogs/{id}/import",
+	// What a held position offers and whether it takes it now (ADR-0429). Reading it
+	// changes nothing; asking for an action is omitted below.
+	"atlas_order_line_actions": "GET /api/v1/orders/{id}/lines/{item}/actions",
+	// Asking for one, as an operator or the system only: the tool sends the trigger and
+	// the server refuses an action that does not declare it (maintainers' decision of
+	// 2026-10-01). A customer's action stays the person's, in the shop.
+	"atlas_ask_order_line_action":      "POST /api/v1/orders/{id}/lines/{item}/actions/{action}",
 	"atlas_get_process_xml":            "GET /api/v1/processes/{key}/xml",
 	"atlas_save_process_diagram":       "PUT /api/v1/processes/{key}/diagram",
 	"atlas_delete_process":             "DELETE /api/v1/processes/{key}",

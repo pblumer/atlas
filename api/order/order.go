@@ -350,6 +350,12 @@ func (l Line) BindingFor(op string) catalog.Binding {
 	return l.frozenItem().BindingFor(op)
 }
 
+// ActionList is the actions this line froze, in either shape its product said them
+// in (ADR-0429).
+func (l Line) ActionList() []catalog.Action {
+	return l.frozenItem().ActionList()
+}
+
 // ActionNamed is the action this line froze under key, in either shape its product
 // said it in.
 func (l Line) ActionNamed(key string) (catalog.Action, bool) {

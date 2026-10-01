@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/pblumer/atlas/api/catalog"
 	"github.com/pblumer/atlas/api/httpapi"
@@ -32,11 +33,11 @@ type returnResp struct {
 
 // handleReturnLine starts the revocation of one provisioned line.
 //
-// Who may: the person who placed the order, and an operator. Not the recipient,
-// even though they are the one holding it — they cannot see the order at all, and
-// "what you hold, and giving it back" is the inventory's question rather than an
-// order's. That surface does not exist yet, and inventing half of it here would
-// put the same act in two places.
+// Who may: the triggers of the line's deprovision action (ADR-0429). `customer` is
+// the person who placed the order, the recipient who holds the right (§10, decision
+// 4) and an operator; a product whose return names only `operator` is given back by
+// an operator. A line that froze no actions — a product of two processes — is given
+// back by its customer, as it always was.
 func (s *Server) handleReturnLine(w http.ResponseWriter, r *http.Request) {
 	id, item := r.PathValue("id"), r.PathValue("item")
 	p := httpapi.PrincipalFrom(r.Context())
@@ -47,6 +48,7 @@ func (s *Server) handleReturnLine(w http.ResponseWriter, r *http.Request) {
 		found     bool
 		returnErr error
 		opErr     error
+		forbidden string
 	)
 	at := s.now()
 	s.do(func() {
@@ -58,12 +60,15 @@ func (s *Server) handleReturnLine(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
+		if !s.mayAskOf(p, ord) {
+			// The same 404 as an order that is not there, because whose orders exist
+			// is not something this endpoint answers.
+			return
+		}
 		found = true
-		if !s.mayCancelOrder(p, ord) {
-			// The same right that withdraws an order gives it back: both are the
-			// orderer saying what happens to what they asked for. And the same 404,
-			// because whose orders exist is not something this endpoint answers.
-			found = false
+		if a, ok := frozenAction(ord, item, catalog.ActionDeprovision); ok && !s.mayTrigger(p, ord, a) {
+			forbidden = "the return of this product is asked for by " + strings.Join(a.Triggers, ", ") +
+				", not by the person it is held for"
 			return
 		}
 		binding = order.ReturnBindingOf(ord, item)
@@ -80,6 +85,9 @@ func (s *Server) handleReturnLine(w http.ResponseWriter, r *http.Request) {
 		return
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no order "+id)
+		return
+	case forbidden != "":
+		httpapi.Error(w, http.StatusForbidden, forbidden)
 		return
 	case returnErr != nil:
 		httpapi.Error(w, http.StatusConflict, returnErr.Error())
@@ -162,4 +170,20 @@ func (s *Server) startReturn(b catalog.Binding, orderID, ref string, o order.Ord
 	// belong beside it in the shop (ADR-0416).
 	s.notePositionInstanceOp(vars, instKey, b.Process, catalog.OpDeprovision)
 	return nil
+}
+
+// frozenAction is the action key that the line ref names froze, when the reference
+// resolves to one line and that line froze it. A reference that does not resolve is
+// answered by whoever acts on it, with the words the order gives.
+func frozenAction(o order.Order, ref, key string) (catalog.Action, bool) {
+	position, err := order.ResolveLine(o, ref)
+	if err != nil {
+		return catalog.Action{}, false
+	}
+	for _, l := range o.Lines {
+		if l.Key() == position {
+			return l.ActionNamed(key)
+		}
+	}
+	return catalog.Action{}, false
 }

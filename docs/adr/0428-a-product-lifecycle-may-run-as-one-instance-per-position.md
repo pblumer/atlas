@@ -1,6 +1,6 @@
 # ADR-0428: A product lifecycle may run as one instance per position, and its later operations are delivered to that instance
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-01 — an operator's or a system's action may be asked through MCP; see "Landed in a second step")
 - **Implementation:** Landed
 - **Date:** 2026-09-29
 - **Deciders:** Atlas maintainers
@@ -294,6 +294,12 @@ Landed in a second step:
   gone, or not waiting for a change, is a 409 (`deliverChange`). It is not an MCP tool,
   for the reason a return is not: changing a right somebody holds reaches the target
   system.
+  *Since ADR-0429 slice B* the route is the action act for the action keyed `change`: the
+  recipient may ask for it beside the orderer and an operator, and on a per-operation line
+  it starts the change instead of refusing it. *Amended 2026-10-01:* the exclusion from
+  MCP stands for what a customer asks; an action whose triggers include `operator` or
+  `system` may be asked by an agent through `atlas_ask_order_line_action`, which names that
+  trigger and is refused by the server for any action that does not declare it (ADR-0429 §2).
 - **Progress.** Position progress (ADR-0390) answers `held` for a held per-position line
   whose strand only waits — at catch events, an event-based gateway, a receive task or a
   timer — and `active` while a change runs.
