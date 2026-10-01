@@ -777,6 +777,81 @@ function eligibleField(dir, chosen) {
 const eligibleFrom = (f) =>
   f.get("eligible-raw") === null ? f.getAll("eligible").map(String) : list(f.get("eligible-raw"));
 
+// commandedByField is which process applications may COMMAND this product
+// (ADR-0429 §10, decision 1): a process deployed into one of them may ask a held
+// position for an action with a Shop send task in mode "command".
+//
+// The eligible picker's shape, and the audience's default. Nothing chosen allows
+// nothing — fail-closed, because a process acting on somebody's held right is the
+// one door here that no person opens. So the label states the empty case, as the
+// other two pickers do, and the hint sets it against the eligible groups, where
+// nothing chosen means the opposite.
+//
+// An application is offered by name and stored by its portable key (ADR-0134),
+// which is the identity that survives a move between servers. A key that no
+// application here carries keeps its box, for the reason an orphaned group does:
+// a box not drawn saves the same result as one unticked, and the catalogue may
+// have come from a server where that application exists — or the application may
+// be one this reader may not see. A typed box takes a key that is not offered, and
+// is the whole field when the applications could not be read (apps is null).
+function commandedByField(apps, chosen) {
+  const keys = chosen || [];
+  const hint = "A process deployed into one of these applications may ask a held "
+    + "position of this product for an action, with a Shop send task in mode "
+    + "<code>command</code> &mdash; a leaver process returning the right, a maintenance "
+    + "process resetting a password. It may ask only for an action whose triggers include "
+    + "<b>operator</b> or <b>system</b>, and never for the provision. <b>Empty is the "
+    + "default and means no process may command it</b> &mdash; the opposite of the "
+    + "eligible groups, where nothing chosen narrows nothing. The list is read from the "
+    + "newest published release when the task runs, so taking an application out and "
+    + "publishing stops it at once, for every right already held.";
+  const typed = (value, label, note) => `<label style="display:block; margin-top:8px">${label}
+      <input name="commandedBy-keys" value="${esc(value)}" autocomplete="off" spellcheck="false"
+        placeholder="hr-leavers">
+      <span class="muted" style="display:block; margin-top:2px">${note}</span></label>`;
+  if (!Array.isArray(apps)) {
+    return `<div class="field wide commanded-by">Applications whose processes may command it
+      (application keys, comma separated; empty: no process may)
+      <span class="muted" style="display:block; margin:2px 0 6px">${hint}</span>
+      ${typed(keys.join(", "), "",
+    "The applications could not be read, so they are named by key here for now.")}</div>`;
+  }
+  const keyed = apps.filter((a) => a && a.key)
+    .map((a) => ({ key: a.key, name: a.name || a.key }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const keyless = apps.filter((a) => a && !a.key).map((a) => a.name || a.id).filter(Boolean);
+  const orphans = [...new Set(keys)].filter((k) => k && !keyed.some((a) => a.key === k));
+  const boxes = [
+    ...keyed.map((a) => ({ key: a.key, text: `${esc(a.name)} <code>${esc(a.key)}</code>` })),
+    ...orphans.map((k) => ({ key: k, text: `<code>${esc(k)}</code> &mdash; no application here carries this key` })),
+  ];
+  const have = new Set(keys);
+  return `<div class="field wide commanded-by">Applications whose processes may command it
+    (none chosen: no process may)
+    <span class="muted" style="display:block; margin:2px 0 6px">${hint}</span>
+    ${boxes.length ? `<div class="commanded-boxes" style="display:grid; gap:4px; margin-top:6px">
+      ${boxes.map((b) => `<label style="display:flex; gap:6px; align-items:center; font-weight:400">
+        <input type="checkbox" name="commandedBy" value="${esc(b.key)}"${have.has(b.key) ? " checked" : ""}>
+        <span>${b.text}</span></label>`).join("")}
+    </div>` : `<p class="muted" style="margin:0">No application here has a key yet, so there is
+      none to tick; name one by its key below.</p>`}
+    ${keyless.length ? `<p class="muted" style="margin:6px 0 0">Not offered, because they have no
+      portable key yet: ${keyless.map(esc).join(", ")}.</p>` : ""}
+    ${typed("", "Another application, by its key (comma separated)",
+    "For one not listed here &mdash; on another server, or one you cannot see. Once "
+    + "saved it is listed above with the others, and unticking it there takes it away.")}</div>`;
+}
+
+// commandedByFrom reads the ticked boxes and the typed keys as one list, each once
+// and none blank: publishing refuses a blank entry and a repeated one, and neither
+// says anything a single entry does not. Always a list, empty included, because a
+// save replaces the product and an absent field would keep the stored one — the
+// eligible groups' rule.
+const commandedByFrom = (f) => [...new Set([
+  ...f.getAll("commandedBy").map((k) => String(k).trim()),
+  ...list(f.get("commandedBy-keys")),
+].filter(Boolean))];
+
 // The orderable window, as two dates.
 //
 // Nanoseconds in the record and days on the screen, and the conversion is the
@@ -967,6 +1042,10 @@ export function productBody(f, { productID, homeCatalog, langs, stored }) {
     // The operation map is read as actions and saved as actions (ADR-0429).
     operations: undefined,
     actions: parseActions(f, langs, was),
+    // Who may command those actions (ADR-0429 §10). Not tied to the lifecycle
+    // process the way the actions are: a product with two processes still has a
+    // return a leaver process may ask for.
+    commandedBy: commandedByFrom(f),
     lifecycleForm: f.get("lifecycleProcess") ? (f.get("lifecycleForm") || "") : "",
     multipleAllowed: !!f.get("multipleAllowed"),
     targets: parseTargets(f.get("targets")),
@@ -997,9 +1076,9 @@ const maxDaysFrom = (f) => {
 // ---------- One catalogue ----------
 
 export async function viewCatalogDetail({ api, apiBytes, toast, view, isSuperseded, me, enforced }, id) {
-  let cat, items, releases, processes, forms, dir, people, unpublished;
+  let cat, items, releases, processes, forms, dir, people, unpublished, apps;
   try {
-    [cat, items, releases, processes, forms, dir, people, unpublished] = await Promise.all([
+    [cat, items, releases, processes, forms, dir, people, unpublished, apps] = await Promise.all([
       api("GET", `/api/v1/catalogs/${encodeURIComponent(id)}`),
       api("GET", "/api/v1/catalog-products"),
       api("GET", `/api/v1/catalogs/${encodeURIComponent(id)}/releases`),
@@ -1021,6 +1100,11 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
       // nothing, where an empty difference is drawn as "the shop is serving this
       // as it stands" — a claim a read that failed is in no position to make.
       api("GET", `/api/v1/catalogs/${encodeURIComponent(id)}/unpublished`).catch(() => null),
+      // The process applications a product may let command it (ADR-0429 §10), offered
+      // by name and stored by key. null is "could not be read", and the field falls
+      // back to typed keys on it — a list that failed must not read as "none exist",
+      // and must not take the rest of the form with it.
+      api("GET", "/api/v1/applications").catch(() => null),
     ]);
   } catch (e) {
     if (isSuperseded()) return;
@@ -1030,6 +1114,8 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
 
   items = items || [];
   releases = releases || [];
+  // Anything but a list is a read that did not answer, whatever it returned.
+  apps = Array.isArray(apps) ? apps : null;
   const langs = cat.languages || [];
   const offered = cat.items || [];
   const byID = {};
@@ -1137,7 +1223,7 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
     : `<p class="muted">Never published. Until it is, the shop shows this catalogue to nobody.</p>`}`;
 
   wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, formList,
-    mayShare(cat, me, enforced), mayTheme(me, enforced), dir, people);
+    mayShare(cat, me, enforced), mayTheme(me, enforced), dir, people, apps);
 }
 
 // ---------- What publishing would change ----------
@@ -1678,7 +1764,7 @@ function rememberSection(key, open) {
   } catch { /* the fold still works; it is only not remembered */ }
 }
 
-function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
+function productForm(it, cat, langs, procIDs, formList, items, dir, people, apps) {
   const v = it || { state: "draft", approval: { kind: "none" }, texts: {} };
   const ap = v.approval || {};
   const opt = (id, sel, label) =>
@@ -1886,6 +1972,7 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
           order. <b>Clear the key and the message to remove an action.</b></span>
         ${actionRows(v, langs)}
         <button type="button" class="btn ghost" data-add-action>Add an action</button></div>
+      ${commandedByField(apps, v.commandedBy)}
       <label class="field wide">How long the right may last
         <span class="muted" style="display:block; margin:2px 0 6px">In days, or
           <code>0</code> for a right that does not end &mdash; which is the ordinary case.
@@ -2149,7 +2236,7 @@ function wireAppearance({ api, toast, view }, id, reload) {
   }, { signal: viewListeners.signal });
 }
 
-function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, formList, canShare, canTheme, dir, people) {
+function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, formList, canShare, canTheme, dir, people, apps) {
   const id = cat.id;
   // Before anything is wired: this render's listeners replace the last one's.
   freshViewListeners();
@@ -2343,12 +2430,12 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
     if (act === "new-product") {
       // A new product has no row yet, so the panel opens level with the button that
       // asked for it — which is where the reader is looking.
-      openEditor(productForm(null, cat, langs, procIDs, formList, items, dir, people),
+      openEditor(productForm(null, cat, langs, procIDs, formList, items, dir, people, apps),
         b.closest(".row"));
       return;
     }
     if (act === "edit") {
-      openEditor(productForm(byID[b.dataset.id], cat, langs, procIDs, formList, items, dir, people),
+      openEditor(productForm(byID[b.dataset.id], cat, langs, procIDs, formList, items, dir, people, apps),
         b.closest("tr"));
       return;
     }

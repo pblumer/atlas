@@ -268,6 +268,17 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   Drives the real `viewCatalogDetail` through the editor harness, which lets a spec reshape
   a product before it mounts (`window.__patchItems`).
 
+- **`catalog-commanded-by.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md) §10):
+  **which process applications may command a product** in the catalogue editor. The
+  applications are offered by name and stored by their portable key, the stored ones
+  ticked; ticking and unticking is what the save sends, and unticking the last sends an
+  empty list rather than keeping the stored one, because a save replaces the product; a
+  key no application here carries keeps a ticked box and survives the save; a typed key
+  is sent without a blank or a repeat; a product without the field saves an empty list;
+  and when the applications cannot be read the field falls back to typed keys instead of
+  breaking the form. Drives the real `viewCatalogDetail` through the editor harness, which
+  serves the applications a spec sets (`window.__applications`, `null` for a failed read).
+
 - **`shop-actions.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
   the **actions on a held position** in the shop. A held position shows a button per action
   the server offers the reader, labelled in the reader's language, and one the position does
