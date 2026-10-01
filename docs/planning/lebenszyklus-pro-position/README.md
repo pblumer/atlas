@@ -52,3 +52,5 @@ Für ein konkretes Produkt werden Prozess-Id und Nachrichtennamen ersetzt, etwa
 - `maxChanges` ist heute keine Startvariable; ohne sie gilt der Standard 20.
 - Die Schritte «Provisionierung», «Change» und «Deprovisionierung» sind Platzhalter
   ohne Formular und ohne Kandidatengruppe.
+
+Bestehende Prozesspaare lassen sich mit [`scripts/lifecycle-strand/strang.py`](../../../scripts/lifecycle-strand/README.md) in einen solchen Strang zusammenführen.
