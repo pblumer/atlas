@@ -70,7 +70,16 @@ func (g jobGate) Allow(_ int32, jobKey uint64) bool {
 
 // Failed reports a job's failure to its target's breaker. Every failure is resolved,
 // because a failure can be the first of a target the breaker has never heard of.
-func (g jobGate) Failed(_ int32, jobKey uint64, message string) {
+//
+// An engine-only job type has no target: its handler changes state the server owns and
+// calls nothing outside it, so its failures are what the model or the data says — a
+// shop task whose order does not list its application, a user task naming nobody —
+// and never an outage. Counting them would let three refusals for one product hold
+// back every other product's tasks until a probe happened to succeed.
+func (g jobGate) Failed(jobType int32, jobKey uint64, message string) {
+	if _, engineOnly := engineOnlyJobTypes[jobType]; engineOnly {
+		return
+	}
 	if k, instance, ok := g.s.breakerTargetOf(jobKey); ok {
 		g.s.breakers.failed(k, jobKey, instance, message)
 	}

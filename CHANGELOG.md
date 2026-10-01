@@ -159,6 +159,14 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A task the server works itself no longer trips a worker breaker.** The breaker that
+  holds a worker's jobs back while its target is down (ADR-0340) also counted the failures
+  of tasks with no target at all: the user provisioning task and the shop task. Three
+  instances refused for their data — a user task naming nobody, a shop task whose instance
+  carries no command — held every other instance's task of that kind back until a probe
+  happened to succeed. Their failures now stay what they are, an incident on the instance
+  they belong to.
+
 - **A reconciliation no longer reports a right as unmanaged when two products claim its
   reference.** A reconciliation run that read a reference two products both target said
   «nothing read under it can be attributed», and then attributed what it read under that

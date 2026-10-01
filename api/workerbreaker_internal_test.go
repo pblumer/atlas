@@ -585,3 +585,19 @@ func tripIt(b *workerBreakers) {
 		fail(b, mailWorker, i)
 	}
 }
+
+// TestAnEngineOnlyJobNeverFeedsABreaker: a job the server serves itself has no target
+// to be down, so its failures — a shop task refused for its data, a user task naming
+// nobody — never count towards holding its type back. The server here has no store:
+// anything past the exemption would have to read one.
+func TestAnEngineOnlyJobNeverFeedsABreaker(t *testing.T) {
+	s := &Server{breakers: newWorkerBreakers(func() int64 { return 0 })}
+	for jobType := range engineOnlyJobTypes {
+		for job := uint64(1); job <= breakerThreshold+1; job++ {
+			jobGate{s}.Failed(jobType, job, "refused")
+		}
+		if s.breakers.tracking(jobType) || s.breakers.holdingFor(jobType) {
+			t.Errorf("job type %d fed a breaker; it has no target outside the server", jobType)
+		}
+	}
+}
