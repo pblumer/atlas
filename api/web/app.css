@@ -368,6 +368,24 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
 }
 .vargrid + .btn { margin-top: 6px; }
 @media (max-width: 760px) { .varrow { grid-template-columns: 1fr; } }
+/* The product's actions (ADR-0429): key, message, effect, who may ask, then one label
+   per declared language. The same grid idiom as the shapes, one column wider. */
+.actgrid { display: grid; gap: 6px; }
+.actrow {
+  display: grid;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1fr) minmax(0, 0.5fr) minmax(0, 1fr) repeat(var(--langs, 1), minmax(0, 0.8fr));
+  gap: 6px; align-items: center;
+}
+.actrow input, .actrow select { width: 100%; box-sizing: border-box; }
+.actrow input[readonly] { background: var(--bg); color: var(--muted); }
+.acthead {
+  font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted);
+}
+.acttrigs { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; }
+.acttrig { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.acteffect { font-size: 12px; color: var(--muted); }
+.actgrid + .btn { margin-top: 6px; }
+@media (max-width: 760px) { .actrow { grid-template-columns: 1fr; } }
 
 /* ---------- The product list and the editor beside it ---------- */
 

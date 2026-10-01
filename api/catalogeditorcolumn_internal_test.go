@@ -226,8 +226,8 @@ func TestTheProductFormSaysWhatPublishingNeeds(t *testing.T) {
 	}
 	needs := webRegion(t, src, "function publishNeeds(form) {", "\n}")
 	for _, want := range []string{`val("id")`, `[name^="t-"]`, `val("state") === "active"`,
-		`val("provisionProcess")`, `val("deprovisionProcess")`, `val("opProvision")`,
-		`val("opDeprovision")`, `kind === "fixed" || kind === "role"`} {
+		`val("provisionProcess")`, `val("deprovisionProcess")`, `val("act-0-msg")`,
+		`val("act-1-msg")`, `kind === "fixed" || kind === "role"`} {
 		if !strings.Contains(needs, want) {
 			t.Errorf("publishNeeds no longer checks %s", want)
 		}

@@ -135,6 +135,26 @@ func (l processLookup) EntryPoints(processID string) (messages []string, hasNone
 	return messages, hasNone, deployed
 }
 
+// WatchedMessages names every message an enabled inbound watch on this server
+// publishes, so publishing a catalogue can refuse an action whose message a Worker's
+// event would reach (ADR-0429 §1). A disabled watch publishes nothing, and enabling
+// it again is refused from the watch's side while a product owns the name.
+func (l processLookup) WatchedMessages() map[string]bool {
+	out := map[string]bool{}
+	l.s.do(func() {
+		subs, err := l.s.inboundSubs.LoadAll()
+		if err != nil {
+			return
+		}
+		for _, sub := range subs {
+			if name := strings.TrimSpace(sub.MessageName); sub.Enabled && name != "" {
+				out[name] = true
+			}
+		}
+	})
+	return out
+}
+
 // CatchPoints lists the message catch points of the newest deployed version of a
 // process id: what a per-position lifecycle delivers its later operations to
 // (ADR-0428).

@@ -14,6 +14,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A product declares its actions.** A lifecycle product used to name three start
+  events — provision, deprovision and an optional change. It now lists its actions: the
+  provision the order starts and the return, then any number of changes (more storage)
+  and services (a password reset, an inactivation), each with the message the lifecycle
+  process starts or waits at, who may ask for it — the customer, an operator or the
+  system — and what its button says in each language. Publishing checks the list against
+  the process: every action is a message start in the per-operation form, and every change
+  or service a correlated catch in the per-position form; a missing button label is a
+  reported translation gap, never a refusal. The catalogue editor shows the actions as a
+  grid with the order's two rows fixed and pre-fills `<product>.provision` and
+  `<product>.deprovision` when a lifecycle process is chosen; the MCP save tool and the
+  OpenAPI schema declare them. A product that still carries the operation map is read as
+  the actions it means and saved as actions; order lines keep what they froze. This is the
+  first slice of ADR-0429 — asking for an action from the portal and recording its outcome
+  follow.
+
 - **The Modeler offers the events your Workers publish when you pick a message.** A
   message start, an intermediate catch, a boundary event or a receive task now lists, under
   «Events from Workers» in its message picker, every name an inbound event watch on this
@@ -58,6 +74,15 @@ _Changed_ / _Removed_ for each version.
   against a live instance first.
 
 ### Changed
+
+- **An inbound watch may no longer publish a catalogue product's message.** A Worker's
+  event under a name one of a product's actions starts or waits at — its provisioning,
+  its return, a change — would have driven the product's lifecycle around the order, and
+  the inventory would have gone on saying what the process had already changed. Nothing
+  checked it: a watch could be created under a product's deprovision message. Creating a
+  watch, renaming one onto such a name or enabling one is now refused with **409** naming
+  the product and the action, and publishing a catalogue refuses an action whose message
+  an enabled watch already publishes (ADR-0425 §8, ADR-0429 §1).
 
 - **A conditional start event in front of a process is refused at deploy instead of never
   firing.** A process-level start event carrying a condition — "Mailbox storage > 100 GB"

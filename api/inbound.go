@@ -178,10 +178,16 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 		return
 	}
 	var (
-		claimed bool
-		saveErr error
+		claimed             bool
+		ownerItem, ownerKey string
+		saveErr             error
 	)
 	s.do(func() {
+		// A name a catalogue product's action owns is no Worker's to publish: the
+		// event would drive the lifecycle around the order (ADR-0429 §1).
+		if ownerItem, ownerKey, saveErr = s.catalogOwnerOfName(rec.MessageName); saveErr != nil || ownerItem != "" {
+			return
+		}
 		// The claim on a message name, from the other side (ADR-0205): pointing this
 		// worker at a name some definition the claimant cannot reach already
 		// listens for would deliver their events to it, silently.
@@ -193,6 +199,9 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 	switch {
 	case saveErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "save subscription: "+saveErr.Error())
+		return
+	case ownerItem != "":
+		catalogOwnedRefusal(w, rec.MessageName, ownerItem, ownerKey)
 		return
 	case claimed:
 		claimRefusal(w, rec.MessageName, "A deployed process you cannot reach already listens for this "+
@@ -237,8 +246,9 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 	// claim and is checked like one (ADR-0205). Without this the update endpoint
 	// would be the way around the create endpoint's door.
 	var (
-		reclaimed string
-		claimErr  error
+		reclaimed           string
+		ownerItem, ownerKey string
+		claimErr            error
 	)
 	if p.MessageName != nil || (p.Enabled != nil && *p.Enabled) {
 		s.do(func() {
@@ -256,6 +266,12 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 			if cur.Enabled && want == cur.MessageName {
 				return
 			}
+			// The same door as on create: a rename or an enable onto a name a
+			// catalogue product's action owns (ADR-0429 §1).
+			if ownerItem, ownerKey, claimErr = s.catalogOwnerOfName(want); claimErr != nil || ownerItem != "" {
+				reclaimed = want
+				return
+			}
 			var blocked bool
 			if blocked, claimErr = s.definitionBlockingClaim(r, want); blocked {
 				reclaimed = want
@@ -263,6 +279,10 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 		})
 		if claimErr != nil {
 			httpapi.Error(w, http.StatusInternalServerError, "read subscriptions: "+claimErr.Error())
+			return
+		}
+		if reclaimed != "" && ownerItem != "" {
+			catalogOwnedRefusal(w, reclaimed, ownerItem, ownerKey)
 			return
 		}
 		if reclaimed != "" {

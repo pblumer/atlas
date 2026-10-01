@@ -141,18 +141,16 @@ func (s *Server) catalogOwnerOfEntry(processID, message string) (string, error) 
 		if it.LifecycleProcess != processID {
 			continue
 		}
-		for _, op := range []string{catalog.OpProvision, catalog.OpChange, catalog.OpDeprovision} {
-			if it.Operations[op] == message {
-				return it.ID, nil
-			}
+		if _, owned := it.OwnsMessage(message); owned {
+			return it.ID, nil
 		}
 	}
 	return "", nil
 }
 
 // catalogOwnerOfDelivered names the per-position product that delivers this message
-// to its running instances as a change or a return, or "" when none does
-// (ADR-0428). Its
+// to its running instances — any of its actions but the provision, which starts the
+// instance — or "" when none does (ADR-0428, ADR-0429). Its
 // provisioning start is refused on the trigger route by [Server.catalogOwnerOfEntry];
 // this is the same rule for the messages that reach an instance already running.
 // Reads the catalogue store, so it runs on the run loop.
@@ -168,11 +166,46 @@ func (s *Server) catalogOwnerOfDelivered(message string) (string, error) {
 		if !it.PerPosition() {
 			continue
 		}
-		for _, op := range []string{catalog.OpChange, catalog.OpDeprovision} {
-			if it.Operations[op] == message {
+		for _, a := range it.ActionList() {
+			if a.Effect != catalog.EffectProvision && a.Message == message {
 				return it.ID, nil
 			}
 		}
 	}
 	return "", nil
+}
+
+// catalogOwnerOfName names the product and the action whose message this is, in any
+// lifecycle form, or "" when no product owns it. An inbound watch may not publish such
+// a name: a Worker's event would drive the product's lifecycle around the order, and
+// the inventory would go on saying what the process had already changed (ADR-0425 §8,
+// ADR-0429 §1). Reads the catalogue store, so it runs on the run loop.
+func (s *Server) catalogOwnerOfName(message string) (item, action string, err error) {
+	if s.catalogStore == nil || strings.TrimSpace(message) == "" {
+		return "", "", nil
+	}
+	items, err := s.catalogStore.Items()
+	if err != nil {
+		return "", "", err
+	}
+	for _, it := range items {
+		if key, owned := it.OwnsMessage(message); owned {
+			return it.ID, key, nil
+		}
+	}
+	return "", "", nil
+}
+
+// catalogOwnedRefusal is the 409 a watch meets when a product's action owns its name.
+// It names the product and the action, unlike the claim refusal of ADR-0205: a product
+// is catalogue data the watch's author can read, and the name is what makes it
+// actionable.
+func catalogOwnedRefusal(w http.ResponseWriter, message, item, action string) {
+	httpapi.JSON(w, http.StatusConflict, map[string]any{
+		"error":       "the message name belongs to a catalogue product",
+		"messageName": message,
+		"details": "Product " + item + "'s action " + action + " starts or waits at this message. " +
+			"A Worker's event must not drive a product's lifecycle around the order; publish " +
+			"under a different name, or have the system ask the order for the action.",
+	})
 }

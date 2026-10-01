@@ -259,6 +259,15 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   column is absent. Drives the real app shell against a routed mock, with Playwright's
   clock driving both intervals — the timing is part of what is being tested.
 
+- **`catalog-actions.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
+  the **product's actions** in the catalogue editor. A product that still carries the
+  operation map opens as the actions it means — the order's provision and return first, key
+  and effect fixed — and is saved as actions; an added action carries its effect, its
+  triggers and a label per language; clearing a row's key and message removes it; and
+  choosing a lifecycle process pre-fills `<product>.provision` and `<product>.deprovision`.
+  Drives the real `viewCatalogDetail` through the editor harness, which lets a spec reshape
+  a product before it mounts (`window.__patchItems`).
+
 - **`worker-events-modeler.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
   the **Worker events in the message picker**. An element that waits for a message — a
   message start, a catch, a boundary event, a receive task — is offered the names the
