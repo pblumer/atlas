@@ -315,6 +315,30 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   shows as the message send the compiler runs it as. Drives the real `mountEditor`
   against a mock `api`, asserting on the exported XML.
 
+- **`message-sources-modeler.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
+  the **message picker grouped by source**. `GET /api/v1/message-sources` answers inbound
+  watches, product actions and the deployed processes waiting for a name; an element that
+  waits for a message is offered «Events from Workers» then «Product actions» (product, key
+  and effect, a declared name left out), an element that throws is offered «Processes
+  waiting for it» and never a product action, and picking any of them declares the
+  message. A row without a `sourceKind` is an inbound watch, and only watches are Worker
+  events. In a process a catalogue product binds, every Worker event is marked as not for a
+  product action, and stays selectable. The name field suggests the same names; the line
+  under it names the watches, the product action that owns the name and the processes
+  waiting for it, and stops suggesting a watch for a name a product owns. A listing that
+  fails leaves a throw's picker as it was. Shares `message-sources-harness.html` with the
+  next spec.
+
+- **`shop-badges-modeler.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
+  the **shop badge on the canvas**. A send task declaring `<atlas:shopTask>` and a receive
+  task whose message a product action owns carry a small shop badge, with a tooltip saying
+  which, on the Implement tab and in the live view and never in the Design view. It sits
+  beside the task's envelope — measured: no overlap, same band, inside the task — and the
+  envelope stays drawn with no implementation badge over it. A listing that fails marks no
+  receive task while the shop send task keeps its badge; one that arrives late marks the
+  receive task when it does, and the canvas asks for it once. The badge is derived: the
+  exported XML is unchanged by it, and choosing the Message kind takes it off.
+
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
 
 ## Rendering a conformance gallery diagram

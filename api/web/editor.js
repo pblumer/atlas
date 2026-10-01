@@ -882,7 +882,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   identity.ownId = () => identity.draftId || (identity.fromDeployment ? openedProcessId : "") || "";
 
   const rerender = wireProperties(root, modeler, api, projectId, toast, identity);
-  const refreshBadges = makeImplementBadges(root, modeler);
+  const refreshBadges = makeImplementBadges(root, modeler, api);
   refreshBadges(); // reflect the initial tab for the diagram just imported
   const refreshPoolCaptions = makePoolProcessCaptions(modeler);
   refreshPoolCaptions(); // name the process each pool runs, on the diagram just imported
@@ -1589,6 +1589,10 @@ function implMarker(bo) {
   if (bo.$type === "bpmn:SendTask") {
     // The send task's kind badge (ADR-0112): a message throw, a Worker Type, or (plain job
     // worker) nothing — the filled send-task arrow bpmn-js draws is that kind's own symbol.
+    // A shop task has none here: its badge is the shop badge, which sits beside the
+    // envelope rather than over it (shopBadgeOf), and it is asked first, as sendTaskKind
+    // asks it, so a leftover messageRef cannot cover the envelope with the Message badge.
+    if (findExt(bo, SEND_SHOP_KIND.ext)) return null;
     if (bo.messageRef) return { label: SEND_MESSAGE_KIND.name, icon: SEND_MESSAGE_KIND.glyph };
     const kind = serviceTaskKind(bo);
     if (!kind.glyph) return null;
@@ -1627,7 +1631,106 @@ function drawImplBadges(modeler) {
       }));
     } catch { /* shape without graphics (e.g. mid-import) — skip */ }
   });
+  return ids.concat(drawShopBadges(modeler));
+}
+
+// shopOwners holds, per diagram instance, which message names product actions own: a Map
+// from name to [{ product, action }], set when the listing arrives. Present but null means
+// it was asked for and has not answered — or failed, which leaves it so: no receive task is
+// then the shop's, and nothing else changes. Kept per instance rather than per call because
+// a runtime view redraws its badges on every poll and must not ask again each time.
+const shopOwners = new WeakMap();
+
+// productActionOwners reads the listing's product actions into that Map.
+function productActionOwners(list) {
+  const out = new Map();
+  for (const s of messageSourcesOf(list, "product-action")) {
+    const name = (s.messageName || "").trim();
+    if (!name) continue;
+    const owners = out.get(name) || [];
+    const product = s.productName || s.productId || "?";
+    const action = s.action || "?";
+    if (!owners.some((o) => o.product === product && o.action === action)) owners.push({ product, action });
+    out.set(name, owners);
+  }
+  return out;
+}
+
+// loadShopOwners asks the server once per diagram instance which names product actions
+// own, and calls redraw when it knows. Without an api (a harness, a static render) it asks
+// nothing, and only the send task's declaration marks anything.
+function loadShopOwners(modeler, api, redraw) {
+  if (!api || !modeler || shopOwners.has(modeler)) return;
+  shopOwners.set(modeler, null);
+  let req;
+  try { req = Promise.resolve(api("GET", "/api/v1/message-sources")); } catch { return; }
+  req.then((list) => {
+    shopOwners.set(modeler, productActionOwners(list));
+    redraw();
+  }).catch(() => { /* no listing: no receive task is marked */ });
+}
+
+// shopBadgeOf says whether a task is the shop's, and in which way, as the badge's tooltip —
+// or null. It is derived and never stored (ADR-0429 §6): a send task from its declared
+// <atlas:shopTask>, in any mode; a receive task from a product action owning its message,
+// which is all that makes a receive the shop's (§4). Events are not marked: the
+// implementation badges mark tasks only, and an event's envelope is its whole symbol.
+function shopBadgeOf(bo, owners) {
+  if (!bo) return null;
+  if (bo.$type === "bpmn:SendTask") {
+    const shop = findExt(bo, SEND_SHOP_KIND.ext);
+    if (!shop) return null;
+    return shop.mode === "command" ? "Shop: commands a product action" : "Shop: states how a product action ended";
+  }
+  if (bo.$type === "bpmn:ReceiveTask") {
+    const name = ((bo.messageRef && bo.messageRef.name) || "").trim();
+    const own = name && owners ? owners.get(name) : null;
+    if (!own || !own.length) return null;
+    return `Shop: waits for product action ${own.map((o) => `${o.action} of ${o.product}`).join(", ")}`;
+  }
+  return null;
+}
+
+// SHOP_BADGE_SPOT is where the shop badge sits on a task: beside the envelope bpmn-js draws
+// in the top-left corner (x 6–27, y 5–19 for a send task; an instantiating receive task's
+// ring reaches x 24), on the same band and clear of it. The implementation badge covers
+// that corner on purpose; on a send or receive task the envelope there says which way the
+// message goes, so the shop badge must leave it showing — a reader with any other BPMN
+// tool sees the same send or receive task.
+const SHOP_BADGE_SPOT = { top: 3, left: 31 };
+
+// drawShopBadges marks the shop's tasks (shopBadgeOf) and returns the overlay ids it added.
+// drawImplBadges calls it, so the shop badge is drawn exactly where the implementation
+// badges are — the Implement tab and the runtime views, never the Design view.
+function drawShopBadges(modeler) {
+  const ids = [];
+  let overlays, registry;
+  try { overlays = modeler.get("overlays"); registry = modeler.get("elementRegistry"); }
+  catch { return ids; } // modeler torn down mid-flight
+  const owners = shopOwners.get(modeler) || null;
+  registry.forEach((el) => {
+    const title = shopBadgeOf(el.businessObject, owners);
+    if (!title) return;
+    try {
+      ids.push(overlays.add(el.id, "shop-badge", {
+        position: SHOP_BADGE_SPOT,
+        html: `<span class="shop-badge" title="${esc(title)}">${SEND_SHOP_KIND.glyph}</span>`,
+      }));
+    } catch { /* shape without graphics (e.g. mid-import) — skip */ }
+  });
   return ids;
+}
+
+// watchShopBadges is a read-only view's half of the receive task's shop badge: it asks for
+// the listing once for this viewer and, when it answers, redraws the shop badges in place.
+// The view's own drawImplBadges calls draw them from then on, the poll's included.
+function watchShopBadges(viewer, api) {
+  loadShopOwners(viewer, api, () => {
+    let overlays;
+    try { overlays = viewer.get("overlays"); } catch { return; } // view torn down meanwhile
+    try { overlays.remove({ type: "shop-badge" }); } catch { /* none drawn */ }
+    drawShopBadges(viewer);
+  });
 }
 
 // makeImplementBadges gates drawImplBadges on the Modeler's Implement tab: the Design
@@ -1636,7 +1739,12 @@ function drawImplBadges(modeler) {
 // Worker Type and a plain worker, is exactly what the author is working with. Returns a
 // refresh function the tab toggle and diagram-change events call; it is a no-op off the
 // Implement tab, where it clears any badges the author left behind.
-function makeImplementBadges(root, modeler) {
+//
+// The shop badge on a receive task needs the server's listing of who owns which message
+// (ADR-0429 §6). It is asked for the first time the Implement tab shows, not before — the
+// Design view draws no badge, so it has no question to ask — and once for the diagram;
+// its answer redraws through this same refresh, so it too is gated on the tab.
+function makeImplementBadges(root, modeler, api) {
   let ids = []; // overlay ids currently on the canvas, so we can remove ours only
 
   const clear = () => {
@@ -1649,6 +1757,7 @@ function makeImplementBadges(root, modeler) {
   const refresh = () => {
     clear();
     if (activeTab(root) !== "implement") return;
+    loadShopOwners(modeler, api, refresh);
     ids = drawImplBadges(modeler);
   };
 
@@ -5455,42 +5564,131 @@ function messageFieldsHTML(modeler, med, hint) {
 //
 // A failed fetch leaves the line empty, like every other server-fed hint in this panel:
 // an author who cannot reach the server is not helped by being told so twice.
+//
+// The listing names two more sources than watches (ADR-0429 §6), and the line names them
+// too, so the author sees every source of the name in one place: the product action that
+// owns it, and the deployed processes waiting for it. Only watches are counted as
+// publishing it, which is what the line has always meant.
 function fillMessageSources(api, el, name, sources) {
   if (!api || !el) return;
   const want = (name || "").trim();
   if (!want) return;
   (sources || api("GET", "/api/v1/message-sources")).then((list) => {
-    const mine = (list || []).filter((s) => s && s.messageName === want);
-    if (!mine.length) {
-      el.innerHTML = `<span class="muted">No inbound event watch on this server publishes <b>${esc(want)}</b>. `
-        + `That is fine when the message is thrown inside a model or posted to <code>/api/v1/messages</code> — `
-        + `for a Jira or clio event, add a watch under <b>Workers → Events</b> in the Console.</span>`;
-      return;
-    }
-    const parts = mine.map((s) => {
-      const what = s.description ? ` — ${esc(s.description)}` : "";
-      const off = s.enabled ? "" : ' <span class="pill warn">off</span>';
-      return `<li>${esc(s.kind)} <b>${esc(s.connectorName)}</b>${what}${off}</li>`;
-    }).join("");
-    el.innerHTML = `Published by ${mine.length} inbound event watch${mine.length > 1 ? "es" : ""}:`
-      + `<ul style="margin:4px 0 0 16px;padding:0">${parts}</ul>`;
+    if (!Array.isArray(list)) return; // not a listing: no hint, as for a failed fetch
+    const named = (s) => (s.messageName || "").trim() === want;
+    const watches = messageSourcesOf(list, "inbound-watch").filter(named);
+    const actions = messageSourcesOf(list, "product-action").filter(named);
+    const waiting = messageSourcesOf(list, "process").filter(named);
+    el.innerHTML = watchSourcesHTML(want, watches, actions.length > 0)
+      + productOwnersHTML(actions, watches.some((s) => s.enabled))
+      + waitingProcessesHTML(waiting);
   }).catch(() => { /* no hint; the field works the same */ });
 }
 
-// MESSAGE_SOURCE_PREFIX marks a #f-msgref option that names a Worker event rather than a
-// message the diagram already declares. Choosing one declares it (ADR-0429 §6).
+// watchSourcesHTML is the hint's account of the inbound watches publishing a name. With
+// none, it says where watches are configured — unless a product action owns the name: no
+// watch may publish an action's message (ADR-0429 §1), so that advice would send the author
+// to a door that refuses them.
+function watchSourcesHTML(want, watches, ownedByProduct) {
+  if (!watches.length) {
+    if (ownedByProduct) return "";
+    return `<span class="muted">No inbound event watch on this server publishes <b>${esc(want)}</b>. `
+      + `That is fine when the message is thrown inside a model or posted to <code>/api/v1/messages</code> — `
+      + `for a Jira or clio event, add a watch under <b>Workers → Events</b> in the Console.</span>`;
+  }
+  const parts = watches.map((s) => {
+    const what = s.description ? ` — ${esc(s.description)}` : "";
+    const off = s.enabled ? "" : ' <span class="pill warn">off</span>';
+    return `<li>${esc(s.kind)} <b>${esc(s.connectorName)}</b>${what}${off}</li>`;
+  }).join("");
+  return `Published by ${watches.length} inbound event watch${watches.length > 1 ? "es" : ""}:`
+    + `<ul style="margin:4px 0 0 16px;padding:0">${parts}</ul>`;
+}
+
+// productOwnersHTML names the product action that owns a message name: the order sends it
+// when somebody asks for the action (ADR-0429 §2). Products that share a lifecycle process
+// share its names, so there may be more than one. A watch that also publishes the name is
+// the trap the record's context describes, and the catalogue's publish check refuses it, so
+// the line says so where the name is set.
+function productOwnersHTML(actions, alsoWatched) {
+  if (!actions.length) return "";
+  const owners = [...new Set(actions.map((s) =>
+    `<b>${esc(s.action || "?")}</b> of <b>${esc(s.productName || s.productId || "?")}</b>`
+      + (s.effect ? ` (${esc(s.effect)})` : "")))];
+  const clash = alsoWatched
+    ? ' <span class="pill warn">watched</span> Publishing the catalogue refuses an action whose message an inbound watch publishes.'
+    : "";
+  return `<div style="margin-top:4px">Owned by product action${owners.length > 1 ? "s" : ""} ${owners.join(", ")}`
+    + ` — the order sends it.${clash}</div>`;
+}
+
+// waitingProcessesHTML names the deployed processes whose newest version waits for a
+// message name, and where: at a message start or at a catch.
+function waitingProcessesHTML(waiting) {
+  if (!waiting.length) return "";
+  const where = new Map(); // "process element" → its HTML, so a place is named once
+  for (const s of waiting) {
+    const pid = s.processId || "?";
+    const at = s.element || "";
+    where.set(`${pid} ${at}`, `<code>${esc(pid)}</code>${at ? ` (${esc(at)})` : ""}`);
+  }
+  const named = [...where.keys()].sort().map((k) => where.get(k));
+  const n = new Set(waiting.map((s) => s.processId)).size;
+  return `<div style="margin-top:4px">Waited for by deployed process${n > 1 ? "es" : ""} ${named.join(", ")}.</div>`;
+}
+
+// messageSourceKind says which kind of source a GET /api/v1/message-sources row is
+// (ADR-0429 §6): an inbound watch, a product action, or a deployed process waiting for the
+// message. A server older than the field sends inbound watches and nothing else, so a row
+// without one is a watch — which is what it meant there.
+function messageSourceKind(s) {
+  return (s && s.sourceKind) || "inbound-watch";
+}
+
+// messageSourcesOf returns the listing's rows of one kind. A row of a kind this Modeler does
+// not know belongs to none, so what a newer server adds is left out rather than read as a
+// watch; an answer that is not a list holds no rows.
+function messageSourcesOf(list, kind) {
+  if (!Array.isArray(list)) return [];
+  return list.filter((s) => s && typeof s === "object" && messageSourceKind(s) === kind);
+}
+
+// MESSAGE_SOURCE_PREFIX marks a #f-msgref option that names a message a source knows — a
+// Worker event, a product action, a waiting process — rather than a message the diagram
+// already declares. Choosing one declares it (ADR-0429 §6).
 const MESSAGE_SOURCE_PREFIX = "__source__:";
+
+// NOT_FOR_AN_ACTION marks a Worker event offered in a process a catalogue product binds.
+// The catalogue's publish check refuses an action whose message an inbound watch publishes
+// (ADR-0429 §1), so a watch's name is the wrong pick for the receive an action is waiting
+// at — the trap of the record's context, made visible where the name is set. It is a
+// warning and not a lock: such a process may wait for a watch's event for a reason of its
+// own, beside its actions.
+const NOT_FOR_AN_ACTION = {
+  text: " — not for a product action",
+  title: "A catalogue product binds this process, and publishing the catalogue refuses an action whose message an inbound watch publishes.",
+};
 
 // receivesMessages reports whether a message-bearing element waits for its message rather
 // than throwing it: a start event (process-level or event subprocess), an intermediate
-// catch, a boundary event, a receive task. Only these are offered the Worker events. A
-// watch's name is one the engine receives; offered to a throw it would make the model a
-// second sender of a name a Worker already sends, which is rarely what the author means,
-// so a throw keeps its free-text name.
+// catch, a boundary event, a receive task. Only these are offered the Worker events and
+// the product actions. A watch's name is one the engine receives; offered to a throw it
+// would make the model a second sender of a name a Worker already sends, which is rarely
+// what the author means. An action's message is the order's to send (ADR-0429 §2), so a
+// throw is never offered one either.
 function receivesMessages(bo) {
   const t = bo && bo.$type;
   return t === "bpmn:StartEvent" || t === "bpmn:IntermediateCatchEvent" ||
     t === "bpmn:BoundaryEvent" || t === "bpmn:ReceiveTask";
+}
+
+// throwsMessages reports whether a message-bearing element publishes its message: an
+// intermediate throw, an end event, a send task of the Message kind (the only kind whose
+// panel holds the message picker). These are offered the deployed processes waiting for a
+// name, which is the question a sender has: who is listening.
+function throwsMessages(bo) {
+  const t = bo && bo.$type;
+  return t === "bpmn:IntermediateThrowEvent" || t === "bpmn:EndEvent" || t === "bpmn:SendTask";
 }
 
 // workerEventChoices folds the server's inbound watches into one choice per message name,
@@ -5499,11 +5697,12 @@ function receivesMessages(bo) {
 // already declares as a message is left out (declared): it is in the list above already,
 // and offering it twice would invite a second message of the same name. A name only
 // disabled watches publish is kept and marked, because "it exists but is off" is what
-// the author needs to know, not a reason to hide it.
+// the author needs to know, not a reason to hide it. Only the listing's inbound watches
+// are read; its product actions and processes are other sources with groups of their own.
 function workerEventChoices(sources, declared) {
   const byName = new Map();
-  for (const s of sources || []) {
-    const name = ((s && s.messageName) || "").trim();
+  for (const s of messageSourcesOf(sources, "inbound-watch")) {
+    const name = (s.messageName || "").trim();
     if (!name || (declared && declared.has(name))) continue;
     const c = byName.get(name) || { name, workers: [], enabled: false };
     const who = s.connectorName || s.connectorId || "";
@@ -5517,31 +5716,114 @@ function workerEventChoices(sources, declared) {
     .map((c) => ({ name: c.name, workers: c.workers.join(", ") + (c.enabled ? "" : " — off") }));
 }
 
-// offerWorkerEvents puts the Worker events in front of the author who would otherwise
-// have to type them: an "Events from Workers" group in the message picker, and the same
-// names as suggestions on the name field. Picking one declares a message of that name;
-// the field stays free text, because a message may be modelled before any watch
-// publishes it (ADR-0429 §6). It runs once the listing arrives, so the picker is usable
-// at once and gains the group a moment later; a failed listing leaves both as they were.
-function offerWorkerEvents(select, datalist, sources, modeler) {
+// sourceChoices folds one kind of the listing's rows into one choice per message name,
+// sorted by name, labelled with what describe(row) says of every row naming it — products
+// that share a lifecycle process share its names, and two processes may wait for one. As
+// with the Worker events, a name the diagram declares is left out (declared), and a name
+// every row of which is off is kept and marked.
+function sourceChoices(rows, declared, describe) {
+  const byName = new Map();
+  for (const s of rows) {
+    const name = (s.messageName || "").trim();
+    if (!name || (declared && declared.has(name))) continue;
+    const c = byName.get(name) || { name, parts: [], enabled: false };
+    const what = describe(s);
+    if (what && !c.parts.includes(what)) c.parts.push(what);
+    c.enabled = c.enabled || s.enabled !== false;
+    byName.set(name, c);
+  }
+  return [...byName.values()]
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+    .map((c) => ({ name: c.name, label: c.parts.sort().join(", ") + (c.enabled ? "" : " — off") }));
+}
+
+// productActionChoices offers each product action's message, labelled with the product,
+// the action's key and its effect: "Mailbox · storage-extend (change)".
+function productActionChoices(sources, declared) {
+  return sourceChoices(messageSourcesOf(sources, "product-action"), declared, (s) =>
+    `${s.productName || s.productId || "?"} · ${s.action || "?"}${s.effect ? ` (${s.effect})` : ""}`);
+}
+
+// waitingProcessChoices offers each name a deployed process waits for, labelled with the
+// process and where its newest version waits: "billing · catch".
+function waitingProcessChoices(sources, declared) {
+  return sourceChoices(messageSourcesOf(sources, "process"), declared, (s) =>
+    [s.processId, s.element].filter(Boolean).join(" · "));
+}
+
+// productBindsProcess reports whether a catalogue product binds the process with this id:
+// one of the listing's product actions names it as the process it runs in. The listing
+// holds the actions of the catalogues the caller maintains only, so a product somebody
+// else maintains is not seen; the publish check stays the last word.
+function productBindsProcess(sources, processId) {
+  return !!processId && messageSourcesOf(sources, "product-action").some((s) => s.processId === processId);
+}
+
+// addSourceGroup puts one group of a source's names into the message picker, before
+// "New message", once per render. Every option declares its name when picked
+// (MESSAGE_SOURCE_PREFIX); mark, when given, is appended to each and explains itself in
+// the option's title.
+function addSourceGroup(select, data, label, choices, mark) {
+  if (!select || !choices.length || select.querySelector(`optgroup[data-${data}]`)) return;
+  const group = document.createElement("optgroup");
+  group.label = label;
+  group.setAttribute(`data-${data}`, "");
+  for (const c of choices) {
+    const opt = document.createElement("option");
+    opt.value = MESSAGE_SOURCE_PREFIX + c.name;
+    opt.textContent = (c.label ? `${c.name} — ${c.label}` : c.name) + (mark ? mark.text : "");
+    if (mark) opt.title = mark.title;
+    group.appendChild(opt);
+  }
+  select.insertBefore(group, select.querySelector('option[value="__new__"]'));
+}
+
+// offerWorkerEvents adds the "Events from Workers" group: the names the server's inbound
+// watches publish. In a process a catalogue product binds, each is marked as not for a
+// product action (NOT_FOR_AN_ACTION).
+function offerWorkerEvents(select, sources, declared, productBound) {
+  const choices = workerEventChoices(sources, declared).map((c) => ({ name: c.name, label: c.workers }));
+  addSourceGroup(select, "worker-events", "Events from Workers", choices, productBound ? NOT_FOR_AN_ACTION : null);
+}
+
+// offerMessageSources puts the names the server knows in front of the author who would
+// otherwise have to type them, grouped by where they come from (ADR-0429 §6). An element
+// that waits for a message is offered the Worker events and the product actions; one that
+// throws is offered the deployed processes waiting for a name, and never a product action,
+// whose message is the order's to send. The name field suggests the same names, declared
+// ones included. Picking one declares a message of that name; the field stays free text,
+// because a message may be modelled before its source exists, and the publish checks
+// remain the last word. It runs once the listing arrives, so the picker is usable at once
+// and gains the groups a moment later; a failed listing leaves it as it was.
+function offerMessageSources(select, fname, datalist, sources, modeler, bo) {
   const declared = new Set(listMessages(modeler).map((m) => (m.name || "").trim()).filter(Boolean));
-  const choices = workerEventChoices(sources, declared);
-  if (select && choices.length && !select.querySelector("optgroup[data-worker-events]")) {
-    const group = document.createElement("optgroup");
-    group.label = "Events from Workers";
-    group.dataset.workerEvents = "";
-    for (const c of choices) {
-      const opt = document.createElement("option");
-      opt.value = MESSAGE_SOURCE_PREFIX + c.name;
-      opt.textContent = c.workers ? `${c.name} — ${c.workers}` : c.name;
-      group.appendChild(opt);
-    }
-    select.insertBefore(group, select.querySelector('option[value="__new__"]'));
+  let suggested;
+  if (receivesMessages(bo)) {
+    offerWorkerEvents(select, sources, declared, productBindsProcess(sources, owningProcessId(bo)));
+    addSourceGroup(select, "product-actions", "Product actions", productActionChoices(sources, declared));
+    suggested = [
+      ...workerEventChoices(sources, null).map((c) => ({ name: c.name, label: c.workers })),
+      ...productActionChoices(sources, null),
+    ];
+  } else if (throwsMessages(bo)) {
+    addSourceGroup(select, "waiting-processes", "Processes waiting for it", waitingProcessChoices(sources, declared));
+    suggested = waitingProcessChoices(sources, null);
+  } else {
+    return;
   }
-  if (datalist) {
-    datalist.innerHTML = workerEventChoices(sources, null)
-      .map((c) => `<option value="${esc(c.name)}" label="${esc(c.workers)}"></option>`).join("");
-  }
+  if (!datalist) return;
+  // A name two sources know is suggested once, under the first.
+  const seen = new Set();
+  const unique = suggested.filter((c) => {
+    if (seen.has(c.name)) return false;
+    seen.add(c.name);
+    return true;
+  });
+  datalist.innerHTML = unique
+    .map((c) => `<option value="${esc(c.name)}" label="${esc(c.label)}"></option>`).join("");
+  // A receiver's field points at the list from the start; a throw's only once there is
+  // something to suggest, so a server with no waiting process leaves it plain.
+  if (fname && datalist.id && unique.length) fname.setAttribute("list", datalist.id);
 }
 
 // messagesManagerHTML lists the model's messages for central management (add,
@@ -9027,15 +9309,17 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     }
 
     const fmsgref = body.querySelector("#f-msgref");
-    // One listing of the server's inbound watches serves the Worker events in the picker,
-    // the name field's suggestions and the line under it, so a render asks once.
+    // One listing of the server's message sources — inbound watches, product actions, the
+    // processes waiting for a name — serves the picker's groups, the name field's
+    // suggestions and the line under it, so a render asks once.
     const msgSources = fmsgref && api ? api("GET", "/api/v1/message-sources") : null;
-    if (fmsgref && msgSources && receivesMessages(element.businessObject)) {
+    const msgBo = element.businessObject;
+    if (fmsgref && msgSources && (receivesMessages(msgBo) || throwsMessages(msgBo))) {
       const fname = body.querySelector("#f-msgname");
-      if (fname) fname.setAttribute("list", "f-msgname-sources");
+      if (fname && receivesMessages(msgBo)) fname.setAttribute("list", "f-msgname-sources");
       msgSources
-        .then((list) => offerWorkerEvents(fmsgref, body.querySelector("#f-msgname-sources"), list, modeler))
-        .catch(() => { /* no Worker events offered; the picker works the same */ });
+        .then((list) => offerMessageSources(fmsgref, fname, body.querySelector("#f-msgname-sources"), list, modeler, msgBo))
+        .catch(() => { /* no sources offered; the picker works the same */ });
     }
     if (fmsgref) {
       fmsgref.addEventListener("change", () => {
@@ -10450,6 +10734,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   const registry = viewer.get("elementRegistry");
   drawImplBadges(viewer); // show type icons at once, before the first poll lands
   drawDataStateLabels(viewer); // [state] captions: model content, so every view shows them
+  watchShopBadges(viewer, api); // a receive task is the shop's once the listing says so
   const countEl = root.querySelector("#inst-count");
   const tokenEl = root.querySelector("#token-count");
   const incidentPill = root.querySelector("#incident-pill");
@@ -11830,6 +12115,7 @@ export async function mountCollaboration(root, { api, toast, key }) {
   const registry = viewer.get("elementRegistry");
   drawImplBadges(viewer); // static type icons; this view never clears overlays
   drawDataStateLabels(viewer); // [state] captions, static for the same reason
+  watchShopBadges(viewer, api); // a receive task is the shop's once the listing says so
   // A pool's call activity drills in like everywhere else (ADR-0076). This view has no
   // single instance to mean — it replays the exchange between pools, not one caller —
   // so the "+" opens the called process's own live view.
@@ -12147,6 +12433,7 @@ export async function mountTaskProcess(container, { api, instanceKey, activeElem
     const registry = v.get("elementRegistry");
     try { drawImplBadges(v); } catch { /* best-effort type icons */ }
     try { drawDataStateLabels(v); } catch { /* best-effort [state] captions */ }
+    watchShopBadges(v, api); // a receive task is the shop's once the listing says so
 
     const frames = tl.frames || [];
     const steps = tl.steps || [];
@@ -12354,6 +12641,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const overlays = viewer.get("overlays");
   drawImplBadges(viewer); // static type icons; only the count badges are re-drawn
   drawDataStateLabels(viewer); // static [state] captions, drawn once with them
+  watchShopBadges(viewer, api); // a receive task is the shop's once the listing says so
   const eventBus = viewer.get("eventBus");
   const layer = canvas.getLayer("atlas-replay", 900); // moving token dot rides above the diagram
   const dotLayer = canvas.getLayer("atlas-tokens", 899); // static per-frame token dots
