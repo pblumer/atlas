@@ -228,7 +228,7 @@ of it uses permissions, which do not hold for root and do not exist on Windows.
 
 ### Why it was worth more than the number
 
-The error paths were not empty. Writing behaviour tests for them found six defects, each
+The error paths were not empty. Writing behaviour tests for them found seven defects, each
 now fixed with a regression test that fails without the fix:
 
 | defect | kind |
@@ -239,8 +239,9 @@ now fixed with a regression test that fails without the fix:
 | an unreadable order store made an escalation answer 404 «no open approval» | swallowed error |
 | an ambiguous product name in an escalation answered 500, the caller's ambiguity as a server fault | wrong status |
 | an unreadable project store refused an API token with 400; some routes answered 500 rather than 503 while stopping | wrong status |
+| on Windows, a file where the DMN model folder should be listed as an empty store, hiding every uploaded model — found only by the Windows CI job running the new test | platform-specific swallowed error |
 
-Four of the six sit in exactly the branches the previous amendment classified as
+Five of the seven sit in exactly the branches the previous amendment classified as
 "`if err != nil` — needs fault injection to reach". A branch nobody has run is a branch
 nobody has read.
 

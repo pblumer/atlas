@@ -154,6 +154,12 @@ _Changed_ / _Removed_ for each version.
   restart the process was listed as deployed, and the version counter had already moved.
   The job types are now registered first, and a failure there writes nothing.
 
+- **On Windows, a broken DMN model folder is no longer listed as empty.** A file where the
+  local model folder should be made Windows answer "not found" when the folder was read,
+  and the model list took that for a store nothing had been uploaded to: it answered an
+  empty list and hid every model. It now tells an absent folder from a file in its place
+  and answers 500 for the second, as Linux always did.
+
 - **Some refusals now say whose fault they are.** Escalating or reassigning an approval
   while the order store could not be read answered 404 «no open approval» instead of the
   500 it was; naming a product an order holds in two shapes answered 500 instead of 409
