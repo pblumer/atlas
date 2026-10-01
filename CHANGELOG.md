@@ -14,6 +14,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A held service can be asked for its actions in the shop.** Under a position somebody
+  holds, the shop now shows a button for each change or service its product declares for
+  the customer — more storage, a password reset — labelled in the reader's language. A
+  button is greyed out, with the reason as its tooltip, while the position cannot take that
+  action: for a product that runs one instance per position, that is the process's answer,
+  read from where its instance stands, so the model decides when an upgrade is possible and
+  the catalogue holds no second copy of the rule. An action with a form opens it under the
+  position; one without asks first. Behind it are two routes:
+  `POST /api/v1/orders/{id}/lines/{item}/actions/{action}` asks for one, with a required
+  `commandId` so a retry is answered with the first outcome, delivering it to the instance
+  that holds the right or starting it at the action's start event for a per-operation
+  product; `GET …/actions` says which actions the caller may ask for and whether each is
+  possible now, and the MCP tool `atlas_order_line_actions` reads the same. Whoever placed
+  the order, the person it was ordered for and an operator may ask for a customer action;
+  an operator asks for the operator's and the system's. The second slice of ADR-0429.
+
 - **A product declares its actions.** A lifecycle product used to name three start
   events — provision, deprovision and an optional change. It now lists its actions: the
   provision the order starts and the return, then any number of changes (more storage)
@@ -75,6 +91,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The person a service was ordered for may now give it back and change it.** Returning
+  a position, and asking it for a change, was the orderer's or an operator's to do; the
+  person who holds the right got a give-back button in the shop and a refusal from the
+  server. Both now follow the product's actions (ADR-0429): a customer action — the return
+  of every product that still carries the operation map is one — is the orderer's, the
+  recipient's and an operator's, and a product whose return names only operators is given
+  back by an operator, in the shop as on the server. `POST …/change` is now the action act
+  for the action keyed `change`: the same trigger id, the same answer, and on a
+  per-operation product it starts the change rather than refusing it. A change, like any
+  action, now refuses a variable the order sets itself — `orderId`, `positionId`, `itemId`,
+  `recipient`, `reason` — which before could file the instance on another order's position.
+
 - **An inbound watch may no longer publish a catalogue product's message.** A Worker's
   event under a name one of a product's actions starts or waits at — its provisioning,
   its return, a change — would have driven the product's lifecycle around the order, and
@@ -99,6 +127,15 @@ _Changed_ / _Removed_ for each version.
   unchanged (ADR-0429).
 
 ### Fixed
+
+- **A directed delivery no longer reports a message delivered that nothing received.** When
+  a per-position instance had taken one branch of an event-based gateway, the catch events
+  of the other branches stayed subscribed until a later message cleared them. Delivering
+  one of their messages to the instance — a return or a change while another change was
+  being worked — wrote its payload into the instance, recorded a receipt and answered
+  «delivered», while no step moved; a retry then replayed that answer. Only a catch that
+  still waits now counts, so the caller is told the instance does not wait for the message
+  and nothing is written.
 
 - **A catalogue product's lifecycle can no longer be started by publishing its message by
   name.** `POST /api/v1/messages` refused only the messages a per-position product delivers

@@ -294,6 +294,9 @@ Landed in a second step:
   gone, or not waiting for a change, is a 409 (`deliverChange`). It is not an MCP tool,
   for the reason a return is not: changing a right somebody holds reaches the target
   system.
+  *Since ADR-0429 slice B* the route is the action act for the action keyed `change`: the
+  recipient may ask for it beside the orderer and an operator, and on a per-operation line
+  it starts the change instead of refusing it.
 - **Progress.** Position progress (ADR-0390) answers `held` for a held per-position line
   whose strand only waits — at catch events, an event-based gateway, a receive task or a
   timer — and `active` while a change runs.

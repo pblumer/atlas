@@ -1078,6 +1078,15 @@ func (s *Server) apiRoutes() []apiRoute {
 				"changeId": tString(), "reason": tString(), "variables": tObject(),
 			}, "changeId")),
 			resp: jsonBody("The instance that took the change", tObject())}},
+		{"POST", "/api/v1/orders/{id}/lines/{item}/actions/{action}", s.handleLineAction, apiOp{
+			summary: "Ask one held position for one of the actions its product declares (ADR-0429): a change or a service. Delivered to the instance that carries the right for a per-position product, started at the action's start event for a per-operation one. commandId is required and makes a retry answer with the first outcome. Whoever placed the order, the recipient who holds it, or an operator may ask for a customer action; an operator for any other. 403 when the caller is not one of the action's triggers; 409 when the line does not declare the action, is not held, or its instance does not wait for it now; the provision and the return are refused with the route that does them", tag: "Order", role: RoleUser,
+			req: jsonBody("The action: an idempotency id, why, and what the process needs", schemaObj(map[string]any{
+				"commandId": tString(), "reason": tString(), "variables": tObject(),
+			}, "commandId")),
+			resp: jsonBody("The action and the instance that took it", tObject())}},
+		{"GET", "/api/v1/orders/{id}/lines/{item}/actions", s.handleLineActions, apiOp{
+			summary: "The actions the caller may ask of one position, each with whether the position takes it now — for a per-position product, whether its instance waits for the action's message at this moment, so the model decides when an action is possible (ADR-0429 §2). Read off the run loop", tag: "Order", role: RoleUser,
+			resp: jsonBody("The position and its actions", tObject())}},
 		{"POST", "/api/v1/orders/{id}/lines/{item}/escalate", s.handleEscalateApproval, apiOp{
 			summary: "Move one line's approval to the superior the caller names, or stall it when there is none — one hop per call, because each call is one deadline that elapsed. Never decides: silence is not a refusal", tag: "Order", role: RoleOperator,
 			req: jsonBody("Whom the caller's directory says the current approver reports to; empty means nobody does", schemaObj(map[string]any{

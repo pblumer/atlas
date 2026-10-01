@@ -96,6 +96,21 @@ func handleDelivering(c *ProcessingContext) {
 		}
 		return nil
 	}))
+	// Only a subscription whose element still waits counts. A catch that lost an
+	// event-based gateway's race, or a boundary whose host finished, leaves its
+	// subscription behind until a later correlation clears it (the lazy cleanup
+	// cancelEventGatewaySiblings relies on). Delivering to one of those would write
+	// the payload into the instance, record a receipt and answer "delivered" for a
+	// message no element received — and a retry would then replay that answer. The
+	// stale entries are left as they are: clearing them is the name-correlated
+	// publish's business, and this delivery changes nothing it did not deliver.
+	live := matches[:0]
+	for _, m := range matches {
+		if c.GetElementInstance(m.elKey) != nil {
+			live = append(live, m)
+		}
+	}
+	matches = live
 	if len(matches) == 0 {
 		report(DeliveryNotWaiting, piKey, nil)
 		return

@@ -393,6 +393,42 @@ func catalogTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_order_line_actions",
+			Description: "Which actions one held order position offers you, and whether it takes " +
+				"each one now (ADR-0429): a product declares what can be asked of what somebody " +
+				"holds — a larger mailbox, a password reset — and for a product that runs one " +
+				"instance per position, whether the action is possible right now is the " +
+				"process's answer, read from where its instance stands. Each action carries its " +
+				"key, effect, triggers, labels, form, `available` and, when it is not, `why`. " +
+				"READ-ONLY: asking for an action is the person's or an operator's act " +
+				"(POST /api/v1/orders/{id}/lines/{item}/actions/{action}) and is not a tool, for " +
+				"the reason a return is not — it reaches the target system.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"orderId": map[string]any{"type": "string", "description": "The order id."},
+					"item": map[string]any{
+						"type": "string",
+						"description": "The position: the product id, or itemId#variantId where " +
+							"one order carries the product in two shapes.",
+					},
+				},
+				"required": []any{"orderId", "item"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "orderId")
+				if err != nil {
+					return "", err
+				}
+				item, err := argString(args, "item")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/orders/" + url.PathEscape(id) + "/lines/" +
+					url.PathEscape(item) + "/actions"))
+			},
+		},
+		{
 			Name: "atlas_save_catalog_product",
 			Description: "Create or change one product or service. THIS IS A FULL REPLACE: every " +
 				"field you leave out is CLEARED, including translations, variants, keywords, " +

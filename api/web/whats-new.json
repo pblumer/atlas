@@ -2,6 +2,40 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "a-held-service-can-be-asked-for-its-actions-in-the-shop",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Ask a service you hold for its actions",
+        "de": "Aktionen auf einer bezogenen Leistung auslösen"
+      },
+      "summary": {
+        "en": "Under a service somebody holds, the shop now shows a button for each change or service its product offers the customer — more storage, a password reset — in the reader's language. While the service cannot take an action, its button is greyed out and says why: whether it can is read from where the service's process stands, so the process model decides when an upgrade is possible. An action with a form opens it under the position; one without asks first. The person the service was ordered for may ask too, not only whoever placed the order.",
+        "de": "Unter einer bezogenen Leistung zeigt der Shop jetzt für jede Änderung oder Dienstleistung, die das Produkt der Kundschaft anbietet – mehr Speicher, ein Passwort-Reset – einen Knopf in der Sprache der Leserin. Solange die Leistung eine Aktion nicht annehmen kann, ist der Knopf ausgegraut und sagt, warum: Ob sie es kann, wird daraus gelesen, wo der Prozess der Leistung steht, sodass das Prozessmodell entscheidet, wann ein Upgrade möglich ist. Eine Aktion mit Formular öffnet es unter der Position, eine ohne fragt zuerst nach. Auslösen darf auch die Person, für die bestellt wurde, nicht nur die Bestellerin."
+      },
+      "link": {
+        "label": "ADR-0429",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
+      },
+      "tags": [
+        "Service catalogue",
+        "Shop"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the shop and go to «My orders».",
+          "Under a service you hold, press the button of the action you need.",
+          "Fill in its form if it has one and send it; the line says the action was requested."
+        ],
+        "de": [
+          "Öffnen Sie den Shop und wechseln Sie zu «Meine Bestellungen».",
+          "Drücken Sie unter einer bezogenen Leistung den Knopf der gewünschten Aktion.",
+          "Füllen Sie das Formular aus, falls es eines gibt, und senden Sie es ab; die Zeile meldet, dass die Aktion angefordert wurde."
+        ]
+      }
+    },
+    {
       "id": "a-product-declares-its-actions",
       "version": "Unreleased",
       "date": null,
@@ -129,6 +163,28 @@
       ]
     },
     {
+      "id": "the-person-a-service-was-ordered-for-may-now-give-it-back-an",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Whoever holds a service may give it back",
+        "de": "Wer eine Leistung bezieht, darf sie zurückgeben"
+      },
+      "summary": {
+        "en": "The shop offered the person a service was ordered for a give-back button, and the server refused them: only whoever placed the order, or an operator, could return or change it. Both now follow the product's actions — the person who holds the right may give it back and ask for its changes, beside the orderer and an operator. A product whose return only operators may give is no longer offered for return in the shop.",
+        "de": "Der Shop bot der Person, für die eine Leistung bestellt wurde, einen Rückgabe-Knopf an, und der Server wies sie ab: Zurückgeben oder ändern durfte nur, wer bestellt hatte, oder der Betrieb. Beides folgt jetzt den Aktionen des Produkts – wer das Recht bezieht, darf es zurückgeben und Änderungen anfordern, neben der Bestellerin und dem Betrieb. Ein Produkt, dessen Rückgabe nur der Betrieb auslösen darf, wird im Shop nicht mehr zur Rückgabe angeboten."
+      },
+      "link": {
+        "label": "ADR-0429",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
+      },
+      "tags": [
+        "Service catalogue",
+        "Shop"
+      ]
+    },
+    {
       "id": "an-inbound-watch-may-no-longer-publish-a-catalogue-product-s",
       "version": "Unreleased",
       "date": null,
@@ -170,6 +226,28 @@
       "tags": [
         "Modeler",
         "Engine"
+      ]
+    },
+    {
+      "id": "a-directed-delivery-no-longer-reports-a-message-delivered-th",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A message nobody received is no longer reported as delivered",
+        "de": "Eine Nachricht, die niemand empfing, gilt nicht mehr als zugestellt"
+      },
+      "summary": {
+        "en": "When a service's process had taken one branch of an event-based gateway, the other branches stayed subscribed for a while. A return or a change sent to the service in that moment was answered «delivered», its data was written into the process, and no step moved. Such a message is now refused with «does not wait for it now», and nothing is written.",
+        "de": "Hatte der Prozess einer Leistung an einem ereignisbasierten Gateway einen Zweig genommen, blieben die anderen Zweige noch eine Weile abonniert. Eine Rückgabe oder Änderung, die in diesem Moment an die Leistung ging, wurde mit «zugestellt» beantwortet, ihre Daten wurden in den Prozess geschrieben, und kein Schritt bewegte sich. Eine solche Nachricht wird jetzt mit «wartet gerade nicht darauf» abgewiesen, und nichts wird geschrieben."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Engine",
+        "Service catalogue"
       ]
     },
     {
@@ -244,106 +322,6 @@
           "de": "Console öffnen"
         },
         "route": "#/console"
-      }
-    },
-    {
-      "id": "a-held-per-position-right-can-be-changed-and-reads-as-held",
-      "version": "0.8.0",
-      "date": "2026-09-30",
-      "category": "Added",
-      "title": {
-        "en": "A held right can be changed in its own process",
-        "de": "Ein gehaltenes Recht lässt sich im eigenen Prozess ändern"
-      },
-      "summary": {
-        "en": "A product whose lifecycle runs as one instance per order position now takes changes too: the orderer asks for a change of a held position, and Atlas delivers it to the instance that carries that right, by key and with a clear answer. A retry with the same change id does not change the right twice, and a right whose instance is no longer running is refused rather than started anew. The order progress now shows such a position as held while its instance waits for the next change or its return. Redeploying a per-position process warns how many instances still run on older versions, because they keep their right there until they are migrated explicitly.",
-        "de": "Ein Produkt, dessen Lebenszyklus als eine Instanz pro Bestellposition läuft, nimmt jetzt auch Änderungen entgegen: Die bestellende Person verlangt eine Änderung einer gehaltenen Position, und Atlas stellt sie gezielt der Instanz zu, die dieses Recht trägt, mit einer eindeutigen Antwort. Eine Wiederholung mit derselben Änderungs-ID ändert das Recht nicht zweimal, und ein Recht, dessen Instanz nicht mehr läuft, wird abgelehnt statt neu gestartet. Der Bestellfortschritt zeigt eine solche Position als gehalten, solange ihre Instanz auf die nächste Änderung oder die Rückgabe wartet. Das erneute Bereitstellen eines Prozesses pro Position warnt, wie viele Instanzen noch auf älteren Versionen laufen, denn sie behalten ihr Recht dort, bis sie ausdrücklich migriert werden."
-      },
-      "link": {
-        "label": "ADR-0428",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0428-a-product-lifecycle-may-run-as-one-instance-per-position.md"
-      },
-      "tags": [
-        "Catalogue",
-        "Orders"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Console",
-          "de": "Konsole öffnen"
-        },
-        "route": "#/console"
-      }
-    },
-    {
-      "id": "a-product-s-lifecycle-can-run-as-one-instance-per-order-posi",
-      "version": "0.8.0",
-      "date": "2026-09-30",
-      "category": "Added",
-      "title": {
-        "en": "One process instance for the whole life of a right",
-        "de": "Eine Prozessinstanz für das ganze Leben eines Rechts"
-      },
-      "summary": {
-        "en": "A product's lifecycle process can now run as one instance per order position: provisioning starts it, and it waits for changes and the return for as long as the right is held — one instance is the whole record of one right. A return goes to exactly that instance and says whether it arrived; if the instance is gone, the process starts at its return start event instead, so every right stays returnable. Publishing checks that the process waits for its return under the position's key and cannot loop without waiting. Choose \"One instance per position\" in the product form.",
-        "de": "Ein Lebenszyklusprozess eines Produkts kann jetzt als eine Instanz pro Auftragsposition laufen: Die Bereitstellung startet sie, und sie wartet auf Änderungen und die Rückgabe, solange das Recht gehalten wird — eine Instanz ist die ganze Akte eines Rechts. Eine Rückgabe geht genau an diese Instanz und meldet, ob sie angekommen ist; ist die Instanz nicht mehr da, startet der Prozess stattdessen an seinem Rückgabe-Startereignis, damit jedes Recht rückgebbar bleibt. Beim Veröffentlichen wird geprüft, dass der Prozess unter dem Schlüssel der Position auf die Rückgabe wartet und nicht ohne Wartezustand kreisen kann. Im Produktformular «Eine Instanz pro Position» wählen."
-      },
-      "link": {
-        "label": "ADR-0425",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0425-a-product-lifecycle-is-one-process-with-message-triggers.md"
-      },
-      "tags": [
-        "Catalogue",
-        "Processes"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Console",
-          "de": "Console öffnen"
-        },
-        "route": "#/console"
-      }
-    },
-    {
-      "id": "the-live-view-migrates-the-running-instances-of-the-version-",
-      "version": "0.8.0",
-      "date": "2026-09-30",
-      "category": "Added",
-      "title": {
-        "en": "Migrate a version's running instances straight from its live view",
-        "de": "Laufende Instanzen einer Version direkt aus der Live-Ansicht migrieren"
-      },
-      "summary": {
-        "en": "When you open a process version in Operations and see its tokens on the diagram, you can now move all of that version's running instances onto another deployed version from the same screen. The new button \"Migrate instances…\" opens the migration dialog with the version you are looking at already chosen as the source and the newest version as the target; each version shows how many instances it is running. The button is only offered when the process has more than one version deployed, and it always moves the whole version — a single instance is still moved from its replay.",
-        "de": "Wenn Sie in Operations eine Prozessversion öffnen und ihre Tokens im Diagramm sehen, können Sie jetzt alle laufenden Instanzen dieser Version direkt aus derselben Ansicht auf eine andere bereitgestellte Version verschieben. Die neue Schaltfläche «Migrate instances…» öffnet den Migrationsdialog mit der angezeigten Version als Quelle und der neuesten Version als Ziel; zu jeder Version steht, wie viele Instanzen darauf laufen. Die Schaltfläche erscheint nur, wenn mehr als eine Version bereitgestellt ist, und sie verschiebt immer die ganze Version — eine einzelne Instanz verschieben Sie weiterhin aus ihrem Replay."
-      },
-      "link": {
-        "label": "ADR-0162",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0162-process-instance-migration.md"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations and click a process that has more than one version deployed.",
-          "Pick the version whose instances should move in the Version selector.",
-          "Click \"Migrate instances…\", check the target version, give a reason and confirm.",
-          "Instances that cannot be moved stay where they are and are listed afterwards."
-        ],
-        "de": [
-          "Öffnen Sie Operations und klicken Sie auf einen Prozess mit mehr als einer bereitgestellten Version.",
-          "Wählen Sie im Feld «Version» die Version, deren Instanzen verschoben werden sollen.",
-          "Klicken Sie auf «Migrate instances…», prüfen Sie die Zielversion, geben Sie einen Grund an und bestätigen Sie.",
-          "Instanzen, die nicht verschoben werden können, bleiben unverändert und werden anschliessend aufgelistet."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
       }
     }
   ]

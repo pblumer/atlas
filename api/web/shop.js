@@ -121,6 +121,11 @@ const STRINGS = {
     'line.close': 'Abbrechen',
     'line.amended': 'Korrigiert',
     'line.amendedFrom': 'vorher',
+    'action.sure': 'Wirklich auslösen:',
+    'action.send': 'Absenden',
+    'action.sending': 'Wird gesendet …',
+    'action.sent': 'Angefordert:',
+    'action.change': 'Ändern',
     'info.price': 'Kosten',
     'price.none': 'Der Katalog nennt keine Kosten.',
     'cat.none': 'Ohne Kategorie',
@@ -293,6 +298,11 @@ const STRINGS = {
     'line.close': 'Cancel',
     'line.amended': 'Corrected',
     'line.amendedFrom': 'was',
+    'action.sure': 'Really ask for this:',
+    'action.send': 'Send',
+    'action.sending': 'Sending …',
+    'action.sent': 'Requested:',
+    'action.change': 'Change',
     'info.price': 'Cost',
     'price.none': 'The catalogue names no cost.',
     'cat.none': 'Without a category',
@@ -463,6 +473,11 @@ const STRINGS = {
     'line.close': 'Annuler',
     'line.amended': 'Corrigé',
     'line.amendedFrom': 'auparavant',
+    'action.sure': 'Demander vraiment :',
+    'action.send': 'Envoyer',
+    'action.sending': 'Envoi …',
+    'action.sent': 'Demandé :',
+    'action.change': 'Modifier',
     'info.price': 'Coût',
     'price.none': 'Le catalogue n’indique aucun coût.',
     'cat.none': 'Sans catégorie',
@@ -632,6 +647,11 @@ const STRINGS = {
     'line.close': 'Annullare',
     'line.amended': 'Corretto',
     'line.amendedFrom': 'prima',
+    'action.sure': 'Richiedere davvero:',
+    'action.send': 'Inviare',
+    'action.sending': 'Invio …',
+    'action.sent': 'Richiesto:',
+    'action.change': 'Modificare',
     'info.price': 'Costo',
     'price.none': 'Il catalogo non indica alcun costo.',
     'cat.none': 'Senza categoria',
@@ -943,6 +963,16 @@ const state = {
   chosen: new Set(),
   busy: false,
   error: '',
+  // lineActions is what each held position offers this person (ADR-0429), as
+  // "orderId|lineKey" -> the actions the server answered, each with whether the
+  // position takes it now. acting is the action whose form is open, actingCommand
+  // the command id that form sends — one per opening, so a double click is one
+  // request to the process — and actionSent the last action asked, shown under its
+  // position.
+  lineActions: new Map(),
+  acting: '',
+  actingCommand: '',
+  actionSent: null,
 
   // --- Who is reading, and whether anybody is ---------------------------------
 
@@ -1448,6 +1478,7 @@ async function load() {
   }
   state.orders = await api('/api/v1/orders');
   await loadTasks();
+  await loadLineActions();
   // What one person holds, and what they have marked. Both are facts about an
   // account, and with enforcement off there is no account — the server says so
   // rather than inventing an empty answer, which is right of the server and must
@@ -2837,6 +2868,10 @@ function cancellable(order) {
 // button would invite it before the server refused it.
 function returnable(order, line) {
   if (line.status !== 'done' && line.status !== 'returnFailed') return false;
+  // The return is an action like any other (ADR-0429): a product whose return only
+  // an operator gives is not offered to the person who holds it.
+  const ret = (line.actions || []).find((a) => a.effect === 'deprovision');
+  if (ret && !(ret.triggers || []).includes('customer') && !state.mayFollowProcess) return false;
   // Held is wider than "done": a revocation only asked for has not happened, and
   // one that failed plainly has not. Either way the access is still there, and
   // offering to revoke what is underneath would invite the mistake the server
@@ -3056,8 +3091,163 @@ function orderRowBodies() {
             },
           }, t('line.details'))
           : null,
+        ...(!o.held ? actionButtons(o, l) : []),
+        actionSentNote(o, l),
         detailsPanel(o, l),
+        actionPanel(o, l),
         taskList(o, l)))))));
+}
+
+// --- Actions on a held position (ADR-0429) ------------------------------------
+//
+// A product says what can be asked of what somebody holds — a larger mailbox, a
+// password reset. The page draws a button per action the server says this person
+// may ask for, labelled in the reader's language, and greys out the ones the
+// position does not take right now with the reason as its title: whether it does is
+// the process's business, read from where the process stands, so the page never
+// holds a second copy of that rule. An action with a form opens it under the
+// position, the way correcting the details does; one without asks first, because
+// what it does reaches a system outside Atlas.
+
+// actionLabel is what an action's button says. A product that still carries the
+// operation map has a change and no label for it, and its key is not a word for a
+// reader, so that one change is named by the page's own string.
+function actionLabel(a) {
+  return textOf(a.labels, a.key === 'change' ? t('action.change') : a.key);
+}
+
+// actingKey is the bucket an action form's answers live in.
+function actingKey(orderID, line, action) { return `act:${orderID}:${line}:${action}`; }
+
+// newCommandId names one request to the process, so a retry is the same request.
+function newCommandId() {
+  if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+  return `cmd-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+// loadLineActions asks, for every held position of a product with a lifecycle
+// process, which actions it offers. Only those: a position that is not held, or
+// whose product has no lifecycle process, has none, and asking for each line of
+// every order would cost a request per line for nothing.
+async function loadLineActions() {
+  const next = new Map();
+  const asks = [];
+  for (const o of state.orders || []) {
+    if (o.held) continue;
+    for (const l of o.lines || []) {
+      if (l.status !== 'done' || !l.lifecycleProcess) continue;
+      const ref = `${o.id}|${lineKey(l)}`;
+      asks.push(api(`/api/v1/orders/${encodeURIComponent(o.id)}/lines/${encodeURIComponent(lineKey(l))}/actions`)
+        .then((r) => { if (r && r.actions && r.actions.length) next.set(ref, r.actions); })
+        // A position whose actions cannot be read shows none; the rest of the page
+        // is still the person's orders.
+        .catch(() => {}));
+    }
+  }
+  await Promise.all(asks);
+  state.lineActions = next;
+}
+
+function actionButtons(order, line) {
+  const list = state.lineActions.get(`${order.id}|${lineKey(line)}`) || [];
+  return list.map((a) => el('button', {
+    class: 'linkish',
+    'data-action': a.key,
+    disabled: state.busy || !a.available,
+    title: a.available ? '' : (a.why || ''),
+    onclick: () => openAction(order, line, a),
+  }, actionLabel(a)));
+}
+
+function openAction(order, line, action) {
+  if (action.form) {
+    harvest();
+    const k = actingKey(order.id, lineKey(line), action.key);
+    state.acting = state.acting === k ? '' : k;
+    state.actingCommand = newCommandId();
+    state.configError = '';
+    render();
+    return;
+  }
+  if (!window.confirm(`${t('action.sure')} ${actionLabel(action)}`)) return;
+  askAction(order, line, action, newCommandId(), {});
+}
+
+// actionPanel is the open action's form, under the position it belongs to.
+function actionPanel(order, line) {
+  const list = state.lineActions.get(`${order.id}|${lineKey(line)}`) || [];
+  const action = list.find((a) => a.form && state.acting === actingKey(order.id, lineKey(line), a.key));
+  if (!action) return null;
+  const key = state.acting;
+  return el('div', { class: 'card cfg', style: 'margin-top:8px' },
+    el('p', {}, el('strong', {}, actionLabel(action))),
+    state.configError === key ? el('p', { class: 'error' }, t('cfg.invalid')) : null,
+    el('div', { 'data-configkey': key, 'data-formid': action.form },
+      el('p', { class: 'note' }, t('cfg.loading'))),
+    el('div', { class: 'row', style: 'margin-top:10px' },
+      el('button', {
+        class: 'primary', disabled: state.busy,
+        onclick: () => sendActionForm(order, line, action),
+      }, state.busy ? t('action.sending') : t('action.send')),
+      el('button', {
+        disabled: state.busy,
+        onclick: () => {
+          harvest();
+          delete state.config[key];
+          state.acting = '';
+          state.configError = '';
+          render();
+        },
+      }, t('line.close'))));
+}
+
+function sendActionForm(order, line, action) {
+  const key = state.acting;
+  const form = mounted.get(key);
+  if (form) {
+    const { errors } = form.submit();
+    if (errors && Object.keys(errors).length) {
+      state.configError = key;
+      render();
+      return;
+    }
+  }
+  harvest();
+  askAction(order, line, action, state.actingCommand, state.config[key] || {});
+}
+
+async function askAction(order, line, action, commandId, variables) {
+  if (state.busy) return;
+  state.busy = true;
+  state.error = '';
+  state.configError = '';
+  render();
+  try {
+    await api(`/api/v1/orders/${encodeURIComponent(order.id)}/lines/${encodeURIComponent(lineKey(line))}` +
+      `/actions/${encodeURIComponent(action.key)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ commandId, variables }),
+    });
+    delete state.config[actingKey(order.id, lineKey(line), action.key)];
+    state.acting = '';
+    state.actionSent = { ref: `${order.id}|${lineKey(line)}`, label: actionLabel(action) };
+    await load();
+  } catch (e) {
+    state.error = `${t('portal.failed')} ${e.message}`;
+  } finally {
+    state.busy = false;
+    render();
+  }
+}
+
+// actionSentNote says the last action was asked for. The position's status does not
+// change — it is held before and after — so without this a pressed button would
+// look like it did nothing.
+function actionSentNote(order, line) {
+  const sent = state.actionSent;
+  if (!sent || sent.ref !== `${order.id}|${lineKey(line)}`) return null;
+  return el('span', { class: 'muted' }, ` (${t('action.sent')} ${sent.label})`);
 }
 
 // --- The open tasks of a position (ADR-0416) --------------------------------

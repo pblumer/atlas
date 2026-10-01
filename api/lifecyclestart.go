@@ -142,13 +142,13 @@ func (s *Server) deliverOrStart(strand uint64, b catalog.Binding, correlationKey
 	return s.startBinding(b, triggerID, vars)
 }
 
-// deliverChange delivers a change to the strand and to nothing else: a change has
-// no start event to fall back to, so a strand that is gone is a refusal.
+// deliverChange delivers a change or a service to the strand and to nothing else:
+// neither has a start event to fall back to, so a strand that is gone is a refusal.
 func (s *Server) deliverChange(strand uint64, b catalog.Binding, correlationKey, triggerID string, vars []model.VariableValue) (uint64, error) {
 	key, gone, err := s.deliverToStrand(strand, b, correlationKey, triggerID, vars)
 	if gone {
 		return 0, errTriggerRefused{fmt.Sprintf("the instance %d that carried this position is "+
-			"no longer running; there is nothing to change", strand)}
+			"no longer running; there is nothing to ask", strand)}
 	}
 	return key, err
 }
