@@ -417,6 +417,39 @@ for its shape as it is typed, the outcome is picked from the closed list, and ch
 kind clears the message and any Worker it replaces. Picking the action from the product's
 declared actions, and a badge on the canvas, are slice D.
 
+*As built — slice C3.* The `command` mode, as §10 decision 1 settled it. A send task
+carrying `<atlas:shopTask mode="command" product="…" action="…" order="…" position="…"
+resultVariable="…"/>` compiles to a second reserved job type, `io.atlas.shop.command`
+(index 31): the product and the action are literals checked at deploy, the order and the
+position a literal or an =expression each, evaluated over the instance's variables when
+the task runs, and a command task states no outcome — the commanded action's own process
+does. The product names the applications that may command it in `commandedBy`, by their
+portable keys (ADR-0134); a blank or repeated key is refused at publish, a key no
+application on this server carries is not, because a catalogue moves between servers and a
+key that matches nothing lets nothing through. The list is read from the newest release
+of the order's catalogue when the task runs, not frozen on the order line as the actions
+are: it says which automation the operator trusts with what somebody holds, and taking an
+application off it must stop it for every right already held. The handler
+(`api/shopcommand.go`) resolves the process's application from its deployment, checks the
+list, then the action: never the provision, and only one whose triggers include `operator`
+or `system`. A change or a service goes through the order act's own firing — the same
+delivery to the strand or start at the action's start event, under the command id
+`task-<job key>`, which survives the job's retries, so a retried task is answered from the
+trigger's receipt. A return goes through the return route's two steps, the line marked
+returning first; a line already returning or returned answers with its newest attempt, so
+a retried leaver process changes nothing. The order act waits on the run loop, and a
+handler that waits on it deadlocks a drive that holds it — a fork's or a migration's — so
+the job type is registered with `job.Runner.HandleOffLoop`: only a round that works its
+jobs off the loop claims it, and the in-process drive leaves it for the next one, which
+the timer tick runs within a second. The result variable receives the command id the
+outcome will be recorded under — for a return, the order's attempt id. A command carries
+no variables of its own in this cut: the process it reaches is seeded as the act seeds it,
+with the reason `asked by application <key>`, so an action whose process needs a form's
+answers is still asked by a person or over the route. Building it found
+that the worker breaker (ADR-0340) counted the failures of engine-only job types, which
+have no target to be down; three refusals for their data held every other instance's task
+of the kind back. They are no longer counted.
+
 ### 5. The feed: what leaves Atlas
 
 **The public contract is a CloudEvents 1.0 envelope** in structured JSON, as ADR-0176 §2

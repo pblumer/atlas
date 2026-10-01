@@ -121,9 +121,16 @@ func (s *Server) handleReturnLine(w http.ResponseWriter, r *http.Request) {
 // recertification — and says what, in words for the person the process shows it
 // to. The orderer's own return carries none.
 func (s *Server) startReturn(b catalog.Binding, orderID, ref string, o order.Order, reason string) error {
+	_, err := s.startReturnAttempt(b, orderID, ref, o, reason)
+	return err
+}
+
+// startReturnAttempt is [Server.startReturn], answering the command id the return
+// runs under — the attempt id the order reports its outcome against (ADR-0429 §3).
+func (s *Server) startReturnAttempt(b catalog.Binding, orderID, ref string, o order.Order, reason string) (string, error) {
 	position, err := order.ResolveLine(o, ref)
 	if err != nil {
-		return err
+		return "", err
 	}
 	var line order.Line
 	for _, l := range o.Lines {
@@ -165,12 +172,12 @@ func (s *Server) startReturn(b catalog.Binding, orderID, ref string, o order.Ord
 		instKey, err = s.startBinding(b, triggerID, vars)
 	}
 	if err != nil {
-		return err
+		return "", err
 	}
 	// The return is a process working this position like any other, and its tasks
 	// belong beside it in the shop (ADR-0416).
 	s.notePositionInstanceOp(vars, instKey, b.Process, catalog.OpDeprovision)
-	return nil
+	return triggerID, nil
 }
 
 // frozenAction is the action key that the line ref names froze, when the reference

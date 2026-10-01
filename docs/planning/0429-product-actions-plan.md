@@ -183,8 +183,10 @@ change the other two build on:
   appends it in the command that completes the job, as a decision's history is. Publish
   check: every change or service action's `completed` is reported by such a task, and no
   task answers an action the product does not declare. See ADR-0429 §4's as-built note.
-- **C3 — mode `command`** with the product's allow-list, limited to `operator`/`system`
-  actions (§10, decision 1).
+- **C3 — mode `command` — ✅ landed.** The product's `commandedBy` list of application
+  keys, read from the newest release when a task commands; only `operator`/`system`
+  actions, never the provision; a return through the return route; a job type of its own
+  that only an off-loop round claims (§10, decision 1). See ADR-0429 §4's as-built note.
 
 - `VTActionOutcome` / `IntentActionCompleted` (engine), written beside a grant or
   revocation in the same batch; outcome route for REST reporters.

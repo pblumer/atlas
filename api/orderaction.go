@@ -243,6 +243,15 @@ func (s *Server) actOnLine(p *httpapi.Principal, id, item, key string, req actio
 		return actionResp{}, http.StatusConflict, "position " + position + " is " + string(line.Status) +
 			"; an action is asked only of a held right"
 	}
+	return s.fireAction(h, id, key, req.CommandID, req.Reason, extra)
+}
+
+// fireAction asks the held position h of order id for the action key, once the act
+// has checked who asks: to the strand that carries the right for a per-position
+// product, at the action's start event for a per-operation one. The command id makes
+// the trigger, so asking again under it answers with the first instance.
+func (s *Server) fireAction(h heldLine, id, key, commandID, reason string, extra []model.VariableValue) (actionResp, int, string) {
+	line, position := h.line, h.position
 	b := line.BindingFor(key)
 	if !b.Triggered() {
 		return actionResp{}, http.StatusConflict, "product " + line.ItemID + " binds no message for action " + key
@@ -254,15 +263,18 @@ func (s *Server) actOnLine(p *httpapi.Principal, id, item, key string, req actio
 		{Name: progressOrderVar, Kind: model.VarString, Text: id},
 		{Name: "recipient", Kind: model.VarString, Text: h.ord.Recipient},
 		// What the process reports the outcome against (ADR-0429 §4).
-		{Name: commandIDVar, Kind: model.VarString, Text: req.CommandID},
+		{Name: commandIDVar, Kind: model.VarString, Text: commandID},
 	}
-	if reason := strings.TrimSpace(req.Reason); reason != "" {
+	if reason := strings.TrimSpace(reason); reason != "" {
 		vars = append(vars, model.VariableValue{Name: "reason", Kind: model.VarString, Text: reason})
 	}
 	vars = append(vars, extra...)
-	triggerID := "order:" + id + ":" + position + ":" + key + ":" + req.CommandID
+	triggerID := "order:" + id + ":" + position + ":" + key + ":" + commandID
 
-	var instKey uint64
+	var (
+		instKey uint64
+		err     error
+	)
 	if line.PerPosition() {
 		// No fallback: an action reaches the strand or nothing. Starting a strand to
 		// change a right would run a second instance for one right.

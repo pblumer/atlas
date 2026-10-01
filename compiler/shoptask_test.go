@@ -64,7 +64,7 @@ func TestAShopSendTaskIsCheckedAtDeploy(t *testing.T) {
 		service bool
 		want    string
 	}{
-		{`mode="command" action="extend" outcome="completed"`, false, `has mode "command"`},
+		{`mode="relay" action="extend" outcome="completed"`, false, `has mode "relay"`},
 		{`action="Extend Storage" outcome="completed"`, false, `names action "Extend Storage"`},
 		{`action="" outcome="completed"`, false, `names action ""`},
 		{`action="extend" outcome="done"`, false, `states outcome "done"`},
@@ -74,6 +74,48 @@ func TestAShopSendTaskIsCheckedAtDeploy(t *testing.T) {
 		_, err := compiler.Parse(1, 1, strings.NewReader(shopModel(c.attrs, c.service)))
 		if err == nil || !strings.Contains(err.Error(), c.want) || !strings.Contains(err.Error(), "Told") {
 			t.Errorf("%s (service %v): %v, want a refusal naming %q", c.attrs, c.service, err, c.want)
+		}
+	}
+}
+
+// TestAShopCommandTaskNamesWhatItCommands: a command task compiles to the shop
+// command job type with the product and the action as literals and the order and the
+// position as values the instance computes; it is not a point that answers an action.
+// One that also states an outcome, or leaves out what it acts on, is refused.
+func TestAShopCommandTaskNamesWhatItCommands(t *testing.T) {
+	cp, err := compiler.Parse(1, 1, strings.NewReader(shopModel(
+		`mode="command" product="mailbox" action="deprovision" order="= leaver.orderId" position="mailbox" resultVariable="returned"`, false)))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	idx, _ := cp.ElementIndexOf("Told")
+	d, err := cp.ConnectorTaskOf(idx)
+	if err != nil {
+		t.Fatalf("ConnectorTaskOf: %v", err)
+	}
+	if d.JobType != compiler.ShopCommandJobTypeIndex || d.ShopMode != compiler.ShopModeCommand ||
+		d.ShopProduct != "mailbox" || d.ShopAction != "deprovision" || d.ShopResultVar != "returned" {
+		t.Fatalf("detail = %+v", d)
+	}
+	if d.ShopOrder.Expr == nil || d.ShopPosition.Expr != nil || d.ShopPosition.Literal != "mailbox" {
+		t.Fatalf("order %+v, position %+v: want an expression and a literal", d.ShopOrder, d.ShopPosition)
+	}
+	if got := cp.ShopOutcomePoints(); len(got) != 0 {
+		t.Fatalf("a command task was listed as answering an action: %+v", got)
+	}
+
+	for _, c := range []struct{ attrs, want string }{
+		{`mode="command" product="mailbox" action="reset" order="o" position="p" outcome="completed"`, "states no outcome"},
+		{`mode="command" action="reset" order="o" position="p"`, "needs the product"},
+		{`mode="command" product="mailbox" action="reset" position="p"`, "needs the order and the position"},
+		{`mode="command" product="mailbox" action="reset" order="o"`, "needs the order and the position"},
+		{`mode="command" product="mailbox" action="reset" order="= (" position="p"`, "Told"},
+		{`mode="command" product="mailbox" action="reset" order="o" position="= )"`, "Told"},
+		{`mode="command" product="mailbox" action="reset" order="o" position="p" retries="x"`, "Told"},
+	} {
+		_, err := compiler.Parse(1, 1, strings.NewReader(shopModel(c.attrs, false)))
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: %v, want a refusal naming %q", c.attrs, err, c.want)
 		}
 	}
 }

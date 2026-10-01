@@ -1943,6 +1943,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.jobRunner.HandleCompleting(compiler.ShopJobTypeIndex, func(rd state.Reader) job.CompletingHandler {
 		return s.shopTaskHandler(rd)
 	})
+	// A shop command task asks a held position for one of its product's actions in
+	// the name of its process's application (ADR-0429 §4, §10 decision 1). It acts
+	// through the order act, which waits on the run loop, so only a round that works
+	// its jobs off the loop takes it.
+	s.jobRunner.HandleOffLoop(compiler.ShopCommandJobTypeIndex, func(rd state.Reader) job.CompletingHandler {
+		return s.shopCommandHandler(rd)
+	})
 	s.jobRunner.HandleWithOutput(compiler.AdJobTypeIndex, func(rd state.Reader) job.OutputHandler {
 		// No directory registry in-process: a task naming a Console-configured
 		// directory is served by the worker that holds it (ADR-0164/0168), and this

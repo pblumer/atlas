@@ -19,6 +19,12 @@ import (
 // ShopModeOutcome states how the command this instance carries ended.
 const ShopModeOutcome = "outcome"
 
+// ShopModeCommand issues an action on a position the instance does not carry — an HR
+// leaver process returning a right, a maintenance process resetting a password. It
+// acts in the name of the process's application, which the product must list, and
+// only for an action an operator or a system may ask for (ADR-0429 §10, decision 1).
+const ShopModeCommand = "command"
+
 // shopActionKey is the shape of an action key (ADR-0305's rules), repeated here
 // because the compiler does not import the catalogue.
 var shopActionKey = regexp.MustCompile(`^[a-z0-9-]{1,64}$`)
@@ -32,6 +38,17 @@ type ShopConfig struct {
 	Action  string
 	Outcome string
 	Retries int32
+}
+
+// ShopCommandConfig is the deploy-time configuration of a shop send task in mode
+// `command`.
+type ShopCommandConfig struct {
+	Product   string
+	Action    string
+	Order     RestExpr
+	Position  RestExpr
+	ResultVar string
+	Retries   int32
 }
 
 // AddShopTask adds a shop send task: a connector-task node carrying the reserved
@@ -56,6 +73,31 @@ func (b *Builder) AddShopTask(cfg ShopConfig) int32 {
 	return b.addNode(TypeConnectorTask, detail)
 }
 
+// AddShopCommandTask adds a shop send task in mode `command`: a connector-task node
+// carrying the reserved shop command job type, served in-process off the run loop.
+func (b *Builder) AddShopCommandTask(cfg ShopCommandConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:       b.intern(ShopCommandJobType),
+		Connector:     -1, // no server-registered provider; it acts through the order
+		Subject:       -1,
+		EventType:     -1,
+		ClioQuery:     -1,
+		ReduceSpec:    -1,
+		Method:        -1,
+		ResultVar:     -1,
+		Auth:          -1,
+		ShopMode:      ShopModeCommand,
+		ShopAction:    cfg.Action,
+		ShopProduct:   cfg.Product,
+		ShopOrder:     cfg.Order,
+		ShopPosition:  cfg.Position,
+		ShopResultVar: cfg.ResultVar,
+		Retries:       cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
 // compileShopTask checks a shop send task's declaration and adds it. Everything is a
 // literal checked here, so a typo in an action key or an outcome is a deploy error
 // rather than a command that never ends.
@@ -64,13 +106,17 @@ func compileShopTask(b *Builder, id string, st *xmlShopTask) (int32, error) {
 	if mode == "" {
 		mode = ShopModeOutcome
 	}
-	if mode != ShopModeOutcome {
-		return 0, fmt.Errorf("compiler: shop task %q has mode %q; the mode is %q", id, mode, ShopModeOutcome)
+	if mode != ShopModeOutcome && mode != ShopModeCommand {
+		return 0, fmt.Errorf("compiler: shop task %q has mode %q; the mode is %q or %q", id, mode,
+			ShopModeOutcome, ShopModeCommand)
 	}
 	action := strings.TrimSpace(st.Action)
 	if !shopActionKey.MatchString(action) {
 		return 0, fmt.Errorf("compiler: shop task %q names action %q; an action key is lower-case "+
 			"letters, digits and dashes, 1 to 64 characters", id, action)
+	}
+	if mode == ShopModeCommand {
+		return compileShopCommand(b, id, action, st)
 	}
 	outcome := strings.TrimSpace(st.Outcome)
 	if !shopOutcomes[outcome] {
@@ -108,4 +154,38 @@ func (p *CompiledProcess) ShopOutcomePoints() []ShopOutcomePoint {
 		out = append(out, ShopOutcomePoint{Element: p.ElementBpmnId(int32(id)), Action: d.ShopAction, Outcome: d.ShopOutcome})
 	}
 	return out
+}
+
+// compileShopCommand checks a `command` declaration and adds it. The product and the
+// action are literals, so the task names exactly one thing it may ask for and a
+// typo is a deploy error; the order and the position are values the instance
+// computes — a leaver process finds them in the inventory — so each is a literal or
+// an =expression, compiled here and evaluated when the task runs.
+func compileShopCommand(b *Builder, id, action string, st *xmlShopTask) (int32, error) {
+	if strings.TrimSpace(st.Outcome) != "" {
+		return 0, fmt.Errorf("compiler: shop task %q issues a command and states no outcome; "+
+			"the commanded action's own process states how it ended", id)
+	}
+	product := strings.TrimSpace(st.Product)
+	if product == "" {
+		return 0, fmt.Errorf("compiler: shop task %q issues a command and needs the product it commands", id)
+	}
+	if strings.TrimSpace(st.Order) == "" || strings.TrimSpace(st.Position) == "" {
+		return 0, fmt.Errorf("compiler: shop task %q issues a command and needs the order and the "+
+			"position it acts on (a literal or an =expression each)", id)
+	}
+	ord, err := connectorValue(b.gate(), id, "shop task", "order", st.Order)
+	if err != nil {
+		return 0, err
+	}
+	pos, err := connectorValue(b.gate(), id, "shop task", "position", st.Position)
+	if err != nil {
+		return 0, err
+	}
+	retries, err := parseRetries("send task", id, st.Retries)
+	if err != nil {
+		return 0, err
+	}
+	return b.AddShopCommandTask(ShopCommandConfig{Product: product, Action: action, Order: ord,
+		Position: pos, ResultVar: strings.TrimSpace(st.ResultVariable), Retries: retries}), nil
 }

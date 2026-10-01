@@ -110,6 +110,8 @@ var releasedKinds = []releasedKind{
 	{JobType: compiler.DiscordJobType, ADR: 258, Class: classConnector},
 	{JobType: compiler.ShopJobType, ADR: 429, Class: classEngine,
 		Why: "the order's own send task: it states how a product action ended to the order and the engine, so there is no system to configure and nothing to publish"},
+	{JobType: compiler.ShopCommandJobType, ADR: 429, Class: classEngine,
+		Why: "the order's own send task in mode command: it asks a held position for an action through the order act, in the name of the process's application, so there is no system to configure and nothing to publish"},
 }
 
 // packagesOwed is how many released connector kinds have no Repository package right

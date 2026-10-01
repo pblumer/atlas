@@ -2,6 +2,28 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "a-process-can-ask-somebody-s-held-service-for-an-action-in-t",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Processes can ask a held service for an action",
+        "de": "Prozesse können eine bezogene Leistung um eine Aktion bitten"
+      },
+      "summary": {
+        "en": "A Shop task can now issue a command: an HR leaver process returns a person's mailbox, a maintenance process resets a password — through the same checks the shop applies to a person. Because no person stands behind a process, each product lists the applications it trusts with this, and only actions meant for operators or systems can be commanded. The list is read fresh every time, so removing an application stops it at once for everything already held.",
+        "de": "Eine Shop-Aufgabe kann jetzt einen Befehl erteilen: Ein Austrittsprozess gibt die Mailbox einer Person zurück, ein Wartungsprozess setzt ein Passwort zurück – mit denselben Prüfungen, die der Shop bei einer Person anwendet. Weil hinter einem Prozess keine Person steht, führt jedes Produkt die Applikationen auf, denen es das erlaubt, und nur Aktionen für Betrieb oder Systeme lassen sich befehlen. Die Liste wird jedes Mal neu gelesen; wird eine Applikation entfernt, ist sie sofort für alles bereits Bezogene gesperrt."
+      },
+      "link": {
+        "label": "ADR-0429",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
+      },
+      "tags": [
+        "Service catalogue",
+        "Modeler"
+      ]
+    },
+    {
       "id": "a-product-s-process-states-how-an-action-ended-without-calli",
       "version": "Unreleased",
       "date": null,
@@ -290,28 +312,6 @@
         "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0340-worker-circuit-breaker.md"
       },
       "tags": [
-        "Operations"
-      ]
-    },
-    {
-      "id": "a-reconciliation-no-longer-reports-a-right-as-unmanaged-when",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A contested reference no longer produces a false finding",
-        "de": "Eine umstrittene Referenz erzeugt keinen falschen Befund mehr"
-      },
-      "summary": {
-        "en": "When two products target the same group or role in a system, a reconciliation cannot tell which of them a person holds there — and said so, but then still attributed what it read to the first product. Somebody who held that product, properly recorded, appeared as holding it unmanaged, a finding that could be adopted or even revoked. What is read under such a reference is now attributed to nobody and compared with nothing.",
-        "de": "Zielen zwei Produkte auf dieselbe Gruppe oder Rolle in einem System, kann ein Abgleich nicht sagen, welches davon eine Person dort hält – das meldete er auch, ordnete das Gelesene dann aber trotzdem dem ersten Produkt zu. Wer dieses Produkt ordentlich erfasst hielt, erschien als unverwalteter Besitz, ein Befund, der übernommen oder sogar entzogen werden konnte. Was unter einer solchen Referenz gelesen wird, wird jetzt niemandem zugeordnet und mit nichts verglichen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Service catalogue",
         "Operations"
       ]
     }
