@@ -5246,7 +5246,8 @@ function messageFieldsHTML(modeler, med, hint) {
   ).join("");
   const fields = current ? `
     <label class="field"><span>Message name</span>
-      <input type="text" id="f-msgname" value="${esc(current.name || "")}" placeholder="payment-received"/></label>
+      <input type="text" id="f-msgname" value="${esc(current.name || "")}" placeholder="payment-received" autocomplete="off"/></label>
+    <datalist id="f-msgname-sources"></datalist>
     <p class="muted" style="font-size:12px" id="f-msgsources"></p>
     <label class="field"><span>Correlation key (FEEL)</span>
       <textarea id="f-corrkey" rows="1" placeholder="orderId">${esc(messageCorrelationKey(current))}</textarea></label>
@@ -5282,11 +5283,11 @@ function messageFieldsHTML(modeler, med, hint) {
 //
 // A failed fetch leaves the line empty, like every other server-fed hint in this panel:
 // an author who cannot reach the server is not helped by being told so twice.
-function fillMessageSources(api, el, name) {
+function fillMessageSources(api, el, name, sources) {
   if (!api || !el) return;
   const want = (name || "").trim();
   if (!want) return;
-  api("GET", "/api/v1/message-sources").then((list) => {
+  (sources || api("GET", "/api/v1/message-sources")).then((list) => {
     const mine = (list || []).filter((s) => s && s.messageName === want);
     if (!mine.length) {
       el.innerHTML = `<span class="muted">No inbound event watch on this server publishes <b>${esc(want)}</b>. `
@@ -5302,6 +5303,73 @@ function fillMessageSources(api, el, name) {
     el.innerHTML = `Published by ${mine.length} inbound event watch${mine.length > 1 ? "es" : ""}:`
       + `<ul style="margin:4px 0 0 16px;padding:0">${parts}</ul>`;
   }).catch(() => { /* no hint; the field works the same */ });
+}
+
+// MESSAGE_SOURCE_PREFIX marks a #f-msgref option that names a Worker event rather than a
+// message the diagram already declares. Choosing one declares it (ADR-0429 §6).
+const MESSAGE_SOURCE_PREFIX = "__source__:";
+
+// receivesMessages reports whether a message-bearing element waits for its message rather
+// than throwing it: a start event (process-level or event subprocess), an intermediate
+// catch, a boundary event, a receive task. Only these are offered the Worker events. A
+// watch's name is one the engine receives; offered to a throw it would make the model a
+// second sender of a name a Worker already sends, which is rarely what the author means,
+// so a throw keeps its free-text name.
+function receivesMessages(bo) {
+  const t = bo && bo.$type;
+  return t === "bpmn:StartEvent" || t === "bpmn:IntermediateCatchEvent" ||
+    t === "bpmn:BoundaryEvent" || t === "bpmn:ReceiveTask";
+}
+
+// workerEventChoices folds the server's inbound watches into one choice per message name,
+// naming every worker that publishes it, sorted by name. Two watches on two workers may
+// publish one name, and the author picks the name, not the watch. A name the diagram
+// already declares as a message is left out (declared): it is in the list above already,
+// and offering it twice would invite a second message of the same name. A name only
+// disabled watches publish is kept and marked, because "it exists but is off" is what
+// the author needs to know, not a reason to hide it.
+function workerEventChoices(sources, declared) {
+  const byName = new Map();
+  for (const s of sources || []) {
+    const name = ((s && s.messageName) || "").trim();
+    if (!name || (declared && declared.has(name))) continue;
+    const c = byName.get(name) || { name, workers: [], enabled: false };
+    const who = s.connectorName || s.connectorId || "";
+    const what = who && s.kind ? `${who} (${s.kind})` : who || s.kind || "";
+    if (what && !c.workers.includes(what)) c.workers.push(what);
+    c.enabled = c.enabled || !!s.enabled;
+    byName.set(name, c);
+  }
+  return [...byName.values()]
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+    .map((c) => ({ name: c.name, workers: c.workers.join(", ") + (c.enabled ? "" : " — off") }));
+}
+
+// offerWorkerEvents puts the Worker events in front of the author who would otherwise
+// have to type them: an "Events from Workers" group in the message picker, and the same
+// names as suggestions on the name field. Picking one declares a message of that name;
+// the field stays free text, because a message may be modelled before any watch
+// publishes it (ADR-0429 §6). It runs once the listing arrives, so the picker is usable
+// at once and gains the group a moment later; a failed listing leaves both as they were.
+function offerWorkerEvents(select, datalist, sources, modeler) {
+  const declared = new Set(listMessages(modeler).map((m) => (m.name || "").trim()).filter(Boolean));
+  const choices = workerEventChoices(sources, declared);
+  if (select && choices.length && !select.querySelector("optgroup[data-worker-events]")) {
+    const group = document.createElement("optgroup");
+    group.label = "Events from Workers";
+    group.dataset.workerEvents = "";
+    for (const c of choices) {
+      const opt = document.createElement("option");
+      opt.value = MESSAGE_SOURCE_PREFIX + c.name;
+      opt.textContent = c.workers ? `${c.name} — ${c.workers}` : c.name;
+      group.appendChild(opt);
+    }
+    select.insertBefore(group, select.querySelector('option[value="__new__"]'));
+  }
+  if (datalist) {
+    datalist.innerHTML = workerEventChoices(sources, null)
+      .map((c) => `<option value="${esc(c.name)}" label="${esc(c.workers)}"></option>`).join("");
+  }
 }
 
 // messagesManagerHTML lists the model's messages for central management (add,
@@ -8726,6 +8794,16 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     }
 
     const fmsgref = body.querySelector("#f-msgref");
+    // One listing of the server's inbound watches serves the Worker events in the picker,
+    // the name field's suggestions and the line under it, so a render asks once.
+    const msgSources = fmsgref && api ? api("GET", "/api/v1/message-sources") : null;
+    if (fmsgref && msgSources && receivesMessages(element.businessObject)) {
+      const fname = body.querySelector("#f-msgname");
+      if (fname) fname.setAttribute("list", "f-msgname-sources");
+      msgSources
+        .then((list) => offerWorkerEvents(fmsgref, body.querySelector("#f-msgname-sources"), list, modeler))
+        .catch(() => { /* no Worker events offered; the picker works the same */ });
+    }
     if (fmsgref) {
       fmsgref.addEventListener("change", () => {
         const med = messageRefHolder(element.businessObject);
@@ -8734,6 +8812,13 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         savePreservingPanel(() => {
           if (v === "__new__") {
             linkMessage(modeler, element, med, createMessage(modeler, ""));
+          } else if (v.startsWith(MESSAGE_SOURCE_PREFIX)) {
+            // A Worker event becomes a message of this diagram under the same name —
+            // the one already declared when there is one, so a name is never split into
+            // two messages with two correlation keys.
+            const name = v.slice(MESSAGE_SOURCE_PREFIX.length);
+            const declared = listMessages(modeler).find((m) => (m.name || "").trim() === name);
+            linkMessage(modeler, element, med, declared || createMessage(modeler, name));
           } else if (v === "") {
             linkMessage(modeler, element, med, null);
           } else {
@@ -8745,13 +8830,13 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     }
     const fmsgname = body.querySelector("#f-msgname");
     if (fmsgname) {
-      fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value);
+      fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value, msgSources);
       fmsgname.addEventListener("change", () => {
         const med = messageRefHolder(element.businessObject);
         if (med && med.messageRef) med.messageRef.name = (fmsgname.value || "").trim();
-        // Renaming the message changes which watches feed it, so the line is re-read
-        // rather than left describing the name that was there a moment ago.
-        fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value);
+        // Renaming the message changes which watches feed it, so the line is redrawn for
+        // the new name from the same listing, rather than left describing the old one.
+        fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value, msgSources);
       });
     }
     const fcorrkey = body.querySelector("#f-corrkey");

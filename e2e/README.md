@@ -259,6 +259,16 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   column is absent. Drives the real app shell against a routed mock, with Playwright's
   clock driving both intervals — the timing is part of what is being tested.
 
+- **`worker-events-modeler.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
+  the **Worker events in the message picker**. An element that waits for a message — a
+  message start, a catch, a boundary event, a receive task — is offered the names the
+  server's inbound watches publish, one choice per name with every publishing worker
+  named and a watch that is off marked; picking one declares a message of that name and
+  links it, and a name the diagram already declares is not offered twice. An element that
+  throws a message is offered none. The name field suggests the same names, one render
+  asks the server once, and a listing that fails leaves the picker as it was. Drives the
+  real `mountEditor` against a mock `api` serving `GET /api/v1/message-sources`.
+
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
 
 ## Rendering a conformance gallery diagram
