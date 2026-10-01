@@ -955,7 +955,19 @@ function unsupportedReason(bo) {
   for (const d of (bo.eventDefinitions || [])) {
     if (UNSUPPORTED_EVENT_DEFS[d.$type]) return UNSUPPORTED_EVENT_DEFS[d.$type];
   }
-  return null;
+  return conditionalStartReason(bo);
+}
+
+// conditionalStartReason flags the one event definition whose support depends on where
+// it stands. An event subprocess's conditional start is its trigger and runs while the
+// parent scope does (ADR-0137); any other conditional start has no instance whose
+// variables the condition could read. At process level the compiler refuses it at deploy
+// (start.conditional); the badge says so while the author is still drawing.
+function conditionalStartReason(bo) {
+  if (bo.$type !== "bpmn:StartEvent") return null;
+  if (!(bo.eventDefinitions || []).some((d) => d.$type === "bpmn:ConditionalEventDefinition")) return null;
+  if (bo.$parent && bo.$parent.triggeredByEvent) return null;
+  return "A conditional start event runs only inside an event subprocess: before an instance exists there are no variables for its condition to read. Use a conditional catch, boundary event or event subprocess, or start with the message or timer that observes the condition";
 }
 
 // A data object's declared type is BPMN's itemSubjectRef, and it is a *reference*

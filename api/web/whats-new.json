@@ -47,6 +47,28 @@
       ]
     },
     {
+      "id": "a-conditional-start-event-in-front-of-a-process-is-refused-a",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "A conditional start event in front of a process is refused instead of never firing",
+        "de": "Ein bedingtes Startereignis vor einem Prozess wird abgewiesen, statt nie auszulösen"
+      },
+      "summary": {
+        "en": "A start event with a condition in front of a process — say, mailbox storage above 100 GB — used to deploy as an ordinary start with its condition silently dropped: it never started on its own, and when started by hand it ran regardless of the condition. A condition reads variables, and before an instance exists there are none, so Atlas runs conditional events only inside a running instance. The Modeler now marks such a start while you draw it, and a deploy refuses it. Processes already deployed with one keep running as before until their next deploy.",
+        "de": "Ein Startereignis mit Bedingung vor einem Prozess – etwa Mailbox-Speicher über 100 GB – wurde bisher als gewöhnlicher Start deployt und die Bedingung stillschweigend verworfen: Es startete nie von selbst, und von Hand gestartet lief es ohne Rücksicht auf die Bedingung. Eine Bedingung liest Variablen, und bevor eine Instanz existiert, gibt es keine; Atlas führt bedingte Ereignisse deshalb nur innerhalb einer laufenden Instanz aus. Der Modeler markiert ein solches Startereignis jetzt schon beim Zeichnen, und das Deployment weist es ab. Bereits deployte Prozesse laufen bis zum nächsten Deployment unverändert weiter."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Engine"
+      ]
+    },
+    {
       "id": "listing-one-instance-s-jobs-no-longer-walks-every-job-on-the",
       "version": "Unreleased",
       "date": null,
@@ -312,35 +334,6 @@
           "de": "Console öffnen"
         },
         "route": "#/console"
-      }
-    },
-    {
-      "id": "the-handbook-teaches-evolving-a-deployed-process",
-      "version": "0.8.0",
-      "date": "2026-09-30",
-      "category": "Added",
-      "title": {
-        "en": "Evolve a running process — the handbook now shows how",
-        "de": "Einen laufenden Prozess weiterentwickeln – das Handbuch zeigt jetzt, wie"
-      },
-      "summary": {
-        "en": "A deployed process is immutable and versioned, so a fix reaches the cases already running only if you move them. Atlas could already deploy a new version without touching running instances, migrate a case to it (plan first, then apply), fork one whose tokens cannot be rebound into a new linked instance, pause a version so it stops auto-starting, and version a decision on its own — and the handbook explained none of it. A new chapter does, in German and English, including the trap that catches everyone first: a new deploy does not carry the stuck cases along; a migration does, and it is refused rather than stranding a token.",
-        "de": "Ein deployter Prozess ist unveränderlich und versioniert – eine Korrektur erreicht die schon laufenden Fälle nur, wenn man sie bewegt. Atlas konnte längst eine neue Version deployen, ohne laufende Instanzen anzutasten, einen Fall darauf migrieren (erst der Plan, dann die Ausführung), einen Fall, dessen Token sich nicht umbinden lässt, in eine neue verknüpfte Instanz forken, eine Version pausieren, damit sie nicht mehr von selbst startet, und eine Entscheidung für sich versionieren – und das Handbuch erklärte nichts davon. Ein neues Kapitel tut es, auf Deutsch und Englisch, samt dem Stolperstein, auf den man zuerst trifft: Ein neuer Deploy nimmt die steckengebliebenen Fälle nicht mit; eine Migration tut es, und sie wird eher abgelehnt, als einen Token ins Leere zu setzen."
-      },
-      "link": {
-        "label": "ADR-0162",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0162-process-instance-migration.md"
-      },
-      "tags": [
-        "Handbook",
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
       }
     }
   ]

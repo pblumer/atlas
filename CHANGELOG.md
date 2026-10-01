@@ -43,6 +43,22 @@ _Changed_ / _Removed_ for each version.
   an incident. It installs from its card in the Beispiele chapter, and every call was run
   against a live instance first.
 
+### Changed
+
+- **A conditional start event in front of a process is refused at deploy instead of never
+  firing.** A process-level start event carrying a condition — "Mailbox storage > 100 GB"
+  drawn before the first task — compiled as a plain start with its condition dropped: the
+  model deployed, never started on its own, and ran without regard to the condition when
+  somebody started it by hand. Nothing said so, in the Modeler or at deploy. Atlas runs a
+  conditional event only inside an instance — an intermediate catch, a boundary event or an
+  event subprocess — because a condition reads variables, and before an instance exists
+  there are none. A deploy and the Modeler's validation now refuse such a start under the
+  rule `start.conditional`, anchored to the start event, and the Modeler puts its
+  unsupported badge on it while it is being drawn. A definition already deployed with one
+  keeps running exactly as before and is named in the log when the server loads it; its
+  next deploy is refused. An event subprocess's conditional start, which is its trigger, is
+  unchanged (ADR-draft-product-actions-are-commands-with-published-outcomes).
+
 ### Fixed
 
 - **`docs/install.md` no longer calls `/metrics` unauthenticated.** The opening rules
