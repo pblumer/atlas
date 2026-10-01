@@ -14,6 +14,20 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The Modeler offers the events your Workers publish when you pick a message.** A
+  message start, an intermediate catch, a boundary event or a receive task now lists, under
+  «Events from Workers» in its message picker, every name an inbound event watch on this
+  server publishes — a Jira, clio, Google Sheets or Discord watch — with the workers that
+  publish it and a mark where the watch is off. Picking one declares a message of that name
+  and links it; the name field suggests the same names and stays free text, because a
+  process may be modelled before its watch exists. Until now the name had to be typed
+  exactly as it was configured under Workers → Events, and a name typed one character
+  differently was two working halves that never met, with only a hint under the field to
+  say so. An element that throws a message is offered none, since a Worker already sends
+  that name. The listing names every watch on the server, as the hint did: a name claimed
+  by a watch the deployer may not reach is still refused at deploy (ADR-0205). One render
+  reads the listing once, for the picker, the suggestions and the hint alike (ADR-0429).
+
 - **The handbook teaches TLS and certificates.** A new chapter «TLS & Zertifikate» /
   «TLS & certificates», in German and English, gathers what ADR-0191 built and
   `docs/install.md` § 8 only sketched: the built-in TLS 1.3 listener and what it accepts

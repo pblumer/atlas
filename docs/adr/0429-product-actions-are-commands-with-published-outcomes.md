@@ -381,6 +381,22 @@ inbound-watch name is marked as not usable for an action, so the trap in the con
 visible where it is set. Offering the inbound-watch names is independent of the rest of
 this record and may land first.
 
+*As built — the inbound-watch slice.* An element that waits for a message (a start event,
+an intermediate catch, a boundary event, a receive task) gains an «Events from Workers»
+group in its message picker, read from the existing `GET /api/v1/message-sources`: one
+choice per message name, every publishing worker named, a watch that is off marked, and a
+name the diagram already declares left out. Picking one declares a message of that name or
+links the one already declared; the name field suggests the same names
+(`offerWorkerEvents`, `api/web/editor.js`). An element that throws a message is offered
+none, since a Worker already sends the name. The listing names every watch on the server,
+as the hint under the field always has; a name claimed by a watch the deployer may not
+reach is still refused at deploy (ADR-0205), so the picker can offer a name the deploy then
+refuses — loudly, at the door ADR-0205 placed. Narrowing the offer by reach would need the
+route to say what each caller reaches, which it does not today. The listing is read once
+per render and shared with the hint. No `sourceKind` was added yet: with one
+source there is nothing to group by, and the field arrives with the second source.
+`e2e/worker-events-modeler.spec.mjs` covers it.
+
 **The shop's tasks are marked, not redrawn.** BPMN lets a tool add markers to its
 elements to show a subtype, as long as the element's own shape and markers stay what the
 standard says they are. The modeler already does exactly that for what a task runs: an
@@ -470,8 +486,8 @@ other rule the compiler gains later is closed (ADR-0177, ADR-0393):
 - A test in `api` holds the two halves together, since nothing else links a rule in Go
   to a warning in JavaScript.
 
-This part of the record is built; the rest is not, which is why the record is
-`Partial`.
+This part of the record is built, as is the inbound-watch slice of §6; the rest is not,
+which is why the record is `Partial`.
 
 ### Consequences
 
