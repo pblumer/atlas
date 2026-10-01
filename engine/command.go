@@ -108,6 +108,10 @@ type Command struct {
 	// (ADR-0428), under the
 	// same contract as Triggered.
 	Delivered *DeliveryResult
+	// Reported is where an action outcome report's answer is written (ADR-0429 §3):
+	// recorded now, answered from the record, or refused as a second ending of the
+	// same command. Same contract as Triggered.
+	Reported *OutcomeResult
 }
 
 // sideEffect is work to run after the batch's fsync (invariant I2). It is a

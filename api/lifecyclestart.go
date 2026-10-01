@@ -3,9 +3,9 @@ package api
 import (
 	"errors"
 	"fmt"
-	"strconv"
 
 	"github.com/pblumer/atlas/api/catalog"
+	"github.com/pblumer/atlas/api/order"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/model"
 )
@@ -110,7 +110,7 @@ func triggerRefusal(res engine.TriggerResult, process, message string) string {
 // attempt delivered twice is one trigger, and a deliberate retry — a return asked
 // for again after it failed — is the next attempt and a new one.
 func positionTriggerID(orderID, position, op string, attempt int) string {
-	return "order:" + orderID + ":" + position + ":" + op + ":" + strconv.Itoa(attempt)
+	return order.AttemptID(orderID, position, op, attempt)
 }
 
 // Delivering a later operation of a per-position lifecycle

@@ -46,6 +46,10 @@ const (
 	// progressPositionVar names the position inside it (ADR-0384): the item id, or
 	// the item id and the variant where one product was ordered in two shapes.
 	progressPositionVar = "positionId"
+	// commandIDVar names the command a position's process is carrying out
+	// (ADR-0429 §4): the caller's command id for an action, the attempt id for the
+	// order's own provision and return. A process reports the outcome against it.
+	commandIDVar = "commandId"
 )
 
 // positionProgress is the whole answer: where the position's process is, and

@@ -157,7 +157,11 @@ func (s *Server) handleStartLine(w http.ResponseWriter, r *http.Request) {
 	}
 
 	b := line.BindingFor(catalog.OpProvision)
-	key, err := s.startBinding(b, positionTriggerID(id, position, catalog.OpProvision, 1), vars)
+	provisionID := positionTriggerID(id, position, catalog.OpProvision, 1)
+	// The provision is a command like any other (ADR-0429 §4): the process reads its
+	// id from its scope to report the outcome against.
+	vars = append(vars, model.VariableValue{Name: commandIDVar, Kind: model.VarString, Text: provisionID})
+	key, err := s.startBinding(b, provisionID, vars)
 	if err != nil {
 		s.startLineFailed(w, err)
 		return

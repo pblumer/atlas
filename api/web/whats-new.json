@@ -2,6 +2,28 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "how-an-action-ended-is-a-fact",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "How an action ended is recorded",
+        "de": "Wie eine Aktion endete, wird festgehalten"
+      },
+      "summary": {
+        "en": "Everything asked of a service somebody holds — its provisioning, its return, a change, a service such as a password reset — now ends in a record: completed, rejected or failed, under the event type the product declares. A successful provisioning or return is recorded together with the right it grants or revokes, so the two can never disagree. A process that reports twice is recorded once, and a contradicting second report is refused. Operators and agents read how a position's actions ended over the API and MCP.",
+        "de": "Alles, was von einer bezogenen Leistung verlangt wird – ihre Bereitstellung, ihre Rückgabe, eine Änderung, eine Dienstleistung wie ein Passwort-Reset –, endet jetzt in einem Eintrag: abgeschlossen, abgelehnt oder fehlgeschlagen, unter dem Ereignistyp, den das Produkt dafür festlegt. Eine erfolgreiche Bereitstellung oder Rückgabe wird zusammen mit dem Recht festgehalten, das sie gewährt oder entzieht, sodass beide nie auseinanderlaufen. Meldet ein Prozess zweimal, wird einmal festgehalten, und eine widersprüchliche zweite Meldung wird abgewiesen. Betrieb und Agenten lesen über API und MCP, wie die Aktionen einer Position endeten."
+      },
+      "link": {
+        "label": "ADR-0429",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
+      },
+      "tags": [
+        "Service catalogue",
+        "Engine"
+      ]
+    },
+    {
       "id": "a-held-service-can-be-asked-for-its-actions-in-the-shop",
       "version": "Unreleased",
       "date": null,
@@ -291,28 +313,6 @@
       },
       "tags": [
         "Deployment",
-        "Operations"
-      ]
-    },
-    {
-      "id": "on-windows-a-broken-dmn-model-folder-is-no-longer-listed-as-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "On Windows, a broken model folder is no longer shown as empty",
-        "de": "Unter Windows erscheint ein defekter Modellordner nicht mehr als leer"
-      },
-      "summary": {
-        "en": "When a file stood where the local DMN model folder should be, Windows reported the folder as missing, and the model list showed an empty store — every uploaded model seemed gone. Atlas now tells a missing folder from a broken one and reports the broken one as an error, as it already did on Linux.",
-        "de": "Stand eine Datei an der Stelle des lokalen DMN-Modellordners, meldete Windows den Ordner als fehlend, und die Modellliste zeigte einen leeren Speicher – alle hochgeladenen Modelle schienen weg. Atlas unterscheidet jetzt einen fehlenden von einem defekten Ordner und meldet den defekten als Fehler, wie bisher schon unter Linux."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Decisions",
         "Operations"
       ]
     }

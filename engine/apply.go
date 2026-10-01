@@ -393,6 +393,14 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			return tx.RecordMessageFlow(h.Timestamp, h.Position, &v.messageFlow)
 		}
 
+	case model.VTActionOutcome:
+		if h.Intent == model.IntentActionCompleted {
+			// How one action ended (ADR-0429 §3). Everything the record holds — the
+			// moment included — was frozen into the event at command time, so replay
+			// rebuilds the identical record (I4, I6).
+			return tx.PutActionOutcome(&v.actionOutcome)
+		}
+
 	case model.VTTriggerReceipt:
 		switch h.Intent {
 		case model.IntentTriggerReceived:

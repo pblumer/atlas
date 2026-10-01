@@ -340,6 +340,22 @@ type LineInstance struct {
 	// deprovision — where the starter knew it (ADR-0425). A lifecycle process is one
 	// process id for all of them, so the id alone no longer says which.
 	Operation string `json:"operation,omitempty"`
+	// CommandID is the command the instance took for the position (ADR-0429): the
+	// caller's command id for an action, the attempt id for the order's own
+	// provision and return. It is what an outcome report names, so the order can say
+	// which action it ends.
+	CommandID string `json:"commandId,omitempty"`
+}
+
+// Command is the instance that took command id for this line, and the action it
+// asked for (its Operation).
+func (l Line) Command(id string) (LineInstance, bool) {
+	for i := len(l.Instances) - 1; i >= 0; i-- {
+		if id != "" && l.Instances[i].CommandID == id {
+			return l.Instances[i], true
+		}
+	}
+	return LineInstance{}, false
 }
 
 // BindingFor is where an operation of this line starts: its frozen binding, in
@@ -428,7 +444,7 @@ func RecordInstance(o Order, ref string, inst LineInstance) (Order, error) {
 			continue
 		}
 		for _, have := range next.Lines[i].Instances {
-			if have.Key == inst.Key && have.Operation == inst.Operation {
+			if have.Key == inst.Key && have.Operation == inst.Operation && have.CommandID == inst.CommandID {
 				return o, nil
 			}
 		}

@@ -430,6 +430,39 @@ func catalogTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_order_line_outcomes",
+			Description: "How the commands of one held order position ended (ADR-0429 §3): its " +
+				"provision, its return and every action asked of it, each with the command id, " +
+				"the action, the outcome (completed, rejected, failed), the event type it is " +
+				"published under, who reported it and when. READ-ONLY: an outcome is reported by " +
+				"the process that carried the action out, not by an agent. Use it after " +
+				"atlas_ask_order_line_action to learn whether what you asked for happened.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"orderId": map[string]any{"type": "string", "description": "The order id."},
+					"item": map[string]any{
+						"type": "string",
+						"description": "The position: the product id, or itemId#variantId where " +
+							"one order carries the product in two shapes.",
+					},
+				},
+				"required": []any{"orderId", "item"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "orderId")
+				if err != nil {
+					return "", err
+				}
+				item, err := argString(args, "item")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/orders/" + url.PathEscape(id) + "/lines/" +
+					url.PathEscape(item) + "/outcomes"))
+			},
+		},
+		{
 			Name: "atlas_ask_order_line_action",
 			Description: "Ask one held order position for an action its product declares for an " +
 				"OPERATOR or the SYSTEM (ADR-0429) — a password reset an operator runs, a " +

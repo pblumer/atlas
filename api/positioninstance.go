@@ -36,7 +36,7 @@ func (s *Server) notePositionInstanceOp(vars []model.VariableValue, key uint64, 
 	if s.orders == nil || key == 0 {
 		return
 	}
-	var orderID, positionID string
+	var orderID, positionID, commandID string
 	for _, v := range vars {
 		if v.Kind != model.VarString {
 			continue
@@ -46,6 +46,8 @@ func (s *Server) notePositionInstanceOp(vars []model.VariableValue, key uint64, 
 			orderID = v.Text
 		case progressPositionVar:
 			positionID = v.Text
+		case commandIDVar:
+			commandID = v.Text
 		}
 	}
 	if orderID == "" || positionID == "" {
@@ -56,6 +58,7 @@ func (s *Server) notePositionInstanceOp(vars []model.VariableValue, key uint64, 
 		ProcessID: processID,
 		StartedAt: time.Now().UnixNano(),
 		Operation: op,
+		CommandID: commandID,
 	})
 	if err != nil {
 		logging.Warn(logging.OrderInstanceUnrecorded,
