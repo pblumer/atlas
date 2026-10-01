@@ -1,6 +1,6 @@
 # ADR-0429: A product declares its actions, each a command whose outcome is a fact published beyond Atlas
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-01 — the points left open are decided at acceptance; see §10)
 - **Implementation:** Partial
 - **Date:** 2026-09-30
 - **Deciders:** Atlas maintainers
@@ -139,7 +139,7 @@ Actions []Action `json:"actions,omitempty"`
   inactivation is either a `service` action the process carries out, or a
   `deprovision`.
 - **Triggers:** `customer` is whoever may return the line today (the orderer, or an
-  operator for any order); `operator` is `RoleOperator`; `system` is something
+  operator for any order), and the recipient who holds the right (§10, decision 4); `operator` is `RoleOperator`; `system` is something
   observed about the held right rather than asked for by a person — see below. The
   inventory's own sweeps — expiry (ADR-0344), recertification (ADR-0341),
   reconciliation (ADR-0334) — keep using the `deprovision` action and are not
@@ -310,6 +310,7 @@ The command a `command` send task issues carries a command id derived from its j
 which is stable across the job's retries, so a retried job answers with the first
 outcome (ADR-0425 §3). It passes every check the order act makes about the line.
 
+**Settled at acceptance (§10, decision 1); the paragraph below records why it was open.**
 **Not settled: in whose name a `command` send task acts.** The order act checks that the
 caller is one of the action's triggers (§2), and a process has no caller in that sense:
 it runs as whoever deployed it, and anybody allowed to deploy could author one that
@@ -488,6 +489,41 @@ other rule the compiler gains later is closed (ADR-0177, ADR-0393):
 
 This part of the record is built, as is the inbound-watch slice of §6; the rest is not,
 which is why the record is `Partial`.
+
+### 10. Decided at acceptance (amended 2026-10-01)
+
+The maintainers accepted this record with the points it left open decided as follows.
+Each is binding on the slice that builds it; none changes a slice already landed.
+
+1. **The `command` send task acts in the name of an allow-list on the product.** A
+   product names the process applications whose processes may command it, and those
+   processes may issue only actions whose triggers include `operator` or `system`,
+   never one that is `customer` only. The order act checks both. Until the list exists
+   on a product, nothing may command it.
+2. **Inactivation is a `service` action.** It changes nothing about what the inventory
+   holds; the process carries it out. A suspended state is a record of its own, written
+   only if billing or recertification must know about it.
+3. **Triggering an operator action for every held position of a product** is wanted,
+   as a later slice: bounded, idempotent per position, asynchronous, with a report of
+   each position's answer.
+4. **`customer` includes the recipient.** Whoever holds the right may trigger its
+   customer actions, beside the orderer and an operator. A right ordered for somebody
+   else (ADR-0349) is changed by the person who uses it.
+5. **A different variant is a return and a new order**, as §1 says. An action that
+   switches the variant through the order, with approval and price, is a record of its
+   own if it is needed often.
+6. **A customer action is approved inside its process** — a user task whose refusal is
+   the outcome `rejected` — not by a stage in the order.
+7. **A missing translation of an action's label is reported, not refused**, as every
+   other missing translation is (ADR-0414).
+8. **The feed keeps 30 days** by default, and its pull route requires `operator` in
+   the first cut, as §5 says.
+9. **The run loop is measured** (the open question) before a per-position product is
+   rolled out beyond a pilot.
+10. **The slices land in this order:** A — actions on the product; B — the action act,
+    availability and the portal's buttons; C — the outcome fact and the shop send task;
+    D — product actions and badges in the modeler; E — the feed. The plan beside this
+    record (`docs/planning/0429-product-actions-plan.md`) holds them.
 
 ### Consequences
 
