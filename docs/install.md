@@ -651,6 +651,13 @@ C:\Atlas\atlas-service.exe install
 Start-Service atlas
 ```
 
+[`deploy/windows/install-atlas-service.ps1`](../deploy/windows/install-atlas-service.ps1)
+does all of this section in one run — WinSW, the virtual account
+`NT SERVICE\atlas`, access lists, a foreground smoke test, the bootstrap
+administrator, and the vault key — and run again it upgrades in place, backing
+the data directory up first. `Get-Help .\install-atlas-service.ps1 -Full` lists
+its parameters.
+
 [NSSM](https://nssm.cc/) works equally well if you prefer it. Whichever you pick,
 set the service to stop with `SIGTERM`-equivalent behaviour and allow ~30 seconds
 so the engine finishes in-flight work.

@@ -7,6 +7,7 @@ Artifacts for running the single-binary Atlas server as a container.
 | Build the container image | [`../Dockerfile`](../Dockerfile) |
 | Deploy on Kubernetes | [`helm/atlas`](helm/atlas) (Helm chart) |
 | Run the binary directly instead | [`../docs/install.md`](../docs/install.md) |
+| Install the binary as a Windows service | [`windows/install-atlas-service.ps1`](windows/install-atlas-service.ps1) |
 
 ## Container image
 
