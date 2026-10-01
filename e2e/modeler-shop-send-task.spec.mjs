@@ -272,3 +272,35 @@ test("a send task naming a message and a shop task shows as the message send it 
   await expect(page.locator("#f-shop-mode")).toHaveCount(0);
   expect(page.__errors).toEqual([]);
 });
+
+// The catalogue's actions are offered beside the free text (ADR-0429 §6). A task that
+// states an outcome is offered the change and service actions of the product binding its
+// own process; a command is offered every product it could command, and the actions of
+// the one it names — never a provision, which the order starts.
+const SOURCES = [
+  { messageName: "mbx.provision", sourceKind: "product-action", productId: "mailbox", productName: "Mailbox", action: "provision", effect: "provision", processId: "mailbox", enabled: true },
+  { messageName: "mbx.deprovision", sourceKind: "product-action", productId: "mailbox", productName: "Mailbox", action: "deprovision", effect: "deprovision", processId: "mailbox", enabled: true },
+  { messageName: "mbx.reset", sourceKind: "product-action", productId: "mailbox", productName: "Mailbox", action: "password-reset", effect: "service", processId: "mailbox", enabled: true },
+  { messageName: "mbx.extend", sourceKind: "product-action", productId: "mailbox", productName: "Mailbox", action: "storage-extend", effect: "change", processId: "mailbox", enabled: true },
+  { messageName: "vpn.renew", sourceKind: "product-action", productId: "vpn", productName: "VPN", action: "renew", effect: "service", processId: "vpn-strand", enabled: true },
+  { messageName: "ticket.created", connectorName: "Jira", kind: "jira", enabled: true },
+];
+const optionsOf = (page, id) =>
+  page.locator(`#${id} option`).evaluateAll((os) => os.map((o) => o.value));
+
+test("a shop task suggests the actions the catalogue declares", async ({ page }) => {
+  await page.addInitScript((s) => { window.__sources = s; }, SOURCES);
+  await mount(page);
+  await page.evaluate(() => window.__select("Send_shop"));
+  await openShop(page);
+  await expect.poll(() => optionsOf(page, "f-shop-action-keys")).toEqual(["password-reset", "storage-extend"]);
+
+  await page.evaluate(() => window.__select("Send_cmd"));
+  await openShop(page);
+  await expect.poll(() => optionsOf(page, "f-shop-product-keys")).toEqual(["mailbox", "vpn"]);
+  await expect.poll(() => optionsOf(page, "f-shop-action-keys")).toEqual(["deprovision", "password-reset", "storage-extend"]);
+  await page.locator("#f-shop-product").fill("vpn");
+  await page.locator("#f-shop-product").dispatchEvent("change");
+  await expect.poll(() => optionsOf(page, "f-shop-action-keys")).toEqual(["renew"]);
+  expect(page.__errors).toEqual([]);
+});

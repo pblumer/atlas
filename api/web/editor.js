@@ -4861,8 +4861,12 @@ function shopTaskFieldsHTML(bo) {
       fields += `<label class="field"><span>${esc(f.label)}</span>
         <textarea id="f-shop-${f.key}" rows="1" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(value)}</textarea></label>`;
     } else {
+      // The action and the product suggest what the catalogue declares (ADR-0429 §6); the
+      // lists are filled once the message sources arrive, and the fields stay free text.
+      const suggest = f.key === "action" || f.key === "product" ? ` list="f-shop-${f.key}-keys"` : "";
       fields += `<label class="field"><span>${esc(f.label)}</span>
-        <input type="text" id="f-shop-${f.key}" value="${esc(value)}" placeholder="${esc(f.placeholder || "")}" autocomplete="off" spellcheck="false"/></label>`;
+        <input type="text" id="f-shop-${f.key}" value="${esc(value)}" placeholder="${esc(f.placeholder || "")}" autocomplete="off" spellcheck="false"${suggest}/></label>`;
+      if (suggest) fields += `<datalist id="f-shop-${f.key}-keys"></datalist>`;
     }
     if (f.key === "action") {
       const problem = shopActionKeyProblem(value);
@@ -4874,6 +4878,40 @@ function shopTaskFieldsHTML(bo) {
     <label class="field"><span>Mode</span><select id="f-shop-mode">${modes}</select></label>
     ${fields}
     <p class="muted" style="font-size:12px">${esc(mode.hint)}</p>`;
+}
+
+// shopActionSuggestions are the action keys and products a shop task may name, from the
+// product-action rows of the message sources. A task stating an outcome answers an action
+// of the product that binds its own process, so it is offered those; a command names its
+// product, so it is offered that product's actions, or every product's while none is named.
+// The provision is left out of a command's: the order starts it and a process cannot.
+function shopActionSuggestions(sources, mode, processId, product) {
+  const all = messageSourcesOf(sources, "product-action");
+  const commandable = all.filter((r) => r.effect !== "provision");
+  const rows = mode === "command"
+    ? commandable.filter((r) => !product || r.productId === product)
+    : all.filter((r) => r.processId === processId && r.effect !== "provision" && r.effect !== "deprovision");
+  const actions = new Map();
+  for (const r of rows) {
+    if (r.action && !actions.has(r.action)) actions.set(r.action, `${r.productName || r.productId || ""} · ${r.effect || ""}`);
+  }
+  // A command picks its product from every product it could command, whichever is named.
+  const products = new Map();
+  for (const r of mode === "command" ? commandable : []) {
+    if (r.productId && !products.has(r.productId)) products.set(r.productId, r.productName || r.productId);
+  }
+  const sorted = (m) => [...m.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  return { actions: sorted(actions), products: sorted(products) };
+}
+
+// fillShopSuggestions fills the shop task's action and product datalists.
+function fillShopSuggestions(body, suggestions) {
+  const fill = (id, entries) => {
+    const dl = body.querySelector("#" + id);
+    if (dl) dl.innerHTML = entries.map(([v, l]) => `<option value="${esc(v)}" label="${esc(l)}"></option>`).join("");
+  };
+  fill("f-shop-action-keys", suggestions.actions);
+  fill("f-shop-product-keys", suggestions.products);
 }
 
 // sendTaskKind returns the kind a send task currently represents (ADR-0112). It is detected by
@@ -8448,6 +8486,17 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           factionErr.textContent = problem;
           factionErr.hidden = !problem;
         });
+      }
+      // The keys the catalogue declares, offered beside the free text. A listing that
+      // fails leaves the fields as they were.
+      if (api) {
+        const fproduct = body.querySelector("#f-shop-product");
+        api("GET", "/api/v1/message-sources").then((list) => {
+          const offer = () => fillShopSuggestions(body, shopActionSuggestions(list, shopTaskMode(fshopmode.value).v,
+            owningProcessId(bo), fproduct ? fproduct.value.trim() : ""));
+          offer();
+          if (fproduct) fproduct.addEventListener("change", offer);
+        }).catch(() => { /* no suggestions; the fields work the same */ });
       }
     }
 

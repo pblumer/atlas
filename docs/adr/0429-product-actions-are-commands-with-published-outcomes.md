@@ -529,6 +529,34 @@ per render and shared with the hint. No `sourceKind` was added yet: with one
 source there is nothing to group by, and the field arrives with the second source.
 `e2e/worker-events-modeler.spec.mjs` covers it.
 
+*As built — slice D.* `GET /api/v1/message-sources` tags every row with `sourceKind`
+(`api/messagesources.go`). `inbound-watch` rows are what the route listed before.
+`product-action` rows carry the product, its name in the catalogue's first language, the
+action's key, effect and triggers, and the process the product binds the action to; they
+are listed for the catalogues the caller maintains or was shared (`MayMaintain`, ADR-0211
+§3), because which process a product drives is a maintainer's picture, not the audience's.
+`process` rows name where the newest deployed version of each process waits for the
+message, at a message `start` or a `catch`. The route stays outside MCP: an agent reads
+products and processes with the tools it has and publishes a message itself.
+
+The Modeler reads a row without `sourceKind` as an inbound watch, as an older server means
+it, and ignores a kind it does not know. An element that receives is offered «Events from
+Workers» and «Product actions»; an element that throws — a message throw or end event, a
+send task of the Message kind — is offered «Processes waiting for it» and never a product
+action, whose message is the order's to send. In a process a product binds, every Worker
+event is marked as not for a product action, and stays selectable. The hint under the name
+says every source: the watches that publish it, the product action that owns it, the
+processes that wait for it. A Shop send task suggests the action keys the catalogue
+declares — for an outcome, the change and service actions of the product binding its own
+process; for a command, every product it could command and that product's actions,
+never a provision. The shop badge is drawn where implementation badges are — the Implement
+view and the runtime views, never the Design view — at `{top: 3, left: 31}`, beside the
+envelope: on a send task carrying `atlas:ShopTask`, and on a receive task whose message a
+product action owns. It is derived, never written into the model, and a listing that fails
+badges no receive task. A message catch event is not badged: its envelope is its whole
+symbol. `e2e/message-sources-modeler.spec.mjs` and `e2e/shop-badges-modeler.spec.mjs`
+cover it.
+
 **The shop's tasks are marked, not redrawn.** BPMN lets a tool add markers to its
 elements to show a subtype, as long as the element's own shape and markers stay what the
 standard says they are. The modeler already does exactly that for what a task runs: an

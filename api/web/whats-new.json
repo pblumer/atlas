@@ -2,6 +2,28 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "the-modeler-offers-a-message-name-from-where-it-comes-from",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Message names grouped by where they come from",
+        "de": "Nachrichtennamen nach Herkunft gruppiert"
+      },
+      "summary": {
+        "en": "When you pick a message in the Modeler, the list now says where each name comes from: events that Workers publish, the actions of products in the catalogue, and the processes already waiting for a message. A step that waits is offered the first two, a step that sends is offered the waiting processes. Shop tasks suggest the actions a product declares, and shop tasks are marked with a small badge next to their envelope.",
+        "de": "Beim Auswählen einer Nachricht im Modeler zeigt die Liste jetzt, woher jeder Name stammt: Ereignisse, die Worker veröffentlichen, die Aktionen der Produkte im Katalog und die Prozesse, die bereits auf eine Nachricht warten. Einem wartenden Schritt werden die ersten beiden angeboten, einem sendenden Schritt die wartenden Prozesse. Shop-Aufgaben schlagen die Aktionen vor, die ein Produkt festlegt, und tragen ein kleines Abzeichen neben ihrem Briefumschlag."
+      },
+      "link": {
+        "label": "ADR-0429",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
+      },
+      "tags": [
+        "Modeler",
+        "Service catalogue"
+      ]
+    },
+    {
       "id": "a-process-can-ask-somebody-s-held-service-for-an-action-in-t",
       "version": "Unreleased",
       "date": null,
@@ -292,27 +314,6 @@
       "tags": [
         "Modeler",
         "Engine"
-      ]
-    },
-    {
-      "id": "a-task-the-server-works-itself-no-longer-trips-a-worker-brea",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Built-in tasks no longer pause their whole kind",
-        "de": "Eingebaute Aufgaben halten nicht mehr ihre ganze Art an"
-      },
-      "summary": {
-        "en": "When a connected system stops answering, Atlas holds that worker's tasks back until it answers again. Tasks Atlas carries out itself — creating a user, a shop task — were counted too, although they call no system: three of them refused for their own data paused all others of the same kind. Now such a refusal stays an incident on its own instance, and the rest keep running.",
-        "de": "Antwortet ein angebundenes System nicht mehr, hält Atlas die Aufgaben dieses Workers zurück, bis es wieder antwortet. Aufgaben, die Atlas selbst ausführt – einen Benutzer anlegen, eine Shop-Aufgabe –, wurden mitgezählt, obwohl sie kein System aufrufen: Drei wegen ihrer eigenen Daten abgelehnte Aufgaben hielten alle anderen derselben Art an. Jetzt bleibt eine solche Ablehnung ein Vorfall auf ihrer eigenen Instanz, und die übrigen laufen weiter."
-      },
-      "link": {
-        "label": "ADR-0340",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0340-worker-circuit-breaker.md"
-      },
-      "tags": [
-        "Operations"
       ]
     }
   ]

@@ -2061,8 +2061,13 @@ actions with closed effects, each a command whose outcome is a fact published be
     `commandedBy` lists — read from the newest release, so removing one stops it for every
     right already held; the list on the product in the Console, HTTP and MCP; the command
     mode in the modeler's Shop kind.
-- 🔲 **Slice D — product actions and shop badges in the modeler**, with the picker grouped
-  by `sourceKind`.
+- ✅ **Slice D — product actions and shop badges in the modeler.** `GET /api/v1/message-sources`
+  tags each row `inbound-watch`, `product-action` (for the catalogues the caller maintains)
+  or `process` (where a deployed process waits); the message picker groups by source —
+  Worker events and product actions for an element that receives, waiting processes for one
+  that throws — and marks a Worker event in a product-bound process; a Shop task suggests the
+  declared action keys; the shop badge sits beside the envelope in the Implement and runtime
+  views.
 - 🔲 **Slice E — the CloudEvents feed.** `GET /api/v1/events?after=`, kept 30 days.
 - 🔲 **Not in any slice yet:** an operator action for every held position of a product.
 - 🔲 **Not in any slice yet:** a suspended entitlement state.
