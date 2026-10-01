@@ -1,0 +1,11 @@
+{
+  "tags": ["Service catalogue", "Security"],
+  "title": {
+    "en": "A product's process can no longer be started around the order",
+    "de": "Der Prozess eines Produkts lässt sich nicht mehr an der Bestellung vorbei starten"
+  },
+  "summary": {
+    "en": "Publishing a message by name could start a catalogue product's process — its provisioning or its return — without any order behind it, so a right could be granted or taken away while the order and the inventory knew nothing of it. Such a message is now refused, naming the product and the action; the order alone sends it.",
+    "de": "Das Veröffentlichen einer Nachricht über ihren Namen konnte den Prozess eines Katalogprodukts starten – seine Bereitstellung oder seine Rückgabe – ohne dass eine Bestellung dahinterstand. So konnte ein Recht vergeben oder entzogen werden, ohne dass Bestellung und Bestand davon wussten. Eine solche Nachricht wird jetzt abgewiesen, mit Nennung von Produkt und Aktion; nur die Bestellung sendet sie."
+  }
+}

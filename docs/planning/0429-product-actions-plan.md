@@ -135,7 +135,7 @@ type Action struct {
 
 ---
 
-## Follow-up to slice A — the name-correlated publish
+## Follow-up to slice A — the name-correlated publish — ✅ landed
 
 Found while landing slice A and reproduced: `POST /api/v1/messages` with a per-operation
 product's message — `laptop.provision` — starts the lifecycle process outside the order,

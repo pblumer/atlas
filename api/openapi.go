@@ -411,7 +411,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Termination result", tObject())}},
 
 		{"POST", "/api/v1/messages", s.handlePublishMessage, apiOp{
-			summary: "Publish a message for correlation", tag: "Messages", role: RoleOperator,
+			summary: "Publish a message for correlation. A message a catalogue product's action starts or waits at is refused with 409 naming the product and the action: the order sends it, through its start act, a return or the action (ADR-0429)", tag: "Messages", role: RoleOperator,
 			req: jsonBody("Message", schemaObj(map[string]any{
 				"name": tString(), "correlationKey": tString(), "variables": tObject(),
 			}, "name")),

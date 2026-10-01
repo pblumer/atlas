@@ -587,7 +587,8 @@ func runtimeTools() []Tool {
 				"whose correlation key matches is delivered the message and advances. Provide the message " +
 				"'name' and, when the catch event correlates on a key, the 'correlationKey' value to match. " +
 				"A message that matches no waiting instance is a legal no-op. Optional 'variables' are merged " +
-				"into a correlated instance's scope. Returns {name, correlationKey, stats}.",
+				"into a correlated instance's scope. Returns {name, correlationKey, stats}. A message a catalogue " +
+				"product's action starts or waits at is refused (409): the order sends it, never a publish by name.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{

@@ -173,6 +173,28 @@
       ]
     },
     {
+      "id": "a-catalogue-product-s-lifecycle-can-no-longer-be-started-by-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A product's process can no longer be started around the order",
+        "de": "Der Prozess eines Produkts lässt sich nicht mehr an der Bestellung vorbei starten"
+      },
+      "summary": {
+        "en": "Publishing a message by name could start a catalogue product's process — its provisioning or its return — without any order behind it, so a right could be granted or taken away while the order and the inventory knew nothing of it. Such a message is now refused, naming the product and the action; the order alone sends it.",
+        "de": "Das Veröffentlichen einer Nachricht über ihren Namen konnte den Prozess eines Katalogprodukts starten – seine Bereitstellung oder seine Rückgabe – ohne dass eine Bestellung dahinterstand. So konnte ein Recht vergeben oder entzogen werden, ohne dass Bestellung und Bestand davon wussten. Eine solche Nachricht wird jetzt abgewiesen, mit Nennung von Produkt und Aktion; nur die Bestellung sendet sie."
+      },
+      "link": {
+        "label": "ADR-0425",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0425-a-product-lifecycle-is-one-process-with-message-triggers.md"
+      },
+      "tags": [
+        "Service catalogue",
+        "Security"
+      ]
+    },
+    {
       "id": "listing-one-instance-s-jobs-no-longer-walks-every-job-on-the",
       "version": "Unreleased",
       "date": null,
@@ -316,35 +338,6 @@
           "Instanzen, die nicht verschoben werden können, bleiben unverändert und werden anschliessend aufgelistet."
         ]
       },
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "the-handbook-teaches-monitoring-an-atlas-installation",
-      "version": "0.8.0",
-      "date": "2026-09-30",
-      "category": "Added",
-      "title": {
-        "en": "Monitor an Atlas installation — the handbook now shows how",
-        "de": "Eine Atlas-Installation überwachen – das Handbuch zeigt jetzt, wie"
-      },
-      "summary": {
-        "en": "Operations shows the single case; running Atlas day and night needs the view from outside. Atlas already exposed Prometheus metrics, mirrored its event log into OpenSearch, deleted finished instances on an export-gated schedule, and backed up either the design-time data or the whole instance — and the operations chapter stopped at the single incident. A new subsection explains all of it, in German and English, including two things worth knowing first: Atlas raises no alert on its own (you alert on the metrics), and `/metrics` is no longer open — since ADR-0198 it sits behind a `metrics`-scoped token. Every call was run against a live instance first.",
-        "de": "Operations zeigt den einzelnen Fall; Atlas im Dauerbetrieb braucht die Sicht von aussen. Atlas legte längst Prometheus-Metriken ab, spiegelte sein Ereignisprotokoll nach OpenSearch, löschte fertige Instanzen export-gesteuert und sicherte wahlweise die Design-Zeit-Daten oder die ganze Instanz – und das Betriebskapitel endete beim einzelnen Incident. Ein neuer Abschnitt erklärt das vollständig, auf Deutsch und Englisch, samt zweier Dinge, die man zuerst wissen sollte: Atlas alarmiert nicht von sich aus (man alarmiert auf die Metriken), und `/metrics` ist nicht mehr offen – seit ADR-0198 liegt es hinter einem Token mit Scope `metrics`. Jeder Aufruf wurde zuerst an einer laufenden Instanz ausgeführt."
-      },
-      "link": {
-        "label": "ADR-0142",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0142-prometheus-metrics.md"
-      },
-      "tags": [
-        "Handbook",
-        "Operations"
-      ],
       "try": {
         "label": {
           "en": "Open Operations",

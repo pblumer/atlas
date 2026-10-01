@@ -100,6 +100,15 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A catalogue product's lifecycle can no longer be started by publishing its message by
+  name.** `POST /api/v1/messages` refused only the messages a per-position product delivers
+  to its running instances. A per-operation product's messages — its provisioning, its
+  return, any action — are start events, and published by name they started the lifecycle
+  process outside the order: a provisioning no order line knew of, or a return the inventory
+  never heard about. The route now refuses every message a product's action owns, with
+  **409** naming the product and the action, and starts nothing; the order sends those
+  messages through its start act, a return or the action (ADR-0425 §8, ADR-0429).
+
 - **`docs/install.md` no longer calls `/metrics` unauthenticated.** The opening rules
   and § 8 still said so after ADR-0198 moved the exposition behind `--auth` and a
   `metrics`-scoped token.

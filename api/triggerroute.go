@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/pblumer/atlas/api/catalog"
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/engine"
 )
@@ -143,33 +142,6 @@ func (s *Server) catalogOwnerOfEntry(processID, message string) (string, error) 
 		}
 		if _, owned := it.OwnsMessage(message); owned {
 			return it.ID, nil
-		}
-	}
-	return "", nil
-}
-
-// catalogOwnerOfDelivered names the per-position product that delivers this message
-// to its running instances — any of its actions but the provision, which starts the
-// instance — or "" when none does (ADR-0428, ADR-0429). Its
-// provisioning start is refused on the trigger route by [Server.catalogOwnerOfEntry];
-// this is the same rule for the messages that reach an instance already running.
-// Reads the catalogue store, so it runs on the run loop.
-func (s *Server) catalogOwnerOfDelivered(message string) (string, error) {
-	if s.catalogStore == nil || message == "" {
-		return "", nil
-	}
-	items, err := s.catalogStore.Items()
-	if err != nil {
-		return "", err
-	}
-	for _, it := range items {
-		if !it.PerPosition() {
-			continue
-		}
-		for _, a := range it.ActionList() {
-			if a.Effect != catalog.EffectProvision && a.Message == message {
-				return it.ID, nil
-			}
 		}
 	}
 	return "", nil
