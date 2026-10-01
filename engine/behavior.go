@@ -53,6 +53,7 @@ func (p *Processor) registerHandlers() {
 		handlerKey(model.VTVariable, model.IntentVariableModify):               handleVariablesModify,
 		handlerKey(model.VTTriggerReceipt, model.IntentTriggering):             handleTriggering,
 		handlerKey(model.VTTriggerReceipt, model.IntentTriggerReceiptsPruning): handleTriggerReceiptsPruning,
+		handlerKey(model.VTFeedRetention, model.IntentFeedPruning):             handleFeedPruning,
 		handlerKey(model.VTTriggerReceipt, model.IntentDelivering):             handleDelivering,
 		handlerKey(model.VTActionOutcome, model.IntentActionReporting):         handleActionReporting,
 	}

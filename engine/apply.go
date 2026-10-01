@@ -262,7 +262,13 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// A function of the event alone — no clock, no lookup, nothing derived
 			// — which is what lets an access record rebuild identically from the log
 			// years after the instance that produced it was deleted (I4/I6).
-			return tx.PutEntitlement(&v.entitlement)
+			if err := tx.PutEntitlement(&v.entitlement); err != nil {
+				return err
+			}
+			// The grant leaves Atlas on the feed (ADR-0429 §5), keyed by where it
+			// sits on the log and stamped with when it was recorded — both in the
+			// header, so replay writes the identical row.
+			return tx.PutFeedEntry(h.PartitionId, h.Position, h.Timestamp, state.FeedGranted, &v.entitlement)
 		case model.IntentEntitlementRevoked:
 			// A revocation written before holds left a history behind
 			// (ADR-0346). The log is append-only and replayed
@@ -285,8 +291,13 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// and on replay alike. Everything that could *not* be derived that way —
 			// the moment, the reason, who decided — travels in the event.
 			e := &v.entitlementEnd
-			_, err := tx.EndEntitlement(e.Principal, e.ItemID, e.EndedAt, e.EndedReason, e.EndedBy)
-			return err
+			row, err := tx.EndEntitlementRow(e.Principal, e.ItemID, e.EndedAt, e.EndedReason, e.EndedBy)
+			if err != nil || row == nil {
+				return err
+			}
+			// The feed publishes the hold as it ended — the order it came from is in
+			// the hold, not in the event (ADR-0429 §5).
+			return tx.PutFeedEntry(h.PartitionId, h.Position, h.Timestamp, state.FeedRevoked, row)
 		}
 
 	case model.VTIncident:
@@ -398,7 +409,17 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// How one action ended (ADR-0429 §3). Everything the record holds — the
 			// moment included — was frozen into the event at command time, so replay
 			// rebuilds the identical record (I4, I6).
-			return tx.PutActionOutcome(&v.actionOutcome)
+			if err := tx.PutActionOutcome(&v.actionOutcome); err != nil {
+				return err
+			}
+			return tx.PutFeedEntry(h.PartitionId, h.Position, h.Timestamp, state.FeedOutcome, &v.actionOutcome)
+		}
+
+	case model.VTFeedRetention:
+		if h.Intent == model.IntentFeedPruned {
+			// The cut was frozen into the event by the sweep, so replay drops exactly
+			// the rows the live run dropped (ADR-0429 §5, I4).
+			return tx.PruneFeed(h.PartitionId, v.feedRetention.Through)
 		}
 
 	case model.VTTriggerReceipt:

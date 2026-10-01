@@ -2068,7 +2068,12 @@ actions with closed effects, each a command whose outcome is a fact published be
   that throws — and marks a Worker event in a product-bound process; a Shop task suggests the
   declared action keys; the shop badge sits beside the envelope in the Implement and runtime
   views.
-- 🔲 **Slice E — the CloudEvents feed.** `GET /api/v1/events?after=`, kept 30 days.
+- ✅ **Slice E — the CloudEvents feed.** Every action outcome, grant and revocation is a
+  row of the feed, folded by `applyToState` and keyed by its log position, pruned by a fact
+  of its own (`--event-feed-ttl`, 30 days); `GET /api/v1/events?after=&limit=` (operator)
+  serves CloudEvents 1.0 in log order, 410 with the oldest cursor for one that fell behind;
+  the envelope is version 1 of the runtime contract. Push delivery through a Worker is
+  prepared, not built.
 - 🔲 **Not in any slice yet:** an operator action for every held position of a product.
 - 🔲 **Not in any slice yet:** a suspended entitlement state.
 - 🔲 **Not in any slice yet:** measuring the run loop before a per-position product goes

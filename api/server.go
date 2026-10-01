@@ -616,8 +616,12 @@ type Server struct {
 	// a tick.
 	triggerReceiptTTL time.Duration
 	lastReceiptPrune  int64
-	retentionBatch    int
-	retentionCursor   uint64
+	// eventFeedTTL is how long a row of the event feed is kept (ADR-0429 §5); zero
+	// keeps the default of 30 days. lastFeedPrune paces its prune like the receipts'.
+	eventFeedTTL    time.Duration
+	lastFeedPrune   int64
+	retentionBatch  int
+	retentionCursor uint64
 
 	// now reads wall-clock time (unix nanoseconds) for the retention sweep's
 	// eligibility cutoff. It is injected so a test can drive the cutoff
@@ -1042,6 +1046,16 @@ func WithTriggerReceiptRetention(d time.Duration) Option {
 	return func(s *Server) {
 		if d > 0 {
 			s.triggerReceiptTTL = d
+		}
+	}
+}
+
+// WithEventFeedRetention sets how long a row of the event feed is kept (ADR-0429 §5);
+// the default is 30 days. A consumer whose cursor is older than that is answered 410.
+func WithEventFeedRetention(d time.Duration) Option {
+	return func(s *Server) {
+		if d > 0 {
+			s.eventFeedTTL = d
 		}
 	}
 }
@@ -2274,6 +2288,7 @@ type purgeTarget struct {
 // Errors are logged and retried next tick.
 func (s *Server) sweepRetention(now int64) {
 	s.pruneTriggerReceipts(now)
+	s.pruneEventFeed(now)
 	// A transient read error just skips this tick (retried on the next), matching the
 	// silent, best-effort style of the other run-loop pollers (timerScheduler).
 	safePos, err := s.retentionSafePosition()

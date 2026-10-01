@@ -9,7 +9,7 @@ import "testing"
 // different facts look the same.
 func TestEveryDefinedTagHasItsOwnName(t *testing.T) {
 	seen := map[string]ValueType{}
-	for vt := VTProcessInstance; vt <= VTActionOutcome; vt++ {
+	for vt := VTProcessInstance; vt <= VTFeedRetention; vt++ {
 		name := vt.String()
 		if name == "ValueType(?)" {
 			t.Errorf("ValueType(%d) has no name", vt)
@@ -18,12 +18,12 @@ func TestEveryDefinedTagHasItsOwnName(t *testing.T) {
 		}
 		seen[name] = vt
 	}
-	if got := (VTActionOutcome + 1).String(); got != "ValueType(?)" {
+	if got := (VTFeedRetention + 1).String(); got != "ValueType(?)" {
 		t.Errorf("a tag past the last one = %q, want the guard label", got)
 	}
 
 	seenIntent := map[string]Intent{}
-	for in := IntentActivating; in <= IntentActionCompleted; in++ {
+	for in := IntentActivating; in <= IntentFeedPruned; in++ {
 		name := in.String()
 		if name == "Intent(?)" {
 			t.Errorf("Intent(%d) has no name", in)

@@ -1511,6 +1511,8 @@ func newValue(vt ValueType) Value {
 		return &EntitlementHistoryValue{}
 	case VTActionOutcome:
 		return &ActionOutcomeValue{}
+	case VTFeedRetention:
+		return &FeedRetentionValue{}
 	case VTTriggerReceipt:
 		return &TriggerReceiptValue{}
 	default:

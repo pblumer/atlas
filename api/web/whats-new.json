@@ -2,6 +2,28 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "what-happens-to-a-right-leaves-atlas-as-a-feed-of-cloudevent",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A feed of what happens to rights",
+        "de": "Ein Feed, was mit Rechten geschieht"
+      },
+      "summary": {
+        "en": "Systems outside Atlas, such as a CMDB or billing, can now follow everything that happens to the services people hold: each right granted or revoked and how each requested action ended. They read it from one feed of standard CloudEvents, in order, picking up where they left off. The feed keeps 30 days; a system that falls further behind is told so instead of silently missing events.",
+        "de": "Systeme ausserhalb von Atlas, etwa eine CMDB oder die Verrechnung, können jetzt alles verfolgen, was mit den bezogenen Leistungen geschieht: jedes gewährte oder entzogene Recht und wie jede angefragte Aktion endete. Sie lesen es aus einem Feed standardisierter CloudEvents, in der richtigen Reihenfolge und ab der Stelle, an der sie aufgehört haben. Der Feed hält 30 Tage; ein System, das weiter zurückliegt, erfährt das, statt stillschweigend Ereignisse zu verpassen."
+      },
+      "link": {
+        "label": "ADR-0429",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
+      },
+      "tags": [
+        "Service catalogue",
+        "API"
+      ]
+    },
+    {
       "id": "the-modeler-offers-a-message-name-from-where-it-comes-from",
       "version": "Unreleased",
       "date": null,
@@ -292,28 +314,6 @@
       "tags": [
         "Workers",
         "Service catalogue"
-      ]
-    },
-    {
-      "id": "a-conditional-start-event-in-front-of-a-process-is-refused-a",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "A conditional start event in front of a process is refused instead of never firing",
-        "de": "Ein bedingtes Startereignis vor einem Prozess wird abgewiesen, statt nie auszulösen"
-      },
-      "summary": {
-        "en": "A start event with a condition in front of a process — say, mailbox storage above 100 GB — used to deploy as an ordinary start with its condition silently dropped: it never started on its own, and when started by hand it ran regardless of the condition. A condition reads variables, and before an instance exists there are none, so Atlas runs conditional events only inside a running instance. The Modeler now marks such a start while you draw it, and a deploy refuses it. Processes already deployed with one keep running as before until their next deploy.",
-        "de": "Ein Startereignis mit Bedingung vor einem Prozess – etwa Mailbox-Speicher über 100 GB – wurde bisher als gewöhnlicher Start deployt und die Bedingung stillschweigend verworfen: Es startete nie von selbst, und von Hand gestartet lief es ohne Rücksicht auf die Bedingung. Eine Bedingung liest Variablen, und bevor eine Instanz existiert, gibt es keine; Atlas führt bedingte Ereignisse deshalb nur innerhalb einer laufenden Instanz aus. Der Modeler markiert ein solches Startereignis jetzt schon beim Zeichnen, und das Deployment weist es ab. Bereits deployte Prozesse laufen bis zum nächsten Deployment unverändert weiter."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Modeler",
-        "Engine"
       ]
     }
   ]

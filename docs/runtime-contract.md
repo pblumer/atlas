@@ -37,12 +37,37 @@ standard defines. Concretely:
 | Queries | Filters, ordering, pagination, continuation |
 | Errors | Rejection shape, concurrency and idempotency semantics |
 | Export | Public event-export payloads and their schema versions |
+| Event feed | The catalogue's facts as CloudEvents 1.0 at `GET /api/v1/events`: the envelope, the event types, the data each type carries, the cursor and the retention ([ADR-0429 §5](adr/0429-product-actions-are-commands-with-published-outcomes.md)) |
 
 The **HTTP API and its OpenAPI description are the primary wire representation.** MCP
 tools ([ADR-0016](adr/0016-mcp-server-over-http-api.md)) and worker SDKs adapt the same
 behaviour; they do not define parallel semantics and do not reach engine state directly.
 A concept keeps the same names, states, identifiers, errors and idempotency rules across
 those surfaces unless an adapter documents a transport-specific reason.
+
+### The event feed, version 1
+
+What leaves Atlas about the catalogue — how each action asked of a held position ended,
+and every right granted or revoked — is one feed of CloudEvents 1.0 envelopes in
+structured JSON, in log order, pulled from a cursor the consumer keeps
+(`GET /api/v1/events?after={cursor}&limit={n}`, role `operator`). Delivery is at least
+once; a consumer deduplicates by `id`.
+
+| Attribute | Value |
+|---|---|
+| `specversion` | `1.0` |
+| `id` | `<node id>:<partition>:<log position>` — unique per installation, the same on every re-read |
+| `source` | the installation's external URL + `/catalog`, or `urn:atlas:<node id>:catalog` on a server given none |
+| `type` | an action's declared event type (default `<message>.<outcome>`), or `atlas.entitlement.granted` / `atlas.entitlement.revoked` |
+| `subject` | `orders/{orderId}/positions/{position}`; `principals/{id}/items/{itemId}` for a right no order produced |
+| `time` | when Atlas recorded the fact, RFC 3339 in UTC |
+| `datacontenttype` | `application/json` |
+| `data` | for an action: `orderId`, `position`, `commandId`, `action`, `effect`, `outcome`, `source`, `principal`, `itemId`, `at`, and when set `variantId`, `instanceKey`, `result`; for a grant: `principal`, `itemId`, `orderId`, `since`, `origin`, and when set `variantId`, `until`; for a revocation: `principal`, `itemId`, `orderId`, `since`, `endedAt`, `reason`, `endedBy`, and when set `variantId` |
+
+People are named by id only. A page answers `{events, next, more}`: `next` is the cursor to
+send as `after`. Rows are kept for the feed's retention (`--event-feed-ttl`, 30 days); a
+cursor older than the oldest row still held is answered **410** with `oldest`, the cursor
+to resume from. `dataschema` is not set in version 1: the shapes above are the schema.
 
 ## 2. Model-layer features are labelled
 
