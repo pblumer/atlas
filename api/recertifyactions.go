@@ -97,6 +97,9 @@ func (s *Server) decideOnRow(w http.ResponseWriter, r *http.Request, decision st
 
 	cmp, found, err := s.loadCampaign(campaignID)
 	switch {
+	case errors.Is(err, errLoopClosing):
+		httpapi.Error(w, http.StatusServiceUnavailable, "recertification: "+err.Error())
+		return
 	case err != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "recertification: "+err.Error())
 		return

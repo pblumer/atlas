@@ -258,7 +258,7 @@ jobs:
           node-version: '20'
 
       - name: Coverage floor (>= 95%, ADR-0018)
-        run: ./scripts/check-coverage.sh 94
+        run: ./scripts/check-coverage.sh 95
 
   # The storage packages on the one platform the release ships a binary for and no
   # job here ran on.

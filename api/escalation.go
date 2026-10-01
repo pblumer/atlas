@@ -189,9 +189,12 @@ func (s *Server) moveApproval(w http.ResponseWriter, r *http.Request,
 		// product do not overwrite each other's escalation history. It is the item
 		// id wherever the order carries one position of the product, so nothing
 		// stored before this changes meaning.
+		// A refusal here is the caller's ambiguity — a product the order carries twice,
+		// named instead of one of its positions — so it is answered as a conflict that
+		// names the positions, like any other move the record will not make.
 		position, resolveErr := order.ResolveLine(ord, item)
 		if resolveErr != nil {
-			saveErr = resolveErr
+			moveErr = resolveErr
 			return
 		}
 		a, have := ord.AssignmentFor(position)
@@ -257,10 +260,14 @@ func (s *Server) approvalTaskOf(orderID, ref string) (taskResp, bool, error) {
 		// product rather than a position. Collected rather than taken, because one
 		// of two phones is not the phone.
 		byProduct []taskResp
+		// readErr stops the walk and is the answer: an order that could not be read
+		// is not an order without this approval, and saying "no open approval" for it
+		// would tell a deadline model the approval is gone while it sits unmoved.
+		readErr error
 	)
 	_, err := s.visitOpenTasks(0, false, func(_ uint64, tr taskResp, _ taskfolder.Task) bool {
 		var stop bool
-		readErr := s.readOffLoop(func(rv *state.ReadView, _ defIndex) error {
+		readErr = s.readOffLoop(func(rv *state.ReadView, _ defIndex) error {
 			a, isApproval, err := s.approvalOf(rv, tr)
 			if err != nil || !isApproval || a.OrderID != orderID {
 				return err
@@ -278,8 +285,14 @@ func (s *Server) approvalTaskOf(orderID, ref string) (taskResp, bool, error) {
 		}
 		return !stop
 	})
-	if err != nil || ok {
-		return found, ok, err
+	if err == nil {
+		err = readErr
+	}
+	if err != nil {
+		return taskResp{}, false, err
+	}
+	if ok {
+		return found, true, nil
 	}
 	// Exactly one approval for the product named is that approval — which is every
 	// order placed before a product could be ordered in two shapes at once. Two is

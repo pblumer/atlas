@@ -1072,6 +1072,21 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 		// (ADR-0423).
 		cp.ResolveLatestAtRuntime(versionPins[i])
 
+		// Translate the process's model-authored job types into the engine-wide index
+		// space before it can create any job, so the type a job carries means the same
+		// thing in every definition (ADR-0007/0157). Resolution is idempotent, so a
+		// redeploy of the same model lands on the same indices.
+		//
+		// It comes before the record is written and before the version is counted,
+		// because interning a new type is itself a durable write that can fail. Done
+		// after the save, a failure answered the deploy with an error while leaving its
+		// record on disk — so the definition the caller was told had failed came back
+		// on the next restart — and with its version already spent, so a retry deployed
+		// as the next one.
+		if err := cp.ResolveJobTypes(s.jobTypes.Intern); err != nil {
+			return deployed, nil, err
+		}
+
 		if err := s.deploys.Save(persistedDeployment{
 			Key:              key,
 			ProcessID:        pid,
@@ -1089,13 +1104,6 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 		}
 
 		s.versions[pid] = version
-		// Translate the process's model-authored job types into the engine-wide index
-		// space before it can create any job, so the type a job carries means the same
-		// thing in every definition (ADR-0007/0157). Resolution is idempotent, so a
-		// redeploy of the same model lands on the same indices.
-		if err := cp.ResolveJobTypes(s.jobTypes.Intern); err != nil {
-			return deployed, nil, err
-		}
 		s.proc.Deploy(cp)
 		// Arm this fresh version's timer start events and supersede any the prior
 		// version left running, so the process starts on its schedule (ADR-0051).
@@ -6459,7 +6467,11 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// round's completion carries tool calls the engine turns into activations
 		// (ADR-0253/0254). Two arms rather than one payload nobody can read without
 		// knowing which it is.
-		j, err := agent.ResolveTask(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		//
+		// Through rd like every other arm: the prompt is one of the worker-evaluated
+		// expressions compiler/personal.go exempts, and that exemption only holds while
+		// it is evaluated over the plaintext of a declared personal value (ADR-0314).
+		j, err := agent.ResolveTask(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}

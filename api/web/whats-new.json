@@ -229,100 +229,92 @@
       ]
     },
     {
-      "id": "a-directed-delivery-no-longer-reports-a-message-delivered-th",
+      "id": "a-reconciliation-no-longer-reports-a-right-as-unmanaged-when",
       "version": "Unreleased",
       "date": null,
       "category": "Fixed",
       "title": {
-        "en": "A message nobody received is no longer reported as delivered",
-        "de": "Eine Nachricht, die niemand empfing, gilt nicht mehr als zugestellt"
+        "en": "A contested reference no longer produces a false finding",
+        "de": "Eine umstrittene Referenz erzeugt keinen falschen Befund mehr"
       },
       "summary": {
-        "en": "When a service's process had taken one branch of an event-based gateway, the other branches stayed subscribed for a while. A return or a change sent to the service in that moment was answered «delivered», its data was written into the process, and no step moved. Such a message is now refused with «does not wait for it now», and nothing is written.",
-        "de": "Hatte der Prozess einer Leistung an einem ereignisbasierten Gateway einen Zweig genommen, blieben die anderen Zweige noch eine Weile abonniert. Eine Rückgabe oder Änderung, die in diesem Moment an die Leistung ging, wurde mit «zugestellt» beantwortet, ihre Daten wurden in den Prozess geschrieben, und kein Schritt bewegte sich. Eine solche Nachricht wird jetzt mit «wartet gerade nicht darauf» abgewiesen, und nichts wird geschrieben."
+        "en": "When two products target the same group or role in a system, a reconciliation cannot tell which of them a person holds there — and said so, but then still attributed what it read to the first product. Somebody who held that product, properly recorded, appeared as holding it unmanaged, a finding that could be adopted or even revoked. What is read under such a reference is now attributed to nobody and compared with nothing.",
+        "de": "Zielen zwei Produkte auf dieselbe Gruppe oder Rolle in einem System, kann ein Abgleich nicht sagen, welches davon eine Person dort hält – das meldete er auch, ordnete das Gelesene dann aber trotzdem dem ersten Produkt zu. Wer dieses Produkt ordentlich erfasst hielt, erschien als unverwalteter Besitz, ein Befund, der übernommen oder sogar entzogen werden konnte. Was unter einer solchen Referenz gelesen wird, wird jetzt niemandem zugeordnet und mit nichts verglichen."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       },
       "tags": [
-        "Engine",
-        "Service catalogue"
+        "Service catalogue",
+        "Operations"
       ]
     },
     {
-      "id": "a-catalogue-product-s-lifecycle-can-no-longer-be-started-by-",
+      "id": "an-ai-task-s-prompt-sees-the-plaintext-of-a-personal-value",
       "version": "Unreleased",
       "date": null,
       "category": "Fixed",
       "title": {
-        "en": "A product's process can no longer be started around the order",
-        "de": "Der Prozess eines Produkts lässt sich nicht mehr an der Bestellung vorbei starten"
+        "en": "An AI task's prompt sees personal values in plain text",
+        "de": "Der Prompt einer KI-Aufgabe sieht Personendaten im Klartext"
       },
       "summary": {
-        "en": "Publishing a message by name could start a catalogue product's process — its provisioning or its return — without any order behind it, so a right could be granted or taken away while the order and the inventory knew nothing of it. Such a message is now refused, naming the product and the action; the order alone sends it.",
-        "de": "Das Veröffentlichen einer Nachricht über ihren Namen konnte den Prozess eines Katalogprodukts starten – seine Bereitstellung oder seine Rückgabe – ohne dass eine Bestellung dahinterstand. So konnte ein Recht vergeben oder entzogen werden, ohne dass Bestellung und Bestand davon wussten. Eine solche Nachricht wird jetzt abgewiesen, mit Nennung von Produkt und Aktion; nur die Bestellung sendet sie."
+        "en": "A prompt such as =\"Hello \" + firstName reached the model empty when firstName was declared personal: it was the one worker expression evaluated over the encrypted stored value instead of its plaintext. It is now read the way every other worker's expressions are.",
+        "de": "Ein Prompt wie =\"Hallo \" + vorname kam beim Modell leer an, wenn vorname als Personendatum deklariert war: Er war der einzige Worker-Ausdruck, der über den verschlüsselt gespeicherten Wert statt über den Klartext ausgewertet wurde. Er wird jetzt so gelesen wie die Ausdrücke aller anderen Worker."
       },
       "link": {
-        "label": "ADR-0425",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0425-a-product-lifecycle-is-one-process-with-message-triggers.md"
+        "label": "ADR-0314",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0314-portal-personal-data.md"
       },
       "tags": [
-        "Service catalogue",
+        "AI",
         "Security"
       ]
     },
     {
-      "id": "listing-one-instance-s-jobs-no-longer-walks-every-job-on-the",
+      "id": "a-deploy-refused-for-its-job-types-no-longer-reappears-after",
       "version": "Unreleased",
       "date": null,
       "category": "Fixed",
       "title": {
-        "en": "Looking up one instance's jobs no longer stalls the engine",
-        "de": "Die Jobs einer Instanz nachzuschlagen hält die Engine nicht mehr an"
+        "en": "A failed deploy no longer comes back after a restart",
+        "de": "Ein gescheitertes Deployment kehrt nach einem Neustart nicht mehr zurück"
       },
       "summary": {
-        "en": "Completing an incident by hand, or asking the MCP tool for an instance's jobs, used to read every waiting job on the server just to find the few of that one instance — and the engine did nothing else while it read. On a server with a large backlog that was a noticeable stall. The lookup now reads only the instance itself, and does so without holding the engine up. The answer is the same jobs as before.",
-        "de": "Einen Incident von Hand abzuschliessen oder die Jobs einer Instanz über das MCP-Werkzeug abzufragen, las bisher jeden wartenden Job des Servers, um die wenigen dieser einen Instanz zu finden — und die Engine tat währenddessen nichts anderes. Auf einem Server mit grossem Rückstand war das ein spürbarer Stillstand. Die Abfrage liest jetzt nur noch die Instanz selbst und hält die Engine dabei nicht mehr auf. Das Ergebnis sind dieselben Jobs wie zuvor."
+        "en": "A deploy that failed while registering the process's job types answered with an error but had already written its record, so after a restart the process was listed as deployed and its version number was used up. The job types are now registered first; when that fails, nothing is written.",
+        "de": "Ein Deployment, das beim Registrieren der Job-Typen des Prozesses scheiterte, meldete einen Fehler, hatte seinen Datensatz aber bereits geschrieben: Nach einem Neustart war der Prozess als deployt aufgeführt, und seine Versionsnummer war verbraucht. Die Job-Typen werden jetzt zuerst registriert; scheitert das, wird nichts geschrieben."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       },
       "tags": [
-        "Operations",
-        "Engine"
+        "Deployment",
+        "Operations"
       ]
     },
     {
-      "id": "the-console-shows-how-atlas-is-built",
-      "version": "0.8.0",
-      "date": "2026-09-30",
-      "category": "Added",
+      "id": "on-windows-a-broken-dmn-model-folder-is-no-longer-listed-as-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
       "title": {
-        "en": "See how atlas is built, in one picture",
-        "de": "Wie atlas gebaut ist, auf einen Blick"
+        "en": "On Windows, a broken model folder is no longer shown as empty",
+        "de": "Unter Windows erscheint ein defekter Modellordner nicht mehr als leer"
       },
       "summary": {
-        "en": "A new System Overview button on this page, and the same entry in the help menu (?), shows the architecture in one diagram: the apps and interfaces, the workflow engine, where your data is kept, and how work on other systems is done by workers. It also shows what the storage rests on: every change is first written to a log on disk, and the current state is kept in Pebble, the storage engine CockroachDB has used by default since 2020. Full size opens the diagram on its own for the detail; the handbook shows it in its welcome chapter.",
-        "de": "Der neue Button System Overview auf dieser Seite und derselbe Eintrag im Hilfe-Menü (?) zeigen die Architektur in einer Grafik: die Apps und Schnittstellen, die Workflow-Engine, wo Ihre Daten liegen und wie Worker die Arbeit an anderen Systemen erledigen. Sie zeigt auch, worauf die Datenhaltung aufbaut: Jede Änderung wird zuerst in ein Log auf der Platte geschrieben, und den aktuellen Zustand hält Pebble, die Speicher-Engine, die CockroachDB seit 2020 standardmässig verwendet. Full size öffnet die Grafik für die Details einzeln; das Handbuch zeigt sie im Kapitel Willkommen."
+        "en": "When a file stood where the local DMN model folder should be, Windows reported the folder as missing, and the model list showed an empty store — every uploaded model seemed gone. Atlas now tells a missing folder from a broken one and reports the broken one as an error, as it already did on Linux.",
+        "de": "Stand eine Datei an der Stelle des lokalen DMN-Modellordners, meldete Windows den Ordner als fehlend, und die Modellliste zeigte einen leeren Speicher – alle hochgeladenen Modelle schienen weg. Atlas unterscheidet jetzt einen fehlenden von einem defekten Ordner und meldet den defekten als Fehler, wie bisher schon unter Linux."
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-8-0"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       },
       "tags": [
-        "Console",
-        "Handbook",
-        "Architecture"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Console",
-          "de": "Console öffnen"
-        },
-        "route": "#/console"
-      }
+        "Decisions",
+        "Operations"
+      ]
     }
   ]
 }

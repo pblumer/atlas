@@ -76,7 +76,11 @@ func (s *Server) handleCreateAPIToken(w http.ResponseWriter, r *http.Request) {
 			"scope must be one of: "+strings.Join(apiScopes(), ", "))
 		return
 	}
-	reach, reachErr := s.reachFor(r, scope, payload.Reach)
+	reach, reachErr, err := s.reachFor(r, scope, payload.Reach)
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read projects: "+err.Error())
+		return
+	}
 	if reachErr != "" {
 		httpapi.Error(w, http.StatusBadRequest, reachErr)
 		return
@@ -182,7 +186,8 @@ func (s *Server) handleRevokeAPIToken(w http.ResponseWriter, r *http.Request) {
 }
 
 // reachFor validates a minted credential's reach and returns the value to store, or a
-// refusal to send back.
+// refusal to send back. A projects store it cannot read comes back as an error rather
+// than a refusal: that is the server's fault, not something wrong with the request.
 //
 // Two rules, and both are about the door rather than the read (ADR-0410).
 //
@@ -197,7 +202,7 @@ func (s *Server) handleRevokeAPIToken(w http.ResponseWriter, r *http.Request) {
 // created it. Its roles are already snapshotted from the minter for that reason (ADR-0209),
 // and a reach naming a project the minter cannot view would be that property broken one step
 // removed — mint the token, then read through it.
-func (s *Server) reachFor(r *http.Request, scope string, asked []string) (reach []string, refusal string) {
+func (s *Server) reachFor(r *http.Request, scope string, asked []string) (reach []string, refusal string, err error) {
 	for _, id := range asked {
 		if id = strings.TrimSpace(id); id != "" {
 			reach = append(reach, id)
@@ -206,9 +211,9 @@ func (s *Server) reachFor(r *http.Request, scope string, asked []string) (reach 
 	if len(reach) == 0 {
 		if scope == apiScopeLandscape {
 			return nil, "a " + apiScopeLandscape + " token must state the reach it may see: " +
-				`"reach" naming one or more projects`
+				`"reach" naming one or more projects`, nil
 		}
-		return nil, ""
+		return nil, "", nil
 	}
 	var (
 		projs   map[string]project
@@ -216,16 +221,16 @@ func (s *Server) reachFor(r *http.Request, scope string, asked []string) (reach 
 	)
 	s.do(func() { projs, loadErr = s.projectsByID() })
 	if loadErr != nil {
-		return nil, "read projects: " + loadErr.Error()
+		return nil, "", loadErr
 	}
 	for _, id := range reach {
 		p, ok := projs[id]
 		if !ok {
-			return nil, "reach names no project this server has: " + id
+			return nil, "reach names no project this server has: " + id, nil
 		}
 		if !s.canViewArtifact(r, p.ID, p.OwnerID, projs) {
-			return nil, "reach names a project you cannot see: " + id
+			return nil, "reach names a project you cannot see: " + id, nil
 		}
 	}
-	return reach, ""
+	return reach, "", nil
 }

@@ -132,6 +132,42 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A reconciliation no longer reports a right as unmanaged when two products claim its
+  reference.** A reconciliation run that read a reference two products both target said
+  «nothing read under it can be attributed», and then attributed what it read under that
+  reference to the first product anyway. A person who held that product, recorded in the
+  inventory, was reported as holding it unmanaged — a finding the journal kept and that
+  could be adopted or deprovisioned. An observation under a contested reference is now
+  attributed to nobody: in reference scope it is reported once against the reference, in a
+  run that read one person's estate it is noted against that person, and either way nothing
+  is compared, so no finding about it can be acted on.
+
+- **An AI task's prompt sees the plaintext of a personal value.** The prompt of an AI task
+  is evaluated by the engine over the task's variables, and it was the one worker
+  expression evaluated over the stored envelope of a declared personal value rather than
+  its plaintext: `="Hallo " + vorname` reached the model as an empty prompt. It is now read
+  through the same deciphering reader as every other worker's expressions (ADR-0314).
+
+- **A deploy refused for its job types no longer reappears after a restart.** The
+  deployment record was written before the process's job types were registered, so a
+  deploy that failed at that step answered 500 and still left its record behind: after a
+  restart the process was listed as deployed, and the version counter had already moved.
+  The job types are now registered first, and a failure there writes nothing.
+
+- **On Windows, a broken DMN model folder is no longer listed as empty.** A file where the
+  local model folder should be made Windows answer "not found" when the folder was read,
+  and the model list took that for a store nothing had been uploaded to: it answered an
+  empty list and hid every model. It now tells an absent folder from a file in its place
+  and answers 500 for the second, as Linux always did.
+
+- **Some refusals now say whose fault they are.** Escalating or reassigning an approval
+  while the order store could not be read answered 404 «no open approval» instead of the
+  500 it was; naming a product an order holds in two shapes answered 500 instead of 409
+  naming both positions; an API token whose reach could not be checked because the project
+  store could not be read was refused with 400; and a few recertification and pending-work
+  routes answered 500 rather than 503 while the server was stopping. Each now answers what
+  happened.
+
 - **A directed delivery no longer reports a message delivered that nothing received.** When
   a per-position instance had taken one branch of an event-based gateway, the catch events
   of the other branches stayed subscribed until a later message cleared them. Delivering

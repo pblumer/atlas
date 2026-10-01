@@ -1,0 +1,11 @@
+{
+  "tags": ["Deployment", "Operations"],
+  "title": {
+    "en": "A failed deploy no longer comes back after a restart",
+    "de": "Ein gescheitertes Deployment kehrt nach einem Neustart nicht mehr zurück"
+  },
+  "summary": {
+    "en": "A deploy that failed while registering the process's job types answered with an error but had already written its record, so after a restart the process was listed as deployed and its version number was used up. The job types are now registered first; when that fails, nothing is written.",
+    "de": "Ein Deployment, das beim Registrieren der Job-Typen des Prozesses scheiterte, meldete einen Fehler, hatte seinen Datensatz aber bereits geschrieben: Nach einem Neustart war der Prozess als deployt aufgeführt, und seine Versionsnummer war verbraucht. Die Job-Typen werden jetzt zuerst registriert; scheitert das, wird nichts geschrieben."
+  }
+}
