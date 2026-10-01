@@ -198,3 +198,41 @@ func TestAWatchedMessageIsNoAction(t *testing.T) {
 		t.Fatalf("problems = %v, want none", got)
 	}
 }
+
+// TestActionsAreFoundByKeyAndByMessage: the two questions the order and the refusals ask
+// of a product — which action is this key, and which action owns this message — have
+// one answer in either shape, and none for a product with no lifecycle process.
+func TestActionsAreFoundByKeyAndByMessage(t *testing.T) {
+	it := actionItem("mailbox")
+	if a, ok := it.ActionNamed("storage-extend"); !ok || a.Message != "mailbox.storage.extend" {
+		t.Errorf("ActionNamed(storage-extend) = %+v, %v", a, ok)
+	}
+	if _, ok := it.ActionNamed("upgrade"); ok {
+		t.Error("an action nobody declared was found")
+	}
+	legacy := lifecycleItem("laptop")
+	legacy.Operations[OpChange] = "laptop.change"
+	if a, ok := legacy.ActionNamed(ActionChange); !ok || a.Effect != EffectChange {
+		t.Errorf("the operation map's change read as %+v, %v", a, ok)
+	}
+
+	for msg, want := range map[string]string{
+		"mailbox.password.reset": "password-reset",
+		" mailbox.provision ":    ActionProvision,
+	} {
+		if key, ok := it.OwnsMessage(msg); !ok || key != want {
+			t.Errorf("OwnsMessage(%q) = %q, %v, want %q", msg, key, ok, want)
+		}
+	}
+	for _, msg := range []string{"", "  ", "jira.ticket.created"} {
+		if key, ok := it.OwnsMessage(msg); ok {
+			t.Errorf("OwnsMessage(%q) = %q, want no owner", msg, key)
+		}
+	}
+	if key, ok := legacy.OwnsMessage("laptop.deprovision"); !ok || key != ActionDeprovision {
+		t.Errorf("the operation map's deprovision is owned by %q, %v", key, ok)
+	}
+	if _, ok := item("vpn").OwnsMessage("vpn.provision"); ok {
+		t.Error("a two-process product owns a message")
+	}
+}
