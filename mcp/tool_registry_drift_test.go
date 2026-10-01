@@ -701,6 +701,7 @@ var mcpOmittedRoutes = map[string]string{
 	// Console-configured watch feeds the name they typed, while an agent that wants a
 	// process to run publishes the message itself with atlas_publish_message and never
 	// depends on a watch existing at all.
+	"GET /api/v1/events":          "a machine-to-machine pull feed for systems beyond Atlas (a CMDB, a billing system), paged by a cursor the consumer keeps; an agent reads how a position's actions ended with atlas_order_line_outcomes",
 	"GET /api/v1/message-sources": "the Modeler's authoring aid for picking a message name — watch configuration, product actions and deployed catches; an agent reads products with atlas_list_catalog_products and processes with atlas_get_process_xml, and publishes a message itself rather than needing one to exist",
 
 	// Repository: package management, an admin/UI concern.

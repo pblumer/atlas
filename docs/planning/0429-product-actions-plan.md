@@ -203,7 +203,10 @@ See ADR-0429 §6's as-built note for slice D.
   `inbound-watch`; the picker groups by source.
 - Shop badges beside the envelope on shop receive and send tasks (§6).
 
-## Slice E — The feed
+## Slice E — The feed — ✅ landed
+
+See ADR-0429 §5's as-built note for slice E, and the version-1 contract in
+`docs/runtime-contract.md`.
 
 - Feed column family folded from outcomes and entitlement events, pruned by an explicit
   event (30 days default, §10 decision 8); `GET /api/v1/events?after=` with CloudEvents 1.0

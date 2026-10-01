@@ -497,6 +497,36 @@ through a Worker (ADR-0203) with a server-held cursor per subscription, the retr
 of the task and a circuit breaker per endpoint (ADR-0340). It reads the feed; it adds no
 fact and no second path into `applyToState`.
 
+*As built — slice E.* The feed is a column family (`cfFeed`, `state/feed.go`) keyed by the
+partition and the log position of the record that carried each fact. `applyToState` writes
+a row beside every `IntentActionCompleted`, every `IntentEntitlementGranted`, and every
+revocation that ends a hold (`VTEntitlementHistory`) — the revocation's row is the hold as
+it ended, read in the fold through `Tx.EndEntitlementRow`, because the revocation event
+names only the principal and the item and the order the right came from is in the hold.
+A row's time is the record header's timestamp, the moment Atlas recorded the fact; the
+data keeps the fact's own moments (`at`, `since`, `endedAt`). The prune is its own fact,
+`VTFeedRetention` with `IntentFeedPruning`/`IntentFeedPruned`: the retention sweep
+(hourly, `--event-feed-ttl`, default 30 days) finds the last row recorded before the
+cutoff — stopping at the first that is not, so the window is a lower bound and never a cut
+through the middle of the log — and freezes that position into the command; the fold drops
+the rows through it and keeps the cut, so a reader can tell a cursor that fell behind.
+`GET /api/v1/events` (`api/eventfeed.go`, `operator`) reads a snapshot off the loop and
+answers `{events, next, more}`; `after` left out reads from the oldest row held, and an
+`after` below the cut answers 410 with `oldest`. The envelope is as the table above says,
+with two first-cut choices: a server given no external URL names its `source`
+`urn:atlas:<node id>:catalog` rather than an address nobody can reach, and `dataschema` is
+not set — the version-1 shapes are written down in the runtime contract
+(`docs/runtime-contract.md`), and the attribute arrives with a schema the server serves.
+The route is not an MCP tool: it is a machine-to-machine feed with a cursor the consumer
+keeps, and an agent reads how a position's actions ended with `atlas_order_line_outcomes`.
+
+One departure from the text above: the projection did not land with the first outcome
+record (slice C1) but with this slice. The feed therefore begins with the version that
+carries it; outcomes and holds recorded before are read through the outcome route and the
+inventory, not the feed. A backfill was considered and not built — the facts' log
+positions are not recoverable from the rows they left, and an `id` invented for them
+would not be the one a re-read repeats.
+
 ### 6. The modeler offers the names
 
 `GET /api/v1/message-sources` gains a `sourceKind` for each entry:

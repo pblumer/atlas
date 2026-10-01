@@ -56,6 +56,7 @@ const (
 	cfEntitlementHistory     columnFamily = 0x2B // entHist:<principal>:0x00:<endedAt>:<itemId> → EntitlementHistoryValue (ADR-0346)
 	cfTriggerReceipt         columnFamily = 0x2C // trigRcpt:<source>:0x00:<triggerId> → instanceKey(8) at(8) (ADR-0425)
 	cfActionOutcome          columnFamily = 0x2D // actOut:<order>:0x00:<position>:0x00:<commandId> → ActionOutcomeValue (ADR-0429)
+	cfFeed                   columnFamily = 0x2E // feed:0x00:<partition>:<position> → kind(1) at(8) value; feed:0x01:<partition> → pruned through (ADR-0429 §5)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key

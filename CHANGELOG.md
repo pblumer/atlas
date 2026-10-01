@@ -14,6 +14,20 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **What happens to a right leaves Atlas as a feed of CloudEvents.** Every action asked of a
+  held position that ends, every right granted and every right revoked is now an event a
+  system beyond Atlas — a CMDB, a billing system — reads from `GET /api/v1/events`, in the
+  order Atlas recorded it, a page at a time from a cursor the consumer keeps. Each event is
+  a CloudEvents 1.0 envelope naming the order position (or, for a right a commissioning load
+  adopted, the person and the product), the event type the product declares for the action
+  or `atlas.entitlement.granted`/`.revoked`, and the fact itself, with people named by id
+  only. Delivery is at least once and deduplicated by the event's id. The feed keeps 30
+  days, set with `--event-feed-ttl`; a consumer that falls further behind is answered 410
+  with the cursor to resume from, rather than silently missing what was dropped. The feed is
+  state the engine rebuilds from its log, so it survives a restart and a recovery
+  unchanged; it begins with this version. The route requires the operator role; the
+  envelope is version 1 of the runtime contract. The last slice of ADR-0429.
+
 - **The modeler offers a message name from where it comes from.** The message picker now
   groups the names it knows by source: a step that waits for a message is offered the
   events Workers publish and the messages of products' actions; a step that sends one is

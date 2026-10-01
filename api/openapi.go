@@ -1605,6 +1605,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Update an inbound event subscription", tag: "Workers", role: RoleModeler, req: jsonBody("Subscription update", tObject()), resp: jsonBody("Updated subscription", tObject())}},
 		{"DELETE", "/api/v1/inbound-subscriptions/{id}", s.handleDeleteInboundSubscription, apiOp{
 			summary: "Delete an inbound event subscription", tag: "Workers", role: RoleModeler, status: http.StatusNoContent}},
+		{"GET", "/api/v1/events", s.handleListEvents, apiOp{
+			summary: "The event feed (ADR-0429 §5): every action outcome, grant and revocation, as CloudEvents 1.0 structured JSON in log order. `after` is the cursor of the last event the caller holds (a decimal position, the `next` of the previous page); leave it out to read from the oldest held. `limit` is 1–1000, default 100. Delivery is at least once: deduplicate by `id`. The feed keeps its rows for `--event-feed-ttl` (30 days); a cursor older than the oldest held is answered 410 with `oldest`, the cursor to resume from", tag: "Catalogue", role: RoleOperator,
+			resp: jsonBody("A page of events: {events, next, more}", tObject())}},
 		{"GET", "/api/v1/message-sources", s.handleListMessageSources, apiOp{
 			summary: "List every message name with where it comes from (ADR-0429 §6), each row tagged by `sourceKind`: `inbound-watch` — a Worker's event, with the worker and, for a viewer of it, the watch; `product-action` — a product's action, with the product, the action's key, effect and triggers and the process the product binds it to, for the catalogues the caller maintains; `process` — where the newest deployed version of a process waits for it, at a message `start` or a `catch`. The Modeler groups its message picker by these and tells a model whether its message has a source", tag: "Workers", role: RoleModeler, resp: jsonBody("Message sources", tArray())}},
 
