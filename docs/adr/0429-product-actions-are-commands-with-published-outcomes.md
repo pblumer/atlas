@@ -411,8 +411,11 @@ leaves the first ending standing. Publishing a catalogue reads the process's sho
 an action the product does not declare, one that answers the provision or the return, and
 one with a change or service action no task answers `completed`. A product that still
 carries the operation map, and the provision and return, are not held to it. The modeler
-offers the kind as **Shop** in the send task's kind picker, with the action picked from the
-product actions and the outcome from the closed list.
+offers the kind as **Shop** in the send task's kind picker (`api/web/editor.js`, the
+`atlas:ShopTask` type in `atlas-moddle.json`): the action is typed as its key and checked
+for its shape as it is typed, the outcome is picked from the closed list, and choosing the
+kind clears the message and any Worker it replaces. Picking the action from the product's
+declared actions, and a badge on the canvas, are slice D.
 
 ### 5. The feed: what leaves Atlas
 
