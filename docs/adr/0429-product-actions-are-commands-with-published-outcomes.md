@@ -1,6 +1,6 @@
 # ADR-0429: A product declares its actions, each a command whose outcome is a fact published beyond Atlas
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Partial
 - **Date:** 2026-09-30
 - **Deciders:** Atlas maintainers
