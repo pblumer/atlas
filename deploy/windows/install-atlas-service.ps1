@@ -209,6 +209,26 @@ function Get-ExeVersion([string]$Path) {
     return $output[0]
 }
 
+function Invoke-Download([string]$Uri, [string]$OutFile, [string]$OfflineHint) {
+    # Lädt eine Datei herunter. Bei einem Fehler wird eine halb geschriebene
+    # Datei entfernt, damit ein erneuter Lauf sie nicht ungeprüft weiterverwendet.
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    Write-Info "Download $Uri"
+    try {
+        Invoke-WebRequest -Uri $Uri -OutFile $OutFile -UseBasicParsing
+    } catch {
+        Remove-Item -LiteralPath $OutFile -Force -ErrorAction SilentlyContinue
+        $msg = $_.Exception.Message
+        $hint = ''
+        if ($msg -match 'trust relationship|Vertrauensstellung') {
+            $hint = " Das Serverzertifikat wird von diesem Server nicht als vertrauenswürdig eingestuft (TLS-Inspection durch einen Proxy oder fehlende Stammzertifikate). Die Zertifikatsprüfung nicht abschalten."
+        } elseif ($msg -match 'SSL/TLS') {
+            $hint = ' TLS-Verbindung nicht möglich (Protokoll oder Proxy).'
+        }
+        throw "Download von $Uri fehlgeschlagen: $msg$hint Alternative: Datei auf einem anderen Rechner herunterladen und $OfflineHint verwenden."
+    }
+}
+
 function Get-FileSha256([string]$Path) {
     return (Get-FileHash -Path $Path -Algorithm SHA256).Hash.ToLowerInvariant()
 }
@@ -541,16 +561,14 @@ if (-not [string]::IsNullOrWhiteSpace($AtlasExe)) {
 }
 
 if ($null -eq $sourceExe -and -not [string]::IsNullOrWhiteSpace($Version)) {
-    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
     $relDir = Join-Path $InstallRoot "releases\$Version"
     New-Item -ItemType Directory -Force -Path $relDir | Out-Null
     $base = "https://github.com/pblumer/atlas/releases/download/v$Version"
     $zipName = "atlas_${Version}_windows_amd64.zip"
     $zip = Join-Path $relDir $zipName
     $sums = Join-Path $relDir 'SHA256SUMS'
-    Write-Info "Download $base/$zipName"
-    Invoke-WebRequest -Uri "$base/$zipName" -OutFile $zip -UseBasicParsing
-    Invoke-WebRequest -Uri "$base/SHA256SUMS" -OutFile $sums -UseBasicParsing
+    Invoke-Download -Uri "$base/$zipName" -OutFile $zip -OfflineHint '-AtlasExe <Pfad zu atlas.exe>'
+    Invoke-Download -Uri "$base/SHA256SUMS" -OutFile $sums -OfflineHint '-AtlasExe <Pfad zu atlas.exe>'
     $line = Select-String -LiteralPath $sums -Pattern ([regex]::Escape($zipName)) | Select-Object -First 1
     if ($null -eq $line) { throw "$zipName ist nicht in SHA256SUMS aufgeführt." }
     $expected = ($line.Line -split '\s+')[0].ToLowerInvariant()
@@ -598,9 +616,7 @@ if (-not (Test-Path -LiteralPath $WrapperExe)) {
     if (-not [string]::IsNullOrWhiteSpace($WinSWPath)) {
         Copy-Item -LiteralPath $WinSWPath -Destination $WrapperExe
     } else {
-        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-        Write-Info "Download $WinSWUrl"
-        Invoke-WebRequest -Uri $WinSWUrl -OutFile $WrapperExe -UseBasicParsing
+        Invoke-Download -Uri $WinSWUrl -OutFile $WrapperExe -OfflineHint '-WinSWPath <Pfad zu WinSW-x64.exe>'
     }
     if (-not [string]::IsNullOrWhiteSpace($WinSWSha256)) {
         $actual = Get-FileSha256 $WrapperExe
