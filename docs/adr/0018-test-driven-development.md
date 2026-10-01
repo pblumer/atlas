@@ -213,11 +213,11 @@ records that the first half of that sentence was right and the second was not.
 ### What was done, measured
 
 ```
-before   52 100 / 55 414   94.0196%   margin above 94%:  10
-after    53 325 / 55 427   96.2076%   margin above 95%: 669
+before   52 239 / 55 563   94.0176%   margin above 94%:   9
+after    53 472 / 55 588   96.1934%   margin above 95%: 663
 ```
 
-1 225 statements newly covered by 400 tests in 108 new files, written in four disjoint
+1 233 statements newly covered by 400 tests in 108 new files, written in four disjoint
 areas (the `api` root package in three, everything else in one) and merged; no production
 line was changed to make a test pass. Many of them do inject faults — a file where a
 store expects its directory, a directory sitting on a record's `.tmp` path so the read
@@ -246,7 +246,7 @@ nobody has read.
 
 ### What stays uncovered, and why it is allowed to
 
-2 102 statements. The four test reports list them by kind, and they are the kinds this
+2 116 statements. The four test reports list them by kind, and they are the kinds this
 record's escape hatch is for: storage-engine failures inside Pebble (batch, iterator,
 fsync) with no seam short of a fake store that asserts itself; `crypto/rand` and embedded
 asset reads that do not fail on supported platforms; guards against a second run-loop turn
@@ -257,7 +257,7 @@ Linux sandbox; decode branches for values JSON cannot produce.
 
 The September amendments measured new code arriving at 89.5% in one exceptional week. From
 2026-09-16 to today it arrived at **93.5%** (4 863 of 5 200 statements). Against a 95% floor
-that spends about 77 statements of margin in fifteen days, so 669 is months, not days —
+that spends about 77 statements of margin in fifteen days, so 663 is months, not days —
 and [`AGENTS.md`](../../AGENTS.md) now asks every feature to arrive with its routes, tools
 and tests together. The "thirty statements, sustained across a few merges" condition of
 2026-09-09 is replaced by the size of the margin and the measured rate; if the rate turns,
