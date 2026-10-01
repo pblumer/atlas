@@ -176,6 +176,17 @@ from loading the engine:
   signal catches only (`isCatchEvent`, `compiler/validation.go`); it runs as a boundary
   or event subprocess beside the strand's wait, or in a branch of its own.
 
+*As built — slice A.* `catalog.Action` and `Item.Actions` (`api/catalog/action.go`), with
+`Item.ActionList()` as the one reading of either shape; `BindingFor` resolves provision and
+deprovision by effect and any other name by key. `checkActions` holds the rules above, with
+one addition the text left implicit: the keys `provision` and `deprovision` are reserved for
+the actions of those effects, so trigger ids and recorded instances keep ADR-0425's names.
+`order.Line.Actions` is frozen at placement and carried by a rebinding. The catalogue editor
+draws the actions as a grid (`actionRows`, `api/web/catalog-admin.js`). §1's "a message name
+is owned by one action of one product" is read as unique *within* a product: products that
+share a lifecycle process share its names, and every refusal treats a name as owned if any
+product owns it (`docs/planning/0429-product-actions-plan.md`).
+
 **Existing products are read, not migrated.** An item with `operations` is read as the
 actions `provision`, `change` and `deprovision` it names, with the effect of the same
 name and the trigger each has today. Order lines keep what they froze; a line placed
@@ -186,7 +197,11 @@ check operations today: in the `per-operation` form every action's message is a 
 message start event; in the `per-position` form `change` and `service` actions are
 message catch events correlated by the position (ADR-0428 §1). A message name is owned
 by one action of one product; an inbound watch may not claim it, and creating or
-editing a watch refuses such a name — closing the gap in the context above.
+editing a watch refuses such a name — closing the gap in the context above. *As built:*
+`catalogOwnerOfName` refuses a watch's create, rename and enable with 409 naming the product
+and the action (`api/inbound.go`, `api/triggerroute.go`); the gap in the context reproduced
+before the gate (`TestAWatchMayNotPublishAProductsMessage`). Publishing refuses the reverse —
+an action whose message an enabled watch publishes — through `WatchLookup`.
 
 ### 2. Triggering an action
 
@@ -487,8 +502,8 @@ other rule the compiler gains later is closed (ADR-0177, ADR-0393):
 - A test in `api` holds the two halves together, since nothing else links a rule in Go
   to a warning in JavaScript.
 
-This part of the record is built, as is the inbound-watch slice of §6; the rest is not,
-which is why the record is `Partial`.
+This part of the record is built, as are the inbound-watch slice of §6 and slice A of §10
+(the actions on the product, §1); the rest is not, which is why the record is `Partial`.
 
 ### 10. Decided at acceptance (amended 2026-10-01)
 

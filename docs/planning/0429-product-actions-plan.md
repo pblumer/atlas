@@ -26,7 +26,10 @@ Worker events in the Modeler's message picker (§6, #1176).
 
 ---
 
-## Slice A — Actions on the product
+## Slice A — Actions on the product — ✅ landed
+
+Built as planned below. ADR-0429 §1 carries the as-built note; the editor's `form` and
+`outcomes` controls wait for slices B and C, and a save carries both through untouched.
 
 **Goal:** a product declares an open list of actions with closed effects; everything that
 reads the old operation map reads actions instead; the editor maintains the list. No new

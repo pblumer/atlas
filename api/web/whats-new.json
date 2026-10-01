@@ -2,6 +2,47 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "a-product-declares-its-actions",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A product lists what can be asked of it",
+        "de": "Ein Produkt listet, was man von ihm verlangen kann"
+      },
+      "summary": {
+        "en": "A product with a lifecycle process no longer stops at three start events. It lists its actions: the provisioning and the return the order runs, then any number of changes such as more storage and services such as a password reset or an inactivation — each with the message its process waits for, who may ask for it (the customer, an operator or the system) and what its button says in each language. Publishing checks every action against the process. Existing products open as the actions they already had. Asking for an action from the shop follows in the next step.",
+        "de": "Ein Produkt mit Lebenszyklus-Prozess ist nicht mehr auf drei Startereignisse beschränkt. Es listet seine Aktionen: die Bereitstellung und die Rückgabe, die die Bestellung ausführt, dann beliebig viele Änderungen wie mehr Speicher und Dienstleistungen wie ein Passwort-Reset oder eine Inaktivierung – jede mit der Nachricht, auf die ihr Prozess wartet, wer sie auslösen darf (der Kunde, der Betrieb oder das System) und was ihr Knopf in jeder Sprache sagt. Beim Publizieren wird jede Aktion gegen den Prozess geprüft. Bestehende Produkte öffnen sich mit den Aktionen, die sie schon hatten. Das Auslösen einer Aktion im Shop folgt im nächsten Schritt."
+      },
+      "link": {
+        "label": "ADR-0429",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
+      },
+      "tags": [
+        "Service catalogue",
+        "Shop"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the catalogue and edit a product.",
+          "Under «How it is fulfilled», choose a lifecycle process — the provision and deprovision messages are pre-filled.",
+          "Press «Add an action» for each change or service, choose who may ask for it and write its label."
+        ],
+        "de": [
+          "Öffnen Sie den Katalog und bearbeiten Sie ein Produkt.",
+          "Wählen Sie unter «How it is fulfilled» einen Lebenszyklus-Prozess – die Nachrichten für Bereitstellung und Rückgabe werden vorbelegt.",
+          "Fügen Sie mit «Add an action» jede Änderung oder Dienstleistung hinzu, wählen Sie, wer sie auslösen darf, und schreiben Sie ihre Beschriftung."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open the catalogue",
+          "de": "Katalog öffnen"
+        },
+        "route": "#/catalog"
+      }
+    },
+    {
       "id": "the-modeler-offers-the-events-your-workers-publish-when-you-",
       "version": "Unreleased",
       "date": null,
@@ -85,6 +126,28 @@
       "tags": [
         "Handbook",
         "Examples"
+      ]
+    },
+    {
+      "id": "an-inbound-watch-may-no-longer-publish-a-catalogue-product-s",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "A Worker's event can no longer drive a product's lifecycle",
+        "de": "Ein Worker-Ereignis kann keinen Produkt-Lebenszyklus mehr steuern"
+      },
+      "summary": {
+        "en": "An event watch under Workers → Events… could be given the very message a catalogue product's process waits for — its return, for example — and then return rights without the order ever knowing. Such a watch is now refused, naming the product and the action, and a catalogue whose product would take a name a watch already publishes cannot be published.",
+        "de": "Einer Ereignisüberwachung unter «Workers → Events…» konnte genau die Nachricht zugewiesen werden, auf die der Prozess eines Katalogprodukts wartet – etwa seine Rückgabe –, und sie hätte dann Rechte zurückgegeben, ohne dass die Bestellung davon erfuhr. Eine solche Überwachung wird jetzt abgewiesen, mit Nennung von Produkt und Aktion, und ein Katalog, dessen Produkt einen bereits überwachten Namen übernehmen würde, lässt sich nicht publizieren."
+      },
+      "link": {
+        "label": "ADR-0425",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0425-a-product-lifecycle-is-one-process-with-message-triggers.md"
+      },
+      "tags": [
+        "Workers",
+        "Service catalogue"
       ]
     },
     {
@@ -288,64 +351,6 @@
           "de": "Operations öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "the-handbook-teaches-writing-your-own-worker-over-the-job-ap",
-      "version": "0.8.0",
-      "date": "2026-09-30",
-      "category": "Added",
-      "title": {
-        "en": "Write your own worker — the handbook now shows the Job API",
-        "de": "Einen eigenen Worker schreiben – das Handbuch zeigt jetzt die Job-API"
-      },
-      "summary": {
-        "en": "The built-in workers cover the common outside systems; for everything else you write your own, on any host, holding an API token of scope worker. It leases a job by its type, does the work, and completes or fails it — the same loop atlas worker runs. The handbook's Forms & workers chapter now explains it in German and English: the task definition that names the job type, the activate/complete/fail calls with a curl example, the lease token that fences a stale completion, and why at-least-once delivery means your worker has to be idempotent. Every call was run against a live instance first.",
-        "de": "Die eingebauten Worker decken die häufigen Aussensysteme ab; für alles andere schreibt man einen eigenen, auf einem beliebigen Rechner, mit einem API-Token des Scopes worker. Er least einen Job nach seinem Typ, tut die Arbeit und schliesst ihn ab oder lässt ihn fehlschlagen – dieselbe Schleife, die auch atlas worker fährt. Das Kapitel «Formulare & Worker» erklärt das jetzt auf Deutsch und Englisch: die Task-Definition, die den Job-Type benennt, die Aufrufe activate/complete/fail mit curl-Beispiel, den Lease-Token, der einen veralteten Abschluss auszäunt, und warum mindestens einmalige Zustellung heisst, dass der Worker idempotent sein muss. Jeder Aufruf wurde zuerst an einer laufenden Instanz ausgeführt."
-      },
-      "link": {
-        "label": "ADR-0007",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0007-job-worker-protocol.md"
-      },
-      "tags": [
-        "Handbook",
-        "Workers"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Console",
-          "de": "Konsole öffnen"
-        },
-        "route": "#/console"
-      }
-    },
-    {
-      "id": "converting-a-product-to-a-lifecycle-process-no-longer-lets-i",
-      "version": "0.8.0",
-      "date": "2026-09-30",
-      "category": "Added",
-      "title": {
-        "en": "Old processes stay as long as an order still needs them",
-        "de": "Alte Prozesse bleiben, solange ein Auftrag sie noch braucht"
-      },
-      "summary": {
-        "en": "When a product moves to one lifecycle process, orders placed before keep the processes they were placed with — a laptop handed out last year is still returned by last year's return process. Atlas now refuses to delete such a process while an order line can still start it, and says how many lines per product. The fulfilment report shows what is left, and if an old process can no longer work, a maintainer can move the lines to the new process; each moved line records who did it and why.",
-        "de": "Wechselt ein Produkt auf einen Lebenszyklusprozess, behalten früher aufgegebene Aufträge die Prozesse, mit denen sie aufgegeben wurden — ein letztes Jahr ausgegebener Laptop wird mit dem Rückgabeprozess von letztem Jahr zurückgenommen. Atlas verweigert jetzt das Löschen eines solchen Prozesses, solange eine Auftragsposition ihn noch starten kann, und nennt die Anzahl Positionen pro Produkt. Der Fulfilment-Report zeigt den Restbestand, und kann ein alter Prozess nicht mehr funktionieren, lassen sich die Positionen auf den neuen Prozess umbinden; jede umgebundene Position hält fest, wer das getan hat und warum."
-      },
-      "link": {
-        "label": "ADR-0427",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0427-converting-a-product-to-a-lifecycle-process.md"
-      },
-      "tags": [
-        "Catalogue",
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Console",
-          "de": "Console öffnen"
-        },
-        "route": "#/console"
       }
     }
   ]
