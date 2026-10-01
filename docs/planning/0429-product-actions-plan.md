@@ -135,6 +135,15 @@ type Action struct {
 
 ---
 
+## Follow-up to slice A — the name-correlated publish
+
+Found while landing slice A and reproduced: `POST /api/v1/messages` with a per-operation
+product's message — `laptop.provision` — starts the lifecycle process outside the order,
+because `handlePublishMessage` refuses only what a per-position product *delivers*
+(`catalogOwnerOfDelivered`). It predates ADR-0429 and contradicts ADR-0425 §8. The fix is the
+watch's door on this route: refuse any name `catalogOwnerOfName` finds, with the same 409.
+One small pull request of its own, before slice B makes the action act the sanctioned path.
+
 ## Slice B — The action act, availability and the portal
 
 - `POST /api/v1/orders/{id}/lines/{item}/actions/{action}` (`commandId` required) and
