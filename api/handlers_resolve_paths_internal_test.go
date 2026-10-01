@@ -233,3 +233,44 @@ func TestHandlersLocalDecisionIsLeasedWithoutAPayload(t *testing.T) {
 		t.Fatalf("a local decision's job was leased with payload %+v, want none", *out.Jobs[0].Connector)
 	}
 }
+
+// TestHandlersAiTaskPromptIsResolvedOverPlaintext is the regression test for the ai
+// task's arm, the one arm that resolved over the raw store rather than the opening
+// reader. An ai task's prompt is a worker-evaluated expression, which compiler/personal.go
+// lets read a declared personal value on the condition that the worker sees the
+// plaintext (ADR-0314). Resolved over the envelope instead, "Hallo " + vorname is FEEL
+// over a context and the prompt travels empty — while a mail subject built the same way
+// in the same instance arrives correct.
+func TestHandlersAiTaskPromptIsResolvedOverPlaintext(t *testing.T) {
+	srv, _ := newValidateServer(t, WithOffloadedConnectorKinds(offloadableKindNames()))
+	task := handlersServiceTask(`<atlas:agentConnector connector="anthropic_pb" model="claude-haiku-4-5" prompt="=&quot;Hallo &quot; + vorname" resultVariable="kategorie"/>`)
+	code, raw := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", handlersPersonalTaskModel("ai-personal", task), "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy: status=%d body=%s", code, raw)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(raw, &dep); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+	handlersStartPersonal(t, srv, dep.Key, "P-1", nil)
+
+	code, raw = serveInternal(t, srv, http.MethodPost, "/api/v1/jobs/activate",
+		fmt.Sprintf(`{"type":%q,"worker":"w1"}`, compiler.AiTaskJobType), "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("lease: status=%d body=%s", code, raw)
+	}
+	var out struct {
+		Jobs []handlersLeasedJob `json:"jobs"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("decode lease: %v (%s)", err, raw)
+	}
+	if len(out.Jobs) != 1 || out.Jobs[0].Connector == nil || out.Jobs[0].Connector.Kind != "agent" {
+		t.Fatalf("leased %s, want one ai task with an agent payload", raw)
+	}
+	if got := out.Jobs[0].Connector.Fields["prompt"]; got != "Hallo Ida-P-1" {
+		t.Errorf("prompt = %#v, want %q: the prompt was resolved over the stored envelope, not the plaintext", got, "Hallo Ida-P-1")
+	}
+}

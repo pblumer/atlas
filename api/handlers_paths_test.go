@@ -866,3 +866,67 @@ func TestHandlersDataTabAttributesAWriteUnderTheVersionItRanOn(t *testing.T) {
 		}
 	}
 }
+
+// handlersDeployedVersion deploys a model and returns the version it was given.
+func handlersDeployedVersion(t *testing.T, ts *httptest.Server, xml string) int32 {
+	t.Helper()
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", xml, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy: status=%d body=%s", code, body)
+	}
+	var dep struct {
+		Version int32 `json:"version"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v (%s)", err, body)
+	}
+	return dep.Version
+}
+
+// TestHandlersDeployThatCannotRecordItsJobTypeLeavesNothingBehind is the regression
+// test for a deploy refused while interning a new job type. Interning is a durable write
+// of its own (ADR-0157), and it used to happen after the deployment record was saved and
+// its version counted: the caller got a 500, and the record it left on disk brought the
+// "failed" definition back on the next restart, with its version already spent.
+//
+// The job-type directory going missing is the fault: the registry cannot write the
+// reservation for a type it has not seen ("payment"), and nothing else is disturbed.
+func TestHandlersDeployThatCannotRecordItsJobTypeLeavesNothingBehind(t *testing.T) {
+	dir := t.TempDir()
+	jobTypes := filepath.Join(dir, "jobtypes")
+
+	first := boot(t, dir)
+	if err := os.RemoveAll(jobTypes); err != nil {
+		first.shutdown()
+		t.Fatalf("remove job-type directory: %v", err)
+	}
+	code, body := doReq(t, first.ts, http.MethodPost, "/api/v1/deployments", sampleBPMN, "application/xml")
+	if code != http.StatusInternalServerError || !strings.Contains(string(body), "job type") {
+		first.shutdown()
+		t.Fatalf("deploy with no job-type directory: status=%d body=%s, want 500 naming the job type", code, body)
+	}
+	first.shutdown()
+
+	// A restart over the same data directory (which recreates the job-type directory)
+	// must not find the definition the caller was told had failed.
+	second := boot(t, dir)
+	defer second.shutdown()
+	if keys := handlersProcessKeys(t, second.ts); len(keys) != 0 {
+		t.Fatalf("after a restart the refused deploy is listed as deployed: %v", keys)
+	}
+
+	// The same failure on a running server spends no version: once the directory is
+	// back, the retry is the process's first version.
+	if err := os.RemoveAll(jobTypes); err != nil {
+		t.Fatalf("remove job-type directory: %v", err)
+	}
+	if code, body := doReq(t, second.ts, http.MethodPost, "/api/v1/deployments", sampleBPMN, "application/xml"); code != http.StatusInternalServerError {
+		t.Fatalf("deploy with no job-type directory: status=%d body=%s, want 500", code, body)
+	}
+	if err := os.MkdirAll(jobTypes, 0o755); err != nil {
+		t.Fatalf("restore job-type directory: %v", err)
+	}
+	if v := handlersDeployedVersion(t, second.ts, sampleBPMN); v != 1 {
+		t.Errorf("the retry deployed as version %d, want 1: the refused deploy spent a version", v)
+	}
+}
