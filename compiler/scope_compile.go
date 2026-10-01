@@ -254,6 +254,10 @@ func registerScope(
 		return nil
 	}
 	for _, st := range c.ServiceTasks {
+		if st.Shop != nil {
+			// The shop states something to the order, which is a send (ADR-0429 §4).
+			return fmt.Errorf("compiler: service task %q carries a shop task; a shop task is a send task", st.Id)
+		}
 		if err := registerJobWorkerTask(st, "service task", b.AddServiceTask); err != nil {
 			return err
 		}
@@ -275,6 +279,16 @@ func registerScope(
 				return err
 			}
 			reg.node(st.Id, b.AddMessageThrowEvent(name, keyExpr))
+			continue
+		}
+		// The shop kind (ADR-0429 §4): send-only, so it is resolved here rather than
+		// in the worker table a service task shares.
+		if st.Shop != nil {
+			id, err := compileShopTask(b, st.Id, st.Shop)
+			if err != nil {
+				return err
+			}
+			reg.taskNode(st.Id, id, st.Form.FormId)
 			continue
 		}
 		if err := registerJobWorkerTask(st, "send task", b.AddSendTask); err != nil {

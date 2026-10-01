@@ -28,22 +28,23 @@ func outcomesOf(t *testing.T, c *http.Client, ts *httptest.Server, ord, item str
 	return code, out, string(body)
 }
 
-// TestAnActionsEndingIsAFact: the act hands the process its command id; the process
-// reports how the command ended, once — the same report again answers with the
-// first, a different ending is refused — under the event type the action is
-// published as; and the person who holds the right reads it back beside how the
-// provision ended.
+// TestAnActionsEndingIsAFact: the act hands the process its command id; a process
+// that reports over REST states how the command ended, once — the same report again
+// answers with the first, a different ending is refused — under the event type the
+// action is published as; and the person who holds the right reads it back beside
+// how the provision ended. The change is used because its strand stops at a person's
+// task first, so the REST report is the first word.
 func TestAnActionsEndingIsAFact(t *testing.T) {
 	ts, admin, rita, _, ord, strand := aToolHeldForRita(t, `["customer","operator"]`)
-	if code, b := cReq(t, rita, ts, "POST", "/api/v1/orders/"+ord+"/lines/tool/actions/password-reset",
-		`{"commandId":"r-1","reason":"locked out"}`); code != http.StatusOK {
+	if code, b := cReq(t, rita, ts, "POST", "/api/v1/orders/"+ord+"/lines/tool/actions/change",
+		`{"commandId":"c-1","variables":{"size":"L"}}`); code != http.StatusOK {
 		t.Fatalf("ask: %d (%s)", code, b)
 	}
-	if vars := variablesOf(t, admin, ts, strand); !strings.Contains(vars, `"commandId"`) || !strings.Contains(vars, `"r-1"`) {
+	if vars := variablesOf(t, admin, ts, strand); !strings.Contains(vars, `"commandId"`) || !strings.Contains(vars, `"c-1"`) {
 		t.Fatalf("the strand was not told which command it carries: %s", vars)
 	}
 
-	outcome := "/api/v1/orders/" + ord + "/lines/tool/actions/r-1/outcome"
+	outcome := "/api/v1/orders/" + ord + "/lines/tool/actions/c-1/outcome"
 	code, body := cReq(t, admin, ts, "POST", outcome, `{"outcome":"completed","result":{"ticket":"INC-1","minutes":3}}`)
 	var got struct {
 		EventType string         `json:"eventType"`
@@ -52,9 +53,9 @@ func TestAnActionsEndingIsAFact(t *testing.T) {
 		Replayed  bool           `json:"replayed"`
 		Result    map[string]any `json:"result"`
 	}
-	if code != http.StatusOK || json.Unmarshal(body, &got) != nil || got.EventType != "tool.reset.completed" ||
-		got.Action != "password-reset" || got.Source != "atlas:rest" || got.Replayed || got.Result["ticket"] != "INC-1" {
-		t.Fatalf("report: %d (%s), want recorded as tool.reset.completed", code, body)
+	if code != http.StatusOK || json.Unmarshal(body, &got) != nil || got.EventType != "tool.change.completed" ||
+		got.Action != "change" || got.Source != "atlas:rest" || got.Replayed || got.Result["ticket"] != "INC-1" {
+		t.Fatalf("report: %d (%s), want recorded as tool.change.completed", code, body)
 	}
 	code, body = cReq(t, admin, ts, "POST", outcome, `{"outcome":"completed"}`)
 	if code != http.StatusOK || !strings.Contains(string(body), `"replayed":true`) || !strings.Contains(string(body), "INC-1") {
@@ -65,8 +66,8 @@ func TestAnActionsEndingIsAFact(t *testing.T) {
 	}
 
 	code, outcomes, body2 := outcomesOf(t, rita, ts, ord, "tool")
-	if code != http.StatusOK || outcomes["r-1"]["outcome"] != "completed" {
-		t.Fatalf("rita reads: %d (%s), want the reset completed", code, body2)
+	if code != http.StatusOK || outcomes["c-1"]["outcome"] != "completed" {
+		t.Fatalf("rita reads: %d (%s), want the change completed", code, body2)
 	}
 	if p := outcomes["order:"+ord+":tool:provision:1"]; p == nil || p["outcome"] != "completed" ||
 		p["eventType"] != "tool.provision.completed" || p["source"] != "atlas:order" {
@@ -80,11 +81,11 @@ func TestAnActionsEndingIsAFact(t *testing.T) {
 // through the line's own route, which records the right they change.
 func TestAnOutcomeReportIsCheckedBeforeItIsWritten(t *testing.T) {
 	ts, admin, rita, _, ord, _ := aToolHeldForRita(t, `["customer","operator"]`)
-	if code, b := cReq(t, rita, ts, "POST", "/api/v1/orders/"+ord+"/lines/tool/actions/password-reset",
-		`{"commandId":"r-1"}`); code != http.StatusOK {
+	if code, b := cReq(t, rita, ts, "POST", "/api/v1/orders/"+ord+"/lines/tool/actions/change",
+		`{"commandId":"c-1","variables":{"size":"L"}}`); code != http.StatusOK {
 		t.Fatalf("ask: %d (%s)", code, b)
 	}
-	outcome := "/api/v1/orders/" + ord + "/lines/tool/actions/r-1/outcome"
+	outcome := "/api/v1/orders/" + ord + "/lines/tool/actions/c-1/outcome"
 	if code, b := cReq(t, rita, ts, "POST", outcome, `{"outcome":"completed"}`); code != http.StatusForbidden {
 		t.Fatalf("the holder reports: %d (%s), want 403", code, b)
 	}
@@ -106,7 +107,7 @@ func TestAnOutcomeReportIsCheckedBeforeItIsWritten(t *testing.T) {
 		`{"outcome":"failed"}`); code != http.StatusConflict || !strings.Contains(string(b), "reported through") {
 		t.Fatalf("the provision through this route: %d (%s), want 409", code, b)
 	}
-	if _, outcomes, body := outcomesOf(t, admin, ts, ord, "tool"); outcomes["r-1"] != nil {
+	if _, outcomes, body := outcomesOf(t, admin, ts, ord, "tool"); outcomes["c-1"] != nil {
 		t.Fatalf("a refused report was written: %s", body)
 	}
 }
@@ -125,5 +126,30 @@ func TestAReturnEndsBesideItsRevocation(t *testing.T) {
 	ret := outcomes["order:"+ord+":tool:deprovision:1"]
 	if ret == nil || ret["outcome"] != "completed" || ret["action"] != "deprovision" || ret["eventType"] != "tool.deprovision.completed" {
 		t.Fatalf("the return's ending = %v (%s), want completed beside the revocation", ret, body)
+	}
+}
+
+// TestAShopTaskStatesHowTheActionEnded: the strand's shop send task states the
+// reset completed as soon as the reset ran — no REST call and no credential in the
+// model — under the instance that carried it out; a REST report of a different
+// ending afterwards is refused, because an action ends once.
+func TestAShopTaskStatesHowTheActionEnded(t *testing.T) {
+	ts, admin, rita, _, ord, strand := aToolHeldForRita(t, `["customer","operator"]`)
+	if code, b := cReq(t, rita, ts, "POST", "/api/v1/orders/"+ord+"/lines/tool/actions/password-reset",
+		`{"commandId":"r-1","reason":"locked out"}`); code != http.StatusOK {
+		t.Fatalf("ask: %d (%s)", code, b)
+	}
+	_, outcomes, body := outcomesOf(t, rita, ts, ord, "tool")
+	r := outcomes["r-1"]
+	if r == nil || r["outcome"] != "completed" || r["source"] != "atlas:shop" || r["eventType"] != "tool.reset.completed" ||
+		uint64(r["instanceKey"].(float64)) != strand {
+		t.Fatalf("the shop task's statement = %v (%s), want completed from the strand", r, body)
+	}
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/orders/"+ord+"/lines/tool/actions/r-1/outcome",
+		`{"outcome":"failed"}`); code != http.StatusConflict {
+		t.Fatalf("a REST report contradicting the shop task: %d (%s), want 409", code, b)
+	}
+	if code, offered, body := actionsOf(t, rita, ts, ord); code != http.StatusOK || !offered["password-reset"].Available {
+		t.Fatalf("after the shop task: %d (%s), want the strand waiting again", code, body)
 	}
 }

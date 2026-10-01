@@ -108,6 +108,8 @@ var releasedKinds = []releasedKind{
 	{JobType: compiler.AgentJobType, ADR: 117, Class: classConnector},
 	{JobType: compiler.AiTaskJobType, ADR: 256, Class: classConnector},
 	{JobType: compiler.DiscordJobType, ADR: 258, Class: classConnector},
+	{JobType: compiler.ShopJobType, ADR: 429, Class: classEngine,
+		Why: "the order's own send task: it states how a product action ended to the order and the engine, so there is no system to configure and nothing to publish"},
 }
 
 // packagesOwed is how many released connector kinds have no Repository package right

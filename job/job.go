@@ -59,6 +59,10 @@ type Completion struct {
 	// the loop and completes the container, which is why the zero value is an ending
 	// rather than an error.
 	ToolCalls []model.ToolCall
+	// Outcome is how a product action ended, stated by a shop send task (ADR-0429
+	// §4). It rides the completion so the engine appends it in the batch that
+	// completes the job: the handler runs off the loop and must not write it itself.
+	Outcome *model.ActionOutcomeValue
 }
 
 // CompletingHandler does a job's work and returns its full Completion — outputs
@@ -77,6 +81,7 @@ type Engine interface {
 	CompleteJob(jobKey uint64, outputs ...model.VariableValue)
 	CompleteJobWithDecision(jobKey uint64, decision *model.DecisionEvaluationValue, outputs ...model.VariableValue)
 	CompleteJobWithToolCalls(jobKey uint64, toolCalls []model.ToolCall, outputs ...model.VariableValue)
+	CompleteJobWithOutcome(jobKey uint64, outcome model.ActionOutcomeValue, outputs ...model.VariableValue)
 	FailJob(jobKey uint64, retries int32, message string, backoff int64)
 }
 
@@ -514,6 +519,12 @@ func (r *Runner) Submit(outcomes []Outcome) {
 			// it is the agent finishing, and the ordinary path below completes the
 			// container for it.
 			r.engine.CompleteJobWithToolCalls(o.Job.Key, o.Completion.ToolCalls, o.Completion.Outputs...)
+			continue
+		}
+		if o.Completion.Outcome != nil {
+			// A shop send task's statement of how an action ended (ADR-0429 §4): the
+			// engine appends it with the completion, in one batch.
+			r.engine.CompleteJobWithOutcome(o.Job.Key, *o.Completion.Outcome, o.Completion.Outputs...)
 			continue
 		}
 		r.engine.CompleteJobWithDecision(o.Job.Key, o.Completion.Decision, o.Completion.Outputs...)

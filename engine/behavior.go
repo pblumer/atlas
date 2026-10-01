@@ -930,6 +930,14 @@ func handleJobCompleted(c *ProcessingContext) {
 		c.AppendDecisionEvaluationEvent(dv)
 	}
 
+	// A shop send task states how an action ended (ADR-0429 §4); the outcome rides
+	// the completion and is appended here, in the same batch, stamped with the
+	// instance that carried the action out.
+	if o := c.cmd.Value.actionOutcome; o.Valid() {
+		o.InstanceKey = job.ProcessInstanceKey
+		appendActionOutcome(c, o)
+	}
+
 	// An operator forced this completion rather than a worker reporting real work
 	// (ADR-0159). Freeze who did it and why into append-only audit history, alongside
 	// the completion events themselves, so the timeline can mark the step as manual and

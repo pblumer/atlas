@@ -73,6 +73,21 @@ func (p *Processor) RevokeEntitlementWithOutcome(principal, itemID string, at in
 	})
 }
 
+// CompleteJobWithOutcome completes a shop send task's job carrying how the action
+// its instance carries ended (ADR-0429 §4). The handler that produced it runs off the
+// loop, so it does not write the outcome; handleJobCompleted appends it in the batch
+// that completes the job, so the step and the fact commit together (I2). An outcome
+// the command already has with a different ending is not written: the first stands.
+func (p *Processor) CompleteJobWithOutcome(jobKey uint64, outcome model.ActionOutcomeValue, outputs ...model.VariableValue) {
+	p.queue = append(p.queue, Command{
+		Key:       jobKey,
+		ValueType: model.VTJob,
+		Intent:    model.IntentJobCompleted,
+		StartVars: outputs,
+		Value:     inflightValue{actionOutcome: outcome},
+	})
+}
+
 func handleActionReporting(c *ProcessingContext) {
 	res := c.cmd.Reported
 	answer, recorded := appendActionOutcome(c, c.cmd.Value.actionOutcome)

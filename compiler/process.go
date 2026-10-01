@@ -627,7 +627,15 @@ type ConnectorTaskDetail struct {
 	// is read only by the in-process user-provisioning worker, which the runner
 	// dispatches by the user job type alone. There is no Worker and no credential:
 	// the worker mutates the internal user store directly, gated to the system project.
-	UserOp          int32
+	UserOp int32
+	// Shop send task fields (JobType == ShopJobType, ADR-0429 §4). ShopMode is what the
+	// task does ("outcome": state how the command this instance carries ended);
+	// ShopAction the product action's key and ShopOutcome the ending it states. All
+	// three are literals fixed at deploy (I5): the publish check reads them to know
+	// that every action is answered, which a value computed at runtime would hide.
+	ShopMode        string
+	ShopAction      string
+	ShopOutcome     string
 	UserName        RestExpr
 	UserEmail       RestExpr
 	UserDisplayName RestExpr

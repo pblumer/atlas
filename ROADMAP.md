@@ -2052,8 +2052,10 @@ actions with closed effects, each a command whose outcome is a fact published be
     grant or revocation it accompanies; every act seeds `commandId`; the outcome route
     (`POST …/actions/{commandId}/outcome`) and the read route (`GET …/outcomes`, MCP
     `atlas_order_line_outcomes`).
-  - 🔲 C2: the `shop` send task in mode `outcome`, and the publish check that every action
-    is answered.
+  - ✅ C2: the `shop` send task in mode `outcome` (`<atlas:shopTask>`, the in-process job
+    type `io.atlas.shop`), which states how the command its instance carries ended in the
+    command that completes its job; the publish check that every change and service action
+    is answered `completed`; the **Shop** kind in the modeler's send-task picker.
   - 🔲 C3: mode `command`, limited to operator and system actions by the product's
     allow-list.
 - 🔲 **Slice D — product actions and shop badges in the modeler**, with the picker grouped

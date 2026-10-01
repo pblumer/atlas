@@ -286,6 +286,18 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   asks the server once, and a listing that fails leaves the picker as it was. Drives the
   real `mountEditor` against a mock `api` serving `GET /api/v1/message-sources`.
 
+- **`modeler-shop-send-task.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
+  the **Shop kind of a send task**. Choosing it writes
+  `<atlas:shopTask mode="outcome" action="…" outcome="…"/>` and nothing else — a message
+  send loses its `messageRef`, a job-worker send its task definition — because that element
+  is the whole contract the compiler parses; a send task drawn fresh in a model that
+  declared no atlas namespace exports with it declared. A shop task read from the model
+  shows its action and outcome, offers the one mode there is and no loop, and survives the
+  round trip unchanged; choosing the message kind or a Worker Type takes it off again. An
+  action key no catalogue could declare is flagged while it is typed and again when the
+  task is reopened, and is saved as typed rather than reverted. Drives the real
+  `mountEditor` against a mock `api`, asserting on the exported XML.
+
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
 
 ## Rendering a conformance gallery diagram

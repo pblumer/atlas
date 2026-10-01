@@ -390,6 +390,33 @@ own OpenAPI description (ADR-0300). It passes ADR-0299's gates no better — its
 "call this endpoint" — and gives neither the publish check nor the credential-free path.
 The outcome route of §3 stays for processes that report over REST today.
 
+*As built — slice C2.* The `outcome` mode. A send task carrying
+`<atlas:shopTask mode="outcome" action="…" outcome="…"/>` in its extension elements
+compiles (`compiler/shoptask.go`) to the reserved job type `io.atlas.shop` (index 30),
+listed in `engineOnlyJobTypes` and in the released-kinds registry; the action key and the
+outcome are literals checked at deploy, and a service task carrying the declaration is
+refused, because the shop's statement is a send. The server serves the job type in-process
+(`api/shoptask.go`): the handler reads `orderId`, `positionId` and `commandId` from the
+instance's scope, the order from the order store, and checks that the position took that
+command for that action. It checks the act's trigger receipt first, because the receipt is
+written in the batch that delivered or started the command, while the order notes the
+command only after the delivery returns, and a task the command leads to can run in that
+delivery. A provision or a return is refused there: those keep the line's report route,
+which records the right they change. The handler changes nothing itself — it may run off the
+loop — and returns the outcome on the job's completion (`job.Completion.Outcome`), which the
+engine appends in the command that completes the job (`CompleteJobWithOutcome`), stamped
+with the instance that ran it. A second ending for the same command completes the task and
+leaves the first ending standing. Publishing a catalogue reads the process's shop tasks
+(`ShopOutcomePoints`) for every product that declares actions and refuses one that answers
+an action the product does not declare, one that answers the provision or the return, and
+one with a change or service action no task answers `completed`. A product that still
+carries the operation map, and the provision and return, are not held to it. The modeler
+offers the kind as **Shop** in the send task's kind picker (`api/web/editor.js`, the
+`atlas:ShopTask` type in `atlas-moddle.json`): the action is typed as its key and checked
+for its shape as it is typed, the outcome is picked from the closed list, and choosing the
+kind clears the message and any Worker it replaces. Picking the action from the product's
+declared actions, and a badge on the canvas, are slice D.
+
 ### 5. The feed: what leaves Atlas
 
 **The public contract is a CloudEvents 1.0 envelope** in structured JSON, as ADR-0176 §2

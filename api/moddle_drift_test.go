@@ -367,6 +367,85 @@ func TestModdleKnowsEveryConnectorAttribute(t *testing.T) {
 	}
 }
 
+// shopTaskAttrs is the whole of <atlas:shopTask>, the shop send task's declaration
+// (ADR-0429 §4), in the order the Modeler writes them:
+//
+//	<atlas:shopTask mode="outcome" action="password-reset" outcome="completed" />
+//
+// It is a contract with the compiler, which reads exactly these three and nothing else.
+var shopTaskAttrs = []string{"mode", "action", "outcome"}
+
+// TestModdleDeclaresTheShopTaskContract pins the Modeler's half of that contract. Every
+// guard above finds an extension by the Connector suffix of the compiler's tag, and the
+// shop task is not a Worker, so it escapes all of them — and a drift here loses data in
+// both directions without a sound. An attribute the moddle lacks is dropped from the
+// model on the first Save; one it has beyond the three is written into models the
+// compiler never reads, which looks configured and is not. Without the panel naming the
+// type, nothing writes the element at all.
+//
+// The type is send-only: the moddle allows it in a send task, and the service-task
+// catalog must not offer it, because a service task cannot carry it.
+func TestModdleDeclaresTheShopTaskContract(t *testing.T) {
+	raw, err := os.ReadFile("web/atlas-moddle.json")
+	if err != nil {
+		t.Fatalf("read atlas-moddle.json: %v", err)
+	}
+	var moddle struct {
+		Types []struct {
+			Name string `json:"name"`
+			Meta struct {
+				AllowedIn []string `json:"allowedIn"`
+			} `json:"meta"`
+			Properties []struct {
+				Name   string `json:"name"`
+				Type   string `json:"type"`
+				IsAttr bool   `json:"isAttr"`
+			} `json:"properties"`
+		} `json:"types"`
+	}
+	if err := json.Unmarshal(raw, &moddle); err != nil {
+		t.Fatalf("decode atlas-moddle.json: %v", err)
+	}
+
+	found := false
+	for _, ty := range moddle.Types {
+		if ty.Name != "ShopTask" {
+			continue
+		}
+		found = true
+		if strings.Join(ty.Meta.AllowedIn, ",") != "bpmn:SendTask" {
+			t.Errorf("ShopTask is allowed in %v; it belongs on a send task and nowhere else", ty.Meta.AllowedIn)
+		}
+		var got []string
+		for _, p := range ty.Properties {
+			got = append(got, p.Name)
+			if p.Type != "String" || !p.IsAttr {
+				t.Errorf("ShopTask's %q is declared as type %q, isAttr %v; the contract has it as a string attribute",
+					p.Name, p.Type, p.IsAttr)
+			}
+		}
+		if strings.Join(got, ",") != strings.Join(shopTaskAttrs, ",") {
+			t.Errorf("ShopTask declares the attributes %v; the contract is exactly %v\n\n"+
+				"bpmn-js drops an attribute the moddle does not declare, and writes one the compiler does not read.",
+				got, shopTaskAttrs)
+		}
+	}
+	if !found {
+		t.Fatal("atlas-moddle.json declares no ShopTask type, so <atlas:shopTask> cannot round-trip through the Modeler")
+	}
+
+	editor, err := os.ReadFile("web/editor.js")
+	if err != nil {
+		t.Fatalf("read editor.js: %v", err)
+	}
+	if !strings.Contains(string(editor), `"atlas:ShopTask"`) {
+		t.Error("api/web/editor.js never names atlas:ShopTask, so no send task can be given the Shop kind")
+	}
+	if strings.Contains(serviceTaskKindsSource(t), `"atlas:ShopTask"`) {
+		t.Error("SERVICE_TASK_KINDS offers atlas:ShopTask; the shop kind is a send task's alone (ADR-0429 §4)")
+	}
+}
+
 // bpmnOwnProcessAttrs are the <bpmn:process> attributes the BPMN moddle itself
 // declares, so bpmn-js round-trips them without anything from our package. Every
 // other attribute compiler/parse.go reads off a process is ours and has to be

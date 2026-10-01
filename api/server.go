@@ -1937,6 +1937,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// the worker resolves at call time (resolveConnectorSecret, ADR-0041). One worker
 	// serves every process under the reserved AD job type; each job dials, binds,
 	// operates, and closes.
+	// A shop send task states how a product action ended (ADR-0429 §4). It is the
+	// server's own: it reads the order and hands the outcome back on the completion,
+	// which the engine appends in the batch that completes the job.
+	s.jobRunner.HandleCompleting(compiler.ShopJobTypeIndex, func(rd state.Reader) job.CompletingHandler {
+		return s.shopTaskHandler(rd)
+	})
 	s.jobRunner.HandleWithOutput(compiler.AdJobTypeIndex, func(rd state.Reader) job.OutputHandler {
 		// No directory registry in-process: a task naming a Console-configured
 		// directory is served by the worker that holds it (ADR-0164/0168), and this

@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
@@ -141,5 +142,65 @@ func TestAGrantCarriesTheOutcomeOfItsProvision(t *testing.T) {
 	}
 	if _, ok := outcomeIn(t, h.store, "ord_2", "vpn", nobody.CommandID); ok {
 		t.Fatal("a grant refused for naming nobody still wrote its outcome")
+	}
+}
+
+// twoJobs deploys start → two service tasks one after the other → end.
+func twoJobs(t *testing.T, h *harness) (*engine.Processor, int32) {
+	t.Helper()
+	b := compiler.NewBuilder(5, "shop", 1)
+	s := b.AddStartEvent()
+	first := b.AddServiceTask("io.atlas.shop", 1)
+	second := b.AddServiceTask("io.atlas.shop", 1)
+	b.Connect(s, first)
+	b.Connect(first, second)
+	b.Connect(second, b.AddEndEvent())
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	return p, cp.ServiceTask(cp.Node(first).Detail).JobType
+}
+
+// TestAJobCompletionCarriesTheOutcomeItStates: a shop send task's job completes
+// carrying how the action ended, and the engine writes the outcome in the batch that
+// completes the job, stamped with the instance that carried it out. A second task
+// stating a different ending for the same command completes, and the first ending
+// stands.
+func TestAJobCompletionCarriesTheOutcomeItStates(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	p, jobType := twoJobs(t, h)
+	var pi uint64
+	p.CreateInstanceReporting(5, &pi)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	stated := resetOutcome("completed")
+	stated.InstanceKey = 0
+	p.CompleteJobWithOutcome(singleActivatableJob(t, h.store, jobType), stated)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	got, ok := outcomeIn(t, h.store, "ord_1", "mailbox", "cmd-1")
+	if !ok || got.Outcome != "completed" || got.InstanceKey != pi {
+		t.Fatalf("outcome = %+v (%v), want completed from instance %d", got, ok, pi)
+	}
+
+	p.CompleteJobWithOutcome(singleActivatableJob(t, h.store, jobType), resetOutcome("failed"))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if got, _ := outcomeIn(t, h.store, "ord_1", "mailbox", "cmd-1"); got.Outcome != "completed" {
+		t.Fatalf("a second ending replaced the first: %+v", got)
+	}
+	if active(t, h, pi) {
+		t.Fatal("the instance did not complete past both tasks")
 	}
 }

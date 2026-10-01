@@ -16,10 +16,11 @@ import (
 // propagation can be exercised without a real processor fault.
 type errEngine struct{ err error }
 
-func (e errEngine) RunUntilIdle() error                                                       { return e.err }
-func (e errEngine) ActivateJob(uint64, string, int64)                                         {}
-func (e errEngine) CompleteJob(uint64, ...model.VariableValue)                                {}
-func (e errEngine) CompleteJobWithToolCalls(uint64, []model.ToolCall, ...model.VariableValue) {}
+func (e errEngine) RunUntilIdle() error                                                             { return e.err }
+func (e errEngine) ActivateJob(uint64, string, int64)                                               {}
+func (e errEngine) CompleteJob(uint64, ...model.VariableValue)                                      {}
+func (e errEngine) CompleteJobWithToolCalls(uint64, []model.ToolCall, ...model.VariableValue)       {}
+func (e errEngine) CompleteJobWithOutcome(uint64, model.ActionOutcomeValue, ...model.VariableValue) {}
 
 func (e errEngine) CompleteJobWithDecision(uint64, *model.DecisionEvaluationValue, ...model.VariableValue) {
 }

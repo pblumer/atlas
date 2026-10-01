@@ -191,6 +191,22 @@ type WatchLookup interface {
 	WatchedMessages() map[string]bool
 }
 
+// ShopLookup answers which shop send tasks the newest deployed version of a process
+// has and what each states (ADR-0429 §4). A lookup that implements it lets
+// [LifecycleProblems] refuse a product whose process never answers one of its actions
+// — the one check an arbitrary REST call cannot be held to, because it is not
+// recognisable as a report.
+type ShopLookup interface {
+	ShopOutcomes(processID string) []ShopOutcome
+}
+
+// ShopOutcome is one shop send task: the action it answers and the ending it states.
+type ShopOutcome struct {
+	Element string
+	Action  string
+	Outcome string
+}
+
 // CatchPoint is one element of a process that waits for a message.
 type CatchPoint struct {
 	Element    string
@@ -245,6 +261,9 @@ func LifecycleProblems(items []Item, look EntryPointLookup) []Problem {
 		}
 		if it.PerPosition() {
 			out = append(out, perPositionProblems(it, look)...)
+		}
+		if shop, ok := look.(ShopLookup); ok {
+			out = append(out, shopProblems(it, shop.ShopOutcomes(it.LifecycleProcess))...)
 		}
 		if hasNone {
 			out = append(out, Problem{Item: it.ID, Message: "lifecycle process " +
@@ -315,6 +334,47 @@ func copyOperations(in map[string]string) map[string]string {
 	out := make(map[string]string, len(in))
 	for k, v := range in {
 		out[k] = v
+	}
+	return out
+}
+
+// shopProblems holds the product to what its process states (ADR-0429 §4): every
+// change or service it declares is answered with `completed` by a shop send task,
+// and no shop task names an action the product does not declare, or the provision or
+// the return, which are reported through the line's own route. Only a product that
+// declares its actions is held to it: one that still carries the operation map was
+// published before the shop task existed, and refusing it now would refuse a
+// catalogue nobody changed.
+func shopProblems(it Item, points []ShopOutcome) []Problem {
+	if len(it.Actions) == 0 {
+		return nil
+	}
+	declared := map[string]Action{}
+	for _, a := range it.Actions {
+		declared[a.Key] = a
+	}
+	completed := map[string]bool{}
+	var out []Problem
+	for _, p := range points {
+		a, ok := declared[p.Action]
+		switch {
+		case !ok:
+			out = append(out, Problem{Item: it.ID, Message: "shop task " + p.Element + " of " +
+				it.LifecycleProcess + " answers action " + p.Action + ", which the product does not declare"})
+		case !deliveredToStrand(a.Effect):
+			out = append(out, Problem{Item: it.ID, Message: "shop task " + p.Element + " answers the " +
+				a.Effect + "; the " + a.Effect + " is reported through the line's own route, which " +
+				"records the right it changes"})
+		case p.Outcome == OutcomeCompleted:
+			completed[p.Action] = true
+		}
+	}
+	for _, a := range it.Actions {
+		if deliveredToStrand(a.Effect) && !completed[a.Key] {
+			out = append(out, Problem{Item: it.ID, Message: "action " + a.Key + " is never answered: " +
+				it.LifecycleProcess + " has no shop task stating it completed, so a command for it " +
+				"would stay open"})
+		}
 	}
 	return out
 }

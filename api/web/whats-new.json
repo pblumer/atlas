@@ -2,6 +2,28 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "a-product-s-process-states-how-an-action-ended-without-calli",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Processes report how an action ended with a Shop task",
+        "de": "Prozesse melden mit einer Shop-Aufgabe, wie eine Aktion endete"
+      },
+      "summary": {
+        "en": "A send task can now be of the kind Shop: choose the action and the outcome — completed, rejected or failed — and the task records that ending for the request its process is handling. It needs no token and no address, because it runs inside Atlas and finds the order and the request in the process itself. When the process took a path that does not fit the action, the task stops with an incident instead of reporting the wrong thing. Publishing a catalogue now checks that every change and service a product offers has a task that reports it completed.",
+        "de": "Eine Sendeaufgabe kann jetzt von der Art Shop sein: Aktion und Ergebnis wählen – abgeschlossen, abgelehnt oder fehlgeschlagen –, und die Aufgabe hält dieses Ende für die Anfrage fest, die ihr Prozess bearbeitet. Sie braucht weder Token noch Adresse, weil sie in Atlas läuft und Bestellung und Anfrage im Prozess selbst findet. Hat der Prozess einen Weg genommen, der nicht zur Aktion passt, hält die Aufgabe mit einem Vorfall an, statt das Falsche zu melden. Beim Veröffentlichen eines Katalogs wird jetzt geprüft, dass jede Änderung und jede Dienstleistung eines Produkts eine Aufgabe hat, die sie als abgeschlossen meldet."
+      },
+      "link": {
+        "label": "ADR-0429",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
+      },
+      "tags": [
+        "Service catalogue",
+        "Modeler"
+      ]
+    },
+    {
       "id": "how-an-action-ended-is-a-fact",
       "version": "Unreleased",
       "date": null,
@@ -251,6 +273,27 @@
       ]
     },
     {
+      "id": "a-task-the-server-works-itself-no-longer-trips-a-worker-brea",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Built-in tasks no longer pause their whole kind",
+        "de": "Eingebaute Aufgaben halten nicht mehr ihre ganze Art an"
+      },
+      "summary": {
+        "en": "When a connected system stops answering, Atlas holds that worker's tasks back until it answers again. Tasks Atlas carries out itself — creating a user, a shop task — were counted too, although they call no system: three of them refused for their own data paused all others of the same kind. Now such a refusal stays an incident on its own instance, and the rest keep running.",
+        "de": "Antwortet ein angebundenes System nicht mehr, hält Atlas die Aufgaben dieses Workers zurück, bis es wieder antwortet. Aufgaben, die Atlas selbst ausführt – einen Benutzer anlegen, eine Shop-Aufgabe –, wurden mitgezählt, obwohl sie kein System aufrufen: Drei wegen ihrer eigenen Daten abgelehnte Aufgaben hielten alle anderen derselben Art an. Jetzt bleibt eine solche Ablehnung ein Vorfall auf ihrer eigenen Instanz, und die übrigen laufen weiter."
+      },
+      "link": {
+        "label": "ADR-0340",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0340-worker-circuit-breaker.md"
+      },
+      "tags": [
+        "Operations"
+      ]
+    },
+    {
       "id": "a-reconciliation-no-longer-reports-a-right-as-unmanaged-when",
       "version": "Unreleased",
       "date": null,
@@ -269,50 +312,6 @@
       },
       "tags": [
         "Service catalogue",
-        "Operations"
-      ]
-    },
-    {
-      "id": "an-ai-task-s-prompt-sees-the-plaintext-of-a-personal-value",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "An AI task's prompt sees personal values in plain text",
-        "de": "Der Prompt einer KI-Aufgabe sieht Personendaten im Klartext"
-      },
-      "summary": {
-        "en": "A prompt such as =\"Hello \" + firstName reached the model empty when firstName was declared personal: it was the one worker expression evaluated over the encrypted stored value instead of its plaintext. It is now read the way every other worker's expressions are.",
-        "de": "Ein Prompt wie =\"Hallo \" + vorname kam beim Modell leer an, wenn vorname als Personendatum deklariert war: Er war der einzige Worker-Ausdruck, der über den verschlüsselt gespeicherten Wert statt über den Klartext ausgewertet wurde. Er wird jetzt so gelesen wie die Ausdrücke aller anderen Worker."
-      },
-      "link": {
-        "label": "ADR-0314",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0314-portal-personal-data.md"
-      },
-      "tags": [
-        "AI",
-        "Security"
-      ]
-    },
-    {
-      "id": "a-deploy-refused-for-its-job-types-no-longer-reappears-after",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A failed deploy no longer comes back after a restart",
-        "de": "Ein gescheitertes Deployment kehrt nach einem Neustart nicht mehr zurück"
-      },
-      "summary": {
-        "en": "A deploy that failed while registering the process's job types answered with an error but had already written its record, so after a restart the process was listed as deployed and its version number was used up. The job types are now registered first; when that fails, nothing is written.",
-        "de": "Ein Deployment, das beim Registrieren der Job-Typen des Prozesses scheiterte, meldete einen Fehler, hatte seinen Datensatz aber bereits geschrieben: Nach einem Neustart war der Prozess als deployt aufgeführt, und seine Versionsnummer war verbraucht. Die Job-Typen werden jetzt zuerst registriert; scheitert das, wird nichts geschrieben."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Deployment",
         "Operations"
       ]
     }
