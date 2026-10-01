@@ -468,7 +468,12 @@
       "properties": [
         { "name": "mode", "type": "String", "isAttr": true },
         { "name": "action", "type": "String", "isAttr": true },
-        { "name": "outcome", "type": "String", "isAttr": true }
+        { "name": "outcome", "type": "String", "isAttr": true },
+        { "name": "product", "type": "String", "isAttr": true },
+        { "name": "order", "type": "String", "isAttr": true },
+        { "name": "position", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
       ]
     },
     {

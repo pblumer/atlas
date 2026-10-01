@@ -4627,15 +4627,16 @@ const SEND_MESSAGE_KIND = {
 };
 
 // SEND_SHOP_KIND is the send task's Shop kind (ADR-0429 §4): the point where a product's
-// process states how the action it is carrying out ended. Like the Message kind it is not a
-// Worker Type — the server serves its job itself, so there is no Worker to name and no
-// credential to hold — and a service task cannot carry it, so it too lives outside
-// SERVICE_TASK_KINDS and has its own fields (shopTaskFieldsHTML). Unlike the Message kind it
-// is declared rather than inferred: the <atlas:shopTask> extension is the whole of it, and
-// exactly what the compiler parses.
+// process states how the action it is carrying out ended, or where a process asks a held
+// position of a product for an action of its own. Like the Message kind it is not a Worker
+// Type — the server serves its job itself, so there is no Worker to name and no credential to
+// hold — and a service task cannot carry it, so it too lives outside SERVICE_TASK_KINDS and
+// has its own fields (shopTaskFieldsHTML). Unlike the Message kind it is declared rather than
+// inferred: the <atlas:shopTask> extension is the whole of it, and exactly what the compiler
+// parses.
 const SEND_SHOP_KIND = {
   id: "shop", name: "Shop", icon: "S", group: "Messaging & events",
-  desc: "Reports how a product action ended (ADR-0429).",
+  desc: "Reports how a product action ended, or asks a held position for one (ADR-0429).",
   glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#c2298a"/><path d="M4.2 6.2h7.6l-.6 6.3H4.8z" fill="#fff"/><path d="M6.3 6.2V5a1.7 1.7 0 0 1 3.4 0v1.2" fill="none" stroke="#fff" stroke-width="1.1"/></svg>`,
   ext: "atlas:ShopTask",
 };
@@ -4660,11 +4661,15 @@ const SHOP_OUTCOMES = [
 ];
 
 // SHOP_TASK_MODES are the modes a shop send task can be in (ADR-0429 §4), each with the
-// fields it carries beside `mode` itself, in the order they are written. Only `outcome` is
-// built. The second mode, `command`, issues an action of the process's own and declares the
-// product, the action and where the position comes from; it waits for the product's
-// allow-list of process applications (§10, decision 1), and it is one entry here when it
-// lands — the select, the fields and the save all read this list.
+// fields it carries beside `mode` itself, in the order the panel shows them. The select, the
+// fields and the save all read this list, and a save clears every field the chosen mode does
+// not carry: the compiler refuses a command that states an outcome, and the other mode's
+// leftovers would only look like configuration.
+//
+// A field marked fx holds a literal or an '=' expression, like the Worker Types' fx fields.
+// A command's order and position are such values because the instance computes them — a
+// leaver process finds them in the inventory — while its product and action are literals, so
+// the task names exactly one thing it may ask for (§10, decision 1).
 const SHOP_TASK_MODES = [
   {
     v: "outcome", l: "Outcome — report how the action ended",
@@ -4680,10 +4685,37 @@ const SHOP_TASK_MODES = [
       },
     ],
   },
+  {
+    v: "command", l: "Command — ask a held position for an action",
+    hint: "On reaching this send task the process asks a held position of the product for an operator or system action, or its return, in the name of this process's application. The product must name that application among those it is commanded by; the provision, and an action only a customer may ask for, are refused when the task runs. It names no Worker and carries no credential.",
+    fields: [
+      {
+        key: "product", label: "Product", placeholder: "mailbox",
+        hint: "The catalogue product whose held position is asked, by its id.",
+      },
+      {
+        key: "action", label: "Action", placeholder: "deprovision",
+        hint: "The key of the action to ask for, as the product declares it.",
+      },
+      {
+        key: "order", label: "Order", fx: true, placeholder: "= leaver.orderId",
+        hint: "The order that holds the position: a literal id, or a FEEL expression (fx) over the instance's variables.",
+      },
+      {
+        key: "position", label: "Position", fx: true, placeholder: "mailbox",
+        hint: "The position on that order, likewise a literal or a FEEL expression (fx).",
+      },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "commandId",
+        hint: "Receives the id of the command the action runs under. Leave empty to discard it.",
+      },
+    ],
+  },
 ];
 
 // shopTaskMode returns the mode entry a stored mode names, or the first one: an element
-// imported without a mode is read as the only mode there is rather than shown blank.
+// imported without a mode is read as an outcome, as the compiler reads it, rather than shown
+// blank.
 function shopTaskMode(v) {
   return SHOP_TASK_MODES.find((m) => m.v === v) || SHOP_TASK_MODES[0];
 }
@@ -4714,6 +4746,11 @@ function shopTaskFieldsHTML(bo) {
         return `<option value="${esc(v)}" ${v === value ? "selected" : ""}>${esc(l)}</option>`;
       }).join("");
       fields += `<label class="field"><span>${esc(f.label)}</span><select id="f-shop-${f.key}">${opts}</select></label>`;
+    } else if (f.fx) {
+      // A one-row textarea, as the Worker Types' fx fields are, so the fx toggle wired
+      // after render can host the FEEL editor in place.
+      fields += `<label class="field"><span>${esc(f.label)}</span>
+        <textarea id="f-shop-${f.key}" rows="1" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(value)}</textarea></label>`;
     } else {
       fields += `<label class="field"><span>${esc(f.label)}</span>
         <input type="text" id="f-shop-${f.key}" value="${esc(value)}" placeholder="${esc(f.placeholder || "")}" autocomplete="off" spellcheck="false"/></label>`;
@@ -4731,19 +4768,19 @@ function shopTaskFieldsHTML(bo) {
 }
 
 // sendTaskKind returns the kind a send task currently represents (ADR-0112). It is detected by
-// what the task carries: an <atlas:shopTask> → Shop; a messageRef → Message; a Worker Type
-// extension → that type; a taskDefinition → Job worker. With none of those, the send task is the
-// Message kind by default — so selecting Message (which clears the other kinds' extensions) keeps
-// the message picker visible until a message is chosen, and a fresh send task starts as a plain
-// message send. Without this default, the Message kind would be undetectable while messageRef is
-// still empty.
+// what the task carries: a messageRef → Message; an <atlas:shopTask> → Shop (ADR-0429); a
+// Worker Type extension → that type; a taskDefinition → Job worker. With none of those, the send
+// task is the Message kind by default — so selecting Message (which clears the other kinds'
+// extensions) keeps the message picker visible until a message is chosen, and a fresh send task
+// starts as a plain message send. Without this default, the Message kind would be undetectable
+// while messageRef is still empty.
 //
-// The shop task is asked first because it is a declaration: a model that also carries a
-// leftover messageRef still means the shop task, and showing it as a message would hide the one
-// thing the element states.
+// The order is the compiler's: a send task carrying both a messageRef and a shop task compiles
+// as a message send, so it is shown as one. The panel never writes both — choosing Shop clears
+// the messageRef — so only a hand-edited model can carry them together.
 function sendTaskKind(bo) {
-  if (findExt(bo, SEND_SHOP_KIND.ext)) return SEND_SHOP_KIND;
   if (bo && bo.messageRef) return SEND_MESSAGE_KIND;
+  if (findExt(bo, SEND_SHOP_KIND.ext)) return SEND_SHOP_KIND;
   for (const k of SERVICE_TASK_KINDS) {
     if (k.id !== "worker" && findExt(bo, k.ext)) return k;
   }
@@ -7153,11 +7190,15 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         html += sendTaskKindHTML(modeler, bo);
         // A message-kind send task is a throw, not an activity the engine can loop
         // (the compiler skips it), so the loop section is offered only for the
-        // job-backed kinds — matching what actually runs. A shop task is job-backed but
-        // reports the one outcome of the one command its instance carries out (ADR-0429
-        // §3); a second report of it changes nothing, so there is nothing to loop either.
-        const sendKind = sendTaskKind(bo).id;
-        if (sendKind !== "message" && sendKind !== SEND_SHOP_KIND.id) html += multiInstanceHTML(bo);
+        // job-backed kinds — matching what actually runs. A shop task is job-backed, and its
+        // mode decides the rest: an outcome is the one report of the one command its
+        // instance carries out (ADR-0429 §3), so a second report changes nothing and there
+        // is nothing to loop, while a command may well be asked once per position — a
+        // leaver process returning each right the leaver holds.
+        const sendKind = sendTaskKind(bo);
+        const reportsOutcome = sendKind === SEND_SHOP_KIND &&
+          shopTaskMode((findExt(bo, SEND_SHOP_KIND.ext) || {}).mode).v === "outcome";
+        if (sendKind.id !== "message" && !reportsOutcome) html += multiInstanceHTML(bo);
       } else if (isActivity(bo)) {
         const t = bo.$type;
         html += `
@@ -8091,14 +8132,28 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           // An empty field is written as no attribute rather than an empty one, so a
           // missing action reads as missing to the compiler and not as the key "".
           if (el) props[f.key] = (el.value || "").trim() || undefined;
+          // A select the newly chosen mode brings is not on screen yet. It starts on its
+          // first choice, as it does when the kind is chosen, so the model says what the
+          // re-rendered panel will show.
+          else if (f.type === "select") props[f.key] = selectOption(f.options[0]).v;
         }
         upsertExt(modeler, element, SEND_SHOP_KIND.ext, props);
       });
       // A mode decides which fields there are, so choosing one re-renders them.
       fshopmode.addEventListener("change", () => { saveShopTask(); show(element); });
-      for (const f of shopTaskMode(fshopmode.value).fields) {
+      // An fx field gets the same value-or-expression toggle as a Worker Type's: the
+      // textarea stays the value the save reads, '=' prefixed when it is an expression,
+      // which is what the compiler keys on.
+      const shopFields = shopTaskMode(fshopmode.value).fields;
+      const shopFx = shopFields.some((f) => f.fx) ? {
+        variables: variablesForCompletion(modeler, element),
+        validate: api ? (expression) => api("POST", "/api/v1/feel/validate", { expression }) : null,
+      } : null;
+      for (const f of shopFields) {
         const el = body.querySelector("#f-shop-" + f.key);
-        if (el) el.addEventListener("change", saveShopTask);
+        if (!el) continue;
+        el.addEventListener("change", saveShopTask);
+        if (f.fx) attachExpressionToggle(el, shopFx);
       }
       // The key's shape is said while it is typed rather than first at deploy. What was
       // typed is still saved on change: the text is the author's to correct, and a hint

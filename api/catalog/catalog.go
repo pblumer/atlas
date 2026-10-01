@@ -199,6 +199,18 @@ type Item struct {
 	// Operations or Actions, never both; one that still carries Operations is
 	// read as the actions they mean (ActionList), so nothing is migrated.
 	Actions []Action `json:"actions,omitempty"`
+	// CommandedBy names, by their portable keys (ADR-0134), the process applications
+	// whose processes may issue this product's actions with a shop command task
+	// (ADR-0429 §10, decision 1) — an HR leaver process returning a right, a
+	// maintenance process resetting a password. Only an action an operator or a
+	// system may ask for can be issued so. Empty, which is the default, means no
+	// process may command it.
+	//
+	// It is read from the newest release at the moment a task commands, not frozen
+	// on the order: it says which automation the operator trusts with what somebody
+	// holds, and taking an application off the list must stop it for every right
+	// already held, not only for the ones ordered afterwards.
+	CommandedBy []string `json:"commandedBy,omitempty"`
 	// MultipleAllowed says whether a principal may hold this item more than once —
 	// two licences, two mailboxes. Where it is false the basket marks an item the
 	// orderer already holds as held, and skips it.

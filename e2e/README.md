@@ -268,6 +268,17 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   Drives the real `viewCatalogDetail` through the editor harness, which lets a spec reshape
   a product before it mounts (`window.__patchItems`).
 
+- **`catalog-commanded-by.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md) §10):
+  **which process applications may command a product** in the catalogue editor. The
+  applications are offered by name and stored by their portable key, the stored ones
+  ticked; ticking and unticking is what the save sends, and unticking the last sends an
+  empty list rather than keeping the stored one, because a save replaces the product; a
+  key no application here carries keeps a ticked box and survives the save; a typed key
+  is sent without a blank or a repeat; a product without the field saves an empty list;
+  and when the applications cannot be read the field falls back to typed keys instead of
+  breaking the form. Drives the real `viewCatalogDetail` through the editor harness, which
+  serves the applications a spec sets (`window.__applications`, `null` for a failed read).
+
 - **`shop-actions.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
   the **actions on a held position** in the shop. A held position shows a button per action
   the server offers the reader, labelled in the reader's language, and one the position does
@@ -292,11 +303,17 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   send loses its `messageRef`, a job-worker send its task definition — because that element
   is the whole contract the compiler parses; a send task drawn fresh in a model that
   declared no atlas namespace exports with it declared. A shop task read from the model
-  shows its action and outcome, offers the one mode there is and no loop, and survives the
+  shows its action and outcome, offers both modes and no loop, and survives the
   round trip unchanged; choosing the message kind or a Worker Type takes it off again. An
   action key no catalogue could declare is flagged while it is typed and again when the
-  task is reopened, and is saved as typed rather than reverted. Drives the real
-  `mountEditor` against a mock `api`, asserting on the exported XML.
+  task is reopened, and is saved as typed rather than reverted. The **command mode**
+  writes `product`, `action`, `order`, `position` and `resultVariable` and no `outcome`,
+  which the compiler refuses on a command, and offers the loop an outcome does not;
+  switching back to an outcome clears those and starts the outcome on its first choice; an
+  `=` expression in the order is written verbatim and opens with fx on, and the fx switch
+  turns a literal position into one. A send task naming both a message and a shop task
+  shows as the message send the compiler runs it as. Drives the real `mountEditor`
+  against a mock `api`, asserting on the exported XML.
 
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
 

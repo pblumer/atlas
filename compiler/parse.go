@@ -2687,6 +2687,14 @@ type xmlShopTask struct {
 	Mode    string `xml:"mode,attr"`
 	Action  string `xml:"action,attr"`
 	Outcome string `xml:"outcome,attr"`
+	// Product, Order, Position and ResultVariable belong to mode `command`: the
+	// product whose action is issued, the order and the position it is issued on
+	// (each a literal or an =expression), and the variable that receives the
+	// command id.
+	Product        string `xml:"product,attr"`
+	Order          string `xml:"order,attr"`
+	Position       string `xml:"position,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
 	// Retries is the task's own retry budget (ADR-0135); blank means the default.
 	Retries string `xml:"retries,attr"`
 }

@@ -54,3 +54,46 @@ func TestACompletionThatStatesAnOutcomeIsRecordedWithIt(t *testing.T) {
 		t.Errorf("recorded against instance %d, want the one that ran the job, %d", got.InstanceKey, pi)
 	}
 }
+
+// TestAnOffLoopJobIsLeftForARoundOffTheLoop: a handler that waits on the run loop
+// would deadlock in a drive that holds it, so the in-process drive leaves its jobs
+// activatable and only a claim whose caller works off the loop hands them out.
+// Taking the handler away takes the mark with it.
+func TestAnOffLoopJobIsLeftForARoundOffTheLoop(t *testing.T) {
+	p, store, jobType, defKey := setup(t)
+	r := job.NewRunner(store, p)
+	worked := 0
+	r.HandleOffLoop(jobType, func(state.Reader) job.CompletingHandler {
+		return func(job.Job) (job.Completion, error) { worked++; return job.Completion{}, nil }
+	})
+	p.CreateInstance(defKey)
+	if err := r.Drive(); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	if worked != 0 {
+		t.Fatal("the drive on the loop worked a job whose handler waits on it")
+	}
+	jobs, err := r.Claim()
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("Claim = %d job(s), %v; want the job the drive left", len(jobs), err)
+	}
+	r.Submit(r.Work(jobs, store))
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if worked != 1 {
+		t.Fatalf("worked %d times, want once", worked)
+	}
+
+	r.Unhandle(jobType)
+	r.HandleCompleting(jobType, func(state.Reader) job.CompletingHandler {
+		return func(job.Job) (job.Completion, error) { worked++; return job.Completion{}, nil }
+	})
+	p.CreateInstance(defKey)
+	if err := r.Drive(); err != nil {
+		t.Fatalf("Drive: %v", err)
+	}
+	if worked != 2 {
+		t.Fatal("a type registered again without the mark was still left out of the drive")
+	}
+}

@@ -415,6 +415,19 @@ const ShopJobType = "io.atlas.shop"
 // compiled process: NewBuilder reserves it thirty-first, so it is always 30.
 const ShopJobTypeIndex int32 = 30
 
+// ShopCommandJobType is the reserved job type of a shop send task in mode `command`
+// (ADR-0429 §4, §10 decision 1): the point where a process issues an action on a
+// position it does not carry. It is a type of its own because its handler acts
+// through the order act, which waits on the run loop, so it may run only in a round
+// that works its jobs off the loop — never in the in-process drive a fork or a
+// migration runs on it.
+const ShopCommandJobType = "io.atlas.shop.command"
+
+// ShopCommandJobTypeIndex is the interned index ShopCommandJobType is guaranteed to
+// occupy in every compiled process: NewBuilder reserves it thirty-second, so it is
+// always 31.
+const ShopCommandJobTypeIndex int32 = 31
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -453,6 +466,7 @@ var reservedJobTypes = []string{
 	AiTaskJobType,        // 28
 	DiscordJobType,       // 29
 	ShopJobType,          // 30
+	ShopCommandJobType,   // 31
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i

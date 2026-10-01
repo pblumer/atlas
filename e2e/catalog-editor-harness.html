@@ -73,6 +73,11 @@
       // under without knowing about this at all.
       window.__unpublished = null;
 
+      // The process applications, which a product names when it lets their processes
+      // command it (ADR-0429 §10). A spec sets them before it mounts; null stands for
+      // a read that failed, which the form has to survive by asking for keys instead.
+      window.__applications = [];
+
       const api = async (method, url, body) => {
         window.__sent.push({ method, url, body });
         if (/\/catalogs$/.test(url)) return [CAT];
@@ -89,6 +94,10 @@
           { id: "u1", type: "user", name: "Die Eigentümerin" },
           { id: "u2", type: "user", name: "Der Vertreter" }];
         if (/\/users\/assignable$/.test(url)) return [{ username: "arno", name: "Arno" }];
+        if (/\/applications$/.test(url)) {
+          if (window.__applications === null) throw Object.assign(new Error("HTTP 500"), { status: 500 });
+          return window.__applications;
+        }
         return {};
       };
 

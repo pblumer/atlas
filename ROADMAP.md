@@ -2047,7 +2047,7 @@ actions with closed effects, each a command whose outcome is a fact published be
   is now refused instead of reported delivered.
 - 🔲 **The Console's surface for operator actions** — waits for an order view the Console
   does not have; operators use the route until then.
-- 🚧 **Slice C — the outcome fact and the shop send task.**
+- ✅ **Slice C — the outcome fact and the shop send task.**
   - ✅ C1: `VTActionOutcome`, idempotent per command and written in one command with the
     grant or revocation it accompanies; every act seeds `commandId`; the outcome route
     (`POST …/actions/{commandId}/outcome`) and the read route (`GET …/outcomes`, MCP
@@ -2056,8 +2056,11 @@ actions with closed effects, each a command whose outcome is a fact published be
     type `io.atlas.shop`), which states how the command its instance carries ended in the
     command that completes its job; the publish check that every change and service action
     is answered `completed`; the **Shop** kind in the modeler's send-task picker.
-  - 🔲 C3: mode `command`, limited to operator and system actions by the product's
-    allow-list.
+  - ✅ C3: mode `command` (`io.atlas.shop.command`): a process asks a held position for an
+    operator or system action, or its return, in the name of an application the product's
+    `commandedBy` lists — read from the newest release, so removing one stops it for every
+    right already held; the list on the product in the Console, HTTP and MCP; the command
+    mode in the modeler's Shop kind.
 - 🔲 **Slice D — product actions and shop badges in the modeler**, with the picker grouped
   by `sourceKind`.
 - 🔲 **Slice E — the CloudEvents feed.** `GET /api/v1/events?after=`, kept 30 days.

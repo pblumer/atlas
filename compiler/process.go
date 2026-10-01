@@ -633,9 +633,17 @@ type ConnectorTaskDetail struct {
 	// ShopAction the product action's key and ShopOutcome the ending it states. All
 	// three are literals fixed at deploy (I5): the publish check reads them to know
 	// that every action is answered, which a value computed at runtime would hide.
-	ShopMode        string
-	ShopAction      string
-	ShopOutcome     string
+	ShopMode    string
+	ShopAction  string
+	ShopOutcome string
+	// ShopProduct, ShopOrder and ShopPosition say which position a `command` task
+	// acts on: the product is a literal fixed at deploy, the order and the position
+	// literal-or-FEEL values evaluated over the instance's variables when the task
+	// runs. ShopResultVar, when set, receives the command id the act was asked under.
+	ShopProduct     string
+	ShopOrder       RestExpr
+	ShopPosition    RestExpr
+	ShopResultVar   string
 	UserName        RestExpr
 	UserEmail       RestExpr
 	UserDisplayName RestExpr

@@ -156,6 +156,12 @@ func catalogItemProps() map[string]any {
 			"newest deployed version: a message start in the per-operation form; in the per-position form " +
 			"a correlated catch for change and service, a catch and a start for deprovision. A message an " +
 			"inbound watch publishes is refused. Send either operations or actions, never both."),
+		"commandedBy": arrayProp("The keys of the process applications whose processes may issue this " +
+			"product's actions with a shop command task (<atlas:shopTask mode=\"command\">), e.g. " +
+			"[\"hr-leavers\"]. Only an action whose triggers include \"operator\" or \"system\" can be " +
+			"issued so, never the provision. Empty (the default) means no process may command it. It is " +
+			"read from the newest release when a task commands, so removing a key and publishing stops " +
+			"that application at once for every right already held."),
 		"lifecycleForm": stringProp("For a lifecycleProcess: how it runs. \"per-operation\" (the default, " +
 			"also what empty means) starts an instance for every operation. \"per-position\" starts ONE " +
 			"instance per order position at provisioning and DELIVERS every later operation to it: the " +

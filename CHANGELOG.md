@@ -14,6 +14,20 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A process can ask somebody's held service for an action — in the name of an application
+  the product trusts.** The Shop send task has a second mode, *command*: name the product and
+  the action, and say where the order and the position come from, and the task asks that
+  position for it the way the order's own act does — an HR leaver process returns the
+  mailbox, a maintenance process resets a password. A process has no person behind it, so
+  the product says which applications may do this: the new list *commanded by*, of
+  application keys, in the Console, over HTTP (`commandedBy`) and in the MCP product tool.
+  Only actions an operator or a system may ask for can be commanded, never the provision and
+  never one only the customer may ask for. The list is read from the product's newest
+  release each time, so taking an application off it and publishing stops it for every
+  right already held. A command retried after a failure asks under the same id and is not
+  carried out twice; a return already under way is left as it is. The last part of
+  ADR-0429's third slice.
+
 - **A product's process states how an action ended without calling Atlas over REST.** The
   send task has a new kind in the modeler, **Shop**: pick the action and the outcome —
   completed, rejected or failed — and the task records that ending for the command its

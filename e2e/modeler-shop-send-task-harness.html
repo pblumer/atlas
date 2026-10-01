@@ -5,10 +5,11 @@
     <title>Atlas shop send task modeler e2e harness</title>
     <!-- Drives the *real* api/web/editor.js mountEditor against a mock `api`, with a
          diagram holding one send task of each shape the Shop kind has to replace or
-         read: a message send, a job-worker send, and a send task that already states
-         an outcome. The compiler parses <atlas:shopTask mode action outcome/> and
-         nothing else (ADR-0429 §4), so the tests assert on the exported XML. A second,
-         bare diagram declares no atlas namespace at all, for a send task drawn fresh.
+         read: a message send, a job-worker send, a send task that already states an
+         outcome, one that issues a command, and a hand-edited one carrying both a
+         message and a shop task. The compiler parses <atlas:shopTask/> and nothing else
+         (ADR-0429 §4), so the tests assert on the exported XML. A second, bare diagram
+         declares no atlas namespace at all, for a send task drawn fresh.
          Mounted in deployment mode (key set, draftId null) so no live collaboration SSE
          is attached. -->
     <link rel="stylesheet" href="/app.css" />
@@ -26,7 +27,9 @@
       const noop = () => {};
 
       // Send_msg publishes a declared message; Send_worker hands a job to a job worker,
-      // with a retry budget; Send_shop reports that storage-extend failed.
+      // with a retry budget; Send_shop reports that storage-extend failed; Send_cmd asks
+      // the leaver's mailbox for its return; Send_both names a message and a shop task,
+      // which the compiler runs as the message send.
       const XML = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:atlas="http://atlas/schema/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_shop" targetNamespace="http://atlas/bpmn">
   <bpmn:message id="Message_done" name="mailbox.done"/>
@@ -41,22 +44,36 @@
       <bpmn:extensionElements><atlas:shopTask mode="outcome" action="storage-extend" outcome="failed"/></bpmn:extensionElements>
       <bpmn:incoming>f2</bpmn:incoming><bpmn:outgoing>f3</bpmn:outgoing>
     </bpmn:sendTask>
-    <bpmn:endEvent id="End_1" name="End"><bpmn:incoming>f3</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sendTask id="Send_cmd" name="Return mailbox">
+      <bpmn:extensionElements><atlas:shopTask mode="command" action="deprovision" product="mailbox" order="= leaver.orderId" position="mailbox" resultVariable="returnCommand"/></bpmn:extensionElements>
+      <bpmn:incoming>f3</bpmn:incoming><bpmn:outgoing>f4</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:sendTask id="Send_both" name="Both" messageRef="Message_done">
+      <bpmn:extensionElements><atlas:shopTask mode="outcome" action="storage-extend" outcome="completed"/></bpmn:extensionElements>
+      <bpmn:incoming>f4</bpmn:incoming><bpmn:outgoing>f5</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="End_1" name="End"><bpmn:incoming>f5</bpmn:incoming></bpmn:endEvent>
     <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="Send_msg"/>
     <bpmn:sequenceFlow id="f1" sourceRef="Send_msg" targetRef="Send_worker"/>
     <bpmn:sequenceFlow id="f2" sourceRef="Send_worker" targetRef="Send_shop"/>
-    <bpmn:sequenceFlow id="f3" sourceRef="Send_shop" targetRef="End_1"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="Send_shop" targetRef="Send_cmd"/>
+    <bpmn:sequenceFlow id="f4" sourceRef="Send_cmd" targetRef="Send_both"/>
+    <bpmn:sequenceFlow id="f5" sourceRef="Send_both" targetRef="End_1"/>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="mailbox">
     <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="Send_msg_di" bpmnElement="Send_msg"><dc:Bounds x="260" y="98" width="100" height="80"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="Send_worker_di" bpmnElement="Send_worker"><dc:Bounds x="420" y="98" width="100" height="80"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="Send_shop_di" bpmnElement="Send_shop"><dc:Bounds x="580" y="98" width="100" height="80"/></bpmndi:BPMNShape>
-    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="740" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Send_cmd_di" bpmnElement="Send_cmd"><dc:Bounds x="740" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Send_both_di" bpmnElement="Send_both"><dc:Bounds x="900" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="1060" y="120" width="36" height="36"/></bpmndi:BPMNShape>
     <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="260" y="138"/></bpmndi:BPMNEdge>
     <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="360" y="138"/><di:waypoint x="420" y="138"/></bpmndi:BPMNEdge>
     <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="520" y="138"/><di:waypoint x="580" y="138"/></bpmndi:BPMNEdge>
     <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><di:waypoint x="680" y="138"/><di:waypoint x="740" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4"><di:waypoint x="840" y="138"/><di:waypoint x="900" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f5_di" bpmnElement="f5"><di:waypoint x="1000" y="138"/><di:waypoint x="1060" y="138"/></bpmndi:BPMNEdge>
   </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 

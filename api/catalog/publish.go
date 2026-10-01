@@ -371,6 +371,26 @@ func checkItems(in Input, add func(Problem)) {
 				break
 			}
 		}
+		// The applications that may command the product (ADR-0429 §10, decision 1). A
+		// blank entry names no application and a repeated one says nothing twice;
+		// either is a list somebody meant differently. A key no application on this
+		// server carries is not refused: a catalogue moves between servers, and a key
+		// that matches nothing lets nothing through.
+		seenCommander := map[string]bool{}
+		for _, k := range it.CommandedBy {
+			key := strings.TrimSpace(k)
+			if key == "" {
+				add(Problem{Item: it.ID, Message: "names a blank application among those that may " +
+					"command it; an application is named by its key"})
+				break
+			}
+			if seenCommander[key] {
+				add(Problem{Item: it.ID, Message: "names application " + key + " twice among those " +
+					"that may command it"})
+				break
+			}
+			seenCommander[key] = true
+		}
 		// A category of nothing but spaces is a heading nobody can read and nobody
 		// can group by: the shop would render an empty column head, and a second
 		// product with a different number of spaces would sit under a different one
@@ -871,6 +891,9 @@ func freeze(items []Item) []Item {
 		}
 		if len(it.Keywords) > 0 {
 			it.Keywords = append([]string(nil), it.Keywords...)
+		}
+		if len(it.CommandedBy) > 0 {
+			it.CommandedBy = append([]string(nil), it.CommandedBy...)
 		}
 		out[i] = it
 	}
