@@ -6,10 +6,10 @@
 # repo-wide number, deliberately not a per-change delta gate — see ADR-0018 for
 # why (avoiding coverage theatre).
 #
-# Usage: scripts/check-coverage.sh [threshold]   (threshold defaults to 94)
+# Usage: scripts/check-coverage.sh [threshold]   (threshold defaults to 95)
 set -euo pipefail
 
-threshold="${1:-94}"
+threshold="${1:-95}"
 outdir="coverage"
 profile="${outdir}/cover.out"
 

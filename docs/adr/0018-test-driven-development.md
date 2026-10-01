@@ -1,6 +1,6 @@
 # ADR-0018: Test-driven development as the default workflow
 
-- **Status:** Accepted (amended 2026-09-09 and 2026-09-16 — the floor stands at 94%; see the amendments below)
+- **Status:** Accepted (amended 2026-09-09, 2026-09-16 and 2026-10-01 — the floor stands at 95% again; see the amendments below)
 - **Implementation:** Landed
 - **Date:** 2026-07-22
 - **Deciders:** Core team
@@ -202,6 +202,69 @@ the code that is untested.
 **The open question is the drift, and it is a process question, not a script one.**
 Nothing here changes the rate at which new code arrives covered, so the margin will
 erode again. Tracked in [issue #979](https://github.com/pblumer/atlas/issues/979).
+
+## Amendment (2026-10-01): the floor goes back to 95%, and what it took
+
+The maintainer asked for 95%. The previous amendment said it was not honestly reachable:
+most of what was uncovered is error plumbing, reachable "only by fault-injecting several
+hundred error paths — the coverage theatre the decision above rejects". This amendment
+records that the first half of that sentence was right and the second was not.
+
+### What was done, measured
+
+```
+before   52 100 / 55 414   94.0196%   margin above 94%:  10
+after    53 325 / 55 427   96.2076%   margin above 95%: 669
+```
+
+1 225 statements newly covered by 400 tests in 108 new files, written in four disjoint
+areas (the `api` root package in three, everything else in one) and merged; no production
+line was changed to make a test pass. Many of them do inject faults — a file where a
+store expects its directory, a directory sitting on a record's `.tmp` path so the read
+works and the write does not, a corrupt record, a closed run loop — but each asserts what
+the caller observes: the status, the words, and that a refused write changed nothing.
+That is not theatre in this record's sense, which is *executing without asserting*. None
+of it uses permissions, which do not hold for root and do not exist on Windows.
+
+### Why it was worth more than the number
+
+The error paths were not empty. Writing behaviour tests for them found six defects, each
+now fixed with a regression test that fails without the fix:
+
+| defect | kind |
+|---|---|
+| a reconciliation attributed a reference two products claim to the first of them, producing an `unmanaged` finding that could be adopted or deprovisioned | wrong answer in an edge path |
+| an AI task's prompt was evaluated over the stored envelope of a personal value, not its plaintext (ADR-0314) | wrong reader on one arm |
+| a deploy refused while registering its job types left its record behind and reappeared after a restart | write before validate |
+| an unreadable order store made an escalation answer 404 «no open approval» | swallowed error |
+| an ambiguous product name in an escalation answered 500, the caller's ambiguity as a server fault | wrong status |
+| an unreadable project store refused an API token with 400; some routes answered 500 rather than 503 while stopping | wrong status |
+
+Four of the six sit in exactly the branches the previous amendment classified as
+"`if err != nil` — needs fault injection to reach". A branch nobody has run is a branch
+nobody has read.
+
+### What stays uncovered, and why it is allowed to
+
+2 102 statements. The four test reports list them by kind, and they are the kinds this
+record's escape hatch is for: storage-engine failures inside Pebble (batch, iterator,
+fsync) with no seam short of a fake store that asserts itself; `crypto/rand` and embedded
+asset reads that do not fail on supported platforms; guards against a second run-loop turn
+racing the first, which only a timing race reaches; the sandbox functions that need a real
+Linux sandbox; decode branches for values JSON cannot produce.
+
+### Why 95 holds this time
+
+The September amendments measured new code arriving at 89.5% in one exceptional week. From
+2026-09-16 to today it arrived at **93.5%** (4 863 of 5 200 statements). Against a 95% floor
+that spends about 77 statements of margin in fifteen days, so 669 is months, not days —
+and [`AGENTS.md`](../../AGENTS.md) now asks every feature to arrive with its routes, tools
+and tests together. The "thirty statements, sustained across a few merges" condition of
+2026-09-09 is replaced by the size of the margin and the measured rate; if the rate turns,
+the right response is to cover the new code, and the wrong one is to lower the floor a
+third time. [Issue #979](https://github.com/pblumer/atlas/issues/979) tracks the rate.
+
+`.github/workflows/ci.yml` and `scripts/check-coverage.sh` (its default) now say 95.
 
 ## Pros and cons of the options
 
