@@ -2,6 +2,28 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "a-product-s-process-states-how-an-action-ended-without-calli",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Processes report how an action ended with a Shop task",
+        "de": "Prozesse melden mit einer Shop-Aufgabe, wie eine Aktion endete"
+      },
+      "summary": {
+        "en": "A send task can now be of the kind Shop: choose the action and the outcome — completed, rejected or failed — and the task records that ending for the request its process is handling. It needs no token and no address, because it runs inside Atlas and finds the order and the request in the process itself. When the process took a path that does not fit the action, the task stops with an incident instead of reporting the wrong thing. Publishing a catalogue now checks that every change and service a product offers has a task that reports it completed.",
+        "de": "Eine Sendeaufgabe kann jetzt von der Art Shop sein: Aktion und Ergebnis wählen – abgeschlossen, abgelehnt oder fehlgeschlagen –, und die Aufgabe hält dieses Ende für die Anfrage fest, die ihr Prozess bearbeitet. Sie braucht weder Token noch Adresse, weil sie in Atlas läuft und Bestellung und Anfrage im Prozess selbst findet. Hat der Prozess einen Weg genommen, der nicht zur Aktion passt, hält die Aufgabe mit einem Vorfall an, statt das Falsche zu melden. Beim Veröffentlichen eines Katalogs wird jetzt geprüft, dass jede Änderung und jede Dienstleistung eines Produkts eine Aufgabe hat, die sie als abgeschlossen meldet."
+      },
+      "link": {
+        "label": "ADR-0429",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
+      },
+      "tags": [
+        "Service catalogue",
+        "Modeler"
+      ]
+    },
+    {
       "id": "how-an-action-ended-is-a-fact",
       "version": "Unreleased",
       "date": null,
@@ -292,28 +314,6 @@
       "tags": [
         "AI",
         "Security"
-      ]
-    },
-    {
-      "id": "a-deploy-refused-for-its-job-types-no-longer-reappears-after",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A failed deploy no longer comes back after a restart",
-        "de": "Ein gescheitertes Deployment kehrt nach einem Neustart nicht mehr zurück"
-      },
-      "summary": {
-        "en": "A deploy that failed while registering the process's job types answered with an error but had already written its record, so after a restart the process was listed as deployed and its version number was used up. The job types are now registered first; when that fails, nothing is written.",
-        "de": "Ein Deployment, das beim Registrieren der Job-Typen des Prozesses scheiterte, meldete einen Fehler, hatte seinen Datensatz aber bereits geschrieben: Nach einem Neustart war der Prozess als deployt aufgeführt, und seine Versionsnummer war verbraucht. Die Job-Typen werden jetzt zuerst registriert; scheitert das, wird nichts geschrieben."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Deployment",
-        "Operations"
       ]
     }
   ]

@@ -47,6 +47,20 @@ func (t *Tx) TriggerReceipt(source, triggerID string) (uint64, bool, error) {
 	return binary.LittleEndian.Uint64(raw), true, nil
 }
 
+// TriggerReceipt reads the instance that answered a trigger this sender delivered,
+// outside a transaction — for a reader such as a job handler that needs to know a
+// trigger was applied in a batch already committed.
+func (q queries) TriggerReceipt(source, triggerID string) (uint64, bool, error) {
+	raw, ok, err := getCopy(q.r, keyTriggerReceipt(source, triggerID))
+	if err != nil || !ok {
+		return 0, false, err
+	}
+	if len(raw) < 16 {
+		return 0, false, fmt.Errorf("state: trigger receipt for %q/%q is %d bytes, want 16", source, triggerID, len(raw))
+	}
+	return binary.LittleEndian.Uint64(raw), true, nil
+}
+
 // PruneTriggerReceipts drops every receipt received before cutoff. The cutoff comes
 // from the event, and the receipts from state this same pipeline built, so replay
 // drops exactly what was dropped live (invariants I4, I6).

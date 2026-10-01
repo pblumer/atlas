@@ -172,6 +172,22 @@ func (l processLookup) CatchPoints(processID string) []catalog.CatchPoint {
 	return out
 }
 
+// ShopOutcomes lists the shop send tasks of the newest deployed version of a process
+// id and what each states (ADR-0429 §4).
+func (l processLookup) ShopOutcomes(processID string) []catalog.ShopOutcome {
+	var out []catalog.ShopOutcome
+	l.s.do(func() {
+		d := l.s.latestDeploymentOf(strings.TrimSpace(processID))
+		if d == nil || d.cp == nil {
+			return
+		}
+		for _, p := range d.cp.ShopOutcomePoints() {
+			out = append(out, catalog.ShopOutcome{Element: p.Element, Action: p.Action, Outcome: p.Outcome})
+		}
+	})
+	return out
+}
+
 // WaitlessCycle names a cycle in the newest deployed version of a process id that
 // waits for nothing, or nil (ADR-0428).
 func (l processLookup) WaitlessCycle(processID string) []string {

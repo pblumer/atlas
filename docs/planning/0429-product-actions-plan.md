@@ -177,11 +177,12 @@ change the other two build on:
   per order, position and command id; written in one command with the grant or revocation
   it accompanies; `commandId` seeded by every act and recorded on the line; the outcome
   route and the read route (HTTP and MCP). See ADR-0429 §3's as-built note.
-- **C2 — the shop send task, mode `outcome`.** A send-task kind `shop` compiled to an
-  engine-only job type. Its handler runs off the loop, so it does not write the outcome
-  itself: it hands it back on the job's completion, and the engine appends it in the
-  batch that completes the job, as a decision's history is. Publish check: every action's
-  `completed` is reported by such a task.
+- **C2 — the shop send task, mode `outcome` — ✅ landed.** A send-task kind `shop` compiled
+  to the engine-only job type `io.atlas.shop`. Its handler runs off the loop, so it does
+  not write the outcome itself: it hands it back on the job's completion, and the engine
+  appends it in the command that completes the job, as a decision's history is. Publish
+  check: every change or service action's `completed` is reported by such a task, and no
+  task answers an action the product does not declare. See ADR-0429 §4's as-built note.
 - **C3 — mode `command`** with the product's allow-list, limited to `operator`/`system`
   actions (§10, decision 1).
 

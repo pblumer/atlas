@@ -14,6 +14,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A product's process states how an action ended without calling Atlas over REST.** The
+  send task has a new kind in the modeler, **Shop**: pick the action and the outcome —
+  completed, rejected or failed — and the task records that ending for the command its
+  instance carries out. It needs no token and no URL: the order, the position and the
+  command id come from the instance, where every order act puts them, and the task runs
+  inside the server. A task whose instance carries no command, or whose path does not match
+  the action it names, stops with an incident that says so instead of reporting the wrong
+  thing. Publishing a catalogue now checks the processes behind products that declare
+  actions: every change and service action must have a task that reports it completed, and
+  no task may report an action the product does not declare or the provision and return,
+  which the order reports itself. The second part of ADR-0429's third slice.
+
 - **How an action ended is a fact.** Whatever is asked of a held position — its
   provision, its return, a change, a service — now ends in an engine record: completed,
   rejected or failed, under the event type the product declares for it (by default the

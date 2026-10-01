@@ -14,7 +14,8 @@ import (
 // at a person's task before the strand waits again, so a test can see a strand that
 // does not take an action right now; a reset runs a script and waits again at once.
 const actingStrandBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
-             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0">
   <message id="m_prov" name="tool.provision"/>
   <message id="m_deprov" name="tool.deprovision">
     <extensionElements><zeebe:subscription correlationKey="=orderId + &#34;/&#34; + positionId"/></extensionElements>
@@ -48,13 +49,19 @@ const actingStrandBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100
     <sequenceFlow id="s3" sourceRef="Gate" targetRef="AskChange"/>
     <sequenceFlow id="s4" sourceRef="AskChange" targetRef="Busy"/>
     <sequenceFlow id="s4b" sourceRef="Busy" targetRef="C"/>
-    <sequenceFlow id="s5" sourceRef="C" targetRef="Wait"/>
+    <sequenceFlow id="s5" sourceRef="C" targetRef="ChangeDone"/>
+    <sendTask id="ChangeDone"><extensionElements><atlas:shopTask mode="outcome" action="change" outcome="completed"/></extensionElements></sendTask>
+    <sequenceFlow id="s5b" sourceRef="ChangeDone" targetRef="Wait"/>
     <sequenceFlow id="r1" sourceRef="Gate" targetRef="AskReset"/>
     <sequenceFlow id="r2" sourceRef="AskReset" targetRef="R"/>
-    <sequenceFlow id="r3" sourceRef="R" targetRef="Wait"/>
+    <sequenceFlow id="r3" sourceRef="R" targetRef="ResetDone"/>
+    <sendTask id="ResetDone"><extensionElements><atlas:shopTask mode="outcome" action="password-reset" outcome="completed"/></extensionElements></sendTask>
+    <sequenceFlow id="r3b" sourceRef="ResetDone" targetRef="Wait"/>
     <sequenceFlow id="a1" sourceRef="Gate" targetRef="AskAudit"/>
     <sequenceFlow id="a2" sourceRef="AskAudit" targetRef="A"/>
-    <sequenceFlow id="a3" sourceRef="A" targetRef="Wait"/>
+    <sequenceFlow id="a3" sourceRef="A" targetRef="AuditDone"/>
+    <sendTask id="AuditDone"><extensionElements><atlas:shopTask mode="outcome" action="audit" outcome="completed"/></extensionElements></sendTask>
+    <sequenceFlow id="a3b" sourceRef="AuditDone" targetRef="Wait"/>
     <sequenceFlow id="s6" sourceRef="Gate" targetRef="AskReturn"/>
     <sequenceFlow id="s7" sourceRef="AskReturn" targetRef="Return"/>
     <sequenceFlow id="s8" sourceRef="Fallback" targetRef="Return"/>
@@ -286,9 +293,13 @@ var repairingLaptopBPMN = strings.NewReplacer(
 	`<endEvent id="DEnd"/>`,
 	`<endEvent id="DEnd"/><startEvent id="Repair"><messageEventDefinition messageRef="m_repair"/></startEvent>`+
 		`<scriptTask id="F"><extensionElements><zeebe:script expression="=reason" resultVariable="repairedFor"/></extensionElements></scriptTask>`+
+		`<sendTask id="Repaired"><extensionElements><atlas:shopTask mode="outcome" action="repair" outcome="completed"/></extensionElements></sendTask>`+
 		`<endEvent id="FEnd"/>`,
 	`<sequenceFlow id="d3"`,
-	`<sequenceFlow id="f1" sourceRef="Repair" targetRef="F"/><sequenceFlow id="f2" sourceRef="F" targetRef="FEnd"/><sequenceFlow id="d3"`,
+	`<sequenceFlow id="f1" sourceRef="Repair" targetRef="F"/><sequenceFlow id="f2" sourceRef="F" targetRef="Repaired"/>`+
+		`<sequenceFlow id="f3" sourceRef="Repaired" targetRef="FEnd"/><sequenceFlow id="d3"`,
+	`xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">`,
+	`xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:atlas="http://atlas/schema/1.0">`,
 ).Replace(laptopLifecycleBPMN)
 
 // TestAPerOperationActionStartsItsProcess: on a per-operation product the action act
@@ -446,7 +457,8 @@ func TestAPositionThatCannotTakeAnActionSaysWhy(t *testing.T) {
 // message boundary on it for an audit and an interrupting one for its return. Neither
 // is an intermediate catch, which is what the availability has to see through.
 const listeningStrandBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
-             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0">
   <message id="m_prov" name="tool.provision"/>
   <message id="m_deprov" name="tool.deprovision">
     <extensionElements><zeebe:subscription correlationKey="=orderId + &#34;/&#34; + positionId"/></extensionElements>
@@ -472,9 +484,13 @@ const listeningStrandBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20
     <sequenceFlow id="s1" sourceRef="Provision" targetRef="Wait"/>
     <sequenceFlow id="s2" sourceRef="Wait" targetRef="Listen"/>
     <sequenceFlow id="s3" sourceRef="Listen" targetRef="R"/>
-    <sequenceFlow id="s4" sourceRef="R" targetRef="Wait"/>
+    <sequenceFlow id="s4" sourceRef="R" targetRef="ResetDone"/>
+    <sendTask id="ResetDone"><extensionElements><atlas:shopTask mode="outcome" action="password-reset" outcome="completed"/></extensionElements></sendTask>
+    <sequenceFlow id="s4b" sourceRef="ResetDone" targetRef="Wait"/>
     <sequenceFlow id="a1" sourceRef="Audit" targetRef="A"/>
-    <sequenceFlow id="a2" sourceRef="A" targetRef="AEnd"/>
+    <sequenceFlow id="a2" sourceRef="A" targetRef="AuditDone"/>
+    <sendTask id="AuditDone"><extensionElements><atlas:shopTask mode="outcome" action="audit" outcome="completed"/></extensionElements></sendTask>
+    <sequenceFlow id="a2b" sourceRef="AuditDone" targetRef="AEnd"/>
     <sequenceFlow id="r1" sourceRef="Returned" targetRef="Return"/>
     <sequenceFlow id="r2" sourceRef="Fallback" targetRef="Return"/>
     <sequenceFlow id="r3" sourceRef="Return" targetRef="End"/>

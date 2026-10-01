@@ -404,6 +404,17 @@ const DiscordJobType = "io.atlas.discord"
 // way the Jira worker uses JiraJobTypeIndex.
 const DiscordJobTypeIndex int32 = 29
 
+// ShopJobType is the reserved job type a shop send task carries (ADR-0429 §4): the
+// point where a product's process states how an action ended, or — in a later mode —
+// issues one of its own. The server serves it itself: it only changes state the run
+// loop owns, reaches no system and holds no credential, which is the one exception
+// ADR-0164 and ADR-0233 allow for an engine-only job type.
+const ShopJobType = "io.atlas.shop"
+
+// ShopJobTypeIndex is the interned index ShopJobType is guaranteed to occupy in every
+// compiled process: NewBuilder reserves it thirty-first, so it is always 30.
+const ShopJobTypeIndex int32 = 30
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -441,6 +452,7 @@ var reservedJobTypes = []string{
 	AgentJobType,         // 27
 	AiTaskJobType,        // 28
 	DiscordJobType,       // 29
+	ShopJobType,          // 30
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i

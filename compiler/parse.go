@@ -2286,6 +2286,10 @@ type xmlServiceTask struct {
 	// User, when present, marks this service task a user-provisioning task
 	// (ADR-0123). The pointer is nil when the <atlas:userConnector> extension is absent.
 	User *xmlUserConnector `xml:"extensionElements>userConnector"`
+	// Shop is a send task's <atlas:shopTask> (ADR-0429 §4): the point where a
+	// product's process states how an action ended. Send tasks only; on a service task
+	// it is refused at compile.
+	Shop *xmlShopTask `xml:"extensionElements>shopTask"`
 	// Csv, when present, marks this service task a CSV-to-JSON task
 	// (ADR-0139). The pointer is nil when the <atlas:csvConnector> extension is absent.
 	Csv *xmlCsvConnector `xml:"extensionElements>csvConnector"`
@@ -2677,6 +2681,16 @@ type xmlMailConnector struct {
 // xmlUserConnector is the <atlas:userConnector> extension of a user-provisioning
 // task (ADR-0123). Operation selects the action; the remaining
 // attributes are literal-or-FEEL values, like the mail worker's fields.
+// xmlShopTask is <atlas:shopTask mode="outcome" action="…" outcome="…"/> on a send
+// task (ADR-0429 §4).
+type xmlShopTask struct {
+	Mode    string `xml:"mode,attr"`
+	Action  string `xml:"action,attr"`
+	Outcome string `xml:"outcome,attr"`
+	// Retries is the task's own retry budget (ADR-0135); blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
 type xmlUserConnector struct {
 	Operation   string `xml:"operation,attr"`
 	Username    string `xml:"username,attr"`
