@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/api/order"
 )
 
-// Changing a held right (ADR-0428) when there is nothing that could take the
+// Changing a held right (ADR-0428, now the action act of ADR-0429) when there is nothing that could take the
 // change: a body that cannot be read, an order record that cannot, a position
 // that is not held yet, and a held position no instance carries. None of them
 // starts or delivers anything.
@@ -40,7 +40,7 @@ func TestOrderChangeOnlyAHeldRightCarriedByAnInstanceChanges(t *testing.T) {
 		Lines: []order.Line{orderChangePathsLine(order.StatusDone)}})
 
 	code, body := orderChangePathsPost(t, srv, "ord_ch1")
-	if code != http.StatusConflict || !strings.Contains(body, "only a held right can be changed") {
+	if code != http.StatusConflict || !strings.Contains(body, "an action is asked only of a held right") {
 		t.Errorf("pending = %d %s, want 409", code, body)
 	}
 	code, body = orderChangePathsPost(t, srv, "ord_ch2")
@@ -69,7 +69,7 @@ func TestOrderChangeRefusalsBeforeTheOrderIsRead(t *testing.T) {
 		Lines: []order.Line{orderChangePathsLine(order.StatusDone)}})
 	orderCancelPathsCorrupt(t, srv, "ord_ch3")
 	code, body = orderChangePathsPost(t, srv, "ord_ch3")
-	if code != http.StatusInternalServerError || !strings.Contains(body, "change line") {
+	if code != http.StatusInternalServerError || !strings.Contains(body, "read order") {
 		t.Errorf("unreadable order = %d %s, want 500", code, body)
 	}
 }
