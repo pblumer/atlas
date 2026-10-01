@@ -1606,7 +1606,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/inbound-subscriptions/{id}", s.handleDeleteInboundSubscription, apiOp{
 			summary: "Delete an inbound event subscription", tag: "Workers", role: RoleModeler, status: http.StatusNoContent}},
 		{"GET", "/api/v1/message-sources", s.handleListMessageSources, apiOp{
-			summary: "List every inbound event watch by the message name it publishes, so a model can be told whether its message start event has a source", tag: "Workers", role: RoleModeler, resp: jsonBody("Message sources", tArray())}},
+			summary: "List every message name with where it comes from (ADR-0429 §6), each row tagged by `sourceKind`: `inbound-watch` — a Worker's event, with the worker and, for a viewer of it, the watch; `product-action` — a product's action, with the product, the action's key, effect and triggers and the process the product binds it to, for the catalogues the caller maintains; `process` — where the newest deployed version of a process waits for it, at a message `start` or a `catch`. The Modeler groups its message picker by these and tells a model whether its message has a source", tag: "Workers", role: RoleModeler, resp: jsonBody("Message sources", tArray())}},
 
 		{"PUT", "/api/v1/connectors/{id}/members/{principalId}", s.handleSetConnectorMember, apiOp{
 			summary: "Share a worker with a user or a group, or change their role (ADR-0205); owner only", tag: "Workers", role: RoleModeler, req: jsonBody("Member role", tObject()), resp: jsonBody("Updated worker", tObject())}},
