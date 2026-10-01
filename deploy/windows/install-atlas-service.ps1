@@ -49,9 +49,9 @@
     --data-dir aus diesem Ordner).
 
 .PARAMETER WinSWPath
-    Lokale WinSW-x64.exe (fuer Server ohne Internetzugang). Ohne Angabe wird
-    eine einzelne WinSW*.exe direkt unter -InstallRoot verwendet, sonst
-    WinSW v2.12.0 von GitHub geladen.
+    Lokale WinSW-x64.exe (fuer Server ohne Internetzugang). Ohne Angabe, oder
+    wenn die Datei nicht existiert, wird eine einzelne WinSW*.exe direkt unter
+    -InstallRoot verwendet, sonst WinSW v2.12.0 von GitHub geladen.
 
 .PARAMETER WinSWSha256
     Erwartete SHA-256-Pruefsumme von WinSW. Leer = keine Pruefung.
@@ -516,10 +516,13 @@ if (-not [string]::IsNullOrWhiteSpace($WinSWPath)) {
         }
         $found = 'keine'
         if ($near.Count -gt 0) { $found = $near -join ', ' }
-        throw "-WinSWPath '$WinSWPath' existiert nicht. Gefundene WinSW-Dateien unter $InstallRoot und im Download-Ordner: $found"
+        Write-Warning "-WinSWPath '$WinSWPath' existiert nicht (gefundene WinSW-Dateien: $found). WinSW wird stattdessen heruntergeladen."
+        $WinSWPath = $null
+    } else {
+        $WinSWPath = (Resolve-Path -LiteralPath $WinSWPath).Path
     }
-    $WinSWPath = (Resolve-Path -LiteralPath $WinSWPath).Path
-} elseif (-not (Test-Path -LiteralPath $WrapperExe)) {
+}
+if ([string]::IsNullOrWhiteSpace($WinSWPath) -and -not (Test-Path -LiteralPath $WrapperExe)) {
     $local = @(Get-ChildItem -LiteralPath $InstallRoot -Filter 'WinSW*.exe' -File -ErrorAction SilentlyContinue)
     if ($local.Count -eq 1) {
         $WinSWPath = $local[0].FullName
@@ -528,7 +531,6 @@ if (-not [string]::IsNullOrWhiteSpace($WinSWPath)) {
         throw "Mehrere WinSW-Dateien unter ${InstallRoot}: $(($local | ForEach-Object { $_.Name }) -join ', '). Bitte mit -WinSWPath eine angeben."
     }
 }
-
 $listen = Split-ListenAddr $Addr
 $UseTls = -not [string]::IsNullOrWhiteSpace($TlsCert)
 if ($UseTls -xor (-not [string]::IsNullOrWhiteSpace($TlsKey))) {
