@@ -368,18 +368,19 @@ func TestModdleKnowsEveryConnectorAttribute(t *testing.T) {
 }
 
 // shopTaskAttrs is the whole of <atlas:shopTask>, the shop send task's declaration
-// (ADR-0429 §4), in the order the Modeler writes them:
+// (ADR-0429 §4), in the order the Modeler writes them. Each mode uses its own share:
 //
 //	<atlas:shopTask mode="outcome" action="password-reset" outcome="completed" />
+//	<atlas:shopTask mode="command" action="deprovision" product="mailbox" order="= leaver.orderId" position="mailbox" resultVariable="commandId" />
 //
-// It is a contract with the compiler, which reads exactly these three and nothing else.
-var shopTaskAttrs = []string{"mode", "action", "outcome"}
+// It is a contract with the compiler, which parses exactly this element.
+var shopTaskAttrs = []string{"mode", "action", "outcome", "product", "order", "position", "resultVariable"}
 
 // TestModdleDeclaresTheShopTaskContract pins the Modeler's half of that contract. Every
 // guard above finds an extension by the Connector suffix of the compiler's tag, and the
 // shop task is not a Worker, so it escapes all of them — and a drift here loses data in
 // both directions without a sound. An attribute the moddle lacks is dropped from the
-// model on the first Save; one it has beyond the three is written into models the
+// model on the first Save; one it has beyond them is written into models the
 // compiler never reads, which looks configured and is not. Without the panel naming the
 // type, nothing writes the element at all.
 //
