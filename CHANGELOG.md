@@ -14,6 +14,26 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Atlas says in one place which events it emits, and who listens.** A Console page
+  *Events* lists every signal, message and feed event atlas emits: what has happened when it
+  comes, what it carries with personal data marked, since which version, how stable, and who
+  may receive it ([ADR-0435](docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)). An
+  administrator also sees which deployed models and feed subscriptions listen to each event,
+  and which models wait for an `atlas.*` name atlas never emits. A modeler's page has no such
+  column, because that view is a map of where personal data flows across every project. The
+  Modeler's signal picker offers the events a model may listen to and says what the listener
+  receives; it warns on an `atlas.*` name that is no event and on a model that throws one.
+  - The catalogue is the Go package `eventcatalog`, held by tests in both directions to what
+    the system processes and the feed emit.
+  - The handbook chapter *Ereignisse* and the runtime contract's feed table are generated
+    from it (`go test ./eventcatalog -update`).
+  - It is served by `GET /api/v1/event-catalog` and, for an administrator,
+    `GET /api/v1/event-catalog/listeners`; the MCP tools `atlas_event_catalog` and
+    `atlas_event_listeners` follow the same split. Neither goes away when the service
+    catalogue is switched off.
+  - The `atlas.user.requested` signal now carries `atlasInstance`, the key of the intake
+    instance that threw it.
+
 - **Publishing says which answers would reach a process in the clear.** When an answer of a
   product's order form reaches one of its processes — provisioning, lifecycle, return or an
   approval model of the installation's own — and that process does not declare it personal data,

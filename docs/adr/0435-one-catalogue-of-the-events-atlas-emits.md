@@ -1,7 +1,7 @@
 # ADR-0435: Atlas keeps one catalogue of the events it emits
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted (2026-10-02)
+- **Implementation:** Partial
 - **Date:** 2026-10-02
 - **Deciders:** Atlas maintainers
 - **Open question:** whether a deployment becomes a fact on the log.
@@ -350,6 +350,79 @@ reads the personal-data marking from it. From there the work goes in this order:
   modelled process, as [ADR-0343](0343-pending-work.md) requires. The catalogue says what can be
   listened to, not who is told.
 - **Renaming log events.**
+
+### As built, first slice
+
+What landed first is the catalogue, the tests that hold it, `atlasInstance`, and the two ways to
+read the catalogue. That departs from the order of §9 in one respect: the Console page and the
+Modeler's picker, placed third there, came with the catalogue, because they were built
+together with it. The rest of §9's first step is the next change:
+
+- the access rule (§6), refused at deploy and reported in validation;
+- `atlas.approval.requested`.
+
+Until the rule lands, the trade-off ADR-0431 accepted still holds. The personal-data marking
+the rule will read is already in place, without a default (§5).
+
+- **`eventcatalog/catalog.go`** holds the six entries of §8 that exist. An entry carries two
+  fields beyond §1:
+  - `Shaped` marks the action outcome, a shape the product's author names, so `Lookup` never
+    finds it by its placeholder.
+  - `Listenable` marks a signal an installation's model may wait for. Only
+    `atlas.user.requested` is: the order messages drive Atlas's own fulfilment process and are
+    not for a model of the installation.
+
+  `NeverSecret` is the name of the test that guards the entry, rather than a boolean that is
+  always true. `Access` is a rule per channel. A field's personal-data marking is `Data`, either
+  `personal` or `not-personal`; its zero value is refused by a test, so a field left unmarked
+  fails the build rather than passing as not personal.
+- **`atlasInstance`.** The intake process's proposal script task (`vorschlag`) now also maps
+  `processInstanceKey` to `atlasInstance`, so the `atlas.user.requested` signal carries it.
+  `processInstanceKey` is a FEEL built-in and evaluates to the key as a decimal string.
+- **The tests:**
+  - `eventcatalog`: every entry says what §1 asks, in both languages. Its never-secret guard
+    is a test that exists, its version is a release in `CHANGELOG.md` or `Unreleased`, and its
+    log event is in `logging`'s catalogue. Beyond that:
+    - the stable entries are pinned in `testdata/stable.json`;
+    - the package imports nothing of atlas;
+    - the handbook chapter and the runtime contract's table are the entries rendered.
+  - `api/eventcatalog_internal_test.go`: every signal and message an embedded system process
+    throws or waits for is a catalogued `atlas.*` entry with that moment, and the reverse. The
+    feed's data keys are exactly the declared payload of the type it produces. The order
+    messages carry exactly the declared variables.
+  - `api/systemsignal_internal_test.go`: a listener on `atlas.user.requested` receives every
+    field the entry says is always there, and nothing undeclared. Its `atlasInstance` is the
+    intake instance's key.
+- **Generated documentation.** `go test ./eventcatalog -update` writes two blocks between
+  markers:
+  - the handbook chapter *Ereignisse / Events* (`#ereignisse`);
+  - the feed table in `docs/runtime-contract.md`.
+
+  The AsyncAPI description is not built.
+- **Two routes**, both outside the service-catalogue area so that switching the shop off
+  (ADR-0434) does not hide them:
+  - `GET /api/v1/event-catalog` (`modeler`) serves the entries.
+  - `GET /api/v1/event-catalog/listeners` (`admin`) serves who listens now:
+    - every deployed element that receives an `atlas.*` signal or message, with process,
+      version, project and the personal fields it receives. An `atlas.*` name the catalogue
+      does not know is marked as not catalogued.
+    - every feed subscription.
+
+    On a server whose shop is off, it says that the feed is not delivered.
+  - The MCP tools `atlas_event_catalog` and `atlas_event_listeners` follow the same split.
+  - The compiler gained `SignalPoints` and `MessageReceivers` to enumerate where a definition
+    throws and receives.
+- **The Console page *Events*** (`#/console/events`) lists the entries and opens one to show
+  its payload, personal fields marked, and its access.
+  - An administrator sees a "listening now" column and the listeners of the selected event,
+    and a warning card for models that wait on an `atlas.*` name atlas never emits.
+  - A modeler's page has no such column: the listeners route refuses, and that refusal is the
+    answer.
+- **The Modeler.** A signal start, catch, boundary or event subprocess offers the listenable
+  entries under "Events atlas emits". It shows the chosen event's meaning and the personal
+  fields its listener receives. It also warns:
+  - on an `atlas.*` name the catalogue lacks;
+  - on a throw that uses an `atlas.*` name.
 
 ### Consequences
 

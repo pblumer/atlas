@@ -92,6 +92,9 @@ var wantAdminRoutes = []string{
 	"POST /api/v1/feed-subscriptions",
 	"PATCH /api/v1/feed-subscriptions/{id}",
 	"DELETE /api/v1/feed-subscriptions/{id}",
+	// Who listens to Atlas's events: where personal data flows across every
+	// project, which only an administrator sees whole (ADR-0435 §7).
+	"GET /api/v1/event-catalog/listeners",
 	"DELETE /api/v1/api-tokens/{id}",
 	"POST /api/v1/oauth-clients",
 	"GET /api/v1/oauth-clients",

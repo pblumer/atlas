@@ -121,6 +121,8 @@ var mcpToolRoutes = map[string]string{
 	"atlas_workers":                      "GET /api/v1/workers",
 	"atlas_close_breaker":                "POST /api/v1/workers/breakers/close",
 	"atlas_feed_subscriptions":           "GET /api/v1/feed-subscriptions",
+	"atlas_event_catalog":                "GET /api/v1/event-catalog",
+	"atlas_event_listeners":              "GET /api/v1/event-catalog/listeners",
 	"atlas_resolve_incident":             "POST /api/v1/incidents/{key}/resolve",
 	"atlas_incident_summary":             "GET /api/v1/incidents/summary",
 	"atlas_resolve_incidents":            "POST /api/v1/incidents/resolve",

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/eventcatalog"
 	"github.com/pblumer/atlas/state"
 )
 
@@ -292,7 +293,7 @@ func feedEnvelope(e state.FeedEntry, nodeID, source, home string) cloudEvent {
 		o := e.Outcome
 		ev.Type = o.EventType
 		if ev.Type == "" {
-			ev.Type = "atlas.action." + o.Outcome
+			ev.Type = eventcatalog.ActionOutcomePrefix + o.Outcome
 		}
 		ev.Subject = positionSubject(o.OrderID, o.Position)
 		data := map[string]any{
@@ -312,7 +313,7 @@ func feedEnvelope(e state.FeedEntry, nodeID, source, home string) cloudEvent {
 		ev.Data = data
 	case e.Granted != nil:
 		g := e.Granted
-		ev.Type = "atlas.entitlement.granted"
+		ev.Type = eventcatalog.EntitlementGranted
 		ev.Subject = holdSubject(g.Principal, g.ItemID, g.VariantID, g.OrderID)
 		data := map[string]any{
 			"principal": g.Principal, "itemId": g.ItemID, "orderId": g.OrderID,
@@ -327,7 +328,7 @@ func feedEnvelope(e state.FeedEntry, nodeID, source, home string) cloudEvent {
 		ev.Data = data
 	case e.Revoked != nil:
 		h := e.Revoked
-		ev.Type = "atlas.entitlement.revoked"
+		ev.Type = eventcatalog.EntitlementRevoked
 		ev.Subject = holdSubject(h.Principal, h.ItemID, h.VariantID, h.OrderID)
 		data := map[string]any{
 			"principal": h.Principal, "itemId": h.ItemID, "orderId": h.OrderID,

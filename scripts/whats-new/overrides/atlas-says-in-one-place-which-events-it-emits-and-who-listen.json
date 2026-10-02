@@ -1,0 +1,18 @@
+{
+  "tags": ["Events", "Modeler", "Console"],
+  "title": {
+    "en": "One place says which events Atlas emits, and who listens",
+    "de": "Ein Ort sagt, welche Ereignisse Atlas aussendet und wer zuhört"
+  },
+  "summary": {
+    "en": "The new Console page Events lists every signal, message and feed event Atlas emits: what has happened when it comes, what it carries with personal data marked, since which version, how stable it is, and who may receive it. An administrator also sees which deployed models and feed subscriptions listen to each event, and which models wait for a name Atlas never emits; a modeler's page leaves that out, because it is a map of where personal data flows across every project. In the Modeler, a signal start or catch offers the events a model may listen to and says what the listener receives. The handbook chapter Ereignisse and the runtime contract are generated from the same catalogue, and tests hold it to what Atlas actually emits.",
+    "de": "Die neue Console-Seite «Events» listet jedes Signal, jede Nachricht und jedes Feed-Ereignis, das Atlas aussendet: was geschehen ist, wenn es eintrifft, was es mitführt (Personendaten markiert), seit welcher Version es besteht, wie stabil es ist und wer es empfangen darf. Eine Administratorin oder ein Administrator sieht zusätzlich, welche deployten Modelle und Feed-Abonnements auf welches Ereignis hören und welche Modelle auf einen Namen warten, den Atlas nie aussendet; die Seite einer Modelliererin oder eines Modellierers enthält das nicht, weil es eine Karte der Personendatenflüsse über alle Projekte ist. Im Modeler bietet ein Signal-Start oder -Catch die Ereignisse an, auf die ein Modell hören darf, und nennt, was der Empfänger erhält. Das Handbuchkapitel «Ereignisse» und der Runtime-Vertrag werden aus demselben Katalog erzeugt, und Tests halten ihn an das, was Atlas tatsächlich aussendet."
+  },
+  "try": {
+    "label": {
+      "en": "Open Events",
+      "de": "Events öffnen"
+    },
+    "route": "#/console/events"
+  }
+}

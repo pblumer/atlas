@@ -6303,7 +6303,7 @@ function deleteSignal(modeler, sigId) {
 // name, shared so every event using the signal stays in sync. Unlike a message there is
 // no correlation key: a signal broadcasts by name alone. sed is the
 // bpmn:SignalEventDefinition.
-function signalFieldsHTML(modeler, sed, hint) {
+function signalFieldsHTML(modeler, sed, hint, listens) {
   const current = sed.signalRef;
   const options = listSignals(modeler).map((s) =>
     `<option value="${esc(s.id)}"${current && current.id === s.id ? " selected" : ""}>${esc(s.name || s.id)}</option>`
@@ -6312,15 +6312,51 @@ function signalFieldsHTML(modeler, sed, hint) {
     <label class="field"><span>Signal name</span>
       <input type="text" id="f-signame" value="${esc(current.name || "")}" placeholder="order-cancelled"/></label>
     <p class="muted" style="font-size:12px">Shared with every event that uses this signal — a broadcast reaches every catch, boundary, event subprocess, and start event of the same name.</p>` : "";
+  // A receiving element is offered the events atlas emits as signals (ADR-0435); the
+  // group is filled from the event catalogue once it answers, and #f-sigevent says
+  // what the chosen atlas.* name means and what it carries.
   return `<h3>Signal</h3>
     <label class="field"><span>Signal</span>
-      <select id="f-sigref">
+      <select id="f-sigref" data-listens="${listens ? "1" : ""}">
         <option value="">— none —</option>
         ${options}
+        ${listens ? `<optgroup label="Events atlas emits" id="f-sig-events"></optgroup>` : ""}
         <option value="__new__">＋ New signal…</option>
       </select></label>
     ${fields}
+    <div id="f-sigevent"></div>
     <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
+// SIGNAL_EVENT_PREFIX marks a picker option that names a catalogued event rather than
+// a signal of this model; choosing it reuses or creates the model's signal of that name.
+const SIGNAL_EVENT_PREFIX = "__event__:";
+
+// eventCatalog is the event catalogue, asked for once per page (ADR-0435). A modeler
+// may read it; a refusal or a server without it leaves the picker as it was.
+let eventCatalogReq = null;
+function eventCatalog(api) {
+  if (!eventCatalogReq) {
+    try { eventCatalogReq = Promise.resolve(api("GET", "/api/v1/event-catalog")).then((c) => (c && c.entries) || [], () => []); }
+    catch { eventCatalogReq = Promise.resolve([]); }
+  }
+  return eventCatalogReq;
+}
+
+// signalEventNote says what a catalogued atlas.* signal means and what a listener
+// receives, personal data named; and on a throw, that the name is atlas's own.
+function signalEventNote(entries, name, listens) {
+  const n = String(name || "").trim();
+  if (!n.startsWith("atlas.")) return "";
+  const e = entries.find((x) => !x.shaped && x.type === n);
+  if (!listens) {
+    return `<p class="hint warn">${esc(n)} is a name atlas emits${e ? "" : " (or reserves)"}: a model that throws it speaks for atlas. Use a name of your own.</p>`;
+  }
+  if (!e) return `<p class="hint warn">atlas emits no event named ${esc(n)}; this element would wait for something that never comes.</p>`;
+  const personal = (e.payload || []).filter((f) => f.data === "personal").map((f) => f.name);
+  return `<p class="hint" data-event="${esc(e.type)}">${esc((e.meaning || {}).en || "")}${
+    personal.length ? ` The listener receives personal data: ${personal.map(esc).join(", ")}.` : ""
+  } <a href="/#/console/events" target="_blank" rel="noopener">Events ↗</a></p>`;
 }
 
 // signalsManagerHTML lists the model's signals for central management (add, rename,
@@ -7998,7 +8034,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "The event waits until this message is published with a matching correlation key.");
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "The event waits until a signal with this name is broadcast (by a throw or signal end event, in this or any other instance).");
+          html += signalFieldsHTML(modeler, sig, "The event waits until a signal with this name is broadcast (by a throw or signal end event, in this or any other instance).", true);
         } else if (link) {
           html += linkFieldsHTML(link, "This is the landing point of a <b>link throw</b> with the same name in the same scope (an off-page connector). It does not wait — a token arriving via the link flows straight on. Draw it with no incoming sequence flow.");
         } else if (cond) {
@@ -8014,7 +8050,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "On reaching this event the message is published; any instance waiting on it with a matching correlation key continues.");
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "On reaching this event the signal is broadcast to every event waiting on that signal name, across all instances. The token then continues.");
+          html += signalFieldsHTML(modeler, sig, "On reaching this event the signal is broadcast to every event waiting on that signal name, across all instances. The token then continues.", false);
         } else if (escl) {
           html += escalationFieldsHTML(modeler, escl, "On reaching this event the escalation is raised, propagating up to the nearest matching escalation boundary or event subprocess, and the token then continues on its outgoing flow (unless an interrupting catch aborts it). Uncaught, it is harmless.");
         } else if (link) {
@@ -8064,7 +8100,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           } else if (msg) {
             html += messageFieldsHTML(modeler, msg, "The event fires when this message is published with a matching correlation key.");
           } else if (sig) {
-            html += signalFieldsHTML(modeler, sig, "The event fires when a signal with this name is broadcast (in this or any other instance) while the activity runs.");
+            html += signalFieldsHTML(modeler, sig, "The event fires when a signal with this name is broadcast (in this or any other instance) while the activity runs.", true);
           } else if (escl) {
             html += escalationFieldsHTML(modeler, escl, "The event fires when the attached activity raises a matching escalation — an escalation throw/end event inside it, or one propagating up from a called process. Interrupting cancels the activity and routes out this event; non-interrupting runs the handler while the activity keeps going.");
           } else if (cond) {
@@ -8109,7 +8145,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           } else if (msg) {
             html += messageFieldsHTML(modeler, msg, "The event subprocess fires when this message is published with a matching correlation key, while its scope runs.");
           } else if (sig) {
-            html += signalFieldsHTML(modeler, sig, "The event subprocess fires when a signal with this name is broadcast while its scope runs. A non-interrupting trigger re-arms and can fire again.");
+            html += signalFieldsHTML(modeler, sig, "The event subprocess fires when a signal with this name is broadcast while its scope runs. A non-interrupting trigger re-arms and can fire again.", true);
           } else if (escl) {
             html += escalationFieldsHTML(modeler, escl, "The event subprocess fires when its enclosing scope raises a matching escalation. Interrupting terminates the scope's other work first; non-interrupting runs this handler alongside the still-running scope.");
           } else if (cond) {
@@ -8130,7 +8166,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "A message start event: publishing this message starts a new instance of this process, matched by message name (the correlation key is shared with the throwing event but is not yet evaluated for starts).");
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "A signal start event: broadcasting this signal starts a new instance of this process, matched by signal name. One broadcast starts every deployed process with a matching signal start.");
+          html += signalFieldsHTML(modeler, sig, "A signal start event: broadcasting this signal starts a new instance of this process, matched by signal name. One broadcast starts every deployed process with a matching signal start.", true);
         } else {
           const fd = findExt(bo, "zeebe:FormDefinition") || {};
           const curForm = fd.formId || "";
@@ -8157,7 +8193,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "On reaching this end event the message is published; any instance waiting on it with a matching correlation key continues. The instance then ends.");
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "On reaching this end event the signal is broadcast to every event waiting on that signal name, across all instances. The instance then ends.");
+          html += signalFieldsHTML(modeler, sig, "On reaching this end event the signal is broadcast to every event waiting on that signal name, across all instances. The instance then ends.", false);
         } else if (err) {
           html += errorFieldsHTML(modeler, err, "On reaching this end event the error is thrown, aborting its scope and propagating up to the nearest matching error boundary or error event subprocess. Uncaught, it raises an incident.");
         } else if (escl) {
@@ -9591,6 +9627,21 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     }
     const fsigref = body.querySelector("#f-sigref");
     if (fsigref) {
+      const listens = fsigref.dataset.listens === "1";
+      const sigNote = body.querySelector("#f-sigevent");
+      eventCatalog(api).then((entries) => {
+        if (!fsigref.isConnected) return;
+        const group = fsigref.querySelector("#f-sig-events");
+        if (group) {
+          const mine = new Set(listSignals(modeler).map((x) => x.name));
+          group.innerHTML = entries.filter((e) => e.listenable && (e.channels || []).includes("signal"))
+            .map((e) => `<option value="${esc(SIGNAL_EVENT_PREFIX + e.type)}" title="${esc((e.meaning || {}).en || "")}">${
+              esc(e.type)}${mine.has(e.type) ? "" : " — new"}</option>`).join("");
+          if (!group.children.length) group.remove();
+        }
+        const sed = signalDefOf(element.businessObject);
+        if (sigNote && sed && sed.signalRef) sigNote.innerHTML = signalEventNote(entries, sed.signalRef.name, listens);
+      });
       fsigref.addEventListener("change", () => {
         const sed = signalDefOf(element.businessObject);
         if (!sed) return;
@@ -9600,6 +9651,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             linkSignal(modeler, element, sed, createSignal(modeler, ""));
           } else if (v === "") {
             linkSignal(modeler, element, sed, null);
+          } else if (v.startsWith(SIGNAL_EVENT_PREFIX)) {
+            // A catalogued event: the model's signal of that name, made once.
+            const name = v.slice(SIGNAL_EVENT_PREFIX.length);
+            linkSignal(modeler, element, sed, listSignals(modeler).find((x) => x.name === name) || createSignal(modeler, name));
           } else {
             linkSignal(modeler, element, sed, listSignals(modeler).find((s) => s.id === v));
           }
@@ -9612,6 +9667,14 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       fsigname.addEventListener("change", () => {
         const sed = signalDefOf(element.businessObject);
         if (sed && sed.signalRef) sed.signalRef.name = (fsigname.value || "").trim();
+        // A renamed signal may now be, or no longer be, a name atlas emits.
+        const note = body.querySelector("#f-sigevent");
+        const sel = body.querySelector("#f-sigref");
+        if (note && sel) {
+          eventCatalog(api).then((entries) => {
+            if (note.isConnected) note.innerHTML = signalEventNote(entries, fsigname.value, sel.dataset.listens === "1");
+          });
+        }
       });
     }
     const ferrref = body.querySelector("#f-errref");
