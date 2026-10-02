@@ -257,7 +257,7 @@ func withID(id, suffix string) string {
 }
 
 func catalogTools() []Tool {
-	return []Tool{
+	return markCatalogue([]Tool{
 		{
 			Name: "atlas_list_catalogs",
 			Description: "List the product catalogues you maintain, lowest rank first. This is the " +
@@ -699,5 +699,15 @@ func catalogTools() []Tool {
 				return asText(c.post(withID(id, "/import"), "application/xml", []byte(model)))
 			},
 		},
+	})
+}
+
+// markCatalogue marks every tool of this file as the catalogue's, in one place, so a
+// tool added to the list above is withheld with the rest when the server switched
+// the area off (ADR-0434).
+func markCatalogue(tools []Tool) []Tool {
+	for i := range tools {
+		tools[i].Catalogue = true
 	}
+	return tools
 }

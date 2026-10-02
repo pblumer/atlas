@@ -150,6 +150,13 @@ func (s *Server) feedPusher(every time.Duration) {
 // the run loop, then delivers each off it. Subscriptions are delivered one after another,
 // so a slow endpoint delays the others by at most its timeout; a held one is not asked.
 func (s *Server) pushFeed(ctx context.Context) {
+	// The feed is the catalogue's, and a server that switched the catalogue off
+	// serves neither its pull route nor its subscriptions — so nothing of it leaves
+	// by push either. Every subscription keeps its cursor, and delivery picks up
+	// there when the area is back (ADR-0434).
+	if s.catalogueOff {
+		return
+	}
 	now := s.feedPushNow()
 	var due []pendingFeedPush
 	s.do(func() { due = s.resolveFeedPushes(now) })

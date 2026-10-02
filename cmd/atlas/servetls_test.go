@@ -204,6 +204,7 @@ func serveForTest(ctx context.Context, addr, dataDir string, tlsCfg tlsConfig) e
 		nil, time.Second, script.SandboxOff, opensearch.Config{}, promquery.Config{}, retentionConfig{}, storeConfig{},
 		0, 0, false,
 		false, // metrics
+		true,  // catalogue
 		logging.FormatText, tracing.Config{}, superviseFlag{}, nil, nil,
 		true, // inProcessConnectors: no worker subprocesses out of a test binary
 		"", api.HistoryScopeAll, "", limits.Default())

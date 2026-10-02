@@ -173,7 +173,10 @@ func (s *Server) handleListMessageSources(w http.ResponseWriter, r *http.Request
 // product drives is a maintainer's, not the audience's. A product that still carries
 // the operation map is listed as the actions it means. Runs on the loop.
 func (s *Server) productActionSources(p *httpapi.Principal) ([]messageSourceView, error) {
-	if s.catalogStore == nil || s.catalogs == nil {
+	// A server that switched the catalogue off lists none of its products' actions:
+	// the store is still on disk and read here directly, not through a route the
+	// switch removed (ADR-0434).
+	if s.catalogStore == nil || s.catalogs == nil || s.catalogueOff {
 		return nil, nil
 	}
 	cats, err := s.catalogStore.Catalogs()
