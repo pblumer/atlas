@@ -55,6 +55,11 @@ type Message struct {
 	// bodies existed: one text/plain part.
 	HTML      string
 	MessageID string
+	// InReplyTo and References thread a reply under the message it answers (RFC 5322
+	// §3.6.4): the original's Message-ID, and its References followed by that id. Both
+	// are empty for every message that is not a reply (ADR-draft-mailbox-worker).
+	InReplyTo  string
+	References string
 }
 
 // Client sends a Message through one configured mail provider. It is an interface so
@@ -108,6 +113,39 @@ type sendFunc func(ctx context.Context, addr string, a smtp.Auth, from string, t
 type SMTPClient struct {
 	conn Connector
 	send sendFunc
+	// mailbox is the IMAP side of the same mailbox, when the worker names an IMAP
+	// endpoint (ADR-draft-mailbox-worker). SMTP can only send; reading needs the
+	// second protocol, and a worker that configures none is a sender only.
+	mailbox    Mailbox
+	mailboxErr error
+}
+
+// attachIMAP gives the worker its IMAP side when it names an endpoint. An endpoint
+// that does not parse does not take sending down with it — it is validated where the
+// worker is saved, and a record that slipped past answers its error when the mailbox
+// is asked for, which is where the operator who wanted it will look.
+func (c *SMTPClient) attachIMAP(endpoint, user, password string) {
+	if strings.TrimSpace(endpoint) == "" {
+		return
+	}
+	mb, err := newIMAPMailbox(endpoint, user, password, c.Send)
+	if err != nil {
+		c.mailboxErr = err
+		return
+	}
+	c.mailbox = mb
+}
+
+// Mailbox answers the IMAP mailbox behind this SMTP worker, or why it has none.
+func (c *SMTPClient) Mailbox() (Mailbox, error) {
+	if c.mailboxErr != nil {
+		return nil, c.mailboxErr
+	}
+	if c.mailbox == nil {
+		return nil, fmt.Errorf("mail: this SMTP worker has no IMAP endpoint, so it cannot read a mailbox " +
+			"(set the worker's mailbox endpoint, e.g. imaps://imap.example.com:993)")
+	}
+	return c.mailbox, nil
 }
 
 // NewSMTPClient builds an SMTP mail client for a configured worker, backed by the
@@ -238,6 +276,12 @@ func buildRFC822(m Message, from string) []byte {
 	if m.MessageID != "" {
 		b.WriteString("Message-ID: <" + m.MessageID + "@atlas>\r\n")
 	}
+	if v := headerSafe(m.InReplyTo); v != "" {
+		b.WriteString("In-Reply-To: " + v + "\r\n")
+	}
+	if v := headerSafe(m.References); v != "" {
+		b.WriteString("References: " + v + "\r\n")
+	}
 	b.WriteString("MIME-Version: 1.0\r\n")
 
 	switch {
@@ -259,4 +303,11 @@ func buildRFC822(m Message, from string) []byte {
 		b.WriteString("--" + boundary + "--\r\n")
 	}
 	return []byte(b.String())
+}
+
+// headerSafe makes a value safe to write as a header: a line break inside it would end
+// the header and start another, which for a value read from a received message — whose
+// Message-ID a stranger wrote — is a header injection.
+func headerSafe(v string) string {
+	return strings.Join(strings.Fields(strings.NewReplacer("\r", " ", "\n", " ").Replace(v)), " ")
 }

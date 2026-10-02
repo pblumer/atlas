@@ -302,6 +302,11 @@ var (
 	// the minute and skips what it could not read. Warned because that is a delivery
 	// gap — and because standing still instead would silently stop the watch for good.
 	InboundWatchMinuteOverflowed = newEvent("inbound_watch.minute_overflowed")
+	// InboundWatchGap reports a watch that resumed past mail it could no longer read:
+	// an IMAP folder the server renumbered, Gmail history older than Gmail keeps
+	// (ADR-draft-mailbox-worker). Warned because it is a delivery gap that otherwise
+	// looks exactly like a quiet mailbox.
+	InboundWatchGap = newEvent("inbound_watch.gap")
 )
 
 // Push delivery of the event feed

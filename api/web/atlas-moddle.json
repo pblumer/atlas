@@ -285,7 +285,15 @@
         { "name": "subject", "type": "String", "isAttr": true },
         { "name": "body", "type": "String", "isAttr": true },
         { "name": "bodyHtml", "type": "String", "isAttr": true },
-        { "name": "retries", "type": "String", "isAttr": true }
+        { "name": "retries", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "folder", "type": "String", "isAttr": true },
+        { "name": "messageId", "type": "String", "isAttr": true },
+        { "name": "destination", "type": "String", "isAttr": true },
+        { "name": "maxResults", "type": "String", "isAttr": true },
+        { "name": "includeBody", "type": "String", "isAttr": true },
+        { "name": "unreadOnly", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true }
       ]
     },
     {

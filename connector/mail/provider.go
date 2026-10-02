@@ -44,6 +44,10 @@ type ProviderConfig struct {
 	Secret   string
 	Name     string
 	Outbox   Sink
+	// Mailbox is an SMTP worker's IMAP endpoint, which is what lets it read the
+	// mailbox it sends from (ADR-draft-mailbox-worker). Gmail and Graph read through
+	// the API they send through and ignore it.
+	Mailbox string
 }
 
 // NewProviderClient builds the mail client for a managed worker, dispatching on its
@@ -61,12 +65,14 @@ func NewProviderClient(cfg ProviderConfig) (Client, error) {
 		if err != nil {
 			return nil, fmt.Errorf("mail: %w", err)
 		}
-		return NewSMTPClient(Connector{
+		client := NewSMTPClient(Connector{
 			Endpoint: endpoint,
 			Username: cfg.Sender,
 			Password: cfg.Secret,
 			From:     cfg.Sender,
-		}), nil
+		})
+		client.attachIMAP(cfg.Mailbox, cfg.Sender, cfg.Secret)
+		return client, nil
 	case ProviderPreview:
 		if cfg.Outbox == nil {
 			return nil, fmt.Errorf("mail: preview worker %q has no outbox", cfg.Name)
@@ -77,7 +83,11 @@ func NewProviderClient(cfg ProviderConfig) (Client, error) {
 		if err != nil {
 			return nil, err
 		}
-		return NewGmailClient(tokens, cfg.Endpoint, cfg.Sender), nil
+		read, modify, err := gmailMailboxTokens(cfg)
+		if err != nil {
+			return nil, err
+		}
+		return NewGmailClient(tokens, cfg.Endpoint, cfg.Sender).WithMailboxTokens(read, modify), nil
 	case ProviderMicrosoft:
 		tokens, err := oauthTokenSource(ProviderMicrosoft, cfg)
 		if err != nil {
@@ -93,15 +103,50 @@ func NewProviderClient(cfg ProviderConfig) (Client, error) {
 // secret, applies the provider's token-endpoint and scope defaults, and builds a
 // cached token source.
 func oauthTokenSource(provider string, cfg ProviderConfig) (TokenSource, error) {
-	if strings.TrimSpace(cfg.Secret) == "" {
-		return nil, fmt.Errorf("mail: %s worker has no credential (set credentialsRef to a JSON auth bundle in the vault)", provider)
-	}
-	var b credentialBundle
-	if err := json.Unmarshal([]byte(cfg.Secret), &b); err != nil {
-		return nil, fmt.Errorf("mail: %s credential is not valid JSON: %w", provider, err)
+	b, err := parseBundle(provider, cfg)
+	if err != nil {
+		return nil, err
 	}
 	applyProviderDefaults(provider, &b, cfg.Sender)
 	return newTokenSource(b, nettimeout.HTTPClient(), nil)
+}
+
+func parseBundle(provider string, cfg ProviderConfig) (credentialBundle, error) {
+	if strings.TrimSpace(cfg.Secret) == "" {
+		return credentialBundle{}, fmt.Errorf("mail: %s worker has no credential (set credentialsRef to a JSON auth bundle in the vault)", provider)
+	}
+	var b credentialBundle
+	if err := json.Unmarshal([]byte(cfg.Secret), &b); err != nil {
+		return credentialBundle{}, fmt.Errorf("mail: %s credential is not valid JSON: %w", provider, err)
+	}
+	return b, nil
+}
+
+// gmailMailboxTokens builds the tokens a Gmail worker's mailbox half reads and changes
+// with: gmail.readonly and gmail.modify, each on its own token, so a delegation that
+// grants only the first still serves a watch. A bundle whose scope the operator set
+// explicitly gets no second guess — both answer nil and the mailbox uses the worker's
+// own token, scope and all.
+func gmailMailboxTokens(cfg ProviderConfig) (read, modify TokenSource, err error) {
+	b, err := parseBundle(ProviderGmail, cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	if strings.TrimSpace(b.Scope) != "" {
+		return nil, nil, nil
+	}
+	for _, s := range []struct {
+		scope string
+		into  *TokenSource
+	}{{gmailReadScope, &read}, {gmailModifyScope, &modify}} {
+		scoped := b
+		scoped.Scope = s.scope
+		applyProviderDefaults(ProviderGmail, &scoped, cfg.Sender)
+		if *s.into, err = newTokenSource(scoped, nettimeout.HTTPClient(), nil); err != nil {
+			return nil, nil, err
+		}
+	}
+	return read, modify, nil
 }
 
 // applyProviderDefaults fills a credential bundle's token URL, scope, and (for a Gmail

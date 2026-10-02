@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/connector/nettimeout"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
@@ -53,6 +54,17 @@ type Job struct {
 	// MessageID is the job key, so a message resent after a lease elapsed is
 	// identifiable as the same one rather than looking like a second mail.
 	MessageID string `json:"messageId,omitempty"`
+	// The mailbox half (ADR-draft-mailbox-worker). Operation is empty for a send.
+	// Target is the message an operation addresses — the messageId a watch or a list
+	// answered — named apart from MessageID above, which is this job's own key.
+	Operation      string `json:"operation,omitempty"`
+	Folder         string `json:"folder,omitempty"`
+	Target         string `json:"target,omitempty"`
+	Destination    string `json:"destination,omitempty"`
+	MaxResults     int    `json:"maxResults,omitempty"`
+	IncludeBody    bool   `json:"includeBody,omitempty"`
+	UnreadOnly     bool   `json:"unreadOnly,omitempty"`
+	ResultVariable string `json:"resultVariable,omitempty"`
 }
 
 // Directory resolves a recipient that is not a mail address — a person or a group
@@ -93,6 +105,25 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 		return Job{}, fmt.Errorf("mail: read variables for element %d: %w", elementInstanceKey, err)
 	}
 	piKey := ei.ProcessInstanceKey // binds the processInstanceKey builtin; not the read scope
+	if detail.MailOp != "" {
+		j := Job{
+			Connector:   cp.Intern(detail.Connector),
+			Operation:   detail.MailOp,
+			Folder:      resolveValue(detail.MailFolder, piKey, scopeVars),
+			Target:      strings.TrimSpace(resolveValue(detail.MailMessage, piKey, scopeVars)),
+			Destination: resolveValue(detail.MailDestination, piKey, scopeVars),
+			MaxResults:  int(detail.MailMaxResults),
+			IncludeBody: detail.MailIncludeBody,
+			UnreadOnly:  detail.MailUnreadOnly,
+			Body:        resolveValue(detail.Body, piKey, scopeVars),
+			HTML:        resolveValue(detail.BodyHTML, piKey, scopeVars),
+			MessageID:   strconv.FormatUint(jobKey, 10),
+		}
+		if detail.ResultVar >= 0 {
+			j.ResultVariable = cp.Intern(detail.ResultVar)
+		}
+		return j, nil
+	}
 	to, err := lookUp(splitAddrs(resolveValue(detail.To, piKey, scopeVars)), dir)
 	if err != nil {
 		return Job{}, err
@@ -118,31 +149,87 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 	}, nil
 }
 
-// Run sends a resolved job through the caller's own registry. It is the whole of the
-// worker's half, and the in-process path calls it too, so there is one definition of
-// what a resolved mail task means rather than two that drift.
+// Run performs a resolved job through the caller's own registry: a send, or a
+// mailbox operation, whose answer it returns for the task's result variable (nil
+// when the operation answers nothing). It is the whole of the worker's half, and the
+// in-process path calls it too, so there is one definition of what a resolved mail
+// task means rather than two that drift.
 //
 // The worker lookup comes first: an unconfigured name is the more actionable of
 // the two failures a job can carry here, and reporting it ahead of an empty
 // recipient list keeps the message an operator sees pointed at the fix.
-func Run(ctx context.Context, j Job, reg *Registry) error {
+func Run(ctx context.Context, j Job, reg *Registry) (any, error) {
 	client, ok := reg.Client(j.Connector)
 	if !ok {
-		return reg.Unresolved("mail", j.Connector)
+		return nil, reg.Unresolved("mail", j.Connector)
 	}
-	if len(j.To) == 0 {
-		return fmt.Errorf("mail: task resolved no recipient")
+	if j.Operation == "" || j.Operation == OpSend {
+		if len(j.To) == 0 {
+			return nil, fmt.Errorf("mail: task resolved no recipient")
+		}
+		return nil, client.Send(ctx, Message{
+			From:      j.From,
+			To:        j.To,
+			Cc:        j.Cc,
+			Bcc:       j.Bcc,
+			Subject:   j.Subject,
+			Body:      j.Body,
+			HTML:      j.HTML,
+			MessageID: j.MessageID,
+		})
 	}
-	return client.Send(ctx, Message{
-		From:      j.From,
-		To:        j.To,
-		Cc:        j.Cc,
-		Bcc:       j.Bcc,
-		Subject:   j.Subject,
-		Body:      j.Body,
-		HTML:      j.HTML,
-		MessageID: j.MessageID,
-	})
+	mb, err := MailboxOf(client)
+	if err != nil {
+		return nil, fmt.Errorf("mail: worker %q: %w", j.Connector, err)
+	}
+	// One operation is one worker call, and the shared budget bounds it whole — a
+	// list of twenty-five is twenty-six requests to Gmail, not twenty-six budgets.
+	ctx, cancel := context.WithTimeout(ctx, nettimeout.Default)
+	defer cancel()
+	return runMailbox(ctx, mb, j)
+}
+
+// runMailbox performs one mailbox operation.
+func runMailbox(ctx context.Context, mb Mailbox, j Job) (any, error) {
+	if j.Operation != OpList && j.Target == "" {
+		return nil, fmt.Errorf("mail: %s: the task's messageId resolved to nothing", j.Operation)
+	}
+	switch j.Operation {
+	case OpList:
+		envs, err := mb.List(ctx, ListRequest{Folder: j.Folder, MaxResults: j.MaxResults, UnreadOnly: j.UnreadOnly, IncludeBody: j.IncludeBody})
+		if err != nil {
+			return nil, err
+		}
+		out := make([]any, 0, len(envs))
+		for _, e := range envs {
+			out = append(out, e.Fields(j.IncludeBody))
+		}
+		return out, nil
+	case OpGet:
+		e, err := mb.Get(ctx, j.Target, j.IncludeBody)
+		if err != nil {
+			return nil, err
+		}
+		return e.Fields(j.IncludeBody), nil
+	case OpMove:
+		if strings.TrimSpace(j.Destination) == "" {
+			return nil, fmt.Errorf("mail: move: the task's destination resolved to nothing")
+		}
+		id, err := mb.Move(ctx, j.Target, j.Destination)
+		if err != nil || id == "" {
+			// No id is an IMAP server that cannot say where the message went; the
+			// variable is left as it was rather than overwritten with nothing.
+			return nil, err
+		}
+		return id, nil
+	case OpMarkRead, OpMarkUnread:
+		return nil, mb.SetRead(ctx, j.Target, j.Operation == OpMarkRead)
+	case OpDelete:
+		return nil, mb.Delete(ctx, j.Target)
+	case OpReply:
+		return nil, mb.Reply(ctx, j.Target, Reply{Body: j.Body, HTML: j.HTML, MessageID: j.MessageID})
+	}
+	return nil, fmt.Errorf("mail: unknown operation %q", j.Operation)
 }
 
 // lookUp turns a recipient list into addresses: an entry with an "@" is already

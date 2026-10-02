@@ -876,3 +876,34 @@ func TestAnUnreadableConnectorStoreRendersNothingForEveryKind(t *testing.T) {
 		t.Errorf("nothing was logged; the log was %q", sink.String())
 	}
 }
+
+// A Worker Instance serving a list or a get must reach the mailbox the engine's watch
+// reads, so an SMTP Worker's IMAP endpoint travels with the rest of its configuration
+// (ADR-draft-mailbox-worker) — and a Worker that only sends hands over no such variable.
+func TestSupervisedMailEnvCarriesTheMailbox(t *testing.T) {
+	srv, _ := newValidateServer(t, WithSupervisedWorkers("http://s", nil, nil))
+	for _, c := range []connector{
+		{ID: "1", Name: "inbox", Kind: connectorKindMail, Provider: "smtp", Endpoint: "smtp.example.com:587",
+			Sender: "me@example.com", MailboxEndpoint: "imaps://imap.example.com:993", Enabled: true, CreatedAt: 1},
+		{ID: "2", Name: "noreply", Kind: connectorKindMail, Provider: "smtp", Endpoint: "smtp.example.com:587",
+			Sender: "noreply@example.com", Enabled: true, CreatedAt: 2},
+	} {
+		if err := srv.connectors.Save(c); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+	}
+	env := envOf(t, srv.mailWorkerEnv())
+	if env["ATLAS_MAIL_INBOX_MAILBOX"] != "imaps://imap.example.com:993" {
+		t.Errorf("mailbox variable = %q", env["ATLAS_MAIL_INBOX_MAILBOX"])
+	}
+	if _, ok := env["ATLAS_MAIL_NOREPLY_MAILBOX"]; ok {
+		t.Error("a sender-only Worker was handed a mailbox variable")
+	}
+	built, err := worker.BuiltinConnectors(func(k string) string { return env[k] }, connectorKindMail)
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	if !slices.Contains(built.Names, "inbox") || !slices.Contains(built.Names, "noreply") {
+		t.Errorf("the worker holds %v", built.Names)
+	}
+}
