@@ -78,6 +78,16 @@ past the others, and a page reads at most 10 000 rows, so a narrowed page can be
 or empty with `more` set — keep asking while `more` is true
 ([ADR-0432](adr/0432-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md)).
 
+**Pushed.** The same events are also delivered to a receiver an administrator subscribes
+([ADR-0433](adr/0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md)):
+a `POST` in the CloudEvents HTTP binding's batched mode — the body a JSON array of the
+envelopes above, `Content-Type: application/cloudevents-batch+json`, the header
+`Atlas-Feed-Subscription` naming the subscription and, where one is configured,
+`Authorization: Bearer`. Batches arrive in log order, one at a time per subscription; the
+next is sent only after the receiver answered `2xx` to the last. A receiver deduplicates by
+`id`, as a reader of the pull feed does: a batch accepted just before a restart can arrive
+again. A redirect is not followed.
+
 ## 2. Model-layer features are labelled
 
 A BPMN element being parseable, or drawable in the Modeler, does not by itself mean

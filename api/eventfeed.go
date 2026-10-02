@@ -125,26 +125,13 @@ func (s *Server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 		limit = v
 	}
 
-	var (
-		view   *state.ReadView
-		nodeID string
-		idErr  error
-		part   uint16
-	)
-	s.do(func() {
-		var ident nodeIdentity
-		if ident, idErr = s.nodeIdentity(); idErr != nil {
-			return
-		}
-		nodeID, part = ident.ID, s.proc.Partition()
-		view = s.store.ReadView()
-	})
+	view, nodeID, part, err := s.feedSnapshot()
 	switch {
-	case idErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "event feed: "+idErr.Error())
-		return
-	case view == nil:
+	case errors.Is(err, errFeedStopping):
 		httpapi.Error(w, http.StatusServiceUnavailable, "event feed: the server is stopping")
+		return
+	case err != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "event feed: "+err.Error())
 		return
 	}
 	defer view.Close()
@@ -162,12 +149,46 @@ func (s *Server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	page, err := s.readFeedPage(view, part, nodeID, after, limit, feedReach(httpapi.PrincipalFrom(r.Context())))
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "event feed: "+err.Error())
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, page)
+}
+
+// errFeedStopping says the server is stopping and no snapshot of the feed can be taken.
+var errFeedStopping = errors.New("the server is stopping")
+
+// feedSnapshot takes what reading the feed needs from the run loop — the node's id, the
+// partition and a read view — and nothing else, so the read itself runs with the loop
+// free (ADR-0239). The caller closes the view.
+func (s *Server) feedSnapshot() (view *state.ReadView, nodeID string, part uint16, err error) {
+	s.do(func() {
+		var ident nodeIdentity
+		if ident, err = s.nodeIdentity(); err != nil {
+			return
+		}
+		nodeID, part = ident.ID, s.proc.Partition()
+		view = s.store.ReadView()
+	})
+	if err == nil && view == nil {
+		err = errFeedStopping
+	}
+	return view, nodeID, part, err
+}
+
+// readFeedPage reads at most limit events after a cursor from a snapshot, narrowed to a
+// reach of catalogues (nil reads everything). Both doors read through it: the pull
+// route a page at a time, and push delivery a batch at a time (feedpush.go), so a
+// subscription and a token with the same reach are given the same events.
+func (s *Server) readFeedPage(view *state.ReadView, part uint16, nodeID string, after uint64, limit int,
+	reach map[string]bool) (eventPage, error) {
 	source := s.eventSource(nodeID)
-	reach := feedReach(httpapi.PrincipalFrom(r.Context()))
 	homes := s.itemHomes()
 	page := eventPage{Events: []cloudEvent{}, Next: strconv.FormatUint(after, 10)}
 	read := 0
-	err = view.FeedAfter(part, after, func(e state.FeedEntry) error {
+	err := view.FeedAfter(part, after, func(e state.FeedEntry) error {
 		if len(page.Events) == limit || read == eventFeedScan {
 			page.More = true
 			return errEventPageFull
@@ -187,10 +208,9 @@ func (s *Server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if err != nil && !errors.Is(err, errEventPageFull) {
-		httpapi.Error(w, http.StatusInternalServerError, "event feed: "+err.Error())
-		return
+		return eventPage{}, err
 	}
-	httpapi.JSON(w, http.StatusOK, page)
+	return page, nil
 }
 
 // feedReach is the set of catalogues a reader is narrowed to, or nil for one that
@@ -198,14 +218,10 @@ func (s *Server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 // token reaches this route, so the ids are the catalogues its minter named. A reach of
 // any other kind matches no row, which is the direction to fail in.
 func feedReach(p *httpapi.Principal) map[string]bool {
-	if p == nil || len(p.Reach) == 0 {
+	if p == nil {
 		return nil
 	}
-	reach := make(map[string]bool, len(p.Reach))
-	for _, id := range p.Reach {
-		reach[id] = true
-	}
-	return reach
+	return reachSet(p.Reach)
 }
 
 // feedItem is the catalogue item a feed row is about.

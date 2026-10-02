@@ -298,6 +298,25 @@ var (
 	InboundWatchMinuteOverflowed = newEvent("inbound_watch.minute_overflowed")
 )
 
+// Push delivery of the event feed
+// (ADR-0433).
+var (
+	// FeedSubscriptionChanged: an administrator created, changed or deleted a push
+	// subscription — what decides which system beyond Atlas is sent who holds what, so
+	// it belongs in the audit trail beside the tokens that read the same feed.
+	FeedSubscriptionChanged = newEvent("feed.subscription_changed")
+	// FeedPushFailing: a subscription's endpoint refused a batch or did not answer, said
+	// once when the failures begin rather than at every retry; the subscription is held
+	// on the backoff ladder and its cursor stays put.
+	FeedPushFailing = newEvent("feed.push_failing")
+	// FeedPushRecovered: a held subscription's endpoint accepted a batch again.
+	FeedPushRecovered = newEvent("feed.push_recovered")
+	// FeedSubscriptionDisabled: the feed's retention dropped rows a subscription had not
+	// delivered, so delivery switched it off rather than go on from the oldest row held
+	// and hide the gap.
+	FeedSubscriptionDisabled = newEvent("feed.subscription_disabled")
+)
+
 // Orders (ADR-0416).
 var (
 	// OrderInstanceUnrecorded: an instance started to work an order position could not

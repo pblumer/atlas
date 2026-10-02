@@ -1,0 +1,11 @@
+{
+  "tags": ["Workers", "API"],
+  "title": {
+    "en": "The event feed, delivered to the system that needs it",
+    "de": "Der Ereignis-Feed, zugestellt an das System, das ihn braucht"
+  },
+  "summary": {
+    "en": "A billing system or a CMDB that can only receive, not ask, can now be sent the event feed: set it up as a CloudEvents endpoint worker and subscribe it, for the whole feed or for some catalogues. Atlas delivers every event in order and at least once, and if the receiver is down it waits and tries again instead of skipping anything.",
+    "de": "Eine Verrechnung oder eine CMDB, die nur empfangen und nicht selbst abfragen kann, bekommt den Ereignis-Feed jetzt zugestellt: als Worker vom Typ CloudEvents-Endpunkt einrichten und abonnieren, für den ganzen Feed oder für einzelne Kataloge. Atlas stellt jedes Ereignis der Reihe nach und mindestens einmal zu; ist der Empfänger nicht erreichbar, wartet Atlas und versucht es erneut, statt etwas auszulassen."
+  }
+}

@@ -2077,8 +2077,7 @@ actions with closed effects, each a command whose outcome is a fact published be
   row of the feed, folded by `applyToState` and keyed by its log position, pruned by a fact
   of its own (`--event-feed-ttl`, 30 days); `GET /api/v1/events?after=&limit=` (operator)
   serves CloudEvents 1.0 in log order, 410 with the oldest cursor for one that fell behind;
-  the envelope is version 1 of the runtime contract. Push delivery through a Worker is
-  prepared, not built.
+  the envelope is version 1 of the runtime contract. Push delivery is built below.
 - ✅ **The feed's own role and token scope**
   ([ADR-0430](docs/adr/0430-the-event-feed-has-its-own-role-and-token-scope.md)).
   The route requires `feedreader`; an API token minted with the `events` scope reaches that
@@ -2089,6 +2088,14 @@ actions with closed effects, each a command whose outcome is a fact published be
   An `events` token's reach names catalogues, and it reads only the events about the
   products they maintain; every event names that catalogue as `homeCatalog`. Narrowing by
   the shop an order was placed in is a possible second dimension, not built.
+- ✅ **Push delivery of the feed**
+  ([ADR-0433](docs/adr/0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md)).
+  A `cloudevents` Worker holds a receiver's https address and bearer token; a feed
+  subscription on it (admin, HTTP and the Worker's Feed… panel, read over MCP) is sent the
+  feed after its server-held cursor as CloudEvents batches, narrowed by catalogue like a
+  token. A refusal holds the subscription on the breaker's ladder and skips nothing; one the
+  retention passed is switched off with the reason. Signatures and `Retry-After` are
+  follow-ups.
 - 🔲 **Not in any slice yet:** an operator action for every held position of a product.
 - 🔲 **Not in any slice yet:** a suspended entitlement state.
 - 🔲 **Not in any slice yet:** measuring the run loop before a per-position product goes

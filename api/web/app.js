@@ -824,6 +824,11 @@ const WORKER_TYPES = [
     refs: "ADR-0117 \u00b7 ADR-0253 \u00b7 ADR-0254 \u00b7 ADR-0256", status: "active", statusLabel: "configured below",
   },
   {
+    id: "cloudevents", name: "CloudEvents endpoint", kind: "Event feed",
+    desc: "Where the event feed is pushed: a system beyond atlas \u2014 billing, a CMDB \u2014 is sent how each action asked of a held position ended and every right granted and revoked, as CloudEvents batches over https, instead of pulling the feed itself. No task names this Worker; its Feed\u2026 panel subscribes it to the feed, narrowed to some catalogues if you like. atlas delivers from the feed it already holds, off the processor loop, and moves its cursor only when the endpoint accepted a batch: a refusal is held and tried again, never skipped. Administrator configuration.",
+    refs: "ADR-0429 \u00b7 ADR-0430", status: "active", statusLabel: "configured below",
+  },
+  {
     id: "entra", name: "Entra ID", kind: "Cloud directory",
     desc: "Creates, licenses, disables, lists or delta-syncs accounts and groups in a Microsoft Entra ID tenant via the Graph API \u2014 on a worker, off the processor loop. A Graph collection arrives page by page and the worker follows the pages itself, so a list operation writes a whole list into a result variable rather than a continuation token. Configure each tenant below: its {tenantId, clientId, clientSecret} bundle lives in the vault and never enters a model. Worker-only, so the tenant credential never reaches the engine.",
     refs: "ADR-0172", status: "active", statusLabel: "configured below",
@@ -2162,6 +2167,9 @@ async function viewConsoleWorkers() {
     // than to any other, and they exist on no other kind.
     if (c.kind === "clio") items.push({ label: "Provision access…", icon: "🔑", act: "provision" });
     if (c.kind === "clio" || c.kind === "jira" || c.kind === "googlesheets" || c.kind === "discord") items.push({ label: "Events…", icon: "⇄", act: "subs" });
+    // A CloudEvents endpoint is subscribed to the event feed, which is administrator
+    // configuration: the panel lists what the worker is sent and how delivery stands.
+    if (c.kind === "cloudevents" && mayUse("admin")) items.push({ label: "Feed…", icon: "⇉", act: "feed" });
     // Every Worker Type the check covers: mail connects and authenticates (or sends a
     // test message), a SQL worker dials its connection string. workerShape is the one
     // place that knows, so the menu does not go stale the next type that gains one.
@@ -4373,7 +4381,7 @@ function wireWorkerManagement(workers) {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="worker-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
+        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="cloudevents">CloudEvents endpoint</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
         <label class="field provider-field" style="margin:0"><span class="provider-label">Provider</span><select name="provider"></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
@@ -4547,6 +4555,9 @@ function wireWorkerManagement(workers) {
       try {
         if (act === "subs") {
           await toggleInboundSubs(row, id, c.kind);
+          return;
+        } else if (act === "feed") {
+          await toggleFeedSubs(row, id);
           return;
         } else if (act === "share") {
           await toggleWorkerShare(c, viewConsoleWorkers);
@@ -4859,6 +4870,104 @@ async function toggleInboundSubs(row, workerId, kind) {
       panel.remove();
       await toggleInboundSubs(row, workerId, kind);
     } catch (err) { toast("Could not delete subscription: " + err.message, "err"); }
+  });
+}
+
+// toggleFeedSubs opens, under a CloudEvents endpoint Worker's row, what that worker is
+// sent of the event feed (ADR-0433):
+// each subscription with its catalogues, whether delivery is moving — and when its
+// endpoint is failing, since when, the next attempt and what it last said — with the
+// form that adds one. Administrator configuration, like the routes behind it.
+async function toggleFeedSubs(row, workerId) {
+  const existing = row.nextElementSibling;
+  if (existing && existing.classList.contains("subs-row")) {
+    existing.remove();
+    return;
+  }
+  const [all, cats] = await Promise.all([
+    api("GET", "/api/v1/feed-subscriptions"),
+    api("GET", "/api/v1/catalogs").catch(() => []),
+  ]);
+  const subs = (all || []).filter((s) => s.workerId === workerId);
+  const catName = (id) => {
+    const c = (cats || []).find((x) => x.id === id);
+    const texts = (c && c.texts) || {};
+    return Object.values(texts).find((t) => t) || id;
+  };
+  const state = (s) => {
+    if (!s.enabled) {
+      return `<span class="pill warn" title="${esc(s.disabledReason || "Switched off.")}"><span class="dot"></span>off</span>`
+        + (s.disabledReason ? ` <span class="muted">${esc(s.disabledReason)}</span>` : "");
+    }
+    if (s.hold) {
+      return `<span class="pill err" title="${esc(s.hold.lastError)}"><span class="dot"></span>held</span>`
+        + ` <span class="muted">failing since ${esc(new Date(s.hold.failingSince).toLocaleString())},`
+        + ` next attempt ${esc(new Date(s.hold.retryAt).toLocaleString())}: ${esc(s.hold.lastError)}</span>`;
+    }
+    return '<span class="pill ok"><span class="dot"></span>on</span>'
+      + ` <span class="muted">${s.deliveredAt ? "last delivered " + esc(fmtTime(s.deliveredAt)) : "nothing delivered yet"}</span>`;
+  };
+  const list = subs.map((s) => `<tr data-sid="${esc(s.id)}" data-enabled="${s.enabled ? "1" : ""}">
+      <td>${(s.reach || []).length
+        ? s.reach.map((id) => `<span class="chip" title="${esc(id)}">${esc(catName(id))}</span>`).join(" ")
+        : '<span class="muted">the whole feed</span>'}</td>
+      <td>${state(s)}</td>
+      <td class="muted">position ${esc(String(s.cursor))}</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn ghost" data-ftoggle>${s.enabled ? "Disable" : "Enable"}</button>
+        <button class="btn ghost" data-ffrom="oldest" title="Deliver again from the oldest event the feed still holds">From oldest</button>
+        <button class="btn ghost" data-ffrom="now" title="Skip to the newest event; deliver only what is recorded from now on">From now</button>
+        <button class="btn ghost danger" data-fdel title="End this subscription">Delete</button>
+      </td>
+    </tr>`).join("") || `<tr><td colspan="4" class="muted" style="padding:10px">Not subscribed. Add a subscription below to have this endpoint sent the event feed.</td></tr>`;
+  const options = (cats || []).map((c) => `<option value="${esc(c.id)}">${esc(catName(c.id))}</option>`).join("");
+  const panel = document.createElement("tr");
+  panel.className = "subs-row";
+  panel.innerHTML = `<td colspan="3" style="background:var(--surface); padding:12px 18px">
+    <div class="muted" style="margin-bottom:8px">The event feed pushed to this endpoint — how each action asked of a held position ended, and every right granted and revoked — as CloudEvents batches. A batch the endpoint refuses is <b>held and tried again</b>, never skipped; the receiver deduplicates by each event's <code>id</code>. Narrowed to some catalogues, it is sent only the events about the products they maintain. If the feed's retention passes a subscription that fell behind, it is switched off and says so: enable it again from the oldest event held.</div>
+    <table style="width:100%"><tbody id="feed-body">${list}</tbody></table>
+    <form id="feed-form" style="display:grid;gap:8px;grid-template-columns:2fr 1fr 1fr auto;align-items:end;margin-top:10px">
+      <label class="field" style="margin:0"><span>Catalogues (none selected: the whole feed)</span><select name="reach" multiple size="3">${options}</select></label>
+      <label class="field" style="margin:0"><span>Start</span><select name="from"><option value="oldest">from the oldest event held</option><option value="now">from now</option></select></label>
+      <label class="field" style="margin:0"><span>Events per batch</span><input name="batchSize" type="number" min="0" max="1000" placeholder="100"/></label>
+      <button class="btn" type="submit" title="Subscribe this endpoint to the event feed">Subscribe</button>
+    </form></td>`;
+  row.after(panel);
+  const reload = async () => {
+    panel.remove();
+    await toggleFeedSubs(row, workerId);
+  };
+  panel.querySelector("#feed-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    try {
+      await api("POST", "/api/v1/feed-subscriptions", {
+        workerId,
+        reach: f.getAll("reach"),
+        from: f.get("from") || "oldest",
+        batchSize: Number(f.get("batchSize") || 0) || 0,
+      });
+      toast("Subscribed to the event feed", "ok");
+      await reload();
+    } catch (err) { toast("Could not subscribe: " + err.message, "err"); }
+  });
+  panel.querySelector("#feed-body").addEventListener("click", async (e) => {
+    const btn = e.target.closest("button");
+    const tr = btn && btn.closest("tr[data-sid]");
+    if (!tr) return;
+    const path = "/api/v1/feed-subscriptions/" + encodeURIComponent(tr.dataset.sid);
+    try {
+      if (btn.hasAttribute("data-fdel")) {
+        await api("DELETE", path);
+      } else if (btn.hasAttribute("data-ftoggle")) {
+        await api("PATCH", path, { enabled: !tr.dataset.enabled });
+      } else if (btn.dataset.ffrom) {
+        await api("PATCH", path, { from: btn.dataset.ffrom });
+      } else {
+        return;
+      }
+      await reload();
+    } catch (err) { toast("Could not change the subscription: " + err.message, "err"); }
   });
 }
 

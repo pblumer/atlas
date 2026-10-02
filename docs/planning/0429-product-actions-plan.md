@@ -212,6 +212,16 @@ See ADR-0429 §5's as-built note for slice E, and the version-1 contract in
   event (30 days default, §10 decision 8); `GET /api/v1/events?after=` with CloudEvents 1.0
   envelopes; 410 for an expired cursor; push via a Worker prepared, not built.
 
+## After slice E — the feed's access and delivery — ✅ landed
+
+- The feed's own role `feedreader` and token scope `events` (ADR-0430).
+- Narrowing by catalogue: an `events` token's reach names catalogues, every event names its
+  product's `homeCatalog`
+  (ADR-0432).
+- Push delivery to a `cloudevents` Worker, a server-held cursor per subscription, held on
+  the breaker's ladder when the receiver fails
+  (ADR-0433).
+
 ## Not in any slice yet
 
 - Triggering an operator action for every position of a product (§10, decision 3).

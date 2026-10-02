@@ -24,6 +24,28 @@
       ]
     },
     {
+      "id": "the-event-feed-can-be-pushed-to-a-system-that-cannot-poll-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The event feed, delivered to the system that needs it",
+        "de": "Der Ereignis-Feed, zugestellt an das System, das ihn braucht"
+      },
+      "summary": {
+        "en": "A billing system or a CMDB that can only receive, not ask, can now be sent the event feed: set it up as a CloudEvents endpoint worker and subscribe it, for the whole feed or for some catalogues. Atlas delivers every event in order and at least once, and if the receiver is down it waits and tries again instead of skipping anything.",
+        "de": "Eine Verrechnung oder eine CMDB, die nur empfangen und nicht selbst abfragen kann, bekommt den Ereignis-Feed jetzt zugestellt: als Worker vom Typ CloudEvents-Endpunkt einrichten und abonnieren, für den ganzen Feed oder für einzelne Kataloge. Atlas stellt jedes Ereignis der Reihe nach und mindestens einmal zu; ist der Empfänger nicht erreichbar, wartet Atlas und versucht es erneut, statt etwas auszulassen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Workers",
+        "API"
+      ]
+    },
+    {
       "id": "an-event-feed-token-can-be-confined-to-the-catalogues-it-is-",
       "version": "Unreleased",
       "date": null,
@@ -273,47 +295,6 @@
           "de": "Katalog öffnen"
         },
         "route": "#/catalog"
-      }
-    },
-    {
-      "id": "the-modeler-offers-the-events-your-workers-publish-when-you-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Pick your Workers' events instead of typing them",
-        "de": "Ereignisse der Worker auswählen statt abtippen"
-      },
-      "summary": {
-        "en": "When a start event, a catch event, a boundary event or a receive task waits for a message, its message picker now lists the events your Workers publish — a Jira, clio, Google Sheets or Discord watch configured under Workers → Events… in the Console — with the worker behind each and a mark where a watch is switched off. Picking one creates the message with exactly that name. Before, the name had to be typed by hand, and one wrong character meant a process that never started.",
-        "de": "Wartet ein Startereignis, ein Zwischenereignis, ein Randereignis oder eine Empfangsaufgabe auf eine Nachricht, listet die Nachrichtenauswahl jetzt die Ereignisse Ihrer Worker auf – eine Jira-, clio-, Google-Sheets- oder Discord-Überwachung aus «Workers → Events…» in der Konsole –, mit dem jeweiligen Worker und einer Markierung, wo eine Überwachung ausgeschaltet ist. Ein Klick legt die Nachricht mit genau diesem Namen an. Bisher musste der Name von Hand eingetippt werden, und ein falsches Zeichen bedeutete einen Prozess, der nie startete."
-      },
-      "link": {
-        "label": "ADR-0205",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0205-connector-ownership-and-event-delivery.md"
-      },
-      "tags": [
-        "Modeler",
-        "Workers"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a process in the Modeler and switch to the «Implement» tab.",
-          "Select a message start event, catch event, boundary event or receive task.",
-          "Open «Message» and choose a name under «Events from Workers»."
-        ],
-        "de": [
-          "Öffnen Sie einen Prozess im Modeler und wechseln Sie zum Reiter «Implement».",
-          "Wählen Sie ein Nachrichten-Startereignis, ein Zwischenereignis, ein Randereignis oder eine Empfangsaufgabe.",
-          "Öffnen Sie «Message» und wählen Sie einen Namen unter «Events from Workers»."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]

@@ -880,6 +880,11 @@ func (s *Server) handleDeleteConnector(w http.ResponseWriter, r *http.Request) {
 		if delErr = s.connectors.Delete(id); delErr != nil {
 			return
 		}
+		// A cloudevents Worker's feed subscriptions go with it: they are its
+		// configuration, and one naming a Worker that no longer exists delivers nowhere.
+		if delErr = s.deleteFeedSubscriptionsOf(id); delErr != nil {
+			return
+		}
 		delErr = s.rebuildConnectorRegistries()
 	})
 	if delErr != nil {

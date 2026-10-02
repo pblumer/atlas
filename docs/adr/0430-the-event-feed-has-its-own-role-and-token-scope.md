@@ -140,7 +140,11 @@ a reviewed, named set, which is what makes it safe to hand out.
     [ADR-0432](0432-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md):
     the catalogue is the product's home, read when the page is.)*
   - **Push delivery.** The Worker that pushes the feed (ADR-0429 §5, prepared) should run
-    under this role.
+    under this role. *(Built otherwise by
+    [ADR-0433](0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md):
+    delivery runs in the server and carries no principal, so no role applies to it; what
+    stands in for the role is that only an administrator creates a subscription, as only an
+    administrator mints an `events` token.)*
   - **The role-carrying scope** is the first step toward the merger ADR-0194 names. If a
     second scope needs roles of its own, `scopeRoles` is where it goes, and this record is the
     precedent.

@@ -31,6 +31,19 @@ _Changed_ / _Removed_ for each version.
   does a catalogue tool that does not say it is one.
   [ADR-draft-the-catalogue-can-be-switched-off](docs/adr/draft-the-catalogue-can-be-switched-off.md).
 
+- **The event feed can be pushed to a system that cannot poll it.** A new Worker Type,
+  **CloudEvents endpoint**, holds a receiver's https address and the vault key sent as its
+  bearer token. Subscribing it to the feed — in the worker's **Feed…** panel or with
+  `POST /api/v1/feed-subscriptions` — has Atlas POST the feed's events to it as CloudEvents
+  batches (`application/cloudevents-batch+json`), the same events with the same ids that
+  `GET /api/v1/events` answers, optionally narrowed to some catalogues and starting from the
+  oldest event held or from now. The cursor is kept by Atlas and moves only when the receiver
+  answers 2xx, so delivery is at least once. A receiver that refuses or does not answer is
+  held and tried again after 10 s, doubling to 5 min, and nothing is skipped; the panel, the
+  listing and the new MCP tool `atlas_feed_subscriptions` show why. A subscription whose
+  unsent events the feed's retention dropped is switched off with the reason, to be resumed
+  from the oldest event held or from now. Subscriptions are an administrator's to manage.
+
 - **An event-feed token can be confined to the catalogues it is for.** An `events` token
   minted with `"reach":["<catalogue id>"]` reads only the events about the products those
   catalogues maintain — their action outcomes, and the rights to them granted and revoked —

@@ -1618,6 +1618,23 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/events", s.handleListEvents, apiOp{
 			summary: "The event feed (ADR-0429 §5): every action outcome, grant and revocation, as CloudEvents 1.0 structured JSON in log order. `after` is the cursor of the last event the caller holds (a decimal position, the `next` of the previous page); leave it out to read from the oldest held. `limit` is 1–1000, default 100. Delivery is at least once: deduplicate by `id`. The feed keeps its rows for `--event-feed-ttl` (30 days); a cursor older than the oldest held is answered 410 with `oldest`, the cursor to resume from. Every event's data names the catalogue that maintains its product as `homeCatalog`; an `events` token minted with a reach of catalogues is answered only the events whose `homeCatalog` it names, its cursor moving past the rest, and a page reads at most 10000 rows, so a narrowed page can be short or empty with `more` set. It requires the `feedreader` role, which a token minted with the `events` scope carries and nothing else", tag: "Catalogue", role: RoleFeedReader,
 			resp: jsonBody("A page of events: {events, next, more}", tObject())}},
+		{"GET", "/api/v1/feed-subscriptions", s.handleListFeedSubscriptions, apiOp{
+			summary: "List the event feed's push subscriptions (ADR-0433): each names the cloudevents Worker it is delivered to, the catalogues it is narrowed to, its cursor, whether it is enabled and why delivery switched it off, when its endpoint last accepted a batch, and — while the endpoint is failing — its hold: failures in a row, since when, the next attempt and the last error (admin-only)", tag: "Catalogue", role: RoleAdmin,
+			resp: jsonBody("Feed subscriptions", tArray())}},
+		{"POST", "/api/v1/feed-subscriptions", s.handleCreateFeedSubscription, apiOp{
+			summary: "Push the event feed to a cloudevents Worker's endpoint: the server POSTs the feed's events after the subscription's cursor as CloudEvents batches (application/cloudevents-batch+json), with the Worker's credential as a bearer token, and moves the cursor when the endpoint answers 2xx — at least once, deduplicated by id. A failing endpoint is held on a backoff ladder, never skipped (admin-only)", tag: "Catalogue", role: RoleAdmin,
+			req: jsonBody("The cloudevents Worker, the catalogues it is narrowed to as reach (none delivers the whole feed), the batch size (1–1000, default 100), whether it starts enabled, and from: oldest (the default) or now", schemaObj(map[string]any{
+				"workerId": tString(), "reach": tArray(), "batchSize": tInteger(), "enabled": tBool(), "from": tString(),
+			}, "workerId")),
+			resp: jsonBody("Created subscription", tObject()), status: http.StatusCreated}},
+		{"PATCH", "/api/v1/feed-subscriptions/{id}", s.handleUpdateFeedSubscription, apiOp{
+			summary: "Change a feed subscription: its reach, its batch size, whether it is enabled (enabling clears why delivery switched it off), or with from (oldest or now) where its cursor stands. Moving the cursor or enabling lifts a hold (admin-only)", tag: "Catalogue", role: RoleAdmin,
+			req: jsonBody("Subscription update", schemaObj(map[string]any{
+				"reach": tArray(), "batchSize": tInteger(), "enabled": tBool(), "from": tString(),
+			})),
+			resp: jsonBody("Updated subscription", tObject())}},
+		{"DELETE", "/api/v1/feed-subscriptions/{id}", s.handleDeleteFeedSubscription, apiOp{
+			summary: "End a feed subscription (admin-only)", tag: "Catalogue", role: RoleAdmin, status: http.StatusNoContent}},
 		{"GET", "/api/v1/message-sources", s.handleListMessageSources, apiOp{
 			summary: "List every message name with where it comes from (ADR-0429 §6), each row tagged by `sourceKind`: `inbound-watch` — a Worker's event, with the worker and, for a viewer of it, the watch; `product-action` — a product's action, with the product, the action's key, effect and triggers and the process the product binds it to, for the catalogues the caller maintains; `process` — where the newest deployed version of a process waits for it, at a message `start` or a `catch`. The Modeler groups its message picker by these and tells a model whether its message has a source", tag: "Workers", role: RoleModeler, resp: jsonBody("Message sources", tArray())}},
 
