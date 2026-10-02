@@ -6,6 +6,7 @@ import (
 
 	"github.com/pblumer/atlas/api"
 	"github.com/pblumer/atlas/connector/script"
+	"github.com/pblumer/atlas/job"
 )
 
 // The gap these cover, named as a follow-up by ADR-0181 itself: trying the AD
@@ -190,5 +191,47 @@ func TestSupervisingRemedyPairsTheWorkerWithTheOffload(t *testing.T) {
 	}
 	if len(offload) != 1 || offload[0] != "remedy" {
 		t.Fatalf("offload = %v, want [remedy] so the engine stops filing the tickets itself", offload)
+	}
+}
+
+// --worker-max-jobs reaches every built-in Worker Type this server supervises, and
+// nothing else: a --supervise command is the operator's own program, which may not
+// be safe to run twice at once, so it keeps the worker's default of one at a time.
+func TestWorkerMaxJobsReachesEveryBuiltInWorker(t *testing.T) {
+	specs := []api.SuperviseSpec{
+		{ID: "rest", Kinds: []string{"rest"}, Connectors: []string{"rest"}},
+		{ID: "mailer-1", Kinds: []string{"send-email"}},
+		{ID: "entra", Kinds: []string{"entra"}, Connectors: []string{"entra"}},
+	}
+	if err := applyWorkerMaxJobs(specs, 8); err != nil {
+		t.Fatalf("applyWorkerMaxJobs: %v", err)
+	}
+	for _, s := range specs {
+		want := 8
+		if len(s.Connectors) == 0 {
+			want = 0
+		}
+		if s.MaxJobs != want {
+			t.Errorf("%s: MaxJobs = %d, want %d", s.ID, s.MaxJobs, want)
+		}
+	}
+}
+
+// Zero or less would be a worker that can never start a job: refused at startup
+// rather than discovered as a queue that never moves.
+func TestWorkerMaxJobsBelowOneIsRefused(t *testing.T) {
+	for _, n := range []int{0, -1} {
+		if err := applyWorkerMaxJobs(nil, n); err == nil {
+			t.Errorf("applyWorkerMaxJobs(%d) succeeded, want a refusal", n)
+		}
+	}
+}
+
+// The default is the engine's own bound for its in-process handlers, so moving a
+// kind onto a worker does not change how many of its jobs run together.
+func TestWorkerMaxJobsDefaultsToTheInProcessBound(t *testing.T) {
+	if api.DefaultSupervisedWorkerMaxJobs != job.DefaultConcurrency {
+		t.Errorf("DefaultSupervisedWorkerMaxJobs = %d, want job.DefaultConcurrency (%d)",
+			api.DefaultSupervisedWorkerMaxJobs, job.DefaultConcurrency)
 	}
 }

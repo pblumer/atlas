@@ -206,6 +206,7 @@ func serveForTest(ctx context.Context, addr, dataDir string, tlsCfg tlsConfig) e
 		false, // metrics
 		true,  // catalogue
 		logging.FormatText, tracing.Config{}, superviseFlag{}, nil, nil,
+		api.DefaultSupervisedWorkerMaxJobs,
 		true, // inProcessConnectors: no worker subprocesses out of a test binary
 		"", api.HistoryScopeAll, "", limits.Default())
 }

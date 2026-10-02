@@ -937,6 +937,13 @@ What it takes to run this for real.
 - 🔲 Public API surface (deploy, create instance, publish message, complete job, queries)
 - 🔲 gRPC job-worker protocol (streaming pull, leases, fencing) — ADR-0007
 - 🔲 Worker SDK (Go first)
+- ✅ A worker runs the jobs of one type concurrently: `--max-jobs` places, a poll asking only
+  for the free ones, and supervised built-in workers at the engine's in-process bound
+  (`--worker-max-jobs`, default 16)
+  ([ADR-0440](docs/adr/0440-worker-runs-jobs-concurrently.md)).
+  On Windows a kill-on-close job object ends every supervised worker, and what it started,
+  with the server however the server ends
+  ([ADR-0439](docs/adr/0439-supervised-workers-end-with-the-server.md)).
 - 🚧 Metrics (throughput, batch size, fsync latency, queue depth), structured logs, OTel traces
   ([ADR-0142](docs/adr/0142-prometheus-metrics.md), v0.2.0 programme E): a Prometheus
   exposition at `/metrics` on Atlas's own registry. The **durability** metrics landed —
@@ -1950,6 +1957,12 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   [ADR-0358](docs/adr/0358-order-line-configuration.md), [ADR-0360](docs/adr/0360-product-category.md),
   [ADR-0361](docs/adr/0361-product-price.md), [ADR-0391](docs/adr/0391-product-picture.md),
   [ADR-0395](docs/adr/0395-product-construction-kit.md)).
+- ✅ **The answers reach the approver and the processes.** The approver reads a position's
+  configuration answers on the approval, labelled as the form labels them; the processes the
+  product binds receive each answer as a variable of its own, sealed where the model declares
+  it personal, never in place of a variable the order sets; Atlas's own approval models and
+  the orchestration no longer receive them
+  ([ADR-0441](docs/adr/0441-a-position-s-answers-reach-its-processes.md)).
 - ✅ **Maintaining a catalogue.** A grantable `productmanager` role creates catalogues, and
   each catalogue is the scope its members work in
   ([ADR-0315](docs/adr/0315-portal-roles-and-responsibilities.md)). The Console screen and

@@ -31,6 +31,29 @@
       }
     },
     {
+      "id": "what-the-orderer-answered-reaches-the-approver-and-the-proce",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Approvers and processes see what was ordered",
+        "de": "Genehmigende und Prozesse sehen, was bestellt wurde"
+      },
+      "summary": {
+        "en": "The answers from a product's order form, such as a licence plate, now appear for the approver in the inbox and reach the product's own processes as separate variables. A process can mark an answer as personal data, so it is stored encrypted and can be erased with the person. Atlas's built-in approval processes no longer keep these answers in their history.",
+        "de": "Die Antworten aus dem Bestellformular eines Produkts, etwa ein Kennzeichen, erscheinen jetzt bei der genehmigenden Person in der Inbox und erreichen die Prozesse des Produkts als eigene Variablen. Ein Prozess kann eine Antwort als Personendaten kennzeichnen; sie wird dann verschlüsselt gespeichert und lässt sich mit der Person löschen. Atlas' eingebaute Genehmigungsprozesse bewahren diese Antworten nicht mehr in ihrem Verlauf auf."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Shop",
+        "Service catalogue",
+        "Security"
+      ]
+    },
+    {
       "id": "a-mail-worker-can-read-its-mailbox-and-the-mailbox-stays-its",
       "version": "Unreleased",
       "date": null,
@@ -271,28 +294,6 @@
       },
       "tags": [
         "Security",
-        "API"
-      ]
-    },
-    {
-      "id": "what-happens-to-a-right-leaves-atlas-as-a-feed-of-cloudevent",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A feed of what happens to rights",
-        "de": "Ein Feed, was mit Rechten geschieht"
-      },
-      "summary": {
-        "en": "Systems outside Atlas, such as a CMDB or billing, can now follow everything that happens to the services people hold: each right granted or revoked and how each requested action ended. They read it from one feed of standard CloudEvents, in order, picking up where they left off. The feed keeps 30 days; a system that falls further behind is told so instead of silently missing events.",
-        "de": "Systeme ausserhalb von Atlas, etwa eine CMDB oder die Verrechnung, können jetzt alles verfolgen, was mit den bezogenen Leistungen geschieht: jedes gewährte oder entzogene Recht und wie jede angefragte Aktion endete. Sie lesen es aus einem Feed standardisierter CloudEvents, in der richtigen Reihenfolge und ab der Stelle, an der sie aufgehört haben. Der Feed hält 30 Tage; ein System, das weiter zurückliegt, erfährt das, statt stillschweigend Ereignisse zu verpassen."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Service catalogue",
         "API"
       ]
     }

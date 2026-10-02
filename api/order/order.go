@@ -597,6 +597,14 @@ func (l Line) ApprovalProcess() string {
 	return l.Approval.Kind
 }
 
+// AtlasApproval reports whether one of Atlas's own approval processes decides this
+// line, rather than a model the installation binds by name. Atlas's own are not
+// given the line's answers (ADR-0441).
+func (l Line) AtlasApproval() bool {
+	_, ok := approvalProcesses[l.Approval.Kind]
+	return ok && l.NeedsApproval()
+}
+
 // Status is where a whole order stands. It is derived from the lines rather than
 // stored, so it can never disagree with them.
 type Status string
