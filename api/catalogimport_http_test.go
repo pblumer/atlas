@@ -8,7 +8,7 @@ import (
 )
 
 // A whole shop as one document, through the whole stack
-// (ADR-draft-a-catalogue-is-imported-as-one-document): the route is a product
+// (ADR-0436): the route is a product
 // manager's, the catalogues it writes are theirs, and a second product manager can
 // neither re-import over them nor take a product from them.
 func TestAProductManagerImportsAShopAsOneDocument(t *testing.T) {

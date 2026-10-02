@@ -1,4 +1,4 @@
-# ADR-DRAFT: A catalogue is imported as one document
+# ADR-0436: A catalogue is imported as one document
 
 - **Status:** Accepted
 - **Implementation:** Landed

@@ -15,7 +15,7 @@ import (
 )
 
 // An example that ships a shop carries it as a catalogue document, katalog.json
-// (ADR-draft-a-catalogue-is-imported-as-one-document), beside the processes and forms
+// (ADR-0436), beside the processes and forms
 // its products are bound to. The installer posts it to POST /api/v1/catalogs/import
 // with publish:true, so a document that would not publish is an example whose install
 // button fails in the reader's instance. This file proves, without a server, what that

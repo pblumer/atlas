@@ -2,7 +2,7 @@
 // installer: the page is bilingual like the handbook, and installing the
 // administration-services example creates the application, its forms and processes,
 // publishes them, and imports the catalogue document with the reader's answers in
-// place of its placeholders (ADR-draft-a-catalogue-is-imported-as-one-document).
+// place of its placeholders (ADR-0436).
 import { test, expect } from "@playwright/test";
 
 function installMock(page) {

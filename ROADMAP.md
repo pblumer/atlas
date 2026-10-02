@@ -1947,7 +1947,7 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   writes catalogues, their products and edges, and optionally their releases, all or nothing,
   under the authority the single writes need; ids are the document's own, so importing again
   updates
-  ([ADR-draft-a-catalogue-is-imported-as-one-document](docs/adr/draft-a-catalogue-is-imported-as-one-document.md)).
+  ([ADR-0436](docs/adr/0436-a-catalogue-is-imported-as-one-document.md)).
   Export is a follow-up.
 - ✅ **A shop handbook with an example to install.** `shop-handbuch.html` (DE/EN) on building
   catalogues, several catalogues, products and services and their processes, with the

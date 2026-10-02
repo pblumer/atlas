@@ -13,7 +13,7 @@ import (
 
 // A catalogue document is a shop as one file: catalogues, their products and the
 // edges between them, imported all or nothing
-// (ADR-draft-a-catalogue-is-imported-as-one-document).
+// (ADR-0436).
 
 // shopDocument is a small, publishable shop: a catalogue that maintains a badge and a
 // parking space and offers both, and a second catalogue offering the badge it does not

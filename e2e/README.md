@@ -344,7 +344,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   subscribing sends the catalogues picked and where to start; a subscription is paused,
   rewound to the oldest event held and ended from its row, each one request. The New worker
   form explains the type and links its runbook.
-- **`shop-handbuch.spec.mjs`** ([ADR-draft-a-catalogue-is-imported-as-one-document](../docs/adr/draft-a-catalogue-is-imported-as-one-document.md)):
+- **`shop-handbuch.spec.mjs`** ([ADR-0436](../docs/adr/0436-a-catalogue-is-imported-as-one-document.md)):
   the **shop handbook** and its installer. The page switches language like the handbook;
   the installer asks for the two audiences and the two approvers the example's catalogue
   document leaves open, then creates the application, its ten forms and five processes,

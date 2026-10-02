@@ -12,7 +12,7 @@ import (
 )
 
 // A catalogue document is a shop as one file
-// (ADR-draft-a-catalogue-is-imported-as-one-document): the catalogues, the products
+// (ADR-0436): the catalogues, the products
 // they maintain and offer, and the edges between them. It is what an example ships,
 // and what moves a shop from one installation to another without a person
 // re-entering it product by product.
