@@ -72,6 +72,11 @@ const (
 	// clearest reason ADR-0164 has: a round is one model call, minutes long and able to
 	// hang, so it never runs in the engine process.
 	connectorKindAgent = "agent"
+
+	// connectorKindCloudEvents is the endpoint push delivery sends the event feed to
+	// (ADR-0433). No task names it:
+	// the feed's subscriptions do (feedsubs.go).
+	connectorKindCloudEvents = "cloudevents"
 )
 
 // configuredWorker is an operator-managed Worker (ADR-0203): an instance of a

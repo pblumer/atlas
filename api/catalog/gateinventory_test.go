@@ -81,6 +81,13 @@ var catalogGates = []handlerGate{
 		why: "reports only on catalogues the caller may edit, by the same mayEdit the two reports above use; the outsider case is an empty report, proved in TestTheTranslationReportFollowsTheCatalogueYouMaintain"},
 	{name: "HandleSaveItem", kind: gated, want: http.StatusNotFound, method: "POST",
 		body: `{"id":"x","homeCatalog":"CAT","state":"active","texts":{"de":"X"},"approval":{"kind":"none"},"provisionProcess":"p","deprovisionProcess":"d"}`},
+	// A document names its catalogues by id, so an outsider importing one that names a
+	// catalogue they cannot see is refused without anything being written. It is 403
+	// rather than 404 because the id is the document's own: any refusal at all says
+	// that something already holds it, and 403 says no more than that — neither whose
+	// it is nor what is in it.
+	{name: "HandleImportDocument", kind: gated, want: http.StatusForbidden, method: "POST",
+		body: `{"catalogs":[{"id":"CAT","rank":5,"languages":["de"]}]}`},
 	{name: "HandleImport", kind: gated, want: http.StatusNotFound, method: "POST",
 		body: `<?xml version="1.0" encoding="UTF-8"?><model xmlns="http://www.opengroup.org/xsd/archimate/3.0/" identifier="m"/>`,
 		id:   true},

@@ -1,0 +1,24 @@
+{
+  "type": "default",
+  "id": "vd-geoportal-entfernung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Zugang im Geoportal entfernen · Remove the geoportal access**\n\nDen Zugang im Geoportal löschen. · Delete the access in the geoportal."
+    },
+    {
+      "key": "recipient",
+      "type": "textfield",
+      "label": "Bisher · Previously",
+      "disabled": true
+    },
+    {
+      "key": "entfernt",
+      "type": "checkbox",
+      "label": "Zugang entfernt · Access removed",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

@@ -560,6 +560,16 @@ type Server struct {
 	// is that bridge's poll cadence (WithInboundPollInterval; 0 disables the bridge).
 	inboundSubs *inboundSubStore
 	inboundPoll time.Duration
+	// feedSubs holds the event feed's push subscriptions and feedPush the cadence they
+	// are delivered at (WithFeedPushInterval; 0 disables delivery). feedPushes is each
+	// subscription's runtime hold after a failed delivery, feedPushClient and
+	// feedPushClock the HTTP client and clock delivery uses, injectable for tests
+	// (ADR-0433).
+	feedSubs       *feedSubStore
+	feedPush       time.Duration
+	feedPushes     *feedPushState
+	feedPushClient *http.Client
+	feedPushClock  func() time.Time
 	// inboundClock is the clock the bridge paces per-watch cadences by, injectable so a
 	// test does not have to wait one out. nil means time.Now.
 	inboundClock func() time.Time
@@ -736,6 +746,14 @@ type Server struct {
 	// it with --docs=false / WithoutDocs (ADR-0043). Set once before Handler is
 	// mounted; read-only thereafter.
 	docsEnabled bool
+
+	// catalogueOff is the shop, the catalogue, the orders and the inventory switched
+	// off with --catalogue=false / WithoutCatalogue
+	// (ADR-0434). Spelled as "off" rather than
+	// "enabled" on purpose: the zero value is the shipped default, and seventy-odd
+	// tests build a Server as a literal and expect the whole surface. Set once before
+	// Handler is mounted; read-only thereafter.
+	catalogueOff bool
 
 	// logs is the recent-process-log tail exposed at GET /api/v1/logs, so an
 	// operator can read server logs from the web UI without shell access. Nil when
@@ -924,6 +942,12 @@ func WithUserProvisioning() Option { return func(s *Server) { s.userProvisioning
 // directly). The default is 2s.
 func WithInboundPollInterval(d time.Duration) Option {
 	return func(s *Server) { s.inboundPoll = d }
+}
+
+// WithFeedPushInterval sets how often push delivery of the event feed runs. A
+// non-positive interval disables it (tests drive it directly). The default is 2s.
+func WithFeedPushInterval(d time.Duration) Option {
+	return func(s *Server) { s.feedPush = d }
 }
 
 // WithCollabKeepaliveInterval sets how often an idle collaboration SSE stream
@@ -1422,6 +1446,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	feedSubs, err := newFeedSubStore(filepath.Join(dataDir, "feed-subscriptions"))
+	if err != nil {
+		return nil, err
+	}
 	settings, err := newSettingsStore(filepath.Join(dataDir, "settings"))
 	if err != nil {
 		return nil, err
@@ -1508,10 +1536,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		repository:        repositoryCatalog,
 		repositoryStore:   repositoryStore,
 		inboundSubs:       inboundSubs,
+		feedSubs:          feedSubs,
+		feedPushes:        newFeedPushState(),
 		settings:          settings,
 		playgroundTTL:     playgroundSessionTTL, // WithPlaygroundSessions overrides both of these
 		playgroundSweep:   playgroundReapInterval,
 		inboundPoll:       2 * time.Second,          // default tick; WithInboundPollInterval overrides, 0 disables
+		feedPush:          2 * time.Second,          // default tick; WithFeedPushInterval overrides, 0 disables
 		inboundBatch:      defaultInboundBatch,      // per-poll ReadEvents cap; WithInboundBatchLimit overrides
 		exporterPoll:      5 * time.Second,          // OpenSearch export cadence; WithOpenSearchExportInterval overrides (ADR-0114)
 		retentionInterval: DefaultRetentionInterval, // history-retention sweep cadence; WithRetentionInterval overrides (ADR-0115)
@@ -2065,6 +2096,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 			return nil, err
 		}
 	}
+	// Switching the catalogue off is never refused, but it is not silent about the
+	// orders it strands: after recovery and the deployments, before the loop serves,
+	// so the counters and the stores are read directly (ADR-0434).
+	if s.catalogueOff {
+		s.warnCatalogueWorkInFlight()
+	}
 	// Build the OpenSearch exporter when configured (ADR-0114). It tails the durable
 	// WAL under dataDir and is bounded by the state store's applied-position
 	// watermark (LastAppliedPosition), so it only ever indexes records that are on
@@ -2132,6 +2169,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if s.inboundPoll > 0 {
 		s.wg.Add(1)
 		go s.inboundBridge(s.inboundPoll)
+	}
+	// Push delivery POSTs the event feed to the cloudevents Workers its subscriptions
+	// name (ADR-0433): a goroutine
+	// like the inbound bridge, its network I/O off the run loop and only the cursor's
+	// write on it. A non-positive interval disables it.
+	if s.feedPush > 0 {
+		s.wg.Add(1)
+		go s.feedPusher(s.feedPush)
 	}
 	// The OpenSearch exporter tails the durable log and bulk-indexes new records
 	// (ADR-0114). Like the timer scheduler and inbound bridge it is a separate
@@ -3341,13 +3386,23 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// rename reaches, so the old one keeps leading to the new one rather than to a
 	// 404 that reads as the service having been switched off. The query is kept:
 	// it is where a returning sign-in says how it went.
-	mountFunc(accessPublic, roleAny, "GET /portal.html", func(w http.ResponseWriter, r *http.Request) {
-		to := "/shop.html"
-		if r.URL.RawQuery != "" {
-			to += "?" + r.URL.RawQuery
-		}
-		http.Redirect(w, r, to, http.StatusMovedPermanently)
-	})
+	//
+	// Unless the shop *was* switched off (--catalogue=false), and then both addresses
+	// say so: the page is a static file the catch-all below would otherwise serve, and
+	// it would render and then fail every call it makes
+	// (ADR-0434).
+	if s.catalogueOff {
+		mountFunc(accessPublic, roleAny, "GET /shop.html", s.handleSwitchedOffPage)
+		mountFunc(accessPublic, roleAny, "GET /portal.html", s.handleSwitchedOffPage)
+	} else {
+		mountFunc(accessPublic, roleAny, "GET /portal.html", func(w http.ResponseWriter, r *http.Request) {
+			to := "/shop.html"
+			if r.URL.RawQuery != "" {
+				to += "?" + r.URL.RawQuery
+			}
+			http.Redirect(w, r, to, http.StatusMovedPermanently)
+		})
+	}
 
 	// The embedded UI is the catch-all; the more specific patterns above win under
 	// net/http's precedence rules. Static assets, and the login screen has to load.

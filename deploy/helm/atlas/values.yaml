@@ -163,6 +163,13 @@ atlas:
   docs:
     enabled: true
 
+  # -- Serve the shop, the catalogue, the orders and the inventory (--catalogue).
+  # Set false to run Atlas as a workflow engine without them: their routes, the
+  # shop page, their Console menus and MCP tools go away. Nothing stored is removed,
+  # and setting it back to true restores everything at the next rollout.
+  catalogue:
+    enabled: true
+
   # -- Script task workers. Each shells out to an interpreter and runs arbitrary
   # code (ADR-0047). The default image bundles python3 and node, so those are ON;
   # PowerShell is OFF because the default image does not ship pwsh — build the

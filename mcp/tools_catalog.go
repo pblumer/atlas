@@ -257,7 +257,7 @@ func withID(id, suffix string) string {
 }
 
 func catalogTools() []Tool {
-	return []Tool{
+	return markCatalogue([]Tool{
 		{
 			Name: "atlas_list_catalogs",
 			Description: "List the product catalogues you maintain, lowest rank first. This is the " +
@@ -671,6 +671,39 @@ func catalogTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_import_catalog",
+			Description: "Import a whole shop as one document: {catalogs, products, publish}. Each " +
+				"catalogue carries its id, texts, rank, languages, items (the product ids it offers), " +
+				"groups (its audience), members and edges; each product carries the fields " +
+				"atlas_save_catalog_product takes, including its homeCatalog. IDs are the document's " +
+				"own and stable, so importing the same document again UPDATES what the first import " +
+				"created. ALL OR NOTHING: every id, every catalogue you must maintain and — with " +
+				"publish:true — every publish problem is checked before anything is written; a refusal " +
+				"writes nothing and lists every problem with its subject (catalog:<id> or product:<id>). " +
+				"Returns {created, updated, releases}. A theme, a logo and pictures are not part of a " +
+				"document.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"catalogs": map[string]any{"type": "array", "items": map[string]any{"type": "object"},
+						"description": "The catalogues, each with its id"},
+					"products": map[string]any{"type": "array", "items": map[string]any{"type": "object"},
+						"description": "The products, each with its id and homeCatalog"},
+					"publish": map[string]any{"type": "boolean",
+						"description": "Publish a release of every catalogue in the document once it is written"},
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				body, err := json.Marshal(map[string]any{
+					"catalogs": args["catalogs"], "products": args["products"], "publish": args["publish"] == true,
+				})
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/catalogs/import", "application/json", body))
+			},
+		},
+		{
 			Name: "atlas_import_catalog_archimate",
 			Description: "Derive catalogue drafts from an ArchiMate Open Exchange model: Products " +
 				"and Business Services become products, compositions become integral parts and " +
@@ -699,5 +732,15 @@ func catalogTools() []Tool {
 				return asText(c.post(withID(id, "/import"), "application/xml", []byte(model)))
 			},
 		},
+	})
+}
+
+// markCatalogue marks every tool of this file as the catalogue's, in one place, so a
+// tool added to the list above is withheld with the rest when the server switched
+// the area off (ADR-0434).
+func markCatalogue(tools []Tool) []Tool {
+	for i := range tools {
+		tools[i].Catalogue = true
 	}
+	return tools
 }

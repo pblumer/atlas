@@ -81,6 +81,13 @@ var wantAdminRoutes = []string{
 	"DELETE /api/v1/deploy-tokens/{id}",
 	"POST /api/v1/api-tokens",
 	"GET /api/v1/api-tokens",
+	// Where the event feed is pushed: minting a delivery of who holds what to a system
+	// beyond Atlas is the act minting an events token is
+	// (ADR-0433).
+	"GET /api/v1/feed-subscriptions",
+	"POST /api/v1/feed-subscriptions",
+	"PATCH /api/v1/feed-subscriptions/{id}",
+	"DELETE /api/v1/feed-subscriptions/{id}",
 	"DELETE /api/v1/api-tokens/{id}",
 	"POST /api/v1/oauth-clients",
 	"GET /api/v1/oauth-clients",

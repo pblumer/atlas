@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -401,6 +402,20 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		// completions are different shapes, which is clio's arrangement exactly.
 		jobTypes: []int32{compiler.AgentJobTypeIndex, compiler.AiTaskJobTypeIndex},
 	},
+	{
+		// A CloudEvents endpoint is where push delivery sends the event feed
+		// (ADR-0433). No task names
+		// it, so it has no job type, no client registry and no in-process handler: the
+		// record is the endpoint and the credential, and the feed's subscriptions
+		// (feedsubs.go) name it. The engine delivers to it itself, off the run loop
+		// (feedpush.go), from the feed it already holds.
+		name:             connectorKindCloudEvents,
+		validateCreate:   validateCloudEventsConnector,
+		newRegistry:      func(*Server) {},
+		registerHandlers: func(*Server, *state.Store) {},
+		rebuild:          func(*Server) error { return nil },
+		problem:          func(*Server, string) (string, bool) { return "", false },
+	},
 }, sqlManagedConnectorKinds()...)
 
 // sqlManagedConnectorKinds are the three SQL products (ADR-0173, ADR-0188). Each is
@@ -693,6 +708,29 @@ func validateEndpointOnlyConnector(p *createConnectorParams) string {
 	return ""
 }
 
+// validateCloudEventsConnector validates a CloudEvents endpoint: the absolute URL push
+// delivery POSTs the feed to, and an optional credentialsRef naming the vault key sent
+// as its bearer token. It must be https, as a deployment target's must (targetstore.go):
+// the feed names who holds what across the catalogue, and the credential travels with
+// it. Plain http is accepted for a loopback host only, where nothing crosses a network.
+func validateCloudEventsConnector(p *createConnectorParams) string {
+	p.Provider, p.Sender, p.Model = "", "", ""
+	if p.Endpoint == "" {
+		return "a cloudevents worker requires the endpoint the event feed is delivered to"
+	}
+	u, err := url.Parse(p.Endpoint)
+	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
+		return "a cloudevents endpoint must be an absolute https URL"
+	}
+	if u.Scheme == "http" && !isLoopbackHost(u.Hostname()) {
+		return "a cloudevents endpoint must use https (plain http is accepted for a loopback host only)"
+	}
+	if u.User != nil {
+		return "a cloudevents endpoint carries no credentials in its URL; name a vault key as credentialsRef"
+	}
+	return ""
+}
+
 // validateRemedyConnector validates a Remedy create request: like temis/clio it needs
 // an endpoint, and it also needs a credentialsRef naming a vault {username,password}
 // bundle to authenticate against the AR System (ADR-0106); the secret itself never
@@ -867,6 +905,8 @@ func normalizeConnectorUpdate(rec *connector) string {
 		validate = validateMailConnector
 	case connectorKindAgent:
 		validate = validateAgentConnector
+	case connectorKindCloudEvents:
+		validate = validateCloudEventsConnector
 	default:
 		return ""
 	}

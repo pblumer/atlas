@@ -125,6 +125,10 @@ export function workerShape(kind, provider) {
   // temis's: each protocol has a public default, and an operator names one only for a
   // gateway, a proxy or a self-hosted deployment.
   const agent = kind === "agent";
+  // A CloudEvents endpoint is where push delivery sends the event feed: an https URL
+  // and, optionally, the vault key sent as its bearer token. No task names it; the
+  // Worker's Feed… panel subscribes it to the feed.
+  const cloudevents = kind === "cloudevents";
   // The three SQL products. Their whole configuration is one secret — a connection
   // string has no public half — so there is no endpoint to author: what the Console
   // shows is a redacted label the server derived from the string itself.
@@ -176,12 +180,16 @@ export function workerShape(kind, provider) {
       ? (provider === "chat-completions"
         ? "https://api.openai.com/v1/chat/completions (optional)"
         : "https://api.anthropic.com/v1/messages (optional)")
+      : cloudevents
+      ? "https://billing.example.com/atlas/events"
       : mail
       ? "smtp.office365.com:587"
       : (ad ? "ldaps://dc.example.com:636"
         : (remedy ? "https://helix.example.com:8008" : (jira ? "https://acme.atlassian.net" : "https://temis.internal"))),
     credRefLabel: agent
       ? "API key reference (a vault key holding the key)"
+      : cloudevents
+      ? "Bearer token reference (optional; a vault key holding the token)"
       : ad
       ? "Credential reference (vault {bindDN, password})"
       : discord
@@ -197,6 +205,8 @@ export function workerShape(kind, provider) {
           : (bundle ? "Credential reference (vault auth bundle)" : "Token reference (optional)"))),
     credRefPlaceholder: agent
       ? "anthropic_api_key (a vault key holding the key)"
+      : cloudevents
+      ? "billing_feed_token (a vault key holding the token)"
       : ad
       ? "ad_prod_bind (vault {bindDN, password})"
       : discord
@@ -212,6 +222,8 @@ export function workerShape(kind, provider) {
           : (sharepoint ? "sharepoint_auth (vault JSON bundle)" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token")))),
     hint: agent
       ? "The model an <b>agent-driven ad-hoc subprocess</b> asks which of its tools to run next. Its <b>API key</b> is a vault key named here \u2014 never a value \u2014 and the endpoint is optional: each wire format has a public default, so name one only for a gateway, a proxy or a self-hosted deployment. A round is one model call, minutes long and able to hang, so atlas never runs it itself: it supervises a worker for this kind and picks the model up as soon as you save, with no restart. <b>Messages</b> is Anthropic's format (also OpenRouter's <code>/api/v1/messages</code>); <b>Chat Completions</b> is OpenAI's, and anything calling itself OpenAI-compatible \u2014 that one has no default model, so name it."
+      : cloudevents
+      ? "Where the <b>event feed</b> is pushed: atlas POSTs the outcomes of product actions and every right granted and revoked to this <b>https</b> address as CloudEvents batches (<code>application/cloudevents-batch+json</code>), and sends the token behind the reference as <code>Authorization: Bearer</code>. Nothing is sent until you subscribe the worker to the feed: <b>Feed…</b> in its menu, where you can narrow it to some catalogues. A refused batch is held and retried, never skipped; the receiver deduplicates by each event's <code>id</code>."
       : discord
       ? "The credential reference names a vault bundle holding the bot token \u2014 never a value: <code>{\"botToken\": \"\u2026\"}</code>, from <b>Discord Developer Portal &rsaquo; your application &rsaquo; Bot &rsaquo; Reset Token</b>. Store the token alone; atlas composes the <code>Bot </code> scheme itself. There is no endpoint to name \u2014 Discord\u0027s API base is the same for everyone \u2014 so the field stays empty unless you sit behind a proxy. The bot must be <b>invited to the server</b> and hold <b>View Channel</b> and <b>Send Messages</b> in every channel a process writes to: a missing grant comes back as code 50001, <i>Missing Access</i>, not as a bad token."
       : googlesheets

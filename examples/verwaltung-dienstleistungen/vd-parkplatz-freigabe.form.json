@@ -1,0 +1,24 @@
+{
+  "type": "default",
+  "id": "vd-parkplatz-freigabe",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Parkplatz freigeben · Release the parking space**\n\nDen Platz wieder als frei führen. · Mark the space as free again."
+    },
+    {
+      "key": "recipient",
+      "type": "textfield",
+      "label": "Bisher · Previously",
+      "disabled": true
+    },
+    {
+      "key": "freigegeben",
+      "type": "checkbox",
+      "label": "Platz freigegeben · Space released",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

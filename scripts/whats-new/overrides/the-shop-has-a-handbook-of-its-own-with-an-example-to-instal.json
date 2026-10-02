@@ -1,0 +1,11 @@
+{
+  "tags": ["Service catalogue", "Handbook", "Examples"],
+  "title": {
+    "en": "A handbook for the shop, with an example to install",
+    "de": "Ein Handbuch für den Shop, mit einem Beispiel zum Installieren"
+  },
+  "summary": {
+    "en": "A new shop handbook explains how to build a catalogue, how several catalogues work together, how to describe products and services, and how to design the processes behind them. It follows one example throughout, the services of a public administration in German and English, which you can install with one click after naming who orders and who approves.",
+    "de": "Ein neues Shop-Handbuch erklärt, wie man einen Katalog aufbaut, wie mehrere Kataloge zusammenspielen, wie man Produkte und Services beschreibt und wie man die Prozesse dahinter entwirft. Es begleitet ein durchgehendes Beispiel, die Dienstleistungen einer Verwaltung auf Deutsch und Englisch, das sich mit einem Klick installieren lässt, nachdem man festgelegt hat, wer bestellt und wer genehmigt."
+  }
+}

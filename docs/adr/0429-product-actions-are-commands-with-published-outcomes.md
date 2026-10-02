@@ -492,12 +492,23 @@ still held — loud, not silent. It requires `operator` in the first cut; a role
 the feed alone (ADR-0209) and scoped tokens (ADR-0194) are follow-ups, as ADR-0425
 already notes for operator tokens held by external systems. *(Both built by
 [ADR-0430](0430-the-event-feed-has-its-own-role-and-token-scope.md):
-the route requires `feedreader`, and an `events` token carries that role and nothing else.)*
+the route requires `feedreader`, and an `events` token carries that role and nothing else.
+Narrowed by catalogue by
+[ADR-0432](0432-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md):
+an `events` token's reach names catalogues, and every event names its product's
+`homeCatalog`.)*
 
 **Push delivery is prepared and not built.** A later slice delivers the same envelopes
 through a Worker (ADR-0203) with a server-held cursor per subscription, the retry ladder
 of the task and a circuit breaker per endpoint (ADR-0340). It reads the feed; it adds no
 fact and no second path into `applyToState`.
+*(Built by
+[ADR-0433](0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md):
+a feed subscription names a `cloudevents` Worker, and the server POSTs the feed after the
+subscription's server-held cursor as CloudEvents batches, off the run loop, adding no fact.
+Two departures, argued there: delivery runs in the server process rather than as a leased
+job, and a refused batch holds its subscription on the breaker's ladder rather than tripping
+a breaker per endpoint — a stream that must not skip has no retries to exhaust.)*
 
 *As built — slice E.* The feed is a column family (`cfFeed`, `state/feed.go`) keyed by the
 partition and the log position of the record that carried each fact. `applyToState` writes

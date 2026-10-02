@@ -50,6 +50,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_rebind_catalog_product":    "POST /api/v1/catalog-products/{id}/rebind",
 	"atlas_catalog_releases":          "GET /api/v1/catalogs/{id}/releases",
 	"atlas_catalog_unpublished":       "GET /api/v1/catalogs/{id}/unpublished",
+	"atlas_import_catalog":            "POST /api/v1/catalogs/import",
 	"atlas_import_catalog_archimate":  "POST /api/v1/catalogs/{id}/import",
 	// What a held position offers and whether it takes it now (ADR-0429). Reading it
 	// changes nothing; asking for an action is omitted below.
@@ -119,6 +120,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_list_incidents":               "GET /api/v1/incidents",
 	"atlas_workers":                      "GET /api/v1/workers",
 	"atlas_close_breaker":                "POST /api/v1/workers/breakers/close",
+	"atlas_feed_subscriptions":           "GET /api/v1/feed-subscriptions",
 	"atlas_resolve_incident":             "POST /api/v1/incidents/{key}/resolve",
 	"atlas_incident_summary":             "GET /api/v1/incidents/summary",
 	"atlas_resolve_incidents":            "POST /api/v1/incidents/resolve",
@@ -701,8 +703,11 @@ var mcpOmittedRoutes = map[string]string{
 	// Console-configured watch feeds the name they typed, while an agent that wants a
 	// process to run publishes the message itself with atlas_publish_message and never
 	// depends on a watch existing at all.
-	"GET /api/v1/events":          "a machine-to-machine pull feed for systems beyond Atlas (a CMDB, a billing system), paged by a cursor the consumer keeps; an agent reads how a position's actions ended with atlas_order_line_outcomes",
-	"GET /api/v1/message-sources": "the Modeler's authoring aid for picking a message name — watch configuration, product actions and deployed catches; an agent reads products with atlas_list_catalog_products and processes with atlas_get_process_xml, and publishes a message itself rather than needing one to exist",
+	"POST /api/v1/feed-subscriptions":        "where the event feed is pushed is administrator configuration, like the worker it names",
+	"PATCH /api/v1/feed-subscriptions/{id}":  "where the event feed is pushed is administrator configuration, like the worker it names",
+	"DELETE /api/v1/feed-subscriptions/{id}": "where the event feed is pushed is administrator configuration, like the worker it names",
+	"GET /api/v1/events":                     "a machine-to-machine pull feed for systems beyond Atlas (a CMDB, a billing system), paged by a cursor the consumer keeps; an agent reads how a position's actions ended with atlas_order_line_outcomes",
+	"GET /api/v1/message-sources":            "the Modeler's authoring aid for picking a message name — watch configuration, product actions and deployed catches; an agent reads products with atlas_list_catalog_products and processes with atlas_get_process_xml, and publishes a message itself rather than needing one to exist",
 
 	// Repository: package management, an admin/UI concern.
 	"GET /api/v1/repository/packages":               "repository management is a UI concern",

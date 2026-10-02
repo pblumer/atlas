@@ -517,6 +517,11 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0429](0429-product-actions-are-commands-with-published-outcomes.md) | A product declares its actions, each a command whose outcome is a fact published beyond Atlas | Accepted | Partial |
 | [0430](0430-the-event-feed-has-its-own-role-and-token-scope.md) | The event feed has its own role and its own token scope | Accepted | Landed |
 | [0431](0431-system-processes-announce-their-facts-as-signals.md) | A system process announces its facts as signals | Accepted | Landed |
+| [0432](0432-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md) | The event feed is narrowed by the catalogue that maintains the product | Accepted | Landed |
+| [0433](0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md) | The event feed is pushed to a CloudEvents endpoint | Accepted | Landed |
+| [0434](0434-the-catalogue-can-be-switched-off.md) | The catalogue can be switched off, and switching it off removes a surface, not a semantics | Accepted | Landed |
+| [0435](0435-one-catalogue-of-the-events-atlas-emits.md) | Atlas keeps one catalogue of the events it emits | Proposed | Not started |
+| [0436](0436-a-catalogue-is-imported-as-one-document.md) | A catalogue is imported as one document | Accepted | Landed |
 
 ## The two states of a record
 

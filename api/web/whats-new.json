@@ -45,6 +45,139 @@
       }
     },
     {
+      "id": "the-shop-has-a-handbook-of-its-own-with-an-example-to-instal",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A handbook for the shop, with an example to install",
+        "de": "Ein Handbuch für den Shop, mit einem Beispiel zum Installieren"
+      },
+      "summary": {
+        "en": "A new shop handbook explains how to build a catalogue, how several catalogues work together, how to describe products and services, and how to design the processes behind them. It follows one example throughout, the services of a public administration in German and English, which you can install with one click after naming who orders and who approves.",
+        "de": "Ein neues Shop-Handbuch erklärt, wie man einen Katalog aufbaut, wie mehrere Kataloge zusammenspielen, wie man Produkte und Services beschreibt und wie man die Prozesse dahinter entwirft. Es begleitet ein durchgehendes Beispiel, die Dienstleistungen einer Verwaltung auf Deutsch und Englisch, das sich mit einem Klick installieren lässt, nachdem man festgelegt hat, wer bestellt und wer genehmigt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue",
+        "Handbook",
+        "Examples"
+      ]
+    },
+    {
+      "id": "a-whole-shop-can-be-imported-as-one-document",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A whole shop in one file",
+        "de": "Ein ganzer Shop in einer Datei"
+      },
+      "summary": {
+        "en": "Catalogues, their products and how the products fit together can now be brought into Atlas as one document, published straight away if you like. Either everything arrives or nothing changes, with every problem listed at once, and importing the same file again updates what is there instead of adding it twice.",
+        "de": "Kataloge, ihre Produkte und wie die Produkte zusammengehören lassen sich jetzt als ein Dokument in Atlas übernehmen und auf Wunsch gleich veröffentlichen. Entweder kommt alles an oder es ändert sich nichts, mit allen Problemen auf einmal, und derselbe Import ein zweites Mal aktualisiert, was da ist, statt es doppelt anzulegen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue",
+        "API"
+      ]
+    },
+    {
+      "id": "switching-the-catalogue-off-says-at-start-what-it-strands",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Switching the shop off warns about orders still being worked",
+        "de": "Beim Ausschalten des Shops warnt Atlas vor laufenden Aufträgen"
+      },
+      "summary": {
+        "en": "If you start Atlas with the shop switched off (--catalogue=false) while orders are still being fulfilled or approved, the server log now says so at start: how many processes will fail at their next step and which ones. Switching off still always works; the warning only makes sure you hear about stranded orders before their incidents arrive one by one. Turn the shop back on and retry those incidents to finish the orders. Nothing is logged when nothing is running.",
+        "de": "Wenn Sie Atlas mit ausgeschaltetem Shop (--catalogue=false) starten, während noch Aufträge erfüllt oder genehmigt werden, meldet das Server-Log das jetzt beim Start: wie viele Prozesse bei ihrem nächsten Schritt scheitern werden und welche. Das Ausschalten funktioniert weiterhin immer; die Warnung sorgt nur dafür, dass Sie von liegengebliebenen Aufträgen erfahren, bevor deren Incidents einzeln eintreffen. Schalten Sie den Shop wieder ein und wiederholen Sie diese Incidents, um die Aufträge abzuschliessen. Läuft nichts, wird nichts gemeldet."
+      },
+      "link": {
+        "label": "ADR-0434",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0434-the-catalogue-can-be-switched-off.md"
+      },
+      "tags": [
+        "Shop",
+        "Operations"
+      ]
+    },
+    {
+      "id": "the-shop-the-catalogue-the-orders-and-the-inventory-can-be-s",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The shop and the catalogue can be switched off",
+        "de": "Shop und Katalog lassen sich ausschalten"
+      },
+      "summary": {
+        "en": "An installation that uses Atlas as a workflow engine and offers no shop can now say so once, at start: --catalogue=false (or ATLAS_CATALOGUE=false, or atlas.catalogue.enabled: false in the Helm chart). The shop, the catalogue, the orders and the inventory are then not served, the Console leaves Shop, Catalogue, Reconciliation and Access review out of its menus, and AI agents are not offered their tools. Nothing stored is removed and your processes run unchanged; turning it back on is a restart. Without the flag nothing changes.",
+        "de": "Eine Installation, die Atlas als Workflow-Engine nutzt und keinen Shop anbietet, kann das jetzt einmal beim Start festlegen: --catalogue=false (oder ATLAS_CATALOGUE=false, oder atlas.catalogue.enabled: false im Helm-Chart). Shop, Katalog, Aufträge und Bestand werden dann nicht ausgeliefert, die Console blendet Shop, Katalog, Abgleich und Zugriffsprüfung in ihren Menüs aus, und KI-Agenten werden deren Werkzeuge nicht angeboten. Gespeichertes wird nicht entfernt, und Ihre Prozesse laufen unverändert weiter; das Wiedereinschalten ist ein Neustart. Ohne den Schalter ändert sich nichts."
+      },
+      "link": {
+        "label": "ADR-0434",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0434-the-catalogue-can-be-switched-off.md"
+      },
+      "tags": [
+        "Shop",
+        "Operations"
+      ]
+    },
+    {
+      "id": "the-event-feed-can-be-pushed-to-a-system-that-cannot-poll-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The event feed, delivered to the system that needs it",
+        "de": "Der Ereignis-Feed, zugestellt an das System, das ihn braucht"
+      },
+      "summary": {
+        "en": "A billing system or a CMDB that can only receive, not ask, can now be sent the event feed: set it up as a CloudEvents endpoint worker and subscribe it, for the whole feed or for some catalogues. Atlas delivers every event in order and at least once, and if the receiver is down it waits and tries again instead of skipping anything.",
+        "de": "Eine Verrechnung oder eine CMDB, die nur empfangen und nicht selbst abfragen kann, bekommt den Ereignis-Feed jetzt zugestellt: als Worker vom Typ CloudEvents-Endpunkt einrichten und abonnieren, für den ganzen Feed oder für einzelne Kataloge. Atlas stellt jedes Ereignis der Reihe nach und mindestens einmal zu; ist der Empfänger nicht erreichbar, wartet Atlas und versucht es erneut, statt etwas auszulassen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Workers",
+        "API"
+      ]
+    },
+    {
+      "id": "an-event-feed-token-can-be-confined-to-the-catalogues-it-is-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "An event-feed key for one catalogue",
+        "de": "Ein Ereignis-Feed-Schlüssel für einen Katalog"
+      },
+      "summary": {
+        "en": "A billing system or a CMDB that serves one catalogue can now be given a feed token that reads only what concerns that catalogue's products: how actions on them ended, and who was granted or lost them. Every event now names the catalogue that maintains its product, so a system reading the whole feed can sort it the same way.",
+        "de": "Eine Verrechnung oder eine CMDB, die einen Katalog betreut, erhält jetzt einen Feed-Token, der nur liest, was die Produkte dieses Katalogs betrifft: wie Aktionen daran endeten und wem sie gewährt oder entzogen wurden. Jedes Ereignis nennt jetzt den Katalog, der sein Produkt pflegt, sodass ein System, das den ganzen Feed liest, ihn gleich aufteilen kann."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Security",
+        "API"
+      ]
+    },
+    {
       "id": "a-new-account-request-announces-itself-so-an-installation-ca",
       "version": "Unreleased",
       "date": null,
@@ -153,189 +286,6 @@
       "tags": [
         "Service catalogue",
         "Modeler"
-      ]
-    },
-    {
-      "id": "a-product-s-process-states-how-an-action-ended-without-calli",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Processes report how an action ended with a Shop task",
-        "de": "Prozesse melden mit einer Shop-Aufgabe, wie eine Aktion endete"
-      },
-      "summary": {
-        "en": "A send task can now be of the kind Shop: choose the action and the outcome — completed, rejected or failed — and the task records that ending for the request its process is handling. It needs no token and no address, because it runs inside Atlas and finds the order and the request in the process itself. When the process took a path that does not fit the action, the task stops with an incident instead of reporting the wrong thing. Publishing a catalogue now checks that every change and service a product offers has a task that reports it completed.",
-        "de": "Eine Sendeaufgabe kann jetzt von der Art Shop sein: Aktion und Ergebnis wählen – abgeschlossen, abgelehnt oder fehlgeschlagen –, und die Aufgabe hält dieses Ende für die Anfrage fest, die ihr Prozess bearbeitet. Sie braucht weder Token noch Adresse, weil sie in Atlas läuft und Bestellung und Anfrage im Prozess selbst findet. Hat der Prozess einen Weg genommen, der nicht zur Aktion passt, hält die Aufgabe mit einem Vorfall an, statt das Falsche zu melden. Beim Veröffentlichen eines Katalogs wird jetzt geprüft, dass jede Änderung und jede Dienstleistung eines Produkts eine Aufgabe hat, die sie als abgeschlossen meldet."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Service catalogue",
-        "Modeler"
-      ]
-    },
-    {
-      "id": "how-an-action-ended-is-a-fact",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "How an action ended is recorded",
-        "de": "Wie eine Aktion endete, wird festgehalten"
-      },
-      "summary": {
-        "en": "Everything asked of a service somebody holds — its provisioning, its return, a change, a service such as a password reset — now ends in a record: completed, rejected or failed, under the event type the product declares. A successful provisioning or return is recorded together with the right it grants or revokes, so the two can never disagree. A process that reports twice is recorded once, and a contradicting second report is refused. Operators and agents read how a position's actions ended over the API and MCP.",
-        "de": "Alles, was von einer bezogenen Leistung verlangt wird – ihre Bereitstellung, ihre Rückgabe, eine Änderung, eine Dienstleistung wie ein Passwort-Reset –, endet jetzt in einem Eintrag: abgeschlossen, abgelehnt oder fehlgeschlagen, unter dem Ereignistyp, den das Produkt dafür festlegt. Eine erfolgreiche Bereitstellung oder Rückgabe wird zusammen mit dem Recht festgehalten, das sie gewährt oder entzieht, sodass beide nie auseinanderlaufen. Meldet ein Prozess zweimal, wird einmal festgehalten, und eine widersprüchliche zweite Meldung wird abgewiesen. Betrieb und Agenten lesen über API und MCP, wie die Aktionen einer Position endeten."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Service catalogue",
-        "Engine"
-      ]
-    },
-    {
-      "id": "a-held-service-can-be-asked-for-its-actions-in-the-shop",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Ask a service you hold for its actions",
-        "de": "Aktionen auf einer bezogenen Leistung auslösen"
-      },
-      "summary": {
-        "en": "Under a service somebody holds, the shop now shows a button for each change or service its product offers the customer — more storage, a password reset — in the reader's language. While the service cannot take an action, its button is greyed out and says why: whether it can is read from where the service's process stands, so the process model decides when an upgrade is possible. An action with a form opens it under the position; one without asks first. The person the service was ordered for may ask too, not only whoever placed the order.",
-        "de": "Unter einer bezogenen Leistung zeigt der Shop jetzt für jede Änderung oder Dienstleistung, die das Produkt der Kundschaft anbietet – mehr Speicher, ein Passwort-Reset – einen Knopf in der Sprache der Leserin. Solange die Leistung eine Aktion nicht annehmen kann, ist der Knopf ausgegraut und sagt, warum: Ob sie es kann, wird daraus gelesen, wo der Prozess der Leistung steht, sodass das Prozessmodell entscheidet, wann ein Upgrade möglich ist. Eine Aktion mit Formular öffnet es unter der Position, eine ohne fragt zuerst nach. Auslösen darf auch die Person, für die bestellt wurde, nicht nur die Bestellerin."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Service catalogue",
-        "Shop"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the shop and go to «My orders».",
-          "Under a service you hold, press the button of the action you need.",
-          "Fill in its form if it has one and send it; the line says the action was requested."
-        ],
-        "de": [
-          "Öffnen Sie den Shop und wechseln Sie zu «Meine Bestellungen».",
-          "Drücken Sie unter einer bezogenen Leistung den Knopf der gewünschten Aktion.",
-          "Füllen Sie das Formular aus, falls es eines gibt, und senden Sie es ab; die Zeile meldet, dass die Aktion angefordert wurde."
-        ]
-      }
-    },
-    {
-      "id": "a-product-declares-its-actions",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A product lists what can be asked of it",
-        "de": "Ein Produkt listet, was man von ihm verlangen kann"
-      },
-      "summary": {
-        "en": "A product with a lifecycle process no longer stops at three start events. It lists its actions: the provisioning and the return the order runs, then any number of changes such as more storage and services such as a password reset or an inactivation — each with the message its process waits for, who may ask for it (the customer, an operator or the system) and what its button says in each language. Publishing checks every action against the process. Existing products open as the actions they already had. Asking for an action from the shop follows in the next step.",
-        "de": "Ein Produkt mit Lebenszyklus-Prozess ist nicht mehr auf drei Startereignisse beschränkt. Es listet seine Aktionen: die Bereitstellung und die Rückgabe, die die Bestellung ausführt, dann beliebig viele Änderungen wie mehr Speicher und Dienstleistungen wie ein Passwort-Reset oder eine Inaktivierung – jede mit der Nachricht, auf die ihr Prozess wartet, wer sie auslösen darf (der Kunde, der Betrieb oder das System) und was ihr Knopf in jeder Sprache sagt. Beim Publizieren wird jede Aktion gegen den Prozess geprüft. Bestehende Produkte öffnen sich mit den Aktionen, die sie schon hatten. Das Auslösen einer Aktion im Shop folgt im nächsten Schritt."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Service catalogue",
-        "Shop"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the catalogue and edit a product.",
-          "Under «How it is fulfilled», choose a lifecycle process — the provision and deprovision messages are pre-filled.",
-          "Press «Add an action» for each change or service, choose who may ask for it and write its label."
-        ],
-        "de": [
-          "Öffnen Sie den Katalog und bearbeiten Sie ein Produkt.",
-          "Wählen Sie unter «How it is fulfilled» einen Lebenszyklus-Prozess – die Nachrichten für Bereitstellung und Rückgabe werden vorbelegt.",
-          "Fügen Sie mit «Add an action» jede Änderung oder Dienstleistung hinzu, wählen Sie, wer sie auslösen darf, und schreiben Sie ihre Beschriftung."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the catalogue",
-          "de": "Katalog öffnen"
-        },
-        "route": "#/catalog"
-      }
-    },
-    {
-      "id": "the-modeler-offers-the-events-your-workers-publish-when-you-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Pick your Workers' events instead of typing them",
-        "de": "Ereignisse der Worker auswählen statt abtippen"
-      },
-      "summary": {
-        "en": "When a start event, a catch event, a boundary event or a receive task waits for a message, its message picker now lists the events your Workers publish — a Jira, clio, Google Sheets or Discord watch configured under Workers → Events… in the Console — with the worker behind each and a mark where a watch is switched off. Picking one creates the message with exactly that name. Before, the name had to be typed by hand, and one wrong character meant a process that never started.",
-        "de": "Wartet ein Startereignis, ein Zwischenereignis, ein Randereignis oder eine Empfangsaufgabe auf eine Nachricht, listet die Nachrichtenauswahl jetzt die Ereignisse Ihrer Worker auf – eine Jira-, clio-, Google-Sheets- oder Discord-Überwachung aus «Workers → Events…» in der Konsole –, mit dem jeweiligen Worker und einer Markierung, wo eine Überwachung ausgeschaltet ist. Ein Klick legt die Nachricht mit genau diesem Namen an. Bisher musste der Name von Hand eingetippt werden, und ein falsches Zeichen bedeutete einen Prozess, der nie startete."
-      },
-      "link": {
-        "label": "ADR-0205",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0205-connector-ownership-and-event-delivery.md"
-      },
-      "tags": [
-        "Modeler",
-        "Workers"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a process in the Modeler and switch to the «Implement» tab.",
-          "Select a message start event, catch event, boundary event or receive task.",
-          "Open «Message» and choose a name under «Events from Workers»."
-        ],
-        "de": [
-          "Öffnen Sie einen Prozess im Modeler und wechseln Sie zum Reiter «Implement».",
-          "Wählen Sie ein Nachrichten-Startereignis, ein Zwischenereignis, ein Randereignis oder eine Empfangsaufgabe.",
-          "Öffnen Sie «Message» und wählen Sie einen Namen unter «Events from Workers»."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "the-handbook-teaches-tls-and-certificates",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Secure Atlas with TLS — the handbook now shows how",
-        "de": "Atlas mit TLS absichern – das Handbuch zeigt jetzt, wie"
-      },
-      "summary": {
-        "en": "Atlas can speak HTTPS itself from a certificate, reload it without a restart, and verify another Atlas against your own CA — and until now that was spread across an ADR and a few paragraphs of the install guide. A new chapter «TLS & certificates» explains it in German and English, including one thing worth knowing first: Atlas does not check the expiry date, so you watch it from outside. A section on Windows Server behind a load balancer compares three ways to encrypt that last hop and walks through one of them step by step, from the PFX file to the load balancer's health check.",
-        "de": "Atlas kann mit einem Zertifikat selbst HTTPS sprechen, es ohne Neustart neu laden und ein anderes Atlas gegen die eigene CA prüfen – bisher stand das verteilt in einem ADR und ein paar Absätzen der Installationsanleitung. Ein neues Kapitel «TLS & Zertifikate» erklärt es auf Deutsch und Englisch, samt einer Sache, die man zuerst wissen sollte: Atlas prüft das Ablaufdatum nicht, das überwacht man von aussen. Ein Abschnitt zu Windows Server hinter einem Load Balancer vergleicht drei Wege, diese letzte Strecke zu verschlüsseln, und führt einen davon Schritt für Schritt durch, von der PFX-Datei bis zum Health Check des Load Balancers."
-      },
-      "link": {
-        "label": "ADR-0191",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0191-built-in-tls-listener.md"
-      },
-      "tags": [
-        "Handbook",
-        "Operations",
-        "Security"
       ]
     }
   ]

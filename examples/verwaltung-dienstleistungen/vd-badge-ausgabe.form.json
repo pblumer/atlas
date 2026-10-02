@@ -1,0 +1,30 @@
+{
+  "type": "default",
+  "id": "vd-badge-ausgabe",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Badge ausgeben · Issue the badge**\n\nBadge drucken, codieren und der Person übergeben. · Print, encode and hand over the badge."
+    },
+    {
+      "key": "recipient",
+      "type": "textfield",
+      "label": "Empfänger · Recipient",
+      "disabled": true
+    },
+    {
+      "key": "variantId",
+      "type": "textfield",
+      "label": "Variante · Variant",
+      "disabled": true
+    },
+    {
+      "key": "badgenummer",
+      "type": "textfield",
+      "label": "Badgenummer · Badge number",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

@@ -330,6 +330,19 @@ export const WORKER_TYPE_DOCS = {
     trap: `A missing channel grant comes back as code <code>50001</code>, <i>Missing Access</i> — not as a bad token. Check the channel's permissions before the token.`,
   },
 
+  cloudevents: {
+    anchor: "runbook-cloudevents", title: "CloudEvents endpoint",
+    checked: "2026-10",
+    needs: `A receiving system that accepts CloudEvents batches over https, and a configured CloudEvents endpoint Worker in ${WORKERS}, subscribed to the event feed.`,
+    steps: [
+      `On the receiving side, offer an <b>https</b> address that accepts <code>POST</code> with <code>Content-Type: application/cloudevents-batch+json</code> — a JSON array of CloudEvents — and answers <b>2xx</b> once it has stored them.`,
+      `If it wants a credential, store its token in the vault: ${VAULT}, e.g. <code>billing_feed_token</code>, holding the token itself. atlas sends it as <code>Authorization: Bearer</code>.`,
+      `${WORKERS} &rarr; <b>New worker</b>: type <b>CloudEvents endpoint</b>, a name, the address, and the token reference.`,
+      `In the worker's menu, <b>Feed…</b>: subscribe it to the feed, optionally narrowed to some catalogues, starting from the oldest event the feed holds or from now.`,
+    ],
+    trap: `Delivery is at least once: a batch accepted just before a restart can arrive again. Deduplicate by each event's <code>id</code>. A receiver that refuses a batch holds the subscription — nothing is skipped — so a permanent refusal shows as a hold that does not lift.`,
+  },
+
   aitask: {
     anchor: "runbook-ai", title: "AI worker",
     checked: "2026-09",

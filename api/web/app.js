@@ -169,6 +169,45 @@ const mayUse = (role) => {
   return roles.includes("admin") || roles.includes(role);
 };
 
+// FEATURES is what this server serves of its optional parts, as /api/v1/info says.
+// Today that is one switch: the shop, the catalogue, the orders and the inventory,
+// which an operator turns off with --catalogue=false
+// (ADR-0434). Until the server has answered,
+// everything is offered — the stance the drawer already takes before /auth/me
+// answers — and a field an older server does not send reads as on, so a Console in
+// front of one keeps the menu it had.
+const FEATURES = { catalogue: true, loaded: false };
+
+// loadFeatures asks once — boot and the first navigation share one request — and
+// remembers only an answer: signed out, or the server mid-restart, leaves the menu as
+// it is and asks again on the next navigation rather than deciding it on a failure.
+// It resolves to the info document, or null.
+let featuresAsked = null;
+function loadFeatures() {
+  if (!featuresAsked) {
+    featuresAsked = api("GET", "/api/v1/info").then((i) => {
+      FEATURES.catalogue = !(i && i.catalogue === false);
+      FEATURES.loaded = true;
+      return i;
+    }, () => {
+      featuresAsked = null;
+      return null;
+    });
+  }
+  return featuresAsked;
+}
+
+// offered is the one predicate both menus filter by: the person holds the role, and
+// the server serves the part of Atlas the entry opens. One predicate and not a second
+// condition beside each role check, because the next menu would be the one that
+// forgot it.
+const offered = (entry) => mayUse(entry.role) && !(entry.feature && FEATURES[entry.feature] === false);
+
+// isCatalogueRoute names the Console views of the area the switch removes — the same
+// four the menus mark with feature: "catalogue".
+const isCatalogueRoute = (path) =>
+  path.startsWith("#/catalog") || path === "#/operations/reconciliation" || path === "#/tasks/recertification";
+
 const initials = (name) => {
   const s = String(name || "").trim();
   if (!s) return "?";
@@ -621,11 +660,11 @@ const APPS = [
   // Without this line the page existed and nothing led to it: it was built, served
   // and reachable only by somebody who already knew the URL. Held by
   // TestBothPortalSurfacesAreReachableFromTheMenu.
-  { id: "portal", name: "Shop", route: "shop.html", on: true, role: "user", separate: true },
+  { id: "portal", name: "Shop", route: "shop.html", on: true, role: "user", separate: true, feature: "catalogue" },
   // Where a catalogue is filled. Gated at productmanager (ADR-0315): maintaining a
   // catalogue means choosing from processes already deployed, never deploying one,
   // so it is deliberately not the modeller's role — deploy is code execution.
-  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager" },
+  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager", feature: "catalogue" },
   { id: "operations", name: "Operations", route: "#/operations", on: true, role: "operator" },
   { id: "panorama", name: "Panorama", route: "#/panorama/starmap", on: true, role: "modeler" },
   { id: "data", name: "Data", route: "#/data", on: true, role: "modeler" },
@@ -659,7 +698,7 @@ const TOPNAV = {
     // (ADR-0334). Operations rather than Catalogue: maintaining a
     // catalogue is authoring, and acting on a finding is repair — the three acts
     // are the operator's role on the server too.
-    { name: "Reconciliation", route: "#/operations/reconciliation", role: "operator" },
+    { name: "Reconciliation", route: "#/operations/reconciliation", role: "operator", feature: "catalogue" },
     { name: "Call activities", route: "#/operations/call-activities", role: "any" },
   ],
   tasks: [
@@ -674,7 +713,7 @@ const TOPNAV = {
     // whether somebody on their team still needs something — and a line manager has
     // never opened Operations. Not one of the two shop pages either: those carry
     // the catalogue's brand and are written for people outside the tooling.
-    { name: "Access review", route: "#/tasks/recertification", role: "user" },
+    { name: "Access review", route: "#/tasks/recertification", role: "user", feature: "catalogue" },
     { name: "Start", route: "#/tasks/start", role: "operator" },
   ],
   panorama: [
@@ -783,6 +822,11 @@ const WORKER_TYPES = [
     id: "agent", name: "AI agent model", kind: "AI",
     desc: "The model an agent-driven ad-hoc subprocess asks which of its tools to run next. What an agent may reach is the diagram: the contained activities no sequence flow leads to are its tools, named by their element ids, described by the modeller\u0027s own documentation. A round is one job and a tool call one activity, so the loop is durable and replayable \u2014 and it never runs in the engine, because one model call can take minutes and hang. Two wire formats: Messages (Anthropic, and OpenRouter\u0027s Messages-compatible endpoint) and Chat Completions (OpenAI, and anything OpenAI-compatible). Configure each model below: its API key lives in the vault and never enters a model, and the model named here is the default \u2014 a task or a container may name its own, so one Worker serves a cheap classification and a strong piece of advice. The same configuration also serves the AI Task: a service task that asks a model once and puts the answer in a variable, with no tools, because a step with tools is the container. Worker-only, and atlas supervises the worker for it.",
     refs: "ADR-0117 \u00b7 ADR-0253 \u00b7 ADR-0254 \u00b7 ADR-0256", status: "active", statusLabel: "configured below",
+  },
+  {
+    id: "cloudevents", name: "CloudEvents endpoint", kind: "Event feed",
+    desc: "Where the event feed is pushed: a system beyond atlas \u2014 billing, a CMDB \u2014 is sent how each action asked of a held position ended and every right granted and revoked, as CloudEvents batches over https, instead of pulling the feed itself. No task names this Worker; its Feed\u2026 panel subscribes it to the feed, narrowed to some catalogues if you like. atlas delivers from the feed it already holds, off the processor loop, and moves its cursor only when the endpoint accepted a batch: a refusal is held and tried again, never skipped. Administrator configuration.",
+    refs: "ADR-0429 \u00b7 ADR-0430", status: "active", statusLabel: "configured below",
   },
   {
     id: "entra", name: "Entra ID", kind: "Cloud directory",
@@ -976,10 +1020,13 @@ function initShell() {
     });
   }
 
-  api("GET", "/api/v1/info").then((i) => {
+  // The same answer tells the drawer what this server switched off, so it is painted
+  // again once it is known.
+  loadFeatures().then((i) => {
     document.querySelectorAll(".org").forEach((e) => { e.textContent = "Atlas Org"; });
+    paintApps();
     initHelpMenu(!!(i && i.docs));
-  }).catch(() => { initHelpMenu(false); });
+  });
 }
 
 // handbookHelp maps the current route to the most relevant handbook chapter, so
@@ -990,6 +1037,11 @@ function initShell() {
 // help — the handbook page and the menu wiring are unchanged.
 function handbookHelp(path) {
   const H = (anchor, label) => ({ anchor, label });
+  // The shop has a handbook of its own (shop-handbuch.html): building catalogues,
+  // modelling products and designing their processes. shop() points into it, and the
+  // help-context spec holds its anchors to that page as it holds H()'s to the handbook.
+  const shop = (anchor, label) => ({ anchor, label, page: "shop-handbuch.html" });
+  if (path.startsWith("#/catalog")) return shop("katalog-aufbauen", "Building a catalogue");
   if (/^#\/modeler\/dmn\//.test(path)) return H("dmn", "Learn DMN");
   if (/^#\/modeler\/form\b/.test(path)) return H("formulare", "Forms & workers");
   // An application's detail view is where its artifacts are gathered and published —
@@ -1045,8 +1097,8 @@ function setHelpContext(path) {
   helpRoutePath = path;
   const ctx = document.getElementById("help-ctx");
   if (!ctx) return;
-  const { anchor, label } = handbookHelp(path);
-  ctx.href = `/handbuch.html#${anchor}`;
+  const { anchor, label, page } = handbookHelp(path);
+  ctx.href = `/${page || "handbuch.html"}#${anchor}`;
   ctx.innerHTML = `${esc(label)} <span class="ext" aria-hidden="true">↗</span>`;
 }
 
@@ -1066,7 +1118,11 @@ function initHelpMenu(docsEnabled) {
     ? `<a role="menuitem" href="/api/docs" target="_blank" rel="noopener">API Explorer <span class="ext" aria-hidden="true">↗</span></a>`
     : `<span class="help-note">API Explorer is disabled<br><span class="muted">start the server without <code>--docs=false</code></span></span>`;
   const gallery = `<a role="menuitem" href="/conformance-gallery.html" target="_blank" rel="noopener">Conformance Gallery <span class="ext" aria-hidden="true">↗</span></a>`;
-  const handbook = `<a role="menuitem" href="/handbuch.html" target="_blank" rel="noopener">Handbook <span class="ext" aria-hidden="true">↗</span></a>`;
+  // The shop handbook is the catalogue's, so it leaves the menu with the rest of the
+  // area when the server switched that off (ADR-0434).
+  const shopHandbook = `<a role="menuitem" href="/shop-handbuch.html" target="_blank" rel="noopener">Shop handbook <span class="ext" aria-hidden="true">↗</span></a>`;
+  const handbook = `<a role="menuitem" href="/handbuch.html" target="_blank" rel="noopener">Handbook <span class="ext" aria-hidden="true">↗</span></a>` +
+    (FEATURES.catalogue ? shopHandbook : "");
   // Not a link like its neighbours: it opens the overview dialog over the current view
   // rather than leaving it, so it carries no "opens elsewhere" mark.
   const overview = `<button type="button" role="menuitem" data-system-overview>System Overview</button>`;
@@ -1185,7 +1241,7 @@ function paintApps() {
   // a span here: it is presentation, it must not join the link's accessible name,
   // and a glyph inside the text would change what every test reading this menu
   // sees for a reason that has nothing to do with them.
-  nav.innerHTML = APPS.filter((a) => mayUse(a.role)).map((a) =>
+  nav.innerHTML = APPS.filter((a) => offered(a)).map((a) =>
     `<a href="${a.route}" data-app="${a.id}"${a.separate ? ' target="_blank" rel="noopener"' : ""}>` +
     `${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`
   ).join("");
@@ -1196,7 +1252,7 @@ function setChrome(appId, route) {
     (APPS.find((a) => a.id === appId) || {}).name || "atlas";
   paintApps();
   const topnav = document.getElementById("topnav");
-  topnav.innerHTML = (TOPNAV[appId] || []).filter((t) => mayUse(t.role)).map((t) =>
+  topnav.innerHTML = (TOPNAV[appId] || []).filter((t) => offered(t)).map((t) =>
     // A `separate` entry is a page of its own and opens in one, exactly as the
     // drawer opens it. Rendered as a plain link it would replace the console in the
     // same tab, which is the behaviour the note above APPS argues against: the only
@@ -2120,6 +2176,11 @@ async function viewConsoleWorkers() {
     // than to any other, and they exist on no other kind.
     if (c.kind === "clio") items.push({ label: "Provision access…", icon: "🔑", act: "provision" });
     if (c.kind === "clio" || c.kind === "jira" || c.kind === "googlesheets" || c.kind === "discord" || c.kind === "mail") items.push({ label: "Events…", icon: "⇄", act: "subs" });
+    // A CloudEvents endpoint is subscribed to the event feed, which is administrator
+    // configuration: the panel lists what the worker is sent and how delivery stands.
+    // The feed is the catalogue's: with the area switched off its subscriptions are not
+    // served, so the entry would open a panel whose every call is a 404.
+    if (c.kind === "cloudevents" && mayUse("admin") && FEATURES.catalogue) items.push({ label: "Feed…", icon: "⇉", act: "feed" });
     // Every Worker Type the check covers: mail connects and authenticates (or sends a
     // test message), a SQL worker dials its connection string. workerShape is the one
     // place that knows, so the menu does not go stale the next type that gains one.
@@ -4331,7 +4392,7 @@ function wireWorkerManagement(workers) {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="worker-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
+        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="cloudevents">CloudEvents endpoint</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
         <label class="field provider-field" style="margin:0"><span class="provider-label">Provider</span><select name="provider"></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
@@ -4507,6 +4568,9 @@ function wireWorkerManagement(workers) {
       try {
         if (act === "subs") {
           await toggleInboundSubs(row, id, c.kind);
+          return;
+        } else if (act === "feed") {
+          await toggleFeedSubs(row, id);
           return;
         } else if (act === "share") {
           await toggleWorkerShare(c, viewConsoleWorkers);
@@ -4834,6 +4898,104 @@ async function toggleInboundSubs(row, workerId, kind) {
       panel.remove();
       await toggleInboundSubs(row, workerId, kind);
     } catch (err) { toast("Could not delete subscription: " + err.message, "err"); }
+  });
+}
+
+// toggleFeedSubs opens, under a CloudEvents endpoint Worker's row, what that worker is
+// sent of the event feed (ADR-0433):
+// each subscription with its catalogues, whether delivery is moving — and when its
+// endpoint is failing, since when, the next attempt and what it last said — with the
+// form that adds one. Administrator configuration, like the routes behind it.
+async function toggleFeedSubs(row, workerId) {
+  const existing = row.nextElementSibling;
+  if (existing && existing.classList.contains("subs-row")) {
+    existing.remove();
+    return;
+  }
+  const [all, cats] = await Promise.all([
+    api("GET", "/api/v1/feed-subscriptions"),
+    api("GET", "/api/v1/catalogs").catch(() => []),
+  ]);
+  const subs = (all || []).filter((s) => s.workerId === workerId);
+  const catName = (id) => {
+    const c = (cats || []).find((x) => x.id === id);
+    const texts = (c && c.texts) || {};
+    return Object.values(texts).find((t) => t) || id;
+  };
+  const state = (s) => {
+    if (!s.enabled) {
+      return `<span class="pill warn" title="${esc(s.disabledReason || "Switched off.")}"><span class="dot"></span>off</span>`
+        + (s.disabledReason ? ` <span class="muted">${esc(s.disabledReason)}</span>` : "");
+    }
+    if (s.hold) {
+      return `<span class="pill err" title="${esc(s.hold.lastError)}"><span class="dot"></span>held</span>`
+        + ` <span class="muted">failing since ${esc(new Date(s.hold.failingSince).toLocaleString())},`
+        + ` next attempt ${esc(new Date(s.hold.retryAt).toLocaleString())}: ${esc(s.hold.lastError)}</span>`;
+    }
+    return '<span class="pill ok"><span class="dot"></span>on</span>'
+      + ` <span class="muted">${s.deliveredAt ? "last delivered " + esc(fmtTime(s.deliveredAt)) : "nothing delivered yet"}</span>`;
+  };
+  const list = subs.map((s) => `<tr data-sid="${esc(s.id)}" data-enabled="${s.enabled ? "1" : ""}">
+      <td>${(s.reach || []).length
+        ? s.reach.map((id) => `<span class="chip" title="${esc(id)}">${esc(catName(id))}</span>`).join(" ")
+        : '<span class="muted">the whole feed</span>'}</td>
+      <td>${state(s)}</td>
+      <td class="muted">position ${esc(String(s.cursor))}</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn ghost" data-ftoggle>${s.enabled ? "Disable" : "Enable"}</button>
+        <button class="btn ghost" data-ffrom="oldest" title="Deliver again from the oldest event the feed still holds">From oldest</button>
+        <button class="btn ghost" data-ffrom="now" title="Skip to the newest event; deliver only what is recorded from now on">From now</button>
+        <button class="btn ghost danger" data-fdel title="End this subscription">Delete</button>
+      </td>
+    </tr>`).join("") || `<tr><td colspan="4" class="muted" style="padding:10px">Not subscribed. Add a subscription below to have this endpoint sent the event feed.</td></tr>`;
+  const options = (cats || []).map((c) => `<option value="${esc(c.id)}">${esc(catName(c.id))}</option>`).join("");
+  const panel = document.createElement("tr");
+  panel.className = "subs-row";
+  panel.innerHTML = `<td colspan="3" style="background:var(--surface); padding:12px 18px">
+    <div class="muted" style="margin-bottom:8px">The event feed pushed to this endpoint — how each action asked of a held position ended, and every right granted and revoked — as CloudEvents batches. A batch the endpoint refuses is <b>held and tried again</b>, never skipped; the receiver deduplicates by each event's <code>id</code>. Narrowed to some catalogues, it is sent only the events about the products they maintain. If the feed's retention passes a subscription that fell behind, it is switched off and says so: enable it again from the oldest event held.</div>
+    <table style="width:100%"><tbody id="feed-body">${list}</tbody></table>
+    <form id="feed-form" style="display:grid;gap:8px;grid-template-columns:2fr 1fr 1fr auto;align-items:end;margin-top:10px">
+      <label class="field" style="margin:0"><span>Catalogues (none selected: the whole feed)</span><select name="reach" multiple size="3">${options}</select></label>
+      <label class="field" style="margin:0"><span>Start</span><select name="from"><option value="oldest">from the oldest event held</option><option value="now">from now</option></select></label>
+      <label class="field" style="margin:0"><span>Events per batch</span><input name="batchSize" type="number" min="0" max="1000" placeholder="100"/></label>
+      <button class="btn" type="submit" title="Subscribe this endpoint to the event feed">Subscribe</button>
+    </form></td>`;
+  row.after(panel);
+  const reload = async () => {
+    panel.remove();
+    await toggleFeedSubs(row, workerId);
+  };
+  panel.querySelector("#feed-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    try {
+      await api("POST", "/api/v1/feed-subscriptions", {
+        workerId,
+        reach: f.getAll("reach"),
+        from: f.get("from") || "oldest",
+        batchSize: Number(f.get("batchSize") || 0) || 0,
+      });
+      toast("Subscribed to the event feed", "ok");
+      await reload();
+    } catch (err) { toast("Could not subscribe: " + err.message, "err"); }
+  });
+  panel.querySelector("#feed-body").addEventListener("click", async (e) => {
+    const btn = e.target.closest("button");
+    const tr = btn && btn.closest("tr[data-sid]");
+    if (!tr) return;
+    const path = "/api/v1/feed-subscriptions/" + encodeURIComponent(tr.dataset.sid);
+    try {
+      if (btn.hasAttribute("data-fdel")) {
+        await api("DELETE", path);
+      } else if (btn.hasAttribute("data-ftoggle")) {
+        await api("PATCH", path, { enabled: !tr.dataset.enabled });
+      } else if (btn.dataset.ffrom) {
+        await api("PATCH", path, { from: btn.dataset.ffrom });
+      } else {
+        return;
+      }
+      await reload();
+    } catch (err) { toast("Could not change the subscription: " + err.message, "err"); }
   });
 }
 
@@ -8838,6 +9000,8 @@ async function viewTasks(preselectKey) {
   // of it may take the inbox down. A failure leaves the map empty and every row
   // renders exactly as it did before.
   async function loadApprovalKeys() {
+    // An approval decides an order, and a server without a catalogue takes none.
+    if (!FEATURES.catalogue) { state.approvals = new Map(); return; }
     try {
       const page = await api("GET", "/api/v1/approvals");
       const next = new Map();
@@ -9205,6 +9369,18 @@ async function viewStartProcess() {
   }
   view.querySelector("#start-refresh").addEventListener("click", load);
   await load();
+}
+
+// viewSwitchedOff is what a bookmark into the catalogue's views opens on a server that
+// switched the area off: the reason, in words, instead of a view whose every call
+// answers 404 and reads as something broken.
+function viewSwitchedOff() {
+  view.innerHTML = `
+    <div class="card empty">
+      <h1>Switched off</h1>
+      <p class="muted">The shop, the catalogue, the orders and the inventory are switched off on this server (--catalogue=false). Nothing stored was removed; an administrator turns them back on at the next start.</p>
+      <a class="btn ghost" href="#/console">Back to Console</a>
+    </div>`;
 }
 
 function viewComingSoon(appId) {
@@ -10212,12 +10388,14 @@ async function route() {
   }
 
   startPresence(); // signed in, so this tab is somebody being here (presence.go)
+  if (!FEATURES.loaded) await loadFeatures(); // before the menus are painted from it
   setChrome(appId, path);
   setTitle(routeTitle(path));
   updateAccount();
   window.scrollTo(0, 0);
 
   try {
+    if (isCatalogueRoute(path) && !FEATURES.catalogue) return viewSwitchedOff();
     if (path === "#/" || path === "#/console") return await viewConsoleDashboard();
     if (path === "#/console/engine") return await viewConsoleEngine();
     if (path === "#/console/logs") return await viewConsoleLogs();

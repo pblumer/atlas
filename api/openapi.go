@@ -35,7 +35,12 @@ type apiRoute struct {
 // permissive object otherwise (ADR-0043).
 type apiOp struct {
 	summary string
-	tag     string
+	// tag groups the route in the API explorer, and two of its values carry more
+	// than that: "Catalogue" and "Order" are the area --catalogue=false switches off
+	// (catalogueRouteTags). A route of the shop, the catalogue, the orders or the
+	// inventory takes one of the two, or it stays served on a server that said it
+	// offers none of them — TestTheCatalogueSwitchCoversTheWholeArea holds that.
+	tag string
 
 	// role is what a signed-in identity must hold to reach this route, one of
 	// routeRoles (ADR-0209). It sits here, beside the
@@ -115,12 +120,17 @@ func eventStreamBody(desc string) *bodySpec {
 // iterates it to register handlers; openapiDoc iterates it to describe them.
 // Adding an endpoint means adding one entry here — nothing is registered off to
 // the side, so the spec cannot fall out of sync (ADR-0043).
+//
+// What it returns is what this server *offers*: the table less any area the
+// operator switched off (offeredRoutes). Filtering here rather than at the mount
+// keeps the mux, the OpenAPI document and the node descriptor reading one answer.
 func (s *Server) apiRoutes() []apiRoute {
-	return []apiRoute{
+	return s.offeredRoutes([]apiRoute{
 		{"GET", "/api/v1/info", s.handleInfo, apiOp{
-			summary: "Product and version metadata", tag: "System", role: roleAny,
+			summary: "Product and version metadata, and which optional parts this server serves: the API explorer (docs) and the shop, catalogue, orders and inventory (catalogue, off with --catalogue=false)", tag: "System", role: roleAny,
 			resp: jsonBody("Product metadata", schemaObj(map[string]any{
 				"product": tString(), "version": tString(),
+				"docs": tBool(), "catalogue": tBool(),
 			}))}},
 		// The node descriptor (ADR-0189 §6): which *runtime* is answering, as opposed
 		// to /api/v1/info's account of which binary. It is what makes cross-server
@@ -952,6 +962,12 @@ func (s *Server) apiRoutes() []apiRoute {
 				"items": tArray(), "groups": tArray(),
 			})),
 			resp: jsonBody("The created catalogue", tObject())}},
+		{"POST", "/api/v1/catalogs/import", s.catalogs.HandleImportDocument, apiOp{
+			summary: "Import a whole shop as one document (ADR-0436): catalogues, the products they maintain and offer, and the edges between them, with optional `publish`. All or nothing — every id, authority and, when publishing, every publish problem is checked before the first write, and a refused document writes nothing and answers every problem at once (400 for the document itself, 403 for a catalogue you do not maintain, 422 for what publishing would refuse, 409 if the store moved during the import). IDs are the document's own, so importing it again updates what the first import created. A theme, a logo and pictures are not part of a document", tag: "Catalogue", role: RoleProductManager,
+			req: jsonBody("Catalogue document: {catalogs, products, publish}", schemaObj(map[string]any{
+				"catalogs": tArray(), "products": tArray(), "publish": tBool(),
+			})),
+			resp: jsonBody("What was created and updated, as catalog:<id> and product:<id>, and the releases published", tObject())}},
 		{"GET", "/api/v1/catalogs/{id}", s.catalogs.HandleGetCatalog, apiOp{
 			summary: "One product catalogue", tag: "Catalogue", role: roleAny,
 			resp: jsonBody("The catalogue", tObject())}},
@@ -1352,7 +1368,7 @@ func (s *Server) apiRoutes() []apiRoute {
 
 		{"POST", "/api/v1/api-tokens", s.handleCreateAPIToken, apiOp{
 			summary: "Mint an API token for a machine — a worker on another host, a stdio MCP adapter, a CI job. The secret is returned once and never again; the scope bounds what it may reach and the lifetime when it stops working (admin-only, ADR-0194)", tag: "API tokens", role: RoleAdmin,
-			req: jsonBody("Token name, scope (full, worker, metrics, status, directory, inventory, landscape or events), for landscape the projects it may see as reach, and lifetime in days (0 = never expires). A token carries its minter's non-admin roles, except an events token, which carries feedreader and nothing else", schemaObj(map[string]any{
+			req: jsonBody("Token name, scope (full, worker, metrics, status, directory, inventory, landscape or events), as reach the projects a landscape token may see (required) or the catalogues whose products an events token reads (optional; none reads the whole feed), and lifetime in days (0 = never expires). A token carries its minter's non-admin roles, except an events token, which carries feedreader and nothing else", schemaObj(map[string]any{
 				"name": tString(), "scope": tString(), "reach": tArray(), "expiresInDays": tInteger(),
 			}, "name", "scope")),
 			resp: jsonBody("Minted token, including its one-time secret", tObject())}},
@@ -1606,8 +1622,25 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/inbound-subscriptions/{id}", s.handleDeleteInboundSubscription, apiOp{
 			summary: "Delete an inbound event subscription", tag: "Workers", role: RoleModeler, status: http.StatusNoContent}},
 		{"GET", "/api/v1/events", s.handleListEvents, apiOp{
-			summary: "The event feed (ADR-0429 §5): every action outcome, grant and revocation, as CloudEvents 1.0 structured JSON in log order. `after` is the cursor of the last event the caller holds (a decimal position, the `next` of the previous page); leave it out to read from the oldest held. `limit` is 1–1000, default 100. Delivery is at least once: deduplicate by `id`. The feed keeps its rows for `--event-feed-ttl` (30 days); a cursor older than the oldest held is answered 410 with `oldest`, the cursor to resume from. It requires the `feedreader` role, which a token minted with the `events` scope carries and nothing else", tag: "Catalogue", role: RoleFeedReader,
+			summary: "The event feed (ADR-0429 §5): every action outcome, grant and revocation, as CloudEvents 1.0 structured JSON in log order. `after` is the cursor of the last event the caller holds (a decimal position, the `next` of the previous page); leave it out to read from the oldest held. `limit` is 1–1000, default 100. Delivery is at least once: deduplicate by `id`. The feed keeps its rows for `--event-feed-ttl` (30 days); a cursor older than the oldest held is answered 410 with `oldest`, the cursor to resume from. Every event's data names the catalogue that maintains its product as `homeCatalog`; an `events` token minted with a reach of catalogues is answered only the events whose `homeCatalog` it names, its cursor moving past the rest, and a page reads at most 10000 rows, so a narrowed page can be short or empty with `more` set. It requires the `feedreader` role, which a token minted with the `events` scope carries and nothing else", tag: "Catalogue", role: RoleFeedReader,
 			resp: jsonBody("A page of events: {events, next, more}", tObject())}},
+		{"GET", "/api/v1/feed-subscriptions", s.handleListFeedSubscriptions, apiOp{
+			summary: "List the event feed's push subscriptions (ADR-0433): each names the cloudevents Worker it is delivered to, the catalogues it is narrowed to, its cursor, whether it is enabled and why delivery switched it off, when its endpoint last accepted a batch, and — while the endpoint is failing — its hold: failures in a row, since when, the next attempt and the last error (admin-only)", tag: "Catalogue", role: RoleAdmin,
+			resp: jsonBody("Feed subscriptions", tArray())}},
+		{"POST", "/api/v1/feed-subscriptions", s.handleCreateFeedSubscription, apiOp{
+			summary: "Push the event feed to a cloudevents Worker's endpoint: the server POSTs the feed's events after the subscription's cursor as CloudEvents batches (application/cloudevents-batch+json), with the Worker's credential as a bearer token, and moves the cursor when the endpoint answers 2xx — at least once, deduplicated by id. A failing endpoint is held on a backoff ladder, never skipped (admin-only)", tag: "Catalogue", role: RoleAdmin,
+			req: jsonBody("The cloudevents Worker, the catalogues it is narrowed to as reach (none delivers the whole feed), the batch size (1–1000, default 100), whether it starts enabled, and from: oldest (the default) or now", schemaObj(map[string]any{
+				"workerId": tString(), "reach": tArray(), "batchSize": tInteger(), "enabled": tBool(), "from": tString(),
+			}, "workerId")),
+			resp: jsonBody("Created subscription", tObject()), status: http.StatusCreated}},
+		{"PATCH", "/api/v1/feed-subscriptions/{id}", s.handleUpdateFeedSubscription, apiOp{
+			summary: "Change a feed subscription: its reach, its batch size, whether it is enabled (enabling clears why delivery switched it off), or with from (oldest or now) where its cursor stands. Moving the cursor or enabling lifts a hold (admin-only)", tag: "Catalogue", role: RoleAdmin,
+			req: jsonBody("Subscription update", schemaObj(map[string]any{
+				"reach": tArray(), "batchSize": tInteger(), "enabled": tBool(), "from": tString(),
+			})),
+			resp: jsonBody("Updated subscription", tObject())}},
+		{"DELETE", "/api/v1/feed-subscriptions/{id}", s.handleDeleteFeedSubscription, apiOp{
+			summary: "End a feed subscription (admin-only)", tag: "Catalogue", role: RoleAdmin, status: http.StatusNoContent}},
 		{"GET", "/api/v1/message-sources", s.handleListMessageSources, apiOp{
 			summary: "List every message name with where it comes from (ADR-0429 §6), each row tagged by `sourceKind`: `inbound-watch` — a Worker's event, with the worker and, for a viewer of it, the watch; `product-action` — a product's action, with the product, the action's key, effect and triggers and the process the product binds it to, for the catalogues the caller maintains; `process` — where the newest deployed version of a process waits for it, at a message `start` or a `catch`. The Modeler groups its message picker by these and tells a model whether its message has a source", tag: "Workers", role: RoleModeler, resp: jsonBody("Message sources", tArray())}},
 
@@ -1896,7 +1929,7 @@ func (s *Server) apiRoutes() []apiRoute {
 
 		{"GET", "/api/v1/audit", s.handleListAudit, apiOp{
 			summary: "The access-control history across every application, newest first — the global admin audit view (ADR-0184). Admin-only. Optional filters: applicationId, action (share|unshare|visibility|transfer); limit caps the window (default 200, max 1000). Answers {items, total, totalExact, truncated}: total is how many events matched the filters, which this read counts in full, so a capped page still says how many there are", tag: "Audit", role: RoleAdmin, resp: jsonBody("Grant audit events", tPage())}},
-	}
+	})
 }
 
 // pathParamRe matches an http.ServeMux path wildcard, e.g. {key} in

@@ -255,7 +255,7 @@ grant and every MCP tool call alike.
 | `operator` | start, cancel, terminate and repair instances; read runtime data |
 | `user` | work on tasks and read what they are given |
 | `productmanager` | maintain the shop's catalogues and products, and publish releases — without deploying |
-| `feedreader` | read the event feed (`GET /api/v1/events`) and nothing else — what a CMDB's or a billing system's `events` token carries |
+| `feedreader` | read the event feed (`GET /api/v1/events`) and nothing else — what a CMDB's or a billing system's `events` token carries, narrowed to some catalogues if its reach names them |
 
 An account carries **several** roles, not one: they are a list, not a ladder, so a
 modeller who also starts test instances holds `modeler` *and* `operator`. An
@@ -708,6 +708,7 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--oidc-name` | *(the issuer host)* | What the button on the login screen says. Also `ATLAS_OIDC_NAME` |
 | `--shutdown-timeout` | `10s` | Grace period for in-flight requests on shutdown |
 | `--docs` | `true` | Serve `/api/docs` and `/api/v1/openapi.json` |
+| `--catalogue` | `true` | Serve the shop, the catalogue, the orders and the inventory. `--catalogue=false` runs Atlas as a workflow engine without them: every route tagged *Catalogue* or *Order* answers 404 like an endpoint that never existed, `/shop.html` is not served, the Console leaves Shop, Catalogue, Reconciliation and Access review out of its menus, the MCP adapter does not offer their tools, the event feed is neither served nor pushed to its subscriptions (which keep their cursors), and the shop's fulfilment and approval processes are not filed into the system project. Nothing stored is removed and deployed processes run unchanged; setting it back to `true` is a restart. An order still in fulfilment when the area is switched off fails its next call to the order routes like any REST task meeting a 404: the job is retried and, its retries spent, becomes an incident, which can be retried once the area is on again. The start then logs one WARN, `event=server.catalogue_disabled_in_flight`, naming how many such processes are running and which ([ADR-0434](adr/0434-the-catalogue-can-be-switched-off.md)). Also `ATLAS_CATALOGUE=false`, which is read strictly: a value that is not a boolean stops the start rather than leaving the shop on |
 | `--vault` | `true` | Encrypted secret vault for worker credentials |
 | `--user-provisioning` | `true` | Let the system project's approved processes manage Atlas logins |
 | `--powershell` | `true` | Run PowerShell script tasks via `pwsh` |
@@ -904,6 +905,9 @@ Event names an operator is most likely to alert on:
 | `retention.purged` | INFO | Finished instances were hard-deleted, with how many |
 | `order.instance_unrecorded` | WARN | An instance working an order position started but could not be noted on the order; the shop shows no tasks for that position |
 | `script_worker.binary_missing` | WARN | A script language is enabled but its interpreter is absent; those tasks park |
+| `feed.push_failing` | WARN | A push subscription's endpoint refused a batch or did not answer, said once when the failures begin; delivery holds and retries on a widening interval, and nothing is skipped |
+| `feed.push_recovered` | INFO | A held push subscription's endpoint accepted a batch again |
+| `feed.subscription_disabled` | WARN | The event feed's retention dropped rows a push subscription had not delivered, so delivery switched it off with the reason; enable it again from the oldest event held or from now |
 | `auth.admin_seeded` | WARN | The bootstrap administrator was created with a generated password |
 | `auth.disabled` | WARN | The server was started with `--auth=false` and requires no login for anything |
 
@@ -920,6 +924,7 @@ of them carries a password, a hash or a token. Ship them with `--log-format=json
 | `auth.denied` | WARN | A signed-in caller was refused for lacking the admin role, with the `method` and `path`. Anonymous `401`s are deliberately *not* logged — they would bury this under every probe that finds the port |
 | `auth.user_created`, `auth.user_updated`, `auth.user_deleted` | INFO | The account lifecycle, naming both the actor and the subject; the update line carries the `roles` and `disabled` state that resulted |
 | `auth.password_set` | INFO | An administrator replaced a user's password (that it happened and for whom — never the password) |
+| `feed.subscription_changed` | INFO | An administrator created, changed or deleted a push subscription of the event feed, by `subscription_id`; a create names the `worker_id` and every change the `reach` |
 | `auth.token_minted`, `auth.token_revoked` | INFO | A machine credential — an API token or a deploy token — was issued or revoked, by `token_id` and `token_name`; a mint also records its `scope` and `expires_at` |
 | `auth.worker_token_unknown` | WARN | `ATLAS_TOKEN` is set to a value this server does not accept. Supervised workers are handed it instead of the server's own token and will be refused at every poll — mint an API token with scope `worker`, or unset the variable |
 
@@ -945,7 +950,7 @@ curl -sS -X POST http://127.0.0.1:8080/api/v1/api-tokens \
 |-------|---------|
 | `worker` | Only what `atlas worker` does: lease a batch of jobs, settle each one, and post a preview mail back to the outbox. Nothing else — the right scope for a worker running in another network zone |
 | `metrics` | Only `GET /metrics`. The narrowest scope there is, for a Prometheus scraper |
-| `events` | Only `GET /api/v1/events`, the event feed of action outcomes and granted and revoked rights. The token carries the `feedreader` role and no other, so it reads the feed and nothing else — the right scope for a CMDB or a billing system that follows the feed. It takes no `reach`: the feed is one stream |
+| `events` | Only `GET /api/v1/events`, the event feed of action outcomes and granted and revoked rights. The token carries the `feedreader` role and no other, so it reads the feed and nothing else — the right scope for a CMDB or a billing system that follows the feed. Without a `reach` it reads the whole feed; with `"reach":["<catalogue id>", …]` it reads only the events about products those catalogues maintain (each event names that catalogue as `homeCatalog`). Name only catalogues you maintain |
 | `full` | Everything a signed-in non-admin reaches, for a CI job or an MCP adapter whose calls cannot be enumerated in advance. Broad by design, and never an admin: user management, secrets and backups stay refused. It does **not** read the event feed, which needs `feedreader` |
 
 Then hand it over as `--token` or `ATLAS_TOKEN`:
@@ -984,6 +989,46 @@ stays listed so you can see what needs reissuing.
 A **deploy token** (`atlasat_` vs `atlasdt_`) is the separate, narrower credential
 a peer Atlas uses to publish a bundle here; see
 [ADR-0129](adr/0129-remote-deployment-targets.md).
+
+### Pushing the event feed to another system
+
+A system that cannot poll — a billing service or a CMDB that offers an inbound webhook and
+nothing else — can be **sent** the event feed instead of reading it with an `events`
+token. Two steps, both an administrator's:
+
+1. **A worker for the endpoint.** In **Console → Workers → New worker**, type
+   **CloudEvents endpoint**: the receiver's address, which must be `https` (plain `http`
+   only for a loopback host), and optionally a vault key whose value is sent as
+   `Authorization: Bearer`.
+2. **A subscription.** In that worker's menu, **Feed…**, or over HTTP:
+
+```bash
+curl -sS -X POST http://127.0.0.1:8080/api/v1/feed-subscriptions \
+  -b cookies.txt -H 'Content-Type: application/json' \
+  -d '{"workerId":"<worker id>","reach":["<catalogue id>"],"from":"oldest"}'
+```
+
+`reach` narrows it to the catalogues named, as an `events` token's does; leave it out to
+send the whole feed. `from` is `oldest` (the oldest event the feed still holds, the default)
+or `now`. Atlas then POSTs the feed's events after the subscription's cursor, up to
+`batchSize` (default 100) at a time, as a JSON array with
+`Content-Type: application/cloudevents-batch+json`, and moves the cursor when the receiver
+answers `2xx`. The events are exactly what `GET /api/v1/events` answers.
+
+- **At least once.** A batch accepted just before a restart can arrive again; deduplicate
+  by each event's `id`.
+- **A refusal is held, never skipped.** The cursor stays put and the next attempt waits
+  10 s, doubling to 5 min, until the receiver accepts. `GET /api/v1/feed-subscriptions`
+  (and the panel, and the MCP tool `atlas_feed_subscriptions`) shows the hold with the
+  receiver's last answer; `feed.push_failing` is logged once when it starts.
+- **Falling behind the retention switches it off.** If `--event-feed-ttl` drops events a
+  subscription had not delivered, it is disabled with the reason rather than continuing
+  past the gap. `PATCH /api/v1/feed-subscriptions/{id}` with
+  `{"enabled":true,"from":"oldest"}` (or `"now"`) resumes it.
+
+Delivery runs inside the server, off its processing loop, every two seconds
+([ADR-0433](adr/0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md)).
+Allow outbound `https` from the server to each receiver.
 
 ### Traces
 

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_vd_parkplatz_zuteilen" targetNamespace="http://atlas/beispiel/verwaltung-dienstleistungen">
+  <process id="proc_vd_parkplatz_zuteilen" name="Parkplatz: zuteilen" isExecutable="true">
+    <documentation>Provisionierung des Parkplatzes, als eigener Prozess (die zweite Form neben dem Lebenszyklus-Prozess). Die Bestellung startet ihn pro Position; das Facility Management teilt einen Platz zu und die Position wird als erledigt gemeldet. Das Kennzeichen kommt aus dem Bestellformular.</documentation>
+    <startEvent id="start" name="Position gestartet"><outgoing>f1</outgoing></startEvent>
+    <userTask id="ut_zuteilen" name="Parkplatz zuteilen"><extensionElements><zeebe:formDefinition formId="vd-parkplatz-zuteilung"/></extensionElements><incoming>f1</incoming><outgoing>f2</outgoing></userTask>
+    <serviceTask id="st_melden" name="Position als erledigt melden"><documentation>Meldet die Position über POST /api/v1/orders/{orderId}/lines/{positionId}: "done" nach der Provisionierung, "returned" nach der Deprovisionierung. Braucht das Secret "atlas" mit einem API-Token.</documentation><extensionElements><atlas:restConnector method="POST" url="=(if atlasApiBase = null then &#34;http://127.0.0.1:8080&#34; else atlasApiBase) + &#34;/api/v1/orders/&#34; + orderId + &#34;/lines/&#34; + (if positionId = null then itemId else positionId)" authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source="=&#34;done&#34;" target="status"/></zeebe:ioMapping></extensionElements><incoming>f2</incoming><outgoing>f3</outgoing></serviceTask>
+    <endEvent id="end" name="Parkplatz zugeteilt"><incoming>f3</incoming></endEvent>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="ut_zuteilen"/>
+    <sequenceFlow id="f2" sourceRef="ut_zuteilen" targetRef="st_melden"/>
+    <sequenceFlow id="f3" sourceRef="st_melden" targetRef="end"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_vd_parkplatz_zuteilen_diagram">
+    <bpmndi:BPMNPlane id="proc_vd_parkplatz_zuteilen_plane" bpmnElement="proc_vd_parkplatz_zuteilen">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start"><omgdc:Bounds x="132" y="82" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="100" y="124" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ut_zuteilen_di" bpmnElement="ut_zuteilen"><omgdc:Bounds x="230" y="60" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_melden_di" bpmnElement="st_melden"><omgdc:Bounds x="380" y="60" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_di" bpmnElement="end"><omgdc:Bounds x="562" y="82" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="530" y="124" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><omgdi:waypoint x="168" y="100"/><omgdi:waypoint x="230" y="100"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><omgdi:waypoint x="330" y="100"/><omgdi:waypoint x="380" y="100"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><omgdi:waypoint x="480" y="100"/><omgdi:waypoint x="562" y="100"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

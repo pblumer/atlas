@@ -1931,6 +1931,12 @@ by the one `applyToState` and exempt from retention. People order in the **shop*
 (`/shop.html`, formerly the portal). The code is `api/catalog` and `api/order`, and the
 shipped approval and fulfilment models are in `api/systemprocesses/`.
 
+- ✅ **The whole area is optional.** `--catalogue=false` switches off its routes, the shop
+  page, its Console menus, its MCP tools, its starmap picture and its system processes,
+  keeps every store and leaves the engine untouched; on is the default, tests hold the
+  switch to routes added later, and a start with orders still in fulfilment warns rather
+  than refuses ([ADR-0434](docs/adr/0434-the-catalogue-can-be-switched-off.md)).
+
 **Catalogue & releases**
 - ✅ **Products, structure and releases.** Products nest by composition and aggregation,
   `requires` orders fulfilment and `excludes` marks a conflicting pair; an ArchiMate model
@@ -1951,6 +1957,17 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   unpublished ([ADR-0376](docs/adr/0376-catalogue-maintenance-over-mcp.md)); a product's
   usage is answered across catalogues ([ADR-0353](docs/adr/0353-product-usage.md)), and the
   starmap draws catalogues and products ([ADR-0396](docs/adr/0396-catalogue-on-the-starmap.md)).
+- ✅ **A shop as one document.** `POST /api/v1/catalogs/import` (MCP `atlas_import_catalog`)
+  writes catalogues, their products and edges, and optionally their releases, all or nothing,
+  under the authority the single writes need; ids are the document's own, so importing again
+  updates
+  ([ADR-0436](docs/adr/0436-a-catalogue-is-imported-as-one-document.md)).
+  Export is a follow-up.
+- ✅ **A shop handbook with an example to install.** `shop-handbuch.html` (DE/EN) on building
+  catalogues, several catalogues, products and services and their processes, with the
+  administration-services example (`examples/verwaltung-dienstleistungen/`, both process
+  forms, bilingual) and an installer that asks for audiences and approvers and imports the
+  shop as one document.
 
 **The shop & ordering**
 - ✅ **Browsing.** A person sees the one catalogue their groups reach, by rank, narrowed per
@@ -2086,13 +2103,25 @@ actions with closed effects, each a command whose outcome is a fact published be
   row of the feed, folded by `applyToState` and keyed by its log position, pruned by a fact
   of its own (`--event-feed-ttl`, 30 days); `GET /api/v1/events?after=&limit=` (operator)
   serves CloudEvents 1.0 in log order, 410 with the oldest cursor for one that fell behind;
-  the envelope is version 1 of the runtime contract. Push delivery through a Worker is
-  prepared, not built.
+  the envelope is version 1 of the runtime contract. Push delivery is built below.
 - ✅ **The feed's own role and token scope**
   ([ADR-0430](docs/adr/0430-the-event-feed-has-its-own-role-and-token-scope.md)).
   The route requires `feedreader`; an API token minted with the `events` scope reaches that
   route only and carries that role only, so a CMDB's credential reads the feed and nothing
-  else. Narrowing the feed by catalogue is a follow-up.
+  else.
+- ✅ **The feed narrowed by catalogue**
+  ([ADR-0432](docs/adr/0432-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md)).
+  An `events` token's reach names catalogues, and it reads only the events about the
+  products they maintain; every event names that catalogue as `homeCatalog`. Narrowing by
+  the shop an order was placed in is a possible second dimension, not built.
+- ✅ **Push delivery of the feed**
+  ([ADR-0433](docs/adr/0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md)).
+  A `cloudevents` Worker holds a receiver's https address and bearer token; a feed
+  subscription on it (admin, HTTP and the Worker's Feed… panel, read over MCP) is sent the
+  feed after its server-held cursor as CloudEvents batches, narrowed by catalogue like a
+  token. A refusal holds the subscription on the breaker's ladder and skips nothing; one the
+  retention passed is switched off with the reason. Signatures and `Retry-After` are
+  follow-ups.
 - 🔲 **Not in any slice yet:** an operator action for every held position of a product.
 - 🔲 **Not in any slice yet:** a suspended entitlement state.
 - 🔲 **Not in any slice yet:** measuring the run loop before a per-position product goes

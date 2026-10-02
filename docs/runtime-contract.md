@@ -63,12 +63,30 @@ once; a consumer deduplicates by `id`.
 | `subject` | `orders/{orderId}/positions/{position}`; `principals/{id}/items/{itemId}` for a right no order produced |
 | `time` | when Atlas recorded the fact, RFC 3339 in UTC |
 | `datacontenttype` | `application/json` |
-| `data` | for an action: `orderId`, `position`, `commandId`, `action`, `effect`, `outcome`, `source`, `principal`, `itemId`, `at`, and when set `variantId`, `instanceKey`, `result`; for a grant: `principal`, `itemId`, `orderId`, `since`, `origin`, and when set `variantId`, `until`; for a revocation: `principal`, `itemId`, `orderId`, `since`, `endedAt`, `reason`, `endedBy`, and when set `variantId` |
+| `data` | for an action: `orderId`, `position`, `commandId`, `action`, `effect`, `outcome`, `source`, `principal`, `itemId`, `at`, and when set `variantId`, `instanceKey`, `result`; for a grant: `principal`, `itemId`, `orderId`, `since`, `origin`, and when set `variantId`, `until`; for a revocation: `principal`, `itemId`, `orderId`, `since`, `endedAt`, `reason`, `endedBy`, and when set `variantId`; every type, when its product is in the catalogue: `homeCatalog` |
 
 People are named by id only. A page answers `{events, next, more}`: `next` is the cursor to
 send as `after`. Rows are kept for the feed's retention (`--event-feed-ttl`, 30 days); a
 cursor older than the oldest row still held is answered **410** with `oldest`, the cursor
 to resume from. `dataschema` is not set in version 1: the shapes above are the schema.
+
+`homeCatalog` is the catalogue that maintains the event's product, read when the page is
+rather than frozen in the fact: an event re-read after its product moved to another home
+names the new one under the same `id`. An `events` token minted with a `reach` of
+catalogues is answered only the events whose `homeCatalog` it names; the cursor moves
+past the others, and a page reads at most 10 000 rows, so a narrowed page can be short,
+or empty with `more` set — keep asking while `more` is true
+([ADR-0432](adr/0432-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md)).
+
+**Pushed.** The same events are also delivered to a receiver an administrator subscribes
+([ADR-0433](adr/0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md)):
+a `POST` in the CloudEvents HTTP binding's batched mode — the body a JSON array of the
+envelopes above, `Content-Type: application/cloudevents-batch+json`, the header
+`Atlas-Feed-Subscription` naming the subscription and, where one is configured,
+`Authorization: Bearer`. Batches arrive in log order, one at a time per subscription; the
+next is sent only after the receiver answered `2xx` to the last. A receiver deduplicates by
+`id`, as a reader of the pull feed does: a batch accepted just before a restart can arrive
+again. A redirect is not followed.
 
 ## 2. Model-layer features are labelled
 
