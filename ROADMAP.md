@@ -577,6 +577,20 @@ The control-flow basics most real models use.
   in, and the in-process handler remains as the fallback `--in-process-connectors` returns
   to. Attachments and inbound events are follow-ups — for the inbound half see
   [the Jira issue-watch draft](docs/adr/0214-jira-inbound-issue-watch.md).
+  **The mail Worker reads its mailbox** ([ADR-0438](docs/adr/0438-mailbox-worker.md)):
+  an inbound watch on a mail Worker publishes the new mail of one folder as an Atlas
+  message — over IMAP for an SMTP Worker that names a `mailboxEndpoint`, through the Gmail
+  history and the Microsoft Graph messages API for those providers — and a mail task's
+  `operation` lists, reads, moves, marks, deletes (to the trash) or answers mail by the
+  `messageId` a watch or a list answered. A process receives the envelope by default and
+  the text only on request; attachment content never. A watch admits `allowedSenders` and,
+  optionally, only a DMARC pass, and never changes the mailbox. A task that reads a mail
+  Worker's mailbox deploys only for a viewer of it and one that changes it for an editor,
+  at every deploy door — the application import included, which also gained ADR-0205's
+  message-name claim it had skipped. Still open: instance reads by relationship rather
+  than by role (ADR-0275), so what a process receives is not yet hidden from the
+  installation's other operators; IMAP `XOAUTH2`; push instead of polling (IMAP `IDLE`,
+  Graph change notifications).
   The same reader also runs the other way: `atlas openapi-template --spec x.yaml --out
   dir` writes one element-template package per operation, in the repository catalog's
   own shape ([ADR-0300](docs/adr/0300-openapi-element-templates.md)) —

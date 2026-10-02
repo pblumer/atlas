@@ -559,6 +559,20 @@ type ConnectorTaskDetail struct {
 	MailSubject RestExpr
 	Body        RestExpr
 	BodyHTML    RestExpr
+	// Mailbox fields (JobType == MailJobType, ADR-0438). MailOp is the
+	// operation, "" being send — every mail task authored before mailboxes existed.
+	// MailFolder is the folder a list reads, MailMessage the message an operation
+	// addresses and MailDestination where a move files it, each literal-or-FEEL.
+	// MailMaxResults is a list's effective cap, written here by the compiler so the
+	// runtime interprets nothing (I5); MailIncludeBody and MailUnreadOnly are literal
+	// flags. ResultVar (above) receives what list, get and move answer.
+	MailOp          string
+	MailFolder      RestExpr
+	MailMessage     RestExpr
+	MailDestination RestExpr
+	MailMaxResults  int32
+	MailIncludeBody bool
+	MailUnreadOnly  bool
 	// CSV worker fields (JobType == CsvImportJobType, ADR-0139). CsvSource is the
 	// interned name of the process variable holding the raw CSV text (-1 → the
 	// default "csvText"); CsvResult the variable the parsed rows are written to
@@ -1989,6 +2003,33 @@ func (p *CompiledProcess) ReceivableMessageNames() []string {
 		out = append(out, name)
 	}
 	sort.Strings(out)
+	return out
+}
+
+// MailboxUse is one mail task that reads or changes its Worker's mailbox rather than
+// sending through it: the Worker it names and the operation.
+type MailboxUse struct {
+	ElementID string
+	Worker    string
+	Operation string
+}
+
+// MailboxUses lists the mail tasks whose operation is not send, in node order. It is
+// what the deploy check reads to decide whether the deployer may use each mailbox
+// (ADR-0438); a send is not listed, because who may use a sender is
+// not what that check governs.
+func (p *CompiledProcess) MailboxUses() []MailboxUse {
+	var out []MailboxUse
+	for i := range p.nodes {
+		if p.nodes[i].Type != TypeConnectorTask {
+			continue
+		}
+		d := p.ConnectorTask(p.nodes[i].Detail)
+		if d.JobType != MailJobTypeIndex || d.MailOp == "" {
+			continue
+		}
+		out = append(out, MailboxUse{ElementID: p.ElementBpmnId(int32(i)), Worker: p.Intern(d.Connector), Operation: d.MailOp})
+	}
 	return out
 }
 

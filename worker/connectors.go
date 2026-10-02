@@ -548,6 +548,7 @@ func mailClientFromEnv(env func(string) string, name string) (mail.Client, error
 			Secret:   env(key + "SECRET"),
 			Name:     name,
 			Outbox:   previewSink(env),
+			Mailbox:  env(key + "MAILBOX"),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("worker: mail worker %q: %w", name, err)
@@ -656,8 +657,15 @@ func RunMailJob(ctx context.Context, j Job, reg *mail.Registry) (map[string]any,
 	if err := json.Unmarshal(raw, &task); err != nil {
 		return nil, fmt.Errorf("mail: cannot read the resolved detail: %w", err)
 	}
-	// A mail task writes no result variable: the send is the whole of its effect.
-	return nil, mail.Run(ctx, task, reg)
+	// A send writes no result variable: the send is the whole of its effect. A mailbox
+	// operation answers what the task's result variable receives — the same
+	// distinction the in-process handler makes, so a mark-read offloaded does not
+	// write a null where a get would write a value (ADR-0438).
+	res, err := mail.Run(ctx, task, reg)
+	if err != nil || task.ResultVariable == "" || res == nil {
+		return nil, err
+	}
+	return map[string]any{task.ResultVariable: res}, nil
 }
 
 // runCSV parses a resolved CSV-import job and returns the variables it completes

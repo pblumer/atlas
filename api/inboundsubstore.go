@@ -95,6 +95,26 @@ type inboundSubscription struct {
 	// share it.
 	ChannelID string `json:"channelId,omitempty"`
 
+	// The fields below are a *mail watch* (ADR-0438): new mail in one
+	// folder of the Worker's mailbox.
+	//
+	// MailFolder is the folder — an IMAP mailbox name, a Gmail label id, a Graph
+	// folder id or well-known name — and defaults to INBOX. IncludeBody puts the
+	// message's text into the event; off by default, because what a process receives
+	// every operator of a shared installation can read, and a body is the part of a
+	// mail that is nobody else's business. Attachments are never included, only their
+	// names and sizes.
+	//
+	// AllowedSenders and RequireDmarcPass decide who may start a process by writing to
+	// the address: a message failing either is consumed — the cursor moves past it —
+	// and neither published nor charged against the budget. From alone is a claim
+	// anybody can write, so an allow-list without RequireDmarcPass keeps out the
+	// mistaken and not the malicious.
+	MailFolder       string   `json:"mailFolder,omitempty"`
+	IncludeBody      bool     `json:"includeBody,omitempty"`
+	AllowedSenders   []string `json:"allowedSenders,omitempty"`
+	RequireDmarcPass bool     `json:"requireDmarcPass,omitempty"`
+
 	// LastPolledAt is when this watch was last read, in unix seconds. It is what makes
 	// PollSeconds a cadence rather than a wish, and like LastEventID it is
 	// best-effort: losing it re-reads, which the marks make harmless.
