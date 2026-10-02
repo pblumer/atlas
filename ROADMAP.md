@@ -2074,6 +2074,11 @@ actions with closed effects, each a command whose outcome is a fact published be
   serves CloudEvents 1.0 in log order, 410 with the oldest cursor for one that fell behind;
   the envelope is version 1 of the runtime contract. Push delivery through a Worker is
   prepared, not built.
+- ✅ **The feed's own role and token scope**
+  ([ADR-draft-the-event-feed-has-its-own-role-and-token-scope](docs/adr/draft-the-event-feed-has-its-own-role-and-token-scope.md)).
+  The route requires `feedreader`; an API token minted with the `events` scope reaches that
+  route only and carries that role only, so a CMDB's credential reads the feed and nothing
+  else. Narrowing the feed by catalogue is a follow-up.
 - 🔲 **Not in any slice yet:** an operator action for every held position of a product.
 - 🔲 **Not in any slice yet:** a suspended entitlement state.
 - 🔲 **Not in any slice yet:** measuring the run loop before a per-position product goes

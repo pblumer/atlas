@@ -2,6 +2,28 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "a-system-that-follows-the-event-feed-can-hold-a-credential-t",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A key for the event feed that opens nothing else",
+        "de": "Ein Schlüssel für den Ereignis-Feed, der sonst nichts öffnet"
+      },
+      "summary": {
+        "en": "A CMDB or a billing system that follows the event feed can now be given an API token that reads the feed and nothing more: it cannot deploy, start or read instances, or touch orders. A new role, Feed reader, opens the feed for people too; operators no longer see it automatically, because it shows who holds what across every catalogue.",
+        "de": "Eine CMDB oder die Verrechnung, die den Ereignis-Feed verfolgt, erhält jetzt einen API-Token, der den Feed liest und sonst nichts: Er kann weder deployen noch Instanzen starten oder lesen noch Bestellungen bearbeiten. Eine neue Rolle, Feed-Leser, öffnet den Feed auch für Personen; Operatoren sehen ihn nicht mehr automatisch, weil er zeigt, wer was hält, über alle Kataloge."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Security",
+        "API"
+      ]
+    },
+    {
       "id": "what-happens-to-a-right-leaves-atlas-as-a-feed-of-cloudevent",
       "version": "Unreleased",
       "date": null,
@@ -292,28 +314,6 @@
       "tags": [
         "Service catalogue",
         "Shop"
-      ]
-    },
-    {
-      "id": "an-inbound-watch-may-no-longer-publish-a-catalogue-product-s",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "A Worker's event can no longer drive a product's lifecycle",
-        "de": "Ein Worker-Ereignis kann keinen Produkt-Lebenszyklus mehr steuern"
-      },
-      "summary": {
-        "en": "An event watch under Workers → Events… could be given the very message a catalogue product's process waits for — its return, for example — and then return rights without the order ever knowing. Such a watch is now refused, naming the product and the action, and a catalogue whose product would take a name a watch already publishes cannot be published.",
-        "de": "Einer Ereignisüberwachung unter «Workers → Events…» konnte genau die Nachricht zugewiesen werden, auf die der Prozess eines Katalogprodukts wartet – etwa seine Rückgabe –, und sie hätte dann Rechte zurückgegeben, ohne dass die Bestellung davon erfuhr. Eine solche Überwachung wird jetzt abgewiesen, mit Nennung von Produkt und Aktion, und ein Katalog, dessen Produkt einen bereits überwachten Namen übernehmen würde, lässt sich nicht publizieren."
-      },
-      "link": {
-        "label": "ADR-0425",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0425-a-product-lifecycle-is-one-process-with-message-triggers.md"
-      },
-      "tags": [
-        "Workers",
-        "Service catalogue"
       ]
     }
   ]

@@ -75,6 +75,19 @@ const (
 	// hand catalogue control to every existing account on the day an operator
 	// installs the update.
 	RoleProductManager = "productmanager"
+
+	// RoleFeedReader reads the event feed and nothing else: how each action asked of
+	// a held position ended, and every right granted or revoked (ADR-0429 §5,
+	// ADR-draft-the-event-feed-has-its-own-role-and-token-scope). It is what a system
+	// beyond Atlas that follows those facts — a CMDB, a billing system — holds, through
+	// a token minted with the `events` scope, and what a person who integrates one may
+	// be given to look at the feed by hand.
+	//
+	// It is no other role's part. The feed names who holds what across every
+	// catalogue, which no other role reads whole, and an operator who starts and
+	// repairs instances is not thereby somebody a CMDB's credential should be. Like
+	// productmanager it is never granted by the legacy upgrade.
+	RoleFeedReader = "feedreader"
 )
 
 // legacyRoles is what an identity that predates the role model holds: everything a

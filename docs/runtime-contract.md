@@ -50,7 +50,8 @@ those surfaces unless an adapter documents a transport-specific reason.
 What leaves Atlas about the catalogue — how each action asked of a held position ended,
 and every right granted or revoked — is one feed of CloudEvents 1.0 envelopes in
 structured JSON, in log order, pulled from a cursor the consumer keeps
-(`GET /api/v1/events?after={cursor}&limit={n}`, role `operator`). Delivery is at least
+(`GET /api/v1/events?after={cursor}&limit={n}`, role `feedreader`, which an API token
+minted with the `events` scope carries and nothing else). Delivery is at least
 once; a consumer deduplicates by `id`.
 
 | Attribute | Value |
