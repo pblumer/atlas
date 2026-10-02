@@ -32,6 +32,13 @@ _Changed_ / _Removed_ for each version.
     Like form generation they are not MCP tools: an agent writes the FEEL itself.
   - The prompt's function list is the engine's own registry, and every rule it teaches the model
     is an expression a test evaluates.
+  - Every request that reached a model is measured, so the prompt can be improved from data: a
+    log line `event=feel_assistant.answered` names the Worker and model, how the request ended,
+    and per round the form of the answer, what the engine's check found and which foreign
+    functions were refused. With metrics on, `atlas_feel_assistant_requests_total{outcome}`,
+    `atlas_feel_assistant_attempts_total{format}`, `atlas_feel_assistant_attempt_faults_total{fault}`
+    and `atlas_feel_assistant_request_seconds` count the same by closed labels. Neither carries
+    the conversation or an expression.
 
 - **Incidents leave Atlas on the event feed.** Every incident raised and every incident resolved
   is now an event of the CloudEvents feed, `atlas.incident.raised` and

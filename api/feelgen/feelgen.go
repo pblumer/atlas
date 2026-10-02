@@ -136,6 +136,12 @@ type Service struct {
 
 	timeout  time.Duration
 	attempts int
+	// now is the clock an Outcome's duration is read from; tests fix it.
+	now func() time.Time
+
+	// Observe, when set, is told what every request that reached a model came to
+	// (Outcome). The server logs it and counts it; nil measures nothing.
+	Observe func(Outcome)
 
 	// Limits are the installation's resource budgets. New sets them to
 	// [limits.Default]; the server overwrites them with its own (ADR-0291).
@@ -144,7 +150,10 @@ type Service struct {
 
 // New builds the service over the server's two collaborators.
 func New(workers func(*http.Request) ([]Worker, error), dial func(*http.Request, string) (agent.Model, error)) *Service {
-	return &Service{workers: workers, dial: dial, timeout: defaultTimeout, attempts: defaultAttempts, Limits: limits.Default()}
+	return &Service{
+		workers: workers, dial: dial, timeout: defaultTimeout, attempts: defaultAttempts,
+		now: time.Now, Limits: limits.Default(),
+	}
 }
 
 // errNoWorker is the "not configured" state, told apart because its remedy is a
@@ -195,27 +204,44 @@ func (s *Service) Generate(r *http.Request, req Request) (Response, int, error) 
 		warning  string
 		attempts int
 	)
+	// From here on a model is asked, so whatever happens is a data point about the
+	// prompt and the model, and is reported whichever way the request ends.
+	outcome := Outcome{Worker: worker.Name, Model: asked}
+	started := s.now()
+	defer func() {
+		if s.Observe == nil {
+			return
+		}
+		outcome.Duration = s.now().Sub(started)
+		s.Observe(outcome)
+	}()
 	for attempts < s.attempts {
 		attempts++
 		decision, err := model.Decide(ctx, agent.Request{System: systemPrompt(), Goal: prompt, Round: 1})
 		if err != nil {
+			outcome.Attempts = append(outcome.Attempts, unusable(err))
 			if !answered {
 				// The adapter's message carries the endpoint's status, which decides
 				// what an operator does about it: 401 is the credential, 429 capacity.
+				outcome.Result = ResultUnanswered
 				return Response{}, http.StatusBadGateway, fmt.Errorf("the AI Worker %q could not answer: %w", worker.Name, err)
 			}
 			// A correction round failed. The answer before it is still an answer, and
 			// on a rate-limited free model the second call is the likely one to fail.
 			warning = fmt.Sprintf("the correction round could not run: %v", err)
+			outcome.Result = ResultCutShort
 			break
 		}
 		answer := answerText(decision)
 		p, perr := ParseAnswer(answer, s.budgets().Request)
 		if perr != nil {
+			outcome.Attempts = append(outcome.Attempts, unusable(perr))
 			if !answered {
+				outcome.Result = ResultUnanswered
 				return Response{}, http.StatusBadGateway, fmt.Errorf("the AI Worker %q answered with nothing usable: %w", worker.Name, perr)
 			}
 			warning = fmt.Sprintf("the correction round answered with nothing usable: %v", perr)
+			outcome.Result = ResultCutShort
 			break
 		}
 		vars := p.Variables
@@ -230,9 +256,15 @@ func (s *Service) Generate(r *http.Request, req Request) (Response, int, error) 
 		if p.Variables == nil {
 			best.Variables = authorVars
 		}
+		outcome.Attempts = append(outcome.Attempts, attemptOf(p, c))
 		if settled(p, c) {
+			outcome.Result = ResultSettled
+			if p.Expression == "" {
+				outcome.Result = ResultQuestion
+			}
 			break
 		}
+		outcome.Result = ResultUnsettled
 		prompt = repairPrompt(goal, answer, problem(p, c))
 	}
 	return s.response(best, check, attempts, warning, worker.Name, asked), 0, nil

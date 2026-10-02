@@ -28,6 +28,12 @@ type Check struct {
 	Result string `json:"result,omitempty"`
 	Kind   string `json:"kind,omitempty"`
 	Error  string `json:"error,omitempty"`
+	// Fault is the kind of failure when OK is false: FaultCompile, FaultCalls or
+	// FaultEvaluate. Calls names the callees a FaultCalls refused; it is reported to
+	// whoever measures the prompt (Outcome), not to the console, whose author reads
+	// the same names in Error.
+	Fault string   `json:"fault,omitempty"`
+	Calls []string `json:"-"`
 	// Inputs are the variables the expression reads, and Missing those of them the
 	// example does not bind. A missing input reads as null, which makes the example
 	// prove nothing about it.
@@ -49,14 +55,24 @@ type Check struct {
 // editor would have run.
 func Evaluate(expression string, vars map[string]any, expected any, hasExpected bool) Check {
 	if strings.TrimSpace(expression) == "" {
-		return Check{Error: "the expression is empty"}
+		return Check{Error: "the expression is empty", Fault: FaultEmpty}
 	}
 	compiled, err := expr.CompileAuto(expression)
 	if err != nil {
-		return Check{Error: "it does not compile: " + err.Error()}
+		return Check{Error: "it does not compile: " + err.Error(), Fault: FaultCompile}
 	}
-	if err := expr.CheckCallsError(expression); err != nil {
-		return Check{Error: err.Error()}
+	// The faults one by one rather than CheckCallsError's single sentence, because the
+	// callee names are worth more apart than joined: they say which foreign functions a
+	// model reaches for. The sentence is put together exactly as CheckCallsError does.
+	if refused := expr.CheckCalls(expression); len(refused) > 0 {
+		c := Check{Fault: FaultCalls}
+		msgs := make([]string, len(refused))
+		for i, f := range refused {
+			msgs[i] = f.Message
+			c.Calls = append(c.Calls, f.Name)
+		}
+		c.Error = strings.Join(msgs, " ")
+		return c
 	}
 	c := Check{Inputs: compiled.Inputs()}
 	bindings := make(map[string]expr.Value, len(vars))
@@ -70,7 +86,7 @@ func Evaluate(expression string, vars map[string]any, expected any, hasExpected 
 	}
 	v, err := compiled.Eval(bindings)
 	if err != nil {
-		c.Error = "it does not evaluate: " + err.Error()
+		c.Error, c.Fault = "it does not evaluate: "+err.Error(), FaultEvaluate
 		return c
 	}
 	kind, b, text := expr.Classify(v)

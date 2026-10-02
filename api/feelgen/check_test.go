@@ -150,3 +150,18 @@ func TestProblemTellsTheModelWhatToFix(t *testing.T) {
 		}
 	}
 }
+
+// TestEvaluateNamesItsFault: the check says which kind of thing went wrong, and for a
+// refused call which callee, because those are what the prompt is measured against.
+func TestEvaluateNamesItsFault(t *testing.T) {
+	c := Evaluate(`is defined(a) and trim(b) = ""`, map[string]any{"a": nil, "b": ""}, nil, false)
+	if c.Fault != FaultCalls || strings.Join(c.Calls, ",") != "is defined,trim" {
+		t.Errorf("check = %+v, want both refused callees", c)
+	}
+	if c := Evaluate(`if x then`, nil, nil, false); c.Fault != FaultCompile {
+		t.Errorf("fault = %q, want compile", c.Fault)
+	}
+	if c := Evaluate(`1 + 1`, nil, nil, false); c.Fault != "" || c.Calls != nil {
+		t.Errorf("a working expression reports a fault: %+v", c)
+	}
+}

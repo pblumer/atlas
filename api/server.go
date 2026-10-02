@@ -360,6 +360,9 @@ type Server struct {
 	// (ADR-draft-feel-assistant). Like formGen it owns no state and holds no run
 	// loop; feelgeneration.go is its whole reach into this server.
 	feelGen *feelgen.Service
+	// feelMetrics counts what the FEEL assistant's requests came to; nil when this
+	// server exports no metrics (feelgeneration.go).
+	feelMetrics *feelAssistantMetrics
 	// releaseNotes serves the Console's release notes, read from the CHANGELOG this
 	// binary embeds (ADR-0444). Like formGen it
 	// owns no state and holds no run loop.
@@ -1613,6 +1616,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// writes there is checked by the engine before the author sees it, which is the
 	// one thing it adds to form generation's pattern.
 	s.feelGen = feelgen.New(s.agentWorkersForFeel, s.dialAgentWorker)
+	s.feelGen.Observe = s.observeFeelAssistant
 	s.releaseNotes = releasenotes.New(atlas.Changelog, atlas.ADRIndex)
 	s.processDocs = processdoc.New(
 		s.runLoop,

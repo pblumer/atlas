@@ -436,3 +436,18 @@ var (
 	// record that it happened — so the attempt is refused and the refusal is audited.
 	PersonalDataKeyWriteRefused = newEvent("personal_data.key_write_refused")
 )
+
+// The FEEL assistant (ADR-draft-feel-assistant).
+var (
+	// FeelAssistantAnswered is one request of the FEEL assistant that reached a model:
+	// which Worker and model answered, how the request ended, and what each round
+	// failed on. It is the data the assistant's prompt is improved from — how often a
+	// model keeps to the contract, which foreign functions it reaches for, how many
+	// rounds a model needs — so it is said for every request, not only for failures.
+	//
+	// It carries the engine's verdicts and never the conversation or the expressions:
+	// what an author writes in a chat may be anything, and an expression may hold a
+	// literal they typed. The categories are enough to tell a prompt that teaches the
+	// dialect from one that does not.
+	FeelAssistantAnswered = newEvent("feel_assistant.answered")
+)

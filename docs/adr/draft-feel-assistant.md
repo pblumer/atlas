@@ -7,7 +7,9 @@
 - **Open question:** Whether a small free model — the kind an installation points an
   OpenRouter Worker at — writes this build's FEEL well enough within three attempts is not
   measured. The bound on correction rounds, and the claim that the engine's check makes
-  such a model usable, rest on that gap.
+  such a model usable, rest on that gap. Every request now reports what it came to (see
+  *Measuring the prompt*), so the question is answerable from an installation's own log
+  and metrics; it stays open until somebody has read them.
 - **Question checked:** 2026-10
 
 ## Context and problem statement
@@ -90,6 +92,21 @@ cell is recognised and not written to: it takes a unary test, which this assista
 writes nor checks. The history of the last thirty expressions and the favourites are kept
 in the browser's local storage, the conversation in its session storage.
 
+**Measuring the prompt.** The prompt is tuned rather than designed, and tuning it by
+impression is how a prompt grows sentences nobody can justify. So every request that
+reached a model reports an outcome: the Worker and model, how it ended (`settled`,
+`question`, `unsettled`, `cut_short`, `unanswered`), and per round the form the model
+answered in (`contract`, `code_block`, `prose`, `unusable`), what the check found (`none`,
+`compile`, `calls`, `evaluate`, `missing`, `mismatch`, `empty`, `unusable`), the engine's
+verdict and the callees it refused. The server writes it as one log line,
+`event=feel_assistant.answered`, and — where metrics are on — counts it:
+`atlas_feel_assistant_requests_total{outcome}`, `atlas_feel_assistant_attempts_total{format}`,
+`atlas_feel_assistant_attempt_faults_total{fault}` and `atlas_feel_assistant_request_seconds`.
+The counters carry only the closed lists `feelgen` declares; the model and the callees are
+values a request or a model invents, so they are in the log line and never a label
+(ADR-0142). Neither carries the conversation or an expression: a chat may hold anything,
+and an expression a literal the author typed.
+
 **Not an MCP tool.** As for form generation: the caller of a tool is already a model, and
 asking Atlas to ask a second one is a detour. An agent writes FEEL and checks it with the
 validate and evaluate routes the assistant uses.
@@ -112,9 +129,10 @@ validate and evaluate routes the assistant uses.
   - Unary tests are not supported, so a decision table's input cells get no help beyond
     the prompt telling the model how a table splits a condition.
 - **Follow-ups / risks to watch:**
-  - Measure the open question: how often a free model settles in one, two or three
-    attempts, and with which errors. The bound and the prompt's examples are where that
-    data would go.
+  - Read the measurements: how often a free model settles in one, two or three
+    attempts, how often it keeps to the contract, and which foreign functions it reaches
+    for. The bound, the prompt's examples and its list of unavailable names are where
+    that data goes.
   - Shared favourites — a team's library of expressions — would be a design-time store
     with owners and scopes (ADR-0205), not local storage.
   - Implementing the foreign functions the prompt names as unavailable remains ADR-0388's
@@ -162,3 +180,6 @@ validate and evaluate routes the assistant uses.
   modeler, both omitted from MCP with their reasons.
 - `api/web/feel-assistant.js`, the mini spark in `feel.js`, the top-bar button, the
   catalogue entries in `i18n.js`; `e2e/feel-assistant.spec.mjs`.
+- The measurement: `feelgen.Outcome` and its closed lists, the `Observe` hook,
+  `feel_assistant.answered` in the logging catalogue, and the four metrics registered
+  with the server's others (`api/feelgeneration.go`).

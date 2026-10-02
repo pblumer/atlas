@@ -8,6 +8,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"unicode/utf8"
+
+	"github.com/pblumer/atlas/api/feelgen"
 )
 
 // Server wiring for the FEEL assistant (ADR-draft-feel-assistant). The area's behaviour —
@@ -55,6 +58,7 @@ func TestFeelAssistantAsksTheConfiguredWorkerAndCorrectsIt(t *testing.T) {
 	}))
 	defer model.Close()
 
+	sink := captureAuditLog(t)
 	srv, _ := newValidateServer(t)
 	_ = srv.connectors.Save(connector{ID: "1", Name: "openrouter", Kind: connectorKindAgent,
 		Provider: agentProtocolChatCompletions, Endpoint: model.URL,
@@ -98,6 +102,123 @@ func TestFeelAssistantAsksTheConfiguredWorkerAndCorrectsIt(t *testing.T) {
 	if len(goals) != 2 || !strings.Contains(goals[0], "Bedingung eines Gateways") ||
 		!strings.Contains(goals[1], "x != null") {
 		t.Errorf("what reached the model:\n%s", strings.Join(goals, "\n---\n"))
+	}
+
+	// What the request came to is logged, for whoever is improving the prompt: the
+	// rounds, what each failed on, the callee it reached for — and never the
+	// conversation or the expressions.
+	lines := feelLines(t, sink)
+	if len(lines) != 1 {
+		t.Fatalf("%d feel_assistant.answered lines, want one:\n%s", len(lines), sink)
+	}
+	line := lines[0]
+	for key, want := range map[string]any{
+		"worker": "openrouter", "model": "meta-llama/llama-3.3-70b-instruct:free",
+		"outcome": "settled", "attempts": float64(2), "faults": "calls,none",
+		"formats": "contract,contract", "calls": "is defined",
+	} {
+		if line[key] != want {
+			t.Errorf("log %s = %v, want %v (line %v)", key, line[key], want, line)
+		}
+	}
+	if errs, _ := line["errors"].(string); !strings.Contains(errs, "x != null") {
+		t.Errorf("log errors = %v, want the engine's verdict", line["errors"])
+	}
+	for _, private := range []string{"E-Mail erfasst", "kunde.email"} {
+		if strings.Contains(sink.String(), private) {
+			t.Errorf("the log carries %q, from the conversation or an expression", private)
+		}
+	}
+
+	// …and counted, by closed labels only (ADR-0142).
+	for series, want := range map[string]float64{
+		`atlas_feel_assistant_requests_total{outcome="settled"}`:      1,
+		`atlas_feel_assistant_requests_total{outcome="unsettled"}`:    0,
+		`atlas_feel_assistant_attempts_total{format="contract"}`:      2,
+		`atlas_feel_assistant_attempt_faults_total{fault="calls"}`:    1,
+		`atlas_feel_assistant_attempt_faults_total{fault="none"}`:     1,
+		`atlas_feel_assistant_attempt_faults_total{fault="mismatch"}`: 0,
+		`atlas_feel_assistant_request_seconds_count`:                  1,
+	} {
+		if got := gatheredValue(t, srv, series); got != want {
+			t.Errorf("%s = %v, want %v", series, got, want)
+		}
+	}
+}
+
+// feelLines is every feel_assistant.answered line the sink caught, decoded.
+func feelLines(t *testing.T, sink *auditSink) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(sink.String()), "\n") {
+		if !strings.Contains(line, `"event":"feel_assistant.answered"`) {
+			continue
+		}
+		var m map[string]any
+		if err := json.Unmarshal([]byte(line), &m); err != nil {
+			t.Fatalf("decode %q: %v", line, err)
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+// gatheredValue reads one series from the server's registry, written the way the
+// exposition writes it: name{label="value"}.
+func gatheredValue(t *testing.T, srv *Server, series string) float64 {
+	t.Helper()
+	if srv.metrics == nil {
+		t.Fatal("the server has no metrics registry")
+	}
+	families, err := srv.metrics.Gather()
+	if err != nil {
+		t.Fatalf("Gather: %v", err)
+	}
+	for _, f := range families {
+		for _, m := range f.GetMetric() {
+			name := f.GetName()
+			var labels []string
+			for _, l := range m.GetLabel() {
+				labels = append(labels, l.GetName()+`="`+l.GetValue()+`"`)
+			}
+			if len(labels) > 0 {
+				name += "{" + strings.Join(labels, ",") + "}"
+			}
+			switch {
+			case name == series && m.GetCounter() != nil:
+				return m.GetCounter().GetValue()
+			case name+"_count" == series && m.GetHistogram() != nil:
+				return float64(m.GetHistogram().GetSampleCount())
+			}
+		}
+	}
+	t.Fatalf("no series %s", series)
+	return 0
+}
+
+// TestFeelAssistantOutcomeWithoutMetrics: a server with metrics turned off still logs
+// what the assistant's requests came to, and counting nothing does not fail.
+func TestFeelAssistantOutcomeWithoutMetrics(t *testing.T) {
+	sink := captureAuditLog(t)
+	srv, _ := newValidateServer(t, WithoutMetrics())
+	if srv.metrics != nil {
+		t.Fatal("metrics are on")
+	}
+	srv.observeFeelAssistant(feelgen.Outcome{Worker: "w", Model: "m", Result: feelgen.ResultUnanswered,
+		Attempts: []feelgen.Attempt{{Format: feelgen.FormatUnusable, Fault: feelgen.FaultUnusable,
+			Error: "model endpoint returned 429: " + strings.Repeat("—", 2000)}}})
+	lines := feelLines(t, sink)
+	if len(lines) != 1 || lines[0]["outcome"] != "unanswered" {
+		t.Fatalf("lines = %v", lines)
+	}
+	// An endpoint's error body can be long; the line keeps the start of it.
+	errs, _ := lines[0]["errors"].(string)
+	if len(errs) > 600 || !strings.HasPrefix(errs, "model endpoint returned 429") {
+		t.Errorf("errors = %d bytes: %.80s…", len(errs), errs)
+	}
+	// Cut between characters, never inside one: the dashes are three bytes each.
+	if !utf8.ValidString(errs) || strings.ContainsRune(errs, utf8.RuneError) {
+		t.Errorf("the shortened error is not valid text: %q", errs[len(errs)-12:])
 	}
 }
 

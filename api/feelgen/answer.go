@@ -22,6 +22,9 @@ type Proposal struct {
 	// HasExpected whether it said anything at all — "expected": null is a claim too.
 	Expected    any
 	HasExpected bool
+	// Format is which reading of the answer succeeded: the contract, a code block, or
+	// plain prose (FormatContract, FormatCodeBlock, FormatProse).
+	Format string
 }
 
 // ParseAnswer reads what a model wrote into a [Proposal]. It forgives as much as can be
@@ -44,12 +47,13 @@ func ParseAnswer(answer string, max int64) (Proposal, error) {
 		return Proposal{}, errors.New("the answer is empty")
 	}
 	if p, ok := contract(text); ok {
+		p.Format = FormatContract
 		return p, nil
 	}
 	if code, rest, ok := codeBlock(text); ok {
-		return Proposal{Expression: bareExpression(code), Explanation: rest}, nil
+		return Proposal{Expression: bareExpression(code), Explanation: rest, Format: FormatCodeBlock}, nil
 	}
-	return Proposal{Explanation: text}, nil
+	return Proposal{Explanation: text, Format: FormatProse}, nil
 }
 
 // contract reads the JSON object the system prompt asks for. It is found the way form

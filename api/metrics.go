@@ -296,6 +296,13 @@ func (s *Server) buildMetrics() error {
 		return err
 	}
 	s.runLoop.SetMetrics(rm)
+	// What the FEEL assistant's requests came to (feelgeneration.go): design-time
+	// counters, pushed per request, nowhere near the engine.
+	fm := newFeelAssistantMetrics()
+	if err := reg.Register(fm.collectors()...); err != nil {
+		return err
+	}
+	s.feelMetrics = fm
 	s.metrics = reg
 	return nil
 }
