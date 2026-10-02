@@ -2,6 +2,29 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "a-package-installs-from-the-command-line",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Install a package from the command line",
+        "de": "Ein Paket im Terminal installieren"
+      },
+      "summary": {
+        "en": "The new command atlas import installs an application, and the shop it serves, into a running instance without a browser, for example from a pipeline. It asks for who orders and who approves through an answers file, accepts groups and people by name so the same file works on every instance, and refuses before writing anything if an answer is missing or unknown.",
+        "de": "Der neue Befehl atlas import installiert eine Applikation und den Shop dazu ohne Browser in eine laufende Instanz, etwa aus einer Pipeline. Wer bestellt und wer genehmigt, steht in einer Antwortdatei; Gruppen und Personen dürfen beim Namen genannt werden, damit dieselbe Datei auf jeder Instanz gilt. Fehlt eine Antwort oder ist sie unbekannt, bricht der Befehl ab, bevor er etwas schreibt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue",
+        "Examples",
+        "Deployment"
+      ]
+    },
+    {
       "id": "the-shop-has-a-handbook-of-its-own-with-an-example-to-instal",
       "version": "Unreleased",
       "date": null,
@@ -235,28 +258,6 @@
       "summary": {
         "en": "A Shop task can now issue a command: an HR leaver process returns a person's mailbox, a maintenance process resets a password — through the same checks the shop applies to a person. Because no person stands behind a process, each product lists the applications it trusts with this, and only actions meant for operators or systems can be commanded. The list is read fresh every time, so removing an application stops it at once for everything already held.",
         "de": "Eine Shop-Aufgabe kann jetzt einen Befehl erteilen: Ein Austrittsprozess gibt die Mailbox einer Person zurück, ein Wartungsprozess setzt ein Passwort zurück – mit denselben Prüfungen, die der Shop bei einer Person anwendet. Weil hinter einem Prozess keine Person steht, führt jedes Produkt die Applikationen auf, denen es das erlaubt, und nur Aktionen für Betrieb oder Systeme lassen sich befehlen. Die Liste wird jedes Mal neu gelesen; wird eine Applikation entfernt, ist sie sofort für alles bereits Bezogene gesperrt."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Service catalogue",
-        "Modeler"
-      ]
-    },
-    {
-      "id": "a-product-s-process-states-how-an-action-ended-without-calli",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Processes report how an action ended with a Shop task",
-        "de": "Prozesse melden mit einer Shop-Aufgabe, wie eine Aktion endete"
-      },
-      "summary": {
-        "en": "A send task can now be of the kind Shop: choose the action and the outcome — completed, rejected or failed — and the task records that ending for the request its process is handling. It needs no token and no address, because it runs inside Atlas and finds the order and the request in the process itself. When the process took a path that does not fit the action, the task stops with an incident instead of reporting the wrong thing. Publishing a catalogue now checks that every change and service a product offers has a task that reports it completed.",
-        "de": "Eine Sendeaufgabe kann jetzt von der Art Shop sein: Aktion und Ergebnis wählen – abgeschlossen, abgelehnt oder fehlgeschlagen –, und die Aufgabe hält dieses Ende für die Anfrage fest, die ihr Prozess bearbeitet. Sie braucht weder Token noch Adresse, weil sie in Atlas läuft und Bestellung und Anfrage im Prozess selbst findet. Hat der Prozess einen Weg genommen, der nicht zur Aktion passt, hält die Aufgabe mit einem Vorfall an, statt das Falsche zu melden. Beim Veröffentlichen eines Katalogs wird jetzt geprüft, dass jede Änderung und jede Dienstleistung eines Produkts eine Aufgabe hat, die sie als abgeschlossen meldet."
       },
       "link": {
         "label": "ADR-0429",

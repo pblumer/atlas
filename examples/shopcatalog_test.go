@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strings"
 	"testing"
 
 	shop "github.com/pblumer/atlas/api/catalog"
@@ -23,8 +22,15 @@ import (
 // lifecycle bindings against the example's own compiled processes, and that every
 // form a product names is one the example ships.
 
-// shopDocumentName is the file an example's catalogue document lives in.
-const shopDocumentName = "katalog.json"
+// The files of a package, beside its processes and forms: the application's
+// manifest in the source layout (ADR-0134), the catalogue document, and what each
+// placeholder in it asks. `atlas import` reads the same three names
+// (ADR-draft-a-package-is-imported-from-the-command-line).
+const (
+	packageManifestName = "atlas.json"
+	shopDocumentName    = "katalog.json"
+	shopQuestionsName   = "fragen.json"
+)
 
 // placeholder is a value the installer asks the reader for — an audience group, an
 // approver — because it names something in their installation and not in ours.
@@ -215,23 +221,145 @@ func TestEveryShopDocumentPublishes(t *testing.T) {
 	}
 }
 
-// TestTheShopInstallerAsksForEveryPlaceholder: what a document leaves to the reader is
-// asked by the shop handbook's installer, which reads its questions from one table. A
-// placeholder that table does not know would be imported literally — an audience group
-// named "{{zielgruppe}}" reaches nobody.
-func TestTheShopInstallerAsksForEveryPlaceholder(t *testing.T) {
-	page, err := os.ReadFile("../api/web/shop-handbuch.html")
-	if err != nil {
-		t.Fatalf("read the shop handbook: %v", err)
-	}
+// shopQuestion is one entry of fragen.json.
+type shopQuestion struct {
+	Kind  string            `json:"kind"`
+	Label map[string]string `json:"label"`
+	Hint  map[string]string `json:"hint"`
+}
+
+// TestEveryPlaceholderIsAsked: what a document leaves to the reader is asked by the
+// package's own questions, which the shop handbook's installer and `atlas import`
+// both read. A placeholder without a question would be imported literally — an
+// audience group named "{{zielgruppe}}" reaches nobody — and a question no
+// placeholder uses is one the reader answers for nothing.
+func TestEveryPlaceholderIsAsked(t *testing.T) {
 	for _, path := range shopDocuments(t) {
 		_, names := readShopDocument(t, path)
 		if len(names) == 0 {
 			t.Errorf("%s leaves nothing to the reader; an audience and the approvers belong to their installation", path)
 		}
+		qpath := filepath.Join(filepath.Dir(path), shopQuestionsName)
+		raw, err := os.ReadFile(qpath)
+		if err != nil {
+			t.Fatalf("%s: %v", qpath, err)
+		}
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.DisallowUnknownFields()
+		var questions map[string]shopQuestion
+		if err := dec.Decode(&questions); err != nil {
+			t.Fatalf("%s: %v", qpath, err)
+		}
+		used := map[string]bool{}
 		for _, name := range names {
-			if !strings.Contains(string(page), `"`+name+`": {`) {
-				t.Errorf("%s leaves {{%s}} to the reader, and the installer's QUESTIONS table does not ask for it", path, name)
+			used[name] = true
+			q, ok := questions[name]
+			switch {
+			case !ok:
+				t.Errorf("%s leaves {{%s}} to the reader, and %s does not ask for it", path, name, qpath)
+			case q.Kind != "group" && q.Kind != "user" && q.Kind != "text":
+				t.Errorf("%s: {{%s}} is a %q question; a question asks for a group, a user or text", qpath, name, q.Kind)
+			case q.Label["de"] == "" || q.Label["en"] == "":
+				t.Errorf("%s: {{%s}} is not asked in both languages", qpath, name)
+			}
+		}
+		for name := range questions {
+			if !used[name] {
+				t.Errorf("%s asks for %s, which %s does not leave open", qpath, name, path)
+			}
+		}
+	}
+}
+
+// packageManifest is the part of atlas.json these tests hold to the directory.
+type packageManifest struct {
+	FormatVersion int    `json:"formatVersion"`
+	Key           string `json:"key"`
+	Name          string `json:"name"`
+	Processes     []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+		Path string `json:"path"`
+	} `json:"processes"`
+	Forms []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+		Path string `json:"path"`
+	} `json:"forms"`
+	Decisions []json.RawMessage `json:"decisions"`
+}
+
+func readPackageManifest(t *testing.T, dir string) packageManifest {
+	t.Helper()
+	path := filepath.Join(dir, packageManifestName)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("a shop example is a package, and %v", err)
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	var man packageManifest
+	if err := dec.Decode(&man); err != nil {
+		t.Fatalf("%s: %v", path, err)
+	}
+	return man
+}
+
+// applicationKey is a key as the server derives one from a name (api/appsource.go
+// slugify): lower case, umlauts spelled out, every other run of characters a dash.
+var applicationKey = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+
+// TestEveryPackageManifestNamesWhatItShips: the source import writes what the
+// manifest lists, under the ids the manifest gives, and does not open a file to
+// check them. So a process the manifest forgets is never deployed, and one listed
+// under an id its BPMN does not carry is saved as a draft the catalogue's binding
+// cannot find. The manifest is therefore held to the directory: every process and
+// every form in it, each under its own id.
+func TestEveryPackageManifestNamesWhatItShips(t *testing.T) {
+	for _, path := range shopDocuments(t) {
+		dir := filepath.Dir(path)
+		man := readPackageManifest(t, dir)
+		if man.FormatVersion != 1 || man.Name == "" || !applicationKey.MatchString(man.Key) {
+			t.Errorf("%s: format %d, key %q, name %q — want format 1, a slug key and a name", dir, man.FormatVersion, man.Key, man.Name)
+		}
+
+		listed := map[string]string{}
+		for _, p := range man.Processes {
+			listed[p.Path] = p.ID
+			raw, err := os.ReadFile(filepath.Join(dir, p.Path))
+			if err != nil {
+				t.Errorf("%s lists process %s at %s: %v", dir, p.ID, p.Path, err)
+				continue
+			}
+			cp, err := compiler.Parse(1, 1, bytes.NewReader(raw))
+			if err != nil {
+				t.Errorf("%s: %v", p.Path, err)
+			} else if cp.ProcessId() != p.ID {
+				t.Errorf("%s lists %s as process %s; its BPMN says %s", dir, p.Path, p.ID, cp.ProcessId())
+			}
+		}
+		bpmns, _ := filepath.Glob(filepath.Join(dir, "*.bpmn"))
+		for _, b := range bpmns {
+			if _, ok := listed[filepath.Base(b)]; !ok {
+				t.Errorf("%s ships %s, which its manifest does not list", dir, filepath.Base(b))
+			}
+		}
+
+		forms := exampleFormIDs(t, dir)
+		inManifest := map[string]bool{}
+		for _, f := range man.Forms {
+			inManifest[f.ID] = true
+			raw, err := os.ReadFile(filepath.Join(dir, f.Path))
+			var form struct {
+				ID string `json:"id"`
+			}
+			if err != nil || json.Unmarshal(raw, &form) != nil || form.ID != f.ID {
+				t.Errorf("%s lists %s as form %s; the file says %q (%v)", dir, f.Path, f.ID, form.ID, err)
+			}
+		}
+		for id := range forms {
+			if !inManifest[id] {
+				t.Errorf("%s ships form %s, which its manifest does not list", dir, id)
 			}
 		}
 	}

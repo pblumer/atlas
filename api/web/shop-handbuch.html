@@ -82,6 +82,7 @@ th{color:var(--muted);font-weight:600}
   <a href="#betrieb"><span data-l="de">Im Betrieb</span><span data-l="en">In operation</span></a>
   <a href="#dokument"><span data-l="de">Ein Shop als Dokument</span><span data-l="en">A shop as a document</span></a>
   <a href="#beispiel"><span data-l="de">Das Beispiel installieren</span><span data-l="en">Installing the example</span></a>
+  <a href="#terminal"><span data-l="de">Im Terminal: atlas import</span><span data-l="en">From a terminal: atlas import</span></a>
 </nav>
 <main>
 
@@ -369,6 +370,70 @@ th{color:var(--muted);font-weight:600}
   </div>
 </section>
 
+<section id="terminal">
+  <h2 data-l="de">Im Terminal: <code>atlas import</code></h2><h2 data-l="en">From a terminal: <code>atlas import</code></h2>
+  <p data-l="de">Dasselbe Paket lässt sich ohne Browser installieren – im Terminal oder in einem CI-Job, etwa um eine
+    Test- und eine Produktionsinstanz gleich auszustatten. Ein <b>Paket</b> ist ein Verzeichnis: <code>atlas.json</code>,
+    das Manifest der Applikation im selben Format, das <i>Download source…</i> liefert; die Prozesse und Formulare,
+    die es nennt; und auf Wunsch <code>katalog.json</code> mit dem Shop und <code>fragen.json</code> mit den Fragen zu
+    seinen Platzhaltern. Der Befehl geht vor wie der Installer: Applikation, Veröffentlichen, Katalog.</p>
+  <p data-l="en">The same package installs without a browser – in a terminal or a CI job, say to equip a test and a
+    production instance alike. A <b>package</b> is a directory: <code>atlas.json</code>, the application's manifest in
+    the format <i>Download source…</i> produces; the processes and forms it names; and optionally <code>katalog.json</code>
+    with the shop and <code>fragen.json</code> with the questions its placeholders ask. The command goes about it like
+    the installer: application, publish, catalogue.</p>
+<pre>atlas import --server https://atlas-test.example.com --answers antworten.json examples/verwaltung-dienstleistungen
+
+# antworten.json
+{ "zielgruppe": "Alle Mitarbeitenden", "zielgruppe-bau": "Fachbereich Bau",
+  "facility-management": "Fabienne Meier", "geoportal-verantwortliche": "Geoportal-Team" }</pre>
+  <p data-l="de">Eine Antwort auf eine Gruppen- oder Personenfrage muss im Verzeichnis des Servers stehen, als ID oder
+    als Name. IDs vergibt jeder Server selbst, Namen sind überall gleich – eine Antwortdatei mit Namen dient deshalb
+    der Test- wie der Produktionsinstanz. Tragen zwei Personen denselben Namen, wird die Antwort abgelehnt; dann hilft
+    die ID. Fehlt eine Antwort oder ist sie unbekannt, bricht der Befehl ab, <b>bevor er etwas schreibt</b>, und nennt
+    alle Probleme auf einmal.</p>
+  <p data-l="en">An answer to a group or person question must be in the server's directory, as an id or as a name. Each
+    server mints its own ids while names stay the same, so an answers file with names serves the test instance and the
+    production one alike. If two people share a name, the answer is refused; the id then helps. If an answer is
+    missing or unknown, the command stops <b>before it writes anything</b> and names every problem at once.</p>
+  <table id="import-flags">
+    <thead><tr>
+      <th data-l="de">Angabe</th><th data-l="en">Flag</th>
+      <th data-l="de">Bedeutung</th><th data-l="en">Meaning</th>
+    </tr></thead>
+    <tbody>
+      <tr><td><code>--server</code></td>
+        <td data-l="de">Adresse der atlas-Instanz; ohne Angabe <code>http://localhost:8080</code></td>
+        <td data-l="en">Address of the atlas instance; <code>http://localhost:8080</code> when omitted</td></tr>
+      <tr><td><code>--token</code></td>
+        <td data-l="de">API-Token, wenn die Anmeldung eingeschaltet ist; ohne Angabe aus <code>ATLAS_TOKEN</code>. Ein
+          Token trägt die Rollen dessen, der es ausstellt (ohne <code>admin</code>): für die Applikation
+          <code>modeler</code>, für den Katalog <code>productmanager</code>.</td>
+        <td data-l="en">API token when sign-in is on; taken from <code>ATLAS_TOKEN</code> when omitted. A token carries
+          the roles of whoever mints it (without <code>admin</code>): <code>modeler</code> for the application,
+          <code>productmanager</code> for the catalogue.</td></tr>
+      <tr><td><code>--answers</code></td>
+        <td data-l="de">eine JSON-Datei mit den Antworten, <code>{"name": "wert"}</code></td>
+        <td data-l="en">a JSON file of answers, <code>{"name": "value"}</code></td></tr>
+      <tr><td><code>--set</code></td>
+        <td data-l="de">eine Antwort, <code>name=wert</code>; mehrfach möglich und stärker als <code>--answers</code> –
+          die Datei für das Gemeinsame, <code>--set</code> für das, was je Instanz abweicht</td>
+        <td data-l="en">one answer, <code>name=value</code>; repeatable, and wins over <code>--answers</code> – the file
+          for what is shared, <code>--set</code> for what differs per instance</td></tr>
+      <tr><td><code>--note</code></td>
+        <td data-l="de">die Notiz der Release, die das Veröffentlichen anlegt; ohne Angabe <code>atlas import</code></td>
+        <td data-l="en">the note on the release publishing creates; <code>atlas import</code> when omitted</td></tr>
+    </tbody>
+  </table>
+  <p data-l="de">Ein zweiter Lauf aktualisiert, statt doppelt anzulegen: Die Applikation wird über den Schlüssel in
+    <code>atlas.json</code> gefunden, Kataloge und Produkte über ihre IDs. Jeder Lauf veröffentlicht die Applikation
+    neu und legt dabei eine weitere Release an. Artefakte der Applikation, die das Paket nicht nennt, bleiben
+    unverändert und werden aufgezählt.</p>
+  <p data-l="en">A second run updates instead of creating twice: the application is found by the key in
+    <code>atlas.json</code>, catalogues and products by their ids. Each run publishes the application again and records
+    another release. The application's artifacts the package does not name stay as they are and are listed.</p>
+</section>
+
 </main>
 </div>
 <script>
@@ -395,26 +460,16 @@ document.getElementById("lang-en").addEventListener("click", () => setLang("en")
 // The example ships in examples-catalog.json, generated from examples/ by
 // `go test ./examples -update`: its processes, its forms and its catalogue document
 // (examples/verwaltung-dienstleistungen/katalog.json). What the document cannot know
-// — an audience group, an approver — it leaves as {{placeholder}}, and QUESTIONS is
-// what the installer asks for each. examples/shopcatalog_test.go holds this table to
-// every placeholder a document leaves, so none is imported literally.
+// — an audience group, an approver — it leaves as {{placeholder}}, and the package's
+// fragen.json says what the installer asks for each. examples/shopcatalog_test.go
+// holds those questions to every placeholder a document leaves, so none is imported
+// literally.
 (function initInstaller(){
   const EXAMPLE = "verwaltung-dienstleistungen";
-  const QUESTIONS = {
-    "zielgruppe": { kind: "group",
-      de: "Zielgruppe «Dienstleistungen der Verwaltung»: wer bestellt", en: "Audience of \"Administration services\": who orders",
-      hintDe: "Meist alle Mitarbeitenden.", hintEn: "Usually all staff." },
-    "zielgruppe-bau": { kind: "group",
-      de: "Zielgruppe «Fachbereich Bau»", en: "Audience of \"Building department\"",
-      hintDe: "Die Mitarbeitenden des Fachbereichs. Sie sehen diesen Katalog, weil sein Rang höher ist.",
-      hintEn: "The department's staff. They see this catalogue because its rank is higher." },
-    "facility-management": { kind: "user",
-      de: "Wer genehmigt Parkplätze (Facility Management)", en: "Who approves parking spaces (facility management)",
-      hintDe: "Eine Person.", hintEn: "One person." },
-    "geoportal-verantwortliche": { kind: "group",
-      de: "Wer genehmigt Geoportal-Zugänge", en: "Who approves geoportal access",
-      hintDe: "Eine Gruppe; wer zuerst entscheidet, entscheidet.", hintEn: "A group; whoever decides first decides." },
-  };
+  // What each placeholder asks is the package's own (fragen.json), carried into
+  // examples-catalog.json beside the document — the same questions `atlas import`
+  // reads, so the terminal and this page ask alike.
+  let QUESTIONS = {};
   const T = (de, en) => (root.dataset.lang === "en" ? en : de);
   const qbox = document.getElementById("inst-questions");
   const go = document.getElementById("inst-go");
@@ -449,6 +504,7 @@ document.getElementById("lang-en").addEventListener("click", () => setLang("en")
       if (!res.ok) throw new Error("examples-catalog.json: " + res.status);
       example = ((await res.json()).examples || []).find((e) => e.id === EXAMPLE && e.shop);
       if (!example) throw new Error(T("Das Beispiel fehlt im Beispielkatalog.", "The example is missing from the examples catalogue."));
+      QUESTIONS = example.shop.questions || {};
     } catch (e) { qbox.textContent = e.message; return; }
     const names = [...new Set([...JSON.stringify(example.shop.document).matchAll(/\{\{([a-z0-9-]+)\}\}/g)].map((m) => m[1]))];
     // One directory for both: any signed-in caller may read it (it is what the member
@@ -457,14 +513,15 @@ document.getElementById("lang-en").addEventListener("click", () => setLang("en")
     const groups = principals.filter((p) => p.type === "group");
     const people = principals.filter((p) => p.type === "user");
     qbox.innerHTML = names.map((name) => {
-      const q = QUESTIONS[name] || { kind: "text", de: name, en: name };
+      const q = QUESTIONS[name] || { kind: "text" };
+      const label = (q.label && (q.label[root.dataset.lang] || q.label.de || q.label.en)) || name;
+      const hint = (q.hint && (q.hint[root.dataset.lang] || q.hint.de || q.hint.en)) || "";
       const list = q.kind === "group" ? groups : q.kind === "user" ? people : null;
       const field = list && list.length
         ? '<select data-ph="' + esc(name) + '">' + list.map((g) =>
             '<option value="' + esc(g.id) + '">' + esc(g.name || g.displayName || g.username || g.id) + "</option>").join("") + "</select>"
         : '<input data-ph="' + esc(name) + '" placeholder="' + esc(q.kind === "group" ? T("Gruppen-ID", "group id") : T("Benutzer-ID", "user id")) + '">';
-      return "<label>" + esc(T(q.de, q.en)) + "</label>" + field +
-        '<p class="hint">' + esc(T(q.hintDe || "", q.hintEn || "")) + "</p>";
+      return "<label>" + esc(label) + "</label>" + field + '<p class="hint">' + esc(hint) + "</p>";
     }).join("");
     go.disabled = false;
   }
