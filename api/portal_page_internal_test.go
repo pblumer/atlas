@@ -488,7 +488,11 @@ func TestTheCatalogueCanBeFilledFromTheMenu(t *testing.T) {
 		t.Fatal("app.js has no APPS list; this test now checks nothing and says so instead")
 	}
 	apps := src[start : start+strings.Index(src[start:], "\n];")]
-	if !strings.Contains(apps, `{ id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager" },`) {
+	// Matched up to the role gate and not as the whole line, for the reason the
+	// portal entry's check gives: the entry grows fields (`feature`, which leaves it
+	// out when the server switched the catalogue off), and a pinned line would fail
+	// here with a message about the gate, which is not what changed.
+	if !strings.Contains(apps, `{ id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager"`) {
 		t.Error("no menu entry leads to the catalogue authoring screen, or its gate moved. " +
 			"It is a hash route because it *is* a view of this app, unlike the two portal " +
 			"pages, and it is gated at productmanager because ADR-0315 exists so that " +
