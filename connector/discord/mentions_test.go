@@ -10,7 +10,7 @@ import (
 
 // A message built from what a stranger typed into a public form must not be able to
 // ping a channel: a first name of "@everyone" is text, not a mention. The
-// registration recipe (ADR-draft-system-processes-announce-their-facts-as-signals)
+// registration recipe (ADR-0431)
 // silences mentions with the FEEL context literal {parse: []}, written inline rather
 // than held in a variable. This holds that the literal reaches Discord as the object
 // allowed_mentions needs, with an empty parse list, and not as a string Discord would

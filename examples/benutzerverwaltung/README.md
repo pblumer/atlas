@@ -78,7 +78,7 @@ Ein eingegangener Antrag wartet bei „Antrag freigeben", und niemand wird darau
 hingewiesen. Den geschützten Prozess kann eine Installation nicht um eine
 Benachrichtigung ergänzen. Deshalb wirft er selbst ein Signal,
 **`atlas.user.requested`**, unmittelbar bevor die Freigabe wartet
-([ADR-draft-system-processes-announce-their-facts-as-signals](../../docs/adr/draft-system-processes-announce-their-facts-as-signals.md)).
+([ADR-0431](../../docs/adr/0431-system-processes-announce-their-facts-as-signals.md)).
 Der Prozess kennt seine Empfänger nicht. Wer informiert werden will, deployt einen
 **eigenen** Prozess mit einem Signal-Start auf diesen Namen. Ohne einen solchen Prozess
 bleibt der Wurf folgenlos.

@@ -15,8 +15,8 @@
         "de": "Wer sich über die Login-Seite registriert, wartet mit seinem Antrag auf die Freigabe, und bisher hat niemanden etwas darauf hingewiesen. Der eingebaute Aufnahmeprozess meldet jetzt jeden neuen Antrag mit dem Signal «atlas.user.requested», unmittelbar bevor er auf die Freigabe wartet. Der Prozess selbst bleibt geschützt. Um informiert zu werden, deployen Sie einen kleinen eigenen Prozess, der auf dieses Signal startet und zum Beispiel eine Nachricht in Ihren Discord-Kanal schreibt. Er erhält Name, E-Mail, Abteilung, Begründung und den vorgeschlagenen Benutzernamen, nie aber die Rolle oder das Initialpasswort. Hört niemand zu, geschieht nichts, und eine fehlgeschlagene Meldung hält den Antrag nie auf."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0431",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0431-system-processes-announce-their-facts-as-signals.md"
       },
       "tags": [
         "Organization",

@@ -10,7 +10,7 @@ import (
 )
 
 // intakeListenerBPMN is what an installation deploys to hear about intake requests
-// (ADR-draft-system-processes-announce-their-facts-as-signals): a signal start on
+// (ADR-0431): a signal start on
 // "atlas.user.requested" and one Discord message. It is the recipe
 // examples/benutzerverwaltung/README.md documents, so the recipe is known to deploy.
 const intakeListenerBPMN = `<?xml version="1.0" encoding="UTF-8"?>

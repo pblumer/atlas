@@ -27,7 +27,7 @@
    -> (X) Join
    -> Ende "Aufnahme abgeschlossen"
 
-  Das Signal "atlas.user.requested" (ADR-draft-system-processes-announce-their-facts-as-signals)
+  Das Signal "atlas.user.requested" (ADR-0431)
   meldet jeden eingegangenen Antrag, bevor die Freigabe wartet. Der Prozess kennt
   seine Empfaenger nicht: eine Installation, die davon erfahren will (Discord, Mail,
   Ticket), deployt einen eigenen Prozess mit einem Signal-Start "atlas.user.requested".

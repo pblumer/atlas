@@ -1,4 +1,4 @@
-# ADR-DRAFT: A system process announces its facts as signals
+# ADR-0431: A system process announces its facts as signals
 
 - **Status:** Accepted
 - **Implementation:** Landed

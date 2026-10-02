@@ -26,7 +26,7 @@ _Changed_ / _Removed_ for each version.
   notice is an incident in the listener and does not hold up the request.
   `examples/benutzerverwaltung/README.md` carries a Discord recipe that silences
   `@everyone` from form input.
-  ADR-draft-system-processes-announce-their-facts-as-signals.
+  ADR-0431.
 
 - **A system that follows the event feed can hold a credential that reads it and nothing
   else.** There is a new role, `feedreader`, and a new API-token scope, `events`. A token
