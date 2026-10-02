@@ -9,10 +9,12 @@ import (
 	"os"
 	"os/exec"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/logging"
 )
 
@@ -80,7 +82,20 @@ type SuperviseSpec struct {
 	// ScriptSandbox is the operator-selected profile passed only to a script
 	// Worker Instance. Empty is the compatible off mode.
 	ScriptSandbox string
+	// MaxJobs is how many jobs of one type the worker runs at once (--max-jobs on
+	// the child). Zero leaves the worker's own default of one at a time, which is
+	// what a --supervise command the operator wrote keeps
+	// (ADR-draft-worker-runs-jobs-concurrently).
+	MaxJobs int
 }
+
+// DefaultSupervisedWorkerMaxJobs is how many jobs of one type a supervised built-in
+// worker runs at once unless --worker-max-jobs says otherwise. It is the bound the
+// engine puts on its own in-process handlers, deliberately: moving a kind onto a
+// worker is about where its work runs, and must not quietly change how much of it
+// runs together — which is what running it one job at a time had done
+// (ADR-draft-worker-runs-jobs-concurrently).
+const DefaultSupervisedWorkerMaxJobs = job.DefaultConcurrency
 
 func supervisedWorkerArgs(server string, spec SuperviseSpec, handles []string) []string {
 	args := []string{"worker", "--server", server, "--id", spec.ID}
@@ -95,6 +110,9 @@ func supervisedWorkerArgs(server string, spec SuperviseSpec, handles []string) [
 	}
 	if strings.TrimSpace(spec.ScriptSandbox) != "" {
 		args = append(args, "--script-sandbox", spec.ScriptSandbox)
+	}
+	if spec.MaxJobs > 0 {
+		args = append(args, "--max-jobs", strconv.Itoa(spec.MaxJobs))
 	}
 	return args
 }
@@ -147,6 +165,9 @@ type supervisor struct {
 	// afterRun, when set, runs between a child's exit and the wait that follows it.
 	// It is a test's way to land a restart in exactly that window; nil in production.
 	afterRun func(c *child)
+	// lifetime ties each child to this process, so a server that ends without
+	// stopping its workers does not leave them running (Windows; a no-op elsewhere).
+	lifetime childLifetime
 
 	mu       sync.Mutex
 	children []*child
@@ -195,8 +216,12 @@ func (s *supervisor) start() {
 	}
 }
 
-// wait blocks until every supervised worker has stopped.
-func (s *supervisor) wait() { s.wg.Wait() }
+// wait blocks until every supervised worker has stopped, then releases what tied
+// them to this process.
+func (s *supervisor) wait() {
+	s.wg.Wait()
+	s.lifetime.close()
+}
 
 // supervise keeps one worker running until the server quits: start it, wait for it,
 // and start it again after a backoff that grows while it keeps failing.
@@ -281,6 +306,11 @@ func (s *supervisor) runOnce(c *child, stop <-chan struct{}) error {
 		logging.Warn(logging.WorkerSupervisorFailed, "could not start a supervised worker",
 			slog.String("id", c.spec.ID), slog.String("error", err.Error()))
 		return err
+	}
+	if err := s.lifetime.bind(cmd.Process); err != nil {
+		logging.Warn(logging.WorkerSupervisorFailed,
+			"a supervised worker is not tied to this server's lifetime; if the server ends without stopping it, it keeps running",
+			slog.String("id", c.spec.ID), slog.Int("pid", cmd.Process.Pid), slog.String("error", err.Error()))
 	}
 	c.set(func() {
 		c.state = "running"
