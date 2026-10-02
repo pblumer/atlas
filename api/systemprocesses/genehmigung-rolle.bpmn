@@ -8,6 +8,7 @@
                   xmlns:atlas="http://atlas/schema/1.0"
                   id="Definitions_atlas-genehmigung-rolle"
                   targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:signal id="Sig_Angefragt" name="atlas.approval.requested" />
   <bpmn:process id="atlas-genehmigung-rolle" name="Shop: Genehmigung (Gruppe)" isExecutable="true">
     <bpmn:documentation>Holt die Genehmigung für eine Auftragsposition ein und entscheidet, was danach geschieht: bei Zustimmung wird der Provisionierungsprozess der Position gestartet, bei Ablehnung die Entscheidung mit Urheber und Begründung an den Auftrag gemeldet.
 
@@ -23,7 +24,7 @@ Kein Worker ist einzurichten. Die Service-Tasks sind REST-Connector-Tasks des re
 
     <bpmn:startEvent id="Start" name="Genehmigung nötig">
       <bpmn:documentation>Wird vom Erfüllungsprozess gestartet, sobald die Position an der Reihe ist und ihre Genehmigungsregel diese Art nennt.</bpmn:documentation>
-      <bpmn:outgoing>F_Start_Split</bpmn:outgoing>
+      <bpmn:outgoing>F_Vor_Vermerken</bpmn:outgoing>
     </bpmn:startEvent>
 
     <bpmn:userTask id="Genehmigen" name="Genehmigen">
@@ -84,9 +85,36 @@ Hier steht die Gruppe, nicht die Person. Atlas hält heute nicht fest, wer eine 
       <bpmn:incoming>F_Abl_Ende</bpmn:incoming>
     </bpmn:endEvent>
 
+    <bpmn:scriptTask id="Vermerken" name="Anfrage vermerken">
+      <bpmn:documentation>Hält fest, was die Anfrage ausmacht, bevor sie gemeldet wird: die eigene Instanz (atlasInstance), damit ein Empfänger auf genau diese Genehmigung verweisen kann, die Regel des Produkts (approvalKind) und wer entscheidet (approver).
+
+Die Meldung im nächsten Schritt trägt alle Variablen, die die Instanz in diesem Moment hält (ADR-0435). Was hier nicht steht, erfährt ein Empfänger nicht.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script expression="=processInstanceKey" resultVariable="atlasInstance" />
+        <!-- With an output mapping present the result stays local, so atlasInstance is
+             mapped out with the rest. -->
+        <zeebe:ioMapping>
+          <zeebe:output source="=processInstanceKey" target="atlasInstance" />
+          <zeebe:output source="=&#34;role&#34;" target="approvalKind" />
+          <zeebe:output source="=approvalRef" target="approver" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_Vor_Vermerken</bpmn:incoming>
+      <bpmn:outgoing>F_Vermerken_Angefragt</bpmn:outgoing>
+    </bpmn:scriptTask>
+
+    <bpmn:intermediateThrowEvent id="Angefragt" name="Genehmigung angefragt">
+      <bpmn:documentation>Meldet atlas.approval.requested (ADR-0435). Ein Modell der Installation kann mit einem Signal-Start darauf hören, etwa um die entscheidende Person oder Gruppe in einem Chat zu benachrichtigen, ohne dieses Modell zu ändern.
+
+Der Wurf steht vor der Aufgabe und vor jeder Entscheidung: Die Instanz hält hier nur ihre Startvariablen und das eben Vermerkte, keine Begründung, kein Geheimnis und keine Antwort des Bestellformulars. Ein Test hält diese Stelle fest.</bpmn:documentation>
+      <bpmn:incoming>F_Vermerken_Angefragt</bpmn:incoming>
+      <bpmn:outgoing>F_Angefragt_Split</bpmn:outgoing>
+      <bpmn:signalEventDefinition id="Angefragt_Signal" signalRef="Sig_Angefragt" />
+    </bpmn:intermediateThrowEvent>
+
     <bpmn:parallelGateway id="Split" name="Aufgabe und Nachricht">
       <bpmn:documentation>Die Benachrichtigung l&#228;uft neben der Aufgabe und nicht vor ihr. Vor ihr h&#228;tte sie die Entscheidung aufgehalten: ein Mail-Worker, der nicht konfiguriert ist, h&#228;lt den Token an, und dann g&#228;be es die Genehmigung gar nicht, &#252;ber die niemand benachrichtigt wurde. Eine Genehmigung, von der niemand wei&#223;, ist immer noch besser als keine — sie steht in der Liste des Genehmigers.</bpmn:documentation>
-      <bpmn:incoming>F_Start_Split</bpmn:incoming>
+      <bpmn:incoming>F_Angefragt_Split</bpmn:incoming>
       <bpmn:outgoing>F_Split_Task</bpmn:outgoing>
       <bpmn:outgoing>F_Split_Mail</bpmn:outgoing>
     </bpmn:parallelGateway>
@@ -179,7 +207,9 @@ Ist die Antwort „stalled&#34;, bleibt die Genehmigung, wo sie ist, und der Ums
     <bpmn:sequenceFlow id="F_Erinnerung_Ende" sourceRef="Erinnern" targetRef="EndeErinnerung" />
     <bpmn:sequenceFlow id="F_Frist_Eskalieren" sourceRef="Frist" targetRef="Eskalieren" />
     <bpmn:sequenceFlow id="F_Frist_Ende" sourceRef="Eskalieren" targetRef="EndeFrist" />
-    <bpmn:sequenceFlow id="F_Start_Split" sourceRef="Start" targetRef="Split" />
+    <bpmn:sequenceFlow id="F_Vor_Vermerken" sourceRef="Start" targetRef="Vermerken" />
+    <bpmn:sequenceFlow id="F_Vermerken_Angefragt" sourceRef="Vermerken" targetRef="Angefragt" />
+    <bpmn:sequenceFlow id="F_Angefragt_Split" sourceRef="Angefragt" targetRef="Split" />
     <bpmn:sequenceFlow id="F_Split_Task" sourceRef="Split" targetRef="Genehmigen" />
     <bpmn:sequenceFlow id="F_Split_Mail" sourceRef="Split" targetRef="Benachrichtigen" />
     <bpmn:sequenceFlow id="F_Mail_Ende" sourceRef="Benachrichtigen" targetRef="EndeMail" />
@@ -199,106 +229,121 @@ Ist die Antwort „stalled&#34;, bleibt die Genehmigung, wo sie ist, und der Ums
         <bpmndi:BPMNLabel><dc:Bounds x="128" y="225" width="84" height="27" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_Task" bpmnElement="Genehmigen">
-        <dc:Bounds x="250" y="160" width="100" height="80" />
+        <dc:Bounds x="490" y="160" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_Gw" bpmnElement="Gw" isMarkerVisible="true">
-        <dc:Bounds x="400" y="175" width="50" height="50" />
-        <bpmndi:BPMNLabel><dc:Bounds x="390" y="132" width="70" height="14" /></bpmndi:BPMNLabel>
+        <dc:Bounds x="640" y="175" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="630" y="132" width="70" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_Prov" bpmnElement="Provisionieren">
-        <dc:Bounds x="500" y="160" width="100" height="80" />
+        <dc:Bounds x="740" y="160" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_Abl" bpmnElement="Ablehnen">
-        <dc:Bounds x="350" y="300" width="100" height="80" />
+        <dc:Bounds x="590" y="300" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_Ende" bpmnElement="Ende">
-        <dc:Bounds x="650" y="182" width="36" height="36" />
-        <bpmndi:BPMNLabel><dc:Bounds x="640" y="225" width="60" height="14" /></bpmndi:BPMNLabel>
+        <dc:Bounds x="890" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="880" y="225" width="60" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
 
       <bpmndi:BPMNShape id="S_Split" bpmnElement="Split">
-        <dc:Bounds x="215" y="175" width="50" height="50" />
+        <dc:Bounds x="455" y="175" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_Mail" bpmnElement="Benachrichtigen">
-        <dc:Bounds x="300" y="40" width="100" height="80" />
+        <dc:Bounds x="540" y="40" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_EndeMail" bpmnElement="EndeMail">
-        <dc:Bounds x="450" y="62" width="36" height="36" />
-        <bpmndi:BPMNLabel><dc:Bounds x="436" y="105" width="70" height="14" /></bpmndi:BPMNLabel>
+        <dc:Bounds x="690" y="62" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="676" y="105" width="70" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_Erinnerung" bpmnElement="Erinnerung">
-        <dc:Bounds x="282" y="222" width="36" height="36" />
+        <dc:Bounds x="522" y="222" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_Erinnern" bpmnElement="Erinnern">
-        <dc:Bounds x="250" y="430" width="100" height="80" />
+        <dc:Bounds x="490" y="430" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_EndeErinnerung" bpmnElement="EndeErinnerung">
-        <dc:Bounds x="400" y="452" width="36" height="36" />
+        <dc:Bounds x="640" y="452" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_Frist" bpmnElement="Frist">
-        <dc:Bounds x="322" y="222" width="36" height="36" />
+        <dc:Bounds x="562" y="222" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_Eskalieren" bpmnElement="Eskalieren">
-        <dc:Bounds x="250" y="560" width="100" height="80" />
+        <dc:Bounds x="490" y="560" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_EndeFrist" bpmnElement="EndeFrist">
-        <dc:Bounds x="400" y="582" width="36" height="36" />
+        <dc:Bounds x="640" y="582" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="E_Erinnerung_Mail" bpmnElement="F_Erinnerung_Mail">
-        <di:waypoint x="300" y="258" />
-        <di:waypoint x="300" y="430" />
+        <di:waypoint x="540" y="258" />
+        <di:waypoint x="540" y="430" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="E_Erinnerung_Ende" bpmnElement="F_Erinnerung_Ende">
-        <di:waypoint x="350" y="470" />
-        <di:waypoint x="400" y="470" />
+        <di:waypoint x="590" y="470" />
+        <di:waypoint x="640" y="470" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="E_Frist_Ende" bpmnElement="F_Frist_Ende">
-        <di:waypoint x="350" y="600" />
-        <di:waypoint x="400" y="600" />
+        <di:waypoint x="590" y="600" />
+        <di:waypoint x="640" y="600" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="E_Frist_Eskalieren" bpmnElement="F_Frist_Eskalieren">
-        <di:waypoint x="340" y="258" />
-        <di:waypoint x="340" y="560" />
+        <di:waypoint x="580" y="258" />
+        <di:waypoint x="580" y="560" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="E_Split_Task" bpmnElement="F_Split_Task">
-        <di:waypoint x="265" y="200" />
-        <di:waypoint x="300" y="200" />
+        <di:waypoint x="505" y="200" />
+        <di:waypoint x="540" y="200" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="E_Split_Mail" bpmnElement="F_Split_Mail">
-        <di:waypoint x="240" y="175" />
-        <di:waypoint x="240" y="80" />
-        <di:waypoint x="300" y="80" />
+        <di:waypoint x="480" y="175" />
+        <di:waypoint x="480" y="80" />
+        <di:waypoint x="540" y="80" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="E_Mail_Ende" bpmnElement="F_Mail_Ende">
-        <di:waypoint x="400" y="80" />
-        <di:waypoint x="450" y="80" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="E_Start" bpmnElement="F_Start_Split">
-        <di:waypoint x="188" y="200" />
-        <di:waypoint x="250" y="200" />
+        <di:waypoint x="640" y="80" />
+        <di:waypoint x="690" y="80" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="E_Task_Gw" bpmnElement="F_Task_Gw">
-        <di:waypoint x="350" y="200" />
-        <di:waypoint x="400" y="200" />
+        <di:waypoint x="590" y="200" />
+        <di:waypoint x="640" y="200" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="E_Gw_Prov" bpmnElement="F_Gw_Provisionieren">
-        <di:waypoint x="450" y="200" />
-        <di:waypoint x="500" y="200" />
-        <bpmndi:BPMNLabel><dc:Bounds x="468" y="182" width="14" height="14" /></bpmndi:BPMNLabel>
+        <di:waypoint x="690" y="200" />
+        <di:waypoint x="740" y="200" />
+        <bpmndi:BPMNLabel><dc:Bounds x="708" y="182" width="14" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="E_Gw_Abl" bpmnElement="F_Gw_Ablehnen">
-        <di:waypoint x="425" y="225" />
-        <di:waypoint x="425" y="300" />
-        <bpmndi:BPMNLabel><dc:Bounds x="431" y="250" width="24" height="14" /></bpmndi:BPMNLabel>
+        <di:waypoint x="665" y="225" />
+        <di:waypoint x="665" y="300" />
+        <bpmndi:BPMNLabel><dc:Bounds x="671" y="250" width="24" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="E_Prov_Ende" bpmnElement="F_Prov_Ende">
-        <di:waypoint x="600" y="200" />
-        <di:waypoint x="650" y="200" />
+        <di:waypoint x="840" y="200" />
+        <di:waypoint x="890" y="200" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="E_Abl_Ende" bpmnElement="F_Abl_Ende">
-        <di:waypoint x="450" y="340" />
-        <di:waypoint x="668" y="340" />
-        <di:waypoint x="668" y="218" />
+        <di:waypoint x="690" y="340" />
+        <di:waypoint x="908" y="340" />
+        <di:waypoint x="908" y="218" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="S_Vermerken" bpmnElement="Vermerken">
+        <dc:Bounds x="230" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Angefragt" bpmnElement="Angefragt">
+        <dc:Bounds x="380" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="356" y="225" width="84" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="E_Vor_Vermerken" bpmnElement="F_Vor_Vermerken">
+        <di:waypoint x="188" y="200" />
+        <di:waypoint x="230" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Vermerken_Angefragt" bpmnElement="F_Vermerken_Angefragt">
+        <di:waypoint x="330" y="200" />
+        <di:waypoint x="380" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Angefragt_Split" bpmnElement="F_Angefragt_Split">
+        <di:waypoint x="416" y="200" />
+        <di:waypoint x="455" y="200" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

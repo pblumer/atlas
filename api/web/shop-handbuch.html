@@ -248,13 +248,24 @@ th{color:var(--muted);font-weight:600}
     <tr><td><code>none</code></td><td data-l="de">Niemand – die Position startet sofort.</td><td data-l="en">Nobody – the position starts at once.</td></tr>
     <tr><td><code>fixed</code></td><td data-l="de">Eine bestimmte Person (<code>ref</code> = ihre ID). Im Beispiel: der Parkplatz, durch das Facility Management.</td><td data-l="en">One named person (<code>ref</code> = their id). In the example: the parking space, by facility management.</td></tr>
     <tr><td><code>role</code></td><td data-l="de">Ein Mitglied einer Gruppe (<code>ref</code> = Gruppen-ID); wer zuerst entscheidet, entscheidet. Im Beispiel: das Geoportal.</td><td data-l="en">A member of a group (<code>ref</code> = group id); whoever decides first decides. In the example: the geoportal.</td></tr>
-    <tr><td><code>superior</code></td><td data-l="de">Die vorgesetzte Person der empfangenden, aus dem Verzeichnis. Braucht einen Verzeichnis-Worker namens <code>verzeichnis</code>; zum Ausprobieren genügt der AD-Mock. Im Beispiel: der Badge.</td><td data-l="en">The recipient's line manager, from the directory. Needs a directory worker named <code>verzeichnis</code>; the AD mock is enough to try it. In the example: the badge.</td></tr>
+    <tr><td><code>superior</code></td><td data-l="de">Die vorgesetzte Person der bestellenden, aus dem Verzeichnis. Braucht einen Verzeichnis-Worker namens <code>verzeichnis</code>; zum Ausprobieren genügt der AD-Mock. Im Beispiel: der Badge.</td><td data-l="en">The orderer's line manager, from the directory. Needs a directory worker named <code>verzeichnis</code>; the AD mock is enough to try it. In the example: the badge.</td></tr>
     <tr><td data-l="de">eigener Prozess</td><td data-l="en">own process</td><td data-l="de">Jeder andere Wert ist die ID eines eigenen Genehmigungsprozesses.</td><td data-l="en">Any other value is the id of an approval process of your own.</td></tr>
   </table>
   <p data-l="de">Genehmigungen erscheinen in der Inbox der Genehmigenden; eine Bestellung mit mehreren Positionen
     derselben Person lässt sich gesammelt entscheiden. Die Katalogpflege zeigt, welche Regeln niemanden erreichen.</p>
   <p data-l="en">Approvals appear in the approvers' inbox; an order with several positions for the same approver can
     be decided at once. The catalogue page shows which rules reach nobody.</p>
+  <p data-l="de">Jede der drei eingebauten Genehmigungen meldet sich, bevor ihre Aufgabe wartet, mit dem Signal
+    <code>atlas.approval.requested</code>: mit der Regel (<code>approvalKind</code>), wer entscheidet
+    (<code>approver</code>), Bestellung, Position und Produkt. Ein eigenes Modell hört mit einem Signal-Start darauf,
+    etwa um die entscheidende Person im Chat zu benachrichtigen, ohne dass Sie die Genehmigung selbst ändern. Was das
+    Signal genau trägt, steht im Handbuch unter <a href="/handbuch.html#ev-atlas-approval-requested">Ereignisse</a>;
+    die Antworten des Bestellformulars trägt es nicht.</p>
+  <p data-l="en">Each of the three built-in approvals announces itself before its task waits, with the signal
+    <code>atlas.approval.requested</code>: the rule (<code>approvalKind</code>), who decides (<code>approver</code>),
+    the order, the position and the product. A model of your own listens with a signal start, for instance to tell the
+    approver in a chat, without changing the approval itself. What the signal carries is listed in the handbook under
+    <a href="/handbuch.html#ev-atlas-approval-requested">Events</a>; it does not carry the order form's answers.</p>
 </section>
 
 <section id="prozesse">

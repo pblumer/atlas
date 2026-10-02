@@ -83,8 +83,8 @@ func TestEverySystemProcessEventIsCatalogued(t *testing.T) {
 			t.Errorf("%s is a %s at %s/%s, and its entry does not name that channel", p.name, p.channel, p.process, p.element)
 		case e.Kind != eventcatalog.Domain:
 			t.Errorf("%s is emitted by a system process, so it is a domain entry, not %s", p.name, e.Kind)
-		case e.Moment.Process != p.process || e.Moment.Element != p.element:
-			t.Errorf("%s is at %s/%s, and its entry says %s/%s", p.name, p.process, p.element, e.Moment.Process, e.Moment.Element)
+		case !slices.Contains(e.Moment.Places, eventcatalog.At(p.process, p.element)):
+			t.Errorf("%s is at %s/%s, and its entry says %+v", p.name, p.process, p.element, e.Moment.Places)
 		case p.channel == eventcatalog.Signal && !p.throws:
 			t.Errorf("system process %s listens to the signal %s; Atlas's own processes do not", p.process, p.name)
 		}
@@ -94,11 +94,13 @@ func TestEverySystemProcessEventIsCatalogued(t *testing.T) {
 			if !e.Has(ch) {
 				continue
 			}
-			found := slices.ContainsFunc(points, func(p systemPoint) bool {
-				return p.name == e.Type && p.channel == ch && p.process == e.Moment.Process && p.element == e.Moment.Element
-			})
-			if !found {
-				t.Errorf("%s says it is a %s at %s/%s, and no system process has it there", e.Type, ch, e.Moment.Process, e.Moment.Element)
+			for _, pl := range e.Moment.Places {
+				found := slices.ContainsFunc(points, func(p systemPoint) bool {
+					return p.name == e.Type && p.channel == ch && p.process == pl.Process && p.element == pl.Element
+				})
+				if !found {
+					t.Errorf("%s says it is a %s at %s/%s, and no system process has it there", e.Type, ch, pl.Process, pl.Element)
+				}
 			}
 		}
 	}
