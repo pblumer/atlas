@@ -24,8 +24,8 @@ import (
 const playgroundHandbook = "../../api/web/handbuch.html"
 
 func TestTheHandbookDocumentsEveryPlaygroundFlag(t *testing.T) {
-	defined := playgroundFlags(t)
-	documented := documentedPlaygroundFlags(t)
+	defined := commandFlags(t, "playgroundrun.go", "runPlaygroundScenario")
+	documented := documentedFlags(t, playgroundHandbook, "playground-flags")
 	for name := range defined {
 		if !documented[name] {
 			t.Errorf("atlas playground defines --%s, but the handbook's flag table "+
@@ -40,7 +40,7 @@ func TestTheHandbookDocumentsEveryPlaygroundFlag(t *testing.T) {
 }
 
 func TestTheHandbookNamesTheExitStatusOfAMissedScenario(t *testing.T) {
-	page := readPlaygroundHandbook(t)
+	page := readPage(t, playgroundHandbook)
 	stated := regexp.MustCompile(`<code data-exit="failed">(\d+)</code>`).FindAllStringSubmatch(page, -1)
 	// Once per language: a status stated in German only is half an instruction.
 	if len(stated) < 2 {
@@ -54,37 +54,41 @@ func TestTheHandbookNamesTheExitStatusOfAMissedScenario(t *testing.T) {
 	}
 }
 
-// playgroundFlags reads the flag names off runPlaygroundScenario's source — the
-// first argument of every fs.String, fs.Bool, fs.Duration … call in it. Reading the
-// source rather than running the function is deliberate: its flag set exits the
-// process on -h, and a test that exits is a test that reports nothing.
-func playgroundFlags(t *testing.T) map[string]bool {
+// commandFlags reads the flag names off a command's source — the first argument of
+// every fs.String, fs.Bool, fs.Duration … call in fn, and the second of every fs.Var.
+// Reading the source rather than running the function is deliberate: its flag set
+// exits the process on -h, and a test that exits is a test that reports nothing.
+func commandFlags(t *testing.T, file, fn string) map[string]bool {
 	t.Helper()
-	file, err := parser.ParseFile(token.NewFileSet(), "playgroundrun.go", nil, 0)
+	parsed, err := parser.ParseFile(token.NewFileSet(), file, nil, 0)
 	if err != nil {
-		t.Fatalf("parse playgroundrun.go: %v", err)
+		t.Fatalf("parse %s: %v", file, err)
 	}
-	definers := map[string]bool{"String": true, "Bool": true, "Duration": true, "Int": true, "Int64": true,
-		"Uint": true, "Float64": true}
+	definers := map[string]int{"String": 0, "Bool": 0, "Duration": 0, "Int": 0, "Int64": 0,
+		"Uint": 0, "Float64": 0, "Var": 1}
 	flags := map[string]bool{}
-	for _, decl := range file.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Name.Name != "runPlaygroundScenario" {
+	for _, decl := range parsed.Decls {
+		f, ok := decl.(*ast.FuncDecl)
+		if !ok || f.Name.Name != fn {
 			continue
 		}
-		ast.Inspect(fn.Body, func(n ast.Node) bool {
+		ast.Inspect(f.Body, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)
-			if !ok || len(call.Args) == 0 {
+			if !ok {
 				return true
 			}
 			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || !definers[sel.Sel.Name] {
+			if !ok {
+				return true
+			}
+			at, ok := definers[sel.Sel.Name]
+			if !ok || len(call.Args) <= at {
 				return true
 			}
 			if recv, ok := sel.X.(*ast.Ident); !ok || recv.Name != "fs" {
 				return true
 			}
-			if lit, ok := call.Args[0].(*ast.BasicLit); ok && lit.Kind == token.STRING {
+			if lit, ok := call.Args[at].(*ast.BasicLit); ok && lit.Kind == token.STRING {
 				if name, err := strconv.Unquote(lit.Value); err == nil {
 					flags[name] = true
 				}
@@ -95,19 +99,20 @@ func playgroundFlags(t *testing.T) map[string]bool {
 	// Finding none means the flags moved out from under this reader, not that the
 	// command has none; passing here would hold the table to nothing.
 	if len(flags) == 0 {
-		t.Fatal("found no flags defined in runPlaygroundScenario — did they move to another function?")
+		t.Fatalf("found no flags defined in %s — did they move to another function?", fn)
 	}
 	return flags
 }
 
-func documentedPlaygroundFlags(t *testing.T) map[string]bool {
+// documentedFlags reads the flags a page's table lists, one row each.
+func documentedFlags(t *testing.T, page, tableID string) map[string]bool {
 	t.Helper()
-	page := readPlaygroundHandbook(t)
-	i := strings.Index(page, `<table id="playground-flags">`)
+	content := readPage(t, page)
+	i := strings.Index(content, `<table id="`+tableID+`">`)
 	if i < 0 {
-		t.Fatalf(`%s has no <table id="playground-flags"> — the table this test guards is gone`, playgroundHandbook)
+		t.Fatalf(`%s has no <table id="%s"> — the table this test guards is gone`, page, tableID)
 	}
-	table := page[i:]
+	table := content[i:]
 	if end := strings.Index(table, "</table>"); end >= 0 {
 		table = table[:end]
 	}
@@ -118,11 +123,11 @@ func documentedPlaygroundFlags(t *testing.T) map[string]bool {
 	return flags
 }
 
-func readPlaygroundHandbook(t *testing.T) string {
+func readPage(t *testing.T, path string) string {
 	t.Helper()
-	raw, err := os.ReadFile(playgroundHandbook)
+	raw, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("read %s: %v", playgroundHandbook, err)
+		t.Fatalf("read %s: %v", path, err)
 	}
 	return string(raw)
 }

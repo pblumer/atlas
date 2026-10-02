@@ -14,6 +14,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A package installs from the command line.** `atlas import DIR` installs what the shop
+  handbook's installer installs, without a browser — from a terminal, or from a pipeline
+  that equips a test and a production installation alike. A package is a directory: the
+  application's `atlas.json` in the source layout *Download source…* produces, the processes
+  and forms it names, and optionally the shop as `katalog.json` with the questions its
+  placeholders ask in `fragen.json`. The command imports the application, publishes it and
+  then imports the catalogue. Answers come from `--answers FILE` or `--set name=value`; a
+  group or a person may be named rather than given by id, since ids differ from server to
+  server, and an answer the server's directory does not have, a name two people share or a
+  question left open is refused, all at once, before anything is written. Running it again
+  updates. The handbook's installer now reads the same questions from the package.
+
 - **The shop has a handbook of its own, with an example to install.** `/shop-handbuch.html`
   (German and English, in the Console's "?" menu, and the help for the Catalogue app)
   answers how to build a catalogue, how several catalogues work together, how to model
