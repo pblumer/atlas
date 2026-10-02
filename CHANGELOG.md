@@ -303,7 +303,7 @@ _Changed_ / _Removed_ for each version.
   bound the engine puts on its own in-process handlers. Set it with
   `atlas serve --worker-max-jobs`, and `1` restores one at a time. A `--supervise`
   command and a worker you start yourself without `--max-jobs` still run one job at a
-  time. [ADR-draft-worker-runs-jobs-concurrently](docs/adr/draft-worker-runs-jobs-concurrently.md).
+  time. [ADR-0440](docs/adr/0440-worker-runs-jobs-concurrently.md).
 
 - **The person a service was ordered for may now give it back and change it.** Returning
   a position, and asking it for a change, was the orderer's or an operator's to do; the
@@ -349,7 +349,7 @@ _Changed_ / _Removed_ for each version.
   supervised worker now goes into a Windows job object that ends its processes when
   the server's process ends, however it ends, including the script interpreters a
   worker started.
-  [ADR-draft-supervised-workers-end-with-the-server](docs/adr/draft-supervised-workers-end-with-the-server.md).
+  [ADR-0439](docs/adr/0439-supervised-workers-end-with-the-server.md).
 
 - **A task the server works itself no longer trips a worker breaker.** The breaker that
   holds a worker's jobs back while its target is down (ADR-0340) also counted the failures

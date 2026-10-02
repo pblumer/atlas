@@ -85,7 +85,7 @@ type SuperviseSpec struct {
 	// MaxJobs is how many jobs of one type the worker runs at once (--max-jobs on
 	// the child). Zero leaves the worker's own default of one at a time, which is
 	// what a --supervise command the operator wrote keeps
-	// (ADR-draft-worker-runs-jobs-concurrently).
+	// (ADR-0440).
 	MaxJobs int
 }
 
@@ -94,7 +94,7 @@ type SuperviseSpec struct {
 // engine puts on its own in-process handlers, deliberately: moving a kind onto a
 // worker is about where its work runs, and must not quietly change how much of it
 // runs together — which is what running it one job at a time had done
-// (ADR-draft-worker-runs-jobs-concurrently).
+// (ADR-0440).
 const DefaultSupervisedWorkerMaxJobs = job.DefaultConcurrency
 
 func supervisedWorkerArgs(server string, spec SuperviseSpec, handles []string) []string {

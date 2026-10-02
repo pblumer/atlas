@@ -175,7 +175,7 @@ type Options struct {
 	// MaxJobs is how many jobs of one type this worker runs at once. A poll leases
 	// only as many as there are free places for, so every leased job starts the
 	// moment it arrives: leased work nobody is running is work nobody else can take
-	// either, and its lease runs down while it waits (ADR-draft-worker-runs-jobs-concurrently).
+	// either, and its lease runs down while it waits (ADR-0440).
 	MaxJobs int
 	// Workers are the worker names this worker holds credentials for, reported
 	// to the engine on every poll. Only the worker knows them — once a kind is
@@ -259,7 +259,7 @@ func (w *Worker) Run(ctx context.Context) error {
 // them one after another instead — the shape this replaced — made a slow endpoint
 // cost the sum of its calls rather than the slowest of them, and left every job of
 // a batch but the first holding a lease it was not using
-// (ADR-draft-worker-runs-jobs-concurrently).
+// (ADR-0440).
 func (w *Worker) serve(ctx context.Context, jobType string) {
 	places := make(chan struct{}, w.opts.MaxJobs)
 	var running sync.WaitGroup

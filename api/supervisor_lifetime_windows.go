@@ -11,7 +11,7 @@ import (
 )
 
 // childLifetime ties every worker this server supervises to the server's own life
-// (ADR-draft-supervised-workers-end-with-the-server).
+// (ADR-0439).
 //
 // Stopping the server already stops its workers: the supervisor kills each one when
 // quit closes. That covers every exit the server takes part in, and none of the ones

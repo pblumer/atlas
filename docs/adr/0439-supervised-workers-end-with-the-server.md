@@ -1,4 +1,4 @@
-# ADR-DRAFT: On Windows, a supervised worker ends with the server, however the server ends
+# ADR-0439: On Windows, a supervised worker ends with the server, however the server ends
 
 - **Status:** Accepted
 - **Implementation:** Landed
@@ -103,7 +103,7 @@ answers, so this record accepts it.
   a pre-Windows-8 system), the old behaviour returns, with a warning.
 - **Follow-ups / risks to watch:** graceful shutdown. The normal stop still kills workers
   outright, so a job in flight is abandoned to its lease, and since
-  [ADR-draft-worker-runs-jobs-concurrently](draft-worker-runs-jobs-concurrently.md) that
+  [ADR-0440](0440-worker-runs-jobs-concurrently.md) that
   can be several jobs per type. A signal-and-wait stop with a deadline, inside the job,
   would let them finish.
 
@@ -128,4 +128,4 @@ answers, so this record accepts it.
 - closes a cost [ADR-0157](0157-worker-processes-supervision-and-console.md) listed for the supervisor ("Windows, which has no fork and different signals"), and keeps its rule that the supervisor does not fight a platform
 - the worker's retry-forever poll loop that makes orphans possible is ADR-0157 step 5's, deliberately
 - the per-interpreter job it nests is the script connector's (`connector/script/process_windows.go`, [ADR-0047](0047-polyglot-script-tasks-via-job-workers.md))
-- sibling: [ADR-draft-worker-runs-jobs-concurrently](draft-worker-runs-jobs-concurrently.md)
+- sibling: [ADR-0440](0440-worker-runs-jobs-concurrently.md)

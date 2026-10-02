@@ -1115,7 +1115,7 @@ func superviseConnectorSpecs(kinds []string, supervised []api.SuperviseSpec, scr
 // server supervises. A --supervise command worker is left at the worker's own
 // default of one job at a time: its command is the operator's program, and running
 // it concurrently is a promise only they can make
-// (ADR-draft-worker-runs-jobs-concurrently).
+// (ADR-0440).
 func applyWorkerMaxJobs(specs []api.SuperviseSpec, n int) error {
 	if n < 1 {
 		return fmt.Errorf("atlas: --worker-max-jobs must be at least 1, got %d: a worker with no place for a job never starts one", n)

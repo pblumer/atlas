@@ -940,10 +940,10 @@ What it takes to run this for real.
 - ✅ A worker runs the jobs of one type concurrently: `--max-jobs` places, a poll asking only
   for the free ones, and supervised built-in workers at the engine's in-process bound
   (`--worker-max-jobs`, default 16)
-  ([ADR-draft-worker-runs-jobs-concurrently](docs/adr/draft-worker-runs-jobs-concurrently.md)).
+  ([ADR-0440](docs/adr/0440-worker-runs-jobs-concurrently.md)).
   On Windows a kill-on-close job object ends every supervised worker, and what it started,
   with the server however the server ends
-  ([ADR-draft-supervised-workers-end-with-the-server](docs/adr/draft-supervised-workers-end-with-the-server.md)).
+  ([ADR-0439](docs/adr/0439-supervised-workers-end-with-the-server.md)).
 - 🚧 Metrics (throughput, batch size, fsync latency, queue depth), structured logs, OTel traces
   ([ADR-0142](docs/adr/0142-prometheus-metrics.md), v0.2.0 programme E): a Prometheus
   exposition at `/metrics` on Atlas's own registry. The **durability** metrics landed —

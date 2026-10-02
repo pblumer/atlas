@@ -1,4 +1,4 @@
-# ADR-DRAFT: A worker runs the jobs of one type concurrently, up to the places it has free
+# ADR-0440: A worker runs the jobs of one type concurrently, up to the places it has free
 
 - **Status:** Accepted
 - **Implementation:** Landed
@@ -147,4 +147,4 @@ guarded by a mutex. Several of these handlers already ran concurrently in proces
 - realises ADR-0157's follow-up "per-kind concurrency limits so one slow kind cannot starve another inside a worker"
 - the lease and fencing a waiting job used to run down are [ADR-0007](0007-job-worker-protocol.md)'s and [ADR-0274](0274-in-process-job-leases.md)'s
 - the defaults it changes are the supervised workers of [ADR-0164](0164-no-in-process-service-tasks.md) and [ADR-0233](0233-in-process-connectors-refused.md)
-- its sibling on supervised workers is [ADR-draft-supervised-workers-end-with-the-server](draft-supervised-workers-end-with-the-server.md)
+- its sibling on supervised workers is [ADR-0439](0439-supervised-workers-end-with-the-server.md)
