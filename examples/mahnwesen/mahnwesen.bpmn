@@ -225,15 +225,16 @@ Bedingung wegen eines Tippfehlers nicht greift, darf kein Inkasso auslösen.</do
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_sub_end" bpmnElement="sub_end">
         <dc:Bounds x="734" y="162" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="708" y="203" width="89" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
 
       <bpmndi:BPMNShape id="di_bezahlt" bpmnElement="bezahlt">
         <dc:Bounds x="382" y="262" width="36" height="36"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="330" y="302" width="140" height="14"/></bpmndi:BPMNLabel>
+        <bpmndi:BPMNLabel><dc:Bounds x="346" y="243" width="107" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_ueberfaellig" bpmnElement="ueberfaellig">
         <dc:Bounds x="642" y="262" width="36" height="36"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="586" y="302" width="148" height="14"/></bpmndi:BPMNLabel>
+        <bpmndi:BPMNLabel><dc:Bounds x="596" y="243" width="129" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
 
       <bpmndi:BPMNShape id="di_end_bezahlt" bpmnElement="end_bezahlt">

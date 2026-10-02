@@ -157,7 +157,7 @@ Der Text nennt die Anzahl und den ältesten Befund. `findings[1]` ist der ältes
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_gw" bpmnElement="gw_gefunden">
         <dc:Bounds x="400" y="175" width="50" height="50" />
-        <bpmndi:BPMNLabel><dc:Bounds x="382" y="232" width="87" height="14" /></bpmndi:BPMNLabel>
+        <bpmndi:BPMNLabel><dc:Bounds x="455" y="193" width="84" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_melden" bpmnElement="melden">
         <dc:Bounds x="510" y="80" width="100" height="80" />
@@ -178,12 +178,14 @@ Der Text nennt die Anzahl und den ältesten Befund. `findings[1]` ist der ältes
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_gw_melden" bpmnElement="f_gw_melden">
         <di:waypoint x="425" y="175" /><di:waypoint x="425" y="120" /><di:waypoint x="510" y="120" />
+        <bpmndi:BPMNLabel><dc:Bounds x="431" y="140" width="46" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_melden_ende" bpmnElement="f_melden_ende">
         <di:waypoint x="610" y="120" /><di:waypoint x="662" y="120" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_gw_nichts" bpmnElement="f_gw_nichts">
         <di:waypoint x="425" y="225" /><di:waypoint x="425" y="280" /><di:waypoint x="510" y="280" />
+        <bpmndi:BPMNLabel><dc:Bounds x="431" y="254" width="29" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

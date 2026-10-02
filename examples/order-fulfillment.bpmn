@@ -137,7 +137,7 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_fanout" bpmnElement="fanout">
         <dc:Bounds x="650" y="175" width="50" height="50"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="632" y="140" width="86" height="14"/></bpmndi:BPMNLabel>
+        <bpmndi:BPMNLabel><dc:Bounds x="632" y="230" width="85" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_reserve_stock" bpmnElement="reserve_stock">
         <dc:Bounds x="760" y="20" width="100" height="80"/>
@@ -150,25 +150,25 @@
         <bpmndi:BPMNLabel><dc:Bounds x="880" y="232" width="98" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_notify_split" bpmnElement="notify_split">
-        <dc:Bounds x="1030" y="175" width="50" height="50"/>
+        <dc:Bounds x="1080" y="175" width="50" height="50"/>
         <bpmndi:BPMNLabel><dc:Bounds x="1012" y="140" width="86" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_notify_priority" bpmnElement="notify_priority">
-        <dc:Bounds x="1140" y="20" width="100" height="80"/>
+        <dc:Bounds x="1190" y="20" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_notify_eu" bpmnElement="notify_eu">
-        <dc:Bounds x="1140" y="160" width="100" height="80"/>
+        <dc:Bounds x="1190" y="160" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_notify_standard" bpmnElement="notify_standard">
-        <dc:Bounds x="1140" y="300" width="100" height="80"/>
+        <dc:Bounds x="1190" y="300" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_notify_join" bpmnElement="notify_join">
-        <dc:Bounds x="1310" y="175" width="50" height="50"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="1292" y="258" width="86" height="14"/></bpmndi:BPMNLabel>
+        <dc:Bounds x="1360" y="175" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1415" y="160" width="84" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_order_fulfilled" bpmnElement="order_fulfilled">
-        <dc:Bounds x="1410" y="182" width="36" height="36"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="1386" y="222" width="84" height="14"/></bpmndi:BPMNLabel>
+        <dc:Bounds x="1460" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1436" y="222" width="84" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_auto_approve" bpmnElement="auto_approve">
         <dc:Bounds x="650" y="300" width="100" height="80"/>
@@ -189,7 +189,7 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_flow_high" bpmnElement="flow_high">
         <di:waypoint x="600" y="200"/><di:waypoint x="650" y="200"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="601" y="178" width="50" height="14"/></bpmndi:BPMNLabel>
+        <bpmndi:BPMNLabel><dc:Bounds x="608" y="181" width="34" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_flow_express" bpmnElement="flow_express">
         <di:waypoint x="575" y="225"/><di:waypoint x="575" y="340"/><di:waypoint x="650" y="340"/>
@@ -208,31 +208,31 @@
         <di:waypoint x="860" y="200"/><di:waypoint x="930" y="200"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_to_notify" bpmnElement="f_to_notify">
-        <di:waypoint x="980" y="200"/><di:waypoint x="1030" y="200"/>
+        <di:waypoint x="980" y="200"/><di:waypoint x="1080" y="200"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_flow_priority" bpmnElement="flow_priority">
-        <di:waypoint x="1055" y="175"/><di:waypoint x="1055" y="60"/><di:waypoint x="1140" y="60"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="1063" y="100" width="52" height="14"/></bpmndi:BPMNLabel>
+        <di:waypoint x="1105" y="175"/><di:waypoint x="1105" y="60"/><di:waypoint x="1190" y="60"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1113" y="100" width="52" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_flow_eu" bpmnElement="flow_eu">
-        <di:waypoint x="1080" y="200"/><di:waypoint x="1140" y="200"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="1082" y="178" width="56" height="14"/></bpmndi:BPMNLabel>
+        <di:waypoint x="1130" y="200"/><di:waypoint x="1190" y="200"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1132" y="178" width="56" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_flow_notify_standard" bpmnElement="flow_notify_standard">
-        <di:waypoint x="1055" y="225"/><di:waypoint x="1055" y="340"/><di:waypoint x="1140" y="340"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="1063" y="280" width="62" height="14"/></bpmndi:BPMNLabel>
+        <di:waypoint x="1105" y="225"/><di:waypoint x="1105" y="340"/><di:waypoint x="1190" y="340"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1113" y="280" width="62" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_pj_a" bpmnElement="f_pj_a">
-        <di:waypoint x="1240" y="60"/><di:waypoint x="1335" y="60"/><di:waypoint x="1335" y="175"/>
+        <di:waypoint x="1290" y="60"/><di:waypoint x="1385" y="60"/><di:waypoint x="1385" y="175"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_pj_b" bpmnElement="f_pj_b">
-        <di:waypoint x="1240" y="200"/><di:waypoint x="1310" y="200"/>
+        <di:waypoint x="1290" y="200"/><di:waypoint x="1360" y="200"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_pj_c" bpmnElement="f_pj_c">
-        <di:waypoint x="1240" y="340"/><di:waypoint x="1335" y="340"/><di:waypoint x="1335" y="225"/>
+        <di:waypoint x="1290" y="340"/><di:waypoint x="1385" y="340"/><di:waypoint x="1385" y="225"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_confirm" bpmnElement="f_confirm">
-        <di:waypoint x="1360" y="200"/><di:waypoint x="1410" y="200"/>
+        <di:waypoint x="1410" y="200"/><di:waypoint x="1460" y="200"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_express_end" bpmnElement="f_express_end">
         <di:waypoint x="750" y="340"/><di:waypoint x="820" y="340"/>

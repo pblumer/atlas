@@ -241,46 +241,46 @@ in Entra angelegt.</bpmn:documentation>
         <bpmndi:BPMNLabel><dc:Bounds x="388" y="145" width="74" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_freigabe" bpmnElement="freigabe">
-        <dc:Bounds x="510" y="160" width="100" height="80"/>
+        <dc:Bounds x="570" y="160" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_gw_frei" bpmnElement="gw_frei" isMarkerVisible="true">
-        <dc:Bounds x="680" y="175" width="50" height="50"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="668" y="145" width="74" height="14"/></bpmndi:BPMNLabel>
+        <dc:Bounds x="740" y="175" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="728" y="145" width="74" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_anlegen" bpmnElement="anlegen">
-        <dc:Bounds x="790" y="160" width="100" height="80"/>
+        <dc:Bounds x="850" y="160" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_gw_lizenz" bpmnElement="gw_lizenz" isMarkerVisible="true">
-        <dc:Bounds x="950" y="175" width="50" height="50"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="940" y="145" width="70" height="14"/></bpmndi:BPMNLabel>
+        <dc:Bounds x="1010" y="175" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1000" y="145" width="70" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_lizenz" bpmnElement="lizenz">
-        <dc:Bounds x="1070" y="160" width="100" height="80"/>
+        <dc:Bounds x="1160" y="160" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_gw_lizenz_m" bpmnElement="gw_lizenz_m" isMarkerVisible="true">
-        <dc:Bounds x="1240" y="175" width="50" height="50"/>
+        <dc:Bounds x="1330" y="175" width="50" height="50"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_gw_gruppe" bpmnElement="gw_gruppe" isMarkerVisible="true">
-        <dc:Bounds x="1360" y="175" width="50" height="50"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="1348" y="145" width="74" height="14"/></bpmndi:BPMNLabel>
+        <dc:Bounds x="1450" y="175" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1438" y="145" width="74" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_mitglied" bpmnElement="mitglied">
-        <dc:Bounds x="1480" y="160" width="100" height="80"/>
+        <dc:Bounds x="1600" y="160" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_gw_gruppe_m" bpmnElement="gw_gruppe_m" isMarkerVisible="true">
-        <dc:Bounds x="1650" y="175" width="50" height="50"/>
+        <dc:Bounds x="1770" y="175" width="50" height="50"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_end_bereit" bpmnElement="end_bereit">
-        <dc:Bounds x="1770" y="182" width="36" height="36"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="1746" y="222" width="86" height="14"/></bpmndi:BPMNLabel>
+        <dc:Bounds x="1890" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1866" y="222" width="86" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_end_kein_test" bpmnElement="end_kein_test">
         <dc:Bounds x="407" y="320" width="36" height="36"/>
         <bpmndi:BPMNLabel><dc:Bounds x="383" y="360" width="86" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_end_abgelehnt" bpmnElement="end_abgelehnt">
-        <dc:Bounds x="687" y="320" width="36" height="36"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="669" y="360" width="72" height="14"/></bpmndi:BPMNLabel>
+        <dc:Bounds x="747" y="320" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="729" y="360" width="72" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
 
       <bpmndi:BPMNEdge id="di_f_start_vorschlag" bpmnElement="f_start_vorschlag">
@@ -290,54 +290,54 @@ in Entra angelegt.</bpmn:documentation>
         <di:waypoint x="340" y="200"/><di:waypoint x="400" y="200"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_test_ok" bpmnElement="f_test_ok">
-        <di:waypoint x="450" y="200"/><di:waypoint x="510" y="200"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="452" y="176" width="106" height="14"/></bpmndi:BPMNLabel>
+        <di:waypoint x="450" y="200"/><di:waypoint x="570" y="200"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="471" y="168" width="78" height="27"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_test_reject" bpmnElement="f_test_reject">
         <di:waypoint x="425" y="225"/><di:waypoint x="425" y="320"/>
         <bpmndi:BPMNLabel><dc:Bounds x="431" y="262" width="30" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_freigabe_gw" bpmnElement="f_freigabe_gw">
-        <di:waypoint x="610" y="200"/><di:waypoint x="680" y="200"/>
+        <di:waypoint x="670" y="200"/><di:waypoint x="740" y="200"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_frei_anlegen" bpmnElement="f_frei_anlegen">
-        <di:waypoint x="730" y="200"/><di:waypoint x="790" y="200"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="738" y="176" width="46" height="14"/></bpmndi:BPMNLabel>
+        <di:waypoint x="790" y="200"/><di:waypoint x="850" y="200"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="798" y="176" width="46" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_frei_ablehnen" bpmnElement="f_frei_ablehnen">
-        <di:waypoint x="705" y="225"/><di:waypoint x="705" y="320"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="711" y="262" width="46" height="14"/></bpmndi:BPMNLabel>
+        <di:waypoint x="765" y="225"/><di:waypoint x="765" y="320"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="771" y="262" width="46" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_anlegen_lizenz" bpmnElement="f_anlegen_lizenz">
-        <di:waypoint x="890" y="200"/><di:waypoint x="950" y="200"/>
+        <di:waypoint x="950" y="200"/><di:waypoint x="1010" y="200"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_lizenz_do" bpmnElement="f_lizenz_do">
-        <di:waypoint x="1000" y="200"/><di:waypoint x="1070" y="200"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="1002" y="176" width="86" height="14"/></bpmndi:BPMNLabel>
+        <di:waypoint x="1060" y="200"/><di:waypoint x="1160" y="200"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1062" y="176" width="86" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_lizenz_skip" bpmnElement="f_lizenz_skip">
-        <di:waypoint x="975" y="225"/><di:waypoint x="975" y="270"/><di:waypoint x="1265" y="270"/><di:waypoint x="1265" y="225"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="1100" y="252" width="30" height="14"/></bpmndi:BPMNLabel>
+        <di:waypoint x="1035" y="225"/><di:waypoint x="1035" y="270"/><di:waypoint x="1355" y="270"/><di:waypoint x="1355" y="225"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1190" y="252" width="30" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_lizenz_done" bpmnElement="f_lizenz_done">
-        <di:waypoint x="1170" y="200"/><di:waypoint x="1240" y="200"/>
+        <di:waypoint x="1260" y="200"/><di:waypoint x="1330" y="200"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_lm_gruppe" bpmnElement="f_lm_gruppe">
-        <di:waypoint x="1290" y="200"/><di:waypoint x="1360" y="200"/>
+        <di:waypoint x="1380" y="200"/><di:waypoint x="1450" y="200"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_gruppe_do" bpmnElement="f_gruppe_do">
-        <di:waypoint x="1410" y="200"/><di:waypoint x="1480" y="200"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="1412" y="176" width="86" height="14"/></bpmndi:BPMNLabel>
+        <di:waypoint x="1500" y="200"/><di:waypoint x="1600" y="200"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1502" y="176" width="86" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_gruppe_skip" bpmnElement="f_gruppe_skip">
-        <di:waypoint x="1385" y="225"/><di:waypoint x="1385" y="270"/><di:waypoint x="1675" y="270"/><di:waypoint x="1675" y="225"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="1510" y="252" width="30" height="14"/></bpmndi:BPMNLabel>
+        <di:waypoint x="1475" y="225"/><di:waypoint x="1475" y="270"/><di:waypoint x="1795" y="270"/><di:waypoint x="1795" y="225"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1630" y="252" width="30" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_gruppe_done" bpmnElement="f_gruppe_done">
-        <di:waypoint x="1580" y="200"/><di:waypoint x="1650" y="200"/>
+        <di:waypoint x="1700" y="200"/><di:waypoint x="1770" y="200"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_gm_ende" bpmnElement="f_gm_ende">
-        <di:waypoint x="1700" y="200"/><di:waypoint x="1770" y="200"/>
+        <di:waypoint x="1820" y="200"/><di:waypoint x="1890" y="200"/>
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

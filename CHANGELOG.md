@@ -499,6 +499,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The examples open as readable diagrams too.** In twenty-three of the example models
+  a caption sat on an edge, a shape, a default-flow marker or another caption, or had no
+  position of its own, and two models carried no diagram at all. Three were worse than
+  untidy: in *account-bestellung* the flow into *Bestellung freigeben* ended a hand's width
+  before the task, in *identitaet-lebenszyklus* two data associations ran through
+  *Übersicht nachführen*, and *umzug* sent three branches out of one gateway along a single
+  line. The diagrams are corrected and the two missing ones drawn; how the examples run is
+  unchanged. The Modeler's example gallery and the handbook carry the redrawn versions, and
+  `go test ./api/layout` now holds every example to the same layout checks as the system
+  processes.
+
 - **The shop's approval models open as a readable diagram.** The three approval processes
   the shop ships — fixed approver, group and superior — printed both deadlines' captions
   over each other, two of them drew their parallel gateway on top of the approval task,

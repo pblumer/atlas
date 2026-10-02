@@ -411,4 +411,227 @@ Das Logo gehört hierher und ist jetzt auch hier. Das gewählte Bild geht beim A
     </bpmn:endEvent>
 
   </bpmn:process>
+
+  <bpmndi:BPMNDiagram xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC" xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI" id="BPMNDiagram_atlas">
+    <bpmndi:BPMNPlane id="BPMNPlane_atlas" bpmnElement="proc_produkt_erfassung">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <omgdc:Bounds x="150" y="252" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="143" y="293" width="50" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_di" bpmnElement="ende">
+        <omgdc:Bounds x="3056" y="252" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="3037" y="293" width="74" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="kataloge_di" bpmnElement="kataloge">
+        <omgdc:Bounds x="236" y="230" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="produkte_di" bpmnElement="produkte">
+        <omgdc:Bounds x="386" y="230" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="katalog_anlegen_di" bpmnElement="katalog_anlegen">
+        <omgdc:Bounds x="906" y="230" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="entwurf_sichern_di" bpmnElement="entwurf_sichern">
+        <omgdc:Bounds x="1156" y="230" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="aktiv_setzen_di" bpmnElement="aktiv_setzen">
+        <omgdc:Bounds x="1556" y="230" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="katalog_lesen_di" bpmnElement="katalog_lesen">
+        <omgdc:Bounds x="1706" y="230" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="katalog_schreiben_di" bpmnElement="katalog_schreiben">
+        <omgdc:Bounds x="1856" y="230" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="theme_setzen_di" bpmnElement="theme_setzen">
+        <omgdc:Bounds x="2406" y="230" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="release_di" bpmnElement="release">
+        <omgdc:Bounds x="2906" y="230" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="katalog_uebernehmen_di" bpmnElement="katalog_uebernehmen">
+        <omgdc:Bounds x="906" y="90" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="logo_ziel_di" bpmnElement="logo_ziel">
+        <omgdc:Bounds x="2106" y="230" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="erfassung_di" bpmnElement="erfassung">
+        <omgdc:Bounds x="536" y="230" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pruefen_di" bpmnElement="pruefen">
+        <omgdc:Bounds x="1306" y="230" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="theme_erfassen_di" bpmnElement="theme_erfassen">
+        <omgdc:Bounds x="2256" y="230" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="publizieren_fragen_di" bpmnElement="publizieren_fragen">
+        <omgdc:Bounds x="2656" y="230" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_katalog_di" bpmnElement="gw_katalog">
+        <omgdc:Bounds x="686" y="245" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="668" y="300" width="86" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="katalog_steht_di" bpmnElement="katalog_steht">
+        <omgdc:Bounds x="1056" y="245" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1048" y="300" width="65" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_pruefen_di" bpmnElement="gw_pruefen">
+        <omgdc:Bounds x="1456" y="245" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1447" y="300" width="68" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_theme_di" bpmnElement="gw_theme">
+        <omgdc:Bounds x="2006" y="245" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1992" y="300" width="77" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="theme_fertig_di" bpmnElement="theme_fertig">
+        <omgdc:Bounds x="2556" y="245" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="2547" y="300" width="68" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_publizieren_di" bpmnElement="gw_publizieren">
+        <omgdc:Bounds x="2806" y="245" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="2800" y="300" width="61" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_start_kataloge_di" bpmnElement="f_start_kataloge">
+        <omgdi:waypoint x="186" y="270"/>
+        <omgdi:waypoint x="236" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_kataloge_produkte_di" bpmnElement="f_kataloge_produkte">
+        <omgdi:waypoint x="336" y="270"/>
+        <omgdi:waypoint x="386" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_produkte_erfassung_di" bpmnElement="f_produkte_erfassung">
+        <omgdi:waypoint x="486" y="270"/>
+        <omgdi:waypoint x="536" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_erfassung_gw_di" bpmnElement="f_erfassung_gw">
+        <omgdi:waypoint x="636" y="270"/>
+        <omgdi:waypoint x="686" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_katalog_neu_di" bpmnElement="f_katalog_neu">
+        <omgdi:waypoint x="736" y="270"/>
+        <omgdi:waypoint x="906" y="270"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="750" y="251" width="142" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_katalog_bestehend_di" bpmnElement="f_katalog_bestehend">
+        <omgdi:waypoint x="711" y="245"/>
+        <omgdi:waypoint x="711" y="130"/>
+        <omgdi:waypoint x="906" y="130"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="715" y="181" width="60" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_anlegen_entwurf_di" bpmnElement="f_anlegen_entwurf">
+        <omgdi:waypoint x="1006" y="270"/>
+        <omgdi:waypoint x="1056" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_uebernehmen_steht_di" bpmnElement="f_uebernehmen_steht">
+        <omgdi:waypoint x="1006" y="130"/>
+        <omgdi:waypoint x="1031" y="130"/>
+        <omgdi:waypoint x="1031" y="270"/>
+        <omgdi:waypoint x="1056" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_steht_entwurf_di" bpmnElement="f_steht_entwurf">
+        <omgdi:waypoint x="1106" y="270"/>
+        <omgdi:waypoint x="1156" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_entwurf_pruefen_di" bpmnElement="f_entwurf_pruefen">
+        <omgdi:waypoint x="1256" y="270"/>
+        <omgdi:waypoint x="1306" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_pruefen_gw_di" bpmnElement="f_pruefen_gw">
+        <omgdi:waypoint x="1406" y="270"/>
+        <omgdi:waypoint x="1456" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_freigegeben_di" bpmnElement="f_freigegeben">
+        <omgdi:waypoint x="1506" y="270"/>
+        <omgdi:waypoint x="1556" y="270"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="1534" y="251" width="9" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_zurueck_erfassung_di" bpmnElement="f_zurueck_erfassung">
+        <omgdi:waypoint x="1506" y="270"/>
+        <omgdi:waypoint x="1531" y="270"/>
+        <omgdi:waypoint x="1531" y="370"/>
+        <omgdi:waypoint x="511" y="370"/>
+        <omgdi:waypoint x="511" y="270"/>
+        <omgdi:waypoint x="536" y="270"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="1535" y="313" width="99" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_aktiv_lesen_di" bpmnElement="f_aktiv_lesen">
+        <omgdi:waypoint x="1656" y="270"/>
+        <omgdi:waypoint x="1706" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_lesen_schreiben_di" bpmnElement="f_lesen_schreiben">
+        <omgdi:waypoint x="1806" y="270"/>
+        <omgdi:waypoint x="1856" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_schreiben_gw_di" bpmnElement="f_schreiben_gw">
+        <omgdi:waypoint x="1956" y="270"/>
+        <omgdi:waypoint x="2006" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_theme_di" bpmnElement="f_theme">
+        <omgdi:waypoint x="2056" y="270"/>
+        <omgdi:waypoint x="2106" y="270"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="2071" y="252" width="20" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ziel_erfassen_di" bpmnElement="f_ziel_erfassen">
+        <omgdi:waypoint x="2206" y="270"/>
+        <omgdi:waypoint x="2256" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_kein_theme_di" bpmnElement="f_kein_theme">
+        <omgdi:waypoint x="2031" y="245"/>
+        <omgdi:waypoint x="2031" y="130"/>
+        <omgdi:waypoint x="2531" y="130"/>
+        <omgdi:waypoint x="2531" y="270"/>
+        <omgdi:waypoint x="2556" y="270"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="2035" y="181" width="49" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_theme_setzen_di" bpmnElement="f_theme_setzen">
+        <omgdi:waypoint x="2356" y="270"/>
+        <omgdi:waypoint x="2406" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_setzen_fertig_di" bpmnElement="f_setzen_fertig">
+        <omgdi:waypoint x="2506" y="270"/>
+        <omgdi:waypoint x="2556" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_fertig_fragen_di" bpmnElement="f_fertig_fragen">
+        <omgdi:waypoint x="2606" y="270"/>
+        <omgdi:waypoint x="2656" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_fragen_gw_di" bpmnElement="f_fragen_gw">
+        <omgdi:waypoint x="2756" y="270"/>
+        <omgdi:waypoint x="2806" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_publizieren_di" bpmnElement="f_publizieren">
+        <omgdi:waypoint x="2856" y="270"/>
+        <omgdi:waypoint x="2906" y="270"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="2871" y="252" width="20" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_nicht_publizieren_di" bpmnElement="f_nicht_publizieren">
+        <omgdi:waypoint x="2831" y="245"/>
+        <omgdi:waypoint x="2831" y="130"/>
+        <omgdi:waypoint x="3031" y="130"/>
+        <omgdi:waypoint x="3031" y="270"/>
+        <omgdi:waypoint x="3056" y="270"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="2835" y="181" width="22" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_release_ende_di" bpmnElement="f_release_ende">
+        <omgdi:waypoint x="3006" y="270"/>
+        <omgdi:waypoint x="3056" y="270"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 </bpmn:definitions>

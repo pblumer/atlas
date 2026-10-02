@@ -160,7 +160,7 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_ship_gw" bpmnElement="ship_gw" isMarkerVisible="true">
         <dc:Bounds x="990" y="215" width="50" height="50"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="966" y="269" width="98" height="27"/></bpmndi:BPMNLabel>
+        <bpmndi:BPMNLabel><dc:Bounds x="1045" y="226" width="83" height="27"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_free_ship" bpmnElement="free_ship">
         <dc:Bounds x="1090" y="80" width="100" height="80"/>
@@ -185,11 +185,11 @@
         <bpmndi:BPMNLabel><dc:Bounds x="1772" y="269" width="86" height="27"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_needs_approval" bpmnElement="needs_approval">
-        <dc:Bounds x="1890" y="122" width="36" height="36"/>
+        <dc:Bounds x="1910" y="122" width="36" height="36"/>
         <bpmndi:BPMNLabel><dc:Bounds x="1870" y="162" width="76" height="27"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_confirmed" bpmnElement="confirmed">
-        <dc:Bounds x="1890" y="222" width="36" height="36"/>
+        <dc:Bounds x="1910" y="222" width="36" height="36"/>
         <bpmndi:BPMNLabel><dc:Bounds x="1870" y="262" width="76" height="27"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
 
@@ -238,12 +238,12 @@
         <di:waypoint x="1740" y="240"/><di:waypoint x="1790" y="240"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_appr" bpmnElement="f_appr">
-        <di:waypoint x="1815" y="215"/><di:waypoint x="1815" y="140"/><di:waypoint x="1890" y="140"/>
+        <di:waypoint x="1815" y="215"/><di:waypoint x="1815" y="140"/><di:waypoint x="1910" y="140"/>
         <bpmndi:BPMNLabel><dc:Bounds x="1823" y="115" width="14" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_confirm" bpmnElement="f_confirm">
-        <di:waypoint x="1840" y="240"/><di:waypoint x="1890" y="240"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="1848" y="218" width="22" height="14"/></bpmndi:BPMNLabel>
+        <di:waypoint x="1840" y="240"/><di:waypoint x="1910" y="240"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1875" y="221" width="21" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

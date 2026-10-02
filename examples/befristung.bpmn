@@ -180,7 +180,7 @@ Bis dahin führt das Inventar das Recht weiter, und der nächste Lauf sieht es e
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_gw" bpmnElement="gw_offen">
         <dc:Bounds x="400" y="175" width="50" height="50" />
-        <bpmndi:BPMNLabel><dc:Bounds x="382" y="232" width="87" height="14" /></bpmndi:BPMNLabel>
+        <bpmndi:BPMNLabel><dc:Bounds x="455" y="193" width="83" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_zurueck" bpmnElement="zurueckgeben">
         <dc:Bounds x="510" y="80" width="100" height="80" />
@@ -201,12 +201,14 @@ Bis dahin führt das Inventar das Recht weiter, und der nächste Lauf sieht es e
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_gw_zurueck" bpmnElement="f_gw_zurueck">
         <di:waypoint x="425" y="175" /><di:waypoint x="425" y="120" /><di:waypoint x="510" y="120" />
+        <bpmndi:BPMNLabel><dc:Bounds x="431" y="134" width="67" height="27" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_zurueck_ende" bpmnElement="f_zurueck_ende">
         <di:waypoint x="610" y="120" /><di:waypoint x="662" y="120" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_gw_leer" bpmnElement="f_gw_leer">
         <di:waypoint x="425" y="225" /><di:waypoint x="425" y="280" /><di:waypoint x="662" y="280" />
+        <bpmndi:BPMNLabel><dc:Bounds x="431" y="254" width="29" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
