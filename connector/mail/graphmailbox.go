@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pblumer/atlas/limits"
 )
 
 // graphMailbox is a Microsoft 365 mailbox read and changed through Graph, as the
@@ -431,7 +433,9 @@ func apiJSON(ctx context.Context, httpc *http.Client, tokens TokenSource, method
 		return fmt.Errorf("mail: %s: %w", what, err)
 	}
 	defer resp.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, maxIMAPLiteral))
+	// A provider's answer is bounded by the installation's payload budget, as the agent
+	// Worker's is: a mailbox page is a document from somebody else's server.
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, limits.Default().Payload))
 	if resp.StatusCode/100 != 2 {
 		return &apiStatusError{What: what, Status: resp.StatusCode, Body: strings.TrimSpace(string(raw))}
 	}
