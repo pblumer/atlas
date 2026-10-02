@@ -71,6 +71,11 @@ The question this record answers: **how Atlas states, in one place and checked a
 code, every event it emits, so that a customizer, an integrator and an operator read the same
 contract.**
 
+A word on terms. In this record, *the event catalogue* is the list proposed here. The shop's
+product catalogue ([ADR-0312](0312-portal-catalogue-order-inventory.md),
+[ADR-0429](0429-product-actions-are-commands-with-published-outcomes.md)) is always called
+*the service catalogue*, and the feed's `homeCatalog` and `reach` refer to it.
+
 ## Decision drivers
 
 - **One name per fact across channels.** If a fact is both a signal and a feed event, it is the
@@ -208,11 +213,22 @@ what the channel's envelope adds.
 ### 6. Who may listen
 
 - **Feed:** the existing rules hold. That means the `feedreader` role, the `events` token, and
-  the catalogue narrowing for events that have a `homeCatalog`
+  the service-catalogue narrowing for events that have a `homeCatalog`
   ([ADR-0430](0430-the-event-feed-has-its-own-role-and-token-scope.md),
   [ADR-0432](0432-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md)).
-  A platform fact has no catalogue, so an `events` token narrowed by `reach` does not receive
-  it. Whether platform facts need a narrowing of their own is decided with the first of them.
+  A platform fact belongs to no service catalogue, so an `events` token narrowed by `reach`
+  does not receive it. Whether platform facts need a narrowing of their own is decided with the
+  first of them.
+- **The feed can be switched off with the shop.** Today the feed is a route of the
+  service-catalogue area. When an installation switches that area off
+  ([ADR-0434](0434-the-catalogue-can-be-switched-off.md)), neither the pull route nor the push
+  delivery runs. A platform fact must not fall silent because the shop is off.
+  - So before the first platform entry lands in the feed, the feed has to leave that area.
+  - With the area off, the feed withholds the service catalogue's types and still delivers the
+    platform types.
+  - The alternative is a second feed for platform facts. That would split the cursor, the
+    subscription and the retention a receiver has to manage, so it is the weaker choice.
+  - Which of the two is decided with the first platform entry.
 - **Signals.** Deploying a process with a signal start or catch on an `atlas.*` name requires a
   role, proposed: `admin`. The rule is refused at deploy and named in the error. This closes the
   trade-off [ADR-0431](0431-system-processes-announce-their-facts-as-signals.md) accepted, where
@@ -275,6 +291,8 @@ facts of their own, is decided when the entries are built.
     trusts every modeler gains nothing from it.
 - **Follow-ups / risks to watch:**
   - The open question about deployments on the log.
+  - The feed leaving the service-catalogue area, so that platform facts keep flowing when the
+    shop is switched off ([ADR-0434](0434-the-catalogue-can-be-switched-off.md)).
   - Declared signal payloads.
   - Whether a process may subscribe to the feed directly, rather than through a `cloudevents`
     endpoint. That would give in-Atlas reactions to platform facts the feed's guarantees.
@@ -324,6 +342,8 @@ facts of their own, is decided when the entries are built.
   [ADR-0432](0432-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md)
   and [ADR-0433](0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md) (the event feed:
   envelope, access, narrowing, push)
+- relates to [ADR-0434](0434-the-catalogue-can-be-switched-off.md) (the service-catalogue
+  area, and with it the feed, can be switched off)
 - relates to [ADR-0176](0176-standards-boundary-and-runtime-contract.md) (standards boundary
   and runtime contract)
 - relates to [ADR-0019](0019-durable-deployments.md) (deployments off the log), the open question
