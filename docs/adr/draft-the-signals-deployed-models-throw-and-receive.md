@@ -129,8 +129,8 @@ A point carries:
 - **Not instances.** See §7.
 - **Not messages.** A message has sources the definitions do not show: the publish route, inbound
   watches, product actions. Message-sources already answers "is this name fed" for the Modeler.
-  What it lacks, a process's own message throw as a source, is a smaller change with its own
-  record (§7). Keeping it out keeps this record to the channel that has no view at all.
+  What it lacks, a process's own message throw as a source, is a change with its own record
+  ([ADR-draft-the-messages-deployed-models-send-and-receive](draft-the-messages-deployed-models-send-and-receive.md)). Keeping it out keeps this record to the channel that has no view at all.
 
 ### 3. Versions
 
@@ -235,8 +235,9 @@ The cost is accepted: a modeler with bad intent finds a name to catch faster.
   declared own signal can carry the same contract and the same access rule as a catalogue entry.
   The inventory then marks which names are declared.
 - **Messages.** A process's own message throw as a fourth kind of message source, beside inbound
-  watches, product actions and waiting processes. A message-kind send task compiles to a message
-  throw ([ADR-0112](0112-send-tasks.md)) and belongs there too.
+  watches, product actions and waiting processes, is decided in
+  ADR-draft-the-messages-deployed-models-send-and-receive. A message-kind send task compiles to a
+  message throw ([ADR-0112](0112-send-tasks.md)) and belongs there too.
 - **Cross-partition broadcast** ([ADR-0006](0006-partition-routing-and-cross-partition.md),
   ADR-0088). The inventory reads definitions, which are server-wide, so it is unaffected.
 
@@ -261,13 +262,15 @@ The cost is accepted: a modeler with bad intent finds a name to catch faster.
     Atlas is uncomfortable, and it is accepted because the alternative is not knowing.
   - Two lists on one page invite the question this record started from: why a name is in one and
     not the other. The page has to answer it in its own text.
-  - Messages keep their own, narrower view until their record lands.
+  - Messages keep their own, narrower view until
+    ADR-draft-the-messages-deployed-models-send-and-receive lands.
 - **Follow-ups / risks to watch:**
   - The open question. If deployed definitions become object-gated, §5's filter must follow
     them.
   - Declared signal payloads, then a deploy rule for cross-project receivers.
   - Runtime counts (§7).
-  - A process's own message throws in message-sources (§7).
+  - A process's own message throws in message-sources
+    (ADR-draft-the-messages-deployed-models-send-and-receive).
   - Whether `signal.crosses-projects` should also be raised to a project's owner, not only shown
     to whoever looks.
 
