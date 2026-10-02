@@ -153,6 +153,16 @@ depends on other deployments, and deploy order is free.
   model. Whether its deploy is refused, as a throw of an `atlas.*` signal is warned about today
   in the Modeler, is a rule at deploy with its own record. Such a rule must not stop a server from
   starting with a model deployed before it (`AGENTS.md`, ADR-0177).
+  - **It protects integrity, not privilege.** `modeler` includes deploy, and deploy is code
+    execution: risk R-09 in `docs/compliance/isds-konzept.md`, restated in
+    [ADR-0315](0315-portal-roles-and-responsibilities.md). A modeler who sends an `atlas.*` name
+    gains nothing that deploying does not already give.
+  - **What the rule would add** is that a model cannot speak for Atlas, by a name chosen by
+    accident or on purpose, and that the attempt is refused where it is made instead of found
+    later.
+  - **It does not replace the measure R-09 names.** A narrow circle of `modeler` accounts on a
+    production server (M-05) bounds what any model may do. A rule on names bounds only this one
+    way of doing it.
 - **Publishes through the route.** Who called `POST /api/v1/messages` with which name is a runtime
   fact. It belongs with the runtime counts the signal record defers.
 - **Declared message payloads.** As for signals, choosing on the throw which variables a message
@@ -176,7 +186,8 @@ depends on other deployments, and deploy order is free.
   - Message-sources gains fields, and its rows grow by one kind. A client that assumed three
     kinds has to accept a fourth.
 - **Follow-ups / risks to watch:**
-  - The deploy rule for `atlas.*` sends (§6).
+  - The deploy rule for `atlas.*` sends (§6), weighed as integrity rather than privilege
+    (R-09).
   - The signal record's open question about definition visibility.
   - Runtime observation of publishes, with the signal record's runtime counts.
   - `message.unreceived` once ADR-0370's buffer is built.
