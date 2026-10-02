@@ -34,6 +34,11 @@
       <label class="sql-only" style="display:none">
         <input name="connectionString" type="password" />
       </label>
+      <!-- the IMAP endpoint is SMTP's alone, and hidden the same way for any other
+           provider (ADR-draft-mailbox-worker) -->
+      <label class="mailbox-field" style="display:none">
+        <input name="mailboxEndpoint" />
+      </label>
     </form>
     <pre id="out"></pre>
     <script type="module">

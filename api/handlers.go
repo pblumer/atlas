@@ -946,9 +946,19 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		compErr    error
 		persistErr error
 		claimed    string
+		refused    *mailboxRefusal
 		e          error
 	)
 	s.do(func() {
+		// Who may use a mailbox, checked before anything is persisted
+		// (ADR-draft-mailbox-worker): a definition that reads somebody else's mailbox
+		// must not exist even briefly.
+		if refused, e = s.mailboxUseBlockingModel(r, body); e != nil {
+			persistErr = e
+			return
+		} else if refused != nil {
+			return
+		}
 		// The claim on a message name, checked before anything is persisted (ADR-0205):
 		// a definition that would be delivered somebody else's inbound events must not
 		// exist even briefly.
@@ -979,6 +989,8 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, compErr.Error())
 	case persistErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "persist deployment: "+persistErr.Error())
+	case refused != nil:
+		mailboxRefusalResponse(w, refused)
 	case claimed != "":
 		claimRefusal(w, claimed, "An inbound worker you cannot reach publishes under this "+
 			"message name. Rename the message in your model, or ask whoever owns that worker to share it.")
@@ -6428,6 +6440,12 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		return &connectorPayload{Kind: "mail", Fields: map[string]any{
 			"connector": j.Connector, "from": j.From, "to": j.To, "cc": j.Cc, "bcc": j.Bcc,
 			"subject": j.Subject, "body": j.Body, "html": j.HTML, "messageId": j.MessageID,
+			// The mailbox half (ADR-draft-mailbox-worker): what to do and to which
+			// message — never how to reach the mailbox, which the worker holds.
+			"operation": j.Operation, "folder": j.Folder, "target": j.Target,
+			"destination": j.Destination, "maxResults": j.MaxResults,
+			"includeBody": j.IncludeBody, "unreadOnly": j.UnreadOnly,
+			"resultVariable": j.ResultVariable,
 		}}
 	case compiler.RemedyJobTypeIndex:
 		// The form and its field values travel; the AR System base URL and the service

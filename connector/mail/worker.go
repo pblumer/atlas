@@ -18,41 +18,72 @@ import (
 // to, so one handler serves every deployed process.
 type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 
-// Handler builds a job handler that performs an outbound mail worker task.
-// Register it with a [job.Runner] for the reserved [compiler.MailJobTypeIndex]; the
+// Handler builds a job handler that performs a mail worker task. Register it with a
+// [job.Runner] for the reserved [compiler.MailJobTypeIndex] via HandleWithOutput; the
 // runner then pulls activatable mail jobs, and for each the handler resolves the
-// task's connector/recipients/subject/body from the compiled process — evaluating
-// any FEEL field over the variables the task sees, up its scope chain (the fx
-// toggle, ADR-0067/0068) — resolves the named worker's provider client from reg,
-// and sends the message keyed by the job key so an at-least-once retry de-duplicates
-// (ADR-0079). Returning an error
-// leaves the job pending (retry, then an incident, ADR-0061); the runner completes it
-// only on success.
-func Handler(store state.Reader, lookup ProcessLookup, reg *Registry, dir Directory) job.Handler {
-	return func(j job.Job) error {
+// task's worker and authored values from the compiled process — evaluating any FEEL
+// field over the variables the task sees, up its scope chain (the fx toggle,
+// ADR-0067/0068) — resolves the named worker's provider client from reg, and either
+// sends the message keyed by the job key so an at-least-once retry de-duplicates
+// (ADR-0079), or performs the mailbox operation the task names and returns its answer
+// as the task's result variable (ADR-draft-mailbox-worker). Returning an error leaves
+// the job pending (retry, then an incident, ADR-0061); the runner completes it only
+// on success.
+func Handler(store state.Reader, lookup ProcessLookup, reg *Registry, dir Directory) job.OutputHandler {
+	return func(j job.Job) ([]model.VariableValue, error) {
 		ei, ok, err := store.GetElementInstance(j.ElementInstanceKey)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if !ok {
-			return nil // element instance gone (e.g. already completed); nothing to do
+			return nil, nil // element instance gone (e.g. already completed); nothing to do
 		}
 		cp := lookup(ei.ProcessDefKey)
 		if cp == nil {
-			return fmt.Errorf("mail: no compiled process for def %d", ei.ProcessDefKey)
+			return nil, fmt.Errorf("mail: no compiled process for def %d", ei.ProcessDefKey)
 		}
 		detail, err := cp.ConnectorTaskOf(ei.ElementId)
 		if err != nil {
-			return fmt.Errorf("mail: %w", err)
+			return nil, fmt.Errorf("mail: %w", err)
 		}
 		// The same Resolve/Run pair a worker uses (ADR-0168). Running in the engine
 		// changes only *where* the registry comes from, never what a resolved mail
 		// task means — which is the point of routing both paths through one pair.
 		resolved, err := Resolve(store, cp, detail, ei, j.ElementInstanceKey, j.Key, dir)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		return Run(context.Background(), resolved, reg)
+		result, err := Run(context.Background(), resolved, reg)
+		if err != nil {
+			return nil, err
+		}
+		if resolved.ResultVariable == "" || result == nil {
+			return nil, nil
+		}
+		return []model.VariableValue{ResultVariable(resolved.ResultVariable, result)}, nil
+	}
+}
+
+// ResultVariable turns a mailbox operation's answer into the variable it completes the
+// task with. Exported because the Worker Instance path completes with the same value.
+func ResultVariable(name string, result any) model.VariableValue {
+	kind, b, text := expr.Classify(expr.FromJSON(result))
+	return model.VariableValue{Name: name, Kind: toVarKind(kind), Bool: b, Text: text}
+}
+
+// toVarKind maps an expr value kind to the stored variable kind.
+func toVarKind(k expr.ValueKind) model.VarKind {
+	switch k {
+	case expr.KindBool:
+		return model.VarBool
+	case expr.KindNumber:
+		return model.VarNumber
+	case expr.KindString:
+		return model.VarString
+	case expr.KindJSON:
+		return model.VarJSON
+	default:
+		return model.VarNull
 	}
 }
 

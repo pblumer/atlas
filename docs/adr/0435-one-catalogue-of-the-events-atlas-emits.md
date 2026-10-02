@@ -348,6 +348,25 @@ facts of their own, is decided when the entries are built.
     endpoint. That would give in-Atlas reactions to platform facts the feed's guarantees.
   - The contract version in API metadata, already an open item of the runtime contract. A
     receiver branching on an event's version needs it.
+  - **A deployment request instead of a dead end.** A modeler whose deploy the `admin` rule
+    refuses has nothing but a copied link to hand an administrator, a step outside Atlas. The
+    governed way is a protected system process, after the intake process's pattern
+    ([ADR-0122](0122-protected-system-project-and-bootstrap-deployment.md),
+    [ADR-0431](0431-system-processes-announce-their-facts-as-signals.md)):
+    - **Starting it.** The refused deploy, and the finding in the Problems panel, offer
+      *Request deployment*.
+    - **What the request carries.** The process id, a hash of the exact content to deploy, the
+      requester, and the `atlas.*` events with the personal-data fields the listener would
+      receive.
+    - **Announcing it.** Before the request waits at an administrator's approval task, the
+      process throws `atlas.deployment.requested`, a domain entry of its own.
+    - **The outcome.** Approval deploys exactly the requested content, never what the draft
+      holds by then; the hash is what makes that checkable. Rejection tells the requester why.
+    - **Why it needs its own record.** A deploy is code execution
+      ([ADR-0315](0315-portal-roles-and-responsibilities.md)), so a process that deploys is a
+      privileged write path. Like user provisioning
+      ([ADR-0123](0123-sanctioned-user-provisioning-for-system-processes.md)), it would be a
+      narrow capability gated to the system project, opened only after a human approves.
 
 ## Pros and cons of the options
 

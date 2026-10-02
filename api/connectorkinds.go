@@ -80,7 +80,10 @@ type createConnectorParams struct {
 	CredentialsRef string `json:"credentialsRef"`
 	Provider       string `json:"provider"`
 	Sender         string `json:"sender"`
-	Enabled        *bool  `json:"enabled"`
+	// MailboxEndpoint is an SMTP mail Worker's IMAP endpoint
+	// (ADR-draft-mailbox-worker); cleared for every other kind.
+	MailboxEndpoint string `json:"mailboxEndpoint"`
+	Enabled         *bool  `json:"enabled"`
 	// ConnectionString is a SQL worker's whole configuration, sealed into the vault
 	// by the create handler which then stores only the reference — so the record still
 	// holds no secret (I6). It exists because for these kinds the credential *is* the
@@ -175,7 +178,7 @@ var managedConnectorKinds = append([]managedConnectorKind{
 			s.mailOutbox = mail.NewOutbox(0)
 		},
 		registerHandlers: func(s *Server, store *state.Store) {
-			s.jobRunner.Handle(compiler.MailJobTypeIndex, func(rd state.Reader) job.Handler {
+			s.jobRunner.HandleWithOutput(compiler.MailJobTypeIndex, func(rd state.Reader) job.OutputHandler {
 				return mail.Handler(rd, s.processLookup, s.mailRegistry, mailDirectory{s})
 			})
 		},
@@ -908,19 +911,21 @@ func normalizeConnectorUpdate(rec *connector) string {
 		return ""
 	}
 	p := createConnectorParams{
-		Name:           rec.Name,
-		Kind:           rec.Kind,
-		Endpoint:       strings.TrimSpace(rec.Endpoint),
-		CredentialsRef: strings.TrimSpace(rec.CredentialsRef),
-		Provider:       strings.TrimSpace(rec.Provider),
-		Sender:         strings.TrimSpace(rec.Sender),
-		Model:          strings.TrimSpace(rec.Model),
+		Name:            rec.Name,
+		Kind:            rec.Kind,
+		Endpoint:        strings.TrimSpace(rec.Endpoint),
+		CredentialsRef:  strings.TrimSpace(rec.CredentialsRef),
+		Provider:        strings.TrimSpace(rec.Provider),
+		Sender:          strings.TrimSpace(rec.Sender),
+		Model:           strings.TrimSpace(rec.Model),
+		MailboxEndpoint: strings.TrimSpace(rec.MailboxEndpoint),
 	}
 	if msg := validate(&p); msg != "" {
 		return msg
 	}
 	rec.Endpoint, rec.CredentialsRef = p.Endpoint, p.CredentialsRef
 	rec.Provider, rec.Sender, rec.Model = p.Provider, p.Sender, p.Model
+	rec.MailboxEndpoint = p.MailboxEndpoint
 	return ""
 }
 
@@ -950,6 +955,24 @@ func validateMailConnector(p *createConnectorParams) string {
 			return err.Error()
 		}
 		p.Endpoint = endpoint
+		// The IMAP side is optional — a Worker that only sends names none — and is
+		// normalized here for the same reason the SMTP endpoint is: a typo found while
+		// typing, not at the first poll.
+		if p.MailboxEndpoint != "" {
+			imap, err := mail.NormalizeIMAPEndpoint(p.MailboxEndpoint)
+			if err != nil {
+				return err.Error()
+			}
+			p.MailboxEndpoint = imap
+		}
+		return ""
+	}
+	// Gmail and Microsoft read through the API they send with, and preview has no
+	// mailbox; an IMAP endpoint there would be dead configuration that reads as live.
+	// Cleared rather than refused, as preview's endpoint is below: it is a rule about
+	// the provider, and switching a Worker away from SMTP must not need a second edit.
+	p.MailboxEndpoint = ""
+	switch p.Provider {
 	case mail.ProviderPreview:
 		// A preview worker dials nothing and authenticates against nothing, so an
 		// endpoint or credential written into the form would be dead configuration

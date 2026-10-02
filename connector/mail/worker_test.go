@@ -110,7 +110,7 @@ func drive(t *testing.T, cp *compiler.CompiledProcess, jobType int32, reg *mail.
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.Handle(jobType, func(rd state.Reader) job.Handler {
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
 		return mail.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg, nil)
 	})
 	p.CreateInstance(cp.Key, vars...)
@@ -330,7 +330,7 @@ func TestMailConnectorNoCompiledProcess(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	runner := job.NewRunner(store, p)
-	runner.Handle(jobType, func(rd state.Reader) job.Handler {
+	runner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
 		return mail.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, mail.NewRegistry(), nil)
 	})
 	p.CreateInstance(cp.Key)
@@ -347,7 +347,7 @@ func TestMailConnectorNoCompiledProcess(t *testing.T) {
 func TestMailHandlerElementInstanceGone(t *testing.T) {
 	_, store := openStore(t)
 	h := mail.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, mail.NewRegistry(), nil)
-	if err := h(job.Job{ElementInstanceKey: 424242}); err != nil {
+	if _, err := h(job.Job{ElementInstanceKey: 424242}); err != nil {
 		t.Fatalf("handler for a vanished element instance: err=%v, want nil", err)
 	}
 }
