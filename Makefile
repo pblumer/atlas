@@ -2,7 +2,7 @@
 # Agents and CI: prefer these targets so the canonical commands live in one place.
 
 .PHONY: all build test race vet fmt fmt-check lint check cover tidy clean run server \
-        nuggets nuggets-check adr-number docker docker-powershell docker-buildx helm-lint helm-template helm-package
+        nuggets nuggets-check postman-smoke adr-number docker docker-powershell docker-buildx helm-lint helm-template helm-package
 
 all: check
 
@@ -62,6 +62,12 @@ nuggets:
 # need re-taking.
 nuggets-check:
 	node scripts/nuggets/capture.mjs --check
+
+# Run the Postman collection (postman/) end to end with Newman against a throwaway
+# Atlas built from this tree: every request, chained id and assertion in the kit.
+# Needs Node.js; Newman is fetched by npx. See postman/README.md.
+postman-smoke:
+	./scripts/postman-smoke.sh
 
 # Assign a number to every ADR still in flight (docs/adr/draft-<slug>.md): rename it
 # to NNNN-<slug>.md, fix its heading, add its index row, and rewrite every
