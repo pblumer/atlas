@@ -1,4 +1,4 @@
-# ADR-DRAFT: Atlas keeps one catalogue of the events it emits
+# ADR-0435: Atlas keeps one catalogue of the events it emits
 
 - **Status:** Proposed
 - **Implementation:** Not started

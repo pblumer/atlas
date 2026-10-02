@@ -520,6 +520,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0432](0432-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md) | The event feed is narrowed by the catalogue that maintains the product | Accepted | Landed |
 | [0433](0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md) | The event feed is pushed to a CloudEvents endpoint | Accepted | Landed |
 | [0434](0434-the-catalogue-can-be-switched-off.md) | The catalogue can be switched off, and switching it off removes a surface, not a semantics | Accepted | Landed |
+| [0435](0435-one-catalogue-of-the-events-atlas-emits.md) | Atlas keeps one catalogue of the events it emits | Proposed | Not started |
 
 ## The two states of a record
 
