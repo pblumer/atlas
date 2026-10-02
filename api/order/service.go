@@ -14,6 +14,7 @@ import (
 	"github.com/pblumer/atlas/api/catalog"
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/runloop"
+	"github.com/pblumer/atlas/eventcatalog"
 	"github.com/pblumer/atlas/limits"
 )
 
@@ -135,11 +136,12 @@ type Service struct {
 // drift apart: a name nobody publishes is a process that waits forever, and it
 // fails silently.
 const (
-	// PlacedMessage starts the fulfilment process for a new order.
-	PlacedMessage = "atlas.order.placed"
+	// PlacedMessage starts the fulfilment process for a new order. Its name, like
+	// AdvancedMessage's, is the event catalogue's (ADR-0435).
+	PlacedMessage = eventcatalog.OrderPlaced
 	// AdvancedMessage says a line settled, so the process asks what may start
 	// next. A settled line publishes it; nothing polls.
-	AdvancedMessage = "atlas.order.advanced"
+	AdvancedMessage = eventcatalog.OrderAdvanced
 )
 
 // New builds the service.

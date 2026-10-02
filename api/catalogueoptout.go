@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/logging"
 )
 
@@ -111,31 +112,29 @@ func (s *Server) handleSwitchedOffPage(w http.ResponseWriter, _ *http.Request) {
 // Runs in New before the loop serves, like loadDeployments, so it reads the stores
 // directly.
 func (s *Server) warnCatalogueWorkInFlight() {
-	byProcess, err := s.catalogueWorkInFlight()
+	reporting, err := s.processesReportingToOrders()
+	if err == nil {
+		s.catalogueReporting = reporting
+	}
+	var byProcess map[string]int
+	if err == nil {
+		byProcess, err = s.catalogueWorkInFlight()
+	}
 	if err != nil {
 		logging.Warn(logging.ServerCatalogueInFlight,
 			"the catalogue is switched off, and whether processes are still working orders could not be read",
 			slog.String("error", err.Error()))
 		return
 	}
-	shop, product := 0, 0
-	ids := make([]string, 0, len(byProcess))
-	for id, n := range byProcess {
-		ids = append(ids, id)
-		if catalogueSystemProcesses[id] {
-			shop += n
-		} else {
-			product += n
-		}
-	}
-	if shop+product == 0 {
+	st := strandedBy(byProcess)
+	if st.ShopProcessInstances+st.ProductProcessInstances == 0 {
 		return
 	}
-	sort.Strings(ids)
-	parts := make([]string, len(ids))
-	for i, id := range ids {
-		parts[i] = fmt.Sprintf("%s=%d", id, byProcess[id])
+	parts := make([]string, len(st.Processes))
+	for i, p := range st.Processes {
+		parts[i] = fmt.Sprintf("%s=%d", p.ProcessID, p.Instances)
 	}
+	shop, product := st.ShopProcessInstances, st.ProductProcessInstances
 	logging.Warn(logging.ServerCatalogueInFlight,
 		"the catalogue is switched off while processes are still working orders: each fails at its next call to the "+
 			"order routes and, its retries spent, raises an incident. Switch the catalogue back on and retry those "+
@@ -145,11 +144,12 @@ func (s *Server) warnCatalogueWorkInFlight() {
 		slog.String("processes", strings.Join(parts, ",")))
 }
 
-// catalogueWorkInFlight counts the live instances, by BPMN process id, of every
-// process that calls the order routes: the shop's system processes and the
-// two-process bindings of the catalogue's products. Ids with none running are left
-// out.
-func (s *Server) catalogueWorkInFlight() (map[string]int, error) {
+// processesReportingToOrders is every BPMN process id that calls the order routes:
+// the shop's system processes and the two-process bindings of the catalogue's
+// products. It reads the product store whole, so it is read once, at start: with the
+// catalogue off nothing can change a product — every route that writes one is
+// switched off with it — so the set cannot go stale while it is used.
+func (s *Server) processesReportingToOrders() (map[string]bool, error) {
 	items, err := s.catalogStore.Items()
 	if err != nil {
 		return nil, err
@@ -165,9 +165,18 @@ func (s *Server) catalogueWorkInFlight() (map[string]int, error) {
 			}
 		}
 	}
+	return reports, nil
+}
+
+// catalogueWorkInFlight counts the live instances, by BPMN process id, of every
+// process in catalogueReporting. Ids with none running are left out. It reads the
+// deployments and one counter per deployed version of those processes — design-time
+// size — so it may run on the loop; after start it must, since the deployments are
+// the loop's.
+func (s *Server) catalogueWorkInFlight() (map[string]int, error) {
 	out := map[string]int{}
 	for key, d := range s.deployments {
-		if !reports[d.ProcessID] {
+		if !s.catalogueReporting[d.ProcessID] {
 			continue
 		}
 		n, err := s.store.DefInstanceCount(key)
@@ -179,4 +188,69 @@ func (s *Server) catalogueWorkInFlight() (map[string]int, error) {
 		}
 	}
 	return out, nil
+}
+
+// strandedProcess is one process still working orders, and how many of its instances.
+type strandedProcess struct {
+	ProcessID string `json:"processId"`
+	Instances int    `json:"instances"`
+}
+
+// catalogueSwitchResp is GET /api/v1/catalogue-switch: whether the catalogue is
+// served, and — when it is not — what the switch strands. The counts are zero with
+// the catalogue on, because then nothing is stranded.
+type catalogueSwitchResp struct {
+	Catalogue               bool              `json:"catalogue"`
+	ShopProcessInstances    int               `json:"shopProcessInstances"`
+	ProductProcessInstances int               `json:"productProcessInstances"`
+	Processes               []strandedProcess `json:"processes"`
+}
+
+// strandedBy sums a per-process count into the shop's own processes and the
+// products', and lists the processes by id so a reader sees them in a stable order.
+func strandedBy(byProcess map[string]int) catalogueSwitchResp {
+	out := catalogueSwitchResp{Processes: []strandedProcess{}}
+	for id, n := range byProcess {
+		if catalogueSystemProcesses[id] {
+			out.ShopProcessInstances += n
+		} else {
+			out.ProductProcessInstances += n
+		}
+		out.Processes = append(out.Processes, strandedProcess{ProcessID: id, Instances: n})
+	}
+	sort.Slice(out.Processes, func(i, j int) bool { return out.Processes[i].ProcessID < out.Processes[j].ProcessID })
+	return out
+}
+
+// handleCatalogueSwitch answers the Console's dashboard, which shows an administrator
+// what the start's warning said — read live, so it goes away once the stranded
+// instances are finished or ended, rather than repeating what was true at boot. A log
+// line at start is lost wherever nobody reads the start, and in a container that is
+// most places.
+//
+// It is not a route of the catalogue: it is the one that has something to say
+// precisely when the catalogue is off, so its tag is System and the switch leaves it
+// served (ADR-0434).
+func (s *Server) handleCatalogueSwitch(w http.ResponseWriter, _ *http.Request) {
+	if !s.catalogueOff {
+		httpapi.JSON(w, http.StatusOK, catalogueSwitchResp{Catalogue: true, Processes: []strandedProcess{}})
+		return
+	}
+	if s.catalogueReporting == nil {
+		// The product store could not be read at start, and the start said so; a
+		// count without it would read as "nothing stranded", which is not known.
+		httpapi.Error(w, http.StatusServiceUnavailable,
+			"what the switched-off catalogue strands could not be read at start; the start log says why")
+		return
+	}
+	var (
+		byProcess map[string]int
+		err       error
+	)
+	s.do(func() { byProcess, err = s.catalogueWorkInFlight() })
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read what the switched-off catalogue strands: "+err.Error())
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, strandedBy(byProcess))
 }

@@ -14,6 +14,46 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Atlas says in one place which events it emits, and who listens.** A Console page
+  *Events* lists every signal, message and feed event atlas emits: what has happened when it
+  comes, what it carries with personal data marked, since which version, how stable, and who
+  may receive it ([ADR-0435](docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)). An
+  administrator also sees which deployed models and feed subscriptions listen to each event,
+  and which models wait for an `atlas.*` name atlas never emits. A modeler's page has no such
+  column, because that view is a map of where personal data flows across every project. The
+  Modeler's signal picker offers the events a model may listen to and says what the listener
+  receives; it warns on an `atlas.*` name that is no event and on a model that throws one.
+  - The catalogue is the Go package `eventcatalog`, held by tests in both directions to what
+    the system processes and the feed emit.
+  - The handbook chapter *Ereignisse* and the runtime contract's feed table are generated
+    from it (`go test ./eventcatalog -update`).
+  - It is served by `GET /api/v1/event-catalog` and, for an administrator,
+    `GET /api/v1/event-catalog/listeners`; the MCP tools `atlas_event_catalog` and
+    `atlas_event_listeners` follow the same split. Neither goes away when the service
+    catalogue is switched off.
+  - The `atlas.user.requested` signal now carries `atlasInstance`, the key of the intake
+    instance that threw it.
+
+- **Publishing says which answers would reach a process in the clear.** When an answer of a
+  product's order form reaches one of its processes — provisioning, lifecycle, return or an
+  approval model of the installation's own — and that process does not declare it personal data,
+  publishing the catalogue warns and names the answer and the process. The release is still made:
+  the warning is shown in the Console's publish report, returned as `warnings` by
+  `POST /api/v1/catalogs/{id}/releases` and by the document import, and printed by `atlas import`.
+  A field that names nobody, such as a cost centre, is marked with the custom property
+  `personal = false` in the form editor and is not warned about again. The administration-services
+  example marks its vehicle type so and declares the licence plate personal.
+
+- **An administrator sees on the dashboard what the switched-off catalogue strands.** The
+  start's warning is a log line, and a log line is lost wherever nobody reads the start.
+  The Console's dashboard now shows an administrator the same thing while it is true:
+  with `--catalogue=false` and processes still working orders, a notice at the top names
+  how many instances will fail at the order routes, which processes they are, and links
+  to the incidents and the instances. It is read live, so it goes away once those
+  instances are finished or ended. Behind it is `GET /api/v1/catalogue-switch`
+  (admin-only, tag System): it is not switched off with the catalogue, because it is the
+  route with something to say precisely then. ADR-0434.
+
 - **What the orderer answered reaches the approver and the processes.** The answers given on
   a product's configuration form — the licence plate a parking space is for, the cost centre
   a laptop is booked to — are shown to the approver in the inbox, labelled as the form labels
@@ -58,6 +98,40 @@ _Changed_ / _Removed_ for each version.
   server, and an answer the server's directory does not have, a name two people share or a
   question left open is refused, all at once, before anything is written. Running it again
   updates. The handbook's installer now reads the same questions from the package.
+
+- **A process can put a document in a bucket, find it again, and hand somebody a link
+  to open it.** A process produces and consumes documents — a generated letter, a scan,
+  an export, an invoice — and until now there was nowhere to put one. A process variable
+  holds a mebibyte and keeps whatever it holds in the event log for as long as the
+  installation keeps history, so the honest options were a script task shelling out to
+  `aws s3 cp` with the installation's credentials in its environment, or nothing.
+
+  There is now an **S3 object storage** Worker Type, against AWS S3 and equally against
+  MinIO, Ceph, Garage, Cloudflare R2 or Wasabi — the Worker's endpoint decides which, and
+  an empty one means AWS. Eight operations, each a step a process takes: put an object,
+  read a small one back, check whether one is there, list what is under a prefix, copy
+  one, delete one, and mint a time-limited link to download or to upload.
+
+  The two link operations are what makes this reach documents at their real size. They
+  compute a signature and make **no call at all**, so a 40 MB signed PDF reaches an
+  approver, and a scan reaches the bucket from the browser that has it, without a byte
+  passing through Atlas. Read and put still carry content through a variable for the
+  cases that suit it — a manifest, a CSV, a letter — bounded at one mebibyte, and the
+  bound refuses rather than truncates, because half a PDF passes every format check and
+  is still broken.
+
+  Three things are worth knowing. A listing is a **prefix scan**, because that is what
+  searching an object store means — there is no query language, and a truncated page
+  answers with the key to resume after, so the paging loop is visible in the diagram
+  rather than hidden in an opaque token. A **check** answers whether the object is
+  there instead of raising an incident, so a gateway can branch on it. And a minted
+  link is a **key to that one object for anybody holding it**, stored in the instance's
+  variables like any other value — the default lifetime is an hour, seven days is the
+  most a signature allows, and short is the right answer.
+
+  The access key, the region and an optional session token live in the vault under the
+  Worker's credential reference; a model names the Worker and never carries a key.
+  Object-store tasks run on a worker by default, like every other integration.
 
 - **The shop has a handbook of its own, with an example to install.** `/shop-handbuch.html`
   (German and English, in the Console's "?" menu, and the help for the Catalogue app)
@@ -319,6 +393,22 @@ _Changed_ / _Removed_ for each version.
   with the changelog — `make whats-new`, `make whats-new-resolve`, the committed
   `api/web/whats-new.json` and the workflow that repaired it on main. A changelog entry now
   reaches the Console with nothing else to do. ADR-draft-release-notes-from-the-changelog.
+
+- **Only an administrator deploys a model that listens to somebody's data.** A signal start,
+  catch, boundary or event subprocess on an event atlas emits whose payload carries personal
+  data is now deployed by an administrator
+  ([ADR-0435](docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md) §6). Today that is
+  `atlas.user.requested`, which carries a requester's name and address.
+  - Every door a caller deploys through refuses it otherwise with 403: the deploy, the project
+    and application deploy and publish, and the application import. The refusal names the
+    element, the event, the personal data, the role needed and the caller's roles.
+  - The Problems panel reports the same finding as an error while modelling, from the same
+    check, and the Modeler says it where the event is chosen.
+  - An event without personal data, a signal atlas does not catalogue, and a throw stay open.
+    A server without authentication applies no rule.
+  - API tokens and deploy tokens never carry the administrator role, so an application import
+    that carries such a listener is refused: the target server's administrator deploys it there.
+  - Listeners deployed before keep running; their next version needs an administrator.
 
 - **A worker runs the jobs of one type concurrently.** A worker used to work the jobs of
   one type one after another, so twenty REST calls of two seconds each took forty

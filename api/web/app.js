@@ -679,6 +679,9 @@ const TOPNAV = {
     { name: "Backup", route: "#/console/backup", role: "admin" },
     { name: "Organization", route: "#/console/org", role: "admin" },
     { name: "Workers", route: "#/console/workers", role: "any" },
+    // What atlas emits (ADR-0435): a modeler chooses an event to listen to here; an
+    // administrator also sees who listens now.
+    { name: "Events", route: "#/console/events", role: "modeler" },
     { name: "AI access", route: "#/console/ai-access", role: "any" },
     { name: "Audit log", route: "#/console/audit", role: "admin" },
   ],
@@ -807,6 +810,11 @@ const WORKER_TYPES = [
     id: "discord", name: "Discord", kind: "Chat",
     desc: "Sends, edits, deletes and reads messages in a Discord channel from a service task off the processor loop, and opens a thread for one case. The operation, the channel and the message body are model-authored (FEEL-capable) and what Discord returned is written into a result variable; the bot token — a {botToken} bundle — is managed below and resolved from the vault. Replying in a thread is a Send message naming the thread\u0027s id, because in Discord a thread is itself a channel. Outbound only: a message that starts a process is not this Worker Type. Authored on a service task with the Discord Worker Type.",
     refs: "ADR-0041", status: "active", statusLabel: "configurable",
+  },
+  {
+    id: "s3", name: "S3 object storage", kind: "Files",
+    desc: "Puts an object into an S3-compatible bucket from a service task off the processor loop, reads a small one back, says whether one is there, lists what is under a prefix, copies one, deletes one, and mints a time-limited URL somebody can open or upload with. The operation, the bucket and the key are model-authored (FEEL-capable) and what the store returned is written into a result variable; the access key \u2014 an {accessKeyId, secretAccessKey, region} bundle \u2014 is managed below and resolved from the vault. The two link operations are why this reaches documents at their real size: they compute a signature and make no call, so the bytes go straight between the store and whoever opens them, while a read into a process variable stays bounded at 1 MiB. The endpoint is empty for AWS and names the host for MinIO, Ceph, Garage, R2 or Wasabi. Authored on a service task with the S3 Worker Type.",
+    refs: "ADR-0041 \u00b7 ADR-0069", status: "active", statusLabel: "configurable",
   },
   {
     id: "remedy", name: "BMC Remedy", kind: "ITSM",
@@ -1074,6 +1082,7 @@ function handbookHelp(path) {
   // where the accounts chapter puts them.
   if (path.startsWith("#/console/ai-access")) return H("konten", "Connecting an AI assistant");
   if (path.startsWith("#/console/audit")) return H("konten", "The audit log");
+  if (path.startsWith("#/console/events")) return H("ereignisse", "Events");
   if (path.startsWith("#/console/engine")) return H("konzepte", "Core concepts");
   // Organization pointed at the worker chapter only because the worker cards used to
   // sit on it; with those on their own page it points there instead, and Organization
@@ -1483,6 +1492,7 @@ function paintReleaseNotes(slot, lang) {
 // ---------- Views ----------
 async function viewConsoleDashboard() {
   view.innerHTML = `
+    <div id="catalogue-stranded-slot"></div>
     <div class="card">
       <div class="welcome-head">
         <span class="mark welcome-mark${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
@@ -1523,6 +1533,10 @@ async function viewConsoleDashboard() {
     </div>
     <div id="key-features-slot"></div>`;
   view.querySelector("[data-system-overview]").addEventListener("click", () => openSystemOverview());
+  // What switching the catalogue off strands (ADR-0434): asked only where it can have
+  // an answer — the catalogue off, and an administrator looking — so nobody else pays a
+  // request for it. Fills its own slot, and is silent when nothing is stranded.
+  if (!FEATURES.catalogue && mayUse("admin")) renderCatalogueStranded(document.getElementById("catalogue-stranded-slot"));
   renderReleaseNotes(document.getElementById("release-notes-slot")); // fills its own slot; safe if it fails
   // The key-features tile sits below the dashboard's own tiles: what Atlas is, for
   // someone who arrived here without having read the README. Fills its own slot,
@@ -1546,6 +1560,36 @@ async function viewConsoleDashboard() {
     document.getElementById("s-pi").textContent = stats.activeProcessInstances;
     document.getElementById("s-ei").textContent = stats.activeElementInstances;
   } catch (e) { toast(e.message, "err"); }
+}
+
+// renderCatalogueStranded tells an administrator, on the dashboard, which processes
+// are still working orders on a server that switched the catalogue off. The start
+// writes the same as a log line, and a log line is lost wherever nobody reads the
+// start. Read live, so the notice goes away once those instances are finished or
+// ended. Silent on failure and when nothing is stranded: it is an addition to a page
+// that works without it.
+async function renderCatalogueStranded(slot) {
+  if (!slot) return;
+  let s;
+  try { s = await api("GET", "/api/v1/catalogue-switch"); } catch { return; }
+  const total = s ? (s.shopProcessInstances || 0) + (s.productProcessInstances || 0) : 0;
+  if (!s || s.catalogue !== false || total === 0) return;
+  const rows = (s.processes || []).map((p) =>
+    `<li><code>${esc(p.processId)}</code> — ${esc(String(p.instances))} running</li>`).join("");
+  slot.innerHTML = `
+    <div class="card catalogue-stranded" role="status">
+      <h2>Orders left mid-way by the switched-off catalogue</h2>
+      <p>The shop, the catalogue, the orders and the inventory are switched off on this server
+      (<code>--catalogue=false</code>), but ${total} process instance${total === 1 ? " is" : "s are"} still working orders.
+      Each fails at its next call to the order routes and, its retries spent, raises an incident.</p>
+      <ul>${rows}</ul>
+      <p class="muted">Switch the catalogue back on and retry those incidents to finish the orders,
+      or end the instances deliberately.</p>
+      <div class="row">
+        <a class="btn ghost" href="#/operations/incidents">Open incidents</a>
+        <a class="btn ghost" href="#/operations">Instances</a>
+      </div>
+    </div>`;
 }
 
 async function viewConsoleEngine() {
@@ -4446,7 +4490,7 @@ function wireWorkerManagement(workers) {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="worker-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="cloudevents">CloudEvents endpoint</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
+        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="s3">S3 object storage</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="cloudevents">CloudEvents endpoint</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
         <label class="field provider-field" style="margin:0"><span class="provider-label">Provider</span><select name="provider"></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
@@ -10373,6 +10417,7 @@ function routeTitle(path) {
     [/^#\/console\/backup$/, "Backup · Console"],
     [/^#\/console\/org$/, "Organization · Console"],
     [/^#\/console\/workers$/, "Workers · Console"],
+    [/^#\/console\/events$/, "Events · Console"],
     [/^#\/modeler\/new/, "New diagram · Modeler"],
     [/^#\/modeler\/form\/new/, "New form · Modeler"],
     [/^#\/modeler\/form\//, "Form · Modeler"],
@@ -10467,6 +10512,11 @@ async function route() {
       return await viewAIAccess({ api, toast, view, isSuperseded: () => superseded(gen) });
     }
     if (path === "#/console/audit") return await viewConsoleAudit();
+    if (path === "#/console/events") {
+      const gen = navGen;
+      const { viewEvents } = await import("./events.js");
+      return await viewEvents({ api, view, isSuperseded: () => superseded(gen) });
+    }
     if (path === "#/catalog") {
       const gen = navGen;
       const { viewCatalogs } = await import("./catalog-admin.js");

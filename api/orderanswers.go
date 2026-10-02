@@ -55,16 +55,39 @@ func (s *Server) orderAnswerVars(l order.Line, taken []model.VariableValue) ([]m
 	return out, nil
 }
 
-// FormFields names the variables a form's fields write, for the catalogue's publish
-// check (catalog.OrderFormProblems).
-func (l processLookup) FormFields(formID string) ([]string, bool) {
+// FormFields names the fields of a form, for the catalogue's publish check and its
+// warning (catalog.OrderFormProblems, catalog.AnswerWarnings): the variable each
+// writes, and whether the form says its answer names nobody.
+func (l processLookup) FormFields(formID string) ([]catalog.FormField, bool) {
 	rec, found, err := l.s.forms.Get(strings.TrimSpace(formID))
 	if err != nil || !found {
 		return nil, false
 	}
-	keys := map[string]bool{}
-	collectFormFieldKeys([]byte(rec.Schema), keys)
-	return slices.Sorted(maps.Keys(keys)), true
+	var out []catalog.FormField
+	for _, f := range formFieldsOf([]byte(rec.Schema)) {
+		key := f.Key
+		// A key addresses a nested value by path; the variable it writes is the root.
+		if i := strings.IndexByte(key, '.'); i > 0 {
+			key = key[:i]
+		}
+		out = append(out, catalog.FormField{Key: key, NotPersonal: f.NotPersonal})
+	}
+	return out, true
+}
+
+// PersonalVariables names what the newest deployed version of a process declares
+// personal data, for the catalogue's publish warning.
+func (l processLookup) PersonalVariables(processID string) (names []string, deployed bool) {
+	processID = strings.TrimSpace(processID)
+	if processID == "" {
+		return nil, false
+	}
+	l.s.do(func() {
+		if d := l.s.latestDeploymentOf(processID); d != nil && d.cp != nil {
+			names, deployed = slices.Clone(d.cp.PersonalVariables()), true
+		}
+	})
+	return names, deployed
 }
 
 // approvalAnswer is one answer as an approver reads it: the field's label where the
@@ -105,10 +128,13 @@ func (s *Server) answersFor(l order.Line) []approvalAnswer {
 	return out
 }
 
-// formField is one field of a form-js schema: its key and its label.
+// formField is one field of a form-js schema: its key, its label, and whether the
+// form says its answer is not personal data — the custom property personal=false,
+// which form-js keeps under "properties" as the editor's Custom properties write it.
 type formField struct {
-	Key   string
-	Label string
+	Key         string
+	Label       string
+	NotPersonal bool
 }
 
 // formFieldsOf walks a form-js schema in the order it shows its fields, nested
@@ -125,7 +151,16 @@ func formFieldsOf(schema []byte) []formField {
 		case map[string]any:
 			if k, ok := t["key"].(string); ok && k != "" {
 				label, _ := t["label"].(string)
-				out = append(out, formField{Key: k, Label: label})
+				f := formField{Key: k, Label: label}
+				if props, ok := t["properties"].(map[string]any); ok {
+					switch v := props["personal"].(type) {
+					case string:
+						f.NotPersonal = strings.EqualFold(strings.TrimSpace(v), "false")
+					case bool:
+						f.NotPersonal = !v
+					}
+				}
+				out = append(out, f)
 			}
 			walk(t["components"])
 		case []any:

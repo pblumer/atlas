@@ -68,6 +68,7 @@ import (
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
+	"github.com/pblumer/atlas/connector/s3"
 	"github.com/pblumer/atlas/connector/scim"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/connector/sharepoint"
@@ -560,6 +561,11 @@ type Server struct {
 	// every change to it, with each Worker's bot token resolved from the vault
 	// (ADR-0041). Read only while driving jobs on the run loop, so it needs no lock.
 	discordRegistry *discord.Registry
+	// s3Registry resolves a Worker name to an S3 API client for object-store tasks
+	// (ADR-0442). Built from the Worker store at startup and
+	// rebuilt on every change; a task naming a Worker that is not in it parks with the
+	// reason (ADR-0158). The access key lives here and in the vault, never in a model.
+	s3Registry *s3.Registry
 
 	// inboundSubs holds the operator-configured clio inbound subscriptions the
 	// inbound bridge polls (ADR-0075). Owned by the run-loop goroutine. inboundPoll
@@ -760,6 +766,9 @@ type Server struct {
 	// tests build a Server as a literal and expect the whole surface. Set once before
 	// Handler is mounted; read-only thereafter.
 	catalogueOff bool
+	// catalogueReporting is every process id that calls the order routes, read once
+	// at start when the catalogue is off (processesReportingToOrders); nil otherwise.
+	catalogueReporting map[string]bool
 
 	// logs is the recent-process-log tail exposed at GET /api/v1/logs, so an
 	// operator can read server logs from the web UI without shell access. Nil when
@@ -1841,6 +1850,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.catalogs.Processes = processLookup{s: s}
 	s.catalogs.EntryPoints = processLookup{s: s}
 	s.catalogs.Forms = processLookup{s: s}
+	s.catalogs.Personal = processLookup{s: s}
 	s.catalogs.Remainders = remainderLookup{s: s}
 	s.orders.Limits = s.budgets()
 	// An outcome that comes without a right changing hands — a provision that

@@ -1963,6 +1963,10 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   it personal, never in place of a variable the order sets; Atlas's own approval models and
   the orchestration no longer receive them
   ([ADR-0441](docs/adr/0441-a-position-s-answers-reach-its-processes.md)).
+- ✅ **Publishing warns about answers in the clear.** A publish names each order-form answer that
+  reaches a process without being declared personal data there, and still makes the release; a
+  field marked `personal = false` in the form is not warned about
+  ([ADR-0443](docs/adr/0443-publishing-warns-about-answers-in-the-clear.md)).
 - ✅ **Maintaining a catalogue.** A grantable `productmanager` role creates catalogues, and
   each catalogue is the scope its members work in
   ([ADR-0315](docs/adr/0315-portal-roles-and-responsibilities.md)). The Console screen and
@@ -2142,6 +2146,23 @@ actions with closed effects, each a command whose outcome is a fact published be
   token. A refusal holds the subscription on the breaker's ladder and skips nothing; one the
   retention passed is switched off with the reason. Signatures and `Retry-After` are
   follow-ups.
+- 🚧 **One catalogue of the events atlas emits**
+  ([ADR-0435](docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)).
+  - ✅ The catalogue and its two views. The Go package `eventcatalog` holds every signal,
+    message and feed event atlas emits, with its meaning, moment, payload (personal data
+    marked, never by default), version, stability and access. Tests hold it to the system
+    processes and the feed in both directions, and a stable entry never loses a field. The
+    handbook chapter *Ereignisse* and the runtime contract's feed table are generated from it.
+    The Console page *Events* reads it (`modeler`); who listens now is a route of its own
+    (`admin`). The Modeler's signal picker offers the events a model may listen to.
+    `atlas.user.requested` carries `atlasInstance`.
+  - ✅ A signal start or catch on a catalogued event whose payload carries personal data
+    requires `admin`. It is refused at the deploy, the bundle deploy and the application import,
+    and the same finding, from the same check, is in the Problems panel.
+  - 🔲 `atlas.approval.requested` from the three shop approval processes.
+  - 🔲 Incidents in the feed, after the feed leaves the service-catalogue area.
+  - 🔲 The remaining entries: user created and rejected, offboarding, access review,
+    deployments.
 - 🔲 **Not in any slice yet:** an operator action for every held position of a product.
 - 🔲 **Not in any slice yet:** a suspended entitlement state.
 - 🔲 **Not in any slice yet:** measuring the run loop before a per-position product goes

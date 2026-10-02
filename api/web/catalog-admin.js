@@ -46,6 +46,27 @@ function refusalCard(err) {
 // shown where the Publish button shows its own.
 let carriedRefusal = null;
 
+// carriedWarnings are the warnings of a publish that went through. Every publish
+// reloads the page, so they ride across the reload like a refusal does, and are
+// shown in the same place.
+let carriedWarnings = null;
+
+// warningsCard renders what a publish that went through warns about: answers of a
+// product's order form that reach one of its processes in the clear
+// (ADR-0443). The release stands; the
+// card says what to change before the next one.
+function warningsCard(warnings) {
+  const where = (p) => (p.item ? `item ${p.item}` : p.catalog ? `catalogue ${p.catalog}` : "");
+  return `<div class="card publish-warnings" style="margin-top:12px; border-color:var(--warn)">
+    <b>Published, with ${warnings.length} ${warnings.length === 1 ? "warning" : "warnings"}.</b>
+    <p class="muted" style="margin:6px 0 0">The release stands. These answers are kept in the
+      process's history as they were given:</p>
+    <ul style="margin:6px 0 0">${warnings.map((p) => {
+    const w = where(p);
+    return `<li>${w ? `<b>${esc(w)}</b> — ` : ""}${esc(p.message)}</li>`;
+  }).join("")}</ul></div>`;
+}
+
 // publishRefusal renders why a publish was refused.
 //
 // The server proves a catalogue at publish and answers 422 with every problem at
@@ -2284,6 +2305,14 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
     }
     carriedRefusal = null;
   }
+  if (carriedWarnings && carriedWarnings.catalog === id) {
+    const report = view.querySelector(".publish-report");
+    if (report) {
+      report.innerHTML = warningsCard(carriedWarnings.warnings);
+      report.scrollIntoView({ block: "center" });
+    }
+    carriedWarnings = null;
+  }
 
   // ---- Where the editor panel sits ----
   //
@@ -2568,6 +2597,9 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
       try {
         const rel = await api("POST", `/api/v1/catalogs/${encodeURIComponent(id)}/releases`);
         toast(`Published ${rel.id}`);
+        if (rel && Array.isArray(rel.warnings) && rel.warnings.length) {
+          carriedWarnings = { catalog: id, warnings: rel.warnings };
+        }
         reload();
       } catch (err) {
         // The refusal is the useful part: the server answers with every problem at
@@ -2786,6 +2818,9 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
           try {
             const rel = await api("POST", `/api/v1/catalogs/${encodeURIComponent(id)}/releases`);
             toast(`Saved and published ${(rel && rel.id) || ""}`.trim());
+            if (rel && Array.isArray(rel.warnings) && rel.warnings.length) {
+              carriedWarnings = { catalog: id, warnings: rel.warnings };
+            }
           } catch (pubErr) {
             carriedRefusal = { catalog: id, err: pubErr };
             toast("Saved, but the catalogue was not published — the reasons are below " +

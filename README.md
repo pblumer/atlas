@@ -51,7 +51,7 @@ That's the whole setup. No SQL schema to migrate, no broker to provision, no sid
 - <img src="docs/brand/icons/tokens.svg" width="18" height="18" align="absmiddle" alt=""> **See every token.** A live view of all running instances on the diagram, plus a step-by-step replay of any single instance with per-step variable snapshots.
 - <img src="docs/brand/icons/human.svg" width="18" height="18" align="absmiddle" alt=""> **Human work included.** User tasks with real forms, claim/assign, candidate groups, and public start links — a Tasks app, not just an API.
 - <img src="docs/brand/icons/decisions.svg" width="18" height="18" align="absmiddle" alt=""> **Decisions as tables.** DMN business rule tasks with an embedded decision-table editor, and every evaluation recorded with its inputs, outputs and rule trace.
-- <img src="docs/brand/icons/agents.svg" width="18" height="18" align="absmiddle" alt=""> **Made for AI agents.** `atlas mcp` exposes 135 Model Context Protocol tools, so an agent can author, deploy, run and inspect processes over the same API you do.
+- <img src="docs/brand/icons/agents.svg" width="18" height="18" align="absmiddle" alt=""> **Made for AI agents.** `atlas mcp` exposes 137 Model Context Protocol tools, so an agent can author, deploy, run and inspect processes over the same API you do.
 
 ## Take the tour
 
@@ -120,7 +120,7 @@ Coverage is a **checkable claim, not a vibe**: the [conformance suite](conforman
 
 **FEEL everywhere.** Gateway conditions, script tasks, timer schedules, multi-instance cardinality and completion conditions, and I/O mappings are compiled at deploy time and evaluated in-engine ([ADR-0008](docs/adr/0008-feel-expression-strategy.md), [ADR-0015](docs/adr/0015-reuse-feel-engine.md)).
 
-**Work that leaves the engine.** Job workers over the HTTP API, polyglot script tasks (JavaScript, Python, PowerShell) run by shelling out to the interpreter ([ADR-0047](docs/adr/0047-polyglot-script-tasks-via-job-workers.md)), a service-task catalog of **Worker Types** ([ADR-0067](docs/adr/0067-service-task-connector-catalog.md), [ADR-0203](docs/adr/0203-worker-execution-model.md)) covering REST, mail, SharePoint, BMC Remedy, Jira and web scraping, and an engine-internal encrypted secret vault so credentials never sit in the model ([ADR-0069](docs/adr/0069-engine-internal-encrypted-secret-vault.md)). Service tasks can also be marked **mockup** ([ADR-0120](docs/adr/0120-mockup-service-task.md)) — the engine simulates the call, with a scripted answer, a random duration and a failure rate — so a process runs end to end before any of its integrations exist.
+**Work that leaves the engine.** Job workers over the HTTP API, polyglot script tasks (JavaScript, Python, PowerShell) run by shelling out to the interpreter ([ADR-0047](docs/adr/0047-polyglot-script-tasks-via-job-workers.md)), a service-task catalog of **Worker Types** ([ADR-0067](docs/adr/0067-service-task-connector-catalog.md), [ADR-0203](docs/adr/0203-worker-execution-model.md)) covering REST, mail, SharePoint, BMC Remedy, Jira, S3 object storage and web scraping, and an engine-internal encrypted secret vault so credentials never sit in the model ([ADR-0069](docs/adr/0069-engine-internal-encrypted-secret-vault.md)). Service tasks can also be marked **mockup** ([ADR-0120](docs/adr/0120-mockup-service-task.md)) — the engine simulates the call, with a scripted answer, a random duration and a failure rate — so a process runs end to end before any of its integrations exist.
 
 ## Built to be driven by an agent
 
@@ -128,7 +128,7 @@ Coverage is a **checkable claim, not a vibe**: the [conformance suite](conforman
 atlas mcp --server http://localhost:8080          # --token, or ATLAS_TOKEN, when the server requires a login
 ```
 
-Atlas ships a [Model Context Protocol](https://modelcontextprotocol.io) adapter over its own HTTP API ([ADR-0016](docs/adr/0016-mcp-server-over-http-api.md)): 135 tools covering projects and drafts, BPMN and DMN deployment, instance lifecycle, task claiming and completion, incident resolution, runtime inspection, the business-architecture registry that says what a process is *for*, and the self-service shop's product catalogue. An agent can author a process, deploy it, start it, work its user tasks and read back the timeline — through exactly the surface a human uses. The Modeler also carries an in-canvas AI copilot ([ADR-0032](docs/adr/0032-modeler-ai-copilot.md)), and processes can call an agent as a task ([ADR-0117](docs/adr/0117-ai-agent-task.md)).
+Atlas ships a [Model Context Protocol](https://modelcontextprotocol.io) adapter over its own HTTP API ([ADR-0016](docs/adr/0016-mcp-server-over-http-api.md)): 137 tools covering projects and drafts, BPMN and DMN deployment, instance lifecycle, task claiming and completion, incident resolution, runtime inspection, the business-architecture registry that says what a process is *for*, and the self-service shop's product catalogue. An agent can author a process, deploy it, start it, work its user tasks and read back the timeline — through exactly the surface a human uses. The Modeler also carries an in-canvas AI copilot ([ADR-0032](docs/adr/0032-modeler-ai-copilot.md)), and processes can call an agent as a task ([ADR-0117](docs/adr/0117-ai-agent-task.md)).
 
 ## Running it for real
 

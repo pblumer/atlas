@@ -84,10 +84,17 @@ var wantAdminRoutes = []string{
 	// Where the event feed is pushed: minting a delivery of who holds what to a system
 	// beyond Atlas is the act minting an events token is
 	// (ADR-0433).
+	// What switching the catalogue off strands: which processes still work orders
+	// and how many, an operator's diagnosis at the level of the whole server
+	// (ADR-0434).
+	"GET /api/v1/catalogue-switch",
 	"GET /api/v1/feed-subscriptions",
 	"POST /api/v1/feed-subscriptions",
 	"PATCH /api/v1/feed-subscriptions/{id}",
 	"DELETE /api/v1/feed-subscriptions/{id}",
+	// Who listens to Atlas's events: where personal data flows across every
+	// project, which only an administrator sees whole (ADR-0435 §7).
+	"GET /api/v1/event-catalog/listeners",
 	"DELETE /api/v1/api-tokens/{id}",
 	"POST /api/v1/oauth-clients",
 	"GET /api/v1/oauth-clients",

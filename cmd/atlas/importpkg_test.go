@@ -280,7 +280,8 @@ func TestImportSaysWhatTheServerRefused(t *testing.T) {
 		answers["/api/v1/principals"] = ok(`[{"type":"group","id":"g1","name":"G"},{"type":"user","id":"u1","name":"U"}]`)
 		answers["/api/v1/applications/source"] = ok(`{"applicationId":"app1","key":"k","name":"n","untracked":["old-form"]}`)
 		answers["/api/v1/applications/app1/publish"] = ok(`{"deployed":true,"definitions":[{}],"warnings":["worker verzeichnis is not configured"],"release":{"version":4}}`)
-		answers["/api/v1/catalogs/import"] = ok(`{"created":[],"updated":["catalog:c"],"releases":[{}]}`)
+		answers["/api/v1/catalogs/import"] = ok(`{"created":[],"updated":["catalog:c"],"releases":[{}],
+		  "warnings":[{"subject":"product:park","problem":"the answers fahrzeug of form f reach p in the clear"}]}`)
 	}
 	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/applications/source" && r.Header.Get("Content-Type") != "application/gzip" {
@@ -335,7 +336,8 @@ func TestImportSaysWhatTheServerRefused(t *testing.T) {
 		t.Fatalf("import: %v", err)
 	}
 	for _, want := range []string{"left in place, not in the package: old-form", "published release 4: 1 processes",
-		"warning: worker verzeichnis is not configured", "shop updated: catalog:c", "catalogues published: 1"} {
+		"warning: worker verzeichnis is not configured", "shop updated: catalog:c", "catalogues published: 1",
+		"warning: product:park: the answers fahrzeug of form f reach p in the clear"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("output lacks %q:\n%s", want, out.String())
 		}

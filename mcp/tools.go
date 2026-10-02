@@ -806,6 +806,36 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_event_catalog",
+			Description: "The catalogue of the events atlas emits (ADR-0435) — the answer to \"what can I listen to?\". " +
+				"Each entry has its 'type' (the name used verbatim as the signal, the message or the CloudEvents " +
+				"type, atlas.<subject>.<fact>; an entry with 'shaped' describes a shape, such as a product " +
+				"action's outcome named by its product), 'kind' (domain: a system process's fact; platform: the " +
+				"engine's or the server's), 'meaning' in English and German, 'moment' (the system process and " +
+				"element, or the record it is derived from), 'channels' (signal, message, feed, log), 'payload' " +
+				"(each field with its type, whether it is always there, and whether it is personal data), " +
+				"'neverSecret' (the test holding it free of secrets), 'since', 'stability' and 'access' per " +
+				"channel. 'listenable' marks what a model may listen to with a signal start or catch.",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return asText(c.get("/api/v1/event-catalog"))
+			},
+		},
+		{
+			Name: "atlas_event_listeners",
+			Description: "Who listens to atlas's events in this installation (ADR-0435 §7), admin-only: every " +
+				"deployed definition with a signal start, catch, boundary or event subprocess, or a message " +
+				"receiver, on an atlas.* name — 'type', 'channel', 'processId', 'version', 'definitionKey', " +
+				"'projectId', 'element', 'role', and 'personal' (the personal-data fields it receives) — with " +
+				"'catalogued' false for a name atlas never emits and 'system' for atlas's own processes; and " +
+				"every feed subscription ('feed'), which receives every type in 'feedTypes' narrowed by its " +
+				"reach. 'feedDelivered' is false where the service catalogue is switched off.",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return asText(c.get("/api/v1/event-catalog/listeners"))
+			},
+		},
+		{
 			Name: "atlas_list_incidents",
 			Description: "List unresolved incidents — the operator \"what's stuck\" view. Each incident carries " +
 				"its elementInstanceKey (pass it to atlas_resolve_incident), processInstanceKey, processDefKey, " +

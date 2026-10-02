@@ -520,13 +520,15 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0432](0432-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md) | The event feed is narrowed by the catalogue that maintains the product | Accepted | Landed |
 | [0433](0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md) | The event feed is pushed to a CloudEvents endpoint | Accepted | Landed |
 | [0434](0434-the-catalogue-can-be-switched-off.md) | The catalogue can be switched off, and switching it off removes a surface, not a semantics | Accepted | Landed |
-| [0435](0435-one-catalogue-of-the-events-atlas-emits.md) | Atlas keeps one catalogue of the events it emits | Proposed | Not started |
+| [0435](0435-one-catalogue-of-the-events-atlas-emits.md) | Atlas keeps one catalogue of the events it emits | Accepted | Partial |
 | [0436](0436-a-catalogue-is-imported-as-one-document.md) | A catalogue is imported as one document | Accepted | Landed |
 | [0437](0437-a-package-is-imported-from-the-command-line.md) | A package is imported from the command line | Accepted | Landed |
 | [0438](0438-mailbox-worker.md) | The mail Worker reads its mailbox — an inbound watch, mailbox operations, and who may use them | Accepted | Landed |
 | [0439](0439-supervised-workers-end-with-the-server.md) | On Windows, a supervised worker ends with the server, however the server ends | Accepted | Landed |
-| [0440](0440-worker-runs-jobs-concurrently.md) | A worker runs the jobs of one type concurrently, up to the places it has free | Accepted | Landed |
+| [0440](0440-worker-runs-jobs-concurrently.md) | A worker runs the jobs of one type concurrently, up to the places it has free | Accepted (amended) | Landed |
 | [0441](0441-a-position-s-answers-reach-its-processes.md) | A position's answers reach its processes | Accepted | Landed |
+| [0442](0442-s3-object-store-worker.md) | An S3 Worker Type — a process puts a file down, finds it again, and hands it out | Accepted | Landed |
+| [0443](0443-publishing-warns-about-answers-in-the-clear.md) | Publishing warns about answers in the clear | Accepted | Landed |
 
 ## The two states of a record
 

@@ -121,6 +121,8 @@ var mcpToolRoutes = map[string]string{
 	"atlas_workers":                      "GET /api/v1/workers",
 	"atlas_close_breaker":                "POST /api/v1/workers/breakers/close",
 	"atlas_feed_subscriptions":           "GET /api/v1/feed-subscriptions",
+	"atlas_event_catalog":                "GET /api/v1/event-catalog",
+	"atlas_event_listeners":              "GET /api/v1/event-catalog/listeners",
 	"atlas_resolve_incident":             "POST /api/v1/incidents/{key}/resolve",
 	"atlas_incident_summary":             "GET /api/v1/incidents/summary",
 	"atlas_resolve_incidents":            "POST /api/v1/incidents/resolve",
@@ -407,6 +409,7 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/sql/mock-journal":      "an operator's view of a mockup run; an agent reads what a job did from the job",
 	"POST /api/v1/workers/{id}/restart": "restarts an operating-system process; an operator action, deliberately not an agent one",
 	"GET /api/v1/checkpoints":           "admin recovery-checkpoint status, not an agent action",
+	"GET /api/v1/catalogue-switch":      "admin diagnosis of what switching the catalogue off strands, shown on the Console's dashboard; not an agent action",
 	"POST /api/v1/checkpoints":          "admin on-demand checkpoint/compaction, not an agent action",
 
 	// Per-server call-activity target overrides (ADR-0105): admin operator config,

@@ -132,6 +132,16 @@ func (s *Server) apiRoutes() []apiRoute {
 				"product": tString(), "version": tString(),
 				"docs": tBool(), "catalogue": tBool(),
 			}))}},
+		// What switching the catalogue off strands, for the Console's dashboard
+		// (ADR-0434). System, not Catalogue: it is the route that has something to say
+		// precisely when the catalogue is off, so the switch must leave it served.
+		{"GET", "/api/v1/catalogue-switch", s.handleCatalogueSwitch, apiOp{
+			summary: "Whether the shop, catalogue, orders and inventory are served, and — when they are switched off (--catalogue=false) — how many instances of processes that call the order routes are still running, by process id: the shop's fulfilment and approval processes and the provision and deprovision processes products bind. Each fails at its next call to the order routes. Read live from the per-definition counters (ADR-0434, ADR-0080). Admin-only",
+			tag:     "System", role: RoleAdmin,
+			resp: jsonBody("The switch and what it strands", schemaObj(map[string]any{
+				"catalogue": tBool(), "shopProcessInstances": tInteger(),
+				"productProcessInstances": tInteger(), "processes": tArray(),
+			}))}},
 		// The node descriptor (ADR-0189 §6): which *runtime* is answering, as opposed
 		// to /api/v1/info's account of which binary. It is what makes cross-server
 		// correlation possible at all, so it is readable by any signed-in identity and
@@ -1656,6 +1666,12 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Updated subscription", tObject())}},
 		{"DELETE", "/api/v1/feed-subscriptions/{id}", s.handleDeleteFeedSubscription, apiOp{
 			summary: "End a feed subscription (admin-only)", tag: "Catalogue", role: RoleAdmin, status: http.StatusNoContent}},
+		{"GET", "/api/v1/event-catalog", s.handleEventCatalog, apiOp{
+			summary: "The catalogue of the events Atlas emits (ADR-0435): for each, its name, kind (domain or platform), meaning in English and German, the moment it is emitted, its channels (signal, message, feed, log), its payload with every field marked as personal data or not, the test that holds it free of secrets, the version it arrived in, its stability and who may receive it. Readable by modelers, because choosing an event to listen to is modelling", tag: "Events", role: RoleModeler,
+			resp: jsonBody("Event catalogue", schemaObj(map[string]any{"entries": tArray()}))}},
+		{"GET", "/api/v1/event-catalog/listeners", s.handleEventListeners, apiOp{
+			summary: "Who listens to Atlas's events in this installation (ADR-0435 §7): every deployed definition with a signal start, catch, boundary or event subprocess, or a message receiver, on an atlas.* name — with process, version, project, element and the personal-data fields it receives — and every feed subscription. A map of where personal data flows across every project, so administrator-only", tag: "Events", role: RoleAdmin,
+			resp: jsonBody("Event listeners", schemaObj(map[string]any{"processes": tArray(), "feed": tArray(), "feedTypes": tArray(), "feedDelivered": map[string]any{"type": "boolean"}}))}},
 		{"GET", "/api/v1/message-sources", s.handleListMessageSources, apiOp{
 			summary: "List every message name with where it comes from (ADR-0429 §6), each row tagged by `sourceKind`: `inbound-watch` — a Worker's event, with the worker and, for a viewer of it, the watch; `product-action` — a product's action, with the product, the action's key, effect and triggers and the process the product binds it to, for the catalogues the caller maintains; `process` — where the newest deployed version of a process waits for it, at a message `start` or a `catch`. The Modeler groups its message picker by these and tells a model whether its message has a source", tag: "Workers", role: RoleModeler, resp: jsonBody("Message sources", tArray())}},
 

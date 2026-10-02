@@ -4179,6 +4179,129 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
+    id: "s3", name: "S3 Object Storage", group: "Files",
+    desc: "Put a document in a bucket, find it again by prefix, and hand somebody a link that opens it",
+    icon: "S",
+    // A bucket on storage grey: the thing an object goes into, which is what this Worker
+    // Type is about — its counterpart to Jira's ticked issue and Sheets' grid. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the fill
+    // and the white marks.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#3f7f6e"/><path d="M3.6 4.6h8.8l-.9 7a1.2 1.2 0 0 1-1.2 1H5.7a1.2 1.2 0 0 1-1.2-1z" fill="#fff"/><ellipse cx="8" cy="4.6" rx="4.4" ry="1.3" fill="#fff"/><ellipse cx="8" cy="4.6" rx="2.6" ry=".7" fill="#3f7f6e"/></svg>`,
+    ext: "atlas:S3Connector",
+    fields: [
+      { group: "S3 worker" },
+      { key: "connector", label: "Worker", datalist: "s3", placeholder: "archiv", hint: "The configured S3 Worker this task acts as, by the name it has under Workers in the Console. Its access key and region live on the server, never in the model." },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "put-object", l: "Put object" },
+          { v: "get-object", l: "Read object" },
+          { v: "head-object", l: "Check object" },
+          { v: "list-objects", l: "List objects" },
+          { v: "copy-object", l: "Copy object" },
+          { v: "delete-object", l: "Delete object" },
+          { v: "presign-get", l: "Link to download" },
+          { v: "presign-put", l: "Link to upload" },
+        ],
+      },
+      {
+        key: "bucket", label: "Bucket", placeholder: "rechnungen", fx: true,
+        hint: "The bucket this task acts in — one name, never a path. May be a FEEL expression (fx).",
+      },
+      {
+        key: "key", label: "Key", placeholder: "=\"faelle/\" + vorgang.nummer + \"/antrag.pdf\"", fx: true,
+        showIf: (v) => v.operation && v.operation !== "list-objects",
+        hint: "The object's whole path inside the bucket, without a leading slash. Usually a FEEL expression (fx) built from the case it belongs to. Note that a retry re-runs this task with the same variables, so a key built from a timestamp or a random value writes a second object instead of overwriting the first.",
+      },
+      {
+        key: "content", label: "Content", placeholder: "=antwort", fx: true,
+        showIf: (v) => v.operation === "put-object",
+        hint: "What to store. It travels through a process variable, so it is capped at that variable's own budget — 1 MiB unless this installation raised it. For anything larger use Link to upload and let the browser that has the document send it straight to the store.",
+      },
+      {
+        key: "encoding", label: "Content is", type: "select",
+        options: [{ v: "", l: "Text — the characters as they are" }, { v: "base64", l: "Base64 — decode it before storing" }],
+        showIf: (v) => v.operation === "put-object" || v.operation === "get-object",
+        hint: "Text is right for JSON, CSV, XML and a letter. Base64 is what a binary needs to survive a process variable at all, and what a form's uploaded file already is. On a read it decides the same thing in reverse.",
+      },
+      {
+        key: "contentType", label: "Content type", placeholder: "application/pdf", fx: true,
+        showIf: (v) => v.operation === "put-object" || v.operation === "presign-put",
+        hint: (v) => (v.operation === "presign-put"
+          ? "Optional, and stronger than it looks: a type set here is bound into the URL, so whoever uploads must send exactly this one. That is what stops a link minted for a PDF being used to store something else."
+          : "What the bytes are, e.g. application/pdf or text/csv. Without it the store guesses, and a browser opening the object later downloads it instead of showing it."),
+      },
+      {
+        key: "prefix", label: "Prefix", placeholder: "=\"faelle/\" + vorgang.nummer + \"/\"", fx: true,
+        showIf: (v) => v.operation === "list-objects",
+        hint: "Only keys that start with this are listed — which is what searching an object store means, because S3 has no query language. May be a FEEL expression (fx).",
+      },
+      {
+        key: "delimiter", label: "Delimiter", placeholder: "/",
+        showIf: (v) => v.operation === "list-objects",
+        hint: "Optional. Keys sharing a segment are rolled up into common prefixes instead of listed one by one, so \"/\" makes a listing read like a folder. They come back in the result's prefixes.",
+      },
+      {
+        key: "startAfter", label: "Start after", placeholder: "=seite.nextStartAfter", fx: true,
+        showIf: (v) => v.operation === "list-objects",
+        hint: "Optional. Resumes after this key, exclusive. A truncated page answers with nextStartAfter, so passing it back here is how a loop pages a prefix forward without re-reading what it already has.",
+      },
+      {
+        key: "maxKeys", label: "Maximum keys", placeholder: "1000",
+        showIf: (v) => v.operation === "list-objects",
+        hint: "Caps what may land in the result variable. Empty uses 1000, which is also the most the store returns in one call; a larger value is refused at deploy rather than silently answered with 1000.",
+      },
+      {
+        key: "sourceBucket", label: "From bucket", placeholder: "eingang", fx: true,
+        showIf: (v) => v.operation === "copy-object",
+        hint: "The bucket the object is copied from. The copy happens inside the store, so the bytes never pass through Atlas — which is what makes archiving a large document a step a process can take.",
+      },
+      {
+        key: "sourceKey", label: "From key", placeholder: "=eingang.key", fx: true,
+        showIf: (v) => v.operation === "copy-object",
+        hint: "The key the object is copied from. May be a FEEL expression (fx), e.g. the key an earlier List objects found.",
+      },
+      {
+        key: "expiresIn", label: "Valid for (seconds)", placeholder: "3600",
+        showIf: (v) => v.operation === "presign-get" || v.operation === "presign-put",
+        hint: "How long the link works. Empty uses one hour; seven days is the most the signature allows. Keep it short: the URL is a key to that one object for anyone who has it, and it lands in a process variable like any other value.",
+      },
+      {
+        key: "meta", label: "Metadata & headers", type: "map", childType: "atlas:S3Meta", fx: true,
+        showIf: (v) => v.operation === "put-object" || v.operation === "copy-object",
+        hint: "Extra request headers. A plain name becomes user metadata on the object (x-amz-meta-<name>), which is where a case number belongs; a name starting with x-amz- is sent as itself, which is how you reach server-side encryption or a storage class. On a copy these replace the source's metadata rather than adding to it — the store offers no third option.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable",
+        resultType: () => "object",
+        placeholder: "datei",
+        // Delete is the one operation the store answers with 204 No Content, so a result
+        // variable there would name a value that is never written — the panel hides it
+        // rather than letting an author expect one (the compiler refuses it too).
+        showIf: (v) => v.operation && v.operation !== "delete-object",
+        hint: (v) => {
+          switch (v.operation) {
+            case "list-objects":
+              return "The page lands here: =seite.objects is the list (1-based, so the first is =seite.objects[1].key), =seite.prefixes the rolled-up folders, =seite.truncated whether there is more, and =seite.nextStartAfter where to carry on.";
+            case "get-object":
+              return "The document lands in =datei.content, with =datei.contentType and =datei.size beside it. An object larger than a process variable's budget (1 MiB by default) fails the task rather than arriving cut short — use Link to download for those.";
+            case "head-object":
+              return "Whether the object is there is =datei.exists, and when it is, =datei.size, =datei.contentType and =datei.lastModified come with it. A missing object is an answer here, not an incident.";
+            case "presign-get":
+            case "presign-put":
+              return "The link lands in =datei.url, with =datei.expiresAt beside it. Put it in a user task, a mail or a message — whoever opens it reaches the store directly, so the document never passes through Atlas.";
+            case "copy-object":
+              return "The copy's identity lands here: =datei.key, =datei.etag and the source it came from. Leave empty to discard it.";
+            default:
+              return "The stored object's identity lands here — =datei.etag, and =datei.versionId on a versioned bucket. Leave empty to discard it.";
+          }
+        },
+      },
+    ],
+  },
+  {
     id: "aitask", name: "AI Task", group: "Applications",
     desc: "Ask a language model one question and put the answer in a process variable",
     icon: "A",
@@ -6180,7 +6303,7 @@ function deleteSignal(modeler, sigId) {
 // name, shared so every event using the signal stays in sync. Unlike a message there is
 // no correlation key: a signal broadcasts by name alone. sed is the
 // bpmn:SignalEventDefinition.
-function signalFieldsHTML(modeler, sed, hint) {
+function signalFieldsHTML(modeler, sed, hint, listens) {
   const current = sed.signalRef;
   const options = listSignals(modeler).map((s) =>
     `<option value="${esc(s.id)}"${current && current.id === s.id ? " selected" : ""}>${esc(s.name || s.id)}</option>`
@@ -6189,15 +6312,52 @@ function signalFieldsHTML(modeler, sed, hint) {
     <label class="field"><span>Signal name</span>
       <input type="text" id="f-signame" value="${esc(current.name || "")}" placeholder="order-cancelled"/></label>
     <p class="muted" style="font-size:12px">Shared with every event that uses this signal — a broadcast reaches every catch, boundary, event subprocess, and start event of the same name.</p>` : "";
+  // A receiving element is offered the events atlas emits as signals (ADR-0435); the
+  // group is filled from the event catalogue once it answers, and #f-sigevent says
+  // what the chosen atlas.* name means and what it carries.
   return `<h3>Signal</h3>
     <label class="field"><span>Signal</span>
-      <select id="f-sigref">
+      <select id="f-sigref" data-listens="${listens ? "1" : ""}">
         <option value="">— none —</option>
         ${options}
+        ${listens ? `<optgroup label="Events atlas emits" id="f-sig-events"></optgroup>` : ""}
         <option value="__new__">＋ New signal…</option>
       </select></label>
     ${fields}
+    <div id="f-sigevent"></div>
     <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
+// SIGNAL_EVENT_PREFIX marks a picker option that names a catalogued event rather than
+// a signal of this model; choosing it reuses or creates the model's signal of that name.
+const SIGNAL_EVENT_PREFIX = "__event__:";
+
+// eventCatalog is the event catalogue, asked for once per page (ADR-0435). A modeler
+// may read it; a refusal or a server without it leaves the picker as it was.
+let eventCatalogReq = null;
+function eventCatalog(api) {
+  if (!eventCatalogReq) {
+    try { eventCatalogReq = Promise.resolve(api("GET", "/api/v1/event-catalog")).then((c) => (c && c.entries) || [], () => []); }
+    catch { eventCatalogReq = Promise.resolve([]); }
+  }
+  return eventCatalogReq;
+}
+
+// signalEventNote says what a catalogued atlas.* signal means and what a listener
+// receives, personal data named; and on a throw, that the name is atlas's own.
+function signalEventNote(entries, name, listens) {
+  const n = String(name || "").trim();
+  if (!n.startsWith("atlas.")) return "";
+  const e = entries.find((x) => !x.shaped && x.type === n);
+  if (!listens) {
+    return `<p class="hint warn">${esc(n)} is a name atlas emits${e ? "" : " (or reserves)"}: a model that throws it speaks for atlas. Use a name of your own.</p>`;
+  }
+  if (!e) return `<p class="hint warn">atlas emits no event named ${esc(n)}; this element would wait for something that never comes.</p>`;
+  const personal = (e.payload || []).filter((f) => f.data === "personal").map((f) => f.name);
+  return `<p class="hint" data-event="${esc(e.type)}">${esc((e.meaning || {}).en || "")}${
+    personal.length ? ` The listener receives personal data: ${personal.map(esc).join(", ")}. ` +
+      "Only an administrator may deploy a model that listens to it." : ""
+  } <a href="/#/console/events" target="_blank" rel="noopener">Events ↗</a></p>`;
 }
 
 // signalsManagerHTML lists the model's signals for central management (add, rename,
@@ -7875,7 +8035,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "The event waits until this message is published with a matching correlation key.");
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "The event waits until a signal with this name is broadcast (by a throw or signal end event, in this or any other instance).");
+          html += signalFieldsHTML(modeler, sig, "The event waits until a signal with this name is broadcast (by a throw or signal end event, in this or any other instance).", true);
         } else if (link) {
           html += linkFieldsHTML(link, "This is the landing point of a <b>link throw</b> with the same name in the same scope (an off-page connector). It does not wait — a token arriving via the link flows straight on. Draw it with no incoming sequence flow.");
         } else if (cond) {
@@ -7891,7 +8051,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "On reaching this event the message is published; any instance waiting on it with a matching correlation key continues.");
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "On reaching this event the signal is broadcast to every event waiting on that signal name, across all instances. The token then continues.");
+          html += signalFieldsHTML(modeler, sig, "On reaching this event the signal is broadcast to every event waiting on that signal name, across all instances. The token then continues.", false);
         } else if (escl) {
           html += escalationFieldsHTML(modeler, escl, "On reaching this event the escalation is raised, propagating up to the nearest matching escalation boundary or event subprocess, and the token then continues on its outgoing flow (unless an interrupting catch aborts it). Uncaught, it is harmless.");
         } else if (link) {
@@ -7941,7 +8101,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           } else if (msg) {
             html += messageFieldsHTML(modeler, msg, "The event fires when this message is published with a matching correlation key.");
           } else if (sig) {
-            html += signalFieldsHTML(modeler, sig, "The event fires when a signal with this name is broadcast (in this or any other instance) while the activity runs.");
+            html += signalFieldsHTML(modeler, sig, "The event fires when a signal with this name is broadcast (in this or any other instance) while the activity runs.", true);
           } else if (escl) {
             html += escalationFieldsHTML(modeler, escl, "The event fires when the attached activity raises a matching escalation — an escalation throw/end event inside it, or one propagating up from a called process. Interrupting cancels the activity and routes out this event; non-interrupting runs the handler while the activity keeps going.");
           } else if (cond) {
@@ -7986,7 +8146,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           } else if (msg) {
             html += messageFieldsHTML(modeler, msg, "The event subprocess fires when this message is published with a matching correlation key, while its scope runs.");
           } else if (sig) {
-            html += signalFieldsHTML(modeler, sig, "The event subprocess fires when a signal with this name is broadcast while its scope runs. A non-interrupting trigger re-arms and can fire again.");
+            html += signalFieldsHTML(modeler, sig, "The event subprocess fires when a signal with this name is broadcast while its scope runs. A non-interrupting trigger re-arms and can fire again.", true);
           } else if (escl) {
             html += escalationFieldsHTML(modeler, escl, "The event subprocess fires when its enclosing scope raises a matching escalation. Interrupting terminates the scope's other work first; non-interrupting runs this handler alongside the still-running scope.");
           } else if (cond) {
@@ -8007,7 +8167,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "A message start event: publishing this message starts a new instance of this process, matched by message name (the correlation key is shared with the throwing event but is not yet evaluated for starts).");
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "A signal start event: broadcasting this signal starts a new instance of this process, matched by signal name. One broadcast starts every deployed process with a matching signal start.");
+          html += signalFieldsHTML(modeler, sig, "A signal start event: broadcasting this signal starts a new instance of this process, matched by signal name. One broadcast starts every deployed process with a matching signal start.", true);
         } else {
           const fd = findExt(bo, "zeebe:FormDefinition") || {};
           const curForm = fd.formId || "";
@@ -8034,7 +8194,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "On reaching this end event the message is published; any instance waiting on it with a matching correlation key continues. The instance then ends.");
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "On reaching this end event the signal is broadcast to every event waiting on that signal name, across all instances. The instance then ends.");
+          html += signalFieldsHTML(modeler, sig, "On reaching this end event the signal is broadcast to every event waiting on that signal name, across all instances. The instance then ends.", false);
         } else if (err) {
           html += errorFieldsHTML(modeler, err, "On reaching this end event the error is thrown, aborting its scope and propagating up to the nearest matching error boundary or error event subprocess. Uncaught, it raises an incident.");
         } else if (escl) {
@@ -9468,6 +9628,21 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     }
     const fsigref = body.querySelector("#f-sigref");
     if (fsigref) {
+      const listens = fsigref.dataset.listens === "1";
+      const sigNote = body.querySelector("#f-sigevent");
+      eventCatalog(api).then((entries) => {
+        if (!fsigref.isConnected) return;
+        const group = fsigref.querySelector("#f-sig-events");
+        if (group) {
+          const mine = new Set(listSignals(modeler).map((x) => x.name));
+          group.innerHTML = entries.filter((e) => e.listenable && (e.channels || []).includes("signal"))
+            .map((e) => `<option value="${esc(SIGNAL_EVENT_PREFIX + e.type)}" title="${esc((e.meaning || {}).en || "")}">${
+              esc(e.type)}${mine.has(e.type) ? "" : " — new"}</option>`).join("");
+          if (!group.children.length) group.remove();
+        }
+        const sed = signalDefOf(element.businessObject);
+        if (sigNote && sed && sed.signalRef) sigNote.innerHTML = signalEventNote(entries, sed.signalRef.name, listens);
+      });
       fsigref.addEventListener("change", () => {
         const sed = signalDefOf(element.businessObject);
         if (!sed) return;
@@ -9477,6 +9652,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             linkSignal(modeler, element, sed, createSignal(modeler, ""));
           } else if (v === "") {
             linkSignal(modeler, element, sed, null);
+          } else if (v.startsWith(SIGNAL_EVENT_PREFIX)) {
+            // A catalogued event: the model's signal of that name, made once.
+            const name = v.slice(SIGNAL_EVENT_PREFIX.length);
+            linkSignal(modeler, element, sed, listSignals(modeler).find((x) => x.name === name) || createSignal(modeler, name));
           } else {
             linkSignal(modeler, element, sed, listSignals(modeler).find((s) => s.id === v));
           }
@@ -9489,6 +9668,14 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       fsigname.addEventListener("change", () => {
         const sed = signalDefOf(element.businessObject);
         if (sed && sed.signalRef) sed.signalRef.name = (fsigname.value || "").trim();
+        // A renamed signal may now be, or no longer be, a name atlas emits.
+        const note = body.querySelector("#f-sigevent");
+        const sel = body.querySelector("#f-sigref");
+        if (note && sel) {
+          eventCatalog(api).then((entries) => {
+            if (note.isConnected) note.innerHTML = signalEventNote(entries, fsigname.value, sel.dataset.listens === "1");
+          });
+        }
       });
     }
     const ferrref = body.querySelector("#f-errref");
