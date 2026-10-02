@@ -14,6 +14,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **What the orderer answered reaches the approver and the processes.** The answers given on
+  a product's configuration form — the licence plate a parking space is for, the cost centre
+  a laptop is booked to — are shown to the approver in the inbox, labelled as the form labels
+  them and marked when they were corrected after ordering. The processes the product binds
+  (its provisioning, lifecycle, return or action process, or an approval model of the
+  installation's own) receive each answer as a variable of its own under the field's key, so a
+  task form shows it and a model can declare it personal data with `atlas:personal` and
+  `atlas:dataSubject="recipient"`, which seals it under the recipient's key and makes it
+  erasable. Only the form's own fields are passed, and never in place of a variable the order
+  sets itself; publishing refuses a form with a field named like one (`recipient`,
+  `orderId`, …). Atlas's own approval processes and the fulfilment orchestration no longer
+  receive the answers, so they are not kept in their history in the clear. The
+  administration-services example now shows the plate to whoever assigns and frees the
+  parking space, and declares it personal.
+
 - **A mail Worker can read its mailbox, and the mailbox stays its owner's.** An inbound
   watch on a mail Worker publishes the new mail of one folder as an Atlas message, so a mail
   starts a process — over IMAP for an SMTP Worker (a new, optional `mailboxEndpoint`), and

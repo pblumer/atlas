@@ -155,6 +155,43 @@ func exampleFormIDs(t *testing.T, dir string) map[string]bool {
 	return out
 }
 
+// exampleFormFieldLookup answers which variables an example's forms write, for the
+// publish check that refuses a configuration field named like one of the order's own
+// variables.
+type exampleFormFieldLookup map[string][]string
+
+func (l exampleFormFieldLookup) FormFields(id string) ([]string, bool) {
+	keys, ok := l[id]
+	return keys, ok
+}
+
+func exampleFormFields(t *testing.T, dir string) exampleFormFieldLookup {
+	t.Helper()
+	out := exampleFormFieldLookup{}
+	matches, _ := filepath.Glob(filepath.Join(dir, "*.form.json"))
+	for _, path := range matches {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		var form struct {
+			ID         string `json:"id"`
+			Components []struct {
+				Key string `json:"key"`
+			} `json:"components"`
+		}
+		if err := json.Unmarshal(raw, &form); err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		for _, c := range form.Components {
+			if c.Key != "" {
+				out[form.ID] = append(out[form.ID], c.Key)
+			}
+		}
+	}
+	return out
+}
+
 // TestEveryShopDocumentPublishes is the install button's whole path, checked before a
 // reader presses it.
 func TestEveryShopDocumentPublishes(t *testing.T) {
@@ -171,6 +208,9 @@ func TestEveryShopDocumentPublishes(t *testing.T) {
 
 			processes := compiledLookup(exampleProcesses(t, dir))
 			forms := exampleFormIDs(t, dir)
+			for _, p := range shop.OrderFormProblems(doc.Products, exampleFormFields(t, dir)) {
+				t.Errorf("%s", p.String())
+			}
 			byID := map[string]shop.Item{}
 			for _, it := range doc.Products {
 				byID[it.ID] = it

@@ -2,6 +2,29 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "what-the-orderer-answered-reaches-the-approver-and-the-proce",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Approvers and processes see what was ordered",
+        "de": "Genehmigende und Prozesse sehen, was bestellt wurde"
+      },
+      "summary": {
+        "en": "The answers from a product's order form, such as a licence plate, now appear for the approver in the inbox and reach the product's own processes as separate variables. A process can mark an answer as personal data, so it is stored encrypted and can be erased with the person. Atlas's built-in approval processes no longer keep these answers in their history.",
+        "de": "Die Antworten aus dem Bestellformular eines Produkts, etwa ein Kennzeichen, erscheinen jetzt bei der genehmigenden Person in der Inbox und erreichen die Prozesse des Produkts als eigene Variablen. Ein Prozess kann eine Antwort als Personendaten kennzeichnen; sie wird dann verschlüsselt gespeichert und lässt sich mit der Person löschen. Atlas' eingebaute Genehmigungsprozesse bewahren diese Antworten nicht mehr in ihrem Verlauf auf."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Shop",
+        "Service catalogue",
+        "Security"
+      ]
+    },
+    {
       "id": "a-mail-worker-can-read-its-mailbox-and-the-mailbox-stays-its",
       "version": "Unreleased",
       "date": null,
@@ -265,28 +288,6 @@
       "tags": [
         "Service catalogue",
         "API"
-      ]
-    },
-    {
-      "id": "the-modeler-offers-a-message-name-from-where-it-comes-from",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Message names grouped by where they come from",
-        "de": "Nachrichtennamen nach Herkunft gruppiert"
-      },
-      "summary": {
-        "en": "When you pick a message in the Modeler, the list now says where each name comes from: events that Workers publish, the actions of products in the catalogue, and the processes already waiting for a message. A step that waits is offered the first two, a step that sends is offered the waiting processes. Shop tasks suggest the actions a product declares, and shop tasks are marked with a small badge next to their envelope.",
-        "de": "Beim Auswählen einer Nachricht im Modeler zeigt die Liste jetzt, woher jeder Name stammt: Ereignisse, die Worker veröffentlichen, die Aktionen der Produkte im Katalog und die Prozesse, die bereits auf eine Nachricht warten. Einem wartenden Schritt werden die ersten beiden angeboten, einem sendenden Schritt die wartenden Prozesse. Shop-Aufgaben schlagen die Aktionen vor, die ein Produkt festlegt, und tragen ein kleines Abzeichen neben ihrem Briefumschlag."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Modeler",
-        "Service catalogue"
       ]
     }
   ]

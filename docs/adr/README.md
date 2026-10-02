@@ -526,6 +526,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0438](0438-mailbox-worker.md) | The mail Worker reads its mailbox — an inbound watch, mailbox operations, and who may use them | Accepted | Landed |
 | [0439](0439-supervised-workers-end-with-the-server.md) | On Windows, a supervised worker ends with the server, however the server ends | Accepted | Landed |
 | [0440](0440-worker-runs-jobs-concurrently.md) | A worker runs the jobs of one type concurrently, up to the places it has free | Accepted (amended) | Landed |
+| [0441](0441-a-position-s-answers-reach-its-processes.md) | A position's answers reach its processes | Accepted | Landed |
 
 ## The two states of a record
 

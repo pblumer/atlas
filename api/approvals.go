@@ -99,6 +99,15 @@ type approvalResp struct {
 	// with, which is the ordinary case — and its absence is therefore the answer
 	// "nobody has had to chase this".
 	Assignment *order.Assignment `json:"assignment,omitempty"`
+	// Answers are what the orderer answered on the product's configuration form, as
+	// the order holds them now, labelled as the form labels them
+	// (ADR-0441). Read from the order and
+	// not from the process: Atlas's own approval models are not given them, so they
+	// never sit in an approval's history in the clear.
+	Answers []approvalAnswer `json:"answers,omitempty"`
+	// Amended says the answers were corrected after the order was placed
+	// (ADR-0359), so an approver reads them as the current ones, not the first.
+	Amended bool `json:"amended,omitempty"`
 }
 
 // handleListApprovals answers the approval page: every open approval the caller
@@ -255,6 +264,7 @@ func (s *Server) approvalOf(rv *state.ReadView, tr taskResp) (approvalResp, bool
 	if as, ok := ord.AssignmentFor(line.Key()); ok {
 		a.Assignment = &as
 	}
+	a.Answers, a.Amended = s.answersFor(line), len(line.Amendments) > 0
 	rel, ok, err := s.catalogStore.Release(ord.ReleaseID)
 	if err != nil {
 		return approvalResp{}, false, err

@@ -838,14 +838,20 @@ func (s *Service) HandleNext(w http.ResponseWriter, r *http.Request) {
 		ready := Ready(got)
 		out := make([]readyLine, 0, len(ready))
 		for _, l := range ready {
+			// Without the answers: the orchestration keeps what it reads here as
+			// variables, in its history and in the clear, and it starts processes
+			// rather than reading forms. The processes it starts are given the answers
+			// by the order (ADR-0441).
+			l.Config, l.Amendments = nil, nil
 			out = append(out, readyLine{ID: l.Key(), Line: l, ApprovalProcess: l.ApprovalProcess()})
 		}
 		httpapi.JSON(w, http.StatusOK, out)
 	}
 }
 
-// readyLine is a line as the fulfilment process reads it: everything the order
-// stored, plus the process that decides it.
+// readyLine is a line as the fulfilment process reads it: what the order stored,
+// less the orderer's answers (see [Service.HandleNext]), plus the process that
+// decides it.
 //
 // The process is added here rather than stored on the line because it is resolved
 // now — see [Line.ApprovalProcess]. Embedding flattens the JSON, so the

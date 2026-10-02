@@ -4,12 +4,24 @@
   "components": [
     {
       "type": "text",
-      "text": "**Parkplatz zuteilen · Assign a parking space**\n\nEinen freien Platz zuteilen und die Person informieren. Das Kennzeichen hat die bestellende Person im Bestellformular angegeben; es steht in ihrer Bestellung. · Assign a free space and tell the person. The licence plate was entered on the order form and is in their order."
+      "text": "**Parkplatz zuteilen · Assign a parking space**\n\nEinen freien Platz für dieses Fahrzeug zuteilen und die Person informieren. · Assign a free space for this vehicle and tell the person."
     },
     {
       "key": "recipient",
       "type": "textfield",
       "label": "Empfänger · Recipient",
+      "disabled": true
+    },
+    {
+      "key": "kennzeichen",
+      "type": "textfield",
+      "label": "Kennzeichen · Licence plate",
+      "disabled": true
+    },
+    {
+      "key": "fahrzeug",
+      "type": "textfield",
+      "label": "Fahrzeug · Vehicle",
       "disabled": true
     },
     {
