@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Service catalogue",
+    "Security"
+  ],
+  "title": {
+    "en": "Publishing warns about unprotected order answers",
+    "de": "Veröffentlichen warnt vor ungeschützten Bestellangaben"
+  },
+  "summary": {
+    "en": "When you publish a catalogue, Atlas now warns if an answer from a product's order form, such as a phone number, would be stored in a process without being protected as personal data. The catalogue is still published. Mark fields that contain no personal data in the form editor and the warning goes away.",
+    "de": "Beim Veröffentlichen eines Katalogs warnt Atlas jetzt, wenn eine Antwort aus dem Bestellformular eines Produkts, etwa eine Telefonnummer, in einem Prozess ungeschützt gespeichert würde. Der Katalog wird trotzdem veröffentlicht. Felder ohne Personendaten markiert man im Formular-Editor, dann entfällt die Warnung."
+  }
+}

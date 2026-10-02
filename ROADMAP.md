@@ -1963,6 +1963,10 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   it personal, never in place of a variable the order sets; Atlas's own approval models and
   the orchestration no longer receive them
   ([ADR-0441](docs/adr/0441-a-position-s-answers-reach-its-processes.md)).
+- ✅ **Publishing warns about answers in the clear.** A publish names each order-form answer that
+  reaches a process without being declared personal data there, and still makes the release; a
+  field marked `personal = false` in the form is not warned about
+  ([ADR-draft-publishing-warns-about-answers-in-the-clear](docs/adr/draft-publishing-warns-about-answers-in-the-clear.md)).
 - ✅ **Maintaining a catalogue.** A grantable `productmanager` role creates catalogues, and
   each catalogue is the scope its members work in
   ([ADR-0315](docs/adr/0315-portal-roles-and-responsibilities.md)). The Console screen and

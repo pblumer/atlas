@@ -42,6 +42,8 @@ type DocumentResult struct {
 	Created  []string  `json:"created"`
 	Updated  []string  `json:"updated"`
 	Releases []Release `json:"releases,omitempty"`
+	// Warnings are what the releases leave exposed (AnswerWarnings), by product.
+	Warnings []DocumentProblem `json:"warnings,omitempty"`
 }
 
 // DocumentProblem is one reason a document is refused, naming what it is about.
@@ -154,6 +156,11 @@ func (s *Service) HandleImportDocument(w http.ResponseWriter, r *http.Request) {
 	case len(problems) > 0:
 		httpapi.JSON(w, http.StatusConflict, map[string]any{"problems": problems})
 	default:
+		for _, rel := range result.Releases {
+			for _, wn := range AnswerWarnings(rel.Items, s.Forms, s.Personal) {
+				result.Warnings = append(result.Warnings, DocumentProblem{Subject: "product:" + wn.Item, Problem: wn.Message})
+			}
+		}
 		httpapi.JSON(w, http.StatusOK, result)
 	}
 }

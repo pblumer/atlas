@@ -3533,6 +3533,9 @@
                 ],
                 "validate": {
                   "required": true
+                },
+                "properties": {
+                  "personal": "false"
                 }
               }
             ]

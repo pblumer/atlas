@@ -190,6 +190,9 @@ func runImport(args []string, out io.Writer) error {
 		fmt.Fprintf(out, "shop updated: %s\n", strings.Join(res.Updated, ", "))
 	}
 	fmt.Fprintf(out, "catalogues published: %d\n", len(res.Releases))
+	for _, w := range res.Warnings {
+		fmt.Fprintf(out, "  warning: %s: %s\n", w.Subject, w.Problem)
+	}
 	return nil
 }
 
@@ -444,6 +447,12 @@ type catalogueImportBody struct {
 	Created  []string          `json:"created"`
 	Updated  []string          `json:"updated"`
 	Releases []json.RawMessage `json:"releases"`
+	// Warnings are what the published catalogues leave exposed: answers that reach a
+	// process in the clear. The import went through; they say what to change.
+	Warnings []struct {
+		Subject string `json:"subject"`
+		Problem string `json:"problem"`
+	} `json:"warnings"`
 }
 
 // catalogueOff reports whether the server says its catalogue is switched off. An
