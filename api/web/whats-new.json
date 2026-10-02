@@ -2,6 +2,28 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "an-event-feed-token-can-be-confined-to-the-catalogues-it-is-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "An event-feed key for one catalogue",
+        "de": "Ein Ereignis-Feed-Schlüssel für einen Katalog"
+      },
+      "summary": {
+        "en": "A billing system or a CMDB that serves one catalogue can now be given a feed token that reads only what concerns that catalogue's products: how actions on them ended, and who was granted or lost them. Every event now names the catalogue that maintains its product, so a system reading the whole feed can sort it the same way.",
+        "de": "Eine Verrechnung oder eine CMDB, die einen Katalog betreut, erhält jetzt einen Feed-Token, der nur liest, was die Produkte dieses Katalogs betrifft: wie Aktionen daran endeten und wem sie gewährt oder entzogen wurden. Jedes Ereignis nennt jetzt den Katalog, der sein Produkt pflegt, sodass ein System, das den ganzen Feed liest, ihn gleich aufteilen kann."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Security",
+        "API"
+      ]
+    },
+    {
       "id": "a-new-account-request-announces-itself-so-an-installation-ca",
       "version": "Unreleased",
       "date": null,
@@ -293,28 +315,6 @@
         "Handbook",
         "Operations",
         "Security"
-      ]
-    },
-    {
-      "id": "the-handbook-has-a-guiding-case-that-runs-one-process-throug",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "One case through all six modules — the course's guiding process",
-        "de": "Ein Fall durch alle sechs Module – der Leitfall des Lehrgangs"
-      },
-      "summary": {
-        "en": "The reference chapters each teach one thing; a course needs one case they all apply to. `examples/lehrgang/` — an employee onboarding — is that case, and a new capstone chapter walks it module by module: modelling, testing, delivering, evolving, writing your own worker, and monitoring, each with a starting point and a scenario. A DMN maps the new hire's role to laptop, software, access and AD groups; one step is deliberately not a mockup but a job over the Job API, so it parks for your own worker and, on repeated failure, raises an incident. Install it from its card in the Beispiele chapter — every call was run against a live instance first.",
-        "de": "Die Referenzkapitel lehren je eine Sache; ein Lehrgang braucht einen Fall, auf den alle zutreffen. `examples/lehrgang/` – ein Mitarbeitereintritt – ist dieser Fall, und ein neues Abschlusskapitel geht ihn Modul für Modul durch: Modellieren, Testen, Ausliefern, Weiterentwickeln, ein eigener Worker und Überwachen, je mit Startpunkt und Szenario. Eine DMN bildet die Rolle auf Laptop, Software, Zugriffe und AD-Gruppen ab; ein Schritt ist bewusst kein Mockup, sondern ein Job über die Job-API – er parkt für den eigenen Worker und wirft bei wiederholtem Fehlschlag einen Incident. Installierbar über die Karte im Kapitel «Beispiele» – jeder Aufruf wurde zuerst an einer laufenden Instanz ausgeführt."
-      },
-      "link": {
-        "label": "examples/lehrgang/",
-        "url": "https://github.com/pblumer/atlas/tree/main/examples/lehrgang"
-      },
-      "tags": [
-        "Handbook",
-        "Examples"
       ]
     }
   ]

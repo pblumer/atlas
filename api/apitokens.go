@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -44,7 +45,8 @@ func (s *Server) loadAPITokens() error {
 
 // handleCreateAPIToken mints a token. Body:
 // {"name": "...", "scope": "full|worker|metrics|status|directory|inventory|landscape|events",
-// "expiresInDays": 90}.
+// "reach": ["..."], "expiresInDays": 90}. The reach is optional except for landscape,
+// and names projects — or, for an events token, catalogues.
 //
 // The name is required and the scope is required, both because the alternative is
 // a credential nobody can identify later and one whose reach nobody chose. An
@@ -79,7 +81,7 @@ func (s *Server) handleCreateAPIToken(w http.ResponseWriter, r *http.Request) {
 	}
 	reach, reachErr, err := s.reachFor(r, scope, payload.Reach)
 	if err != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "read projects: "+err.Error())
+		httpapi.Error(w, http.StatusInternalServerError, "check reach: "+err.Error())
 		return
 	}
 	if reachErr != "" {
@@ -192,10 +194,12 @@ func (s *Server) handleRevokeAPIToken(w http.ResponseWriter, r *http.Request) {
 }
 
 // reachFor validates a minted credential's reach and returns the value to store, or a
-// refusal to send back. A projects store it cannot read comes back as an error rather
-// than a refusal: that is the server's fault, not something wrong with the request.
+// refusal to send back. A store it cannot read comes back as an error rather than a
+// refusal: that is the server's fault, not something wrong with the request.
 //
-// Two rules, and both are about the door rather than the read (ADR-0410).
+// What a reach names depends on the scope. For an events token it is catalogues
+// (catalogReach); for every other scope it is projects, and two rules apply, both about
+// the door rather than the read (ADR-0410).
 //
 // **A scope whose answer is wide must state a reach.** The landscape read serves a whole
 // derived picture, and a machine principal holding it with no reach would be viewer on
@@ -214,10 +218,8 @@ func (s *Server) reachFor(r *http.Request, scope string, asked []string) (reach 
 			reach = append(reach, id)
 		}
 	}
-	if len(reach) > 0 && scope == apiScopeEvents {
-		// The feed is one stream for the installation; a reach the route never reads
-		// would be a narrowing the holder believes in and nothing enforces.
-		return nil, "an " + apiScopeEvents + " token reads the whole feed; reach does not narrow it", nil
+	if scope == apiScopeEvents {
+		return s.catalogReach(r, reach)
 	}
 	if len(reach) == 0 {
 		if scope == apiScopeLandscape {
@@ -232,7 +234,7 @@ func (s *Server) reachFor(r *http.Request, scope string, asked []string) (reach 
 	)
 	s.do(func() { projs, loadErr = s.projectsByID() })
 	if loadErr != nil {
-		return nil, "", loadErr
+		return nil, "", fmt.Errorf("read projects: %w", loadErr)
 	}
 	for _, id := range reach {
 		p, ok := projs[id]
@@ -242,6 +244,47 @@ func (s *Server) reachFor(r *http.Request, scope string, asked []string) (reach 
 		if !s.canViewArtifact(r, p.ID, p.OwnerID, projs) {
 			return nil, "reach names a project you cannot see: " + id, nil
 		}
+	}
+	return reach, "", nil
+}
+
+// catalogReach validates an events token's reach, which names catalogues: the feed
+// answers such a token only the rows about products those catalogues maintain
+// (eventfeed.go). Empty is allowed and means the whole feed, which is what an events
+// token minted before reach meant anything still reads.
+//
+// The minter rule is the same as for projects, with the catalogue's own notion of who
+// may see behind it: a minter names only catalogues they maintain (catalog.MayMaintain).
+// Being the audience a catalogue is offered to does not count, because the feed of a
+// catalogue is a map of who holds its products, which is the estate behind it rather
+// than the shop in front.
+func (s *Server) catalogReach(r *http.Request, reach []string) ([]string, string, error) {
+	if len(reach) == 0 {
+		return nil, "", nil
+	}
+	p := httpapi.PrincipalFrom(r.Context())
+	var (
+		refusal string
+		loadErr error
+	)
+	s.do(func() {
+		for _, id := range reach {
+			c, found, err := s.catalogStore.Catalog(id)
+			switch {
+			case err != nil:
+				loadErr = fmt.Errorf("read catalogues: %w", err)
+				return
+			case !found:
+				refusal = "reach names no catalogue this server has: " + id
+				return
+			case !s.catalogs.MayMaintain(c, p):
+				refusal = "reach names a catalogue you do not maintain: " + id
+				return
+			}
+		}
+	})
+	if loadErr != nil || refusal != "" {
+		return nil, refusal, loadErr
 	}
 	return reach, "", nil
 }

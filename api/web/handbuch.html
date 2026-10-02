@@ -8535,13 +8535,17 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
               wie eine CMDB oder die Verrechnung stellt ein Administrator einen API-Token mit dem Scope
               <code>events</code> aus; er trägt genau diese Rolle und erreicht genau diese eine Route:
               <code>POST /api/v1/api-tokens</code> mit <code>{"name":"cmdb","scope":"events","expiresInDays":365}</code>.
+              Mit <code>"reach":["&lt;Katalog-ID&gt;"]</code> liest der Token nur, was die Produkte betrifft, die diese
+              Kataloge pflegen; jedes Ereignis nennt diesen Katalog als <code>homeCatalog</code>.
               Bewusst kein Teil von <code>operator</code>: Der Feed zeigt, wer was hält, über alle Kataloge.</td>
             <td data-l="en">Reading the event feed (<code>GET /api/v1/events</code>): how each action asked of a held
               position ended and every right granted and revoked – and nothing else. For a system beyond Atlas such as
               a CMDB or billing, an administrator mints an API token with the <code>events</code> scope; it carries
               exactly this role and reaches exactly that one route: <code>POST /api/v1/api-tokens</code> with
-              <code>{"name":"cmdb","scope":"events","expiresInDays":365}</code>. Deliberately not part of
-              <code>operator</code>: the feed shows who holds what, across every catalogue.</td></tr>
+              <code>{"name":"cmdb","scope":"events","expiresInDays":365}</code>. With
+              <code>"reach":["&lt;catalogue id&gt;"]</code> the token reads only what concerns the products those
+              catalogues maintain; every event names that catalogue as <code>homeCatalog</code>. Deliberately not part
+              of <code>operator</code>: the feed shows who holds what, across every catalogue.</td></tr>
         </tbody>
       </table>
       <ul>

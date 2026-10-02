@@ -63,12 +63,20 @@ once; a consumer deduplicates by `id`.
 | `subject` | `orders/{orderId}/positions/{position}`; `principals/{id}/items/{itemId}` for a right no order produced |
 | `time` | when Atlas recorded the fact, RFC 3339 in UTC |
 | `datacontenttype` | `application/json` |
-| `data` | for an action: `orderId`, `position`, `commandId`, `action`, `effect`, `outcome`, `source`, `principal`, `itemId`, `at`, and when set `variantId`, `instanceKey`, `result`; for a grant: `principal`, `itemId`, `orderId`, `since`, `origin`, and when set `variantId`, `until`; for a revocation: `principal`, `itemId`, `orderId`, `since`, `endedAt`, `reason`, `endedBy`, and when set `variantId` |
+| `data` | for an action: `orderId`, `position`, `commandId`, `action`, `effect`, `outcome`, `source`, `principal`, `itemId`, `at`, and when set `variantId`, `instanceKey`, `result`; for a grant: `principal`, `itemId`, `orderId`, `since`, `origin`, and when set `variantId`, `until`; for a revocation: `principal`, `itemId`, `orderId`, `since`, `endedAt`, `reason`, `endedBy`, and when set `variantId`; every type, when its product is in the catalogue: `homeCatalog` |
 
 People are named by id only. A page answers `{events, next, more}`: `next` is the cursor to
 send as `after`. Rows are kept for the feed's retention (`--event-feed-ttl`, 30 days); a
 cursor older than the oldest row still held is answered **410** with `oldest`, the cursor
 to resume from. `dataschema` is not set in version 1: the shapes above are the schema.
+
+`homeCatalog` is the catalogue that maintains the event's product, read when the page is
+rather than frozen in the fact: an event re-read after its product moved to another home
+names the new one under the same `id`. An `events` token minted with a `reach` of
+catalogues is answered only the events whose `homeCatalog` it names; the cursor moves
+past the others, and a page reads at most 10 000 rows, so a narrowed page can be short,
+or empty with `more` set — keep asking while `more` is true
+([ADR-draft-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product](adr/draft-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md)).
 
 ## 2. Model-layer features are labelled
 
