@@ -356,7 +356,7 @@ type Server struct {
 	// formgeneration.go are its whole reach into this server.
 	formGen *formgen.Service
 	// releaseNotes serves the Console's release notes, read from the CHANGELOG this
-	// binary embeds (ADR-draft-release-notes-from-the-changelog). Like formGen it
+	// binary embeds (ADR-0444). Like formGen it
 	// owns no state and holds no run loop.
 	releaseNotes *releasenotes.Service
 	// playground serves the Modeler's Playground area, and playgroundSessions

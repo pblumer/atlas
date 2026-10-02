@@ -3,7 +3,7 @@ package atlas
 import _ "embed"
 
 // Changelog is CHANGELOG.md as this binary was built from it. The Console's release
-// notes are read from it while the server runs (ADR-draft-release-notes-from-the-changelog),
+// notes are read from it while the server runs (ADR-0444),
 // so a changelog entry reaches the Console with nothing generated, committed or
 // regenerated in between.
 //

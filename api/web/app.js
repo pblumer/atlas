@@ -1319,7 +1319,7 @@ function setChrome(appId, route) {
 // ---------- Release notes ----------
 // The Console landing page shows the release notes: CHANGELOG.md as this binary was
 // built from it, read by the server at /api/v1/release-notes
-// (ADR-draft-release-notes-from-the-changelog). They replace the curated What's New
+// (ADR-0444). They replace the curated What's New
 // feed, whose per-entry translation and regeneration cost more on every change than
 // the feed gave back. The notes are English, as the CHANGELOG is; the section's own
 // labels follow the landing page's language.

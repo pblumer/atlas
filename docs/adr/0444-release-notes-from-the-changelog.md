@@ -1,4 +1,4 @@
-# ADR-DRAFT: The Console shows the CHANGELOG as release notes, read while the server runs
+# ADR-0444: The Console shows the CHANGELOG as release notes, read while the server runs
 
 - **Status:** Accepted
 - **Implementation:** Landed

@@ -8,7 +8,7 @@ import (
 
 // The Console's release notes through the whole stack: the server answers them from
 // the CHANGELOG the binary embeds, and only to somebody signed in
-// (ADR-draft-release-notes-from-the-changelog).
+// (ADR-0444).
 func TestReleaseNotesAreServedFromTheEmbeddedChangelog(t *testing.T) {
 	ts, _ := newAuthServer(t, "admin", "s3cret-pass")
 

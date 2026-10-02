@@ -1,7 +1,7 @@
 // Package releasenotes serves the release notes the Console's landing page shows.
 //
 // They are CHANGELOG.md as the binary was built from it, read while the server runs
-// (ADR-draft-release-notes-from-the-changelog). That replaces the What's New feed,
+// (ADR-0444). That replaces the What's New feed,
 // which was generated from the same file at authoring time, committed, curated per
 // entry in two languages and checked for staleness in CI — every one of which was a
 // step somebody had to remember on every change, and a merge conflict on every

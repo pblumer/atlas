@@ -1,6 +1,6 @@
 # ADR-0375: The feed generator is Go, so the Go checks stop needing Node
 
-- **Status:** Accepted (amended 2026-10-02: the feed is retired, and its open question answered, by ADR-draft-release-notes-from-the-changelog)
+- **Status:** Accepted (amended 2026-10-02: the feed is retired, and its open question answered, by ADR-0444)
 - **Implementation:** Landed
 - **Date:** 2026-09-16
 - **Open question:** Whether the feed should stop being a committed file at all —

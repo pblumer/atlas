@@ -392,7 +392,7 @@ _Changed_ / _Removed_ for each version.
   tutorials and "Try it" links are gone, and so is everything that kept the feed in step
   with the changelog — `make whats-new`, `make whats-new-resolve`, the committed
   `api/web/whats-new.json` and the workflow that repaired it on main. A changelog entry now
-  reaches the Console with nothing else to do. ADR-draft-release-notes-from-the-changelog.
+  reaches the Console with nothing else to do. ADR-0444.
 
 - **Only an administrator deploys a model that listens to somebody's data.** A signal start,
   catch, boundary or event subprocess on an event atlas emits whose payload carries personal

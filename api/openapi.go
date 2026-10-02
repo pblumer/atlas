@@ -162,7 +162,7 @@ func (s *Server) apiRoutes() []apiRoute {
 				"name": tString(), "environment": tString(), "labels": tObject(),
 			})), resp: jsonBody("Node descriptor", tObject())}},
 		// The release notes the Console's landing page shows: CHANGELOG.md as this
-		// binary was built from it (ADR-draft-release-notes-from-the-changelog). Behind
+		// binary was built from it (ADR-0444). Behind
 		// the login like the page that reads them; /api/v1/info already tells a visitor
 		// which version this is, and the notes are the Console's, not the login screen's.
 		{"GET", "/api/v1/release-notes", s.releaseNotes.HandleList, apiOp{
