@@ -313,7 +313,7 @@ func (s *Service) publishProblems(plan importPlan) []DocumentProblem {
 		return out
 	}
 	for i, rel := range rels {
-		for _, pr := range LifecycleProblems(rel.Items, s.EntryPoints) {
+		for _, pr := range append(LifecycleProblems(rel.Items, s.EntryPoints), OrderFormProblems(rel.Items, s.Forms)...) {
 			out = append(out, DocumentProblem{Subject: "catalog:" + plan.order[i], Problem: pr.String()})
 		}
 	}

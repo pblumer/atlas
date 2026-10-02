@@ -2,6 +2,29 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "what-the-orderer-answered-reaches-the-approver-and-the-proce",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Approvers and processes see what was ordered",
+        "de": "Genehmigende und Prozesse sehen, was bestellt wurde"
+      },
+      "summary": {
+        "en": "The answers from a product's order form, such as a licence plate, now appear for the approver in the inbox and reach the product's own processes as separate variables. A process can mark an answer as personal data, so it is stored encrypted and can be erased with the person. Atlas's built-in approval processes no longer keep these answers in their history.",
+        "de": "Die Antworten aus dem Bestellformular eines Produkts, etwa ein Kennzeichen, erscheinen jetzt bei der genehmigenden Person in der Inbox und erreichen die Prozesse des Produkts als eigene Variablen. Ein Prozess kann eine Antwort als Personendaten kennzeichnen; sie wird dann verschlüsselt gespeichert und lässt sich mit der Person löschen. Atlas' eingebaute Genehmigungsprozesse bewahren diese Antworten nicht mehr in ihrem Verlauf auf."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Shop",
+        "Service catalogue",
+        "Security"
+      ]
+    },
+    {
       "id": "a-package-installs-from-the-command-line",
       "version": "Unreleased",
       "date": null,
@@ -244,28 +267,6 @@
       "tags": [
         "Modeler",
         "Service catalogue"
-      ]
-    },
-    {
-      "id": "a-process-can-ask-somebody-s-held-service-for-an-action-in-t",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Processes can ask a held service for an action",
-        "de": "Prozesse können eine bezogene Leistung um eine Aktion bitten"
-      },
-      "summary": {
-        "en": "A Shop task can now issue a command: an HR leaver process returns a person's mailbox, a maintenance process resets a password — through the same checks the shop applies to a person. Because no person stands behind a process, each product lists the applications it trusts with this, and only actions meant for operators or systems can be commanded. The list is read fresh every time, so removing an application stops it at once for everything already held.",
-        "de": "Eine Shop-Aufgabe kann jetzt einen Befehl erteilen: Ein Austrittsprozess gibt die Mailbox einer Person zurück, ein Wartungsprozess setzt ein Passwort zurück – mit denselben Prüfungen, die der Shop bei einer Person anwendet. Weil hinter einem Prozess keine Person steht, führt jedes Produkt die Applikationen auf, denen es das erlaubt, und nur Aktionen für Betrieb oder Systeme lassen sich befehlen. Die Liste wird jedes Mal neu gelesen; wird eine Applikation entfernt, ist sie sofort für alles bereits Bezogene gesperrt."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Service catalogue",
-        "Modeler"
       ]
     }
   ]

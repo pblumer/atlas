@@ -1833,6 +1833,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.catalogs.Approvers = approverLookup{s: s}
 	s.catalogs.Processes = processLookup{s: s}
 	s.catalogs.EntryPoints = processLookup{s: s}
+	s.catalogs.Forms = processLookup{s: s}
 	s.catalogs.Remainders = remainderLookup{s: s}
 	s.orders.Limits = s.budgets()
 	// An outcome that comes without a right changing hands — a provision that

@@ -222,12 +222,17 @@ th{color:var(--muted);font-weight:600}
     <tr><td><code>approval</code></td><td data-l="de">Wer genehmigt – siehe <a href="#genehmigung">Genehmigungen</a>.</td><td data-l="en">Who approves – see <a href="#genehmigung">Approvals</a>.</td></tr>
     <tr><td data-l="de">Prozessbindung</td><td data-l="en">Process binding</td><td data-l="de">Welche Prozesse das Produkt bereitstellen und entziehen – siehe <a href="#prozesse">Prozesse</a>.</td><td data-l="en">Which processes provide and remove the product – see <a href="#prozesse">Processes</a>.</td></tr>
   </table>
-  <p class="note" data-l="de">Die Antworten des Bestellformulars sehen heute die bestellende und die empfangende Person.
-    Ein Bereitstellungsprozess erhält sie nicht als Variable; im Beispiel nennt die Aufgabe deshalb nur, wo das
-    Kennzeichen steht.</p>
-  <p class="note" data-l="en">The answers of the order form are visible today to the person ordering and the recipient.
-    A provisioning process does not receive them as variables; in the example the task therefore only says where
-    the licence plate is.</p>
+  <p class="note" data-l="de">Die Antworten des Bestellformulars sehen die bestellende und die empfangende Person, die
+    genehmigende Person in ihrer Inbox (mit den Beschriftungen des Formulars) und die Prozesse, die das Produkt
+    bindet: Jedes Feld kommt als eigene Variable unter seinem Schlüssel an, im Beispiel <code>kennzeichen</code> und
+    <code>fahrzeug</code>. Atlas' eigene Genehmigungsprozesse erhalten sie nicht. Ein Feld darf nicht wie eine der
+    Variablen heissen, die die Bestellung selbst setzt (etwa <code>recipient</code>); das Veröffentlichen lehnt ein
+    solches Formular ab.</p>
+  <p class="note" data-l="en">The answers of the order form are seen by the person ordering and the recipient, by the
+    approver in their inbox (with the form's labels) and by the processes the product binds: each field arrives as a
+    variable of its own under its key, in the example <code>kennzeichen</code> and <code>fahrzeug</code>. Atlas's own
+    approval processes do not receive them. A field may not be named like one of the variables the order sets itself
+    (such as <code>recipient</code>); publishing refuses such a form.</p>
 </section>
 
 <section id="genehmigung">
@@ -281,14 +286,23 @@ th{color:var(--muted);font-weight:600}
   <h3 data-l="de">Was jeder Produktprozess bekommt</h3><h3 data-l="en">What every product process receives</h3>
   <p data-l="de">Die Variablen <code>orderId</code>, <code>itemId</code>, <code>positionId</code>, <code>recipient</code>,
     <code>orderer</code>, <code>variantId</code>, <code>approvalRef</code>, <code>atlasApiBase</code> und
-    <code>portalBaseUrl</code>. Gemeldet wird über <code>POST /api/v1/orders/{orderId}/lines/{positionId}</code> mit
-    einem REST-Task; er nennt nur die Verbindung <code>atlas</code>. Den Wert – ein API-Token mit der Rolle
+    <code>portalBaseUrl</code>, dazu jede Antwort des Bestellformulars als eigene Variable. Ist eine Antwort eine
+    Personenangabe – ein Kennzeichen, eine Telefonnummer –, deklariert der Prozess sie mit
+    <code>atlas:personal="kennzeichen"</code> und <code>atlas:dataSubject="recipient"</code>: Dann wird sie
+    verschlüsselt unter dem Schlüssel der empfangenden Person gespeichert und lässt sich mit dieser Person löschen;
+    Bedingungen und Zuordnungen des Modells dürfen sie dann nicht lesen. Gemeldet wird über
+    <code>POST /api/v1/orders/{orderId}/lines/{positionId}</code> mit einem REST-Task; er nennt nur die Verbindung
+    <code>atlas</code>. Den Wert – ein API-Token mit der Rolle
     <code>operator</code> – legt die Installation im Vault unter <code>atlas</code> oder in
     <code>ATLAS_CONNECTOR_ATLAS_TOKEN</code> ab.</p>
   <p data-l="en">The variables <code>orderId</code>, <code>itemId</code>, <code>positionId</code>, <code>recipient</code>,
     <code>orderer</code>, <code>variantId</code>, <code>approvalRef</code>, <code>atlasApiBase</code> and
-    <code>portalBaseUrl</code>. Reporting goes through <code>POST /api/v1/orders/{orderId}/lines/{positionId}</code>
-    with a REST task; it names only the connection <code>atlas</code>. The value – an API token with the
+    <code>portalBaseUrl</code>, plus every answer of the order form as a variable of its own. Where an answer is
+    personal – a licence plate, a phone number – the process declares it with <code>atlas:personal="kennzeichen"</code>
+    and <code>atlas:dataSubject="recipient"</code>: it is then stored sealed under the recipient's key and can be
+    erased with that person; the model's conditions and mappings may not read it then. Reporting goes through
+    <code>POST /api/v1/orders/{orderId}/lines/{positionId}</code> with a REST task; it names only the connection
+    <code>atlas</code>. The value – an API token with the
     <code>operator</code> role – is stored by the installation in the vault under <code>atlas</code> or in
     <code>ATLAS_CONNECTOR_ATLAS_TOKEN</code>.</p>
 </section>
