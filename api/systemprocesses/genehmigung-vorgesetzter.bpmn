@@ -79,7 +79,7 @@ Das Formular zeigt, worum es geht, und verlangt bei einer Ablehnung eine Begrün
         </zeebe:ioMapping>
       </bpmn:extensionElements>
       <bpmn:incoming>F_Gw_Provisionieren</bpmn:incoming>
-      <bpmn:outgoing>F_Prov_Ende</bpmn:outgoing>
+      <bpmn:outgoing>F_Prov_Join</bpmn:outgoing>
     </bpmn:serviceTask>
 
     <bpmn:serviceTask id="Ablehnen" name="Ablehnung melden">
@@ -98,12 +98,18 @@ Der Genehmiger ist der Vorgesetzte, den der erste Schritt gelesen hat: die Aufga
         </zeebe:ioMapping>
       </bpmn:extensionElements>
       <bpmn:incoming>F_Gw_Ablehnen</bpmn:incoming>
-      <bpmn:outgoing>F_Abl_Ende</bpmn:outgoing>
+      <bpmn:outgoing>F_Abl_Join</bpmn:outgoing>
     </bpmn:serviceTask>
 
+    <bpmn:exclusiveGateway id="Join">
+      <bpmn:documentation>Führt Zustimmung und Ablehnung wieder zusammen, bevor die Entscheidung endet. Exklusiv und nicht parallel: von den beiden Wegen kommt immer genau einer an, und ein paralleler Zusammenführer wartete auf den anderen, der nie kommt.</bpmn:documentation>
+      <bpmn:incoming>F_Prov_Join</bpmn:incoming>
+      <bpmn:incoming>F_Abl_Join</bpmn:incoming>
+      <bpmn:outgoing>F_Join_Ende</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
     <bpmn:endEvent id="Ende" name="Entschieden">
-      <bpmn:incoming>F_Prov_Ende</bpmn:incoming>
-      <bpmn:incoming>F_Abl_Ende</bpmn:incoming>
+      <bpmn:incoming>F_Join_Ende</bpmn:incoming>
     </bpmn:endEvent>
 
     <bpmn:sequenceFlow id="F_Start_Ad" sourceRef="Start" targetRef="Vorgesetzter" />
@@ -232,8 +238,9 @@ Ist die Antwort „stalled&#34;, bleibt die Genehmigung, wo sie ist, und der Ums
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=genehmigt = true</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="F_Gw_Ablehnen" name="nein" sourceRef="Gw" targetRef="Ablehnen" />
-    <bpmn:sequenceFlow id="F_Prov_Ende" sourceRef="Provisionieren" targetRef="Ende" />
-    <bpmn:sequenceFlow id="F_Abl_Ende" sourceRef="Ablehnen" targetRef="Ende" />
+    <bpmn:sequenceFlow id="F_Prov_Join" sourceRef="Provisionieren" targetRef="Join" />
+    <bpmn:sequenceFlow id="F_Abl_Join" sourceRef="Ablehnen" targetRef="Join" />
+    <bpmn:sequenceFlow id="F_Join_Ende" sourceRef="Join" targetRef="Ende" />
   </bpmn:process>
 
   <bpmndi:BPMNDiagram id="Diagram">
@@ -243,123 +250,137 @@ Ist die Antwort „stalled&#34;, bleibt die Genehmigung, wo sie ist, und der Ums
         <bpmndi:BPMNLabel><dc:Bounds x="128" y="225" width="84" height="27" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_Ad" bpmnElement="Vorgesetzter">
-        <dc:Bounds x="250" y="160" width="100" height="80" />
+        <dc:Bounds x="240" y="160" width="100" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="S_Task" bpmnElement="Genehmigen">
-        <dc:Bounds x="400" y="160" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="S_Gw" bpmnElement="Gw" isMarkerVisible="true">
-        <dc:Bounds x="550" y="175" width="50" height="50" />
-        <bpmndi:BPMNLabel><dc:Bounds x="540" y="132" width="70" height="14" /></bpmndi:BPMNLabel>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="S_Prov" bpmnElement="Provisionieren">
-        <dc:Bounds x="650" y="160" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="S_Abl" bpmnElement="Ablehnen">
-        <dc:Bounds x="500" y="300" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="S_Ende" bpmnElement="Ende">
-        <dc:Bounds x="800" y="182" width="36" height="36" />
-        <bpmndi:BPMNLabel><dc:Bounds x="790" y="225" width="60" height="14" /></bpmndi:BPMNLabel>
-      </bpmndi:BPMNShape>
-
       <bpmndi:BPMNShape id="S_Split" bpmnElement="Split">
-        <dc:Bounds x="215" y="175" width="50" height="50" />
+        <dc:Bounds x="400" y="175" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="356" y="146" width="63" height="27" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_Mail" bpmnElement="Benachrichtigen">
-        <dc:Bounds x="300" y="40" width="100" height="80" />
+        <dc:Bounds x="500" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Task" bpmnElement="Genehmigen">
+        <dc:Bounds x="500" y="320" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Gw" bpmnElement="Gw" isMarkerVisible="true">
+        <dc:Bounds x="660" y="335" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="717" y="353" width="60" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Prov" bpmnElement="Provisionieren">
+        <dc:Bounds x="790" y="240" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Abl" bpmnElement="Ablehnen">
+        <dc:Bounds x="790" y="400" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Join" bpmnElement="Join" isMarkerVisible="true">
+        <dc:Bounds x="970" y="335" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Ende" bpmnElement="Ende">
+        <dc:Bounds x="1080" y="342" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1067" y="321" width="62" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_EndeMail" bpmnElement="EndeMail">
-        <dc:Bounds x="450" y="62" width="36" height="36" />
-        <bpmndi:BPMNLabel><dc:Bounds x="436" y="105" width="70" height="14" /></bpmndi:BPMNLabel>
+        <dc:Bounds x="1080" y="102" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1063" y="145" width="70" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_Erinnerung" bpmnElement="Erinnerung">
-        <dc:Bounds x="282" y="222" width="36" height="36" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="S_Erinnern" bpmnElement="Erinnern">
-        <dc:Bounds x="250" y="430" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="S_EndeErinnerung" bpmnElement="EndeErinnerung">
-        <dc:Bounds x="400" y="452" width="36" height="36" />
+        <dc:Bounds x="507" y="382" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="440" y="422" width="78" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_Frist" bpmnElement="Frist">
-        <dc:Bounds x="322" y="222" width="36" height="36" />
+        <dc:Bounds x="562" y="382" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="587" y="422" width="74" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Erinnern" bpmnElement="Erinnern">
+        <dc:Bounds x="660" y="640" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_EndeErinnerung" bpmnElement="EndeErinnerung">
+        <dc:Bounds x="1080" y="662" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1078" y="705" width="40" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_FristVorgesetzter" bpmnElement="FristVorgesetzter">
+        <dc:Bounds x="660" y="520" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_Eskalieren" bpmnElement="Eskalieren">
-        <dc:Bounds x="250" y="560" width="100" height="80" />
+        <dc:Bounds x="810" y="520" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_EndeFrist" bpmnElement="EndeFrist">
-        <dc:Bounds x="400" y="582" width="36" height="36" />
+        <dc:Bounds x="1080" y="542" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="1062" y="585" width="72" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="E_Erinnerung_Mail" bpmnElement="F_Erinnerung_Mail">
-        <di:waypoint x="300" y="258" />
-        <di:waypoint x="300" y="430" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="E_Erinnerung_Ende" bpmnElement="F_Erinnerung_Ende">
-        <di:waypoint x="350" y="470" />
-        <di:waypoint x="400" y="470" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="E_Frist_Ende" bpmnElement="F_Frist_Ende">
-        <di:waypoint x="350" y="600" />
-        <di:waypoint x="400" y="600" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="S_FristVorgesetzter" bpmnElement="FristVorgesetzter">
-        <dc:Bounds x="480" y="430" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="E_Frist_Ad" bpmnElement="F_Frist_Ad">
-        <di:waypoint x="340" y="258" />
-        <di:waypoint x="340" y="400" />
-        <di:waypoint x="530" y="400" />
-        <di:waypoint x="530" y="430" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="E_Frist_Eskalieren" bpmnElement="F_Frist_Eskalieren">
-        <di:waypoint x="530" y="510" />
-        <di:waypoint x="530" y="600" />
-        <di:waypoint x="350" y="600" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="E_Split_Task" bpmnElement="F_Split_Task">
-        <di:waypoint x="265" y="200" />
-        <di:waypoint x="300" y="200" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="E_Split_Mail" bpmnElement="F_Split_Mail">
-        <di:waypoint x="240" y="175" />
-        <di:waypoint x="240" y="80" />
-        <di:waypoint x="300" y="80" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="E_Mail_Ende" bpmnElement="F_Mail_Ende">
-        <di:waypoint x="400" y="80" />
-        <di:waypoint x="450" y="80" />
-      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="E_Start" bpmnElement="F_Start_Ad">
         <di:waypoint x="188" y="200" />
-        <di:waypoint x="250" y="200" />
+        <di:waypoint x="240" y="200" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="E_Ad_Task" bpmnElement="F_Start_Split">
-        <di:waypoint x="350" y="200" />
+      <bpmndi:BPMNEdge id="E_Ad_Split" bpmnElement="F_Start_Split">
+        <di:waypoint x="340" y="200" />
         <di:waypoint x="400" y="200" />
       </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Split_Mail" bpmnElement="F_Split_Mail">
+        <di:waypoint x="425" y="175" />
+        <di:waypoint x="425" y="120" />
+        <di:waypoint x="500" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Split_Task" bpmnElement="F_Split_Task">
+        <di:waypoint x="425" y="225" />
+        <di:waypoint x="425" y="360" />
+        <di:waypoint x="500" y="360" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Mail_Ende" bpmnElement="F_Mail_Ende">
+        <di:waypoint x="600" y="120" />
+        <di:waypoint x="1080" y="120" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="E_Task_Gw" bpmnElement="F_Task_Gw">
-        <di:waypoint x="500" y="200" />
-        <di:waypoint x="550" y="200" />
+        <di:waypoint x="600" y="360" />
+        <di:waypoint x="660" y="360" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="E_Gw_Prov" bpmnElement="F_Gw_Provisionieren">
-        <di:waypoint x="600" y="200" />
-        <di:waypoint x="650" y="200" />
-        <bpmndi:BPMNLabel><dc:Bounds x="618" y="182" width="14" height="14" /></bpmndi:BPMNLabel>
+        <di:waypoint x="685" y="335" />
+        <di:waypoint x="685" y="280" />
+        <di:waypoint x="790" y="280" />
+        <bpmndi:BPMNLabel><dc:Bounds x="667" y="300" width="14" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="E_Gw_Abl" bpmnElement="F_Gw_Ablehnen">
-        <di:waypoint x="575" y="225" />
-        <di:waypoint x="575" y="300" />
-        <bpmndi:BPMNLabel><dc:Bounds x="581" y="250" width="24" height="14" /></bpmndi:BPMNLabel>
+        <di:waypoint x="685" y="385" />
+        <di:waypoint x="685" y="440" />
+        <di:waypoint x="790" y="440" />
+        <bpmndi:BPMNLabel><dc:Bounds x="691" y="405" width="24" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="E_Prov_Ende" bpmnElement="F_Prov_Ende">
-        <di:waypoint x="750" y="200" />
-        <di:waypoint x="800" y="200" />
+      <bpmndi:BPMNEdge id="E_Prov_Join" bpmnElement="F_Prov_Join">
+        <di:waypoint x="890" y="280" />
+        <di:waypoint x="995" y="280" />
+        <di:waypoint x="995" y="335" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="E_Abl_Ende" bpmnElement="F_Abl_Ende">
-        <di:waypoint x="600" y="340" />
-        <di:waypoint x="818" y="340" />
-        <di:waypoint x="818" y="218" />
+      <bpmndi:BPMNEdge id="E_Abl_Join" bpmnElement="F_Abl_Join">
+        <di:waypoint x="890" y="440" />
+        <di:waypoint x="995" y="440" />
+        <di:waypoint x="995" y="385" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Join_Ende" bpmnElement="F_Join_Ende">
+        <di:waypoint x="1020" y="360" />
+        <di:waypoint x="1080" y="360" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Erinnerung_Mail" bpmnElement="F_Erinnerung_Mail">
+        <di:waypoint x="525" y="418" />
+        <di:waypoint x="525" y="680" />
+        <di:waypoint x="660" y="680" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Erinnerung_Ende" bpmnElement="F_Erinnerung_Ende">
+        <di:waypoint x="760" y="680" />
+        <di:waypoint x="1080" y="680" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Frist_Ad" bpmnElement="F_Frist_Ad">
+        <di:waypoint x="580" y="418" />
+        <di:waypoint x="580" y="560" />
+        <di:waypoint x="660" y="560" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Frist_Eskalieren" bpmnElement="F_Frist_Eskalieren">
+        <di:waypoint x="760" y="560" />
+        <di:waypoint x="810" y="560" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Frist_Ende" bpmnElement="F_Frist_Ende">
+        <di:waypoint x="910" y="560" />
+        <di:waypoint x="1080" y="560" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
