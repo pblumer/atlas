@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "an-approval-announces-itself-before-it-waits",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "An approval announces itself before it waits",
+        "de": "Eine Genehmigung meldet sich, bevor sie wartet"
+      },
+      "summary": {
+        "en": "Each of the shop's three built-in approvals — a fixed person, a role, the orderer's line manager — now sends the signal atlas.approval.requested before its approval task waits. A model of your own can listen to it with a signal start, for instance to tell the approver in a chat, without changing the approval. The signal says which rule applies, who decides, and which order, position and product are waiting, and points back at the approval. It carries nothing decided and none of the order form's answers, so any modeler may build such a listener. The Events page in the Console and the Modeler's signal picker list it.",
+        "de": "Jede der drei eingebauten Genehmigungen des Shops – eine feste Person, eine Rolle, die vorgesetzte Person der bestellenden – sendet jetzt das Signal atlas.approval.requested, bevor ihre Genehmigungsaufgabe wartet. Ein eigenes Modell kann mit einem Signal-Start darauf hören, etwa um die entscheidende Person in einem Chat zu benachrichtigen, ohne dass die Genehmigung selbst geändert wird. Das Signal nennt die Regel, wer entscheidet, welche Bestellung, Position und welches Produkt warten, und verweist auf die Genehmigung. Es trägt nichts Entschiedenes und keine Antworten des Bestellformulars; deshalb darf jede Modelliererin und jeder Modellierer einen solchen Listener bauen. Die Seite «Events» in der Console und der Signal-Picker im Modeler führen es auf."
+      },
+      "link": {
+        "label": "ADR-0435",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md"
+      },
+      "tags": [
+        "Events",
+        "Shop"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Events",
+          "de": "Events öffnen"
+        },
+        "route": "#/console/events"
+      }
+    },
+    {
       "id": "atlas-says-in-one-place-which-events-it-emits-and-who-listen",
       "version": "Unreleased",
       "date": null,
@@ -305,28 +334,6 @@
       "tags": [
         "Shop",
         "Operations"
-      ]
-    },
-    {
-      "id": "the-event-feed-can-be-pushed-to-a-system-that-cannot-poll-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The event feed, delivered to the system that needs it",
-        "de": "Der Ereignis-Feed, zugestellt an das System, das ihn braucht"
-      },
-      "summary": {
-        "en": "A billing system or a CMDB that can only receive, not ask, can now be sent the event feed: set it up as a CloudEvents endpoint worker and subscribe it, for the whole feed or for some catalogues. Atlas delivers every event in order and at least once, and if the receiver is down it waits and tries again instead of skipping anything.",
-        "de": "Eine Verrechnung oder eine CMDB, die nur empfangen und nicht selbst abfragen kann, bekommt den Ereignis-Feed jetzt zugestellt: als Worker vom Typ CloudEvents-Endpunkt einrichten und abonnieren, für den ganzen Feed oder für einzelne Kataloge. Atlas stellt jedes Ereignis der Reihe nach und mindestens einmal zu; ist der Empfänger nicht erreichbar, wartet Atlas und versucht es erneut, statt etwas auszulassen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Workers",
-        "API"
       ]
     }
   ]

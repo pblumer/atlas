@@ -43,7 +43,10 @@ function detailHTML(entry, ls) {
   const access = Object.entries(entry.access || {}).map(([ch, who]) =>
     `<li><b>${esc(ch)}</b> — ${esc(who)}</li>`).join("");
   const moment = entry.moment || {};
-  const where = moment.process ? `<code>${esc(moment.process)}</code> at <code>${esc(moment.element)}</code> — ` : "";
+  const places = moment.places || [];
+  const where = places.length
+    ? places.map((p) => `<code>${esc(p.process)}</code> at <code>${esc(p.element)}</code>`).join(", ") + " — "
+    : "";
   let listening = "";
   if (ls) {
     const { processes, feed } = listenersOf(entry, ls);

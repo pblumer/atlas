@@ -308,7 +308,8 @@ The catalogue holds two kinds of information, and they are not equally sensitive
 | `atlas.user.created`, `atlas.user.rejected` | domain | signal | planned |
 | `atlas.user.offboarding-requested`, `atlas.user.disabled` | domain | signal | planned |
 | `atlas.access-review.due`, `atlas.access-review.completed` | domain | signal | planned |
-| `atlas.approval.requested`, `atlas.approval.granted`, `atlas.approval.denied` | domain | signal | planned, for the three shop approval processes |
+| `atlas.approval.requested` | domain | signal | exists (third slice), thrown by the three shop approval processes |
+| `atlas.approval.granted`, `atlas.approval.denied` | domain | signal | planned, for the three shop approval processes |
 | `atlas.incident.raised`, `atlas.incident.resolved` | platform | feed, log | planned, folded from `IntentIncidentCreated` / `IntentIncidentResolved` |
 | `atlas.deployment.created` | platform | log; feed once the open question is answered | planned |
 
@@ -456,6 +457,40 @@ step.
   is therefore always refused, including a release promoted to a peer. The listener is deployed
   on each server by that server's administrator. The deployment request named under Follow-ups is
   the way to make that a governed step rather than a dead end.
+
+### As built, third slice: the approval asks
+
+With `atlas.approval.requested`, §9's first step is complete.
+
+- **Where it is thrown.** Each of the three shop approval processes (`atlas-genehmigung-fix`,
+  `-rolle`, `-vorgesetzter`) throws it from an element `Angefragt`. The throw comes after the
+  start, or after the directory lookup for `superior`, and before the parallel split into the
+  approval task and the notice. Nothing has been decided there, and the instance holds its start
+  variables only, which the order sets without the order form's answers (ADR-0441). That is the
+  position the never-secret test holds.
+- **What it carries.** A signal sends every variable the instance holds (§4). A script task
+  `Vermerken` before the throw therefore records three things in the instance:
+  - `atlasInstance` (§3);
+  - `approvalKind` (`fixed`, `role`, `superior`, the product's own words);
+  - `approver`, who decides: `approvalRef` for `fixed` and `role`, the manager found for
+    `superior`.
+
+  An event cannot carry an output mapping in this engine, so the record is a task, as the
+  intake's proposal step is.
+- **No field is marked personal data.** The payload names people by principal id, as
+  `atlas.order.placed` and the feed do. That makes `approver` a group id for `role`. Under §6 a
+  listener on this event therefore needs no administrator.
+- **One entry, three places.** `Moment` now lists places, each a process and an element, so one
+  entry can name every process that throws it. The drift test matches every place in both
+  directions.
+- **Only with the shop on.** A server whose service catalogue is switched off (ADR-0434) runs
+  none of the three processes, so it never emits the event. The entry's producer says so.
+- **The test.** `TestTheApprovalProcessesAnnounceTheRequestAsASignal` drives all three
+  processes, the `superior` one through its directory job. For each it checks that:
+  - exactly one listener starts;
+  - the listener receives every always-present field and nothing undeclared;
+  - `atlasInstance` is the approval instance's key;
+  - the approval still waits at its task.
 
 ### Consequences
 

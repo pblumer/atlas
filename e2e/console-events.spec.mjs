@@ -13,7 +13,7 @@ const CATALOG = {
   entries: [
     { type: "atlas.order.placed", kind: "domain", channels: ["message"], since: "0.7.0", stability: "stable",
       meaning: { en: "An order was placed.", de: "Eine Bestellung wurde aufgegeben." },
-      moment: { process: "atlas-auftrag-erfuellung", element: "Start", producer: "the shop's order route" },
+      moment: { places: [{ process: "atlas-auftrag-erfuellung", element: "Start" }], producer: "the shop's order route" },
       payload: [field("orderId", false)], neverSecret: "TestTheOrderMessagesCarryNoSecret",
       access: { message: "Atlas's own fulfilment process" } },
     { type: "atlas.entitlement.granted", kind: "platform", channels: ["feed"], since: "Unreleased", stability: "stable",
@@ -27,7 +27,7 @@ const CATALOG = {
     { type: "atlas.user.requested", kind: "domain", channels: ["signal"], since: "Unreleased", stability: "experimental",
       listenable: true,
       meaning: { en: "Somebody asked for a <user> account.", de: "Jemand hat ein Benutzerkonto beantragt." },
-      moment: { process: "proc_benutzer_aufnahme", element: "beantragt_melden", producer: "the intake process" },
+      moment: { places: [{ process: "proc_benutzer_aufnahme", element: "beantragt_melden" }], producer: "the intake process" },
       payload: [field("atlasInstance", false), field("vorname", true), field("email", true)],
       neverSecret: "TestSystemIntakeAnnouncesTheRequestAsASignal", access: { signal: "a deployed model with a signal start or catch" } },
   ],
@@ -95,6 +95,8 @@ test("a modeler reads every entry and has no listening-now column", async ({ pag
   await page.locator('#ev-rows tr[data-type="atlas.user.requested"]').click();
   const detail = page.locator(".ev-detail");
   await expect(detail).toContainText("Somebody asked for a <user> account.");
+  // Where it is thrown: each place, process and element.
+  await expect(detail).toContainText("proc_benutzer_aufnahme at beantragt_melden — the intake process");
   await expect(detail.locator("tr", { hasText: "vorname" }).locator(".pill.warn")).toHaveText("personal");
   await expect(detail.locator("tr", { hasText: "atlasInstance" }).locator(".pill")).toHaveCount(0);
   await expect(detail).toContainText("TestSystemIntakeAnnouncesTheRequestAsASignal");
