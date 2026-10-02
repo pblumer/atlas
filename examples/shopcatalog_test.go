@@ -158,11 +158,21 @@ func exampleFormIDs(t *testing.T, dir string) map[string]bool {
 // exampleFormFieldLookup answers which variables an example's forms write, for the
 // publish check that refuses a configuration field named like one of the order's own
 // variables.
-type exampleFormFieldLookup map[string][]string
+type exampleFormFieldLookup map[string][]shop.FormField
 
-func (l exampleFormFieldLookup) FormFields(id string) ([]string, bool) {
-	keys, ok := l[id]
-	return keys, ok
+func (l exampleFormFieldLookup) FormFields(id string) ([]shop.FormField, bool) {
+	fields, ok := l[id]
+	return fields, ok
+}
+
+// PersonalVariables answers the publish warning from an example's own compiled
+// processes, as the server answers it from what it has deployed.
+func (l compiledLookup) PersonalVariables(processID string) ([]string, bool) {
+	cp, ok := l[processID]
+	if !ok {
+		return nil, false
+	}
+	return cp.PersonalVariables(), true
 }
 
 func exampleFormFields(t *testing.T, dir string) exampleFormFieldLookup {
@@ -177,7 +187,8 @@ func exampleFormFields(t *testing.T, dir string) exampleFormFieldLookup {
 		var form struct {
 			ID         string `json:"id"`
 			Components []struct {
-				Key string `json:"key"`
+				Key        string            `json:"key"`
+				Properties map[string]string `json:"properties"`
 			} `json:"components"`
 		}
 		if err := json.Unmarshal(raw, &form); err != nil {
@@ -185,7 +196,7 @@ func exampleFormFields(t *testing.T, dir string) exampleFormFieldLookup {
 		}
 		for _, c := range form.Components {
 			if c.Key != "" {
-				out[form.ID] = append(out[form.ID], c.Key)
+				out[form.ID] = append(out[form.ID], shop.FormField{Key: c.Key, NotPersonal: c.Properties["personal"] == "false"})
 			}
 		}
 	}
@@ -210,6 +221,11 @@ func TestEveryShopDocumentPublishes(t *testing.T) {
 			forms := exampleFormIDs(t, dir)
 			for _, p := range shop.OrderFormProblems(doc.Products, exampleFormFields(t, dir)) {
 				t.Errorf("%s", p.String())
+			}
+			// An example is what people copy: none of its answers reaches a process in
+			// the clear unless its form says the answer names nobody.
+			for _, p := range shop.AnswerWarnings(doc.Products, exampleFormFields(t, dir), processes) {
+				t.Errorf("publishing would warn: %s", p.String())
 			}
 			byID := map[string]shop.Item{}
 			for _, it := range doc.Products {

@@ -14,6 +14,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Publishing says which answers would reach a process in the clear.** When an answer of a
+  product's order form reaches one of its processes — provisioning, lifecycle, return or an
+  approval model of the installation's own — and that process does not declare it personal data,
+  publishing the catalogue warns and names the answer and the process. The release is still made:
+  the warning is shown in the Console's publish report, returned as `warnings` by
+  `POST /api/v1/catalogs/{id}/releases` and by the document import, and printed by `atlas import`.
+  A field that names nobody, such as a cost centre, is marked with the custom property
+  `personal = false` in the form editor and is not warned about again. The administration-services
+  example marks its vehicle type so and declares the licence plate personal.
+
 - **An administrator sees on the dashboard what the switched-off catalogue strands.** The
   start's warning is a log line, and a log line is lost wherever nobody reads the start.
   The Console's dashboard now shows an administrator the same thing while it is true:

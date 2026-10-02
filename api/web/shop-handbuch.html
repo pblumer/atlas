@@ -227,12 +227,18 @@ th{color:var(--muted);font-weight:600}
     bindet: Jedes Feld kommt als eigene Variable unter seinem Schlüssel an, im Beispiel <code>kennzeichen</code> und
     <code>fahrzeug</code>. Atlas' eigene Genehmigungsprozesse erhalten sie nicht. Ein Feld darf nicht wie eine der
     Variablen heissen, die die Bestellung selbst setzt (etwa <code>recipient</code>); das Veröffentlichen lehnt ein
-    solches Formular ab.</p>
+    solches Formular ab. Erreicht eine Antwort einen Prozess, der sie nicht als Personendaten deklariert, warnt das
+    Veröffentlichen und nennt Antwort und Prozess; die Version wird trotzdem veröffentlicht. Benennt ein Feld
+    niemanden – eine Kostenstelle, eine Fahrzeugart –, setzt man im Formular-Editor unter <i>Custom properties</i>
+    <code>personal</code> = <code>false</code>; dann entfällt die Warnung für dieses Feld.</p>
   <p class="note" data-l="en">The answers of the order form are seen by the person ordering and the recipient, by the
     approver in their inbox (with the form's labels) and by the processes the product binds: each field arrives as a
     variable of its own under its key, in the example <code>kennzeichen</code> and <code>fahrzeug</code>. Atlas's own
     approval processes do not receive them. A field may not be named like one of the variables the order sets itself
-    (such as <code>recipient</code>); publishing refuses such a form.</p>
+    (such as <code>recipient</code>); publishing refuses such a form. If an answer reaches a process that does not
+    declare it personal data, publishing warns and names the answer and the process; the release is still made. If a
+    field names nobody – a cost centre, a vehicle type – set <code>personal</code> = <code>false</code> under
+    <i>Custom properties</i> in the form editor, and the warning for that field goes away.</p>
 </section>
 
 <section id="genehmigung">

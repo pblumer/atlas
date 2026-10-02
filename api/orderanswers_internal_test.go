@@ -228,8 +228,8 @@ func TestPublishingRefusesAFieldNamedLikeTheOrdersOwn(t *testing.T) {
 	if len(problems) != 1 || problems[0].Item != "a" || !strings.Contains(problems[0].Message, "orderId, recipient") {
 		t.Fatalf("problems = %+v, want product a refused for orderId and recipient", problems)
 	}
-	if keys, found := look.FormFields("park-form"); !found || fmt.Sprint(keys) != "[fahrzeug kennzeichen]" {
-		t.Errorf("FormFields = %v %v", keys, found)
+	if fields, found := look.FormFields("park-form"); !found || fmt.Sprint(fields) != "[{kennzeichen false} {fahrzeug false}]" {
+		t.Errorf("FormFields = %v %v", fields, found)
 	}
 	if catalog.OrderFormProblems(items, nil) != nil {
 		t.Error("a service without a form lookup refused something")
@@ -313,5 +313,70 @@ func TestAnActionThatStartsItsProcessIsGivenTheAnswers(t *testing.T) {
 	}
 	if got := vars["fahrzeug"].Text; got != "Lieferwagen" {
 		t.Errorf("fahrzeug = %q: the order's answer replaced what the action was given", got)
+	}
+}
+
+// TestPublishingWarnsAboutAnAnswerThatReachesAProcessInTheClear, through the routes a
+// product manager uses: the release is made — a warning is not a refusal — and says
+// which answer reaches which process in the clear, until the form says the answer
+// names nobody. The document import says the same.
+func TestPublishingWarnsAboutAnAnswerThatReachesAProcessInTheClear(t *testing.T) {
+	srv := answersServer(t)
+	code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/catalogs",
+		`{"rank":1,"languages":["de"],"texts":{"de":"Verwaltung"}}`, "application/json")
+	var cat struct {
+		ID string `json:"id"`
+	}
+	if code != http.StatusCreated || json.Unmarshal(body, &cat) != nil {
+		t.Fatalf("create catalogue: %d %s", code, body)
+	}
+	product := `{"id":"park","homeCatalog":"` + cat.ID + `","state":"active","texts":{"de":"Parkplatz"},
+	  "approval":{"kind":"none"},"provisionProcess":"prov-park","deprovisionProcess":"prov-park","configForm":"park-form"}`
+	if code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/catalog-products", product, "application/json"); code != http.StatusOK {
+		t.Fatalf("save product: %d %s", code, body)
+	}
+	if code, body := serveInternal(t, srv, http.MethodPatch, "/api/v1/catalogs/"+cat.ID, `{"items":["park"]}`, "application/json"); code != http.StatusOK {
+		t.Fatalf("offer product: %d %s", code, body)
+	}
+	publish := func() (string, []catalog.Problem) {
+		t.Helper()
+		code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/catalogs/"+cat.ID+"/releases", "", "")
+		var rel struct {
+			ID       string            `json:"id"`
+			Warnings []catalog.Problem `json:"warnings"`
+		}
+		if code != http.StatusCreated || json.Unmarshal(body, &rel) != nil || rel.ID == "" {
+			t.Fatalf("publish: %d %s", code, body)
+		}
+		return rel.ID, rel.Warnings
+	}
+
+	_, warnings := publish()
+	if len(warnings) != 1 || warnings[0].Item != "park" ||
+		!strings.Contains(warnings[0].Message, "the answers fahrzeug of form park-form reach prov-park in the clear") {
+		t.Fatalf("warnings = %+v, want the vehicle named, and not the plate the process declares", warnings)
+	}
+
+	doc := `{"publish":true,"catalogs":[{"id":"cat-doc","rank":2,"languages":["de"],"texts":{"de":"Dokument"},"items":["park"]}]}`
+	code, body = serveInternal(t, srv, http.MethodPost, "/api/v1/catalogs/import", doc, "application/json")
+	var imported catalog.DocumentResult
+	if code != http.StatusOK || json.Unmarshal(body, &imported) != nil || len(imported.Warnings) != 1 ||
+		imported.Warnings[0].Subject != "product:park" {
+		t.Fatalf("import = %d %s, want the same warning by product", code, body)
+	}
+
+	marked := strings.Replace(parkingForm, `"key":"fahrzeug","label":"Fahrzeug"`,
+		`"key":"fahrzeug","label":"Fahrzeug","properties":{"personal":"false"}`, 1)
+	if code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/forms", marked, "application/json"); code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("save the marked form: %d %s", code, body)
+	}
+	if _, warnings := publish(); len(warnings) != 0 {
+		t.Fatalf("the form says the vehicle names nobody, and publishing still warns: %+v", warnings)
+	}
+	if names, deployed := (processLookup{s: srv}).PersonalVariables("nowhere"); deployed || names != nil {
+		t.Errorf("an undeployed process = %v %v", names, deployed)
+	}
+	if names, deployed := (processLookup{s: srv}).PersonalVariables(" "); deployed || names != nil {
+		t.Errorf("no process = %v %v", names, deployed)
 	}
 }
