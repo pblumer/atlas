@@ -61,6 +61,14 @@
       <extensionElements>
         <zeebe:script resultVariable="benutzername"
           expression="= lower case(vorname) + &quot;.&quot; + lower case(nachname)"/>
+        <!-- With an output mapping present the result stays local, so the user name
+             is mapped out as well. atlasInstance is the event catalogue's pointer back
+             at this request (ADR-0435): every domain event carries the instance that
+             emitted it, and the signal below sends the variables the instance holds. -->
+        <zeebe:ioMapping>
+          <zeebe:output source="=benutzername" target="benutzername"/>
+          <zeebe:output source="=processInstanceKey" target="atlasInstance"/>
+        </zeebe:ioMapping>
       </extensionElements>
       <incoming>f_start_vorschlag</incoming>
       <outgoing>f_vorschlag_melden</outgoing>

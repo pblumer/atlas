@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/eventcatalog"
 )
 
 // intakeListenerBPMN is what an installation deploys to hear about intake requests
@@ -136,6 +138,24 @@ func TestSystemIntakeAnnouncesTheRequestAsASignal(t *testing.T) {
 			t.Errorf("listener received %s; the signal must be thrown before the approval decides it", name)
 		}
 	}
+	// What the listener receives is what the event catalogue promises (ADR-0435): every
+	// field it names as always there is there, and nothing arrives that it does not name.
+	entry, ok := eventcatalog.Lookup(eventcatalog.UserRequested)
+	if !ok {
+		t.Fatal("the event catalogue has no entry for the intake signal")
+	}
+	declared := map[string]bool{}
+	for _, f := range entry.Payload {
+		declared[f.Name] = true
+		if _, there := got[f.Name]; f.Always && !there {
+			t.Errorf("the catalogue promises %s on every %s, and the listener did not receive it", f.Name, entry.Type)
+		}
+	}
+	for name := range got {
+		if !declared[name] {
+			t.Errorf("the listener received %s, which the catalogue's payload for %s does not declare", name, entry.Type)
+		}
+	}
 
 	// The intake did not wait on the notice: its approval task is open.
 	code, raw = do(http.MethodGet, "/api/v1/tasks", "", "")
@@ -143,21 +163,26 @@ func TestSystemIntakeAnnouncesTheRequestAsASignal(t *testing.T) {
 		t.Fatalf("list tasks: %d %s", code, raw)
 	}
 	var tasks []struct {
-		Key       uint64 `json:"key"`
-		ProcessID string `json:"processId"`
-		ElementID string `json:"elementId"`
+		Key                uint64 `json:"key"`
+		ProcessID          string `json:"processId"`
+		ElementID          string `json:"elementId"`
+		ProcessInstanceKey uint64 `json:"processInstanceKey"`
 	}
 	if err := json.Unmarshal(listRows(t, raw), &tasks); err != nil {
 		t.Fatalf("decode tasks: %v (%s)", err, raw)
 	}
-	var taskKey uint64
+	var taskKey, intakeInstance uint64
 	for _, it := range tasks {
 		if it.ProcessID == "proc_benutzer_aufnahme" && it.ElementID == "freigabe" {
-			taskKey = it.Key
+			taskKey, intakeInstance = it.Key, it.ProcessInstanceKey
 		}
 	}
 	if taskKey == 0 {
 		t.Fatalf("intake is not waiting at freigabe after the signal: %s", raw)
+	}
+	// atlasInstance points back at the request that emitted the event.
+	if want := strconv.FormatUint(intakeInstance, 10); !strings.Contains(got["atlasInstance"], want) {
+		t.Errorf("atlasInstance = %q, want the intake instance %s", got["atlasInstance"], want)
 	}
 
 	// Approving announces nothing further.

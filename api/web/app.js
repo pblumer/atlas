@@ -679,6 +679,9 @@ const TOPNAV = {
     { name: "Backup", route: "#/console/backup", role: "admin" },
     { name: "Organization", route: "#/console/org", role: "admin" },
     { name: "Workers", route: "#/console/workers", role: "any" },
+    // What atlas emits (ADR-0435): a modeler chooses an event to listen to here; an
+    // administrator also sees who listens now.
+    { name: "Events", route: "#/console/events", role: "modeler" },
     { name: "AI access", route: "#/console/ai-access", role: "any" },
     { name: "Audit log", route: "#/console/audit", role: "admin" },
   ],
@@ -1079,6 +1082,7 @@ function handbookHelp(path) {
   // where the accounts chapter puts them.
   if (path.startsWith("#/console/ai-access")) return H("konten", "Connecting an AI assistant");
   if (path.startsWith("#/console/audit")) return H("konten", "The audit log");
+  if (path.startsWith("#/console/events")) return H("ereignisse", "Events");
   if (path.startsWith("#/console/engine")) return H("konzepte", "Core concepts");
   // Organization pointed at the worker chapter only because the worker cards used to
   // sit on it; with those on their own page it points there instead, and Organization
@@ -10359,6 +10363,7 @@ function routeTitle(path) {
     [/^#\/console\/backup$/, "Backup · Console"],
     [/^#\/console\/org$/, "Organization · Console"],
     [/^#\/console\/workers$/, "Workers · Console"],
+    [/^#\/console\/events$/, "Events · Console"],
     [/^#\/modeler\/new/, "New diagram · Modeler"],
     [/^#\/modeler\/form\/new/, "New form · Modeler"],
     [/^#\/modeler\/form\//, "Form · Modeler"],
@@ -10453,6 +10458,11 @@ async function route() {
       return await viewAIAccess({ api, toast, view, isSuperseded: () => superseded(gen) });
     }
     if (path === "#/console/audit") return await viewConsoleAudit();
+    if (path === "#/console/events") {
+      const gen = navGen;
+      const { viewEvents } = await import("./events.js");
+      return await viewEvents({ api, view, isSuperseded: () => superseded(gen) });
+    }
     if (path === "#/catalog") {
       const gen = navGen;
       const { viewCatalogs } = await import("./catalog-admin.js");

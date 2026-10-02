@@ -350,6 +350,24 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   document leaves open, then creates the application, its ten forms and five processes,
   publishes them and imports the catalogue last, with every placeholder replaced; a refused
   import lists each problem by its catalogue or product.
+- **`console-events.spec.mjs`** ([ADR-0435](../docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)):
+  the Console's **Events** page. A modeler reads every entry, with the shape and an
+  experimental entry marked, and opens one to its payload, personal data marked. The
+  listeners route refuses a modeler, so the page has no "listening now" column at all. An
+  administrator's page:
+  - counts the listeners per event;
+  - names each listener with its version, project and the personal data it receives;
+  - warns about a model waiting for an `atlas.*` name atlas never emits;
+  - says that feed subscriptions wait while the shop is switched off.
+- **`signal-events-modeler.spec.mjs`** ([ADR-0435](../docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)):
+  the **events atlas emits in the Modeler's signal picker**, driven through the real
+  vendored bpmn-js.
+  - An element that waits for a signal is offered only the events a model may listen to.
+  - Picking one declares a signal of that name, or reuses the diagram's. The note under it
+    names the personal data the listener receives, and a rename redraws the note.
+  - An `atlas.*` name that is no event, and a throw on an `atlas.*` name, are warned about.
+  - The catalogue is asked for once. A catalogue that cannot be read leaves the picker as it
+    was.
 
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
 - **`catalog-publish-warnings.spec.mjs`** (ADR-0443): a
