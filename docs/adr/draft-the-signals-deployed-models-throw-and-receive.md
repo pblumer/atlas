@@ -225,6 +225,21 @@ The cost is accepted: a modeler with bad intent finds a name to catch faster.
     installation's.
 
   That is a record of its own.
+- **Refusing an `atlas.*` throw by a model outside the system project.** The finding shows such a
+  model, and the Modeler warns before the deploy (ADR-0435). Whether the deploy is refused is a
+  rule with its own record. Such a rule must not stop a server from starting with a model
+  deployed before it (`AGENTS.md`, [ADR-0177](0177-reload-skips-the-deploy-gate.md)).
+  - **It protects integrity, not privilege.** `modeler` includes deploy, and deploy is code
+    execution: risk R-09 in `docs/compliance/isds-konzept.md`, restated in
+    [ADR-0315](0315-portal-roles-and-responsibilities.md). A modeler who throws an `atlas.*` name
+    gains nothing that deploying does not already give.
+  - **What the rule would add** is that a model cannot speak for Atlas, by a name chosen by
+    accident or on purpose, and that the attempt is refused where it is made instead of found
+    later.
+  - **It does not replace the measures R-09 names.** These are a defined circle of accounts that
+    may deploy (M-05), the `modeler` role given only to authors, and script languages switched
+    off where they are not needed (M-09). They bound what any model may do. A rule on names
+    bounds only this one way of doing it.
 - **Declared signal payloads.** Choosing on the throw which variables a signal carries, instead
   of every variable of the instance, is an engine change named in ADR-0435 §10. It is a record of
   its own.
@@ -268,6 +283,8 @@ The cost is accepted: a modeler with bad intent finds a name to catch faster.
   - The open question. If deployed definitions become object-gated, §5's filter must follow
     them.
   - Declared signal payloads, then a deploy rule for cross-project receivers.
+  - The deploy rule for `atlas.*` throws (§7), weighed as integrity rather than privilege
+    (R-09).
   - Runtime counts (§7).
   - A process's own message throws in message-sources
     (ADR-draft-the-messages-deployed-models-send-and-receive).
