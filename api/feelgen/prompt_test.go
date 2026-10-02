@@ -1,6 +1,9 @@
 package feelgen
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -178,5 +181,39 @@ func TestRepairPromptShowsTheFailedAnswerAndTheVerdict(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("the repair prompt lacks %q:\n%s", want, got)
 		}
+	}
+}
+
+// promptText is everything this package says to a model, in one fixed instance: the
+// system prompt, a goal with every optional section, and a correction round. A change
+// to any of them changes what a model is told.
+func promptText() string {
+	goal := goalPrompt([]Turn{
+		{Role: "user", Content: "a"}, {Role: "assistant", Content: "b"}, {Role: "user", Content: "c"},
+	}, "editor", "{}", "target")
+	return systemPrompt() + "\x00" + goal + "\x00" + repairPrompt(goal, "answer", "verdict")
+}
+
+// TestThePromptVersionNamesThePrompt holds PromptVersion to the prompt it names.
+//
+// The version is what keeps measurements of two prompts apart (Outcome, and the
+// metrics and log line the server makes of it). A version that stays the same while
+// the prompt changes mixes the data of both and makes the comparison it exists for
+// worthless — and nobody notices, because nothing looks wrong. So the prompt's
+// fingerprint is recorded beside the version, and any change to what a model is told
+// — this package's text, or the engine's function list after a dependency update —
+// fails here until the version moves with it.
+func TestThePromptVersionNamesThePrompt(t *testing.T) {
+	sum := sha256.Sum256([]byte(promptText()))
+	got := hex.EncodeToString(sum[:])[:16]
+	if got != promptFingerprint {
+		t.Fatalf("the prompt changed: its fingerprint is %s, and %s is recorded for version %s.\n"+
+			"A change to what the model is told is a new prompt. Raise PromptVersion and set "+
+			"promptFingerprint to %q, so the measurements of the two stay apart.",
+			got, promptFingerprint, PromptVersion, got)
+	}
+	// It is a metric label and a log value: short, and nothing that needs quoting.
+	if !regexp.MustCompile(`^[0-9]{1,4}$`).MatchString(PromptVersion) {
+		t.Errorf("PromptVersion %q is not a plain number", PromptVersion)
 	}
 }

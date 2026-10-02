@@ -104,7 +104,16 @@ verdict and the callees it refused. The server writes it as one log line,
 `atlas_feel_assistant_attempt_faults_total{fault}` and `atlas_feel_assistant_request_seconds`.
 The counters carry only the closed lists `feelgen` declares; the model and the callees are
 values a request or a model invents, so they are in the log line and never a label
-(ADR-0142). Neither carries the conversation or an expression: a chat may hold anything,
+(ADR-0142).
+
+Every measurement, and every answer the console shows, names the **prompt version**
+(`feelgen.PromptVersion`) — a plain number, raised with every change to what a model is
+told, and a constant label on the counters: one value per build, fixed by the code. It is
+what keeps the measurements of two prompts apart, so a change that forgets to raise it would
+mix them silently. A test therefore records the SHA-256 fingerprint of the whole prompt —
+the system prompt, a goal and a correction round — beside the version and fails until the
+version moves with any change, including one a dependency update makes to the engine's
+function list. Neither carries the conversation or an expression: a chat may hold anything,
 and an expression a literal the author typed.
 
 **Not an MCP tool.** As for form generation: the caller of a tool is already a model, and
@@ -180,6 +189,7 @@ validate and evaluate routes the assistant uses.
   modeler, both omitted from MCP with their reasons.
 - `api/web/feel-assistant.js`, the mini spark in `feel.js`, the top-bar button, the
   catalogue entries in `i18n.js`; `e2e/feel-assistant.spec.mjs`.
-- The measurement: `feelgen.Outcome` and its closed lists, the `Observe` hook,
+- The measurement: `feelgen.Outcome` and its closed lists, `feelgen.PromptVersion` and
+  the fingerprint test that holds it, the `Observe` hook,
   `feel_assistant.answered` in the logging catalogue, and the four metrics registered
   with the server's others (`api/feelgeneration.go`).

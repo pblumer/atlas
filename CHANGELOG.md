@@ -39,6 +39,9 @@ _Changed_ / _Removed_ for each version.
     `atlas_feel_assistant_attempts_total{format}`, `atlas_feel_assistant_attempt_faults_total{fault}`
     and `atlas_feel_assistant_request_seconds` count the same by closed labels. Neither carries
     the conversation or an expression.
+  - Each answer, log line and metric names the prompt version that produced it (`prompt`), so the
+    measurements of two prompts stay apart. A test holds the version to a fingerprint of the
+    prompt and fails when the prompt changes without it.
 
 - **Incidents leave Atlas on the event feed.** Every incident raised and every incident resolved
   is now an event of the CloudEvents feed, `atlas.incident.raised` and

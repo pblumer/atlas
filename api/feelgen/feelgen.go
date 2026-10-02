@@ -118,6 +118,9 @@ type Response struct {
 	Warning string `json:"warning,omitempty"`
 	Worker  string `json:"worker"`
 	Model   string `json:"model,omitempty"`
+	// Prompt is the PromptVersion that asked: an author comparing two answers across
+	// an upgrade can tell whether the prompt changed between them.
+	Prompt string `json:"prompt"`
 }
 
 // Capability is what the console asks before it offers to write anything.
@@ -206,7 +209,7 @@ func (s *Service) Generate(r *http.Request, req Request) (Response, int, error) 
 	)
 	// From here on a model is asked, so whatever happens is a data point about the
 	// prompt and the model, and is reported whichever way the request ends.
-	outcome := Outcome{Worker: worker.Name, Model: asked}
+	outcome := Outcome{Worker: worker.Name, Model: asked, Prompt: PromptVersion}
 	started := s.now()
 	defer func() {
 		if s.Observe == nil {
@@ -274,7 +277,7 @@ func (s *Service) Generate(r *http.Request, req Request) (Response, int, error) 
 func (s *Service) response(p Proposal, c Check, attempts int, warning, worker, model string) Response {
 	resp := Response{
 		Expression: p.Expression, Explanation: p.Explanation,
-		Attempts: attempts, Warning: warning, Worker: worker, Model: model,
+		Attempts: attempts, Warning: warning, Worker: worker, Model: model, Prompt: PromptVersion,
 	}
 	if p.Expression != "" {
 		resp.Check = &c

@@ -68,7 +68,9 @@ type Outcome struct {
 	Worker string
 	// Model is the language model that was asked: the Worker's own, or the one the
 	// request chose. Comparing models is the second thing the data is for.
-	Model    string
+	Model string
+	// Prompt is the PromptVersion that was sent.
+	Prompt   string
 	Result   string
 	Attempts []Attempt
 	Duration time.Duration

@@ -428,6 +428,7 @@ export function openFeelAssistant(opts = {}) {
       const meta = [];
       if (v.attempts > 1) meta.push(t("feel.chat.attempts", { n: v.attempts }));
       if (v.worker) meta.push(v.worker + (v.model ? " · " + v.model : ""));
+      if (v.prompt) meta.push(t("feel.chat.prompt", { v: v.prompt }));
       return `<div class="fa-msg ai">
         ${v.explanation ? `<div class="fa-expl">${esc(v.explanation)}</div>` : ""}
         ${v.expression ? `<pre class="fa-code">${esc(v.expression)}</pre>` : ""}
@@ -500,7 +501,7 @@ export function openFeelAssistant(opts = {}) {
         view: {
           expression: resp.expression, explanation: resp.explanation, check: resp.check || null,
           variables: resp.variables, attempts: resp.attempts, warning: resp.warning,
-          worker: resp.worker, model: resp.model,
+          worker: resp.worker, model: resp.model, prompt: resp.prompt,
         },
       });
       setStatus("", "");

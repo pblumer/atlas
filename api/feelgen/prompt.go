@@ -17,6 +17,21 @@ import (
 // is built. A prompt that disagrees with the engine teaches the model to be wrong with
 // confidence, and the model has no other source for this dialect than this text.
 
+// PromptVersion names the prompt this build sends: the system prompt, the shape of a
+// goal and the shape of a correction round together. It travels with every answer and
+// every measurement (Outcome), because the measurements are how the prompt is improved,
+// and the measurements of two prompts must stay apart to be compared.
+//
+// Raise it with every change to what a model is told. TestThePromptVersionNamesThePrompt
+// holds it to promptFingerprint and fails on a change that did not raise it — including
+// one nobody made in this package, when a dependency update changes the engine's
+// function list and with it the prompt.
+const PromptVersion = "1"
+
+// promptFingerprint is the first 16 hex digits of the SHA-256 of the prompt
+// PromptVersion names (see promptText in prompt_test.go).
+const promptFingerprint = "4695a33bba635e1c"
+
 // builtinsHeading introduces the function list, which is the last section of the system
 // prompt.
 const builtinsHeading = "Built-in functions (the complete list; names with spaces are written with spaces):\n"

@@ -115,7 +115,7 @@ func TestFeelAssistantAsksTheConfiguredWorkerAndCorrectsIt(t *testing.T) {
 	for key, want := range map[string]any{
 		"worker": "openrouter", "model": "meta-llama/llama-3.3-70b-instruct:free",
 		"outcome": "settled", "attempts": float64(2), "faults": "calls,none",
-		"formats": "contract,contract", "calls": "is defined",
+		"formats": "contract,contract", "calls": "is defined", "prompt": feelgen.PromptVersion,
 	} {
 		if line[key] != want {
 			t.Errorf("log %s = %v, want %v (line %v)", key, line[key], want, line)
@@ -131,14 +131,15 @@ func TestFeelAssistantAsksTheConfiguredWorkerAndCorrectsIt(t *testing.T) {
 	}
 
 	// …and counted, by closed labels only (ADR-0142).
+	p := `prompt="` + feelgen.PromptVersion + `"`
 	for series, want := range map[string]float64{
-		`atlas_feel_assistant_requests_total{outcome="settled"}`:      1,
-		`atlas_feel_assistant_requests_total{outcome="unsettled"}`:    0,
-		`atlas_feel_assistant_attempts_total{format="contract"}`:      2,
-		`atlas_feel_assistant_attempt_faults_total{fault="calls"}`:    1,
-		`atlas_feel_assistant_attempt_faults_total{fault="none"}`:     1,
-		`atlas_feel_assistant_attempt_faults_total{fault="mismatch"}`: 0,
-		`atlas_feel_assistant_request_seconds_count`:                  1,
+		`atlas_feel_assistant_requests_total{outcome="settled",` + p + `}`:      1,
+		`atlas_feel_assistant_requests_total{outcome="unsettled",` + p + `}`:    0,
+		`atlas_feel_assistant_attempts_total{format="contract",` + p + `}`:      2,
+		`atlas_feel_assistant_attempt_faults_total{fault="calls",` + p + `}`:    1,
+		`atlas_feel_assistant_attempt_faults_total{fault="none",` + p + `}`:     1,
+		`atlas_feel_assistant_attempt_faults_total{fault="mismatch",` + p + `}`: 0,
+		`atlas_feel_assistant_request_seconds_count{` + p + `}`:                 1,
 	} {
 		if got := gatheredValue(t, srv, series); got != want {
 			t.Errorf("%s = %v, want %v", series, got, want)
@@ -176,18 +177,18 @@ func gatheredValue(t *testing.T, srv *Server, series string) float64 {
 	}
 	for _, f := range families {
 		for _, m := range f.GetMetric() {
-			name := f.GetName()
 			var labels []string
 			for _, l := range m.GetLabel() {
 				labels = append(labels, l.GetName()+`="`+l.GetValue()+`"`)
 			}
+			set := ""
 			if len(labels) > 0 {
-				name += "{" + strings.Join(labels, ",") + "}"
+				set = "{" + strings.Join(labels, ",") + "}"
 			}
 			switch {
-			case name == series && m.GetCounter() != nil:
+			case f.GetName()+set == series && m.GetCounter() != nil:
 				return m.GetCounter().GetValue()
-			case name+"_count" == series && m.GetHistogram() != nil:
+			case f.GetName()+"_count"+set == series && m.GetHistogram() != nil:
 				return float64(m.GetHistogram().GetSampleCount())
 			}
 		}

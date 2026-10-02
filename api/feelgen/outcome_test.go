@@ -59,7 +59,7 @@ func TestOutcomeOfACorrectedAnswer(t *testing.T) {
 		t.Fatalf("Generate: %v", err)
 	}
 	o := onlyOutcome(t, *got)
-	if o.Result != ResultSettled || o.Worker != "openrouter" || o.Model != one[0].Model {
+	if o.Result != ResultSettled || o.Worker != "openrouter" || o.Model != one[0].Model || o.Prompt != PromptVersion {
 		t.Errorf("outcome = %+v", o)
 	}
 	if strings.Join(faults(o), ",") != FaultCalls+","+FaultNone {

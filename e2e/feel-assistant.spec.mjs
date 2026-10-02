@@ -57,6 +57,8 @@ test("a message writes a checked expression into the editor", async ({ page }) =
   await expect(page.locator("[data-vars]")).toHaveValue(/"total": 1500/);
   await expect(page.locator(".fa-check.ok")).toContainText("Geprüft: 150 (number) · wie erwartet");
   await expect(page.locator(".fa-meta")).toContainText("nach 2 Versuchen");
+  // Which prompt answered, so two answers across an upgrade can be told apart.
+  await expect(page.locator(".fa-meta")).toContainText("Prompt 1");
   // …and in the history, under the words that asked for it.
   await expect(page.locator(".fa-pick-name").first()).toHaveText("10 % Rabatt, wenn total über 1000 liegt");
 

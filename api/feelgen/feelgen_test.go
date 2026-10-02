@@ -92,6 +92,11 @@ func TestGenerateReturnsACheckedProposal(t *testing.T) {
 	if resp.Attempts != 1 || resp.Worker != "openrouter" || resp.Model != one[0].Model {
 		t.Errorf("attempts/worker/model = %d %q %q", resp.Attempts, resp.Worker, resp.Model)
 	}
+	// Which prompt answered travels with the answer, so an author comparing two
+	// attempts across an upgrade can tell them apart.
+	if resp.Prompt != PromptVersion {
+		t.Errorf("prompt = %q, want %q", resp.Prompt, PromptVersion)
+	}
 	if string(resp.Variables) != `{"total":1500}` {
 		t.Errorf("variables = %s", resp.Variables)
 	}

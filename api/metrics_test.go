@@ -173,6 +173,8 @@ func TestMetricsCarryOnlyAllowlistedLabels(t *testing.T) {
 		// TestTheLabelsAreClosed holds (feelgeneration.go).
 		"format": true,
 		"fault":  true,
+		// The FEEL assistant's prompt version: a constant label, one value per build.
+		"prompt": true,
 		// A histogram's bucket boundaries and a summary's quantiles are chosen in the
 		// code, so their series count is fixed at compile time — the rule is that a
 		// label's values must not come from the data, not that no label may exist.

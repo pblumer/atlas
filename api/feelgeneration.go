@@ -60,8 +60,14 @@ type feelAssistantMetrics struct {
 }
 
 func newFeelAssistantMetrics() *feelAssistantMetrics {
+	// Every series carries the prompt version as a constant label: one value per
+	// build, fixed by the code, so it adds no series — and it is what keeps the
+	// counts of two prompts apart across an upgrade.
+	prompt := prometheus.Labels{"prompt": feelgen.PromptVersion}
 	resolve := func(name, help, label string, values []string) (map[string]prometheus.Counter, prometheus.Collector) {
-		vec := prometheus.NewCounterVec(prometheus.CounterOpts{Namespace: metrics.Namespace, Name: name, Help: help}, []string{label})
+		vec := prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: metrics.Namespace, Name: name, Help: help, ConstLabels: prompt,
+		}, []string{label})
 		out := make(map[string]prometheus.Counter, len(values))
 		for _, v := range values {
 			out[v] = vec.WithLabelValues(v)
@@ -74,8 +80,9 @@ func newFeelAssistantMetrics() *feelAssistantMetrics {
 		// bound.
 		seconds: prometheus.NewHistogram(prometheus.HistogramOpts{
 			Namespace: metrics.Namespace, Name: "feel_assistant_request_seconds",
-			Help:    "How long one FEEL assistant request took, correction rounds included.",
-			Buckets: []float64{1, 2, 5, 10, 20, 30, 45, 60, 90, 120, 150},
+			Help:        "How long one FEEL assistant request took, correction rounds included.",
+			Buckets:     []float64{1, 2, 5, 10, 20, 30, 45, 60, 90, 120, 150},
+			ConstLabels: prompt,
 		}),
 	}
 	var requests, formats, faults prometheus.Collector
@@ -143,7 +150,7 @@ func (s *Server) observeFeelAssistant(o feelgen.Outcome) {
 		}
 	}
 	logging.Info(logging.FeelAssistantAnswered, "the FEEL assistant answered",
-		slog.String("worker", o.Worker), slog.String("model", o.Model),
+		slog.String("worker", o.Worker), slog.String("model", o.Model), slog.String("prompt", o.Prompt),
 		slog.String("outcome", o.Result), slog.Int("attempts", len(o.Attempts)),
 		slog.String("faults", strings.Join(faults, ",")), slog.String("formats", strings.Join(formats, ",")),
 		slog.String("calls", strings.Join(calls, ",")), slog.String("errors", strings.Join(errs, " | ")),
