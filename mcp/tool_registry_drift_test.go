@@ -247,6 +247,13 @@ var mcpOmittedRoutes = map[string]string{
 	// the one it was pointed at, and the write half is an operator naming the
 	// instance for other operators to recognise.
 	"GET /api/v1/node": "runtime identity for cross-server correlation, not an agent action",
+	// The Console's release notes: prose for a person opening the landing page,
+	// read from the CHANGELOG the binary embeds. atlas_info already says which
+	// version an agent is talking to, and the same text is CHANGELOG.md in the
+	// repository; a tool would put several hundred kilobytes of prose one call
+	// away from every agent's context for no action it could take on it.
+	"GET /api/v1/release-notes":           "the Console's release notes, prose for a person; atlas_info names the version and CHANGELOG.md holds the text",
+	"GET /api/v1/release-notes/{version}": "the Console's release notes, prose for a person; atlas_info names the version and CHANGELOG.md holds the text",
 	// The observation projection (ADR-0189 §6). The facts in it are ones an agent
 	// already reaches directly — instances, incidents, deployments, releases — and
 	// what this route adds is the *correlation onto an architecture model*, which

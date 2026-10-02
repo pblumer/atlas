@@ -1,6 +1,6 @@
 # ADR-0375: The feed generator is Go, so the Go checks stop needing Node
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-02: the feed is retired, and its open question answered, by ADR-draft-release-notes-from-the-changelog)
 - **Implementation:** Landed
 - **Date:** 2026-09-16
 - **Open question:** Whether the feed should stop being a committed file at all —
@@ -10,7 +10,7 @@
   CHANGELOG would go on conflicting anyway, because it is the source. The
   arithmetic would change if the overrides ever shrank or the cap ever grew to the
   point where most of what is embedded is actually served.
-- **Question checked:** 2026-09
+- **Question checked:** 2026-10
 
 ## Context and problem statement
 

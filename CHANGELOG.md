@@ -309,6 +309,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The Console's landing page shows the release notes instead of What's New.** The
+  section lists the releases of the changelog this server was built from, newest first:
+  the newest opens with its introduction, what to read before upgrading and its changes,
+  and an older one loads when it is opened. `GET /api/v1/release-notes` and
+  `GET /api/v1/release-notes/{version}` answer the same to anybody signed in. The notes
+  are English, as the changelog is; the old feed's curated German and English summaries,
+  tutorials and "Try it" links are gone, and so is everything that kept the feed in step
+  with the changelog — `make whats-new`, `make whats-new-resolve`, the committed
+  `api/web/whats-new.json` and the workflow that repaired it on main. A changelog entry now
+  reaches the Console with nothing else to do. ADR-draft-release-notes-from-the-changelog.
+
 - **A worker runs the jobs of one type concurrently.** A worker used to work the jobs of
   one type one after another, so twenty REST calls of two seconds each took forty
   seconds. `--max-jobs` now means how many jobs of one type a worker runs at once. A poll
