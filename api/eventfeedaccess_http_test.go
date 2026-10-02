@@ -19,7 +19,7 @@ import (
 // TestAnEventsTokenReadsTheFeedAndNothingElse: a token minted with the events scope
 // reads the feed and is refused everywhere else, by its scope; a full token, which
 // carries the minter's non-admin roles and not feedreader, is refused the feed by
-// the role; and an events token cannot be narrowed by a reach the route never reads.
+// the role; and an events token's reach names catalogues this server has.
 func TestAnEventsTokenReadsTheFeedAndNothingElse(t *testing.T) {
 	ts, admin := apiTokenServer(t)
 	secret, _ := mint(t, admin, ts, `{"name":"cmdb","scope":"events","expiresInDays":365}`)
@@ -44,9 +44,14 @@ func TestAnEventsTokenReadsTheFeedAndNothingElse(t *testing.T) {
 	}
 
 	if code, body := cReq(t, admin, ts, "POST", "/api/v1/api-tokens",
-		`{"name":"cmdb","scope":"events","reach":["anything"]}`); code != http.StatusBadRequest ||
-		!strings.Contains(string(body), "reach does not narrow it") {
-		t.Errorf("an events token with a reach = %d (%s), want 400", code, body)
+		`{"name":"billing","scope":"events","reach":["anything"]}`); code != http.StatusBadRequest ||
+		!strings.Contains(string(body), "no catalogue") {
+		t.Errorf("an events token reaching an unknown catalogue = %d (%s), want 400", code, body)
+	}
+	cat := ownCatalogue(t, ts, admin, "IT")
+	narrowed, _ := mint(t, admin, ts, `{"name":"billing","scope":"events","reach":["`+cat+`"]}`)
+	if code, body := bearerReq(t, ts, http.MethodGet, "/api/v1/events", "", narrowed); code != http.StatusOK {
+		t.Errorf("an events token narrowed to a catalogue = %d (%s), want 200", code, body)
 	}
 
 	// The token's record says what it carries, so an administrator reading the list
@@ -55,6 +60,7 @@ func TestAnEventsTokenReadsTheFeedAndNothingElse(t *testing.T) {
 	var list []struct {
 		Name  string   `json:"name"`
 		Scope string   `json:"scope"`
+		Reach []string `json:"reach"`
 		Roles []string `json:"roles"`
 	}
 	if code != http.StatusOK || json.Unmarshal(body, &list) != nil {
@@ -63,6 +69,9 @@ func TestAnEventsTokenReadsTheFeedAndNothingElse(t *testing.T) {
 	for _, tok := range list {
 		if tok.Scope == "events" && (len(tok.Roles) != 1 || tok.Roles[0] != "feedreader") {
 			t.Errorf("the events token carries %v, want [feedreader]", tok.Roles)
+		}
+		if tok.Name == "billing" && (len(tok.Reach) != 1 || tok.Reach[0] != cat) {
+			t.Errorf("the narrowed token's reach = %v, want [%s]", tok.Reach, cat)
 		}
 	}
 }

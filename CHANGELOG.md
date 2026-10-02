@@ -14,6 +14,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An event-feed token can be confined to the catalogues it is for.** An `events` token
+  minted with `"reach":["<catalogue id>"]` reads only the events about the products those
+  catalogues maintain — their action outcomes, and the rights to them granted and revoked —
+  so a billing system for one catalogue no longer holds who holds what in every other.
+  Every event now names the catalogue that maintains its product as `homeCatalog`, so a
+  reader of the whole feed can sort it the same way. Whoever mints the token must maintain
+  each catalogue it names; a token without a reach still reads the whole feed. A product
+  offered by several catalogues belongs to the one that maintains it. A narrowed reader's
+  cursor moves past the events it is not given, and a page that read 10 000 rows without
+  filling up answers what it found with `more` set.
+
 - **A system that follows the event feed can hold a credential that reads it and nothing
   else.** There is a new role, `feedreader`, and a new API-token scope, `events`. A token
   minted with `{"scope":"events"}` reaches `GET /api/v1/events` and no other route, and it

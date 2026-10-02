@@ -79,7 +79,10 @@ the only route, the role says reading the feed is the only act, and both checks 
 feed. The rule that a token is never more than its minter still holds: a minter who is not
 an administrator and does not hold `feedreader` is refused with 403. A `reach` is refused on
 an `events` token, because the feed is one stream and a reach nothing reads would be a
-narrowing the holder believes in and nothing enforces.
+narrowing the holder believes in and nothing enforces. *(Superseded for the reach by
+[ADR-draft-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product](draft-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md):
+an `events` token's reach names catalogues, and the feed answers it only the rows about the
+products they maintain.)*
 
 **The other scopes are unchanged.** A scope absent from `scopeRoles` carries the minter's
 roles, as before. In particular a `full` token does **not** read the feed, because its
@@ -127,11 +130,15 @@ a reviewed, named set, which is what makes it safe to hand out.
   - A `full` token cannot read the feed. An integration that wanted one credential for
     everything needs two.
   - The feed is not narrowed by catalogue. An `events` token reads every catalogue's facts.
+    *(Lifted by
+    [ADR-draft-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product](draft-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md).)*
 - **Follow-ups / risks to watch:**
   - **Narrowing by catalogue.** A billing system for one catalogue would want only that
     catalogue's rows, and the subject already carries the order position to filter on. That
     is a reach of catalogues, not of projects, and it needs the feed rows to carry their
-    catalogue.
+    catalogue. *(Built by
+    [ADR-draft-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product](draft-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md):
+    the catalogue is the product's home, read when the page is.)*
   - **Push delivery.** The Worker that pushes the feed (ADR-0429 §5, prepared) should run
     under this role.
   - **The role-carrying scope** is the first step toward the merger ADR-0194 names. If a
