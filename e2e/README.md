@@ -368,7 +368,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   - counts the listeners per event;
   - names each listener with its version, project and the personal data it receives;
   - warns about a model waiting for an `atlas.*` name atlas never emits;
-  - says that feed subscriptions wait while the shop is switched off.
+  - lists for a feed entry the subscriptions it reaches: a subscription narrowed to catalogues
+    is not sent an incident, which belongs to none;
+  - says, with the shop switched off, that the feed passes over the catalogue's events while
+    the engine's still reach every subscription.
 - **`signal-events-modeler.spec.mjs`** ([ADR-0435](../docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)):
   the **events atlas emits in the Modeler's signal picker**, driven through the real
   vendored bpmn-js.

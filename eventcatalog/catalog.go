@@ -56,15 +56,25 @@ type Text struct {
 	DE string `json:"de"`
 }
 
-// Moment is where an event is emitted. A domain fact names the system process and
-// the element that throws it — or, for a message the server publishes, the element
-// that receives it — and Producer says who sends it; a platform fact names the record
-// or the component it is derived from.
+// Moment is where an event is emitted. A domain fact names the places — a system
+// process and its element — that throw it, or, for a message the server publishes,
+// the element that receives it, and Producer says who sends it. One fact may be
+// thrown in several processes: the shop's three approval processes each announce the
+// same request. A platform fact names the record or the component it is derived from,
+// and no place.
 type Moment struct {
-	Process  string `json:"process,omitempty"`
-	Element  string `json:"element,omitempty"`
-	Producer string `json:"producer"`
+	Places   []Place `json:"places,omitempty"`
+	Producer string  `json:"producer"`
 }
+
+// Place is one element of one system process.
+type Place struct {
+	Process string `json:"process"`
+	Element string `json:"element"`
+}
+
+// At is the place of an element in a system process.
+func At(process, element string) Place { return Place{Process: process, Element: element} }
 
 // Field is one field of a payload a receiver may rely on.
 type Field struct {
@@ -123,6 +133,11 @@ type Entry struct {
 	// offers its name. A message that drives a system process is not: a second
 	// receiver would take it from the process it drives.
 	Listenable bool `json:"listenable,omitempty"`
+	// ServiceCatalogue marks a fact of the service catalogue — an order, a position,
+	// a right — as against one of the engine. A server whose catalogue is switched off
+	// (ADR-0434) emits none of them: its feed passes over their rows, and the system
+	// processes that throw or receive them are not deployed there.
+	ServiceCatalogue bool `json:"serviceCatalogue,omitempty"`
 }
 
 // Has reports whether the entry uses a channel.
@@ -171,6 +186,9 @@ const (
 	EntitlementGranted = "atlas.entitlement.granted"
 	EntitlementRevoked = "atlas.entitlement.revoked"
 	UserRequested      = "atlas.user.requested"
+	ApprovalRequested  = "atlas.approval.requested"
+	IncidentRaised     = "atlas.incident.raised"
+	IncidentResolved   = "atlas.incident.resolved"
 	// ActionOutcomePrefix is the type of an action's outcome whose product declares
 	// none and whose action names no message: atlas.action.<outcome>.
 	ActionOutcomePrefix = "atlas.action."
@@ -181,18 +199,21 @@ const (
 	accessFeed    = "the feedreader role or an events token; an events token narrowed by reach receives only the events of products whose home catalogue it reaches (ADR-0430, ADR-0432)"
 	accessSignal  = "any model deployed on this server with a signal start or catch on the name (ADR-0431); when the payload carries personal data, only an administrator may deploy such a model (ADR-0435)"
 	accessMessage = "the system process it drives; a model of an installation does not receive it"
+	// accessPlatform is the feed's rule for a fact of the engine: it belongs to no
+	// service catalogue, so a token narrowed to catalogues never receives it.
+	accessPlatform = "the feedreader role, or an events token without a reach; a token narrowed to catalogues does not receive it, since a fact of the engine belongs to no catalogue (ADR-0430, ADR-0435)"
 )
 
 // Entries is the catalogue. A planned event lands here with the change that emits
 // it, never before: the drift tests refuse an entry nothing produces.
 var Entries = []Entry{
 	{
-		Type: OrderPlaced, Kind: Domain,
+		Type: OrderPlaced, Kind: Domain, ServiceCatalogue: true,
 		Meaning: Text{
 			EN: "An order was placed, so its fulfilment can begin.",
 			DE: "Eine Bestellung wurde aufgegeben; ihre Erfüllung kann beginnen.",
 		},
-		Moment:   Moment{Process: "atlas-auftrag-erfuellung", Element: "Start", Producer: "the order service, when an order is placed"},
+		Moment:   Moment{Places: []Place{At("atlas-auftrag-erfuellung", "Start")}, Producer: "the order service, when an order is placed"},
 		Channels: []Channel{Message},
 		Payload: []Field{
 			{Name: "orderId", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The order.", DE: "Die Bestellung."}},
@@ -206,12 +227,12 @@ var Entries = []Entry{
 		Access: map[Channel]string{Message: accessMessage},
 	},
 	{
-		Type: OrderAdvanced, Kind: Domain,
+		Type: OrderAdvanced, Kind: Domain, ServiceCatalogue: true,
 		Meaning: Text{
 			EN: "A position of an order moved on, so the fulfilment asks again what may start.",
 			DE: "Eine Position einer Bestellung ist weitergekommen; die Erfüllung fragt erneut, was starten darf.",
 		},
-		Moment:      Moment{Process: "atlas-auftrag-erfuellung", Element: "Warten", Producer: "the order service, when a position is reported, cancelled or repaired; correlated on the order id, with no variables"},
+		Moment:      Moment{Places: []Place{At("atlas-auftrag-erfuellung", "Warten")}, Producer: "the order service, when a position is reported, cancelled or repaired; correlated on the order id, with no variables"},
 		Channels:    []Channel{Message},
 		Payload:     []Field{},
 		NeverSecret: "TestTheOrderMessagesCarryNoSecret",
@@ -219,7 +240,7 @@ var Entries = []Entry{
 		Access: map[Channel]string{Message: accessMessage},
 	},
 	{
-		Type: EntitlementGranted, Kind: Platform,
+		Type: EntitlementGranted, Kind: Platform, ServiceCatalogue: true,
 		Meaning: Text{
 			EN: "A right was granted to a person: a position was provisioned, or a right was recorded by hand or by a load.",
 			DE: "Einer Person wurde ein Recht erteilt: Eine Position wurde bereitgestellt, oder ein Recht wurde von Hand oder durch einen Abgleich erfasst.",
@@ -241,7 +262,7 @@ var Entries = []Entry{
 		Access: map[Channel]string{Feed: accessFeed},
 	},
 	{
-		Type: EntitlementRevoked, Kind: Platform,
+		Type: EntitlementRevoked, Kind: Platform, ServiceCatalogue: true,
 		Meaning: Text{
 			EN: "A right a person held ended: it was returned, expired, or taken away.",
 			DE: "Ein Recht, das eine Person hielt, endete: Es wurde zurückgegeben, ist abgelaufen oder wurde entzogen.",
@@ -264,7 +285,7 @@ var Entries = []Entry{
 		Access: map[Channel]string{Feed: accessFeed},
 	},
 	{
-		Type: "<message>.<outcome>", Shaped: true, Kind: Domain,
+		Type: "<message>.<outcome>", Shaped: true, Kind: Domain, ServiceCatalogue: true,
 		Meaning: Text{
 			EN: "An action asked of a held position ended. Its type is the product author's: the action's declared event type, by default its message and the outcome; atlas.action.<outcome> where the action names neither.",
 			DE: "Eine Aktion an einer gehaltenen Position ist abgeschlossen. Den Typ bestimmt der Produktautor: der deklarierte Ereignistyp der Aktion, sonst ihre Nachricht und das Ergebnis; atlas.action.<outcome>, wo die Aktion keines von beiden nennt.",
@@ -297,7 +318,7 @@ var Entries = []Entry{
 			EN: "Somebody asked for an account, and the request now waits for an administrator to approve it.",
 			DE: "Jemand hat ein Konto beantragt; der Antrag wartet nun auf die Freigabe durch die Administration.",
 		},
-		Moment:   Moment{Process: "proc_benutzer_aufnahme", Element: "beantragt_melden", Producer: "the intake process, before its approval waits"},
+		Moment:   Moment{Places: []Place{At("proc_benutzer_aufnahme", "beantragt_melden")}, Producer: "the intake process, before its approval waits"},
 		Channels: []Channel{Signal},
 		Payload: []Field{
 			{Name: "atlasInstance", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The intake instance that emitted it, so a receiver can point back at the request.", DE: "Die Aufnahme-Instanz, die es ausgesendet hat, damit ein Empfänger auf den Antrag verweisen kann."}},
@@ -312,5 +333,90 @@ var Entries = []Entry{
 		Since:       Unreleased, Stability: Experimental,
 		Access:     map[Channel]string{Signal: accessSignal},
 		Listenable: true,
+	},
+	{
+		Type: ApprovalRequested, Kind: Domain, ServiceCatalogue: true,
+		Meaning: Text{
+			EN: "A position of an order needs an approval, and the approval task now waits for whoever decides it.",
+			DE: "Eine Bestellposition braucht eine Genehmigung; die Genehmigungsaufgabe wartet nun auf die Person oder Gruppe, die entscheidet.",
+		},
+		Moment: Moment{
+			Places: []Place{
+				At("atlas-genehmigung-fix", "Angefragt"),
+				At("atlas-genehmigung-rolle", "Angefragt"),
+				At("atlas-genehmigung-vorgesetzter", "Angefragt"),
+			},
+			Producer: "the shop's three approval processes, before their approval task waits; a server whose service catalogue is switched off runs none of them",
+		},
+		Channels: []Channel{Signal},
+		Payload: []Field{
+			{Name: "atlasInstance", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The approval instance that emitted it, so a receiver can point back at the request.", DE: "Die Genehmigungsinstanz, die es ausgesendet hat, damit ein Empfänger auf die Anfrage verweisen kann."}},
+			{Name: "approvalKind", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The product's approval rule: fixed (a person named on the product), role (a group) or superior (the orderer's line manager).", DE: "Die Genehmigungsregel des Produkts: fixed (eine am Produkt genannte Person), role (eine Gruppe) oder superior (die vorgesetzte Person der bestellenden)."}},
+			{Name: "approver", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "Who decides: a principal id for fixed and superior, the group for role.", DE: "Wer entscheidet: eine Principal-ID bei fixed und superior, die Gruppe bei role."}},
+			{Name: "orderId", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The order.", DE: "Die Bestellung."}},
+			{Name: "positionId", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The position of the order that waits.", DE: "Die Position der Bestellung, die wartet."}},
+			{Name: "itemId", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The product.", DE: "Das Produkt."}},
+			{Name: "variantId", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The variant; empty where the product has none.", DE: "Die Variante; leer, wo das Produkt keine hat."}},
+			{Name: "orderer", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "Who placed the order, by principal id.", DE: "Wer bestellt hat, als Principal-ID."}},
+			{Name: "recipient", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "Who it is for, by principal id.", DE: "Für wen bestellt wurde, als Principal-ID."}},
+			{Name: "approvalRef", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The approval rule's reference as the product states it: the person for fixed, the group for role.", DE: "Die Referenz der Genehmigungsregel, wie das Produkt sie nennt: die Person bei fixed, die Gruppe bei role."}},
+			{Name: "provisionProcess", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The process that provisions the position once it is approved.", DE: "Der Prozess, der die Position nach der Genehmigung bereitstellt."}},
+			{Name: "atlasApiBase", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "This server's own API address.", DE: "Die eigene API-Adresse dieses Servers."}},
+			{Name: "portalBaseUrl", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The external address of the portal; empty where none is set.", DE: "Die externe Adresse des Portals; leer, wo keine gesetzt ist."}},
+			{Name: "vorgesetzter", Type: "string", Data: NotPersonal, Meaning: Text{EN: "For superior only: the line manager found in the directory, the same as approver.", DE: "Nur bei superior: die im Verzeichnis gefundene vorgesetzte Person, dieselbe wie approver."}},
+		},
+		NeverSecret: "TestTheApprovalProcessesAnnounceTheRequestAsASignal",
+		Since:       Unreleased, Stability: Experimental,
+		Access:     map[Channel]string{Signal: accessSignal},
+		Listenable: true,
+	},
+	{
+		Type: IncidentRaised, Kind: Platform,
+		Meaning: Text{
+			EN: "A token parked on an element and waits for somebody to fix the cause: an incident was raised.",
+			DE: "Ein Token ist an einem Element stehen geblieben und wartet, bis jemand die Ursache behebt: ein Incident wurde ausgelöst.",
+		},
+		Moment:   Moment{Producer: "the incident record (IntentIncidentCreated), folded into the feed by applyToState"},
+		Channels: []Channel{Feed},
+		Payload: []Field{
+			{Name: "elementInstanceKey", Type: "number", Always: true, Data: NotPersonal, Meaning: Text{EN: "The incident: the element instance that parked, the key GET /api/v1/incidents lists it under and its resolve takes.", DE: "Der Incident: die stehen gebliebene Elementinstanz, unter deren Schlüssel GET /api/v1/incidents ihn führt und die sein Lösen erwartet."}},
+			{Name: "processInstanceKey", Type: "number", Always: true, Data: NotPersonal, Meaning: Text{EN: "The process instance it parked in.", DE: "Die Prozessinstanz, in der es stehen blieb."}},
+			{Name: "elementIndex", Type: "number", Always: true, Data: NotPersonal, Meaning: Text{EN: "The element in the compiled definition; elementId names it while the definition is deployed.", DE: "Das Element in der kompilierten Definition; elementId benennt es, solange die Definition deployt ist."}},
+			{Name: "incidentType", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "What parked: job (a job whose retries ran out), timer (a schedule that stopped resolving) or budget (an element whose run used up its execution budget).", DE: "Was stehen blieb: job (ein Job ohne verbleibende Versuche), timer (ein Zeitplan, der sich nicht mehr auflöst) oder budget (ein Element, dessen Lauf sein Ausführungsbudget aufgebraucht hat)."}},
+			{Name: "raisedAt", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "When the incident was raised.", DE: "Wann der Incident ausgelöst wurde."}},
+			{Name: "jobKey", Type: "number", Data: NotPersonal, Meaning: Text{EN: "The job, for an incident of a job.", DE: "Der Job, bei einem Incident eines Jobs."}},
+			{Name: "processDefKey", Type: "number", Data: NotPersonal, Meaning: Text{EN: "The process definition the instance ran; with elementIndex and incidentType the cause a receiver groups by (ADR-0337).", DE: "Die Prozessdefinition, die die Instanz ausführte; mit elementIndex und incidentType die Ursache, nach der ein Empfänger gruppiert (ADR-0337)."}},
+			{Name: "processId", Type: "string", Data: NotPersonal, Meaning: Text{EN: "The process id of that definition, while it is deployed.", DE: "Die Prozess-ID dieser Definition, solange sie deployt ist."}},
+			{Name: "version", Type: "number", Data: NotPersonal, Meaning: Text{EN: "Its version, while it is deployed.", DE: "Ihre Version, solange sie deployt ist."}},
+			{Name: "elementId", Type: "string", Data: NotPersonal, Meaning: Text{EN: "The BPMN id of the element, while the definition is deployed.", DE: "Die BPMN-ID des Elements, solange die Definition deployt ist."}},
+		},
+		NeverSecret: "TestTheFeedCarriesNoSecret",
+		Since:       Unreleased, Stability: Experimental,
+		Access: map[Channel]string{Feed: accessPlatform},
+	},
+	{
+		Type: IncidentResolved, Kind: Platform,
+		Meaning: Text{
+			EN: "An incident was resolved: the token that had parked runs again.",
+			DE: "Ein Incident wurde gelöst: das stehen gebliebene Token läuft wieder.",
+		},
+		Moment:   Moment{Producer: "the incident record (IntentIncidentResolved), folded into the feed by applyToState"},
+		Channels: []Channel{Feed},
+		Payload: []Field{
+			{Name: "elementInstanceKey", Type: "number", Always: true, Data: NotPersonal, Meaning: Text{EN: "The incident: the element instance that parked, the key GET /api/v1/incidents lists it under and its resolve takes.", DE: "Der Incident: die stehen gebliebene Elementinstanz, unter deren Schlüssel GET /api/v1/incidents ihn führt und die sein Lösen erwartet."}},
+			{Name: "processInstanceKey", Type: "number", Always: true, Data: NotPersonal, Meaning: Text{EN: "The process instance it parked in.", DE: "Die Prozessinstanz, in der es stehen blieb."}},
+			{Name: "elementIndex", Type: "number", Always: true, Data: NotPersonal, Meaning: Text{EN: "The element in the compiled definition; elementId names it while the definition is deployed.", DE: "Das Element in der kompilierten Definition; elementId benennt es, solange die Definition deployt ist."}},
+			{Name: "incidentType", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "What parked: job (a job whose retries ran out), timer (a schedule that stopped resolving) or budget (an element whose run used up its execution budget).", DE: "Was stehen blieb: job (ein Job ohne verbleibende Versuche), timer (ein Zeitplan, der sich nicht mehr auflöst) oder budget (ein Element, dessen Lauf sein Ausführungsbudget aufgebraucht hat)."}},
+			{Name: "raisedAt", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "When the incident was raised.", DE: "Wann der Incident ausgelöst wurde."}},
+			{Name: "resolvedAt", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "When it was resolved.", DE: "Wann er gelöst wurde."}},
+			{Name: "jobKey", Type: "number", Data: NotPersonal, Meaning: Text{EN: "The job, for an incident of a job.", DE: "Der Job, bei einem Incident eines Jobs."}},
+			{Name: "processDefKey", Type: "number", Data: NotPersonal, Meaning: Text{EN: "The process definition the instance ran; with elementIndex and incidentType the cause a receiver groups by (ADR-0337).", DE: "Die Prozessdefinition, die die Instanz ausführte; mit elementIndex und incidentType die Ursache, nach der ein Empfänger gruppiert (ADR-0337)."}},
+			{Name: "processId", Type: "string", Data: NotPersonal, Meaning: Text{EN: "The process id of that definition, while it is deployed.", DE: "Die Prozess-ID dieser Definition, solange sie deployt ist."}},
+			{Name: "version", Type: "number", Data: NotPersonal, Meaning: Text{EN: "Its version, while it is deployed.", DE: "Ihre Version, solange sie deployt ist."}},
+			{Name: "elementId", Type: "string", Data: NotPersonal, Meaning: Text{EN: "The BPMN id of the element, while the definition is deployed.", DE: "Die BPMN-ID des Elements, solange die Definition deployt ist."}},
+		},
+		NeverSecret: "TestTheFeedCarriesNoSecret",
+		Since:       Unreleased, Stability: Experimental,
+		Access: map[Channel]string{Feed: accessPlatform},
 	},
 }

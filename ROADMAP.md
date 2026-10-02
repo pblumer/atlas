@@ -2171,8 +2171,12 @@ actions with closed effects, each a command whose outcome is a fact published be
   - ✅ A signal start or catch on a catalogued event whose payload carries personal data
     requires `admin`. It is refused at the deploy, the bundle deploy and the application import,
     and the same finding, from the same check, is in the Problems panel.
-  - 🔲 `atlas.approval.requested` from the three shop approval processes.
-  - 🔲 Incidents in the feed, after the feed leaves the service-catalogue area.
+  - ✅ `atlas.approval.requested` from the three shop approval processes, thrown before the
+    approval task waits, with the rule, who decides and the approval instance.
+  - ✅ Incidents in the feed. The feed leaves the service-catalogue area: it is served and
+    pushed with the shop off, without the catalogue's events. `atlas.incident.raised` and
+    `atlas.incident.resolved` carry the cause (definition, element, type) and never the
+    message.
   - 🔲 The remaining entries: user created and rejected, offboarding, access review,
     deployments.
 - 🔲 **Not in any slice yet:** an operator action for every held position of a product.

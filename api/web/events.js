@@ -21,12 +21,22 @@ const CHANNEL_WHAT = {
   log: "a structured log line, named in the log catalogue",
 };
 
+// withheld says the server passes over this entry's events in the feed: a fact of the
+// service catalogue on a server whose catalogue is switched off.
+const withheld = (entry, ls) => !!(ls && ls.catalogueWithheld && entry.serviceCatalogue);
+
 // listenersOf is everything listening to one entry: the deployed models on its name,
-// and for a feed entry every feed subscription, since each receives every feed type.
+// and for a feed entry the feed subscriptions it reaches. A subscription receives every
+// feed type it is not narrowed away from: a fact of the engine belongs to no catalogue,
+// so a subscription narrowed to catalogues is not sent it, and none is sent what the
+// server withholds.
 function listenersOf(entry, ls) {
   if (!ls) return { processes: [], feed: [] };
   const processes = (ls.processes || []).filter((l) => l.type === entry.type);
-  const feed = (entry.channels || []).includes("feed") ? (ls.feed || []) : [];
+  let feed = [];
+  if ((entry.channels || []).includes("feed") && !withheld(entry, ls)) {
+    feed = (ls.feed || []).filter((f) => entry.serviceCatalogue || !(f.reach || []).length);
+  }
   return { processes, feed };
 }
 
@@ -43,7 +53,10 @@ function detailHTML(entry, ls) {
   const access = Object.entries(entry.access || {}).map(([ch, who]) =>
     `<li><b>${esc(ch)}</b> — ${esc(who)}</li>`).join("");
   const moment = entry.moment || {};
-  const where = moment.process ? `<code>${esc(moment.process)}</code> at <code>${esc(moment.element)}</code> — ` : "";
+  const places = moment.places || [];
+  const where = places.length
+    ? places.map((p) => `<code>${esc(p.process)}</code> at <code>${esc(p.element)}</code>`).join(", ") + " — "
+    : "";
   let listening = "";
   if (ls) {
     const { processes, feed } = listenersOf(entry, ls);
@@ -60,8 +73,8 @@ function detailHTML(entry, ls) {
       <h3>Listening now</h3>
       ${processes.length ? `<table><thead><tr><th>Process</th><th>Version</th><th>Project</th><th>Element</th><th>Personal data it receives</th></tr></thead><tbody>${rows}</tbody></table>`
         : `<p class="muted">No deployed model listens to this name.</p>`}
+      ${withheld(entry, ls) ? `<p class="muted ev-withheld">The service catalogue is switched off on this server: the feed passes over this event, and no subscription is sent it.</p>` : ""}
       ${feed.length ? `<h4>Feed subscriptions</h4>
-        ${ls.feedDelivered ? "" : `<p class="muted">The service catalogue is switched off on this server, so the feed is neither served nor pushed; these subscriptions wait.</p>`}
         <table><thead><tr><th>Worker</th><th>Narrowed to</th><th>State</th></tr></thead><tbody>${subs}</tbody></table>` : ""}
     </div>`;
   }
@@ -69,6 +82,7 @@ function detailHTML(entry, ls) {
     <h2><code>${esc(entry.type)}</code></h2>
     <p>${esc((entry.meaning || {}).en)}</p>
     <p class="muted">${where}${esc(moment.producer)}</p>
+    ${entry.serviceCatalogue ? `<p class="muted">Part of the service catalogue: a server whose catalogue is switched off does not emit it.</p>` : ""}
     <h3>Payload</h3>
     ${fields ? `<table><thead><tr><th>Field</th><th>Type</th><th></th><th></th><th>Meaning</th></tr></thead><tbody>${fields}</tbody></table>`
       : `<p class="muted">No fields: the event is its name.</p>`}

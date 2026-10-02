@@ -36,6 +36,13 @@ import (
 // be given. The home is read when the page is, not frozen in the fact: an item moved to
 // another home moves its rows with it, as its editing already did
 // (ADR-0432).
+//
+// The feed also carries facts of the engine, which belong to no catalogue: an incident
+// raised or resolved (ADR-0435). A reader narrowed to catalogues never receives them,
+// since no reach contains the home they do not have. And the feed is no longer the
+// service catalogue's alone: a server whose catalogue is switched off (ADR-0434) still
+// serves and pushes it, passing over the catalogue's own rows, so a platform fact does
+// not fall silent because the shop is off.
 
 // defaultEventFeedTTL is how long a feed row is kept when the operator set nothing.
 const defaultEventFeedTTL = 30 * 24 * time.Hour
@@ -126,7 +133,7 @@ func (s *Server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 		limit = v
 	}
 
-	view, nodeID, part, err := s.feedSnapshot()
+	view, nodeID, part, defs, err := s.feedSnapshot()
 	switch {
 	case errors.Is(err, errFeedStopping):
 		httpapi.Error(w, http.StatusServiceUnavailable, "event feed: the server is stopping")
@@ -150,7 +157,7 @@ func (s *Server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	page, err := s.readFeedPage(view, part, nodeID, after, limit, feedReach(httpapi.PrincipalFrom(r.Context())))
+	page, err := s.readFeedPage(view, defs, part, nodeID, after, limit, feedReach(httpapi.PrincipalFrom(r.Context())))
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "event feed: "+err.Error())
 		return
@@ -162,9 +169,10 @@ func (s *Server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 var errFeedStopping = errors.New("the server is stopping")
 
 // feedSnapshot takes what reading the feed needs from the run loop — the node's id, the
-// partition and a read view — and nothing else, so the read itself runs with the loop
-// free (ADR-0239). The caller closes the view.
-func (s *Server) feedSnapshot() (view *state.ReadView, nodeID string, part uint16, err error) {
+// partition, a read view and the deployed definitions an incident row names — and
+// nothing else, so the read itself runs with the loop free (ADR-0239). The caller
+// closes the view.
+func (s *Server) feedSnapshot() (view *state.ReadView, nodeID string, part uint16, defs defIndex, err error) {
 	s.do(func() {
 		var ident nodeIdentity
 		if ident, err = s.nodeIdentity(); err != nil {
@@ -172,20 +180,23 @@ func (s *Server) feedSnapshot() (view *state.ReadView, nodeID string, part uint1
 		}
 		nodeID, part = ident.ID, s.proc.Partition()
 		view = s.store.ReadView()
+		defs = s.defIndexOnLoop()
 	})
 	if err == nil && view == nil {
 		err = errFeedStopping
 	}
-	return view, nodeID, part, err
+	return view, nodeID, part, defs, err
 }
 
 // readFeedPage reads at most limit events after a cursor from a snapshot, narrowed to a
 // reach of catalogues (nil reads everything). Both doors read through it: the pull
 // route a page at a time, and push delivery a batch at a time (feedpush.go), so a
-// subscription and a token with the same reach are given the same events.
-func (s *Server) readFeedPage(view *state.ReadView, part uint16, nodeID string, after uint64, limit int,
+// subscription and a token with the same reach are given the same events. On a server
+// whose catalogue is switched off it passes over the catalogue's rows, and the cursor
+// with them: what is left is the engine's facts.
+func (s *Server) readFeedPage(view *state.ReadView, defs defIndex, part uint16, nodeID string, after uint64, limit int,
 	reach map[string]bool) (eventPage, error) {
-	source := s.eventSource(nodeID)
+	sources := feedSources{catalogue: s.eventSource(nodeID), engine: s.engineEventSource(nodeID)}
 	homes := s.itemHomes()
 	page := eventPage{Events: []cloudEvent{}, Next: strconv.FormatUint(after, 10)}
 	read := 0
@@ -195,6 +206,10 @@ func (s *Server) readFeedPage(view *state.ReadView, part uint16, nodeID string, 
 			return errEventPageFull
 		}
 		read++
+		if s.catalogueOff && e.IsCatalogue() {
+			page.Next = strconv.FormatUint(e.Position, 10)
+			return nil
+		}
 		home, err := homes(feedItem(e))
 		if err != nil {
 			return err
@@ -204,7 +219,7 @@ func (s *Server) readFeedPage(view *state.ReadView, part uint16, nodeID string, 
 			page.Next = strconv.FormatUint(e.Position, 10)
 			return nil
 		}
-		page.Events = append(page.Events, feedEnvelope(e, nodeID, source, home))
+		page.Events = append(page.Events, feedEnvelope(e, nodeID, sources, home, defs))
 		page.Next = strconv.FormatUint(e.Position, 10)
 		return nil
 	})
@@ -276,19 +291,35 @@ func (s *Server) eventSource(nodeID string) string {
 	return "urn:atlas:" + nodeID + ":catalog"
 }
 
+// engineEventSource is the `source` of the engine's facts, beside the catalogue's:
+// the external URL and `/engine`, or the node's URN. A receiver tells the two kinds
+// of producer apart by it, as the record does (ADR-0435 §3).
+func (s *Server) engineEventSource(nodeID string) string {
+	if base := strings.TrimRight(strings.TrimSpace(s.externalURL), "/"); base != "" {
+		return base + "/engine"
+	}
+	return "urn:atlas:" + nodeID + ":engine"
+}
+
+// feedSources are the two sources a page's events name.
+type feedSources struct{ catalogue, engine string }
+
 // feedEnvelope wraps one feed row as a CloudEvent. Its id is the node, the partition
 // and the log position, which no other fact shares and a re-read repeats. The data
 // names people by id only (ADR-0314), and the catalogue that maintains the product as
 // homeCatalog, where the item has one.
-func feedEnvelope(e state.FeedEntry, nodeID, source, home string) cloudEvent {
+func feedEnvelope(e state.FeedEntry, nodeID string, sources feedSources, home string, defs defIndex) cloudEvent {
 	ev := cloudEvent{
 		SpecVersion:     "1.0",
 		ID:              nodeID + ":" + strconv.FormatUint(uint64(e.Partition), 10) + ":" + strconv.FormatUint(e.Position, 10),
-		Source:          source,
+		Source:          sources.catalogue,
 		Time:            feedTime(e.At),
 		DataContentType: "application/json",
 	}
 	switch {
+	case e.Incident != nil:
+		ev.Source = sources.engine
+		ev.Type, ev.Subject, ev.Data = incidentEvent(e, defs)
 	case e.Outcome != nil:
 		o := e.Outcome
 		ev.Type = o.EventType
@@ -340,7 +371,7 @@ func feedEnvelope(e state.FeedEntry, nodeID, source, home string) cloudEvent {
 		}
 		ev.Data = data
 	}
-	if data, ok := ev.Data.(map[string]any); ok && home != "" {
+	if data, ok := ev.Data.(map[string]any); ok && home != "" && e.IsCatalogue() {
 		data["homeCatalog"] = home
 	}
 	return ev

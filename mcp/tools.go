@@ -787,10 +787,9 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
-			Name:      "atlas_feed_subscriptions",
-			Catalogue: true,
+			Name: "atlas_feed_subscriptions",
 			Description: "The event feed's push subscriptions — which systems beyond atlas (a CMDB, a billing " +
-				"system) are sent the feed of action outcomes and granted and revoked rights, and whether that " +
+				"system) are sent the feed of action outcomes, granted and revoked rights and incidents, and whether that " +
 				"delivery is moving. Admin-only. Each row names its cloudevents Worker ('workerId', " +
 				"'workerName'), the catalogues it is narrowed to ('reach'; empty is the whole feed), its " +
 				"'cursor' (the feed position delivered through), 'enabled' and 'disabledReason' (set when the " +
