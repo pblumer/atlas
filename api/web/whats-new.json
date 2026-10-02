@@ -2,6 +2,28 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "the-shop-the-catalogue-the-orders-and-the-inventory-can-be-s",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The shop and the catalogue can be switched off",
+        "de": "Shop und Katalog lassen sich ausschalten"
+      },
+      "summary": {
+        "en": "An installation that uses Atlas as a workflow engine and offers no shop can now say so once, at start: --catalogue=false (or ATLAS_CATALOGUE=false, or atlas.catalogue.enabled: false in the Helm chart). The shop, the catalogue, the orders and the inventory are then not served, the Console leaves Shop, Catalogue, Reconciliation and Access review out of its menus, and AI agents are not offered their tools. Nothing stored is removed and your processes run unchanged; turning it back on is a restart. Without the flag nothing changes.",
+        "de": "Eine Installation, die Atlas als Workflow-Engine nutzt und keinen Shop anbietet, kann das jetzt einmal beim Start festlegen: --catalogue=false (oder ATLAS_CATALOGUE=false, oder atlas.catalogue.enabled: false im Helm-Chart). Shop, Katalog, Aufträge und Bestand werden dann nicht ausgeliefert, die Console blendet Shop, Katalog, Abgleich und Zugriffsprüfung in ihren Menüs aus, und KI-Agenten werden deren Werkzeuge nicht angeboten. Gespeichertes wird nicht entfernt, und Ihre Prozesse laufen unverändert weiter; das Wiedereinschalten ist ein Neustart. Ohne den Schalter ändert sich nichts."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Shop",
+        "Operations"
+      ]
+    },
+    {
       "id": "the-event-feed-can-be-pushed-to-a-system-that-cannot-poll-it",
       "version": "Unreleased",
       "date": null,
@@ -273,47 +295,6 @@
           "de": "Katalog öffnen"
         },
         "route": "#/catalog"
-      }
-    },
-    {
-      "id": "the-modeler-offers-the-events-your-workers-publish-when-you-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Pick your Workers' events instead of typing them",
-        "de": "Ereignisse der Worker auswählen statt abtippen"
-      },
-      "summary": {
-        "en": "When a start event, a catch event, a boundary event or a receive task waits for a message, its message picker now lists the events your Workers publish — a Jira, clio, Google Sheets or Discord watch configured under Workers → Events… in the Console — with the worker behind each and a mark where a watch is switched off. Picking one creates the message with exactly that name. Before, the name had to be typed by hand, and one wrong character meant a process that never started.",
-        "de": "Wartet ein Startereignis, ein Zwischenereignis, ein Randereignis oder eine Empfangsaufgabe auf eine Nachricht, listet die Nachrichtenauswahl jetzt die Ereignisse Ihrer Worker auf – eine Jira-, clio-, Google-Sheets- oder Discord-Überwachung aus «Workers → Events…» in der Konsole –, mit dem jeweiligen Worker und einer Markierung, wo eine Überwachung ausgeschaltet ist. Ein Klick legt die Nachricht mit genau diesem Namen an. Bisher musste der Name von Hand eingetippt werden, und ein falsches Zeichen bedeutete einen Prozess, der nie startete."
-      },
-      "link": {
-        "label": "ADR-0205",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0205-connector-ownership-and-event-delivery.md"
-      },
-      "tags": [
-        "Modeler",
-        "Workers"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a process in the Modeler and switch to the «Implement» tab.",
-          "Select a message start event, catch event, boundary event or receive task.",
-          "Open «Message» and choose a name under «Events from Workers»."
-        ],
-        "de": [
-          "Öffnen Sie einen Prozess im Modeler und wechseln Sie zum Reiter «Implement».",
-          "Wählen Sie ein Nachrichten-Startereignis, ein Zwischenereignis, ein Randereignis oder eine Empfangsaufgabe.",
-          "Öffnen Sie «Message» und wählen Sie einen Namen unter «Events from Workers»."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]

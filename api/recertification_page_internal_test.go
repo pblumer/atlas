@@ -15,7 +15,9 @@ import (
 func TestTheAccessReviewIsReachableFromTasks(t *testing.T) {
 	src := readWeb(t, "app.js")
 
-	if !strings.Contains(src, `{ name: "Access review", route: "#/tasks/recertification", role: "user" }`) {
+	// Up to the role gate, not the whole line: the entry also says it belongs to the
+	// catalogue, so a server that switched the area off leaves it out.
+	if !strings.Contains(src, `{ name: "Access review", route: "#/tasks/recertification", role: "user"`) {
 		t.Error("no navigation entry leads to the access review. A campaign that reaches " +
 			"nobody is a campaign nobody answers, and the rows then close as unanswered " +
 			"through no fault of the reviewer")

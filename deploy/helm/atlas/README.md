@@ -206,6 +206,7 @@ common knobs:
 | `atlas.auth.enabled` | `false` | Require login for API/UI |
 | `atlas.vault.enabled` | `true` | Encrypted secret vault |
 | `atlas.docs.enabled` | `true` | Serve OpenAPI + API explorer |
+| `atlas.catalogue.enabled` | `true` | Serve the shop, catalogue, orders and inventory; `false` switches the whole area off, keeping its data |
 | `atlas.tls.enabled` | `false` | Terminate TLS in the pod. Needs `atlas.tls.existingSecret`; the probes switch to HTTPS with it |
 | `atlas.tls.existingSecret` | `""` | `kubernetes.io/tls` Secret with the certificate and key (what cert-manager writes) |
 | `atlas.tls.caKey` | `""` | Key in that Secret holding a CA bundle to trust when publishing to another Atlas (`--tls-ca`) |

@@ -80,6 +80,11 @@ var (
 	ServerShuttingDown = newEvent("server.shutting_down")
 	ServerDocsEnabled  = newEvent("server.docs_enabled")
 	ServerMetrics      = newEvent("server.metrics_enabled")
+	// ServerCatalogueDisabled is a server started with --catalogue=false: the shop,
+	// the catalogue, the orders and the inventory are not served
+	// (ADR-draft-the-catalogue-can-be-switched-off). One line at start, so the
+	// question "why is there no shop" has an answer in the log.
+	ServerCatalogueDisabled = newEvent("server.catalogue_disabled")
 	// The operator-supplied certificate, where this server terminates TLS itself
 	// (ADR-0191). ServerTLSReloaded is one line per renewal picked up without a
 	// restart; ServerTLSReloadFailed is the pair that changed on disk and could not
@@ -188,6 +193,11 @@ var (
 	// CommandFailed is a top-level command exiting non-zero.
 	CommandFailed = newEvent("command.failed")
 	MCPProxying   = newEvent("mcp.proxying")
+	// MCPCatalogueUnknown is the stdio adapter unable to ask its server whether it
+	// serves the catalogue (ADR-draft-the-catalogue-can-be-switched-off). The
+	// adapter then offers every tool and the server refuses what it does not serve,
+	// so this is a WARN about a tool list that may be too long, never a failure.
+	MCPCatalogueUnknown = newEvent("mcp.catalogue_unknown")
 	// WorkerStarting is the out-of-process job worker announcing what it will serve
 	// and for which server (ADR-0157).
 	WorkerStarting = newEvent("worker.starting")

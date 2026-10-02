@@ -16,7 +16,9 @@ import (
 func TestTheFindingsAreReachableFromOperations(t *testing.T) {
 	src := readWeb(t, "app.js")
 
-	if !strings.Contains(src, `{ name: "Reconciliation", route: "#/operations/reconciliation", role: "operator" }`) {
+	// Up to the role gate, not the whole line: the entry also says it belongs to the
+	// catalogue, so a server that switched the area off leaves it out.
+	if !strings.Contains(src, `{ name: "Reconciliation", route: "#/operations/reconciliation", role: "operator"`) {
 		t.Error("no navigation entry leads to the findings. The comparison writes them, the " +
 			"three actions need a person to have read them, and a person who cannot reach " +
 			"them is a person who cannot decide")
