@@ -1,9 +1,21 @@
 # ADR-0440: A worker runs the jobs of one type concurrently, up to the places it has free
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-02 — IMAP session caps; see the amendment note below)
 - **Implementation:** Landed
 - **Date:** 2026-10-02
 - **Deciders:** Atlas maintainers
+
+> **Amendment (2026-10-02): IMAP session caps.** [ADR-0438](0438-mailbox-worker.md)
+> landed beside this record and gave the mail worker mailbox operations. Each one opens
+> an IMAP session of its own (`imapMailbox.session`), so under this record's default up
+> to 16 sessions to one account can be open at once. An IMAP server that caps sessions
+> per account is therefore one more target with a lower connection limit than the
+> default, next to the SMTP relay and the rate-limited API named under *Consequences*.
+> It answers the excess with login failures, which retries and incidents surface. The
+> remedy is the same, `--worker-max-jobs`. The decision is unchanged. The handler was
+> checked for this record's concurrency audit: the IMAP mailbox's fields are set once,
+> when the client is built, and the Graph and Gmail mailboxes share only the
+> mutex-guarded token cache, so no data race arises.
 
 ## Context and problem statement
 

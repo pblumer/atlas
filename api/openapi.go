@@ -132,6 +132,16 @@ func (s *Server) apiRoutes() []apiRoute {
 				"product": tString(), "version": tString(),
 				"docs": tBool(), "catalogue": tBool(),
 			}))}},
+		// What switching the catalogue off strands, for the Console's dashboard
+		// (ADR-0434). System, not Catalogue: it is the route that has something to say
+		// precisely when the catalogue is off, so the switch must leave it served.
+		{"GET", "/api/v1/catalogue-switch", s.handleCatalogueSwitch, apiOp{
+			summary: "Whether the shop, catalogue, orders and inventory are served, and — when they are switched off (--catalogue=false) — how many instances of processes that call the order routes are still running, by process id: the shop's fulfilment and approval processes and the provision and deprovision processes products bind. Each fails at its next call to the order routes. Read live from the per-definition counters (ADR-0434, ADR-0080). Admin-only",
+			tag:     "System", role: RoleAdmin,
+			resp: jsonBody("The switch and what it strands", schemaObj(map[string]any{
+				"catalogue": tBool(), "shopProcessInstances": tInteger(),
+				"productProcessInstances": tInteger(), "processes": tArray(),
+			}))}},
 		// The node descriptor (ADR-0189 §6): which *runtime* is answering, as opposed
 		// to /api/v1/info's account of which binary. It is what makes cross-server
 		// correlation possible at all, so it is readable by any signed-in identity and

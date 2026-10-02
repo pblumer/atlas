@@ -400,6 +400,7 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/sql/mock-journal":      "an operator's view of a mockup run; an agent reads what a job did from the job",
 	"POST /api/v1/workers/{id}/restart": "restarts an operating-system process; an operator action, deliberately not an agent one",
 	"GET /api/v1/checkpoints":           "admin recovery-checkpoint status, not an agent action",
+	"GET /api/v1/catalogue-switch":      "admin diagnosis of what switching the catalogue off strands, shown on the Console's dashboard; not an agent action",
 	"POST /api/v1/checkpoints":          "admin on-demand checkpoint/compaction, not an agent action",
 
 	// Per-server call-activity target overrides (ADR-0105): admin operator config,

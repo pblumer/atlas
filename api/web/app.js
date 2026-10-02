@@ -1434,6 +1434,7 @@ function paintWhatsNew(slot, entries, lang) {
 // ---------- Views ----------
 async function viewConsoleDashboard() {
   view.innerHTML = `
+    <div id="catalogue-stranded-slot"></div>
     <div class="card">
       <div class="welcome-head">
         <span class="mark welcome-mark${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
@@ -1474,6 +1475,10 @@ async function viewConsoleDashboard() {
     </div>
     <div id="key-features-slot"></div>`;
   view.querySelector("[data-system-overview]").addEventListener("click", () => openSystemOverview());
+  // What switching the catalogue off strands (ADR-0434): asked only where it can have
+  // an answer — the catalogue off, and an administrator looking — so nobody else pays a
+  // request for it. Fills its own slot, and is silent when nothing is stranded.
+  if (!FEATURES.catalogue && mayUse("admin")) renderCatalogueStranded(document.getElementById("catalogue-stranded-slot"));
   renderWhatsNew(document.getElementById("whats-new-slot")); // fills its own slot; safe if it fails
   // The key-features tile sits below the dashboard's own tiles: what Atlas is, for
   // someone who arrived here without having read the README. Fills its own slot,
@@ -1497,6 +1502,36 @@ async function viewConsoleDashboard() {
     document.getElementById("s-pi").textContent = stats.activeProcessInstances;
     document.getElementById("s-ei").textContent = stats.activeElementInstances;
   } catch (e) { toast(e.message, "err"); }
+}
+
+// renderCatalogueStranded tells an administrator, on the dashboard, which processes
+// are still working orders on a server that switched the catalogue off. The start
+// writes the same as a log line, and a log line is lost wherever nobody reads the
+// start. Read live, so the notice goes away once those instances are finished or
+// ended. Silent on failure and when nothing is stranded: it is an addition to a page
+// that works without it.
+async function renderCatalogueStranded(slot) {
+  if (!slot) return;
+  let s;
+  try { s = await api("GET", "/api/v1/catalogue-switch"); } catch { return; }
+  const total = s ? (s.shopProcessInstances || 0) + (s.productProcessInstances || 0) : 0;
+  if (!s || s.catalogue !== false || total === 0) return;
+  const rows = (s.processes || []).map((p) =>
+    `<li><code>${esc(p.processId)}</code> — ${esc(String(p.instances))} running</li>`).join("");
+  slot.innerHTML = `
+    <div class="card catalogue-stranded" role="status">
+      <h2>Orders left mid-way by the switched-off catalogue</h2>
+      <p>The shop, the catalogue, the orders and the inventory are switched off on this server
+      (<code>--catalogue=false</code>), but ${total} process instance${total === 1 ? " is" : "s are"} still working orders.
+      Each fails at its next call to the order routes and, its retries spent, raises an incident.</p>
+      <ul>${rows}</ul>
+      <p class="muted">Switch the catalogue back on and retry those incidents to finish the orders,
+      or end the instances deliberately.</p>
+      <div class="row">
+        <a class="btn ghost" href="#/operations/incidents">Open incidents</a>
+        <a class="btn ghost" href="#/operations">Instances</a>
+      </div>
+    </div>`;
 }
 
 async function viewConsoleEngine() {
