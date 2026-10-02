@@ -1,0 +1,15 @@
+{
+  "tags": [
+    "Service catalogue",
+    "Examples",
+    "Deployment"
+  ],
+  "title": {
+    "en": "Install a package from the command line",
+    "de": "Ein Paket im Terminal installieren"
+  },
+  "summary": {
+    "en": "The new command atlas import installs an application, and the shop it serves, into a running instance without a browser, for example from a pipeline. It asks for who orders and who approves through an answers file, accepts groups and people by name so the same file works on every instance, and refuses before writing anything if an answer is missing or unknown.",
+    "de": "Der neue Befehl atlas import installiert eine Applikation und den Shop dazu ohne Browser in eine laufende Instanz, etwa aus einer Pipeline. Wer bestellt und wer genehmigt, steht in einer Antwortdatei; Gruppen und Personen dürfen beim Namen genannt werden, damit dieselbe Datei auf jeder Instanz gilt. Fehlt eine Antwort oder ist sie unbekannt, bricht der Befehl ab, bevor er etwas schreibt."
+  }
+}
