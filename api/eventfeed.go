@@ -23,8 +23,10 @@ import (
 // the oldest cursor still held: a consumer that fell behind is told what it missed
 // rather than silently skipping it.
 //
-// The route reads a snapshot off the run loop (ADR-0239). It requires `operator` in
-// this first cut; a role scoped to the feed alone and scoped tokens are follow-ups.
+// The route reads a snapshot off the run loop (ADR-0239). It requires the `feedreader`
+// role, which a token minted with the `events` scope carries and nothing else, so a
+// system that follows the feed holds a credential that reads the feed and no more
+// (ADR-draft-the-event-feed-has-its-own-role-and-token-scope).
 
 // defaultEventFeedTTL is how long a feed row is kept when the operator set nothing.
 const defaultEventFeedTTL = 30 * 24 * time.Hour
