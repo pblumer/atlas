@@ -503,7 +503,7 @@ through a Worker (ADR-0203) with a server-held cursor per subscription, the retr
 of the task and a circuit breaker per endpoint (ADR-0340). It reads the feed; it adds no
 fact and no second path into `applyToState`.
 *(Built by
-[ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint](draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md):
+[ADR-0433](0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md):
 a feed subscription names a `cloudevents` Worker, and the server POSTs the feed after the
 subscription's server-held cursor as CloudEvents batches, off the run loop, adding no fact.
 Two departures, argued there: delivery runs in the server process rather than as a leased

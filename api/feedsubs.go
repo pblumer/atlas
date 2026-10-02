@@ -13,7 +13,7 @@ import (
 )
 
 // The routes that manage push delivery of the event feed
-// (ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint). Admin-only: a
+// (ADR-0433). Admin-only: a
 // subscription sends the map of who holds what to a system beyond Atlas, which is what
 // minting an events token does (ADR-0430), and minting is an administrator's act.
 

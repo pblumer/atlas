@@ -141,7 +141,7 @@ a reviewed, named set, which is what makes it safe to hand out.
     the catalogue is the product's home, read when the page is.)*
   - **Push delivery.** The Worker that pushes the feed (ADR-0429 §5, prepared) should run
     under this role. *(Built otherwise by
-    [ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint](draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md):
+    [ADR-0433](0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md):
     delivery runs in the server and carries no principal, so no role applies to it; what
     stands in for the role is that only an administrator creates a subscription, as only an
     administrator mints an `events` token.)*

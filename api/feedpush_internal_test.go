@@ -16,7 +16,7 @@ import (
 )
 
 // Push delivery of the event feed
-// (ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint): a subscription on a
+// (ADR-0433): a subscription on a
 // cloudevents Worker is sent the feed after its cursor, a batch at a time, and the cursor
 // moves only when the endpoint accepted the batch.
 

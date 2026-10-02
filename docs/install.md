@@ -1026,7 +1026,7 @@ answers `2xx`. The events are exactly what `GET /api/v1/events` answers.
   `{"enabled":true,"from":"oldest"}` (or `"now"`) resumes it.
 
 Delivery runs inside the server, off its processing loop, every two seconds
-([ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint](adr/draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md)).
+([ADR-0433](adr/0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md)).
 Allow outbound `https` from the server to each receiver.
 
 ### Traces

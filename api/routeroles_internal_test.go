@@ -83,7 +83,7 @@ var wantAdminRoutes = []string{
 	"GET /api/v1/api-tokens",
 	// Where the event feed is pushed: minting a delivery of who holds what to a system
 	// beyond Atlas is the act minting an events token is
-	// (ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint).
+	// (ADR-0433).
 	"GET /api/v1/feed-subscriptions",
 	"POST /api/v1/feed-subscriptions",
 	"PATCH /api/v1/feed-subscriptions/{id}",

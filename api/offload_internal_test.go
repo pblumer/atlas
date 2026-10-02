@@ -451,7 +451,7 @@ const jiraPullBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 // to keep in the engine or to move. The CloudEvents endpoint is the one such kind — the
 // event feed's subscriptions name it, and delivery reads the feed off the run loop as the
 // inbound bridge reads a watch
-// (ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint).
+// (ADR-0433).
 func TestEveryManagedKindIsProvisioned(t *testing.T) {
 	provisioned := (&Server{}).provisionedConnectorKinds()
 	for _, k := range managedConnectorKinds {

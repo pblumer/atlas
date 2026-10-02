@@ -134,7 +134,7 @@ credential for one catalogue would expose who holds the products of every catalo
   - **The shop as a second dimension** (option 2), if a tenant's billing case arrives.
   - **Push delivery.** The Worker that pushes the feed (ADR-0429 §5, prepared) should honour
     the same reach. *(Built by
-    [ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint](draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md):
+    [ADR-0433](0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md):
     a subscription's reach is validated and applied exactly as a token's, through the same
     page reader.)*
 

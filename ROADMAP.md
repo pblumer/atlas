@@ -2084,7 +2084,7 @@ actions with closed effects, each a command whose outcome is a fact published be
   products they maintain; every event names that catalogue as `homeCatalog`. Narrowing by
   the shop an order was placed in is a possible second dimension, not built.
 - ✅ **Push delivery of the feed**
-  ([ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint](docs/adr/draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md)).
+  ([ADR-0433](docs/adr/0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md)).
   A `cloudevents` Worker holds a receiver's https address and bearer token; a feed
   subscription on it (admin, HTTP and the Worker's Feed… panel, read over MCP) is sent the
   feed after its server-held cursor as CloudEvents batches, narrowed by catalogue like a

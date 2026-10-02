@@ -401,7 +401,7 @@ var managedConnectorKinds = append([]managedConnectorKind{
 	},
 	{
 		// A CloudEvents endpoint is where push delivery sends the event feed
-		// (ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint). No task names
+		// (ADR-0433). No task names
 		// it, so it has no job type, no client registry and no in-process handler: the
 		// record is the endpoint and the credential, and the feed's subscriptions
 		// (feedsubs.go) name it. The engine delivers to it itself, off the run loop

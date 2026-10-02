@@ -62,7 +62,7 @@ func TestEveryConfigurableWorkerTypeIsInTheConsoleCatalog(t *testing.T) {
 //
 // A managed kind no task names is served by something other than a job: the CloudEvents
 // endpoint is pushed the event feed by the server itself
-// (ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint), so it answers without
+// (ADR-0433), so it answers without
 // a job type.
 func TestTheConsoleCatalogDescribesNothingAtlasDoesNotServe(t *testing.T) {
 	for id := range consoleWorkerCatalogIDs(t) {

@@ -518,6 +518,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0430](0430-the-event-feed-has-its-own-role-and-token-scope.md) | The event feed has its own role and its own token scope | Accepted | Landed |
 | [0431](0431-system-processes-announce-their-facts-as-signals.md) | A system process announces its facts as signals | Accepted | Landed |
 | [0432](0432-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md) | The event feed is narrowed by the catalogue that maintains the product | Accepted | Landed |
+| [0433](0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md) | The event feed is pushed to a CloudEvents endpoint | Accepted | Landed |
 
 ## The two states of a record
 

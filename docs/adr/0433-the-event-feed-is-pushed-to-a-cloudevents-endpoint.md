@@ -1,4 +1,4 @@
-# ADR-DRAFT: The event feed is pushed to a CloudEvents endpoint
+# ADR-0433: The event feed is pushed to a CloudEvents endpoint
 
 - **Status:** Accepted
 - **Implementation:** Landed

@@ -74,7 +74,7 @@ const (
 	connectorKindAgent = "agent"
 
 	// connectorKindCloudEvents is the endpoint push delivery sends the event feed to
-	// (ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint). No task names it:
+	// (ADR-0433). No task names it:
 	// the feed's subscriptions do (feedsubs.go).
 	connectorKindCloudEvents = "cloudevents"
 )

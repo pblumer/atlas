@@ -289,7 +289,7 @@ var (
 )
 
 // Push delivery of the event feed
-// (ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint).
+// (ADR-0433).
 var (
 	// FeedSubscriptionChanged: an administrator created, changed or deleted a push
 	// subscription — what decides which system beyond Atlas is sent who holds what, so

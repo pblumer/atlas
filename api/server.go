@@ -564,7 +564,7 @@ type Server struct {
 	// are delivered at (WithFeedPushInterval; 0 disables delivery). feedPushes is each
 	// subscription's runtime hold after a failed delivery, feedPushClient and
 	// feedPushClock the HTTP client and clock delivery uses, injectable for tests
-	// (ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint).
+	// (ADR-0433).
 	feedSubs       *feedSubStore
 	feedPush       time.Duration
 	feedPushes     *feedPushState
@@ -2157,7 +2157,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		go s.inboundBridge(s.inboundPoll)
 	}
 	// Push delivery POSTs the event feed to the cloudevents Workers its subscriptions
-	// name (ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint): a goroutine
+	// name (ADR-0433): a goroutine
 	// like the inbound bridge, its network I/O off the run loop and only the cursor's
 	// write on it. A non-positive interval disables it.
 	if s.feedPush > 0 {

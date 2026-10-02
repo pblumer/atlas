@@ -4832,7 +4832,7 @@ async function toggleInboundSubs(row, workerId, kind) {
 }
 
 // toggleFeedSubs opens, under a CloudEvents endpoint Worker's row, what that worker is
-// sent of the event feed (ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint):
+// sent of the event feed (ADR-0433):
 // each subscription with its catalogues, whether delivery is moving — and when its
 // endpoint is failing, since when, the next attempt and what it last said — with the
 // form that adds one. Administrator configuration, like the routes behind it.

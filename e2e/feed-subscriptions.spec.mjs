@@ -1,5 +1,5 @@
 // End-to-end coverage for push delivery of the event feed in the Console
-// (ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint): a CloudEvents endpoint
+// (ADR-0433): a CloudEvents endpoint
 // Worker's Feed… panel lists what the worker is sent and how delivery stands, and
 // subscribes, pauses, rewinds and ends a subscription.
 import { test, expect } from "@playwright/test";

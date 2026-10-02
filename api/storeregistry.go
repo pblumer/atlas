@@ -115,7 +115,7 @@ var persistentStores = []storeEntry{
 	{name: "favourites", class: classInstance, why: "the products each account marked to find again (ADR-0348). A convenience and not a right — nothing here decides what anybody may order — but it is one person's own arrangement of a catalogue they use, and restoring an estate without it hands everybody back a shop they have to set up again"},
 	{name: "repository", class: classDesignTime, why: "the shared artifact repository"},
 	{name: "inbound-subscriptions", class: classDesignTime, why: "which worker receives which message"},
-	{name: "feed-subscriptions", class: classInstance, why: "which CloudEvents endpoint is pushed the event feed, and the position each has been delivered through. The position names this installation's log, so it belongs to a snapshot of this installation and not to a portable export (ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint)"},
+	{name: "feed-subscriptions", class: classInstance, why: "which CloudEvents endpoint is pushed the event feed, and the position each has been delivered through. The position names this installation's log, so it belongs to a snapshot of this installation and not to a portable export (ADR-0433)"},
 	{name: "settings", class: classDesignTime, why: "installation settings, including the OIDC claim mapping"},
 	{name: "process-docs", class: classInstance, why: "process documentation"},
 	{name: "decision-docs", class: classInstance, why: "decision documentation — the sign-off artifact for a business rule, with its own version line"},

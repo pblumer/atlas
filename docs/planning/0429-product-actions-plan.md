@@ -220,7 +220,7 @@ See ADR-0429 §5's as-built note for slice E, and the version-1 contract in
   (ADR-0432).
 - Push delivery to a `cloudevents` Worker, a server-held cursor per subscription, held on
   the breaker's ladder when the receiver fails
-  (ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint).
+  (ADR-0433).
 
 ## Not in any slice yet
 

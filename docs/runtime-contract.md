@@ -79,7 +79,7 @@ or empty with `more` set — keep asking while `more` is true
 ([ADR-0432](adr/0432-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md)).
 
 **Pushed.** The same events are also delivered to a receiver an administrator subscribes
-([ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint](adr/draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md)):
+([ADR-0433](adr/0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md)):
 a `POST` in the CloudEvents HTTP binding's batched mode — the body a JSON array of the
 envelopes above, `Content-Type: application/cloudevents-batch+json`, the header
 `Atlas-Feed-Subscription` naming the subscription and, where one is configured,

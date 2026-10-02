@@ -5,7 +5,7 @@ import (
 )
 
 // feedSubscription is one push delivery of the event feed
-// (ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint): the feed's rows after
+// (ADR-0433): the feed's rows after
 // Cursor, narrowed to Reach, POSTed as CloudEvents batches to the endpoint of the
 // cloudevents Worker it names.
 //
