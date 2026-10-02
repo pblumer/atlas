@@ -523,6 +523,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0435](0435-one-catalogue-of-the-events-atlas-emits.md) | Atlas keeps one catalogue of the events it emits | Proposed | Not started |
 | [0436](0436-a-catalogue-is-imported-as-one-document.md) | A catalogue is imported as one document | Accepted | Landed |
 | [0437](0437-a-package-is-imported-from-the-command-line.md) | A package is imported from the command line | Accepted | Landed |
+| [0438](0438-mailbox-worker.md) | The mail Worker reads its mailbox — an inbound watch, mailbox operations, and who may use them | Accepted | Landed |
 
 ## The two states of a record
 

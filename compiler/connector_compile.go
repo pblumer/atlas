@@ -1251,56 +1251,175 @@ func compileRestConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 
 // compileMailConnectorTask compiles an <atlas:mailConnector> task: it sends a
 // model-authored message through a server-registered mail provider via the job path
-// (ADR-0079). The provider (host, credentials) is resolved server-side by worker
-// name, like clio; only the message (recipients, subject, and the text and/or HTML
-// body) lives in the model.
+// (ADR-0079), or — with an operation — reads or changes the Worker's mailbox
+// (ADR-0438). The provider (host, credentials) is resolved
+// server-side by worker name, like clio; only the message, or the operation and what
+// it addresses, lives in the model.
 func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.Mail
 	if strings.TrimSpace(cn.Connector) == "" {
 		return 0, fmt.Errorf("compiler: mail task %q needs a worker", st.Id)
 	}
-	if strings.TrimSpace(cn.To) == "" {
+	op := strings.ToLower(strings.TrimSpace(cn.Operation))
+	if op == "" {
+		op = mailOpSend
+	}
+	spec, ok := mailOps[op]
+	if !ok {
+		return 0, fmt.Errorf("compiler: mail task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(MailOperations(), ", "))
+	}
+	if op == mailOpSend && strings.TrimSpace(cn.To) == "" {
 		return 0, fmt.Errorf("compiler: mail task %q needs a to recipient", st.Id)
 	}
-	to, err := restValue(b.gate(), st.Id, "to", cn.To)
-	if err != nil {
-		return 0, err
+	// One pass over every authored value, as for Discord: required where the operation
+	// needs it, refused where it does not use it, so a model never carries a value the
+	// worker ignores.
+	for _, v := range []struct {
+		attr     string
+		raw      string
+		required bool
+		allowed  bool
+		why      string
+	}{
+		{"to", cn.To, false, spec.send, "the recipients of a message this task sends"},
+		{"cc", cn.Cc, false, spec.send, "copy recipients of a message this task sends"},
+		{"bcc", cn.Bcc, false, spec.send, "blind-copy recipients of a message this task sends"},
+		{"from", cn.From, false, spec.send, "the sender of a message this task sends"},
+		{"subject", cn.Subject, false, spec.send, "the subject of a message this task sends; a reply takes the original's"},
+		{"body", cn.Body, false, spec.send || spec.reply, "the text of a message or a reply"},
+		{"bodyHtml", cn.BodyHtml, false, spec.send || spec.reply, "the HTML of a message or a reply"},
+		{"folder", cn.Folder, false, spec.list, "the folder a list reads"},
+		{"messageId", cn.MessageID, spec.message, spec.message, "the message the operation acts on — the messageId a watch or a list answered"},
+		{"destination", cn.Destination, spec.destination, spec.destination, "the folder a move files the message into"},
+		{"maxResults", cn.MaxResults, false, spec.list, "how many messages a list answers"},
+		{"unreadOnly", cn.UnreadOnly, false, spec.list, "whether a list answers only unread messages"},
+		{"includeBody", cn.IncludeBody, false, spec.list || spec.get, "whether the text of a message is read along with it"},
+		{"resultVariable", cn.ResultVariable, spec.needsResult, spec.takesResult, "the process variable receiving what the mailbox answered"},
+	} {
+		set := strings.TrimSpace(v.raw) != ""
+		if v.required && !set {
+			return 0, fmt.Errorf("compiler: mail task %q operation %q needs a %s (%s)", st.Id, op, v.attr, v.why)
+		}
+		if set && !v.allowed {
+			return 0, fmt.Errorf("compiler: mail task %q operation %q does not use %s (%s); remove it rather than leaving a value the worker ignores",
+				st.Id, op, v.attr, v.why)
+		}
 	}
-	cc, err := restValue(b.gate(), st.Id, "cc", cn.Cc)
-	if err != nil {
-		return 0, err
+	if spec.reply && strings.TrimSpace(cn.Body) == "" && strings.TrimSpace(cn.BodyHtml) == "" {
+		return 0, fmt.Errorf("compiler: mail task %q operation %q needs a body or a bodyHtml (the text of the reply)", st.Id, op)
 	}
-	bcc, err := restValue(b.gate(), st.Id, "bcc", cn.Bcc)
-	if err != nil {
-		return 0, err
-	}
-	from, err := restValue(b.gate(), st.Id, "from", cn.From)
-	if err != nil {
-		return 0, err
-	}
-	subject, err := restValue(b.gate(), st.Id, "subject", cn.Subject)
-	if err != nil {
-		return 0, err
-	}
-	body, err := restValue(b.gate(), st.Id, "body", cn.Body)
-	if err != nil {
-		return 0, err
-	}
-	bodyHTML, err := restValue(b.gate(), st.Id, "bodyHtml", cn.BodyHtml)
-	if err != nil {
-		return 0, err
-	}
-	return b.AddMailConnectorTask(MailConfig{
+	cfg := MailConfig{
 		Connector: strings.TrimSpace(cn.Connector),
-		To:        to,
-		Cc:        cc,
-		Bcc:       bcc,
-		From:      from,
-		Subject:   subject,
-		Body:      body,
-		BodyHTML:  bodyHTML,
 		Retries:   retries,
-	}), nil
+		ResultVar: strings.TrimSpace(cn.ResultVariable),
+	}
+	if op != mailOpSend {
+		cfg.Operation = op
+	}
+	var err error
+	if spec.list {
+		if cfg.MaxResults, err = mailMaxResults(st.Id, cn.MaxResults); err != nil {
+			return 0, err
+		}
+		if cfg.UnreadOnly, err = mailFlag(st.Id, "unreadOnly", cn.UnreadOnly); err != nil {
+			return 0, err
+		}
+	}
+	if cfg.IncludeBody, err = mailFlag(st.Id, "includeBody", cn.IncludeBody); err != nil {
+		return 0, err
+	}
+	// Each authored value is literal or FEEL (the fx toggle, ADR-0067), compiled once
+	// here and evaluated over the variables the task sees at call time.
+	for _, v := range []struct {
+		what string
+		raw  string
+		into *RestExpr
+	}{
+		{"to", cn.To, &cfg.To},
+		{"cc", cn.Cc, &cfg.Cc},
+		{"bcc", cn.Bcc, &cfg.Bcc},
+		{"from", cn.From, &cfg.From},
+		{"subject", cn.Subject, &cfg.Subject},
+		{"body", cn.Body, &cfg.Body},
+		{"bodyHtml", cn.BodyHtml, &cfg.BodyHTML},
+		{"folder", cn.Folder, &cfg.Folder},
+		{"messageId", cn.MessageID, &cfg.Message},
+		{"destination", cn.Destination, &cfg.Destination},
+	} {
+		if *v.into, err = restValue(b.gate(), st.Id, v.what, v.raw); err != nil {
+			return 0, err
+		}
+	}
+	return b.AddMailConnectorTask(cfg), nil
+}
+
+// The mail task's operations (ADR-0438). Send is the one every mail
+// task authored before mailboxes existed carries, written as no operation at all.
+const (
+	mailOpSend = "send"
+	// mailDefaultMaxResults and mailMaxResultsCeiling bound a list. The answer becomes
+	// a process variable, so the ceiling is about what an instance carries.
+	mailDefaultMaxResults int32 = 25
+	mailMaxResultsCeiling int32 = 100
+)
+
+// mailOp describes what one mail operation requires of a model and what it may carry.
+// It is the compiler's half of connector/mail's operation list; the drift test
+// TestMailOpsMatchTheConnector keeps the two from disagreeing, because the compiler
+// cannot import a package that imports it.
+type mailOp struct {
+	send, reply, list, get   bool
+	message, destination     bool
+	needsResult, takesResult bool
+}
+
+var mailOps = map[string]mailOp{
+	mailOpSend:    {send: true},
+	"list":        {list: true, needsResult: true, takesResult: true},
+	"get":         {get: true, message: true, needsResult: true, takesResult: true},
+	"move":        {message: true, destination: true, takesResult: true},
+	"mark-read":   {message: true},
+	"mark-unread": {message: true},
+	"delete":      {message: true},
+	"reply":       {reply: true, message: true},
+}
+
+// MailOperations lists the operations a mail task may name, sorted.
+func MailOperations() []string {
+	out := make([]string, 0, len(mailOps))
+	for name := range mailOps {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func mailMaxResults(taskID, raw string) (int32, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return mailDefaultMaxResults, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("compiler: mail task %q has a non-numeric maxResults %q", taskID, raw)
+	}
+	if n < 1 || int32(n) > mailMaxResultsCeiling {
+		return 0, fmt.Errorf("compiler: mail task %q has a maxResults of %d; a list answers between 1 and %d messages", taskID, n, mailMaxResultsCeiling)
+	}
+	return int32(n), nil
+}
+
+// mailFlag reads a literal true/false attribute. It is not FEEL: whether a body is read
+// decides what an instance carries, and that is a property of the model, fixed at
+// deploy, not of the data that happens to flow through it.
+func mailFlag(taskID, attr, raw string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "false":
+		return false, nil
+	case "true":
+		return true, nil
+	}
+	return false, fmt.Errorf("compiler: mail task %q has %s=%q; it is true or false", taskID, attr, raw)
 }
 
 // compileUserConnectorTask compiles an <atlas:userConnector> task: it delegates to

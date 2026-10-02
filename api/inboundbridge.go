@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 )
@@ -79,8 +80,20 @@ func (s *Server) pollInbound(ctx context.Context) {
 			continue
 		}
 		events, cursor, err := sb.source.Read(ctx, sb.rec, s.inboundBatch)
-		if err != nil || len(events) == 0 {
-			continue // transient read failure or nothing new; retry next tick
+		if err != nil {
+			continue // transient read failure; retry next tick
+		}
+		if len(events) == 0 {
+			// Nothing to publish — but a source may still have moved: a mail watch
+			// whose page held only senders it does not admit, a folder the server
+			// renumbered (ADR-0438). Leaving the cursor behind would
+			// re-read that page every tick, and a page of refused mail longer than the
+			// batch would stop the watch for good. Every other source answers no cursor
+			// for an empty page, so for them this is the no-op it always was.
+			if cursor != "" && cursor != sb.rec.LastEventID {
+				s.do(func() { s.advanceInboundCursor(subID, cursor) })
+			}
+			continue
 		}
 		// Compute correlation keys and payloads off the run loop.
 		type pub struct {
@@ -162,6 +175,12 @@ const googleDefaultPoll = 60 * time.Second
 // second, and an operator who needs it faster sets pollSeconds on the watch.
 const discordDefaultPoll = 15 * time.Second
 
+// mailDefaultPoll is how often a mail watch is read when it names no cadence of its
+// own. Every provider meters reads — Graph per app and mailbox, Gmail per project,
+// an IMAP server per login — and a read is a session or several requests, so a
+// minute is the latency a mailbox watch accepts, as Jira's does.
+const mailDefaultPoll = 60 * time.Second
+
 // inboundCadence is how often a watch is read: its own pollSeconds, or its kind's
 // default when it states none — which is what the field has always documented itself to
 // mean. Zero means "every tick", which is what a clio read is cheap enough for and what
@@ -177,6 +196,8 @@ func inboundCadence(kind string, rec inboundSubscription) time.Duration {
 		return googleDefaultPoll
 	case connectorKindDiscord:
 		return discordDefaultPoll
+	case connectorKindMail:
+		return mailDefaultPoll
 	}
 	return 0
 }
@@ -372,6 +393,18 @@ func (s *Server) resolveInboundSubs() []pendingSub {
 				continue
 			}
 			src = discordSource{client: client}
+		case connectorKindMail:
+			client, ok := s.mailRegistry.Client(c.Name)
+			if !ok {
+				continue
+			}
+			// A mail Worker that only sends — SMTP without an IMAP endpoint, the
+			// preview provider — has no mailbox to watch (ADR-0438).
+			mb, err := mail.MailboxOf(client)
+			if err != nil {
+				continue
+			}
+			src = mailSource{mb: mb}
 		default:
 			continue // a kind with no inbound half; its worker is outbound only
 		}

@@ -785,7 +785,7 @@ const WORKER_TYPES = [
   },
   {
     id: "mail", name: "Mail", kind: "Outbound e-mail",
-    desc: "Sends an e-mail from a service task off the processor loop via a managed provider — SMTP (any server, incl. Google/Microsoft 365 submission) or the native Gmail and Microsoft Graph APIs (OAuth2 app-only or refresh-token) — or the “preview” provider, which needs neither and delivers to the in-app Outbox so a mail task can be tried before a real provider exists. Recipients, subject, and body are model-authored (FEEL-capable); the provider, default sender, and credentials are managed below and resolved from the vault. Authored on a service task with the E-Mail Outbound Worker Type.",
+    desc: "Sends an e-mail from a service task off the processor loop via a managed provider — SMTP (any server, incl. Google/Microsoft 365 submission) or the native Gmail and Microsoft Graph APIs (OAuth2 app-only or refresh-token) — or the “preview” provider, which needs neither and delivers to the in-app Outbox so a mail task can be tried before a real provider exists. Recipients, subject, and body are model-authored (FEEL-capable); the provider, default sender, and credentials are managed below and resolved from the vault. With an IMAP endpoint (SMTP) or read access (Gmail, Graph) the same Worker reads its mailbox: an inbound watch publishes new mail as messages, and a mail task lists, reads, files, marks, deletes or answers mail. Authored on a service task with the E-Mail Worker Type.",
     refs: "ADR-0041 · ADR-0079 · ADR-0093", status: "active", statusLabel: "configurable",
   },
   {
@@ -2210,7 +2210,7 @@ async function viewConsoleWorkers() {
     // Kind-specific first: these are the reasons an operator came to this row rather
     // than to any other, and they exist on no other kind.
     if (c.kind === "clio") items.push({ label: "Provision access…", icon: "🔑", act: "provision" });
-    if (c.kind === "clio" || c.kind === "jira" || c.kind === "googlesheets" || c.kind === "discord") items.push({ label: "Events…", icon: "⇄", act: "subs" });
+    if (c.kind === "clio" || c.kind === "jira" || c.kind === "googlesheets" || c.kind === "discord" || c.kind === "mail") items.push({ label: "Events…", icon: "⇄", act: "subs" });
     // A CloudEvents endpoint is subscribed to the event feed, which is administrator
     // configuration: the panel lists what the worker is sent and how delivery stands.
     // The feed is the catalogue's: with the area switched off its subscriptions are not
@@ -4432,6 +4432,7 @@ function wireWorkerManagement(workers) {
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
         <label class="field mail-only" style="margin:0;flex:1 1 180px"><span>Sender</span><input name="sender" placeholder="bot@example.com"/></label>
+        <label class="field mailbox-field" style="margin:0;flex:1 1 200px" title="Lets this Worker read the mailbox it sends from: a watch, or a task that lists, files or answers mail. Logs in as the sender, always over TLS."><span>IMAP endpoint (optional)</span><input name="mailboxEndpoint" placeholder="imaps://imap.example.com:993"/></label>
         <label class="field model-field" style="margin:0;flex:1 1 180px"><span>Default model</span><input name="model" title="What a step that names no model of its own asks. A task or an agent container may name one, and then that one runs (ADR-0256)."/></label>
         <label class="field sql-only" style="margin:0;flex:1 1 100%"><span>Connection string</span><input name="connectionString" type="password" autocomplete="new-password"/></label>
         <label class="field credref-field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
@@ -4473,6 +4474,7 @@ function wireWorkerManagement(workers) {
       const sync = () => {
         const sh = workerShape(kindSel.value, providerSel.value);
         form.querySelectorAll(".mail-only").forEach((el) => { el.style.display = sh.mail ? "" : "none"; });
+        form.querySelector(".mailbox-field").style.display = sh.mailbox ? "" : "none";
         form.querySelector(".provider-field").style.display = sh.provider ? "" : "none";
         form.querySelector(".provider-label").textContent = sh.model ? "Wire format" : "Provider";
         const modelField = form.querySelector(".model-field");
@@ -4779,7 +4781,7 @@ async function toggleInboundSubs(row, workerId, kind) {
   }
   const subs = (await api("GET", "/api/v1/connectors/" + encodeURIComponent(workerId) + "/inbound-subscriptions")) || [];
   const list = subs.map((s) => `<tr data-sid="${esc(s.id)}">
-      <td><code>${esc(s.jql || s.spreadsheetId || s.folderId || s.channelId || s.watchedSubject)}</code>${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}${s.jql ? ` <span class="muted">(on ${esc(s.cursorField || "created")})</span>` : ""}${s.spreadsheetId ? ` <span class="muted">(rows in ${esc(s.watchRange || "A:Z")})</span>` : ""}${s.folderId ? ` <span class="muted">(files ${esc(s.cursorField || "created")})</span>` : ""}${s.channelId ? ' <span class="muted">(new messages)</span>' : ""}</td>
+      <td><code>${esc(s.jql || s.spreadsheetId || s.folderId || s.channelId || s.mailFolder || s.watchedSubject)}</code>${s.mailFolder ? ` <span class="muted">(new mail${(s.allowedSenders || []).length ? " from " + esc(s.allowedSenders.join(", ")) : " from anyone"}${s.requireDmarcPass ? ", DMARC pass" : ""}${s.includeBody ? ", with body" : ", metadata only"})</span>` : ""}${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}${s.jql ? ` <span class="muted">(on ${esc(s.cursorField || "created")})</span>` : ""}${s.spreadsheetId ? ` <span class="muted">(rows in ${esc(s.watchRange || "A:Z")})</span>` : ""}${s.folderId ? ` <span class="muted">(files ${esc(s.cursorField || "created")})</span>` : ""}${s.channelId ? ' <span class="muted">(new messages)</span>' : ""}</td>
       <td>→ message <span class="chip">${esc(s.messageName)}</span>${s.correlationKey ? ` on <code>${esc(s.correlationKey)}</code>` : ""}</td>
       <td>${s.enabled
         ? '<span class="pill ok"><span class="dot"></span>on</span>'
@@ -4790,14 +4792,19 @@ async function toggleInboundSubs(row, workerId, kind) {
   const isJira = kind === "jira";
   const isGoogle = kind === "googlesheets";
   const isDiscord = kind === "discord";
-  const what = isDiscord
+  const isMail = kind === "mail";
+  const what = isMail
+    ? `<div class="muted" style="margin-bottom:8px">Inbound mail watches — the mail arriving in one folder of this Worker's mailbox is published as atlas messages, so a mail starts a process (ADR-0438). Atlas polls once a minute by default and <b>never changes the mailbox</b>: model a task to file or mark a message. <b>Who may start a process</b> is anyone who can write to the address — restrict it with <i>Allowed senders</i>, and since a sender address is a claim anybody can make, require a <b>DMARC pass</b> too. <b>What a process receives</b> is the envelope — sender, recipients, subject, attachment names and sizes — and the text only when you include it; on a shared server every operator can read what a process receives. <b>Max events/hour</b> is the loop guard; an auto-reply ping-pong is exactly the loop it stops. Empty uses 60.</div>`
+    : isDiscord
     ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the messages posted in a Discord channel are published as atlas messages, so a message starts a process. Atlas polls every 15 seconds by default; nothing has to reach this server from the internet. <b>The bot needs the Message Content intent</b> — without it Discord returns every message with an empty <code>content</code>, no error and no warning, and a correlation key over it quietly matches nothing. Enable it under <i>Developer Portal &rsaquo; your application &rsaquo; Bot &rsaquo; Privileged Gateway Intents</i>. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a channel the Worker also posts into has no natural end. Empty uses 60.</div>`
     : isGoogle
     ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — a spreadsheet's new rows, or the files put into a Drive folder, are published as atlas messages so each one starts a process. Atlas polls once a minute by default; nothing has to reach this server from the internet. <b>A row watch follows the sheet's own row numbers</b>, so it sees rows appended at the end — which is what a form response sheet does. Deleting rows from the watched range renumbers the tail, and a later row landing on a number already delivered is not delivered again. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a watch fed by what its own processes write has no natural end. Empty uses 60.</div>`
     : isJira
     ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the issues a JQL matches are published as atlas messages, so a new ticket starts a process (ADR-0214). Atlas polls; nothing has to reach this server from the internet. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`
     : `<div class="muted" style="margin-bottom:8px">Inbound event subscriptions — a watched clio subject's events are published as atlas messages (ADR-0075). <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`;
-  const source = isDiscord
+  const source = isMail
+    ? `<label class="field" style="margin:0"><span>Folder</span><input name="mailFolder" placeholder="INBOX"/></label>`
+    : isDiscord
     ? `<label class="field" style="margin:0"><span>Channel</span><input name="channelId" placeholder="123456789012345678" required/></label>`
     : isGoogle
     ? `<label class="field" style="margin:0"><span>Watch</span><select name="googleTarget" class="input">
@@ -4808,7 +4815,12 @@ async function toggleInboundSubs(row, workerId, kind) {
     : isJira
     ? `<label class="field" style="margin:0"><span>JQL</span><input name="jql" placeholder="project = OPS AND issuetype = Bug" required/></label>`
     : `<label class="field" style="margin:0"><span>Watched subject</span><input name="watchedSubject" placeholder="/employees" required/></label>`;
-  const extra = isDiscord
+  const extra = isMail
+    ? `<label class="field" style="grid-column:1 / span 2;margin:0"><span>Allowed senders (optional, comma-separated)</span><input name="allowedSenders" placeholder="kunde@example.com, @lieferant.ch"/></label>
+      <label class="check" style="margin:0 0 8px;display:flex;gap:8px;align-items:center"><input type="checkbox" name="requireDmarcPass"/><span>Require a DMARC pass</span></label>
+      <label class="check" style="margin:0 0 8px;display:flex;gap:8px;align-items:center"><input type="checkbox" name="includeBody"/><span>Include the text</span></label>
+      <div class="muted" style="grid-column:1 / -1">The folder is an IMAP folder name, a Gmail label id (<code>INBOX</code>, <code>Label_…</code>) or a Microsoft folder id or well-known name (<code>inbox</code>, <code>archive</code>); empty is the inbox. The correlation key (FEEL) sees <code>messageId</code>, <code>internetMessageId</code>, <code>from</code>, <code>fromName</code>, <code>replyTo</code>, <code>to</code>, <code>cc</code>, <code>subject</code>, <code>receivedAt</code>, <code>unread</code>, <code>hasAttachments</code>, <code>attachments</code>, <code>auth</code> (<code>spf</code>, <code>dkim</code>, <code>dmarc</code>), <code>folder</code>, <code>eventType</code> — and <code>body</code> when the text is included. These are also seeded as process variables; <code>messageId</code> is what a mail task's operation addresses. A new watch is forward-only, so the mail already in the folder is skipped.</div>`
+    : isDiscord
     ? `<div class="muted" style="grid-column:1 / -1">In Discord, enable <b>Developer Mode</b> (User Settings &rsaquo; Advanced) and use the channel's <b>Copy Channel ID</b>. A thread is itself a channel, so a thread's id works here too. The correlation key (FEEL) sees <code>messageId</code>, <code>channelId</code>, <code>content</code>, <code>authorId</code>, <code>authorName</code>, <code>authorBot</code>, <code>timestamp</code>, <code>eventType</code>, and <code>message</code> — the whole message, for anything not named here. These are also seeded as process variables on the started instance. <b>Guard against your own bot</b>: if this Worker also posts into this channel, key or condition on <code>authorBot</code>, or the watch will react to what it wrote. A new watch is forward-only, so the messages already in the channel are skipped.</div>`
     : isGoogle
     ? `<div class="google-rows" style="grid-column:1 / -1;display:flex;gap:12px;align-items:end;flex-wrap:wrap">
@@ -4849,8 +4861,8 @@ async function toggleInboundSubs(row, workerId, kind) {
     <table style="width:100%"><tbody id="subs-body">${list}</tbody></table>
     <form id="subs-form" style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr auto;align-items:end;margin-top:10px">
       ${source}
-      <label class="field" style="margin:0"><span>Message name</span><input name="messageName" placeholder="${isGoogle ? "antrag.eingegangen" : isJira ? "jira.ticket.created" : "employee.created"}" required/></label>
-      <label class="field" style="margin:0"><span>Correlation key (FEEL, optional)</span><input name="correlationKey" placeholder="${isGoogle ? "= Antragsnummer" : isJira ? "= issueKey" : "= subjectTail"}"/></label>
+      <label class="field" style="margin:0"><span>Message name</span><input name="messageName" placeholder="${isMail ? "mail.eingegangen" : isGoogle ? "antrag.eingegangen" : isJira ? "jira.ticket.created" : "employee.created"}" required/></label>
+      <label class="field" style="margin:0"><span>Correlation key (FEEL, optional)</span><input name="correlationKey" placeholder="${isMail ? "= internetMessageId" : isGoogle ? "= Antragsnummer" : isJira ? "= issueKey" : "= subjectTail"}"/></label>
       <label class="field" style="margin:0"><span>Max events/hour</span><input name="maxPerHour" type="number" min="0" placeholder="60"/></label>
       <button class="btn" type="submit" title="Add this inbound event watch">Add</button>
       ${extra}
@@ -4882,7 +4894,12 @@ async function toggleInboundSubs(row, workerId, kind) {
         correlationKey: (f.get("correlationKey") || "").trim(),
         maxPerHour: Number(f.get("maxPerHour") || 0) || 0,
       };
-      if (isDiscord) {
+      if (isMail) {
+        body.mailFolder = (f.get("mailFolder") || "").trim();
+        body.allowedSenders = String(f.get("allowedSenders") || "").split(",").map((x) => x.trim()).filter(Boolean);
+        body.requireDmarcPass = f.get("requireDmarcPass") === "on";
+        body.includeBody = f.get("includeBody") === "on";
+      } else if (isDiscord) {
         body.channelId = (f.get("channelId") || "").trim();
       } else if (isGoogle) {
         const id = (f.get("googleId") || "").trim();

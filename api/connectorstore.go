@@ -105,6 +105,11 @@ type configuredWorker struct {
 	// (client secret, refresh token, or service-account key), never a value (I6).
 	Provider string `json:"provider,omitempty"`
 	Sender   string `json:"sender,omitempty"`
+	// MailboxEndpoint is an SMTP mail Worker's IMAP endpoint ("imaps://host:993"),
+	// what lets it read the mailbox it sends from (ADR-0438). It
+	// uses the sender and the credential above as login. Empty for a Worker that only
+	// sends, and for Gmail and Microsoft, which read through the API they send with.
+	MailboxEndpoint string `json:"mailboxEndpoint,omitempty"`
 
 	// Model is which model an agent Worker asks (Kind == connectorKindAgent,
 	// ADR-0255). It is the first piece of a Worker's
