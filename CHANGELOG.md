@@ -23,12 +23,24 @@ _Changed_ / _Removed_ for each version.
   menus, because `/api/v1/info` now says `catalogue: false`. The MCP adapter no longer offers
   the area's tools, and the stdio adapter asks the server at start. The starmap draws no
   catalogue, the Modeler's message picker lists no product action, and the shop's
-  fulfilment and approval processes are not filed into the system project. Nothing stored is removed, and deployed processes run unchanged, shop tasks
-  included. Turning the area back on is a restart. The default is on, so an upgrade changes
-  nothing. A malformed `ATLAS_CATALOGUE` stops the start rather than leaving the shop on.
-  Tests hold the switch to the whole area as it grows: a route of the area under another tag
-  fails them, and so does a catalogue tool that does not say it is one.
+  fulfilment and approval processes are not filed into the system project. Nothing stored
+  is removed, and deployed processes run unchanged, shop tasks included. Turning the area
+  back on is a restart. The default is on, so an upgrade changes nothing. A malformed
+  `ATLAS_CATALOGUE` stops the start rather than leaving the shop on. Tests hold the switch
+  to the whole area as it grows: a route of the area under another tag fails them, and so
+  does a catalogue tool that does not say it is one.
   [ADR-draft-the-catalogue-can-be-switched-off](docs/adr/draft-the-catalogue-can-be-switched-off.md).
+
+- **An event-feed token can be confined to the catalogues it is for.** An `events` token
+  minted with `"reach":["<catalogue id>"]` reads only the events about the products those
+  catalogues maintain — their action outcomes, and the rights to them granted and revoked —
+  so a billing system for one catalogue no longer holds who holds what in every other.
+  Every event now names the catalogue that maintains its product as `homeCatalog`, so a
+  reader of the whole feed can sort it the same way. Whoever mints the token must maintain
+  each catalogue it names; a token without a reach still reads the whole feed. A product
+  offered by several catalogues belongs to the one that maintains it. A narrowed reader's
+  cursor moves past the events it is not given, and a page that read 10 000 rows without
+  filling up answers what it found with `more` set.
 
 - **A new account request announces itself, so an installation can be told.** The intake
   process (`proc_benutzer_aufnahme`), the one behind the login screen's "Registrieren" link,

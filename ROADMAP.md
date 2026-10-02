@@ -2083,7 +2083,12 @@ actions with closed effects, each a command whose outcome is a fact published be
   ([ADR-0430](docs/adr/0430-the-event-feed-has-its-own-role-and-token-scope.md)).
   The route requires `feedreader`; an API token minted with the `events` scope reaches that
   route only and carries that role only, so a CMDB's credential reads the feed and nothing
-  else. Narrowing the feed by catalogue is a follow-up.
+  else.
+- ✅ **The feed narrowed by catalogue**
+  ([ADR-0432](docs/adr/0432-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md)).
+  An `events` token's reach names catalogues, and it reads only the events about the
+  products they maintain; every event names that catalogue as `homeCatalog`. Narrowing by
+  the shop an order was placed in is a possible second dimension, not built.
 - 🔲 **Not in any slice yet:** an operator action for every held position of a product.
 - 🔲 **Not in any slice yet:** a suspended entitlement state.
 - 🔲 **Not in any slice yet:** measuring the run loop before a per-position product goes

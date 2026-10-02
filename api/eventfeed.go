@@ -27,6 +27,14 @@ import (
 // role, which a token minted with the `events` scope carries and nothing else, so a
 // system that follows the feed holds a credential that reads the feed and no more
 // (ADR-0430).
+//
+// Every row belongs to the catalogue that maintains its product — the item's home — and
+// says so as `homeCatalog`. An events token minted with a reach of catalogues reads only
+// the rows whose product one of them maintains; the rows it may not read are passed
+// over, and the cursor moves past them, so the holder never waits on a row it will not
+// be given. The home is read when the page is, not frozen in the fact: an item moved to
+// another home moves its rows with it, as its editing already did
+// (ADR-0432).
 
 // defaultEventFeedTTL is how long a feed row is kept when the operator set nothing.
 const defaultEventFeedTTL = 30 * 24 * time.Hour
@@ -37,6 +45,15 @@ const (
 	eventFeedPage    = 100
 	eventFeedMaxPage = 1000
 )
+
+// eventFeedScan is how many rows one page reads at most. It bounds the work a narrowed
+// reader can cause: a token whose catalogues hold one row in a million would otherwise
+// make a single request walk the whole feed. A page cut here answers what it found, its
+// cursor at the last row read, and `more`.
+//
+// A var rather than a const so a test can reach the cut without writing ten thousand
+// rows; nothing outside a test writes it.
+var eventFeedScan = 10 * eventFeedMaxPage
 
 // pruneEventFeed drops the feed rows older than their retention, at most once an hour.
 // It runs on the run loop, inside the retention sweep's turn, and enqueues a prune
@@ -146,13 +163,26 @@ func (s *Server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	source := s.eventSource(nodeID)
+	reach := feedReach(httpapi.PrincipalFrom(r.Context()))
+	homes := s.itemHomes()
 	page := eventPage{Events: []cloudEvent{}, Next: strconv.FormatUint(after, 10)}
+	read := 0
 	err = view.FeedAfter(part, after, func(e state.FeedEntry) error {
-		if len(page.Events) == limit {
+		if len(page.Events) == limit || read == eventFeedScan {
 			page.More = true
 			return errEventPageFull
 		}
-		page.Events = append(page.Events, feedEnvelope(e, nodeID, source))
+		read++
+		home, err := homes(feedItem(e))
+		if err != nil {
+			return err
+		}
+		if reach != nil && !reach[home] {
+			// Not this reader's: passed over, and the cursor with it.
+			page.Next = strconv.FormatUint(e.Position, 10)
+			return nil
+		}
+		page.Events = append(page.Events, feedEnvelope(e, nodeID, source, home))
 		page.Next = strconv.FormatUint(e.Position, 10)
 		return nil
 	})
@@ -161,6 +191,62 @@ func (s *Server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.JSON(w, http.StatusOK, page)
+}
+
+// feedReach is the set of catalogues a reader is narrowed to, or nil for one that
+// reads the whole feed. Only a machine credential states a reach, and only an events
+// token reaches this route, so the ids are the catalogues its minter named. A reach of
+// any other kind matches no row, which is the direction to fail in.
+func feedReach(p *httpapi.Principal) map[string]bool {
+	if p == nil || len(p.Reach) == 0 {
+		return nil
+	}
+	reach := make(map[string]bool, len(p.Reach))
+	for _, id := range p.Reach {
+		reach[id] = true
+	}
+	return reach
+}
+
+// feedItem is the catalogue item a feed row is about.
+func feedItem(e state.FeedEntry) string {
+	switch {
+	case e.Outcome != nil:
+		return e.Outcome.ItemID
+	case e.Granted != nil:
+		return e.Granted.ItemID
+	case e.Revoked != nil:
+		return e.Revoked.ItemID
+	}
+	return ""
+}
+
+// itemHomes answers the home catalogue of an item, reading each item once per page. It
+// reads the catalogue store off the run loop, as the approval page does (Server.
+// catalogStore): its records are written atomically. An item the store does not have
+// has no home — "" — which no reach contains, so its rows go only to a reader of the
+// whole feed. A store that cannot be read is an error, never "no home": passing a row
+// over moves the reader's cursor past it for good.
+func (s *Server) itemHomes() func(itemID string) (string, error) {
+	seen := map[string]string{}
+	return func(itemID string) (string, error) {
+		if itemID == "" {
+			return "", nil
+		}
+		if home, ok := seen[itemID]; ok {
+			return home, nil
+		}
+		it, found, err := s.catalogStore.Item(itemID)
+		if err != nil {
+			return "", err
+		}
+		home := ""
+		if found {
+			home = it.HomeCatalog
+		}
+		seen[itemID] = home
+		return home, nil
+	}
 }
 
 // eventSource is the CloudEvents `source` of this installation's catalogue facts: its
@@ -175,8 +261,9 @@ func (s *Server) eventSource(nodeID string) string {
 
 // feedEnvelope wraps one feed row as a CloudEvent. Its id is the node, the partition
 // and the log position, which no other fact shares and a re-read repeats. The data
-// names people by id only (ADR-0314).
-func feedEnvelope(e state.FeedEntry, nodeID, source string) cloudEvent {
+// names people by id only (ADR-0314), and the catalogue that maintains the product as
+// homeCatalog, where the item has one.
+func feedEnvelope(e state.FeedEntry, nodeID, source, home string) cloudEvent {
 	ev := cloudEvent{
 		SpecVersion:     "1.0",
 		ID:              nodeID + ":" + strconv.FormatUint(uint64(e.Partition), 10) + ":" + strconv.FormatUint(e.Position, 10),
@@ -235,6 +322,9 @@ func feedEnvelope(e state.FeedEntry, nodeID, source string) cloudEvent {
 			data["variantId"] = h.VariantID
 		}
 		ev.Data = data
+	}
+	if data, ok := ev.Data.(map[string]any); ok && home != "" {
+		data["homeCatalog"] = home
 	}
 	return ev
 }

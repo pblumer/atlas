@@ -1081,6 +1081,8 @@ Claims abbildet — und sie sind eine öffentliche Zusage, kein Implementierungs
 Seither sind zwei hinzugekommen, beide nur bewusst vergeben und nie durch das Update:
 `productmanager` für die Katalogpflege (ADR-0315) und `feedreader` für den Ereignis-Feed,
 den ein Umsystem wie eine CMDB mit einem `events`-Token liest, der genau diese Rolle trägt.
+Ein solcher Token lässt sich auf einzelne Kataloge beschränken; er liest dann nur, was die
+Produkte dieser Kataloge betrifft.
 
 **M12 ist umgesetzt**, beide Schritte: der Anmeldeweg über OpenID Connect und die
 Abbildung der Claims auf genau diese vier Namen und auf die Gruppen. Damit ist der
