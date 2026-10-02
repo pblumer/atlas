@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"reflect"
 	"regexp"
 	"runtime"
@@ -38,6 +39,9 @@ var catalogueSegments = map[string]bool{
 	"recertification":  true,
 	"pending-work":     true,
 	"events":           true,
+	// The event feed's push subscriptions (ADR-0433): the same facts as /events,
+	// sent rather than fetched.
+	"feed-subscriptions": true,
 }
 
 // catalogueHandlerPackages is the third: a handler written in either package of the
@@ -248,5 +252,30 @@ func TestTheModelerIsNotShownTheProductActionsOfASwitchedOffCatalogue(t *testing
 	seed(off)
 	if rows, err := off.productActionSources(nil); err != nil || len(rows) != 0 {
 		t.Errorf("with the area off: %d product action(s) listed, %v", len(rows), err)
+	}
+}
+
+// TestTheFeedIsNotPushedWithTheCatalogueOff: the feed says who holds what across the
+// catalogue, and with the area off its pull route is not served — so it does not
+// leave Atlas by push either. A subscription made while the area was on keeps its
+// cursor, and delivery picks up there once the area is back; setting the field on a
+// running server here stands in for that restart.
+func TestTheFeedIsNotPushedWithTheCatalogueOff(t *testing.T) {
+	srv, ep, _ := feedPushServer(t)
+	sub := subscribe(t, srv, `{"workerId":"wk-billing"}`)
+
+	srv.catalogueOff = true
+	srv.pushFeed(context.Background())
+	if n := len(ep.received()); n != 0 {
+		t.Fatalf("%d batch(es) were pushed with the catalogue off", n)
+	}
+	if rec := storedSub(t, srv, sub.ID); rec.Cursor != sub.Cursor || !rec.Enabled {
+		t.Fatalf("the subscription moved while the catalogue was off: %+v", rec)
+	}
+
+	srv.catalogueOff = false
+	srv.pushFeed(context.Background())
+	if n := len(ep.received()); n != 1 {
+		t.Fatalf("after switching back on, %d batch(es) were pushed, want the one it held back", n)
 	}
 }

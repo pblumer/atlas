@@ -2169,7 +2169,9 @@ async function viewConsoleWorkers() {
     if (c.kind === "clio" || c.kind === "jira" || c.kind === "googlesheets" || c.kind === "discord") items.push({ label: "Events…", icon: "⇄", act: "subs" });
     // A CloudEvents endpoint is subscribed to the event feed, which is administrator
     // configuration: the panel lists what the worker is sent and how delivery stands.
-    if (c.kind === "cloudevents" && mayUse("admin")) items.push({ label: "Feed…", icon: "⇉", act: "feed" });
+    // The feed is the catalogue's: with the area switched off its subscriptions are not
+    // served, so the entry would open a panel whose every call is a 404.
+    if (c.kind === "cloudevents" && mayUse("admin") && FEATURES.catalogue) items.push({ label: "Feed…", icon: "⇉", act: "feed" });
     // Every Worker Type the check covers: mail connects and authenticates (or sends a
     // test message), a SQL worker dials its connection string. workerShape is the one
     // place that knows, so the menu does not go stale the next type that gains one.

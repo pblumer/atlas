@@ -62,6 +62,11 @@ func TestTheMenusLeaveOutWhatTheServerSwitchedOff(t *testing.T) {
 		t.Error("app.js does not take the catalogue's state from /api/v1/info; " +
 			"an absent field must read as on, so a Console served by an older binary keeps its menu")
 	}
+	// The feed's subscriptions hang off a CloudEvents Worker's row, not off a menu,
+	// and are the catalogue's all the same (ADR-0433).
+	if !strings.Contains(src, `c.kind === "cloudevents" && mayUse("admin") && FEATURES.catalogue`) {
+		t.Error("a CloudEvents Worker still offers its feed subscriptions with the catalogue off")
+	}
 	// A bookmark into a view of the area must say why there is nothing there, not
 	// open a view whose every call answers 404.
 	if !strings.Contains(src, "if (isCatalogueRoute(path) && !FEATURES.catalogue) return viewSwitchedOff();") {

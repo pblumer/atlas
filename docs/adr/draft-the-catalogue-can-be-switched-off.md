@@ -81,6 +81,13 @@ Helm chart), `api.WithoutCatalogue()` in the package.
   in-process transport is built knowing the flag; the stdio adapter, a separate process,
   asks `/api/v1/info` at start and offers everything if it cannot ask — the server still
   refuses what it does not serve.
+- **The event feed, pulled or pushed.** `GET /api/v1/events` and the feed's push
+  subscriptions ([ADR-0433](0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md))
+  are routes of the area, and the push delivery does not run: what the feed says — who
+  holds what — does not leave Atlas by either door. Every subscription keeps its cursor,
+  so delivery resumes where it stood when the area is back; one whose cursor the feed's
+  retention passed in between is switched off and says so, as it would be for any
+  consumer that fell that far behind.
 - **The starmap's catalogue, and the Modeler's product actions.** Both read the store
   directly rather than through a route of the area, so each is told separately: the
   starmap draws no catalogue or product, and `GET /api/v1/message-sources` lists no
