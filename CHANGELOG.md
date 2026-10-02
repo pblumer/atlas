@@ -511,6 +511,30 @@ _Changed_ / _Removed_ for each version.
   are now held to the generator's layout invariants (`go test ./api/layout`), so a model
   drawn like that no longer passes.
 
+- **The Postman collection works against today's server again.** It had not been
+  revised since login became the default
+  ([ADR-0195](docs/adr/0195-auth-on-by-default.md)), and it showed.
+  - Its README still told a local user to skip the login, so every request answered 401.
+  - *Log out* ran directly after *Log in*, so a Collection Runner pass was refused from
+    the second folder on.
+  - Even with the session kept, nine reference requests answered 400 or 404 when run in
+    order, unnoticed because they asserted nothing.
+  - The Modeler folder taught the deprecated `/api/v1/projects` alias
+    ([ADR-0128](docs/adr/0128-process-applications.md)), and the MCP folder called `/mcp`
+    unauthenticated.
+
+  The collection now runs green top to bottom with a password, with an API token
+  (`apiToken`, sent as a Bearer header), and against a server started with
+  `--auth=false`.
+  - Every request documents the role it needs, its body and its answers, asserts its
+    status and shape, and carries saved example responses, the common errors included.
+  - The Messages folder shows correlation end to end with a new `payment-wait` model.
+  - Both sample models ship with a diagram layout and their documentation.
+  - `make postman-smoke` runs the whole collection against a throwaway server.
+  - `go test ./api` now fails when a request names a route the server does not serve
+    or a deprecated alias, lacks a description, an assertion or an example, or deploys
+    a model that differs from its file under `postman/`.
+
 - **On Windows, a crashed server no longer leaves its workers running.** Stopping Atlas
   stopped the workers it supervises, but a server that crashed, was ended in the Task
   Manager, or was killed by its service wrapper left them running. They retried the dead
