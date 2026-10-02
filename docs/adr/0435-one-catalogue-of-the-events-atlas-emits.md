@@ -209,6 +209,8 @@ what the channel's envelope adds.
 - **The Modeler offers catalogued names.** A signal or message field offers the catalogued
   `atlas.*` names a model may listen to, the way the message picker already offers message
   sources.
+- **The Console shows it.** A Console page lists the entries, and for an administrator the
+  listeners (§7).
 
 ### 6. Who may listen
 
@@ -230,12 +232,54 @@ what the channel's envelope adds.
     subscription and the retention a receiver has to manage, so it is the weaker choice.
   - Which of the two is decided with the first platform entry.
 - **Signals.** Deploying a process with a signal start or catch on an `atlas.*` name requires a
-  role, proposed: `admin`. The rule is refused at deploy and named in the error. This closes the
-  trade-off [ADR-0431](0431-system-processes-announce-their-facts-as-signals.md) accepted, where
-  anyone who may deploy can receive a requester's data. It closes it before offboarding and
-  access-review facts make the same trade worse.
+  role, proposed: `admin`. This closes the trade-off
+  [ADR-0431](0431-system-processes-announce-their-facts-as-signals.md) accepted, where anyone who
+  may deploy can receive a requester's data. It closes it before offboarding and access-review
+  facts make the same trade worse.
+  - **Refused at deploy.** The error names the element, the event, the personal-data fields the
+    listener would receive, the role the deploy needs, and the caller's role.
+  - **Reported before the deploy.** The Problems panel's validation (`POST /api/v1/validate`,
+    [ADR-0026](0026-problems-panel-and-versioned-validation.md)) runs the same check and reports the same
+    finding as an error on the element. A modeler learns of the rule while modelling, not from a
+    refused deploy.
+  - **One check, two callers.** The deploy gate and the validation call the same function, so
+    the two cannot disagree. This is the reason ADR-0026 gives for validating through the real
+    compiler instead of a copy of its rules.
+  - **The finding depends on who asks.** Until now a validation result depends on the model and,
+    with `applicationId`, on its application ([ADR-0230](0230-process-information-model.md)).
+    This adds the caller's role: the same draft is clean for an administrator and has an error
+    for a modeler. The finding therefore states both the role it needs and the caller's role, so
+    the two views explain each other. The MCP deploy tools (`atlas_deploy`,
+    `atlas_deploy_project`) act as their caller, so the same rule holds there.
 
-### 7. The first entries
+### 7. Who may read the catalogue
+
+The catalogue holds two kinds of information, and they are not equally sensitive.
+
+- **The entries.** Name, meaning, moment, payload, guarantees and access rule describe what
+  Atlas can say, not what one installation does with it. The same text is in the repository and
+  the handbook. They are readable by `modeler` and above, because choosing an event to listen
+  to is modelling. The Modeler's name picker reads them.
+- **Who listens now.** This covers:
+  - which deployed definitions have a signal start or catch on an `atlas.*` name, with process,
+    version, project and the personal-data fields each receives;
+  - which feed subscriptions receive which types.
+
+  Together that is a map of where personal data flows in this installation, across every
+  project. The feed subscriptions are already administrator configuration
+  ([ADR-0433](0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md)). This part is
+  readable by `admin` only.
+- **Two routes, not one route with a hidden column.** The listeners are served by a route of
+  their own that requires `admin`. A modeler's answer therefore never contains them, rather than
+  containing them and having the page hide them. An MCP read tool follows the same split.
+- **A modeler still sees the models they may open.** Project sharing
+  ([ADR-0071](0071-sharing-scopes.md)) decides that, unchanged. What this record withholds is
+  the view across every project at once, which only an administrator has elsewhere too.
+- **The Console view.** A Console page *Events* lists the entries for every caller with
+  `modeler` or above. For an administrator it adds the "listening now" column and the
+  listeners of the selected event.
+
+### 8. The first entries
 
 | Type | Kind | Channels | State |
 |---|---|---|---|
@@ -262,7 +306,7 @@ from the thousandth incident of a known one, without a flood reaching a chat cha
 incident at a time. Whether the feed should rather carry the cause opening and clearing, as
 facts of their own, is decided when the entries are built.
 
-### 8. What this record does not decide
+### 9. What this record does not decide
 
 - **Declared signal payloads.** Narrowing what a throw sends by input mappings on the throw
   event, instead of every instance variable, is an engine change with its own record.
@@ -280,6 +324,8 @@ facts of their own, is decided when the entries are built.
   - Payloads and personal data become reviewed contracts instead of whatever a model happens to
     hold.
   - Drift is a failing test, as it already is for log events.
+  - The `admin` rule is seen while modelling, in the Problems panel, rather than first as a
+    refused deploy.
   - Every later event is added the same way, so the first one sets the pattern rather than each
     one inventing its own.
 - **Negative / trade-offs accepted:**
@@ -289,6 +335,10 @@ facts of their own, is decided when the entries are built.
     than shipping stale pages.
   - The `admin` rule for `atlas.*` listeners narrows who may customize. An installation that
     trusts every modeler gains nothing from it.
+  - Validation now depends on the caller as well as the model. Two people can see different
+    findings on the same draft; the finding names both roles so that this is visible.
+  - A modeler cannot see who else listens across projects and has to ask an administrator. That
+    is accepted: that view is exactly what the rule protects.
 - **Follow-ups / risks to watch:**
   - The open question about deployments on the log.
   - The feed leaving the service-catalogue area, so that platform facts keep flowing when the
