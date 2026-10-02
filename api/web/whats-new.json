@@ -2,6 +2,29 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "a-new-account-request-announces-itself-so-an-installation-ca",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "You can now be told when someone asks for an account",
+        "de": "Sie können sich jetzt benachrichtigen lassen, wenn jemand ein Konto beantragt"
+      },
+      "summary": {
+        "en": "When someone registers through the login screen, their request waits for approval, and until now nothing told anyone it was there. The built-in intake process now announces every new request with the signal \"atlas.user.requested\", just before it waits for approval. The process itself stays protected and unchanged for you. To be told, you deploy a small process of your own that starts on that signal and, for example, posts a message to your Discord channel. It receives the name, email, department, justification and proposed username, never the role or the initial password. If nobody listens, nothing happens, and a notice that fails never holds up the request.",
+        "de": "Wer sich über die Login-Seite registriert, wartet mit seinem Antrag auf die Freigabe, und bisher hat niemanden etwas darauf hingewiesen. Der eingebaute Aufnahmeprozess meldet jetzt jeden neuen Antrag mit dem Signal «atlas.user.requested», unmittelbar bevor er auf die Freigabe wartet. Der Prozess selbst bleibt geschützt. Um informiert zu werden, deployen Sie einen kleinen eigenen Prozess, der auf dieses Signal startet und zum Beispiel eine Nachricht in Ihren Discord-Kanal schreibt. Er erhält Name, E-Mail, Abteilung, Begründung und den vorgeschlagenen Benutzernamen, nie aber die Rolle oder das Initialpasswort. Hört niemand zu, geschieht nichts, und eine fehlgeschlagene Meldung hält den Antrag nie auf."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Organization",
+        "Events",
+        "Workers"
+      ]
+    },
+    {
       "id": "a-system-that-follows-the-event-feed-can-hold-a-credential-t",
       "version": "Unreleased",
       "date": null,
@@ -292,28 +315,6 @@
       "tags": [
         "Handbook",
         "Examples"
-      ]
-    },
-    {
-      "id": "the-person-a-service-was-ordered-for-may-now-give-it-back-an",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "Whoever holds a service may give it back",
-        "de": "Wer eine Leistung bezieht, darf sie zurückgeben"
-      },
-      "summary": {
-        "en": "The shop offered the person a service was ordered for a give-back button, and the server refused them: only whoever placed the order, or an operator, could return or change it. Both now follow the product's actions — the person who holds the right may give it back and ask for its changes, beside the orderer and an operator. A product whose return only operators may give is no longer offered for return in the shop.",
-        "de": "Der Shop bot der Person, für die eine Leistung bestellt wurde, einen Rückgabe-Knopf an, und der Server wies sie ab: Zurückgeben oder ändern durfte nur, wer bestellt hatte, oder der Betrieb. Beides folgt jetzt den Aktionen des Produkts – wer das Recht bezieht, darf es zurückgeben und Änderungen anfordern, neben der Bestellerin und dem Betrieb. Ein Produkt, dessen Rückgabe nur der Betrieb auslösen darf, wird im Shop nicht mehr zur Rückgabe angeboten."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Service catalogue",
-        "Shop"
       ]
     }
   ]
