@@ -18,8 +18,8 @@ obligations of each. It is a living plan, edited as slices land.
   by the one `applyToState`, generated values are frozen into it, nothing is answered
   before it is durable, resolution happens at publish and at the API boundary.
 - Definition of done per slice: `go build ./...`, `go test -race -timeout=45m ./...`,
-  `go vet ./...` green, `gofmt -l .` empty, the e2e suite green, `make whats-new` re-run
-  when `CHANGELOG.md` changed.
+  `go vet ./...` green, `gofmt -l .` empty, the e2e suite green, and a `CHANGELOG.md`
+  entry, which is also the Console's release notes.
 
 Already landed under this record: the conditional-start refusal (§9, #1173) and the
 Worker events in the Modeler's message picker (§6, #1176).

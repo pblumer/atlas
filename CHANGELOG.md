@@ -400,6 +400,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The Console's landing page shows the release notes instead of What's New.** The
+  section lists the releases of the changelog this server was built from, newest first:
+  the newest opens with its introduction, what to read before upgrading and its changes,
+  and an older one loads when it is opened. `GET /api/v1/release-notes` and
+  `GET /api/v1/release-notes/{version}` answer the same to anybody signed in. The notes
+  are English, as the changelog is; the old feed's curated German and English summaries,
+  tutorials and "Try it" links are gone, and so is everything that kept the feed in step
+  with the changelog — `make whats-new`, `make whats-new-resolve`, the committed
+  `api/web/whats-new.json` and the workflow that repaired it on main. A changelog entry now
+  reaches the Console with nothing else to do. ADR-0444.
+
 - **Only an administrator deploys a model that listens to somebody's data.** A signal start,
   catch, boundary or event subprocess on an event atlas emits whose payload carries personal
   data is now deployed by an administrator

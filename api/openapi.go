@@ -161,6 +161,21 @@ func (s *Server) apiRoutes() []apiRoute {
 			req: jsonBody("Node identity", schemaObj(map[string]any{
 				"name": tString(), "environment": tString(), "labels": tObject(),
 			})), resp: jsonBody("Node descriptor", tObject())}},
+		// The release notes the Console's landing page shows: CHANGELOG.md as this
+		// binary was built from it (ADR-0444). Behind
+		// the login like the page that reads them; /api/v1/info already tells a visitor
+		// which version this is, and the notes are the Console's, not the login screen's.
+		{"GET", "/api/v1/release-notes", s.releaseNotes.HandleList, apiOp{
+			summary: "The releases in this server's release notes, newest first, with the number of changes each carries",
+			tag:     "System", role: roleAny,
+			resp: jsonBody("Releases", schemaObj(map[string]any{"releases": tArray()}, "releases"))}},
+		{"GET", "/api/v1/release-notes/{version}", s.releaseNotes.HandleGet, apiOp{
+			summary: "One release's notes — its introduction and its changes — by version, Unreleased included",
+			tag:     "System", role: roleAny,
+			resp: jsonBody("Release", schemaObj(map[string]any{
+				"version": tString(), "date": tString(),
+				"intro": tArray(), "changes": tArray(), "link": tObject(),
+			}, "version", "intro", "changes"))}},
 		{"GET", "/api/v1/stats", s.handleStats, apiOp{
 			summary: "Live active-instance counts, plus how many tokens are parked behind an unresolved incident", tag: "System", role: roleAny,
 			resp: jsonBody("Instance counts", schemaObj(map[string]any{
