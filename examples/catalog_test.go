@@ -58,14 +58,14 @@ type catalogSource struct {
 	// already owns the artifacts (the system processes). It still gets a card, and
 	// still opens in the Modeler; it just has no install button.
 	NoInstall bool
-	// Shop marks an example that ships a shop: its directory carries a catalogue
-	// document (katalog.json, shopcatalog_test.go) beside the processes and forms its
-	// products are bound to, and it installs from the shop handbook
-	// (api/web/shop-handbuch.html), whose installer also imports the catalogue. The
-	// value is the application that installer creates. Such an example is NoInstall
-	// here: the Beispiele chapter's button would deploy the processes without the
-	// shop they serve, so its card links to the shop handbook instead.
-	Shop string
+	// Shop marks an example that ships a shop: its directory is a package
+	// (shopcatalog_test.go) — an application manifest, atlas.json, and a catalogue
+	// document, katalog.json, beside the processes and forms its products are bound to
+	// — and it installs from the shop handbook (api/web/shop-handbuch.html), whose
+	// installer also imports the catalogue, or with `atlas import`. Such an example is
+	// NoInstall here: the Beispiele chapter's button would deploy the processes
+	// without the shop they serve, so its card links to the shop handbook instead.
+	Shop bool
 }
 
 type catalogStart struct {
@@ -266,7 +266,7 @@ var catalogSources = []catalogSource{
 	// groups and the approvers the catalogue document leaves open.
 	{ID: "verwaltung-dienstleistungen", Dir: "verwaltung-dienstleistungen", NoInstall: true,
 		Main: "verwaltung-dienstleistungen/zutrittsbadge-lebenszyklus.bpmn",
-		Shop: "Beispiel: Dienstleistungen der Verwaltung"},
+		Shop: true},
 }
 
 // formDisplayNames gives a form the name the Modeler and the Tasks inbox list it
@@ -338,6 +338,8 @@ type catalogExample struct {
 type catalogShop struct {
 	App      string          `json:"app"`
 	Document json.RawMessage `json:"document"`
+	// Questions are what each placeholder in the document asks (fragen.json).
+	Questions json.RawMessage `json:"questions,omitempty"`
 }
 
 type catalogProcess struct {
@@ -479,6 +481,16 @@ func TestFormIDsAreUniqueAcrossExamples(t *testing.T) {
 
 // --- building the catalog ---
 
+// compactFile is a JSON file without its whitespace.
+func compactFile(t *testing.T, path string) json.RawMessage {
+	t.Helper()
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, []byte(readFile(t, path))); err != nil {
+		t.Fatalf("%s: %v", path, err)
+	}
+	return compact.Bytes()
+}
+
 func buildCatalog(t *testing.T) string {
 	t.Helper()
 	cat := catalog{}
@@ -491,13 +503,12 @@ func buildCatalog(t *testing.T) string {
 		if !src.NoInstall {
 			ex.App = src.App
 		}
-		if src.Shop != "" {
-			doc := readFile(t, filepath.Join(src.Dir, shopDocumentName))
-			var compact bytes.Buffer
-			if err := json.Compact(&compact, []byte(doc)); err != nil {
-				t.Fatalf("%s/%s: %v", src.Dir, shopDocumentName, err)
+		if src.Shop {
+			ex.Shop = &catalogShop{
+				App:       readPackageManifest(t, src.Dir).Name,
+				Document:  compactFile(t, filepath.Join(src.Dir, shopDocumentName)),
+				Questions: compactFile(t, filepath.Join(src.Dir, shopQuestionsName)),
 			}
-			ex.Shop = &catalogShop{App: src.Shop, Document: compact.Bytes()}
 		}
 		for _, f := range files {
 			switch {

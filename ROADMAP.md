@@ -1954,6 +1954,13 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   administration-services example (`examples/verwaltung-dienstleistungen/`, both process
   forms, bilingual) and an installer that asks for audiences and approvers and imports the
   shop as one document.
+- ✅ **A package installs from the command line.** `atlas import DIR` installs a package — an
+  application in the source layout (`atlas.json`), and optionally its shop (`katalog.json`)
+  with the questions its placeholders ask (`fragen.json`) — through the source import, a
+  publish and the catalogue import; answers come from a file or `--set`, groups and people by
+  id or by name, and every open answer is refused before the first write
+  ([ADR-0437](docs/adr/0437-a-package-is-imported-from-the-command-line.md)).
+  An `atlas.json` for the other examples is a follow-up.
 
 **The shop & ordering**
 - ✅ **Browsing.** A person sees the one catalogue their groups reach, by rank, narrowed per
