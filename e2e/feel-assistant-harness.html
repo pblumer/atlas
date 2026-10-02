@@ -1,0 +1,116 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas FEEL assistant e2e harness</title>
+    <!-- Drives the real api/web/feel-assistant.js against a stubbed API, because the
+         thing under test is the assistant and not the model: what the conversation
+         sends, that a checked proposal lands in the editor with its verdict, that a
+         failure leaves the message where it was typed, that "Apply" writes into the
+         field it was opened from — a Modeler field, an fx field, a dmn-js cell — and
+         that the history and the favourites survive closing it. The fields are the
+         test's own stand-ins: app.js boots the whole console on import and cannot be
+         loaded here. ?workers=none plays a server with no AI Worker. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div class="card" style="padding: 18px; max-width: 760px; display: grid; gap: 12px">
+      <button type="button" id="feel-assistant-btn" class="icon-btn"></button>
+
+      <label class="field"><span>Condition</span>
+        <textarea id="cond" rows="2">amount &gt; 10</textarea>
+      </label>
+
+      <label class="field"><span>Assignee</span>
+        <textarea id="fx" rows="1">= kunde.name</textarea>
+      </label>
+
+      <table class="dmn-like">
+        <tr>
+          <td class="input-cell"><div id="dmn-in" contenteditable="true">&gt; 10</div></td>
+          <td class="output-cell"><div id="dmn-out" contenteditable="true">"alt"</div></td>
+        </tr>
+      </table>
+
+      <pre id="sent">—</pre>
+      <pre id="copied">—</pre>
+      <pre id="toast">—</pre>
+      <pre id="changes">—</pre>
+    </div>
+    <script type="module">
+      import { attachFeelEditor } from "/feel.js";
+      import { installFeelAssistant } from "/feel-assistant.js";
+
+      const none = new URLSearchParams(location.search).get("workers") === "none";
+      window.__generate = "ok";
+      const sent = document.getElementById("sent");
+      const log = [];
+
+      const PROPOSAL = {
+        expression: "if total > 1000 then total * 0.1 else 0",
+        explanation: "10 % von total, wenn total über 1000 liegt, sonst 0.",
+        variables: { total: 1500 },
+        check: { ok: true, result: "150", kind: "number", expected: "150", matches: true, inputs: ["total"] },
+        reply: '{"expression":"if total > 1000 then total * 0.1 else 0","expected":150}',
+        attempts: 2,
+        worker: "openrouter",
+        model: "meta-llama/llama-3.3-70b-instruct:free",
+      };
+
+      async function api(method, path, body) {
+        if (method === "GET" && path === "/api/v1/feel/generate/workers") {
+          return none ? { available: false, workers: [] }
+            : { available: true, workers: [{ name: "openrouter", model: "meta-llama/llama-3.3-70b-instruct:free" }] };
+        }
+        if (method === "POST" && path === "/api/v1/feel/validate") return { ok: true };
+        if (method === "POST" && path === "/api/v1/feel/evaluate") {
+          log.push({ path, body });
+          sent.textContent = JSON.stringify({ path, body });
+          if (body.expression === "fail") return { ok: false, error: "boom" };
+          return { ok: true, result: "42", kind: "number" };
+        }
+        if (method === "POST" && path === "/api/v1/feel/generate") {
+          log.push({ path, body });
+          sent.textContent = JSON.stringify({ path, body });
+          // A little latency, so "thinking" is a state and not a frame.
+          await new Promise((r) => setTimeout(r, 60));
+          if (window.__generate === "fails") {
+            const err = new Error("the AI Worker \"openrouter\" could not answer: model endpoint returned 429");
+            err.status = 502;
+            throw err;
+          }
+          return PROPOSAL;
+        }
+        throw new Error("unexpected call: " + method + " " + path);
+      }
+
+      installFeelAssistant({
+        api,
+        copy: async (text) => { document.getElementById("copied").textContent = text; return true; },
+        toast: (msg) => { document.getElementById("toast").textContent = msg; },
+        button: document.getElementById("feel-assistant-btn"),
+      });
+
+      // The two Modeler fields, upgraded the way editor.js upgrades them: marked as
+      // FEEL for the Developer View, and attached to the FEEL editor — which is where
+      // the mini spark comes from.
+      const cond = document.getElementById("cond");
+      cond.dataset.devlang = "feel";
+      attachFeelEditor(cond, {});
+      const fx = document.getElementById("fx");
+      fx.dataset.devlang = "feel";
+      fx.dataset.fxOn = "1";
+      attachFeelEditor(fx, { lockPrefix: (v) => (/^\s*=\s*/.exec(v) || [""])[0].length });
+
+      // What the panel's save wiring and dmn-js would see.
+      const changes = [];
+      const record = (what) => { changes.push(what); document.getElementById("changes").textContent = JSON.stringify(changes); };
+      cond.addEventListener("change", () => record("cond=" + cond.value));
+      fx.addEventListener("change", () => record("fx=" + fx.value));
+      document.getElementById("dmn-out").addEventListener("input", (e) => record("dmn-out=" + e.target.textContent));
+
+      window.__log = log;
+      window.__ready = true;
+    </script>
+  </body>
+</html>

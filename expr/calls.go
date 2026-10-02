@@ -285,3 +285,13 @@ func (c *callCheck) each(e feel.Expr, fn func(feel.Expr)) {
 		visit(n.Body)
 	}
 }
+
+// BuiltinNames lists every built-in function this build can call, sorted. It is the
+// registry CheckCalls judges against, so anything that offers functions to somebody
+// writing FEEL — a prompt, a picker — and is built from this list cannot offer one
+// that the deploy would then refuse.
+func BuiltinNames() []string {
+	names := builtins.Default().Names()
+	sort.Strings(names)
+	return names
+}

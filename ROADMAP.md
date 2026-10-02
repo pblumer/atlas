@@ -761,6 +761,18 @@ Making processes wait, react, and time out.
   one root type, a curated component vocabulary (an `iframe` is refused **by name**, not dropped),
   a unique key on every input, and a bound on the document — and an answer that is not a form is a
   422 with the reason rather than a broken editor.
+- ✅ **The FEEL assistant** ([ADR-draft-feel-assistant](docs/adr/draft-feel-assistant.md)): a
+  conversation with the same AI Worker that writes a **FEEL expression**, opened from anywhere with
+  **Ctrl/⌘+Shift+E**, the spark in the top bar, a **mini spark on every FEEL field** of the Modeler,
+  or a spark beside a focused output cell, literal expression or input expression in the DMN editor.
+  **Every answer is run before anybody reads it**: compiled, its calls refused as a deploy refuses
+  them (ADR-0388), evaluated against the example the model gave and held against the result it
+  claimed — and an answer that fails goes back to the model with the engine's own words, at most
+  twice, so a small free model behind OpenRouter is usable. The prompt's function list is the
+  engine's registry and every rule it teaches is a tested expression. Beside the chat: a FEEL editor,
+  a test pane, Copy, and **Apply to the field it was opened from** (an fx field keeps its `=`; a
+  decision table's input cell, which takes a unary test, is not written to), a **history** of the
+  last thirty expressions and **favourites**, kept in the browser. Nothing is stored on the server.
 - ✅ Boundary events: timer and message, interrupting and non-interrupting,
   attached to waiting activities. An interrupting boundary cancels the host (and
   its job) and routes out its flow; a non-interrupting one spawns a parallel

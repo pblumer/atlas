@@ -14,6 +14,25 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A FEEL assistant writes expressions in a conversation, and the engine checks them first.**
+  Ctrl/⌘+Shift+E opens it from any screen of the console, as do the spark in the top bar, a mini
+  spark on every FEEL field of the Modeler, and a spark beside a focused output cell, literal
+  expression or input expression in the DMN editor
+  ([ADR-draft-feel-assistant](docs/adr/draft-feel-assistant.md)). An author says what an
+  expression should compute; the AI Worker an operator configured writes one, with an explanation
+  and an example. Before it is shown, Atlas compiles it, refuses calls a deploy would refuse, and
+  evaluates it against the example; an answer that fails or disagrees with the result it claimed
+  goes back to the model with the engine's own words, at most twice. Beside the chat are a FEEL
+  editor, a test pane, Copy, and Apply, which writes into the field the assistant was opened from.
+  - The last thirty expressions and the author's favourites are kept in the browser, the
+    conversation for the browser session; nothing is stored on the server.
+  - A decision table's input cell is recognised and not written to: it takes a unary test, not an
+    expression.
+  - Routes `GET /api/v1/feel/generate/workers` and `POST /api/v1/feel/generate` (modeler role).
+    Like form generation they are not MCP tools: an agent writes the FEEL itself.
+  - The prompt's function list is the engine's own registry, and every rule it teaches the model
+    is an expression a test evaluates.
+
 - **Atlas says in one place which events it emits, and who listens.** A Console page
   *Events* lists every signal, message and feed event atlas emits: what has happened when it
   comes, what it carries with personal data marked, since which version, how stable, and who

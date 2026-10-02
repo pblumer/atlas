@@ -794,7 +794,7 @@ func (s *Server) handleEvaluateFeel(w http.ResponseWriter, r *http.Request) {
 	case expr.KindNull:
 		result = "null"
 	}
-	httpapi.JSON(w, http.StatusOK, evalFeelResp{OK: true, Result: result, Kind: feelKindName(kind)})
+	httpapi.JSON(w, http.StatusOK, evalFeelResp{OK: true, Result: result, Kind: kind.Label()})
 }
 
 // feelBindings converts the JSON sample variables into FEEL values. Numbers keep
@@ -820,22 +820,6 @@ func feelBindings(in map[string]any) (map[string]expr.Value, error) {
 		}
 	}
 	return out, nil
-}
-
-// feelKindName maps a classified value kind to the label the UI shows.
-func feelKindName(k expr.ValueKind) string {
-	switch k {
-	case expr.KindBool:
-		return "boolean"
-	case expr.KindNumber:
-		return "number"
-	case expr.KindString:
-		return "string"
-	case expr.KindJSON:
-		return "json"
-	default:
-		return "null"
-	}
 }
 
 // handleDeploy parses a BPMN XML body, compiles and deploys every executable

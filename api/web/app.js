@@ -13,6 +13,7 @@ import { enhanceTable } from "./table.js";
 import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
 import { renderDrgSvg, openDecisionGraph } from "./decision-graph.js";
 import { copyText } from "./clipboard.js";
+import { installFeelAssistant } from "./feel-assistant.js";
 import { restoreSummary } from "./restore-report.js";
 // Documentation prose is Markdown (ADR-0250). The renderer
 // is a module of its own because every surface that shows an element's documentation
@@ -1003,6 +1004,16 @@ function initShell() {
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
       e.preventDefault(); openSearchPalette();
     }
+  });
+
+  // The FEEL assistant (ADR-draft-feel-assistant): Ctrl/⌘+Shift+E anywhere, the spark
+  // in the top bar, the mini spark on every FEEL field and beside a focused dmn-js
+  // cell. Its routes are the modeler's, so the role is asked at the moment it opens —
+  // the principal is known only once /auth/me has answered.
+  installFeelAssistant({
+    api, copy: copyText, toast,
+    allowed: () => mayUse("modeler"),
+    button: document.getElementById("feel-assistant-btn"),
   });
 
   const nav = document.getElementById("drawer-apps");
@@ -10453,6 +10464,10 @@ async function route() {
   document.getElementById("scrim").hidden = true;
   if (window.__atlasCleanup) { try { window.__atlasCleanup(); } catch { /* ignore */ } }
   navGen++; // supersede any view handler still awaiting from a previous navigation
+  // The FEEL assistant's top-bar button is offered to whoever may use its routes; this
+  // is the first point after boot at which the principal is known.
+  const feelBtn = document.getElementById("feel-assistant-btn");
+  if (feelBtn) feelBtn.hidden = !mayUse("modeler");
 
   const hash = location.hash || "#/console";
   // #/console/connectors is the pre-ADR-0203 spelling of the Workers page. A
