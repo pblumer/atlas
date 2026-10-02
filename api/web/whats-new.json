@@ -45,6 +45,29 @@
       }
     },
     {
+      "id": "a-package-installs-from-the-command-line",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Install a package from the command line",
+        "de": "Ein Paket im Terminal installieren"
+      },
+      "summary": {
+        "en": "The new command atlas import installs an application, and the shop it serves, into a running instance without a browser, for example from a pipeline. It asks for who orders and who approves through an answers file, accepts groups and people by name so the same file works on every instance, and refuses before writing anything if an answer is missing or unknown.",
+        "de": "Der neue Befehl atlas import installiert eine Applikation und den Shop dazu ohne Browser in eine laufende Instanz, etwa aus einer Pipeline. Wer bestellt und wer genehmigt, steht in einer Antwortdatei; Gruppen und Personen dürfen beim Namen genannt werden, damit dieselbe Datei auf jeder Instanz gilt. Fehlt eine Antwort oder ist sie unbekannt, bricht der Befehl ab, bevor er etwas schreibt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue",
+        "Examples",
+        "Deployment"
+      ]
+    },
+    {
       "id": "the-shop-has-a-handbook-of-its-own-with-an-example-to-instal",
       "version": "Unreleased",
       "date": null,
@@ -264,28 +287,6 @@
       "tags": [
         "Modeler",
         "Service catalogue"
-      ]
-    },
-    {
-      "id": "a-process-can-ask-somebody-s-held-service-for-an-action-in-t",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Processes can ask a held service for an action",
-        "de": "Prozesse können eine bezogene Leistung um eine Aktion bitten"
-      },
-      "summary": {
-        "en": "A Shop task can now issue a command: an HR leaver process returns a person's mailbox, a maintenance process resets a password — through the same checks the shop applies to a person. Because no person stands behind a process, each product lists the applications it trusts with this, and only actions meant for operators or systems can be commanded. The list is read fresh every time, so removing an application stops it at once for everything already held.",
-        "de": "Eine Shop-Aufgabe kann jetzt einen Befehl erteilen: Ein Austrittsprozess gibt die Mailbox einer Person zurück, ein Wartungsprozess setzt ein Passwort zurück – mit denselben Prüfungen, die der Shop bei einer Person anwendet. Weil hinter einem Prozess keine Person steht, führt jedes Produkt die Applikationen auf, denen es das erlaubt, und nur Aktionen für Betrieb oder Systeme lassen sich befehlen. Die Liste wird jedes Mal neu gelesen; wird eine Applikation entfernt, ist sie sofort für alles bereits Bezogene gesperrt."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Service catalogue",
-        "Modeler"
       ]
     }
   ]

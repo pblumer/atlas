@@ -522,6 +522,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0434](0434-the-catalogue-can-be-switched-off.md) | The catalogue can be switched off, and switching it off removes a surface, not a semantics | Accepted | Landed |
 | [0435](0435-one-catalogue-of-the-events-atlas-emits.md) | Atlas keeps one catalogue of the events it emits | Proposed | Not started |
 | [0436](0436-a-catalogue-is-imported-as-one-document.md) | A catalogue is imported as one document | Accepted | Landed |
+| [0437](0437-a-package-is-imported-from-the-command-line.md) | A package is imported from the command line | Accepted | Landed |
 
 ## The two states of a record
 
