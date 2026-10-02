@@ -56,15 +56,25 @@ type Text struct {
 	DE string `json:"de"`
 }
 
-// Moment is where an event is emitted. A domain fact names the system process and
-// the element that throws it — or, for a message the server publishes, the element
-// that receives it — and Producer says who sends it; a platform fact names the record
-// or the component it is derived from.
+// Moment is where an event is emitted. A domain fact names the places — a system
+// process and its element — that throw it, or, for a message the server publishes,
+// the element that receives it, and Producer says who sends it. One fact may be
+// thrown in several processes: the shop's three approval processes each announce the
+// same request. A platform fact names the record or the component it is derived from,
+// and no place.
 type Moment struct {
-	Process  string `json:"process,omitempty"`
-	Element  string `json:"element,omitempty"`
-	Producer string `json:"producer"`
+	Places   []Place `json:"places,omitempty"`
+	Producer string  `json:"producer"`
 }
+
+// Place is one element of one system process.
+type Place struct {
+	Process string `json:"process"`
+	Element string `json:"element"`
+}
+
+// At is the place of an element in a system process.
+func At(process, element string) Place { return Place{Process: process, Element: element} }
 
 // Field is one field of a payload a receiver may rely on.
 type Field struct {
@@ -171,6 +181,7 @@ const (
 	EntitlementGranted = "atlas.entitlement.granted"
 	EntitlementRevoked = "atlas.entitlement.revoked"
 	UserRequested      = "atlas.user.requested"
+	ApprovalRequested  = "atlas.approval.requested"
 	// ActionOutcomePrefix is the type of an action's outcome whose product declares
 	// none and whose action names no message: atlas.action.<outcome>.
 	ActionOutcomePrefix = "atlas.action."
@@ -192,7 +203,7 @@ var Entries = []Entry{
 			EN: "An order was placed, so its fulfilment can begin.",
 			DE: "Eine Bestellung wurde aufgegeben; ihre Erfüllung kann beginnen.",
 		},
-		Moment:   Moment{Process: "atlas-auftrag-erfuellung", Element: "Start", Producer: "the order service, when an order is placed"},
+		Moment:   Moment{Places: []Place{At("atlas-auftrag-erfuellung", "Start")}, Producer: "the order service, when an order is placed"},
 		Channels: []Channel{Message},
 		Payload: []Field{
 			{Name: "orderId", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The order.", DE: "Die Bestellung."}},
@@ -211,7 +222,7 @@ var Entries = []Entry{
 			EN: "A position of an order moved on, so the fulfilment asks again what may start.",
 			DE: "Eine Position einer Bestellung ist weitergekommen; die Erfüllung fragt erneut, was starten darf.",
 		},
-		Moment:      Moment{Process: "atlas-auftrag-erfuellung", Element: "Warten", Producer: "the order service, when a position is reported, cancelled or repaired; correlated on the order id, with no variables"},
+		Moment:      Moment{Places: []Place{At("atlas-auftrag-erfuellung", "Warten")}, Producer: "the order service, when a position is reported, cancelled or repaired; correlated on the order id, with no variables"},
 		Channels:    []Channel{Message},
 		Payload:     []Field{},
 		NeverSecret: "TestTheOrderMessagesCarryNoSecret",
@@ -297,7 +308,7 @@ var Entries = []Entry{
 			EN: "Somebody asked for an account, and the request now waits for an administrator to approve it.",
 			DE: "Jemand hat ein Konto beantragt; der Antrag wartet nun auf die Freigabe durch die Administration.",
 		},
-		Moment:   Moment{Process: "proc_benutzer_aufnahme", Element: "beantragt_melden", Producer: "the intake process, before its approval waits"},
+		Moment:   Moment{Places: []Place{At("proc_benutzer_aufnahme", "beantragt_melden")}, Producer: "the intake process, before its approval waits"},
 		Channels: []Channel{Signal},
 		Payload: []Field{
 			{Name: "atlasInstance", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The intake instance that emitted it, so a receiver can point back at the request.", DE: "Die Aufnahme-Instanz, die es ausgesendet hat, damit ein Empfänger auf den Antrag verweisen kann."}},
@@ -309,6 +320,42 @@ var Entries = []Entry{
 			{Name: "begruendung", Type: "string", Data: PersonalData, Meaning: Text{EN: "Why the account is needed, in the requester's words.", DE: "Begründung, in den Worten der antragstellenden Person."}},
 		},
 		NeverSecret: "TestSystemIntakeAnnouncesTheRequestAsASignal",
+		Since:       Unreleased, Stability: Experimental,
+		Access:     map[Channel]string{Signal: accessSignal},
+		Listenable: true,
+	},
+	{
+		Type: ApprovalRequested, Kind: Domain,
+		Meaning: Text{
+			EN: "A position of an order needs an approval, and the approval task now waits for whoever decides it.",
+			DE: "Eine Bestellposition braucht eine Genehmigung; die Genehmigungsaufgabe wartet nun auf die Person oder Gruppe, die entscheidet.",
+		},
+		Moment: Moment{
+			Places: []Place{
+				At("atlas-genehmigung-fix", "Angefragt"),
+				At("atlas-genehmigung-rolle", "Angefragt"),
+				At("atlas-genehmigung-vorgesetzter", "Angefragt"),
+			},
+			Producer: "the shop's three approval processes, before their approval task waits; a server whose service catalogue is switched off runs none of them",
+		},
+		Channels: []Channel{Signal},
+		Payload: []Field{
+			{Name: "atlasInstance", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The approval instance that emitted it, so a receiver can point back at the request.", DE: "Die Genehmigungsinstanz, die es ausgesendet hat, damit ein Empfänger auf die Anfrage verweisen kann."}},
+			{Name: "approvalKind", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The product's approval rule: fixed (a person named on the product), role (a group) or superior (the orderer's line manager).", DE: "Die Genehmigungsregel des Produkts: fixed (eine am Produkt genannte Person), role (eine Gruppe) oder superior (die vorgesetzte Person der bestellenden)."}},
+			{Name: "approver", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "Who decides: a principal id for fixed and superior, the group for role.", DE: "Wer entscheidet: eine Principal-ID bei fixed und superior, die Gruppe bei role."}},
+			{Name: "orderId", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The order.", DE: "Die Bestellung."}},
+			{Name: "positionId", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The position of the order that waits.", DE: "Die Position der Bestellung, die wartet."}},
+			{Name: "itemId", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The product.", DE: "Das Produkt."}},
+			{Name: "variantId", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The variant; empty where the product has none.", DE: "Die Variante; leer, wo das Produkt keine hat."}},
+			{Name: "orderer", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "Who placed the order, by principal id.", DE: "Wer bestellt hat, als Principal-ID."}},
+			{Name: "recipient", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "Who it is for, by principal id.", DE: "Für wen bestellt wurde, als Principal-ID."}},
+			{Name: "approvalRef", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The approval rule's reference as the product states it: the person for fixed, the group for role.", DE: "Die Referenz der Genehmigungsregel, wie das Produkt sie nennt: die Person bei fixed, die Gruppe bei role."}},
+			{Name: "provisionProcess", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The process that provisions the position once it is approved.", DE: "Der Prozess, der die Position nach der Genehmigung bereitstellt."}},
+			{Name: "atlasApiBase", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "This server's own API address.", DE: "Die eigene API-Adresse dieses Servers."}},
+			{Name: "portalBaseUrl", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The external address of the portal; empty where none is set.", DE: "Die externe Adresse des Portals; leer, wo keine gesetzt ist."}},
+			{Name: "vorgesetzter", Type: "string", Data: NotPersonal, Meaning: Text{EN: "For superior only: the line manager found in the directory, the same as approver.", DE: "Nur bei superior: die im Verzeichnis gefundene vorgesetzte Person, dieselbe wie approver."}},
+		},
+		NeverSecret: "TestTheApprovalProcessesAnnounceTheRequestAsASignal",
 		Since:       Unreleased, Stability: Experimental,
 		Access:     map[Channel]string{Signal: accessSignal},
 		Listenable: true,

@@ -14,6 +14,23 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An approval announces itself before it waits.** Each of the shop's three built-in
+  approvals — a fixed person, a role, the orderer's line manager — now throws the signal
+  `atlas.approval.requested` before its approval task waits
+  ([ADR-0435](docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)). A model of the
+  installation listens with a signal start, for instance to tell the approver in a chat,
+  without changing the approval.
+  - The signal carries the rule (`approvalKind`), who decides (`approver`), the order, position,
+    product and variant, orderer and recipient by principal id, and `atlasInstance`, the
+    approval instance.
+  - It carries nothing decided and none of the order form's answers.
+  - No field is personal data, so any modeler may deploy a listener.
+  - The event catalogue lists it, so the Console page *Events* and the Modeler's signal
+    picker offer it, and the handbook's chapter describes it.
+  - A catalogue entry now names every place that throws it, rather than one.
+  - The shop handbook said the `superior` approval asks the recipient's line manager; it asks
+    the orderer's, as the process always did, and now says so.
+
 - **Atlas says in one place which events it emits, and who listens.** A Console page
   *Events* lists every signal, message and feed event atlas emits: what has happened when it
   comes, what it carries with personal data marked, since which version, how stable, and who
@@ -459,9 +476,9 @@ _Changed_ / _Removed_ for each version.
 ### Fixed
 
 - **The shop's approval models open as a readable diagram.** The three approval processes
-  the shop ships — fixed approver, group and superior — drew their parallel gateway on top
-  of the approval task and printed both deadlines' captions over each other, and the
-  superior variant drew its deadlines on the directory read instead of on the approval.
+  the shop ships — fixed approver, group and superior — printed both deadlines' captions
+  over each other, two of them drew their parallel gateway on top of the approval task,
+  and the superior variant drew its deadlines away from the task they are attached to.
   The diagrams are redrawn: the notification on a row above, the decision on one axis with
   its two outcomes rejoining at an exclusive gateway before *Entschieden*, and reminder and
   escalation each on a row of their own. The joining gateway changes no behaviour, since

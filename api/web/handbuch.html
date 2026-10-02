@@ -10206,6 +10206,29 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
           <tr><td><code>begruendung</code></td><td>string</td><td><span data-l="de">optional</span><span data-l="en">optional</span> · <span data-l="de">Personendaten</span><span data-l="en">personal data</span></td><td data-l="de">Begründung, in den Worten der antragstellenden Person.</td><td data-l="en">Why the account is needed, in the requester&#39;s words.</td></tr>
         </tbody>
       </table>
+      <h3 id="ev-atlas-approval-requested"><code>atlas.approval.requested</code></h3>
+      <p data-l="de">Eine Bestellposition braucht eine Genehmigung; die Genehmigungsaufgabe wartet nun auf die Person oder Gruppe, die entscheidet.</p>
+      <p data-l="en">A position of an order needs an approval, and the approval task now waits for whoever decides it.</p>
+      <p class="muted"><span data-l="de">Art</span><span data-l="en">Kind</span>: domain · <span data-l="de">Kanäle</span><span data-l="en">Channels</span>: signal · <span data-l="de">seit</span><span data-l="en">since</span> Unreleased · experimental<br><code>atlas-genehmigung-fix</code> / <code>Angefragt</code>, <code>atlas-genehmigung-rolle</code> / <code>Angefragt</code>, <code>atlas-genehmigung-vorgesetzter</code> / <code>Angefragt</code> — the shop&#39;s three approval processes, before their approval task waits; a server whose service catalogue is switched off runs none of them</p>
+      <table>
+        <thead><tr><th data-l="de">Feld</th><th data-l="en">Field</th><th data-l="de">Typ</th><th data-l="en">Type</th><th></th><th data-l="de">Bedeutung</th><th data-l="en">Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>atlasInstance</code></td><td>string</td><td></td><td data-l="de">Die Genehmigungsinstanz, die es ausgesendet hat, damit ein Empfänger auf die Anfrage verweisen kann.</td><td data-l="en">The approval instance that emitted it, so a receiver can point back at the request.</td></tr>
+          <tr><td><code>approvalKind</code></td><td>string</td><td></td><td data-l="de">Die Genehmigungsregel des Produkts: fixed (eine am Produkt genannte Person), role (eine Gruppe) oder superior (die vorgesetzte Person der bestellenden).</td><td data-l="en">The product&#39;s approval rule: fixed (a person named on the product), role (a group) or superior (the orderer&#39;s line manager).</td></tr>
+          <tr><td><code>approver</code></td><td>string</td><td></td><td data-l="de">Wer entscheidet: eine Principal-ID bei fixed und superior, die Gruppe bei role.</td><td data-l="en">Who decides: a principal id for fixed and superior, the group for role.</td></tr>
+          <tr><td><code>orderId</code></td><td>string</td><td></td><td data-l="de">Die Bestellung.</td><td data-l="en">The order.</td></tr>
+          <tr><td><code>positionId</code></td><td>string</td><td></td><td data-l="de">Die Position der Bestellung, die wartet.</td><td data-l="en">The position of the order that waits.</td></tr>
+          <tr><td><code>itemId</code></td><td>string</td><td></td><td data-l="de">Das Produkt.</td><td data-l="en">The product.</td></tr>
+          <tr><td><code>variantId</code></td><td>string</td><td></td><td data-l="de">Die Variante; leer, wo das Produkt keine hat.</td><td data-l="en">The variant; empty where the product has none.</td></tr>
+          <tr><td><code>orderer</code></td><td>string</td><td></td><td data-l="de">Wer bestellt hat, als Principal-ID.</td><td data-l="en">Who placed the order, by principal id.</td></tr>
+          <tr><td><code>recipient</code></td><td>string</td><td></td><td data-l="de">Für wen bestellt wurde, als Principal-ID.</td><td data-l="en">Who it is for, by principal id.</td></tr>
+          <tr><td><code>approvalRef</code></td><td>string</td><td></td><td data-l="de">Die Referenz der Genehmigungsregel, wie das Produkt sie nennt: die Person bei fixed, die Gruppe bei role.</td><td data-l="en">The approval rule&#39;s reference as the product states it: the person for fixed, the group for role.</td></tr>
+          <tr><td><code>provisionProcess</code></td><td>string</td><td></td><td data-l="de">Der Prozess, der die Position nach der Genehmigung bereitstellt.</td><td data-l="en">The process that provisions the position once it is approved.</td></tr>
+          <tr><td><code>atlasApiBase</code></td><td>string</td><td></td><td data-l="de">Die eigene API-Adresse dieses Servers.</td><td data-l="en">This server&#39;s own API address.</td></tr>
+          <tr><td><code>portalBaseUrl</code></td><td>string</td><td></td><td data-l="de">Die externe Adresse des Portals; leer, wo keine gesetzt ist.</td><td data-l="en">The external address of the portal; empty where none is set.</td></tr>
+          <tr><td><code>vorgesetzter</code></td><td>string</td><td><span data-l="de">optional</span><span data-l="en">optional</span></td><td data-l="de">Nur bei superior: die im Verzeichnis gefundene vorgesetzte Person, dieselbe wie approver.</td><td data-l="en">For superior only: the line manager found in the directory, the same as approver.</td></tr>
+        </tbody>
+      </table>
       <!-- eventcatalog:end -->
     </section>
 
