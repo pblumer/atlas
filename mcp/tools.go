@@ -17,6 +17,13 @@ type Tool struct {
 	Description string
 	InputSchema map[string]any
 	Handler     func(c *Client, args map[string]any) (string, error)
+	// Catalogue marks a tool of the shop, the catalogue, the orders or the
+	// inventory: one an adapter built WithoutCatalogue does not offer, because the
+	// server it fronts does not serve the route behind it
+	// (ADR-draft-the-catalogue-can-be-switched-off).
+	// TestWithoutCatalogueOffersNoToolOfTheArea fails for a tool of the area that
+	// does not say so.
+	Catalogue bool
 }
 
 // noArgs is the JSON Schema for a tool that takes no arguments.
@@ -98,7 +105,8 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
-			Name: "atlas_product_usage",
+			Name:      "atlas_product_usage",
+			Catalogue: true,
 			Description: "Where one catalogue product is used, read out of the release backwards: " +
 				"which catalogues offer it, which wholes carry it and whether integrally " +
 				"(composition) or optionally (aggregation), what it needs, what needs it, what " +

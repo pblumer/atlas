@@ -473,6 +473,13 @@ func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, panorama
 // survivable when everything is stale together; a picture that contradicts itself
 // is not.
 func (s *Server) collectCatalogue(land *panorama.Landscape, p *httpapi.Principal) error {
+	// A server that switched the catalogue off does not draw it. The store is still
+	// on disk and readable here, which is exactly why this has to be said: the
+	// starmap reaches it directly rather than through a route the switch removed
+	// (ADR-draft-the-catalogue-can-be-switched-off).
+	if s.catalogueOff {
+		return nil
+	}
 	cats, err := s.catalogStore.Catalogs()
 	if err != nil {
 		return err

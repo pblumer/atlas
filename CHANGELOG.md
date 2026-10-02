@@ -14,6 +14,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The shop, the catalogue, the orders and the inventory can be switched off.** Start the
+  server with `--catalogue=false` (or `ATLAS_CATALOGUE=false`, or
+  `atlas.catalogue.enabled: false` in the Helm chart) to run Atlas as a workflow engine
+  without them. Every route tagged *Catalogue* or *Order* then answers 404 like an endpoint
+  that never existed, and the API explorer no longer describes them. `/shop.html` is not
+  served. The Console leaves Shop, Catalogue, Reconciliation and Access review out of its
+  menus, because `/api/v1/info` now says `catalogue: false`. The MCP adapter no longer offers
+  the area's tools, and the stdio adapter asks the server at start. The starmap draws no
+  catalogue, the Modeler's message picker lists no product action, and the shop's
+  fulfilment and approval processes are not filed into the system project. Nothing stored is removed, and deployed processes run unchanged, shop tasks
+  included. Turning the area back on is a restart. The default is on, so an upgrade changes
+  nothing. A malformed `ATLAS_CATALOGUE` stops the start rather than leaving the shop on.
+  Tests hold the switch to the whole area as it grows: a route of the area under another tag
+  fails them, and so does a catalogue tool that does not say it is one.
+  [ADR-draft-the-catalogue-can-be-switched-off](docs/adr/draft-the-catalogue-can-be-switched-off.md).
+
 - **A new account request announces itself, so an installation can be told.** The intake
   process (`proc_benutzer_aufnahme`), the one behind the login screen's "Registrieren" link,
   now throws the signal `atlas.user.requested` just before the request waits at "Antrag

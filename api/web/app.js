@@ -169,6 +169,45 @@ const mayUse = (role) => {
   return roles.includes("admin") || roles.includes(role);
 };
 
+// FEATURES is what this server serves of its optional parts, as /api/v1/info says.
+// Today that is one switch: the shop, the catalogue, the orders and the inventory,
+// which an operator turns off with --catalogue=false
+// (ADR-draft-the-catalogue-can-be-switched-off). Until the server has answered,
+// everything is offered — the stance the drawer already takes before /auth/me
+// answers — and a field an older server does not send reads as on, so a Console in
+// front of one keeps the menu it had.
+const FEATURES = { catalogue: true, loaded: false };
+
+// loadFeatures asks once — boot and the first navigation share one request — and
+// remembers only an answer: signed out, or the server mid-restart, leaves the menu as
+// it is and asks again on the next navigation rather than deciding it on a failure.
+// It resolves to the info document, or null.
+let featuresAsked = null;
+function loadFeatures() {
+  if (!featuresAsked) {
+    featuresAsked = api("GET", "/api/v1/info").then((i) => {
+      FEATURES.catalogue = !(i && i.catalogue === false);
+      FEATURES.loaded = true;
+      return i;
+    }, () => {
+      featuresAsked = null;
+      return null;
+    });
+  }
+  return featuresAsked;
+}
+
+// offered is the one predicate both menus filter by: the person holds the role, and
+// the server serves the part of Atlas the entry opens. One predicate and not a second
+// condition beside each role check, because the next menu would be the one that
+// forgot it.
+const offered = (entry) => mayUse(entry.role) && !(entry.feature && FEATURES[entry.feature] === false);
+
+// isCatalogueRoute names the Console views of the area the switch removes — the same
+// four the menus mark with feature: "catalogue".
+const isCatalogueRoute = (path) =>
+  path.startsWith("#/catalog") || path === "#/operations/reconciliation" || path === "#/tasks/recertification";
+
 const initials = (name) => {
   const s = String(name || "").trim();
   if (!s) return "?";
@@ -621,11 +660,11 @@ const APPS = [
   // Without this line the page existed and nothing led to it: it was built, served
   // and reachable only by somebody who already knew the URL. Held by
   // TestBothPortalSurfacesAreReachableFromTheMenu.
-  { id: "portal", name: "Shop", route: "shop.html", on: true, role: "user", separate: true },
+  { id: "portal", name: "Shop", route: "shop.html", on: true, role: "user", separate: true, feature: "catalogue" },
   // Where a catalogue is filled. Gated at productmanager (ADR-0315): maintaining a
   // catalogue means choosing from processes already deployed, never deploying one,
   // so it is deliberately not the modeller's role — deploy is code execution.
-  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager" },
+  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager", feature: "catalogue" },
   { id: "operations", name: "Operations", route: "#/operations", on: true, role: "operator" },
   { id: "panorama", name: "Panorama", route: "#/panorama/starmap", on: true, role: "modeler" },
   { id: "data", name: "Data", route: "#/data", on: true, role: "modeler" },
@@ -659,7 +698,7 @@ const TOPNAV = {
     // (ADR-0334). Operations rather than Catalogue: maintaining a
     // catalogue is authoring, and acting on a finding is repair — the three acts
     // are the operator's role on the server too.
-    { name: "Reconciliation", route: "#/operations/reconciliation", role: "operator" },
+    { name: "Reconciliation", route: "#/operations/reconciliation", role: "operator", feature: "catalogue" },
     { name: "Call activities", route: "#/operations/call-activities", role: "any" },
   ],
   tasks: [
@@ -674,7 +713,7 @@ const TOPNAV = {
     // whether somebody on their team still needs something — and a line manager has
     // never opened Operations. Not one of the two shop pages either: those carry
     // the catalogue's brand and are written for people outside the tooling.
-    { name: "Access review", route: "#/tasks/recertification", role: "user" },
+    { name: "Access review", route: "#/tasks/recertification", role: "user", feature: "catalogue" },
     { name: "Start", route: "#/tasks/start", role: "operator" },
   ],
   panorama: [
@@ -976,10 +1015,13 @@ function initShell() {
     });
   }
 
-  api("GET", "/api/v1/info").then((i) => {
+  // The same answer tells the drawer what this server switched off, so it is painted
+  // again once it is known.
+  loadFeatures().then((i) => {
     document.querySelectorAll(".org").forEach((e) => { e.textContent = "Atlas Org"; });
+    paintApps();
     initHelpMenu(!!(i && i.docs));
-  }).catch(() => { initHelpMenu(false); });
+  });
 }
 
 // handbookHelp maps the current route to the most relevant handbook chapter, so
@@ -1185,7 +1227,7 @@ function paintApps() {
   // a span here: it is presentation, it must not join the link's accessible name,
   // and a glyph inside the text would change what every test reading this menu
   // sees for a reason that has nothing to do with them.
-  nav.innerHTML = APPS.filter((a) => mayUse(a.role)).map((a) =>
+  nav.innerHTML = APPS.filter((a) => offered(a)).map((a) =>
     `<a href="${a.route}" data-app="${a.id}"${a.separate ? ' target="_blank" rel="noopener"' : ""}>` +
     `${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`
   ).join("");
@@ -1196,7 +1238,7 @@ function setChrome(appId, route) {
     (APPS.find((a) => a.id === appId) || {}).name || "atlas";
   paintApps();
   const topnav = document.getElementById("topnav");
-  topnav.innerHTML = (TOPNAV[appId] || []).filter((t) => mayUse(t.role)).map((t) =>
+  topnav.innerHTML = (TOPNAV[appId] || []).filter((t) => offered(t)).map((t) =>
     // A `separate` entry is a page of its own and opens in one, exactly as the
     // drawer opens it. Rendered as a plain link it would replace the console in the
     // same tab, which is the behaviour the note above APPS argues against: the only
@@ -8821,6 +8863,8 @@ async function viewTasks(preselectKey) {
   // of it may take the inbox down. A failure leaves the map empty and every row
   // renders exactly as it did before.
   async function loadApprovalKeys() {
+    // An approval decides an order, and a server without a catalogue takes none.
+    if (!FEATURES.catalogue) { state.approvals = new Map(); return; }
     try {
       const page = await api("GET", "/api/v1/approvals");
       const next = new Map();
@@ -9188,6 +9232,18 @@ async function viewStartProcess() {
   }
   view.querySelector("#start-refresh").addEventListener("click", load);
   await load();
+}
+
+// viewSwitchedOff is what a bookmark into the catalogue's views opens on a server that
+// switched the area off: the reason, in words, instead of a view whose every call
+// answers 404 and reads as something broken.
+function viewSwitchedOff() {
+  view.innerHTML = `
+    <div class="card empty">
+      <h1>Switched off</h1>
+      <p class="muted">The shop, the catalogue, the orders and the inventory are switched off on this server (--catalogue=false). Nothing stored was removed; an administrator turns them back on at the next start.</p>
+      <a class="btn ghost" href="#/console">Back to Console</a>
+    </div>`;
 }
 
 function viewComingSoon(appId) {
@@ -10195,12 +10251,14 @@ async function route() {
   }
 
   startPresence(); // signed in, so this tab is somebody being here (presence.go)
+  if (!FEATURES.loaded) await loadFeatures(); // before the menus are painted from it
   setChrome(appId, path);
   setTitle(routeTitle(path));
   updateAccount();
   window.scrollTo(0, 0);
 
   try {
+    if (isCatalogueRoute(path) && !FEATURES.catalogue) return viewSwitchedOff();
     if (path === "#/" || path === "#/console") return await viewConsoleDashboard();
     if (path === "#/console/engine") return await viewConsoleEngine();
     if (path === "#/console/logs") return await viewConsoleLogs();

@@ -80,12 +80,36 @@ type Server struct {
 	index  map[string]Tool
 }
 
+// ServerOption configures a Server at construction.
+type ServerOption func(*serverConfig)
+
+type serverConfig struct {
+	withoutCatalogue bool
+}
+
+// WithoutCatalogue builds an adapter for a server that switched the shop, the
+// catalogue, the orders and the inventory off (--catalogue=false): it neither lists
+// nor dispatches the tools marked Catalogue, so an agent is not offered a capability
+// whose every call would answer "no such endpoint"
+// (ADR-draft-the-catalogue-can-be-switched-off). The server is still what refuses
+// them; this only stops the adapter from advertising what is not there.
+func WithoutCatalogue() ServerOption {
+	return func(c *serverConfig) { c.withoutCatalogue = true }
+}
+
 // NewServer builds an MCP server that proxies tool calls to the Atlas server
 // reachable through client.
-func NewServer(client *Client) *Server {
+func NewServer(client *Client, opts ...ServerOption) *Server {
+	var cfg serverConfig
+	for _, o := range opts {
+		o(&cfg)
+	}
 	s := &Server{client: client, index: map[string]Tool{}}
-	s.tools = defaultTools()
-	for _, t := range s.tools {
+	for _, t := range defaultTools() {
+		if cfg.withoutCatalogue && t.Catalogue {
+			continue
+		}
+		s.tools = append(s.tools, t)
 		s.index[t.Name] = t
 	}
 	return s

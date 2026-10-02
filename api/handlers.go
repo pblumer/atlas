@@ -201,6 +201,11 @@ type infoResp struct {
 	// (the --docs gate, ADR-0043), so the web UI can show or hide its
 	// "API Explorer" entry without probing /api/docs.
 	Docs bool `json:"docs"`
+	// Catalogue reports whether the shop, the catalogue, the orders and the
+	// inventory are served (the --catalogue gate,
+	// ADR-draft-the-catalogue-can-be-switched-off), so the Console can leave them out
+	// of its menus rather than lead somebody to a view whose every call is a 404.
+	Catalogue bool `json:"catalogue"`
 	// Revision/BuildTime/Modified/Go are the binary's embedded VCS build metadata,
 	// so the web UI can show exactly which commit the running server was built from.
 	Revision  string `json:"revision,omitempty"`
@@ -680,6 +685,7 @@ func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
 		Product:   "Atlas",
 		Version:   Version,
 		Docs:      s.docsEnabled,
+		Catalogue: !s.catalogueOff,
 		Revision:  b.Revision,
 		BuildTime: b.Time,
 		Modified:  b.Modified,

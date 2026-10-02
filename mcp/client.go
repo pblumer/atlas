@@ -275,3 +275,36 @@ func findingMessages(findings []json.RawMessage) []string {
 	}
 	return out
 }
+
+// CatalogueOffered asks the server whether it serves the shop, the catalogue, the
+// orders and the inventory, which an operator can switch off with --catalogue=false
+// (ADR-draft-the-catalogue-can-be-switched-off). It is how the stdio adapter, a
+// separate process that cannot read the server's flags, decides whether to build
+// itself WithoutCatalogue. A server that does not say — one older than the switch —
+// offers it. An error is returned as an error and not read as either answer: the
+// caller cannot tell a server that is down from one that decided.
+//
+// It asks with a short deadline of its own rather than the client's thirty seconds.
+// The adapter asks before it reads its first message, and an agent's host waits on
+// that first answer: a server behind a firewall that drops packets would otherwise
+// hold the whole adapter for half a minute to decide which tools to list.
+func (c *Client) CatalogueOffered() (bool, error) {
+	probe := *c
+	hc := *c.http
+	hc.Timeout = catalogueProbeTimeout
+	probe.http = &hc
+	body, err := probe.get("/api/v1/info")
+	if err != nil {
+		return false, err
+	}
+	var info struct {
+		Catalogue *bool `json:"catalogue"`
+	}
+	if err := json.Unmarshal(body, &info); err != nil {
+		return false, fmt.Errorf("read /api/v1/info: %w", err)
+	}
+	return info.Catalogue == nil || *info.Catalogue, nil
+}
+
+// catalogueProbeTimeout bounds CatalogueOffered.
+const catalogueProbeTimeout = 5 * time.Second
