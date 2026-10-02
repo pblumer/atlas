@@ -59,8 +59,16 @@ func TestEveryConfigurableWorkerTypeIsInTheConsoleCatalog(t *testing.T) {
 // a capability that is not there. It is allowed to describe a Worker Type that needs no
 // Console record (REST authors its endpoint in the model), which is why this checks the
 // placement catalog — every authorable kind — rather than only the managed ones.
+//
+// A managed kind no task names is served by something other than a job: the CloudEvents
+// endpoint is pushed the event feed by the server itself
+// (ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint), so it answers without
+// a job type.
 func TestTheConsoleCatalogDescribesNothingAtlasDoesNotServe(t *testing.T) {
 	for id := range consoleWorkerCatalogIDs(t) {
+		if k, managed := lookupManagedConnectorKind(id); managed && len(k.jobTypes) == 0 {
+			continue
+		}
 		if _, ok := authoredKindJobTypes[id]; !ok {
 			t.Errorf("the Worker catalog card describes %q, which is not a Worker Type this Atlas serves "+
 				"(no entry in authoredKindJobTypes) — the card would offer a capability nothing answers", id)

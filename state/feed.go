@@ -167,6 +167,24 @@ func (q queries) FeedPrunedThrough(partition uint16) (uint64, error) {
 	return binary.BigEndian.Uint64(raw), nil
 }
 
+// FeedLast is the position of partition's newest feed row, or the position its feed was
+// pruned through when it holds none: the cursor that reads only what is recorded from
+// now on. A push subscription that starts "now" starts there.
+func (q queries) FeedLast(partition uint16) (uint64, error) {
+	var last uint64
+	err := q.scanRangeDesc(feedRowPrefix(partition), prefixEnd(feedRowPrefix(partition)), func(k, _ []byte) error {
+		last = binary.BigEndian.Uint64(k[len(k)-8:])
+		return errFeedScanDone
+	})
+	if err != nil && !errors.Is(err, errFeedScanDone) {
+		return 0, err
+	}
+	if last == 0 {
+		return q.FeedPrunedThrough(partition)
+	}
+	return last, nil
+}
+
 // FeedThroughBefore is the position of the last row of partition recorded before
 // cutoff, in position order, and whether there is one: what the retention sweep
 // prunes through. It stops at the first row recorded at or after cutoff, so a row

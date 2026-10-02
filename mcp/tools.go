@@ -779,6 +779,24 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_feed_subscriptions",
+			Description: "The event feed's push subscriptions — which systems beyond atlas (a CMDB, a billing " +
+				"system) are sent the feed of action outcomes and granted and revoked rights, and whether that " +
+				"delivery is moving. Admin-only. Each row names its cloudevents Worker ('workerId', " +
+				"'workerName'), the catalogues it is narrowed to ('reach'; empty is the whole feed), its " +
+				"'cursor' (the feed position delivered through), 'enabled' and 'disabledReason' (set when the " +
+				"feed's retention dropped rows it had not delivered — it stays off until an administrator " +
+				"re-enables it), and 'deliveredAt'. A row with a 'hold' is FAILING: its endpoint refused or did " +
+				"not answer, and delivery waits on a backoff ladder with the cursor where it was — nothing is " +
+				"skipped — showing 'failures', 'failingSince', 'retryAt' and 'lastError'. Fix the endpoint or " +
+				"its credential; delivery resumes by itself. Read-only: creating, changing and ending " +
+				"subscriptions is administrator configuration and has no tool.",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return asText(c.get("/api/v1/feed-subscriptions"))
+			},
+		},
+		{
 			Name: "atlas_list_incidents",
 			Description: "List unresolved incidents — the operator \"what's stuck\" view. Each incident carries " +
 				"its elementInstanceKey (pass it to atlas_resolve_incident), processInstanceKey, processDefKey, " +

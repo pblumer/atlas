@@ -6281,6 +6281,44 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
       </div>
 
+      <div class="card" id="runbook-cloudevents">
+        <h4>CloudEvents endpoint</h4>
+        <p data-l="de">Wohin der Ereignis-Feed geschoben wird: Ein Umsystem wie die Verrechnung oder eine CMDB bekommt
+          die Ergebnisse der Produktaktionen und jedes gewährte und entzogene Recht zugestellt, statt den Feed selbst
+          abzufragen.</p>
+        <p data-l="en">Where the event feed is pushed: a system such as billing or a CMDB is sent the outcomes of
+          product actions and every right granted and revoked, instead of pulling the feed itself.</p>
+        <ol>
+          <li data-l="de">Auf der Empfängerseite eine <b>https</b>-Adresse bereitstellen, die <code>POST</code> mit
+            <code>Content-Type: application/cloudevents-batch+json</code> annimmt – ein JSON-Array von CloudEvents – und
+            mit <b>2xx</b> antwortet, sobald sie gespeichert sind.</li>
+          <li data-l="en">On the receiving side, offer an <b>https</b> address that accepts <code>POST</code> with
+            <code>Content-Type: application/cloudevents-batch+json</code> – a JSON array of CloudEvents – and answers
+            <b>2xx</b> once it has stored them.</li>
+          <li data-l="de">Verlangt sie einen Schlüssel: Secret anlegen, z.&nbsp;B. <code>billing_feed_token</code>, mit
+            dem Token selbst. atlas sendet ihn als <code>Authorization: Bearer</code>.</li>
+          <li data-l="en">If it wants a credential: create a secret, e.g. <code>billing_feed_token</code>, holding the
+            token itself. atlas sends it as <code>Authorization: Bearer</code>.</li>
+          <li data-l="de">Worker anlegen: Typ <b>CloudEvents endpoint</b>, ein Name, die Adresse und die
+            Token-Referenz.</li>
+          <li data-l="en">Create the worker: type <b>CloudEvents endpoint</b>, a name, the address and the token
+            reference.</li>
+          <li data-l="de">Im Menü des Workers <b>Feed…</b>: ihn auf den Feed abonnieren, auf Wunsch auf einzelne
+            Kataloge beschränkt, ab dem ältesten noch gehaltenen Ereignis oder ab jetzt.</li>
+          <li data-l="en">In the worker's menu, <b>Feed…</b>: subscribe it to the feed, optionally narrowed to some
+            catalogues, starting from the oldest event the feed still holds or from now.</li>
+        </ol>
+        <p data-l="de"><b>Die Falle:</b> Zugestellt wird mindestens einmal – ein Stapel, der kurz vor einem Neustart
+          angenommen wurde, kann noch einmal kommen. Der Empfänger dedupliziert nach der <code>id</code> jedes
+          Ereignisses. Lehnt er einen Stapel ab, hält atlas das Abonnement an und versucht es gestaffelt wieder; nichts
+          wird übersprungen. Eine dauerhafte Ablehnung zeigt sich als Rückhalt, der nicht endet.</p>
+        <p data-l="en"><b>The trap:</b> delivery is at least once – a batch accepted just before a restart can arrive
+          again. The receiver deduplicates by each event's <code>id</code>. If it refuses a batch, atlas holds the
+          subscription and retries on a widening interval; nothing is skipped. A permanent refusal shows as a hold
+          that does not lift.</p>
+        <p class="checked" data-checked="2026-10"><span data-l="de">Zuletzt geprüft: Oktober 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked October 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
+      </div>
+
       <div class="card" id="runbook-ai">
         <h4 data-l="de">KI-Worker (Sprachmodell)</h4><h4 data-l="en">AI worker (language model)</h4>
         <p data-l="de">Ein Konto beim Modellanbieter, ein Schlüssel, ein Standardmodell – mehr braucht es nicht.
