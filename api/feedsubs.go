@@ -46,7 +46,7 @@ const (
 // readFeedSubRequest decodes a create or an update body.
 func (s *Server) readFeedSubRequest(r *http.Request) (feedSubRequest, string) {
 	var req feedSubRequest
-	body, err := io.ReadAll(io.LimitReader(r.Body, 64<<10))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Request))
 	if err != nil {
 		return req, "read body: " + err.Error()
 	}

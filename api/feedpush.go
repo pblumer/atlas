@@ -53,8 +53,6 @@ const (
 	feedPushBatchesPerTick = 20
 	// feedPushContentType is the CloudEvents HTTP binding's batched content mode.
 	feedPushContentType = "application/cloudevents-batch+json"
-	// feedPushErrorBody bounds how much of a refusal's body is kept as the last error.
-	feedPushErrorBody = 300
 )
 
 // feedPushHold is the delivery state of one subscription that is not in the record: how
@@ -288,7 +286,9 @@ func (s *Server) postFeedBatch(ctx context.Context, p pendingFeedPush, events []
 		return fmt.Errorf("deliver to %s: %w", p.endpoint, err)
 	}
 	defer resp.Body.Close()
-	excerpt, _ := io.ReadAll(io.LimitReader(resp.Body, feedPushErrorBody))
+	// What a refusal said is kept as a diagnostic quotation, bounded as every failed
+	// response's is.
+	excerpt, _ := io.ReadAll(io.LimitReader(resp.Body, s.budgets().ErrorBody))
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		msg := "the endpoint answered " + resp.Status
 		if text := strings.TrimSpace(string(excerpt)); text != "" {
