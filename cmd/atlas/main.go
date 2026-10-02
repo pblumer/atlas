@@ -300,6 +300,7 @@ func runServe(args []string) error {
 	historyScope := fs.String("worker-history-scope", api.HistoryScopeAll, "what --worker-history writes: \"all\" settled jobs, or \"failed\" only. All is what \"how long does a mail send take\" needs and the larger bill; failed is much less volume and still answers most of what a history is asked")
 	superviseConnectors := fs.String("supervise-connector", "", "comma-separated Worker Types this server runs a worker for itself, beyond the ones it supervises by default (e.g. ad,entra). Each named kind gets its own supervised worker — handed this server's token and environment at spawn, like the default ones — and is taken off the engine, so that worker is what leases its jobs. It is the missing half of --offload-connectors, which parks a kind's jobs for a worker somebody else runs: on a server with --auth there is no credential an outside worker could hold, so without this a kind outside the defaults cannot be served at all. An unknown kind is refused at startup rather than ignored")
 	inProcess := fs.Bool("in-process-connectors", false, "run every worker inside the engine, as before ADR-0164. Off by default: "+strings.Join(api.DefaultOffloadedKinds(), ", ")+" run in a worker this server starts and supervises itself, so the loop cannot stall behind them — behind an SMTP handshake above all — and trying atlas still needs no configuration")
+	workerMaxJobs := fs.Int("worker-max-jobs", api.DefaultSupervisedWorkerMaxJobs, "how many jobs of one type each built-in worker this server supervises runs at once, handed to it as --max-jobs. The default is the bound the engine puts on its own in-process handlers, so moving a kind onto a worker does not change how many of its jobs run together; lower it when a target system takes fewer parallel calls than that, and 1 runs every kind one job at a time. A --supervise command keeps one at a time: it is your own program, and nothing here can know it is safe to run twice at once")
 	supervise := superviseFlag{}
 	fs.Var(&supervise, "supervise", "run a worker process for these job types and keep it running, as id=type=command; repeat for more workers, and repeat the type=command part for a worker that serves several types (ADR-0157). Off unless given: under systemd or Kubernetes the platform owns process lifecycle")
 	// The shop, the catalogue, the orders and the inventory
@@ -384,7 +385,7 @@ func runServe(args []string) error {
 		ClientSecret: *oidcClientSecret,
 		Scopes:       *oidcScopes,
 		Name:         *oidcName,
-	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, *vault, *userProvisioning, enabled, *scriptTimeout, scriptSandbox, osCfg, metricsCfg, retention, storeCfg, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, *catalogue, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *inProcess, *history, *historyScope, *publicFormsCORS, budgets)
+	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, *vault, *userProvisioning, enabled, *scriptTimeout, scriptSandbox, osCfg, metricsCfg, retention, storeCfg, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, *catalogue, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *workerMaxJobs, *inProcess, *history, *historyScope, *publicFormsCORS, budgets)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -503,7 +504,7 @@ func (c storeConfig) options() []state.Option {
 	}
 }
 
-func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, scriptSandbox script.SandboxMode, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, storeCfg storeConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn, catalogue bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string, budgets limits.Limits) error {
+func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, scriptSandbox script.SandboxMode, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, storeCfg storeConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn, catalogue bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, workerMaxJobs int, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string, budgets limits.Limits) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -847,6 +848,9 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 		handles = append(handles, nil)
 	}
 	offloadKinds = append(offloadKinds, askedOffload...)
+	if err := applyWorkerMaxJobs(specs, workerMaxJobs); err != nil {
+		return err
+	}
 	if len(offloadKinds) > 0 {
 		apiOpts = append(apiOpts, api.WithOffloadedConnectorKinds(offloadKinds))
 	}
@@ -1107,6 +1111,23 @@ func superviseConnectorSpecs(kinds []string, supervised []api.SuperviseSpec, scr
 	return specs, offload, nil
 }
 
+// applyWorkerMaxJobs hands --worker-max-jobs to every built-in Worker Type this
+// server supervises. A --supervise command worker is left at the worker's own
+// default of one job at a time: its command is the operator's program, and running
+// it concurrently is a promise only they can make
+// (ADR-draft-worker-runs-jobs-concurrently).
+func applyWorkerMaxJobs(specs []api.SuperviseSpec, n int) error {
+	if n < 1 {
+		return fmt.Errorf("atlas: --worker-max-jobs must be at least 1, got %d: a worker with no place for a job never starts one", n)
+	}
+	for i := range specs {
+		if len(specs[i].Connectors) > 0 {
+			specs[i].MaxJobs = n
+		}
+	}
+	return nil
+}
+
 // superviseFlag collects repeated --supervise id=type=command entries: which worker
 // processes this server should run itself, and what each one works.
 //
@@ -1223,7 +1244,7 @@ func runWorker(args []string) error {
 	tlsCA := fs.String("tls-ca", os.Getenv("ATLAS_TLS_CA"), "PEM bundle of certificate authorities to trust *in addition to* the host's, when --server is https and its certificate comes from an internal CA (ADR-0191). Without it the host trust store is the only answer. It is never a way to skip verification: there is none (or ATLAS_TLS_CA)")
 	lease := fs.Duration("lease", worker.DefaultLease, "how long the engine holds a job for this worker; must comfortably exceed how long the work takes")
 	wait := fs.Duration("wait", worker.DefaultWait, "how long a poll waits for work before asking again; the server caps it")
-	maxJobs := fs.Int("max-jobs", worker.DefaultMaxJobs, "how many jobs one poll may lease; keep it to what this worker can actually run at once")
+	maxJobs := fs.Int("max-jobs", worker.DefaultMaxJobs, "how many jobs of one type this worker runs at once; a poll leases only as many as there are free places for, so a leased job starts the moment it arrives. Keep it to what the handler and its target can take in parallel")
 	once := fs.Bool("once", false, "poll each type once and exit, instead of working until interrupted")
 	handles := handleFlag{}
 	fs.Var(handles, "handle", "a job type and the command that works it, as type=command; repeat for each type")

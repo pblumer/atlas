@@ -294,6 +294,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **A worker runs the jobs of one type concurrently.** A worker used to work the jobs of
+  one type one after another, so twenty REST calls of two seconds each took forty
+  seconds. `--max-jobs` now means how many jobs of one type a worker runs at once. A poll
+  asks only for as many jobs as there are free places, so every leased job starts the
+  moment it arrives, and none waits on a lease while the job before it finishes. A
+  worker Atlas supervises for a built-in Worker Type now runs up to 16 at once, the same
+  bound the engine puts on its own in-process handlers. Set it with
+  `atlas serve --worker-max-jobs`, and `1` restores one at a time. A `--supervise`
+  command and a worker you start yourself without `--max-jobs` still run one job at a
+  time. [ADR-draft-worker-runs-jobs-concurrently](docs/adr/draft-worker-runs-jobs-concurrently.md).
+
 - **The person a service was ordered for may now give it back and change it.** Returning
   a position, and asking it for a change, was the orderer's or an operator's to do; the
   person who holds the right got a give-back button in the shop and a refusal from the
@@ -330,6 +341,15 @@ _Changed_ / _Removed_ for each version.
   unchanged (ADR-0429).
 
 ### Fixed
+
+- **On Windows, a crashed server no longer leaves its workers running.** Stopping Atlas
+  stopped the workers it supervises, but a server that crashed, was ended in the Task
+  Manager, or was killed by its service wrapper left them running. They retried the dead
+  address forever, and the restarted server started a second set beside them. Every
+  supervised worker now goes into a Windows job object that ends its processes when
+  the server's process ends, however it ends, including the script interpreters a
+  worker started.
+  [ADR-draft-supervised-workers-end-with-the-server](docs/adr/draft-supervised-workers-end-with-the-server.md).
 
 - **A task the server works itself no longer trips a worker breaker.** The breaker that
   holds a worker's jobs back while its target is down (ADR-0340) also counted the failures

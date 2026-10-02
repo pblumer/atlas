@@ -5809,6 +5809,33 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           registers no handler. So they need a running worker instance; atlas starts one itself once the worker is
           configured.</p>
       </div>
+      <div class="note">
+        <span class="lbl" data-l="de">Wie viele Jobs eine Worker-Instanz gleichzeitig bearbeitet</span><span class="lbl" data-l="en">How many jobs a worker instance runs at once</span>
+        <p data-l="de" style="margin:.3em 0 0">Eine Worker-Instanz, die atlas selbst startet, bearbeitet bis zu
+          <b>16 Jobs desselben Typs gleichzeitig</b> – so viele, wie die Engine auch ihren eigenen Handlern erlaubt.
+          Zwanzig REST-Aufrufe an ein langsames Ziel dauern damit so lange wie die langsamsten unter ihnen, nicht so
+          lange wie alle zusammen. Verträgt ein Zielsystem weniger parallele Aufrufe, senkst du den Wert mit
+          <code>atlas serve --worker-max-jobs</code>; <code>1</code> bearbeitet jeden Typ wieder Job für Job. Eine
+          Worker-Instanz, die du selbst betreibst, bestimmst du mit <code>atlas worker --max-jobs</code>; ohne Angabe
+          bearbeitet sie einen Job nach dem anderen. Ein Befehl, den du mit <code>--supervise</code> angibst, bleibt
+          ebenfalls bei einem Job zur Zeit, denn ob dein Programm zweimal gleichzeitig laufen darf, weiss nur du.</p>
+        <p data-l="en" style="margin:.3em 0 0">A worker instance atlas starts itself runs up to <b>16 jobs of the
+          same type at once</b> – as many as the engine allows its own handlers. Twenty REST calls to a slow target
+          then take as long as the slowest of them, not as long as all of them together. If a target system takes
+          fewer parallel calls, lower the number with <code>atlas serve --worker-max-jobs</code>; <code>1</code> runs
+          every type one job at a time again. A worker instance you run yourself is set with
+          <code>atlas worker --max-jobs</code>; without it, it runs one job after another. A command you give with
+          <code>--supervise</code> also stays at one job at a time, because only you know whether your program may run
+          twice at once.</p>
+        <p data-l="de" style="margin:.3em 0 0">Unter Windows hängen diese Worker-Instanzen an der Lebensdauer des
+          Servers: Endet <code>atlas.exe</code> auf irgendeine Weise – auch durch einen Absturz oder «Task beenden» –,
+          beendet Windows die Worker-Instanzen und die von ihnen gestarteten Skript-Interpreter mit. Nach einem
+          Neustart laufen also keine verwaisten Worker neben den neuen.</p>
+        <p data-l="en" style="margin:.3em 0 0">On Windows these worker instances are tied to the server's lifetime:
+          however <code>atlas.exe</code> ends – a crash or "End task" included – Windows ends the worker instances and
+          the script interpreters they started with it. After a restart no orphaned workers run beside the new
+          ones.</p>
+      </div>
 
       <h3 data-l="de">Woran du merkst, dass etwas fehlt</h3><h3 data-l="en">How you notice something is missing</h3>
       <table>
