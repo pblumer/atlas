@@ -586,7 +586,11 @@ func catalogTools() []Tool {
 				"product still in draft, a missing text for a declared language, an unresolved or " +
 				"absent provisioning or deprovisioning binding, an approval rule needing a ref and " +
 				"having none, a cycle in the structure or precedence edges, two catalogues at the " +
-				"same rank, and the same target ref on two products.",
+				"same rank, and the same target ref on two products. A publish that goes through may " +
+				"carry `warnings`, one per product: answers of its order form that reach a process the " +
+				"product binds without that process declaring them personal data. The release is made " +
+				"regardless; settle each by declaring the answer personal in the process " +
+				"(atlas:personal) or, when it names nobody, marking the form field personal=false.",
 			InputSchema: catalogIDArg("The catalogue to publish."),
 			Handler: func(c *Client, args map[string]any) (string, error) {
 				id, err := argString(args, "id")
