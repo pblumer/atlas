@@ -34,7 +34,7 @@ import (
 // over, and the cursor moves past them, so the holder never waits on a row it will not
 // be given. The home is read when the page is, not frozen in the fact: an item moved to
 // another home moves its rows with it, as its editing already did
-// (ADR-draft-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product).
+// (ADR-0432).
 
 // defaultEventFeedTTL is how long a feed row is kept when the operator set nothing.
 const defaultEventFeedTTL = 30 * 24 * time.Hour

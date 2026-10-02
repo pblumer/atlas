@@ -494,7 +494,7 @@ already notes for operator tokens held by external systems. *(Both built by
 [ADR-0430](0430-the-event-feed-has-its-own-role-and-token-scope.md):
 the route requires `feedreader`, and an `events` token carries that role and nothing else.
 Narrowed by catalogue by
-[ADR-draft-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product](draft-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md):
+[ADR-0432](0432-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md):
 an `events` token's reach names catalogues, and every event names its product's
 `homeCatalog`.)*
 

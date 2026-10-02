@@ -76,7 +76,7 @@ names the new one under the same `id`. An `events` token minted with a `reach` o
 catalogues is answered only the events whose `homeCatalog` it names; the cursor moves
 past the others, and a page reads at most 10 000 rows, so a narrowed page can be short,
 or empty with `more` set — keep asking while `more` is true
-([ADR-draft-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product](adr/draft-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md)).
+([ADR-0432](adr/0432-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md)).
 
 ## 2. Model-layer features are labelled
 

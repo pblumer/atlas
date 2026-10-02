@@ -1,4 +1,4 @@
-# ADR-DRAFT: The event feed is narrowed by the catalogue that maintains the product
+# ADR-0432: The event feed is narrowed by the catalogue that maintains the product
 
 - **Status:** Accepted
 - **Implementation:** Landed

@@ -2080,7 +2080,7 @@ actions with closed effects, each a command whose outcome is a fact published be
   route only and carries that role only, so a CMDB's credential reads the feed and nothing
   else.
 - ✅ **The feed narrowed by catalogue**
-  ([ADR-draft-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product](docs/adr/draft-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md)).
+  ([ADR-0432](docs/adr/0432-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md)).
   An `events` token's reach names catalogues, and it reads only the events about the
   products they maintain; every event names that catalogue as `homeCatalog`. Narrowing by
   the shop an order was placed in is a possible second dimension, not built.
