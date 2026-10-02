@@ -60,6 +60,7 @@ spec:
             - --auth={{ .Values.atlas.auth.enabled }}
             - --vault={{ .Values.atlas.vault.enabled }}
             - --docs={{ .Values.atlas.docs.enabled }}
+            - --catalogue={{ .Values.atlas.catalogue.enabled }}
             - --powershell={{ .Values.atlas.script.powershell }}
             - --python={{ .Values.atlas.script.python }}
             - --javascript={{ .Values.atlas.script.javascript }}

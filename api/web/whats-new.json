@@ -47,6 +47,28 @@
       ]
     },
     {
+      "id": "the-shop-the-catalogue-the-orders-and-the-inventory-can-be-s",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The shop and the catalogue can be switched off",
+        "de": "Shop und Katalog lassen sich ausschalten"
+      },
+      "summary": {
+        "en": "An installation that uses Atlas as a workflow engine and offers no shop can now say so once, at start: --catalogue=false (or ATLAS_CATALOGUE=false, or atlas.catalogue.enabled: false in the Helm chart). The shop, the catalogue, the orders and the inventory are then not served, the Console leaves Shop, Catalogue, Reconciliation and Access review out of its menus, and AI agents are not offered their tools. Nothing stored is removed and your processes run unchanged; turning it back on is a restart. Without the flag nothing changes.",
+        "de": "Eine Installation, die Atlas als Workflow-Engine nutzt und keinen Shop anbietet, kann das jetzt einmal beim Start festlegen: --catalogue=false (oder ATLAS_CATALOGUE=false, oder atlas.catalogue.enabled: false im Helm-Chart). Shop, Katalog, Aufträge und Bestand werden dann nicht ausgeliefert, die Console blendet Shop, Katalog, Abgleich und Zugriffsprüfung in ihren Menüs aus, und KI-Agenten werden deren Werkzeuge nicht angeboten. Gespeichertes wird nicht entfernt, und Ihre Prozesse laufen unverändert weiter; das Wiedereinschalten ist ein Neustart. Ohne den Schalter ändert sich nichts."
+      },
+      "link": {
+        "label": "ADR-0434",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0434-the-catalogue-can-be-switched-off.md"
+      },
+      "tags": [
+        "Shop",
+        "Operations"
+      ]
+    },
+    {
       "id": "the-event-feed-can-be-pushed-to-a-system-that-cannot-poll-it",
       "version": "Unreleased",
       "date": null,
@@ -244,40 +266,6 @@
         "Service catalogue",
         "Engine"
       ]
-    },
-    {
-      "id": "a-held-service-can-be-asked-for-its-actions-in-the-shop",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Ask a service you hold for its actions",
-        "de": "Aktionen auf einer bezogenen Leistung auslösen"
-      },
-      "summary": {
-        "en": "Under a service somebody holds, the shop now shows a button for each change or service its product offers the customer — more storage, a password reset — in the reader's language. While the service cannot take an action, its button is greyed out and says why: whether it can is read from where the service's process stands, so the process model decides when an upgrade is possible. An action with a form opens it under the position; one without asks first. The person the service was ordered for may ask too, not only whoever placed the order.",
-        "de": "Unter einer bezogenen Leistung zeigt der Shop jetzt für jede Änderung oder Dienstleistung, die das Produkt der Kundschaft anbietet – mehr Speicher, ein Passwort-Reset – einen Knopf in der Sprache der Leserin. Solange die Leistung eine Aktion nicht annehmen kann, ist der Knopf ausgegraut und sagt, warum: Ob sie es kann, wird daraus gelesen, wo der Prozess der Leistung steht, sodass das Prozessmodell entscheidet, wann ein Upgrade möglich ist. Eine Aktion mit Formular öffnet es unter der Position, eine ohne fragt zuerst nach. Auslösen darf auch die Person, für die bestellt wurde, nicht nur die Bestellerin."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Service catalogue",
-        "Shop"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the shop and go to «My orders».",
-          "Under a service you hold, press the button of the action you need.",
-          "Fill in its form if it has one and send it; the line says the action was requested."
-        ],
-        "de": [
-          "Öffnen Sie den Shop und wechseln Sie zu «Meine Bestellungen».",
-          "Drücken Sie unter einer bezogenen Leistung den Knopf der gewünschten Aktion.",
-          "Füllen Sie das Formular aus, falls es eines gibt, und senden Sie es ab; die Zeile meldet, dass die Aktion angefordert wurde."
-        ]
-      }
     }
   ]
 }

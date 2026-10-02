@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -66,6 +67,49 @@ func TestEnvIntOr(t *testing.T) {
 			}
 			if got := envIntOr("ATLAS_TEST_INT", def); got != tc.want {
 				t.Errorf("envIntOr = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestEnvSwitch is the one env helper that refuses rather than falls back. It backs
+// switches that turn a part of the server off (ATLAS_CATALOGUE), and there the
+// fallback the other helpers take is the wrong way round: a typo in "ATLAS_CATALOGUE=of"
+// would leave the shop served to everybody by an operator who believes it is off.
+func TestEnvSwitch(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		set     bool
+		val     string
+		def     bool
+		want    bool
+		refused bool
+	}{
+		{"unset keeps on", false, "", true, true, false},
+		{"unset keeps off", false, "", false, false, false},
+		{"empty", true, "", true, true, false},
+		{"blank", true, "   ", true, true, false},
+		{"false", true, "false", true, false, false},
+		{"zero", true, "0", true, false, false},
+		{"upper", true, " FALSE ", true, false, false},
+		{"true", true, "true", false, true, false},
+		{"one", true, "1", false, true, false},
+		{"typo", true, "of", true, false, true},
+		{"word", true, "off", true, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.set {
+				t.Setenv("ATLAS_TEST_SWITCH", tc.val)
+			}
+			got, err := envSwitch("ATLAS_TEST_SWITCH", tc.def)
+			if tc.refused {
+				if err == nil || !strings.Contains(err.Error(), "ATLAS_TEST_SWITCH") {
+					t.Errorf("envSwitch(%q) = %v, %v; want an error naming the variable", tc.val, got, err)
+				}
+				return
+			}
+			if err != nil || got != tc.want {
+				t.Errorf("envSwitch(%q) = %v, %v; want %v, nil", tc.val, got, err, tc.want)
 			}
 		})
 	}

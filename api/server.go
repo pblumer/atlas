@@ -747,6 +747,14 @@ type Server struct {
 	// mounted; read-only thereafter.
 	docsEnabled bool
 
+	// catalogueOff is the shop, the catalogue, the orders and the inventory switched
+	// off with --catalogue=false / WithoutCatalogue
+	// (ADR-0434). Spelled as "off" rather than
+	// "enabled" on purpose: the zero value is the shipped default, and seventy-odd
+	// tests build a Server as a literal and expect the whole surface. Set once before
+	// Handler is mounted; read-only thereafter.
+	catalogueOff bool
+
 	// logs is the recent-process-log tail exposed at GET /api/v1/logs, so an
 	// operator can read server logs from the web UI without shell access. Nil when
 	// the command did not wire a buffer (WithLogBuffer), in which case the endpoint
@@ -3372,13 +3380,23 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// rename reaches, so the old one keeps leading to the new one rather than to a
 	// 404 that reads as the service having been switched off. The query is kept:
 	// it is where a returning sign-in says how it went.
-	mountFunc(accessPublic, roleAny, "GET /portal.html", func(w http.ResponseWriter, r *http.Request) {
-		to := "/shop.html"
-		if r.URL.RawQuery != "" {
-			to += "?" + r.URL.RawQuery
-		}
-		http.Redirect(w, r, to, http.StatusMovedPermanently)
-	})
+	//
+	// Unless the shop *was* switched off (--catalogue=false), and then both addresses
+	// say so: the page is a static file the catch-all below would otherwise serve, and
+	// it would render and then fail every call it makes
+	// (ADR-0434).
+	if s.catalogueOff {
+		mountFunc(accessPublic, roleAny, "GET /shop.html", s.handleSwitchedOffPage)
+		mountFunc(accessPublic, roleAny, "GET /portal.html", s.handleSwitchedOffPage)
+	} else {
+		mountFunc(accessPublic, roleAny, "GET /portal.html", func(w http.ResponseWriter, r *http.Request) {
+			to := "/shop.html"
+			if r.URL.RawQuery != "" {
+				to += "?" + r.URL.RawQuery
+			}
+			http.Redirect(w, r, to, http.StatusMovedPermanently)
+		})
+	}
 
 	// The embedded UI is the catch-all; the more specific patterns above win under
 	// net/http's precedence rules. Static assets, and the login screen has to load.

@@ -297,6 +297,17 @@ func runServe(args []string) error {
 	inProcess := fs.Bool("in-process-connectors", false, "run every worker inside the engine, as before ADR-0164. Off by default: "+strings.Join(api.DefaultOffloadedKinds(), ", ")+" run in a worker this server starts and supervises itself, so the loop cannot stall behind them — behind an SMTP handshake above all — and trying atlas still needs no configuration")
 	supervise := superviseFlag{}
 	fs.Var(&supervise, "supervise", "run a worker process for these job types and keep it running, as id=type=command; repeat for more workers, and repeat the type=command part for a worker that serves several types (ADR-0157). Off unless given: under systemd or Kubernetes the platform owns process lifecycle")
+	// The shop, the catalogue, the orders and the inventory
+	// (ADR-0434): on by default, so an upgrade
+	// changes nothing, and off for an installation that runs Atlas as a workflow
+	// engine and offers no shop. The environment variable is read strictly — see
+	// envSwitch — because the fallback the other env helpers take would leave the shop
+	// served by a typo.
+	catalogueDefault, err := envSwitch("ATLAS_CATALOGUE", true)
+	if err != nil {
+		return err
+	}
+	catalogue := fs.Bool("catalogue", catalogueDefault, "serve the shop, the catalogue, the orders and the inventory — their routes, the shop page, their Console menus and MCP tools (ADR-0312); on by default (opt-out), --catalogue=false to switch the whole area off. Nothing stored is removed, deployed processes run unchanged, and turning it back on is a restart (or ATLAS_CATALOGUE=false)")
 	metricsOn := fs.Bool("metrics", true, "serve the Prometheus exposition at /metrics (ADR-0142); pass --metrics=false to disable. With --auth on (the default) it sits behind the boundary like every other route: a scraper needs an API token of scope metrics (ADR-0198)")
 	// The read side of the exposition above, and a different server: this is where
 	// somebody else keeps what they scraped. Panorama queries it for a node's recent
@@ -368,7 +379,7 @@ func runServe(args []string) error {
 		ClientSecret: *oidcClientSecret,
 		Scopes:       *oidcScopes,
 		Name:         *oidcName,
-	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, *vault, *userProvisioning, enabled, *scriptTimeout, scriptSandbox, osCfg, metricsCfg, retention, storeCfg, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *inProcess, *history, *historyScope, *publicFormsCORS, budgets)
+	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, *vault, *userProvisioning, enabled, *scriptTimeout, scriptSandbox, osCfg, metricsCfg, retention, storeCfg, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, *catalogue, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *inProcess, *history, *historyScope, *publicFormsCORS, budgets)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -405,6 +416,25 @@ func envIntOr(key string, def int) int {
 		}
 	}
 	return def
+}
+
+// envSwitch reads an on/off switch from the environment: unset or blank is def, and
+// anything strconv.ParseBool accepts is that value. Unlike envDurationOr and envIntOr,
+// a value that does not parse is refused rather than replaced by the default. Those
+// helpers back numbers, where the default is the safe reading of a typo; this one
+// backs switches that turn a part of the server off, where the default is the part
+// staying on — "ATLAS_CATALOGUE=of" must stop the start, not serve the shop to
+// everybody while its operator believes it is gone.
+func envSwitch(key string, def bool) (bool, error) {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return def, nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return def, fmt.Errorf("%s=%q is not a boolean: use true or false", key, v)
+	}
+	return b, nil
 }
 
 // oauthConfig is the OAuth-facing half of the serve flags, kept together so the
@@ -468,7 +498,7 @@ func (c storeConfig) options() []state.Option {
 	}
 }
 
-func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, scriptSandbox script.SandboxMode, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, storeCfg storeConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string, budgets limits.Limits) error {
+func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, scriptSandbox script.SandboxMode, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, storeCfg storeConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn, catalogue bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string, budgets limits.Limits) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -622,6 +652,9 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	}
 	if !metricsOn {
 		apiOpts = append(apiOpts, api.WithoutMetrics())
+	}
+	if !catalogue {
+		apiOpts = append(apiOpts, api.WithoutCatalogue())
 	}
 	// Mirror the durable event log into OpenSearch when configured (ADR-0114).
 	if osExport.Enabled() {
@@ -838,7 +871,14 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	// This used to be a second mux out here, with the server's internal service
 	// token attached to every loopback call (ADR-0049). withAuth never saw those
 	// requests, so anything that could reach the port drove the whole API.
-	apiOpts = append(apiOpts, api.WithMCP(mcp.NewServer(mcp.NewClient(internal))))
+	//
+	// It offers what this server serves: with the catalogue switched off, the tools
+	// of the area are not advertised, as their routes are not mounted.
+	var mcpOpts []mcp.ServerOption
+	if !catalogue {
+		mcpOpts = append(mcpOpts, mcp.WithoutCatalogue())
+	}
+	apiOpts = append(apiOpts, api.WithMCP(mcp.NewServer(mcp.NewClient(internal), mcpOpts...)))
 
 	srv, err := api.New(proc, store, dataDir, apiOpts...)
 	if err != nil {
@@ -872,6 +912,10 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	if docs {
 		logging.Info(logging.ServerDocsEnabled, "API explorer enabled",
 			slog.String("docs", base+"/api/docs"), slog.String("openapi", base+"/api/v1/openapi.json"))
+	}
+	if !catalogue {
+		logging.Info(logging.ServerCatalogueDisabled,
+			"shop, catalogue, orders and inventory switched off (--catalogue=false): their routes are not served and nothing stored was removed")
 	}
 	if metricsOn {
 		logging.Info(logging.ServerMetrics,
@@ -939,7 +983,20 @@ func runMCPOn(args []string, in io.Reader, out io.Writer) error {
 		slog.String("server", *server), slog.Bool("authenticated", bearer != ""),
 		slog.Bool("extra_ca", roots != nil))
 
-	s := mcp.NewServer(mcp.NewClient(*server, mcp.WithBearer(bearer), mcp.WithTLSRoots(roots)))
+	client := mcp.NewClient(*server, mcp.WithBearer(bearer), mcp.WithTLSRoots(roots))
+	// This process cannot read the server's flags, so it asks whether the server
+	// serves the catalogue, and leaves the area's tools out if it does not
+	// (ADR-0434). A server that cannot be asked
+	// yet — an agent's host often starts the adapter before the server is up — gets
+	// the whole list, and its own refusal is what answers a tool it does not serve.
+	var opts []mcp.ServerOption
+	if offered, err := client.CatalogueOffered(); err != nil {
+		logging.Warn(logging.MCPCatalogueUnknown, "could not ask the server whether it serves the catalogue; offering every tool",
+			slog.String("error", err.Error()))
+	} else if !offered {
+		opts = append(opts, mcp.WithoutCatalogue())
+	}
+	s := mcp.NewServer(client, opts...)
 	return s.Serve(in, out)
 }
 

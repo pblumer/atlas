@@ -35,7 +35,12 @@ type apiRoute struct {
 // permissive object otherwise (ADR-0043).
 type apiOp struct {
 	summary string
-	tag     string
+	// tag groups the route in the API explorer, and two of its values carry more
+	// than that: "Catalogue" and "Order" are the area --catalogue=false switches off
+	// (catalogueRouteTags). A route of the shop, the catalogue, the orders or the
+	// inventory takes one of the two, or it stays served on a server that said it
+	// offers none of them — TestTheCatalogueSwitchCoversTheWholeArea holds that.
+	tag string
 
 	// role is what a signed-in identity must hold to reach this route, one of
 	// routeRoles (ADR-0209). It sits here, beside the
@@ -115,12 +120,17 @@ func eventStreamBody(desc string) *bodySpec {
 // iterates it to register handlers; openapiDoc iterates it to describe them.
 // Adding an endpoint means adding one entry here — nothing is registered off to
 // the side, so the spec cannot fall out of sync (ADR-0043).
+//
+// What it returns is what this server *offers*: the table less any area the
+// operator switched off (offeredRoutes). Filtering here rather than at the mount
+// keeps the mux, the OpenAPI document and the node descriptor reading one answer.
 func (s *Server) apiRoutes() []apiRoute {
-	return []apiRoute{
+	return s.offeredRoutes([]apiRoute{
 		{"GET", "/api/v1/info", s.handleInfo, apiOp{
-			summary: "Product and version metadata", tag: "System", role: roleAny,
+			summary: "Product and version metadata, and which optional parts this server serves: the API explorer (docs) and the shop, catalogue, orders and inventory (catalogue, off with --catalogue=false)", tag: "System", role: roleAny,
 			resp: jsonBody("Product metadata", schemaObj(map[string]any{
 				"product": tString(), "version": tString(),
+				"docs": tBool(), "catalogue": tBool(),
 			}))}},
 		// The node descriptor (ADR-0189 §6): which *runtime* is answering, as opposed
 		// to /api/v1/info's account of which binary. It is what makes cross-server
@@ -1919,7 +1929,7 @@ func (s *Server) apiRoutes() []apiRoute {
 
 		{"GET", "/api/v1/audit", s.handleListAudit, apiOp{
 			summary: "The access-control history across every application, newest first — the global admin audit view (ADR-0184). Admin-only. Optional filters: applicationId, action (share|unshare|visibility|transfer); limit caps the window (default 200, max 1000). Answers {items, total, totalExact, truncated}: total is how many events matched the filters, which this read counts in full, so a capped page still says how many there are", tag: "Audit", role: RoleAdmin, resp: jsonBody("Grant audit events", tPage())}},
-	}
+	})
 }
 
 // pathParamRe matches an http.ServeMux path wildcard, e.g. {key} in
