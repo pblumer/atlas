@@ -8693,6 +8693,8 @@ async function viewTasks(preselectKey) {
         ${row("Ordered by", esc(a.ordererName || a.orderer))}
         ${row("Order", `<span class="chip">${esc(a.orderId)}</span>`)}
         ${row("Catalogue", esc(approvalCatalogue(a)))}
+        ${(a.answers || []).map((x) => row(esc(x.label || x.key), esc(x.value))).join("")}
+        ${a.amended ? row("Order form", `<span class="muted">corrected after the order was placed</span>`) : ""}
       </div>
       ${decides}
     </div>`;
@@ -9025,6 +9027,10 @@ async function viewTasks(preselectKey) {
             // surface and wears nobody's brand, so it says it in words instead — an
             // approver deciding for two customers needs to know which one this is.
             catalogTexts: a.catalogTexts || {},
+            // What the orderer answered on the product's form, read from the order,
+            // and whether it was corrected since
+            // (ADR-draft-a-position-s-answers-reach-its-processes).
+            answers: Array.isArray(a.answers) ? a.answers : [], amended: !!a.amended,
           });
         }
       }
