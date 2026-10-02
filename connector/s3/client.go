@@ -2,7 +2,7 @@
 // Worker Type: a BPMN S3 task performs one object operation — put one down, read a small
 // one back, ask whether it is there, list what is under a prefix, copy one, delete one,
 // or mint a time-limited URL somebody can open it with — against a configured S3 Worker
-// via the job path (ADR-draft-s3-object-store-worker). It mirrors how the jira package
+// via the job path (ADR-0442). It mirrors how the jira package
 // delegates an issue-tracker step to a registry-managed instance (ADR-0201) and inherits
 // the job protocol's durability and non-blocking properties (ADR-0007):
 //
@@ -47,7 +47,7 @@
 // Whoever holds one can perform that one verb on that one key until it expires, with no
 // further authentication, and it lands in a process variable like any other value — which
 // means the event log. That is argued and bounded rather than avoided in
-// ADR-draft-s3-object-store-worker: the default expiry is an hour, the ceiling is S3's own
+// ADR-0442: the default expiry is an hour, the ceiling is S3's own
 // seven days, and the panel says so where the field is authored. What must never travel is
 // the *standing* credential, and it does not: a [Job] has nowhere to put one.
 //

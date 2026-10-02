@@ -429,7 +429,7 @@ const ShopCommandJobType = "io.atlas.shop.command"
 const ShopCommandJobTypeIndex int32 = 31
 
 // S3JobType is the reserved job type an object-store task carries
-// (ADR-draft-s3-object-store-worker). One job type serves every object operation — put
+// (ADR-0442). One job type serves every object operation — put
 // one down, read a small one back, ask whether it is there, list what is under a prefix,
 // copy one, delete one, or mint a time-limited URL somebody can open it with — because
 // they share a bucket, a credential and an error envelope; the operation is a modeled
@@ -2065,7 +2065,7 @@ func (b *Builder) AddDiscordConnectorTask(cfg DiscordConfig) int32 {
 }
 
 // S3Config is the deploy-time configuration of an object-store task
-// (ADR-draft-s3-object-store-worker). Worker names the configured S3 Worker (whose
+// (ADR-0442). Worker names the configured S3 Worker (whose
 // access key lives server-side, never in the model) and Operation is the object
 // operation. It is read from the task's `connector="…"` attribute, which keeps the
 // pre-ADR-0203 spelling because it is authored in deployed models. The remaining values

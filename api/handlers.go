@@ -6534,7 +6534,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 	case compiler.S3JobTypeIndex:
 		// The bucket, the key and — for a put — the document travel; the access key does
 		// not exist here to travel. Same split as Jira's above
-		// (ADR-draft-s3-object-store-worker), and with one consequence this kind has that
+		// (ADR-0442), and with one consequence this kind has that
 		// the others do not: on an offloaded installation the *bytes* of a put go from
 		// the worker to the store, so the engine only ever held the variable they were
 		// composed from.

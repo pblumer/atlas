@@ -556,7 +556,7 @@ type Server struct {
 	// (ADR-0041). Read only while driving jobs on the run loop, so it needs no lock.
 	discordRegistry *discord.Registry
 	// s3Registry resolves a Worker name to an S3 API client for object-store tasks
-	// (ADR-draft-s3-object-store-worker). Built from the Worker store at startup and
+	// (ADR-0442). Built from the Worker store at startup and
 	// rebuilt on every change; a task naming a Worker that is not in it parks with the
 	// reason (ADR-0158). The access key lives here and in the vault, never in a model.
 	s3Registry *s3.Registry

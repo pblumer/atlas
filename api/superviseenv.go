@@ -219,7 +219,7 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		connectorKindDiscord: s.discordWorkerEnv,
 		// S3 is provisioned for Discord's reason with one field more: the access key is
 		// the whole identity and lives in the Worker store and the vault
-		// (ADR-draft-s3-object-store-worker), so a supervised worker holding neither
+		// (ADR-0442), so a supervised worker holding neither
 		// could serve no object-store task at all. The endpoint travels beside it because
 		// for this kind it is not only an override — it is what says the store is not
 		// AWS, and therefore how its buckets are addressed.

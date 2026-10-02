@@ -987,7 +987,7 @@ type ConnectorTaskDetail struct {
 	// (ADR-0253), not this.
 	AgentModel  int32
 	AgentPrompt RestExpr
-	// Object-store fields (JobType == S3JobType, ADR-draft-s3-object-store-worker).
+	// Object-store fields (JobType == S3JobType, ADR-0442).
 	// Connector (above) names the configured S3 Worker — the field keeps that name
 	// because the BPMN attribute it is read from does; its access key lives in the
 	// Worker store and the vault, never in a model. S3Op is the interned operation

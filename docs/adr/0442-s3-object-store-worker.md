@@ -1,4 +1,4 @@
-# ADR-DRAFT: An S3 Worker Type — a process puts a file down, finds it again, and hands it out
+# ADR-0442: An S3 Worker Type — a process puts a file down, finds it again, and hands it out
 
 - **Status:** Accepted
 - **Implementation:** Landed

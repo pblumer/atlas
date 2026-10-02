@@ -2484,7 +2484,7 @@ func s3OpNames() []string {
 
 // compileS3ConnectorTask compiles an <atlas:s3Connector> task: one object operation
 // against a Worker an operator configured, via the job path
-// (ADR-draft-s3-object-store-worker). The access key is resolved server-side by Worker
+// (ADR-0442). The access key is resolved server-side by Worker
 // name, like Jira's and Google Sheets'; only the operation and its values live in the
 // model.
 //

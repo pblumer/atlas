@@ -2359,7 +2359,7 @@ type xmlServiceTask struct {
 	// or open a thread — against a Worker an operator configured.
 	Discord *xmlDiscordConnector `xml:"extensionElements>discordConnector"`
 	// S3, when present, marks this service task an object-store task
-	// (ADR-draft-s3-object-store-worker): one operation against an S3-compatible bucket
+	// (ADR-0442): one operation against an S3-compatible bucket
 	// — put an object down, read a small one back, ask whether it is there, list what is
 	// under a prefix, copy one, delete one, or mint a link somebody can open it with.
 	S3 *xmlS3Connector `xml:"extensionElements>s3Connector"`
@@ -2988,7 +2988,7 @@ type xmlGoogleSheetsConnector struct {
 
 // An object-store task's parameters, carried on a service task as an
 // <atlas:s3Connector connector="..." operation="..." .../> extension element
-// (ADR-draft-s3-object-store-worker). The connector attribute names the Worker (whose
+// (ADR-0442). The connector attribute names the Worker (whose
 // access key lives on the server, never in the model) and operation is the object
 // operation the task performs. Element and attribute keep the pre-ADR-0203 spelling
 // their siblings carry: both are authored in deployed models.

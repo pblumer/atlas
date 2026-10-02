@@ -25,7 +25,7 @@ import (
 // Virtual-host addressing is what AWS supports for buckets created since September 2020,
 // and path-style is what every self-hosted store serves. Which one this worker uses
 // follows from the one field an operator sets: no endpoint means AWS and virtual-host, an
-// endpoint means their store and path-style. See ADR-draft-s3-object-store-worker's open
+// endpoint means their store and path-style. See ADR-0442's open
 // question for the case that leaves uncovered.
 const awsHostFormat = "s3.%s.amazonaws.com"
 

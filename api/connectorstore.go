@@ -58,7 +58,7 @@ const (
 	// Only the operation and its values are model-authored.
 	connectorKindDiscord = "discord"
 	// connectorKindS3 is the object-store Worker Type
-	// (ADR-draft-s3-object-store-worker): a configured record of this kind resolves to a
+	// (ADR-0442): a configured record of this kind resolves to a
 	// live client speaking the S3 API, whose access key — an {accessKeyId,
 	// secretAccessKey, region} bundle, optionally with a sessionToken — is read from the
 	// vault. Unlike Google Sheets and Discord the endpoint *is* meaningful: blank means

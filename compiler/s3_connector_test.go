@@ -6,7 +6,7 @@ import (
 )
 
 // A service task bearing an <atlas:s3Connector> extension is an object-store task
-// (ADR-draft-s3-object-store-worker): it performs one operation against a configured S3
+// (ADR-0442): it performs one operation against a configured S3
 // Worker via the job path. The access key lives server-side, like Jira's credential and
 // Google's (ADR-0201/0235); only what the task is *about* — the operation, the bucket,
 // the key and its values — is authored in the model.

@@ -353,7 +353,7 @@ var managedConnectorKinds = append([]managedConnectorKind{
 	},
 	{
 		// An S3 task performs one object operation against a Worker an operator
-		// configured (ADR-draft-s3-object-store-worker) and writes what the store
+		// configured (ADR-0442) and writes what the store
 		// returned into the task's result variable. Unlike Discord and Google Sheets the
 		// endpoint is meaningful and optional at once: blank is AWS at the credential
 		// bundle's region, and anything else is the store the installation runs.
