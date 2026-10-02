@@ -1,4 +1,0 @@
-{
-  "hidden": true,
-  "_why": "Crash recovery inside the write-ahead log: it needs a crash in the middle of a 16-byte write to matter, and there is nothing for a reader of the Console to do or see. The changelog carries it for operators."
-}

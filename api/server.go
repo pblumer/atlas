@@ -46,6 +46,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pblumer/atlas"
 	"github.com/pblumer/atlas/api/capability"
 	"github.com/pblumer/atlas/api/collab"
 	"github.com/pblumer/atlas/api/httpapi"
@@ -95,6 +96,7 @@ import (
 	"github.com/pblumer/atlas/api/order"
 	playgroundapi "github.com/pblumer/atlas/api/playground"
 	"github.com/pblumer/atlas/api/processdoc"
+	"github.com/pblumer/atlas/api/releasenotes"
 	"github.com/pblumer/atlas/api/token"
 	"github.com/pblumer/atlas/api/vault"
 )
@@ -353,6 +355,10 @@ type Server struct {
 	// loop, because it owns no state: it stores nothing, and the three closures in
 	// formgeneration.go are its whole reach into this server.
 	formGen *formgen.Service
+	// releaseNotes serves the Console's release notes, read from the CHANGELOG this
+	// binary embeds (ADR-draft-release-notes-from-the-changelog). Like formGen it
+	// owns no state and holds no run loop.
+	releaseNotes *releasenotes.Service
 	// playground serves the Modeler's Playground area, and playgroundSessions
 	// holds its live sandboxes. Each sandbox owns its own single-writer goroutine,
 	// so neither field is guarded by this server's run loop (ADR-0215).
@@ -1598,6 +1604,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		s.dialAgentWorker,
 		s.processSourceForGeneration,
 	)
+	s.releaseNotes = releasenotes.New(atlas.Changelog, atlas.ADRIndex)
 	s.processDocs = processdoc.New(
 		s.runLoop,
 		processDocStore,

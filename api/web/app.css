@@ -4099,79 +4099,82 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 }
 .secret-set-row .field { margin: 0; }
 
-/* ---------- What's New (Console landing page) ----------
-   A compact, collapsible feed of recent user-facing features (see renderWhatsNew in
-   app.js). Everything is theme-variable driven so it follows the accent and any
-   theme. The whole section, and each entry, is a native <details>. */
-.whats-new { margin-top: 18px; }
-/* The section header doubles as the collapse toggle: title on the left, the DE/EN
-   toggle on the right. A caret marks open/closed in place of the default marker. */
-.whats-new .wn-head {
+/* ---------- Release notes (Console landing page) ----------
+   The CHANGELOG as this binary was built from it, release by release (see
+   renderReleaseNotes in app.js). Everything is theme-variable driven so it follows
+   the accent and any theme. The section, each release and each change is a native
+   <details>. */
+.release-notes { margin-top: 18px; }
+/* The section header doubles as the collapse toggle. A caret marks open/closed in
+   place of the default marker. */
+.release-notes .rn-head {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; cursor: pointer; list-style: none;
 }
-.whats-new .wn-head::-webkit-details-marker { display: none; }
-.whats-new .wn-title {
+.release-notes .rn-head::-webkit-details-marker { display: none; }
+.release-notes .rn-title {
   font-size: 18px; font-weight: 650; display: inline-flex; align-items: center; gap: 8px;
 }
-.whats-new .wn-title::before {
+.release-notes .rn-title::before {
   content: "▸"; color: var(--muted); font-size: 12px; transition: transform .12s ease;
 }
-.whats-new .wn-root[open] .wn-title::before { transform: rotate(90deg); }
+.release-notes .rn-root[open] .rn-title::before { transform: rotate(90deg); }
 
-/* Segmented DE/EN toggle. */
-.whats-new .wn-lang { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-.whats-new .wn-lang button {
-  appearance: none; border: 0; background: var(--surface); color: var(--muted);
-  font: 600 12px/1 system-ui, sans-serif; padding: 5px 9px; cursor: pointer;
+.release-notes .rn-list { margin-top: 10px; }
+
+/* One release. The row with its version, date and size is always visible. */
+.release-notes .rn-release { border-top: 1px solid var(--border); padding: 10px 2px; }
+.release-notes .rn-release:first-child { border-top: 0; }
+.release-notes .rn-release > summary {
+  cursor: pointer; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; list-style: none;
 }
-.whats-new .wn-lang button + button { border-left: 1px solid var(--border); }
-.whats-new .wn-lang button:hover { background: var(--bg); }
-.whats-new .wn-lang button.active { background: var(--accent-soft); color: var(--accent); }
-
-.whats-new .wn-list { margin-top: 10px; }
-
-/* One feature. The summary row is always visible; the body opens on click. */
-.whats-new .wn-item { border-top: 1px solid var(--border); padding: 10px 2px; }
-.whats-new .wn-item:first-child { border-top: 0; }
-.whats-new .wn-item > summary {
-  cursor: pointer; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+/* A flex summary loses its marker, so a release and a change draw the caret the
+   section header draws: a row that opens should say so before it is clicked. */
+.release-notes .rn-release > summary::-webkit-details-marker,
+.release-notes .rn-change > summary::-webkit-details-marker { display: none; }
+.release-notes .rn-release > summary::before,
+.release-notes .rn-change > summary::before {
+  content: "▸"; color: var(--muted); font-size: 11px; flex: none; transition: transform .12s ease;
 }
-.whats-new .wn-item > summary::marker { color: var(--muted); }
-.whats-new .wn-item-title { font-weight: 600; }
-.whats-new .wn-date { font: 12px/1.6 ui-monospace, monospace; color: var(--muted); }
-.whats-new .wn-date.wn-new {
-  font-family: system-ui, sans-serif; font-weight: 600; color: var(--accent);
-  background: var(--accent-soft); border-radius: 999px; padding: 1px 8px;
+.release-notes .rn-release[open] > summary::before,
+.release-notes .rn-change[open] > summary::before { transform: rotate(90deg); }
+.release-notes .rn-version { font-weight: 650; }
+.release-notes .rn-date,
+.release-notes .rn-count { font: 12px/1.6 ui-monospace, monospace; color: var(--muted); }
+
+.release-notes .rn-body { margin: 8px 0 2px; padding-left: 18px; }
+.release-notes .rn-body p { margin: 0 0 8px; color: var(--text); }
+.release-notes .rn-intro { line-height: 1.5; }
+.release-notes ul.rn-intro { margin: 0 0 8px; padding-left: 20px; }
+.release-notes ul.rn-intro li { margin: 3px 0; }
+.release-notes .rn-body code { font-size: 0.92em; overflow-wrap: anywhere; }
+
+/* One change: its category and headline, with the rest of the entry on click. */
+.release-notes .rn-changes { margin-top: 4px; }
+.release-notes .rn-change { border-top: 1px solid var(--border); padding: 7px 0; }
+.release-notes .rn-change:first-child { border-top: 0; }
+.release-notes .rn-change > summary {
+  cursor: pointer; display: flex; align-items: baseline; gap: 8px; list-style: none;
 }
+.release-notes .rn-cat { flex: none; }
+.release-notes .rn-change-title { font-weight: 600; }
+.release-notes .rn-change-body { margin: 6px 0 2px; padding-left: 18px; }
 
-.whats-new .wn-body { margin: 8px 0 2px; padding-left: 18px; }
-.whats-new .wn-body > p { margin: 0; color: var(--text); }
+.release-notes .rn-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 8px; }
+.release-notes .rn-link { font-size: 13px; font-weight: 600; }
 
-/* The optional step-by-step tutorial, boxed off from the summary. */
-.whats-new .wn-tutorial {
-  margin-top: 10px; padding: 8px 12px; border: 1px solid var(--border);
-  border-radius: 6px; background: var(--bg);
-}
-.whats-new .wn-tut-label { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
-.whats-new .wn-tutorial ol { margin: 0; padding-left: 20px; }
-.whats-new .wn-tutorial li { margin: 3px 0; }
-
-.whats-new .wn-links { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 10px; }
-.whats-new .wn-link { font-size: 13px; font-weight: 600; }
-.whats-new .wn-try { padding: 4px 12px; font-size: 13px; }
-
-/* "Show older" reveals the entries beyond the initial few. */
-.whats-new .wn-more {
-  appearance: none; margin-top: 10px; background: transparent; border: 0;
+/* "Show all changes" and "Show older releases" reveal what the first paint leaves out. */
+.release-notes .rn-more {
+  appearance: none; background: transparent; border: 0;
   color: var(--accent); font: 600 13px/1 system-ui, sans-serif; cursor: pointer; padding: 4px 0;
 }
-.whats-new .wn-more:hover { text-decoration: underline; }
+.release-notes .rn-list + .rn-more { margin-top: 10px; }
+.release-notes .rn-more:hover { text-decoration: underline; }
 
 /* ---------- Key features (Console landing page) ----------
    A short statement of what Atlas is, below the dashboard's own tiles (see
-   key-features.js). Bilingual like What's New, and collapsible for the same
-   reason: someone who has read it once should be able to fold it away. The
+   key-features.js). Bilingual, and collapsible like the release notes above it:
+   someone who has read it once should be able to fold it away. The
    entries are a responsive two-column grid that collapses to one on a narrow
    window, so fourteen short items stay scannable instead of becoming a wall. */
 .key-features { margin-top: 18px; }
@@ -4188,7 +4191,7 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 }
 .key-features .kf-root[open] .kf-title::before { transform: rotate(90deg); }
 
-/* Segmented EN/DE toggle, matching the What's New header. */
+/* Segmented EN/DE toggle. It sets the language of the whole landing page. */
 .key-features .kf-lang { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .key-features .kf-lang button {
   appearance: none; border: 0; background: var(--surface); color: var(--muted);
