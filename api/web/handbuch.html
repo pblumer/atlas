@@ -2199,12 +2199,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <!-- ==================== EXAMPLES ==================== -->
     <section id="beispiele">
       <h2 data-l="de">Beispiele</h2><h2 data-l="en">Examples</h2>
-      <p class="lead" data-l="de">Hier stehen <span data-count="examples">39</span> fertige Szenarien aus dem
+      <p class="lead" data-l="de">Hier stehen <span data-count="examples">40</span> fertige Szenarien aus dem
         atlas-Repository, vollständig beschrieben – <b>fachlich</b> (wofür ist das gut, wer hat etwas davon) und <b>technisch</b>
         (wie ist es gebaut, welche Variablen, welche Fallstricke). Jedes lässt sich mit einem Klick in deine eigene
         Instanz installieren, im Modeler öffnen und zu deinem Prozess umbauen. Vom Dreizeiler bis zur Applikation aus
         zwei Prozessen; vom Einzelunternehmen bis zum Konzernverzeichnis mit 50 000 Konten.</p>
-      <p class="lead" data-l="en">Here are <span data-count="examples">39</span> finished scenarios from the atlas
+      <p class="lead" data-l="en">Here are <span data-count="examples">40</span> finished scenarios from the atlas
         repository, described in full – <b>in business terms</b> (what it is good for, who benefits) and <b>technically</b> (how it is
         built, which variables, which traps). Each one installs into your own instance in one click, opens in the
         Modeler, and can be rebuilt into your process. From a three-liner to an application of two processes; from a
@@ -5164,6 +5164,47 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <p data-l="en">What an information model is in atlas, what it is for and where it meets the process is in
             the <a href="#infomodell">Information model</a> chapter. This card is the field report beside it.</p>
         </details>
+      </div>
+      <div class="bsp" id="bsp-verwaltung-dienstleistungen">
+        <h4><span class="rz-emoji" aria-hidden="true">🏛️</span>
+          <span data-l="de">Dienstleistungen der Verwaltung: ein ganzer Shop</span><span data-l="en">Administration services: a whole shop</span></h4>
+        <p class="bsp-tags">
+          <span class="tag" data-l="de">Katalog</span><span class="tag" data-l="en">catalogue</span>
+          <span class="tag" data-l="de">Lebenszyklus mit Aktionen</span><span class="tag" data-l="en">lifecycle with actions</span>
+          <span class="tag" data-l="de">zweisprachig</span><span class="tag" data-l="en">bilingual</span>
+          <span class="tag">examples/verwaltung-dienstleistungen/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Zwei Kataloge einer Verwaltung: Die Dienstleistungen für alle bieten den Zutrittsbadge und den
+              Parkplatz an, der Fachbereich Bau zusätzlich den Zugang zum Geoportal. Der Badge wird vorgesetzt
+              genehmigt, der Parkplatz vom Facility Management, der Geoportal-Zugang von seinen Verantwortlichen;
+              Parkplatz und Zugang sind befristet.</p>
+            <p data-l="en">Two catalogues of a public administration: the services for everyone offer the access badge
+              and a parking space, the building department also access to the geoportal. The badge is approved by the
+              line manager, the parking space by facility management, the geoportal access by its owners; the parking
+              space and the access are time-limited.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Ein Katalogdokument (<code>katalog.json</code>) mit beiden Katalogen und drei Produkten, dazu
+              die Prozesse in beiden Formen: der Badge als <b>ein Lebenszyklus-Prozess</b> mit den Aktionen Sperren und
+              Ersatz, Parkplatz und Geoportal mit <b>getrennten Prozessen</b> zum Einrichten und Entfernen.</p>
+            <p data-l="en">A catalogue document (<code>katalog.json</code>) with both catalogues and three products, and
+              the processes in both forms: the badge as <b>one lifecycle process</b> with the actions block and
+              replace, parking and geoportal with <b>separate processes</b> to set up and remove.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <p data-l="de"><b>Installiert wird es aus dem <a href="shop-handbuch.html#beispiel">Shop-Handbuch</a></b>: Sein
+          Installer legt die Prozesse und Formulare an, fragt nach Zielgruppen und Genehmigenden und importiert dann
+          den Katalog.</p>
+        <p data-l="en"><b>It installs from the <a href="shop-handbuch.html#beispiel">shop handbook</a></b>: its
+          installer creates the processes and forms, asks for the audiences and the approvers, and then imports the
+          catalogue.</p>
       </div>
       <h3 data-l="de">Aus einem Beispiel deinen Prozess machen</h3><h3 data-l="en">Turning an example into your process</h3>
       <p data-l="de">Ein Beispiel zu installieren dauert eine Sekunde. Daraus etwas zu machen, das in deinem Betrieb
@@ -9986,7 +10027,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
              <a class="applink" href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a></p>
         </div>
         <div class="card"><b data-l="de">Beispiele</b><b data-l="en">Examples</b>
-          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">39</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">39</span> examples in the handbook</span></a> ·
+          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">40</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">40</span> examples in the handbook</span></a> ·
              <a class="applink" href="#runbooks"><span data-l="de">Worker in Betrieb nehmen</span><span data-l="en">Putting a worker into service</span></a></p>
           <p class="lead" data-l="de">Die Dateien dazu liegen unter <code>examples/</code> im Repository.</p>
           <p class="lead" data-l="en">Their files live under <code>examples/</code> in the repository.</p>

@@ -962,6 +962,12 @@ func (s *Server) apiRoutes() []apiRoute {
 				"items": tArray(), "groups": tArray(),
 			})),
 			resp: jsonBody("The created catalogue", tObject())}},
+		{"POST", "/api/v1/catalogs/import", s.catalogs.HandleImportDocument, apiOp{
+			summary: "Import a whole shop as one document (ADR-0436): catalogues, the products they maintain and offer, and the edges between them, with optional `publish`. All or nothing — every id, authority and, when publishing, every publish problem is checked before the first write, and a refused document writes nothing and answers every problem at once (400 for the document itself, 403 for a catalogue you do not maintain, 422 for what publishing would refuse, 409 if the store moved during the import). IDs are the document's own, so importing it again updates what the first import created. A theme, a logo and pictures are not part of a document", tag: "Catalogue", role: RoleProductManager,
+			req: jsonBody("Catalogue document: {catalogs, products, publish}", schemaObj(map[string]any{
+				"catalogs": tArray(), "products": tArray(), "publish": tBool(),
+			})),
+			resp: jsonBody("What was created and updated, as catalog:<id> and product:<id>, and the releases published", tObject())}},
 		{"GET", "/api/v1/catalogs/{id}", s.catalogs.HandleGetCatalog, apiOp{
 			summary: "One product catalogue", tag: "Catalogue", role: roleAny,
 			resp: jsonBody("The catalogue", tObject())}},

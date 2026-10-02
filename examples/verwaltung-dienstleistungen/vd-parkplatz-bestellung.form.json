@@ -1,0 +1,40 @@
+{
+  "type": "default",
+  "id": "vd-parkplatz-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Parkplatz · Parking space**\n\nAngaben zum Fahrzeug, für das der Platz bestimmt ist. · Details of the vehicle the space is for."
+    },
+    {
+      "key": "kennzeichen",
+      "type": "textfield",
+      "label": "Kennzeichen · Licence plate",
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "key": "fahrzeug",
+      "type": "radio",
+      "label": "Fahrzeug · Vehicle",
+      "values": [
+        {
+          "label": "Auto · Car",
+          "value": "auto"
+        },
+        {
+          "label": "Motorrad · Motorcycle",
+          "value": "motorrad"
+        },
+        {
+          "label": "Elektroauto mit Ladeplatz · Electric car with charging",
+          "value": "elektro"
+        }
+      ],
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

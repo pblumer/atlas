@@ -1,0 +1,24 @@
+{
+  "type": "default",
+  "id": "vd-geoportal-einrichtung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Zugang im Geoportal einrichten · Set up the geoportal access**\n\nLesenden Zugang auf die Pläne des Fachbereichs einrichten. · Set up read access to the department's plans."
+    },
+    {
+      "key": "recipient",
+      "type": "textfield",
+      "label": "Empfänger · Recipient",
+      "disabled": true
+    },
+    {
+      "key": "benutzerkennung",
+      "type": "textfield",
+      "label": "Benutzerkennung im Geoportal · Geoportal user id",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "tags": ["Service catalogue", "API"],
+  "title": {
+    "en": "A whole shop in one file",
+    "de": "Ein ganzer Shop in einer Datei"
+  },
+  "summary": {
+    "en": "Catalogues, their products and how the products fit together can now be brought into Atlas as one document, published straight away if you like. Either everything arrives or nothing changes, with every problem listed at once, and importing the same file again updates what is there instead of adding it twice.",
+    "de": "Kataloge, ihre Produkte und wie die Produkte zusammengehören lassen sich jetzt als ein Dokument in Atlas übernehmen und auf Wunsch gleich veröffentlichen. Entweder kommt alles an oder es ändert sich nichts, mit allen Problemen auf einmal, und derselbe Import ein zweites Mal aktualisiert, was da ist, statt es doppelt anzulegen."
+  }
+}
