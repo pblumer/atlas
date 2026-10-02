@@ -73,3 +73,17 @@ func TestTheMenusLeaveOutWhatTheServerSwitchedOff(t *testing.T) {
 		t.Error("the router does not stop at a view of the switched-off catalogue")
 	}
 }
+
+// TestTheDashboardTellsAnAdministratorWhatTheSwitchStrands: the start's warning is a
+// log line, and in a container nobody reads the start. The dashboard asks the same
+// question live, and only where it can have an answer — the catalogue off, and an
+// administrator looking — so nobody else pays a request for it.
+func TestTheDashboardTellsAnAdministratorWhatTheSwitchStrands(t *testing.T) {
+	src := readWeb(t, "app.js")
+	if !strings.Contains(src, `if (!FEATURES.catalogue && mayUse("admin")) renderCatalogueStranded(document.getElementById("catalogue-stranded-slot"));`) {
+		t.Error("the dashboard does not ask what the switched-off catalogue strands, or asks it of everybody")
+	}
+	if !strings.Contains(src, `api("GET", "/api/v1/catalogue-switch")`) {
+		t.Error("the dashboard's notice does not read GET /api/v1/catalogue-switch")
+	}
+}

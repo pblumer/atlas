@@ -754,6 +754,9 @@ type Server struct {
 	// tests build a Server as a literal and expect the whole surface. Set once before
 	// Handler is mounted; read-only thereafter.
 	catalogueOff bool
+	// catalogueReporting is every process id that calls the order routes, read once
+	// at start when the catalogue is off (processesReportingToOrders); nil otherwise.
+	catalogueReporting map[string]bool
 
 	// logs is the recent-process-log tail exposed at GET /api/v1/logs, so an
 	// operator can read server logs from the web UI without shell access. Nil when
