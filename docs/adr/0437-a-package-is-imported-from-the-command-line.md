@@ -1,4 +1,4 @@
-# ADR-DRAFT: A package is imported from the command line
+# ADR-0437: A package is imported from the command line
 
 - **Status:** Accepted
 - **Implementation:** Landed

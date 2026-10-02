@@ -12,7 +12,7 @@ import (
 )
 
 // The administration-services example is the package `atlas import` was written
-// for (ADR-draft-a-package-is-imported-from-the-command-line): an application with
+// for (ADR-0437): an application with
 // five processes and ten forms, and the shop they serve.
 const examplePackage = "../../examples/verwaltung-dienstleistungen"
 

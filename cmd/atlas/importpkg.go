@@ -22,7 +22,7 @@ import (
 
 // `atlas import` installs a package into a running atlas from a terminal or a CI
 // job, where the shop handbook's installer needs a browser
-// (ADR-draft-a-package-is-imported-from-the-command-line). A package is a directory:
+// (ADR-0437). A package is a directory:
 //
 //	atlas.json           the source manifest (ADR-0134): key, name, and the files below
 //	*.bpmn, *.form.json  the processes and forms the manifest names

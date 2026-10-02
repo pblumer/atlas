@@ -25,7 +25,7 @@ import (
 // The files of a package, beside its processes and forms: the application's
 // manifest in the source layout (ADR-0134), the catalogue document, and what each
 // placeholder in it asks. `atlas import` reads the same three names
-// (ADR-draft-a-package-is-imported-from-the-command-line).
+// (ADR-0437).
 const (
 	packageManifestName = "atlas.json"
 	shopDocumentName    = "katalog.json"

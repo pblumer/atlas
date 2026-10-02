@@ -1959,7 +1959,7 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   with the questions its placeholders ask (`fragen.json`) — through the source import, a
   publish and the catalogue import; answers come from a file or `--set`, groups and people by
   id or by name, and every open answer is refused before the first write
-  ([ADR-draft-a-package-is-imported-from-the-command-line](docs/adr/draft-a-package-is-imported-from-the-command-line.md)).
+  ([ADR-0437](docs/adr/0437-a-package-is-imported-from-the-command-line.md)).
   An `atlas.json` for the other examples is a follow-up.
 
 **The shop & ordering**
