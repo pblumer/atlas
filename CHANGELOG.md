@@ -14,6 +14,29 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The shop has a handbook of its own, with an example to install.** `/shop-handbuch.html`
+  (German and English, in the Console's "?" menu, and the help for the Catalogue app)
+  answers how to build a catalogue, how several catalogues work together, how to model
+  products and services and how to design their processes — the two process forms, the
+  actions, what a product process receives and how it reports. It walks through one example
+  throughout, *Dienstleistungen der Verwaltung*: two catalogues, an access badge with one
+  lifecycle process and the actions block and replace, a parking space and a geoportal access
+  with separate processes, line-manager, fixed and group approvals, time limits and an order
+  form, all bilingual. Its installer asks for the audiences and the approvers, creates the
+  processes and forms, and imports and publishes the shop as one document. The example ships
+  in `examples/verwaltung-dienstleistungen/`, and a test proves without a server that its
+  catalogue document publishes.
+
+- **A whole shop can be imported as one document.** `POST /api/v1/catalogs/import` — and the
+  MCP tool `atlas_import_catalog` — takes `{catalogs, products, publish}`: the catalogues
+  with their texts, rank, languages, audience, members and the edges between their
+  products, and every product with its home catalogue, approval, process bindings, variants
+  and limits. It is all or nothing: every id, every catalogue you must maintain and, with
+  `publish`, everything a publish would refuse is checked before the first record is written,
+  and a refused document changes nothing and lists every problem by the catalogue or product
+  it is about. The ids are the document's own, so importing the same document again updates
+  what the first import created. A theme, a logo and pictures are set as before.
+
 - **Switching the catalogue off says at start what it strands.** A server started with
   `--catalogue=false` while the shop's fulfilment or approval processes, or a product's
   provisioning process, are still running writes one WARN,

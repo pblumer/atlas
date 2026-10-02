@@ -2,6 +2,51 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "the-shop-has-a-handbook-of-its-own-with-an-example-to-instal",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A handbook for the shop, with an example to install",
+        "de": "Ein Handbuch für den Shop, mit einem Beispiel zum Installieren"
+      },
+      "summary": {
+        "en": "A new shop handbook explains how to build a catalogue, how several catalogues work together, how to describe products and services, and how to design the processes behind them. It follows one example throughout, the services of a public administration in German and English, which you can install with one click after naming who orders and who approves.",
+        "de": "Ein neues Shop-Handbuch erklärt, wie man einen Katalog aufbaut, wie mehrere Kataloge zusammenspielen, wie man Produkte und Services beschreibt und wie man die Prozesse dahinter entwirft. Es begleitet ein durchgehendes Beispiel, die Dienstleistungen einer Verwaltung auf Deutsch und Englisch, das sich mit einem Klick installieren lässt, nachdem man festgelegt hat, wer bestellt und wer genehmigt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue",
+        "Handbook",
+        "Examples"
+      ]
+    },
+    {
+      "id": "a-whole-shop-can-be-imported-as-one-document",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A whole shop in one file",
+        "de": "Ein ganzer Shop in einer Datei"
+      },
+      "summary": {
+        "en": "Catalogues, their products and how the products fit together can now be brought into Atlas as one document, published straight away if you like. Either everything arrives or nothing changes, with every problem listed at once, and importing the same file again updates what is there instead of adding it twice.",
+        "de": "Kataloge, ihre Produkte und wie die Produkte zusammengehören lassen sich jetzt als ein Dokument in Atlas übernehmen und auf Wunsch gleich veröffentlichen. Entweder kommt alles an oder es ändert sich nichts, mit allen Problemen auf einmal, und derselbe Import ein zweites Mal aktualisiert, was da ist, statt es doppelt anzulegen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue",
+        "API"
+      ]
+    },
+    {
       "id": "switching-the-catalogue-off-says-at-start-what-it-strands",
       "version": "Unreleased",
       "date": null,
@@ -221,62 +266,6 @@
         "Service catalogue",
         "Modeler"
       ]
-    },
-    {
-      "id": "how-an-action-ended-is-a-fact",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "How an action ended is recorded",
-        "de": "Wie eine Aktion endete, wird festgehalten"
-      },
-      "summary": {
-        "en": "Everything asked of a service somebody holds — its provisioning, its return, a change, a service such as a password reset — now ends in a record: completed, rejected or failed, under the event type the product declares. A successful provisioning or return is recorded together with the right it grants or revokes, so the two can never disagree. A process that reports twice is recorded once, and a contradicting second report is refused. Operators and agents read how a position's actions ended over the API and MCP.",
-        "de": "Alles, was von einer bezogenen Leistung verlangt wird – ihre Bereitstellung, ihre Rückgabe, eine Änderung, eine Dienstleistung wie ein Passwort-Reset –, endet jetzt in einem Eintrag: abgeschlossen, abgelehnt oder fehlgeschlagen, unter dem Ereignistyp, den das Produkt dafür festlegt. Eine erfolgreiche Bereitstellung oder Rückgabe wird zusammen mit dem Recht festgehalten, das sie gewährt oder entzieht, sodass beide nie auseinanderlaufen. Meldet ein Prozess zweimal, wird einmal festgehalten, und eine widersprüchliche zweite Meldung wird abgewiesen. Betrieb und Agenten lesen über API und MCP, wie die Aktionen einer Position endeten."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Service catalogue",
-        "Engine"
-      ]
-    },
-    {
-      "id": "a-held-service-can-be-asked-for-its-actions-in-the-shop",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Ask a service you hold for its actions",
-        "de": "Aktionen auf einer bezogenen Leistung auslösen"
-      },
-      "summary": {
-        "en": "Under a service somebody holds, the shop now shows a button for each change or service its product offers the customer — more storage, a password reset — in the reader's language. While the service cannot take an action, its button is greyed out and says why: whether it can is read from where the service's process stands, so the process model decides when an upgrade is possible. An action with a form opens it under the position; one without asks first. The person the service was ordered for may ask too, not only whoever placed the order.",
-        "de": "Unter einer bezogenen Leistung zeigt der Shop jetzt für jede Änderung oder Dienstleistung, die das Produkt der Kundschaft anbietet – mehr Speicher, ein Passwort-Reset – einen Knopf in der Sprache der Leserin. Solange die Leistung eine Aktion nicht annehmen kann, ist der Knopf ausgegraut und sagt, warum: Ob sie es kann, wird daraus gelesen, wo der Prozess der Leistung steht, sodass das Prozessmodell entscheidet, wann ein Upgrade möglich ist. Eine Aktion mit Formular öffnet es unter der Position, eine ohne fragt zuerst nach. Auslösen darf auch die Person, für die bestellt wurde, nicht nur die Bestellerin."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Service catalogue",
-        "Shop"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the shop and go to «My orders».",
-          "Under a service you hold, press the button of the action you need.",
-          "Fill in its form if it has one and send it; the line says the action was requested."
-        ],
-        "de": [
-          "Öffnen Sie den Shop und wechseln Sie zu «Meine Bestellungen».",
-          "Drücken Sie unter einer bezogenen Leistung den Knopf der gewünschten Aktion.",
-          "Füllen Sie das Formular aus, falls es eines gibt, und senden Sie es ab; die Zeile meldet, dass die Aktion angefordert wurde."
-        ]
-      }
     }
   ]
 }

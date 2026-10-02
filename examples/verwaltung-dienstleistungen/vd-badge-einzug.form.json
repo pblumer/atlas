@@ -1,0 +1,24 @@
+{
+  "type": "default",
+  "id": "vd-badge-einzug",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Badge einziehen · Take the badge back**\n\nBadge entgegennehmen und im Zutrittssystem löschen. · Take the badge back and delete it from the access system."
+    },
+    {
+      "key": "recipient",
+      "type": "textfield",
+      "label": "Inhaber · Holder",
+      "disabled": true
+    },
+    {
+      "key": "eingezogen",
+      "type": "checkbox",
+      "label": "Badge zurückerhalten oder gesperrt · Badge returned or blocked",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

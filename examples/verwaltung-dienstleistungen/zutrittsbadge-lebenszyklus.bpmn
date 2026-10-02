@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_vd_zutrittsbadge" targetNamespace="http://atlas/beispiel/verwaltung-dienstleistungen">
+  <message id="m_ausgeben" name="vd.badge.ausgeben"/>
+  <message id="m_sperren" name="vd.badge.sperren"/>
+  <message id="m_ersatz" name="vd.badge.ersatz"/>
+  <message id="m_einziehen" name="vd.badge.einziehen"/>
+  <process id="proc_vd_zutrittsbadge" name="Zutrittsbadge: Lebenszyklus" isExecutable="true">
+    <documentation>Ein Prozess für den ganzen Lebenszyklus des Zutrittsbadges (ADR-0425/0429), Form pro Operation: jede Aktion des Produkts startet eine eigene Instanz über ihren Nachrichtenstart.
+Ausgeben und Einziehen melden die Position über ihre eigene Route (done / returned), weil sie das Recht ändern. Sperren und Ersatz sind Änderung und Service: Sie melden ihr Ergebnis mit einer Shop-Aufgabe, die der Katalog beim Veröffentlichen verlangt.
+Die Bearbeitung liegt beim Empfang (Facility Desk): Wer die Aufgaben sieht, regelt die Installation.</documentation>
+    <startEvent id="start_ausgeben" name="Badge bestellt"><outgoing>a1</outgoing><messageEventDefinition messageRef="m_ausgeben"/></startEvent>
+    <userTask id="ut_ausgeben" name="Badge ausgeben"><extensionElements><zeebe:formDefinition formId="vd-badge-ausgabe"/></extensionElements><incoming>a1</incoming><outgoing>a2</outgoing></userTask>
+    <serviceTask id="st_ausgabe_melden" name="Position als ausgegeben melden"><documentation>Meldet die Position als erledigt (status "done") über POST /api/v1/orders/{orderId}/lines/{positionId}: Erst damit erhält die Person das Recht im Bestand. Eine Serviceaufgabe und keine Shop-Aufgabe, weil Ausgabe und Rückgabe das Recht ändern und deshalb über die Positionsroute laufen. Braucht das Secret "atlas" mit einem API-Token.</documentation><extensionElements><atlas:restConnector method="POST" url="=(if atlasApiBase = null then &#34;http://127.0.0.1:8080&#34; else atlasApiBase) + &#34;/api/v1/orders/&#34; + orderId + &#34;/lines/&#34; + (if positionId = null then itemId else positionId)" authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source="=&#34;done&#34;" target="status"/></zeebe:ioMapping></extensionElements><incoming>a2</incoming><outgoing>a3</outgoing></serviceTask>
+    <endEvent id="end_ausgegeben" name="Badge ausgegeben"><incoming>a3</incoming></endEvent>
+    <sequenceFlow id="a1" sourceRef="start_ausgeben" targetRef="ut_ausgeben"/>
+    <sequenceFlow id="a2" sourceRef="ut_ausgeben" targetRef="st_ausgabe_melden"/>
+    <sequenceFlow id="a3" sourceRef="st_ausgabe_melden" targetRef="end_ausgegeben"/>
+
+    <startEvent id="start_sperren" name="Sperrung angefordert"><outgoing>s1</outgoing><messageEventDefinition messageRef="m_sperren"/></startEvent>
+    <userTask id="ut_sperren" name="Badge sperren"><extensionElements><zeebe:formDefinition formId="vd-badge-sperren"/></extensionElements><incoming>s1</incoming><outgoing>s2</outgoing></userTask>
+    <sendTask id="send_sperren" name="Sperrung als erledigt melden"><documentation>Eine Shop-Aufgabe (Modus outcome) meldet, dass die Aktion "sperren" erledigt ist. Sperren ist eine Änderung (effect change): Das Recht bleibt bestehen, der Befehl aus dem Shop wird damit abgeschlossen. Der Katalog verlangt beim Veröffentlichen, dass jede Änderung und jeder Service so beantwortet wird.</documentation><extensionElements><atlas:shopTask mode="outcome" action="sperren" outcome="completed"/></extensionElements><incoming>s2</incoming><outgoing>s3</outgoing></sendTask>
+    <endEvent id="end_gesperrt" name="Badge gesperrt"><incoming>s3</incoming></endEvent>
+    <sequenceFlow id="s1" sourceRef="start_sperren" targetRef="ut_sperren"/>
+    <sequenceFlow id="s2" sourceRef="ut_sperren" targetRef="send_sperren"/>
+    <sequenceFlow id="s3" sourceRef="send_sperren" targetRef="end_gesperrt"/>
+
+    <startEvent id="start_ersatz" name="Ersatz angefordert"><outgoing>e1</outgoing><messageEventDefinition messageRef="m_ersatz"/></startEvent>
+    <userTask id="ut_ersatz" name="Ersatzbadge ausgeben"><extensionElements><zeebe:formDefinition formId="vd-badge-ersatz"/></extensionElements><incoming>e1</incoming><outgoing>e2</outgoing></userTask>
+    <sendTask id="send_ersatz" name="Ersatz als erledigt melden"><documentation>Eine Shop-Aufgabe meldet den Service "ersatz" als erledigt. Ein Ersatzbadge ändert das Recht nicht, er ist eine Dienstleistung an einer gehaltenen Position.</documentation><extensionElements><atlas:shopTask mode="outcome" action="ersatz" outcome="completed"/></extensionElements><incoming>e2</incoming><outgoing>e3</outgoing></sendTask>
+    <endEvent id="end_ersatz" name="Ersatzbadge ausgegeben"><incoming>e3</incoming></endEvent>
+    <sequenceFlow id="e1" sourceRef="start_ersatz" targetRef="ut_ersatz"/>
+    <sequenceFlow id="e2" sourceRef="ut_ersatz" targetRef="send_ersatz"/>
+    <sequenceFlow id="e3" sourceRef="send_ersatz" targetRef="end_ersatz"/>
+
+    <startEvent id="start_einziehen" name="Rückgabe angefordert"><outgoing>r1</outgoing><messageEventDefinition messageRef="m_einziehen"/></startEvent>
+    <userTask id="ut_einziehen" name="Badge einziehen"><extensionElements><zeebe:formDefinition formId="vd-badge-einzug"/></extensionElements><incoming>r1</incoming><outgoing>r2</outgoing></userTask>
+    <serviceTask id="st_einzug_melden" name="Rückgabe als erfolgt melden"><documentation>Meldet die Rückgabe (status "returned") über die Positionsroute; damit endet das Recht im Bestand.</documentation><extensionElements><atlas:restConnector method="POST" url="=(if atlasApiBase = null then &#34;http://127.0.0.1:8080&#34; else atlasApiBase) + &#34;/api/v1/orders/&#34; + orderId + &#34;/lines/&#34; + (if positionId = null then itemId else positionId)" authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source="=&#34;returned&#34;" target="status"/></zeebe:ioMapping></extensionElements><incoming>r2</incoming><outgoing>r3</outgoing></serviceTask>
+    <endEvent id="end_eingezogen" name="Badge eingezogen"><incoming>r3</incoming></endEvent>
+    <sequenceFlow id="r1" sourceRef="start_einziehen" targetRef="ut_einziehen"/>
+    <sequenceFlow id="r2" sourceRef="ut_einziehen" targetRef="st_einzug_melden"/>
+    <sequenceFlow id="r3" sourceRef="st_einzug_melden" targetRef="end_eingezogen"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_vd_zutrittsbadge_diagram">
+    <bpmndi:BPMNPlane id="proc_vd_zutrittsbadge_plane" bpmnElement="proc_vd_zutrittsbadge">
+      <bpmndi:BPMNShape id="start_ausgeben_di" bpmnElement="start_ausgeben"><omgdc:Bounds x="132" y="82" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="100" y="124" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ut_ausgeben_di" bpmnElement="ut_ausgeben"><omgdc:Bounds x="230" y="60" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_ausgabe_melden_di" bpmnElement="st_ausgabe_melden"><omgdc:Bounds x="380" y="60" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_ausgegeben_di" bpmnElement="end_ausgegeben"><omgdc:Bounds x="562" y="82" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="530" y="124" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="start_sperren_di" bpmnElement="start_sperren"><omgdc:Bounds x="132" y="232" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="100" y="274" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ut_sperren_di" bpmnElement="ut_sperren"><omgdc:Bounds x="230" y="210" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="send_sperren_di" bpmnElement="send_sperren"><omgdc:Bounds x="380" y="210" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_gesperrt_di" bpmnElement="end_gesperrt"><omgdc:Bounds x="562" y="232" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="530" y="274" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="start_ersatz_di" bpmnElement="start_ersatz"><omgdc:Bounds x="132" y="382" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="100" y="424" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ut_ersatz_di" bpmnElement="ut_ersatz"><omgdc:Bounds x="230" y="360" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="send_ersatz_di" bpmnElement="send_ersatz"><omgdc:Bounds x="380" y="360" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_ersatz_di" bpmnElement="end_ersatz"><omgdc:Bounds x="562" y="382" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="530" y="424" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="start_einziehen_di" bpmnElement="start_einziehen"><omgdc:Bounds x="132" y="532" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="100" y="574" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ut_einziehen_di" bpmnElement="ut_einziehen"><omgdc:Bounds x="230" y="510" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_einzug_melden_di" bpmnElement="st_einzug_melden"><omgdc:Bounds x="380" y="510" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_eingezogen_di" bpmnElement="end_eingezogen"><omgdc:Bounds x="562" y="532" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="530" y="574" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="a1_di" bpmnElement="a1"><omgdi:waypoint x="168" y="100"/><omgdi:waypoint x="230" y="100"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a2_di" bpmnElement="a2"><omgdi:waypoint x="330" y="100"/><omgdi:waypoint x="380" y="100"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="a3_di" bpmnElement="a3"><omgdi:waypoint x="480" y="100"/><omgdi:waypoint x="562" y="100"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s1_di" bpmnElement="s1"><omgdi:waypoint x="168" y="250"/><omgdi:waypoint x="230" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s2_di" bpmnElement="s2"><omgdi:waypoint x="330" y="250"/><omgdi:waypoint x="380" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s3_di" bpmnElement="s3"><omgdi:waypoint x="480" y="250"/><omgdi:waypoint x="562" y="250"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e1_di" bpmnElement="e1"><omgdi:waypoint x="168" y="400"/><omgdi:waypoint x="230" y="400"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e2_di" bpmnElement="e2"><omgdi:waypoint x="330" y="400"/><omgdi:waypoint x="380" y="400"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="e3_di" bpmnElement="e3"><omgdi:waypoint x="480" y="400"/><omgdi:waypoint x="562" y="400"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="r1_di" bpmnElement="r1"><omgdi:waypoint x="168" y="550"/><omgdi:waypoint x="230" y="550"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="r2_di" bpmnElement="r2"><omgdi:waypoint x="330" y="550"/><omgdi:waypoint x="380" y="550"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="r3_di" bpmnElement="r3"><omgdi:waypoint x="480" y="550"/><omgdi:waypoint x="562" y="550"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
