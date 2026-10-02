@@ -111,8 +111,9 @@ nothing to drift.
 
 - **Signals** come from `CompiledProcess.SignalPoints` (ADR-0435's as-built note added it).
 - **Messages** need a `MessageSenders` beside the existing `MessageReceivers`: the message throw
-  event and the message end event, which share the throw detail table. A send task is a service
-  task that creates a job (`AddSendTask`), not a publish, and is not a sender here.
+  event and the message end event, which share the throw detail table. A send task that names a
+  message compiles to a message throw ([ADR-0112](0112-send-tasks.md)) and is listed with them. A
+  send task without one creates a job (`AddSendTask`), publishes nothing, and is not a sender here.
 
 A point carries:
 
