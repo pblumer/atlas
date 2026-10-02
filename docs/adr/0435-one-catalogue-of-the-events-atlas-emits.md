@@ -492,6 +492,54 @@ With `atlas.approval.requested`, §9's first step is complete.
   - `atlasInstance` is the approval instance's key;
   - the approval still waits at its task.
 
+### As built, fourth slice: incidents in the feed
+
+§9's second step. It settles three questions the record left to it.
+
+- **One feed, not two (§6).** The event feed leaves the service-catalogue area:
+  - `GET /api/v1/events` and the feed-subscription routes are tagged *Events* rather than
+    *Catalogue*.
+  - Push delivery runs whatever the switch says.
+  - The Console's *Feed…* panel and the MCP tool `atlas_feed_subscriptions` stay.
+
+  With the area off, the feed passes over the catalogue's rows. A cursor cannot wait behind
+  one row and deliver the rows after it, so a subscription's cursor moves past what is
+  withheld, and those events are not sent later when the area is back. A receiver that needs
+  them reads them while the area is on. Their rows are still folded either way (I4).
+- **No narrowing of their own for platform facts (§6).** A platform fact belongs to no
+  catalogue, so a reader narrowed to catalogues is passed over it, as it already was for a row
+  without a home. The feed and its push need no rule beyond that.
+- **Per incident, with the cause, not per cause (§8).** ADR-0381's problem record, the place
+  where a cause's opening and clearing would be facts of their own, is not built. So each
+  incident is a row, and the row carries the triple ADR-0337 groups a flood by:
+  - `processDefKey`;
+  - `elementIndex` (with `elementId` while the definition is deployed);
+  - `incidentType`.
+
+  A receiver can tell a new cause from the thousandth incident of a known one.
+
+How it is built:
+
+- **The fold.** `applyToState` folds `IntentIncidentCreated` and `IntentIncidentResolved`
+  into rows of two new kinds (`FeedIncidentRaised`, `FeedIncidentResolved`). Each row keeps
+  the definition key it read from the parked element instance through the same batch, live
+  and on replay. An incident names only its instance, and the instance may be gone when a
+  receiver reads the row.
+- **The envelope.** Its `source` is the installation's URL + `/engine` (or
+  `urn:atlas:<node>:engine`), beside `/catalog`. Its `subject` is
+  `instances/{processInstanceKey}`. Its data uses the names `GET /api/v1/incidents` uses, so
+  `elementInstanceKey` is the key the resolve route takes.
+- **Never the message.** It is whatever a worker or an expression produced, and may carry
+  personal data or a fragment of a credential. `TestTheFeedCarriesNoSecret` holds that with a
+  message that holds both.
+- **`ServiceCatalogue`.** A new entry field marks the catalogue's facts, so the Console page
+  can say what a switched-off server withholds. Tests hold it equal to the feed's own
+  classification and to the system processes the switch leaves undeployed.
+- **The log channel.** It is not built. There is no incident log event today, and one log line
+  per incident is a flood of its own (ADR-0337) that deserves its own decision.
+- **The entries are experimental,** and the runtime contract states that a consumer ignores a
+  type it does not know: the feed gains types without a new version.
+
 ### Consequences
 
 - **Positive:**

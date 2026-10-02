@@ -70,13 +70,14 @@ type eventListenersResp struct {
 	Processes []eventListener `json:"processes"`
 	Feed      []feedListener  `json:"feed"`
 	FeedTypes []string        `json:"feedTypes"`
-	// FeedDelivered is false on a server whose service catalogue is switched off:
-	// the feed is neither served nor pushed there, and the subscriptions wait.
-	FeedDelivered bool `json:"feedDelivered"`
+	// CatalogueWithheld is true on a server whose service catalogue is switched off:
+	// the feed is served and pushed there, but passes over the catalogue's events,
+	// so a subscription is sent the engine's facts only.
+	CatalogueWithheld bool `json:"catalogueWithheld"`
 }
 
 func (s *Server) handleEventListeners(w http.ResponseWriter, _ *http.Request) {
-	out := eventListenersResp{Processes: []eventListener{}, Feed: []feedListener{}, FeedTypes: []string{}, FeedDelivered: !s.catalogueOff}
+	out := eventListenersResp{Processes: []eventListener{}, Feed: []feedListener{}, FeedTypes: []string{}, CatalogueWithheld: s.catalogueOff}
 	for _, e := range eventcatalog.Entries {
 		if e.Has(eventcatalog.Feed) {
 			out.FeedTypes = append(out.FeedTypes, e.Type)

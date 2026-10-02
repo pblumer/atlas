@@ -14,6 +14,20 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Incidents leave Atlas on the event feed.** Every incident raised and every incident resolved
+  is now an event of the CloudEvents feed, `atlas.incident.raised` and
+  `atlas.incident.resolved`, pulled from `GET /api/v1/events` or pushed to a subscribed
+  endpoint like the catalogue's events
+  ([ADR-0435](docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)).
+  - An event names the parked element instance (the key the resolve route takes), its process
+    instance, and its cause: definition, element and incident type, the triple a flood is
+    grouped by (ADR-0337). A receiver can therefore tell a new cause from the thousandth
+    incident of a known one.
+  - It never carries the incident's message, which may hold anything a worker reported.
+  - Its source is the installation's address + `/engine`, beside `/catalog`.
+  - A reader or subscription narrowed to catalogues does not receive it: an incident belongs to
+    no catalogue.
+
 - **An approval announces itself before it waits.** Each of the shop's three built-in
   approvals — a fixed person, a role, the orderer's line manager — now throws the signal
   `atlas.approval.requested` before its approval task waits
@@ -399,6 +413,16 @@ _Changed_ / _Removed_ for each version.
   against a live instance first.
 
 ### Changed
+
+- **The event feed no longer goes away with the shop.** A server started with
+  `--catalogue=false` now serves `GET /api/v1/events` and its feed subscriptions, and pushes
+  the feed, without the service catalogue's events. Before, it served and pushed nothing.
+  - Their rows are passed over, a subscription's cursor with them, so they are not delivered
+    later when the catalogue is switched back on.
+  - The Console's *Feed…* panel and the MCP tool `atlas_feed_subscriptions` stay with the shop
+    off.
+  - The routes moved from the *Catalogue* tag to *Events*
+    ([ADR-0435](docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md) §6).
 
 - **The Console's landing page shows the release notes instead of What's New.** The
   section lists the releases of the changelog this server was built from, newest first:
