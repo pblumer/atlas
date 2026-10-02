@@ -1,5 +1,5 @@
 // A publish that goes through says what it leaves exposed
-// (ADR-draft-publishing-warns-about-answers-in-the-clear).
+// (ADR-0443).
 //
 // Publishing warns, and does not refuse, when an answer of a product's order form
 // reaches one of its processes without that process declaring it personal data. The

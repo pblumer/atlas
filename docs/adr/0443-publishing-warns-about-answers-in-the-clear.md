@@ -1,4 +1,4 @@
-# ADR-DRAFT: Publishing warns about answers in the clear
+# ADR-0443: Publishing warns about answers in the clear
 
 - **Status:** Accepted
 - **Implementation:** Landed

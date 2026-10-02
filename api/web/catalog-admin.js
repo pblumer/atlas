@@ -53,7 +53,7 @@ let carriedWarnings = null;
 
 // warningsCard renders what a publish that went through warns about: answers of a
 // product's order form that reach one of its processes in the clear
-// (ADR-draft-publishing-warns-about-answers-in-the-clear). The release stands; the
+// (ADR-0443). The release stands; the
 // card says what to change before the next one.
 function warningsCard(warnings) {
   const where = (p) => (p.item ? `item ${p.item}` : p.catalog ? `catalogue ${p.catalog}` : "");

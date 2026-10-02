@@ -352,7 +352,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   import lists each problem by its catalogue or product.
 
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
-- **`catalog-publish-warnings.spec.mjs`** (ADR-draft-publishing-warns-about-answers-in-the-clear): a
+- **`catalog-publish-warnings.spec.mjs`** (ADR-0443): a
   publish that warns says the release stands and lists which order-form answers reach a process in
   the clear; the warnings survive the reload every publish does, and a publish without warnings
   shows none.
