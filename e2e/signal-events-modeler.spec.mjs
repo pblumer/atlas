@@ -61,6 +61,7 @@ test("picking an event declares a signal of that name and says what the listener
   await expect(page.locator("#f-sigevent [data-event]")).toHaveAttribute("data-event", "atlas.user.created");
   await expect(page.locator("#f-sigevent")).toContainText("A user account was created.");
   await expect(page.locator("#f-sigevent")).not.toContainText("personal data");
+  await expect(page.locator("#f-sigevent")).not.toContainText("administrator");
   expect(page.__errors).toEqual([]);
 });
 
@@ -76,6 +77,8 @@ test("picking an event the diagram declares reuses its signal", async ({ page })
   // The note names the personal data the listener receives.
   await expect(page.locator("#f-sigevent")).toContainText("Somebody asked for a user account.");
   await expect(page.locator("#f-sigevent")).toContainText("The listener receives personal data: vorname, email.");
+  // The deploy rule that follows from it (ADR-0435 §6) is said where the event is chosen.
+  await expect(page.locator("#f-sigevent")).toContainText("Only an administrator may deploy a model that listens to it.");
   await expect(page.locator('#f-sigevent a[href="/#/console/events"]')).toHaveCount(1);
   expect(page.__errors).toEqual([]);
 });

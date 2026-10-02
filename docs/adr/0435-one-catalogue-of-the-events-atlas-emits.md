@@ -424,6 +424,39 @@ the rule will read is already in place, without a default (§5).
   - on an `atlas.*` name the catalogue lacks;
   - on a throw that uses an `atlas.*` name.
 
+### As built, second slice: who may listen
+
+The access rule of §6. `atlas.approval.requested` is still to come, and is the rest of §9's first
+step.
+
+- **One check.** `api/eventlistenrule.go` holds `personalListenersBlocking`. It compiles the
+  model and lists every element that receives a signal the catalogue lists with the signal
+  channel and at least one field marked personal data: a start, a catch, a boundary event, or an
+  event subprocess, which is named by its start event. A throw receives nothing.
+  - The check answers nothing for an administrator, and nothing on a server without
+    authentication, where `isAdmin` holds for everybody.
+  - It reads only the bytes and the caller, so it runs off the run loop.
+- **Three doors refuse with it before anything is persisted**, each with 403:
+  - the deploy (`POST /api/v1/deployments`);
+  - the bundle deploy behind the project and application deploy and the application publish,
+    where one refused draft deploys none of the bundle;
+  - the application import.
+
+  It is not in `deployModel`, so the server's own startup deploys, which have no caller, never
+  meet it. Restart recovery does not deploy afresh at all.
+- **The refusal.** The `error` is the whole sentence, because an MCP client keeps nothing else
+  of the body. It names the element, the event, the personal-data fields, the role needed and
+  the caller's roles. Beside it the body carries `listeners`, `needs` and `roles`. The refusal
+  leaves an `auth.denied` audit line, like every authorization refusal.
+- **Validation.** `POST /api/v1/validate` appends the same findings as errors with the rule
+  `event.personal-listener`, worded as the deploy words them. An administrator's panel has none.
+  The Modeler's signal picker says the rule where a personal event is chosen.
+- **A consequence the record did not spell out.** API tokens, deploy tokens and the stdio MCP
+  adapter never carry the administrator role. An application import that carries such a listener
+  is therefore always refused, including a release promoted to a peer. The listener is deployed
+  on each server by that server's administrator. The deployment request named under Follow-ups is
+  the way to make that a governed step rather than a dead end.
+
 ### Consequences
 
 - **Positive:**

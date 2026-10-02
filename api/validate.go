@@ -55,6 +55,10 @@ func (s *Server) handleValidate(w http.ResponseWriter, r *http.Request) {
 		problems = append(problems, s.dataFlowProblems(bytes.NewReader(body), appID)...)
 	}
 	problems = append(problems, s.ambiguousCallProblems(bytes.NewReader(body))...)
+	// The deploy's own rule on listeners to personal data atlas emits, from the same
+	// function, so the panel and the deploy cannot disagree (ADR-0435 §6). The finding
+	// depends on who asks: an administrator's panel has none.
+	problems = append(problems, s.personalListenerProblems(r, body)...)
 	// A nil slice would serialize as JSON null; the panel expects an array, so
 	// normalize "no problems" to an empty list.
 	if problems == nil {

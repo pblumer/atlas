@@ -383,6 +383,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Only an administrator deploys a model that listens to somebody's data.** A signal start,
+  catch, boundary or event subprocess on an event atlas emits whose payload carries personal
+  data is now deployed by an administrator
+  ([ADR-0435](docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md) §6). Today that is
+  `atlas.user.requested`, which carries a requester's name and address.
+  - Every door a caller deploys through refuses it otherwise with 403: the deploy, the project
+    and application deploy and publish, and the application import. The refusal names the
+    element, the event, the personal data, the role needed and the caller's roles.
+  - The Problems panel reports the same finding as an error while modelling, from the same
+    check, and the Modeler says it where the event is chosen.
+  - An event without personal data, a signal atlas does not catalogue, and a throw stay open.
+    A server without authentication applies no rule.
+  - API tokens and deploy tokens never carry the administrator role, so an application import
+    that carries such a listener is refused: the target server's administrator deploys it there.
+  - Listeners deployed before keep running; their next version needs an administrator.
+
 - **A worker runs the jobs of one type concurrently.** A worker used to work the jobs of
   one type one after another, so twenty REST calls of two seconds each took forty
   seconds. `--max-jobs` now means how many jobs of one type a worker runs at once. A poll

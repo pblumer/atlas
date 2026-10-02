@@ -179,7 +179,7 @@ const (
 // Access rules, as the entries state them.
 const (
 	accessFeed    = "the feedreader role or an events token; an events token narrowed by reach receives only the events of products whose home catalogue it reaches (ADR-0430, ADR-0432)"
-	accessSignal  = "any model deployed on this server with a signal start or catch on the name (ADR-0431)"
+	accessSignal  = "any model deployed on this server with a signal start or catch on the name (ADR-0431); when the payload carries personal data, only an administrator may deploy such a model (ADR-0435)"
 	accessMessage = "the system process it drives; a model of an installation does not receive it"
 )
 

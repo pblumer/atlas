@@ -220,6 +220,19 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 		}
 		dmnForDraft[i] = xmls
 	}
+	// Who may listen to the personal data atlas emits (ADR-0435 §6), under the same
+	// "validate all, then deploy all" rule: one refused draft deploys none of the
+	// bundle.
+	for _, d := range drafts {
+		if found := s.personalListenersBlocking(r, []byte(d.XML)); len(found) > 0 {
+			auditPersonalListenerRefusal(r, found)
+			return bundleOutcome{status: http.StatusForbidden, proj: proj, resp: projectDeployResp{
+				ID: proj.ID, Name: proj.Name, Deployed: false,
+				Reason:      fmt.Sprintf("draft %q listens to personal data atlas emits — %s", d.ProcessID, personalListenerReason(r, found)),
+				Definitions: []deployedProcess{}, Decisions: []deployedDecisionResp{}, References: refReports,
+			}}
+		}
+	}
 
 	// Phase 3 (on-loop): deploy the application's decisions, then each draft with
 	// its matched DMN model.
