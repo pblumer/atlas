@@ -704,7 +704,7 @@ func catalogTools() []Tool {
 
 // markCatalogue marks every tool of this file as the catalogue's, in one place, so a
 // tool added to the list above is withheld with the rest when the server switched
-// the area off (ADR-draft-the-catalogue-can-be-switched-off).
+// the area off (ADR-0434).
 func markCatalogue(tools []Tool) []Tool {
 	for i := range tools {
 		tools[i].Catalogue = true

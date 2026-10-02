@@ -82,7 +82,7 @@ var (
 	ServerMetrics      = newEvent("server.metrics_enabled")
 	// ServerCatalogueDisabled is a server started with --catalogue=false: the shop,
 	// the catalogue, the orders and the inventory are not served
-	// (ADR-draft-the-catalogue-can-be-switched-off). One line at start, so the
+	// (ADR-0434). One line at start, so the
 	// question "why is there no shop" has an answer in the log.
 	ServerCatalogueDisabled = newEvent("server.catalogue_disabled")
 	// The operator-supplied certificate, where this server terminates TLS itself
@@ -194,7 +194,7 @@ var (
 	CommandFailed = newEvent("command.failed")
 	MCPProxying   = newEvent("mcp.proxying")
 	// MCPCatalogueUnknown is the stdio adapter unable to ask its server whether it
-	// serves the catalogue (ADR-draft-the-catalogue-can-be-switched-off). The
+	// serves the catalogue (ADR-0434). The
 	// adapter then offers every tool and the server refuses what it does not serve,
 	// so this is a WARN about a tool list that may be too long, never a failure.
 	MCPCatalogueUnknown = newEvent("mcp.catalogue_unknown")

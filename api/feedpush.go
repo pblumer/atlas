@@ -153,7 +153,7 @@ func (s *Server) pushFeed(ctx context.Context) {
 	// The feed is the catalogue's, and a server that switched the catalogue off
 	// serves neither its pull route nor its subscriptions — so nothing of it leaves
 	// by push either. Every subscription keeps its cursor, and delivery picks up
-	// there when the area is back (ADR-draft-the-catalogue-can-be-switched-off).
+	// there when the area is back (ADR-0434).
 	if s.catalogueOff {
 		return
 	}

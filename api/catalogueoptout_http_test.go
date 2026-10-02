@@ -16,7 +16,7 @@ import (
 	"github.com/pblumer/atlas/wal"
 )
 
-// The catalogue opt-out (ADR-draft-the-catalogue-can-be-switched-off), through the
+// The catalogue opt-out (ADR-0434), through the
 // whole stack.
 //
 // An installation that runs Atlas as a workflow engine and nothing else must be able

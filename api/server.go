@@ -749,7 +749,7 @@ type Server struct {
 
 	// catalogueOff is the shop, the catalogue, the orders and the inventory switched
 	// off with --catalogue=false / WithoutCatalogue
-	// (ADR-draft-the-catalogue-can-be-switched-off). Spelled as "off" rather than
+	// (ADR-0434). Spelled as "off" rather than
 	// "enabled" on purpose: the zero value is the shipped default, and seventy-odd
 	// tests build a Server as a literal and expect the whole surface. Set once before
 	// Handler is mounted; read-only thereafter.
@@ -3384,7 +3384,7 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// Unless the shop *was* switched off (--catalogue=false), and then both addresses
 	// say so: the page is a static file the catch-all below would otherwise serve, and
 	// it would render and then fail every call it makes
-	// (ADR-draft-the-catalogue-can-be-switched-off).
+	// (ADR-0434).
 	if s.catalogueOff {
 		mountFunc(accessPublic, roleAny, "GET /shop.html", s.handleSwitchedOffPage)
 		mountFunc(accessPublic, roleAny, "GET /portal.html", s.handleSwitchedOffPage)

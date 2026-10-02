@@ -476,7 +476,7 @@ func (s *Server) collectCatalogue(land *panorama.Landscape, p *httpapi.Principal
 	// A server that switched the catalogue off does not draw it. The store is still
 	// on disk and readable here, which is exactly why this has to be said: the
 	// starmap reaches it directly rather than through a route the switch removed
-	// (ADR-draft-the-catalogue-can-be-switched-off).
+	// (ADR-0434).
 	if s.catalogueOff {
 		return nil
 	}

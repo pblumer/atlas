@@ -298,7 +298,7 @@ func runServe(args []string) error {
 	supervise := superviseFlag{}
 	fs.Var(&supervise, "supervise", "run a worker process for these job types and keep it running, as id=type=command; repeat for more workers, and repeat the type=command part for a worker that serves several types (ADR-0157). Off unless given: under systemd or Kubernetes the platform owns process lifecycle")
 	// The shop, the catalogue, the orders and the inventory
-	// (ADR-draft-the-catalogue-can-be-switched-off): on by default, so an upgrade
+	// (ADR-0434): on by default, so an upgrade
 	// changes nothing, and off for an installation that runs Atlas as a workflow
 	// engine and offers no shop. The environment variable is read strictly — see
 	// envSwitch — because the fallback the other env helpers take would leave the shop
@@ -986,7 +986,7 @@ func runMCPOn(args []string, in io.Reader, out io.Writer) error {
 	client := mcp.NewClient(*server, mcp.WithBearer(bearer), mcp.WithTLSRoots(roots))
 	// This process cannot read the server's flags, so it asks whether the server
 	// serves the catalogue, and leaves the area's tools out if it does not
-	// (ADR-draft-the-catalogue-can-be-switched-off). A server that cannot be asked
+	// (ADR-0434). A server that cannot be asked
 	// yet — an agent's host often starts the adapter before the server is up — gets
 	// the whole list, and its own refusal is what answers a tool it does not serve.
 	var opts []mcp.ServerOption

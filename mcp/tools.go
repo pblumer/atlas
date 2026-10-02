@@ -20,7 +20,7 @@ type Tool struct {
 	// Catalogue marks a tool of the shop, the catalogue, the orders or the
 	// inventory: one an adapter built WithoutCatalogue does not offer, because the
 	// server it fronts does not serve the route behind it
-	// (ADR-draft-the-catalogue-can-be-switched-off).
+	// (ADR-0434).
 	// TestWithoutCatalogueOffersNoToolOfTheArea fails for a tool of the area that
 	// does not say so.
 	Catalogue bool

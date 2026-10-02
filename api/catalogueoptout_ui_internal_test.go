@@ -7,7 +7,7 @@ import (
 )
 
 // The Console's half of the catalogue opt-out
-// (ADR-draft-the-catalogue-can-be-switched-off). The server stops serving the area;
+// (ADR-0434). The server stops serving the area;
 // these hold the Console to not leading anybody into it — a menu entry for a
 // switched-off shop is a link to a page that cannot load, offered to every employee.
 

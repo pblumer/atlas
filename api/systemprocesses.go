@@ -134,7 +134,7 @@ func (s *Server) ensureSystemProcesses(now int64) error {
 	// that switched the shop off files none of the shop's machinery: not its
 	// approval form, and below not its fulfilment and approval processes. The ids
 	// stay in systemPIDs above, so one an earlier start deployed is still protected
-	// (ADR-draft-the-catalogue-can-be-switched-off).
+	// (ADR-0434).
 	for _, f := range forms {
 		if s.catalogueOff && catalogueSystemForms[f.id] {
 			continue

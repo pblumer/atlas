@@ -1,4 +1,4 @@
-# ADR-DRAFT: The catalogue can be switched off, and switching it off removes a surface, not a semantics
+# ADR-0434: The catalogue can be switched off, and switching it off removes a surface, not a semantics
 
 - **Status:** Accepted
 - **Implementation:** Landed

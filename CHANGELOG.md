@@ -30,7 +30,7 @@ _Changed_ / _Removed_ for each version.
   `ATLAS_CATALOGUE` stops the start rather than leaving the shop on. Tests hold the switch
   to the whole area as it grows: a route of the area under another tag fails them, and so
   does a catalogue tool that does not say it is one.
-  [ADR-draft-the-catalogue-can-be-switched-off](docs/adr/draft-the-catalogue-can-be-switched-off.md).
+  [ADR-0434](docs/adr/0434-the-catalogue-can-be-switched-off.md).
 
 - **The event feed can be pushed to a system that cannot poll it.** A new Worker Type,
   **CloudEvents endpoint**, holds a receiver's https address and the vault key sent as its

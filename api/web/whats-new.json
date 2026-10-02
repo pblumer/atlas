@@ -15,8 +15,8 @@
         "de": "Eine Installation, die Atlas als Workflow-Engine nutzt und keinen Shop anbietet, kann das jetzt einmal beim Start festlegen: --catalogue=false (oder ATLAS_CATALOGUE=false, oder atlas.catalogue.enabled: false im Helm-Chart). Shop, Katalog, Aufträge und Bestand werden dann nicht ausgeliefert, die Console blendet Shop, Katalog, Abgleich und Zugriffsprüfung in ihren Menüs aus, und KI-Agenten werden deren Werkzeuge nicht angeboten. Gespeichertes wird nicht entfernt, und Ihre Prozesse laufen unverändert weiter; das Wiedereinschalten ist ein Neustart. Ohne den Schalter ändert sich nichts."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0434",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0434-the-catalogue-can-be-switched-off.md"
       },
       "tags": [
         "Shop",

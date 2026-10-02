@@ -4,7 +4,7 @@ import (
 	"net/http"
 )
 
-// Switching the catalogue off (ADR-draft-the-catalogue-can-be-switched-off).
+// Switching the catalogue off (ADR-0434).
 //
 // An installation that runs Atlas as a workflow engine and has no use for a shop says
 // so once, at start, with --catalogue=false. What that removes is the area's

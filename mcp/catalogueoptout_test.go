@@ -14,7 +14,7 @@ import (
 )
 
 // The adapter's half of the catalogue opt-out
-// (ADR-draft-the-catalogue-can-be-switched-off). The server stops serving the area;
+// (ADR-0434). The server stops serving the area;
 // an agent connected to it must not be offered eighteen tools that each answer
 // "no such endpoint", which reads as a broken server rather than a decision.
 

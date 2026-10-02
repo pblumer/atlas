@@ -172,7 +172,7 @@ const mayUse = (role) => {
 // FEATURES is what this server serves of its optional parts, as /api/v1/info says.
 // Today that is one switch: the shop, the catalogue, the orders and the inventory,
 // which an operator turns off with --catalogue=false
-// (ADR-draft-the-catalogue-can-be-switched-off). Until the server has answered,
+// (ADR-0434). Until the server has answered,
 // everything is offered — the stance the drawer already takes before /auth/me
 // answers — and a field an older server does not send reads as on, so a Console in
 // front of one keeps the menu it had.

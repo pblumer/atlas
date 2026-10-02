@@ -175,7 +175,7 @@ func (s *Server) handleListMessageSources(w http.ResponseWriter, r *http.Request
 func (s *Server) productActionSources(p *httpapi.Principal) ([]messageSourceView, error) {
 	// A server that switched the catalogue off lists none of its products' actions:
 	// the store is still on disk and read here directly, not through a route the
-	// switch removed (ADR-draft-the-catalogue-can-be-switched-off).
+	// switch removed (ADR-0434).
 	if s.catalogStore == nil || s.catalogs == nil || s.catalogueOff {
 		return nil, nil
 	}

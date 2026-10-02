@@ -278,7 +278,7 @@ func findingMessages(findings []json.RawMessage) []string {
 
 // CatalogueOffered asks the server whether it serves the shop, the catalogue, the
 // orders and the inventory, which an operator can switch off with --catalogue=false
-// (ADR-draft-the-catalogue-can-be-switched-off). It is how the stdio adapter, a
+// (ADR-0434). It is how the stdio adapter, a
 // separate process that cannot read the server's flags, decides whether to build
 // itself WithoutCatalogue. A server that does not say — one older than the switch —
 // offers it. An error is returned as an error and not read as either answer: the

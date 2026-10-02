@@ -1920,7 +1920,7 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
 - ✅ **The whole area is optional.** `--catalogue=false` switches off its routes, the shop
   page, its Console menus, its MCP tools, its starmap picture and its system processes,
   keeps every store and leaves the engine untouched; on is the default, and tests hold the
-  switch to routes added later ([ADR-draft-the-catalogue-can-be-switched-off](docs/adr/draft-the-catalogue-can-be-switched-off.md)).
+  switch to routes added later ([ADR-0434](docs/adr/0434-the-catalogue-can-be-switched-off.md)).
 
 **Catalogue & releases**
 - ✅ **Products, structure and releases.** Products nest by composition and aggregation,

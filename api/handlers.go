@@ -203,7 +203,7 @@ type infoResp struct {
 	Docs bool `json:"docs"`
 	// Catalogue reports whether the shop, the catalogue, the orders and the
 	// inventory are served (the --catalogue gate,
-	// ADR-draft-the-catalogue-can-be-switched-off), so the Console can leave them out
+	// ADR-0434), so the Console can leave them out
 	// of its menus rather than lead somebody to a view whose every call is a 404.
 	Catalogue bool `json:"catalogue"`
 	// Revision/BuildTime/Modified/Go are the binary's embedded VCS build metadata,

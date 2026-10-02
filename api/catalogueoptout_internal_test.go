@@ -14,7 +14,7 @@ import (
 )
 
 // What keeps the catalogue opt-out whole as the area grows
-// (ADR-draft-the-catalogue-can-be-switched-off).
+// (ADR-0434).
 //
 // The switch removes the routes tagged Catalogue or Order. That is one statement of
 // the boundary, and a route that joins the area under some other tag would stay

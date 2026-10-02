@@ -91,7 +91,7 @@ type serverConfig struct {
 // catalogue, the orders and the inventory off (--catalogue=false): it neither lists
 // nor dispatches the tools marked Catalogue, so an agent is not offered a capability
 // whose every call would answer "no such endpoint"
-// (ADR-draft-the-catalogue-can-be-switched-off). The server is still what refuses
+// (ADR-0434). The server is still what refuses
 // them; this only stops the adapter from advertising what is not there.
 func WithoutCatalogue() ServerOption {
 	return func(c *serverConfig) { c.withoutCatalogue = true }
