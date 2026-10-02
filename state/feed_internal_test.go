@@ -84,6 +84,31 @@ func TestTheFeedHoldsItsRowsInPositionOrderPerPartition(t *testing.T) {
 	}
 }
 
+// TestTheFeedsLastPositionIsWhereNowStarts: a feed with rows answers its newest row's
+// position, one partition's never another's; an empty feed answers where it was pruned
+// through, or 0 when it never was.
+func TestTheFeedsLastPositionIsWhereNowStarts(t *testing.T) {
+	s := openStore(t)
+	if last, err := s.FeedLast(1); err != nil || last != 0 {
+		t.Fatalf("an empty feed's last = %d %v, want 0", last, err)
+	}
+	tx := s.NewTransaction()
+	grant := &model.EntitlementValue{Principal: "usr_ada", ItemID: "vpn", OrderID: "ord_1", Since: 10}
+	must(t, tx.PutFeedEntry(1, 7, 100, FeedGranted, grant))
+	must(t, tx.PutFeedEntry(1, 9, 300, FeedGranted, grant))
+	must(t, tx.PutFeedEntry(2, 40, 50, FeedGranted, grant))
+	commit(t, tx)
+	if last, err := s.FeedLast(1); err != nil || last != 9 {
+		t.Fatalf("partition 1's last = %d %v, want 9", last, err)
+	}
+	tx = s.NewTransaction()
+	must(t, tx.PruneFeed(1, 9))
+	commit(t, tx)
+	if last, err := s.FeedLast(1); err != nil || last != 9 {
+		t.Fatalf("a feed pruned empty answers %d %v, want its cut 9", last, err)
+	}
+}
+
 // TestAFeedRowCutShortIsAnError: a row the store cannot read back is reported, never
 // served as a fact.
 func TestAFeedRowCutShortIsAnError(t *testing.T) {

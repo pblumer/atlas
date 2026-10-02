@@ -2,6 +2,28 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "the-event-feed-can-be-pushed-to-a-system-that-cannot-poll-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The event feed, delivered to the system that needs it",
+        "de": "Der Ereignis-Feed, zugestellt an das System, das ihn braucht"
+      },
+      "summary": {
+        "en": "A billing system or a CMDB that can only receive, not ask, can now be sent the event feed: set it up as a CloudEvents endpoint worker and subscribe it, for the whole feed or for some catalogues. Atlas delivers every event in order and at least once, and if the receiver is down it waits and tries again instead of skipping anything.",
+        "de": "Eine Verrechnung oder eine CMDB, die nur empfangen und nicht selbst abfragen kann, bekommt den Ereignis-Feed jetzt zugestellt: als Worker vom Typ CloudEvents-Endpunkt einrichten und abonnieren, für den ganzen Feed oder für einzelne Kataloge. Atlas stellt jedes Ereignis der Reihe nach und mindestens einmal zu; ist der Empfänger nicht erreichbar, wartet Atlas und versucht es erneut, statt etwas auszulassen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Workers",
+        "API"
+      ]
+    },
+    {
       "id": "an-event-feed-token-can-be-confined-to-the-catalogues-it-is-",
       "version": "Unreleased",
       "date": null,
@@ -293,29 +315,6 @@
         },
         "route": "#/modeler"
       }
-    },
-    {
-      "id": "the-handbook-teaches-tls-and-certificates",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Secure Atlas with TLS — the handbook now shows how",
-        "de": "Atlas mit TLS absichern – das Handbuch zeigt jetzt, wie"
-      },
-      "summary": {
-        "en": "Atlas can speak HTTPS itself from a certificate, reload it without a restart, and verify another Atlas against your own CA — and until now that was spread across an ADR and a few paragraphs of the install guide. A new chapter «TLS & certificates» explains it in German and English, including one thing worth knowing first: Atlas does not check the expiry date, so you watch it from outside. A section on Windows Server behind a load balancer compares three ways to encrypt that last hop and walks through one of them step by step, from the PFX file to the load balancer's health check.",
-        "de": "Atlas kann mit einem Zertifikat selbst HTTPS sprechen, es ohne Neustart neu laden und ein anderes Atlas gegen die eigene CA prüfen – bisher stand das verteilt in einem ADR und ein paar Absätzen der Installationsanleitung. Ein neues Kapitel «TLS & Zertifikate» erklärt es auf Deutsch und Englisch, samt einer Sache, die man zuerst wissen sollte: Atlas prüft das Ablaufdatum nicht, das überwacht man von aussen. Ein Abschnitt zu Windows Server hinter einem Load Balancer vergleicht drei Wege, diese letzte Strecke zu verschlüsseln, und führt einen davon Schritt für Schritt durch, von der PFX-Datei bis zum Health Check des Load Balancers."
-      },
-      "link": {
-        "label": "ADR-0191",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0191-built-in-tls-listener.md"
-      },
-      "tags": [
-        "Handbook",
-        "Operations",
-        "Security"
-      ]
     }
   ]
 }

@@ -551,6 +551,7 @@ das Vorhaben ergänzen⟩. Initiator ist immer die Quelle.
 | K-14 | KI-Agent / Werkzeug | Atlas-Server `/mcp` | HTTP / 8080 | MCP-Steuerung (ADR-0016) | keine | Session-Cookie oder Bearer des Aufrufers; unter `--auth` erzwungen (ADR-0196) |
 | K-15 | Internet ⟨optional⟩ | Reverse Proxy → `/public/forms/…` | HTTPS / 443 | öffentliche Start-Links (ADR-0029), Selbstregistrierung (ADR-0126) | TLS | anonym, Token-gebunden, ratenbegrenzt |
 | K-16 | Atlas-Server | Skript-Interpreter (lokal) | Prozessaufruf | Skript-Tasks `pwsh`/`python3`/`node` (ADR-0047) | — | läuft als Dienstbenutzer — siehe R-09 |
+| K-17 | Atlas-Server | Umsystem (Verrechnung, CMDB) ⟨Zone⟩ | HTTPS / 443 | Push-Zustellung des Ereignis-Feeds an einen CloudEvents-Endpunkt (ADR-0429 §5), nur falls ein Administrator ein Abonnement anlegt; Inhalt: wer welches Recht hält, Personen nur als ID | TLS, Klartext nur für Loopback, Weiterleitungen werden nicht verfolgt | Bearer-Token aus dem Vault (Referenz am Worker); Abonnement admin-verwaltet, auf Kataloge einschränkbar |
 
 **Nicht vorhanden:** ausgehende Verbindungen zum Hersteller, Update-Prüfungen,
 Telemetrie, Lizenz-Calls. Der Server benötigt für den Betrieb **keinen

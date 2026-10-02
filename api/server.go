@@ -560,6 +560,16 @@ type Server struct {
 	// is that bridge's poll cadence (WithInboundPollInterval; 0 disables the bridge).
 	inboundSubs *inboundSubStore
 	inboundPoll time.Duration
+	// feedSubs holds the event feed's push subscriptions and feedPush the cadence they
+	// are delivered at (WithFeedPushInterval; 0 disables delivery). feedPushes is each
+	// subscription's runtime hold after a failed delivery, feedPushClient and
+	// feedPushClock the HTTP client and clock delivery uses, injectable for tests
+	// (ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint).
+	feedSubs       *feedSubStore
+	feedPush       time.Duration
+	feedPushes     *feedPushState
+	feedPushClient *http.Client
+	feedPushClock  func() time.Time
 	// inboundClock is the clock the bridge paces per-watch cadences by, injectable so a
 	// test does not have to wait one out. nil means time.Now.
 	inboundClock func() time.Time
@@ -924,6 +934,12 @@ func WithUserProvisioning() Option { return func(s *Server) { s.userProvisioning
 // directly). The default is 2s.
 func WithInboundPollInterval(d time.Duration) Option {
 	return func(s *Server) { s.inboundPoll = d }
+}
+
+// WithFeedPushInterval sets how often push delivery of the event feed runs. A
+// non-positive interval disables it (tests drive it directly). The default is 2s.
+func WithFeedPushInterval(d time.Duration) Option {
+	return func(s *Server) { s.feedPush = d }
 }
 
 // WithCollabKeepaliveInterval sets how often an idle collaboration SSE stream
@@ -1422,6 +1438,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	feedSubs, err := newFeedSubStore(filepath.Join(dataDir, "feed-subscriptions"))
+	if err != nil {
+		return nil, err
+	}
 	settings, err := newSettingsStore(filepath.Join(dataDir, "settings"))
 	if err != nil {
 		return nil, err
@@ -1508,10 +1528,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		repository:        repositoryCatalog,
 		repositoryStore:   repositoryStore,
 		inboundSubs:       inboundSubs,
+		feedSubs:          feedSubs,
+		feedPushes:        newFeedPushState(),
 		settings:          settings,
 		playgroundTTL:     playgroundSessionTTL, // WithPlaygroundSessions overrides both of these
 		playgroundSweep:   playgroundReapInterval,
 		inboundPoll:       2 * time.Second,          // default tick; WithInboundPollInterval overrides, 0 disables
+		feedPush:          2 * time.Second,          // default tick; WithFeedPushInterval overrides, 0 disables
 		inboundBatch:      defaultInboundBatch,      // per-poll ReadEvents cap; WithInboundBatchLimit overrides
 		exporterPoll:      5 * time.Second,          // OpenSearch export cadence; WithOpenSearchExportInterval overrides (ADR-0114)
 		retentionInterval: DefaultRetentionInterval, // history-retention sweep cadence; WithRetentionInterval overrides (ADR-0115)
@@ -2132,6 +2155,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if s.inboundPoll > 0 {
 		s.wg.Add(1)
 		go s.inboundBridge(s.inboundPoll)
+	}
+	// Push delivery POSTs the event feed to the cloudevents Workers its subscriptions
+	// name (ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint): a goroutine
+	// like the inbound bridge, its network I/O off the run loop and only the cursor's
+	// write on it. A non-positive interval disables it.
+	if s.feedPush > 0 {
+		s.wg.Add(1)
+		go s.feedPusher(s.feedPush)
 	}
 	// The OpenSearch exporter tails the durable log and bulk-indexes new records
 	// (ADR-0114). Like the timer scheduler and inbound bridge it is a separate

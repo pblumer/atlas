@@ -338,6 +338,12 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   receive task while the shop send task keeps its badge; one that arrives late marks the
   receive task when it does, and the canvas asks for it once. The badge is derived: the
   exported XML is unchanged by it, and choosing the Message kind takes it off.
+- **`feed-subscriptions.spec.mjs`** ([ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint](../docs/adr/draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md)):
+  the **Feed… panel** of a CloudEvents endpoint Worker. A subscription whose endpoint is
+  failing shows as held, with the endpoint's last answer and the position it waits at;
+  subscribing sends the catalogues picked and where to start; a subscription is paused,
+  rewound to the oldest event held and ended from its row, each one request. The New worker
+  form explains the type and links its runbook.
 
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
 

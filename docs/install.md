@@ -904,6 +904,9 @@ Event names an operator is most likely to alert on:
 | `retention.purged` | INFO | Finished instances were hard-deleted, with how many |
 | `order.instance_unrecorded` | WARN | An instance working an order position started but could not be noted on the order; the shop shows no tasks for that position |
 | `script_worker.binary_missing` | WARN | A script language is enabled but its interpreter is absent; those tasks park |
+| `feed.push_failing` | WARN | A push subscription's endpoint refused a batch or did not answer, said once when the failures begin; delivery holds and retries on a widening interval, and nothing is skipped |
+| `feed.push_recovered` | INFO | A held push subscription's endpoint accepted a batch again |
+| `feed.subscription_disabled` | WARN | The event feed's retention dropped rows a push subscription had not delivered, so delivery switched it off with the reason; enable it again from the oldest event held or from now |
 | `auth.admin_seeded` | WARN | The bootstrap administrator was created with a generated password |
 | `auth.disabled` | WARN | The server was started with `--auth=false` and requires no login for anything |
 
@@ -920,6 +923,7 @@ of them carries a password, a hash or a token. Ship them with `--log-format=json
 | `auth.denied` | WARN | A signed-in caller was refused for lacking the admin role, with the `method` and `path`. Anonymous `401`s are deliberately *not* logged — they would bury this under every probe that finds the port |
 | `auth.user_created`, `auth.user_updated`, `auth.user_deleted` | INFO | The account lifecycle, naming both the actor and the subject; the update line carries the `roles` and `disabled` state that resulted |
 | `auth.password_set` | INFO | An administrator replaced a user's password (that it happened and for whom — never the password) |
+| `feed.subscription_changed` | INFO | An administrator created, changed or deleted a push subscription of the event feed, by `subscription_id`; a create names the `worker_id` and every change the `reach` |
 | `auth.token_minted`, `auth.token_revoked` | INFO | A machine credential — an API token or a deploy token — was issued or revoked, by `token_id` and `token_name`; a mint also records its `scope` and `expires_at` |
 | `auth.worker_token_unknown` | WARN | `ATLAS_TOKEN` is set to a value this server does not accept. Supervised workers are handed it instead of the server's own token and will be refused at every poll — mint an API token with scope `worker`, or unset the variable |
 
@@ -984,6 +988,46 @@ stays listed so you can see what needs reissuing.
 A **deploy token** (`atlasat_` vs `atlasdt_`) is the separate, narrower credential
 a peer Atlas uses to publish a bundle here; see
 [ADR-0129](adr/0129-remote-deployment-targets.md).
+
+### Pushing the event feed to another system
+
+A system that cannot poll — a billing service or a CMDB that offers an inbound webhook and
+nothing else — can be **sent** the event feed instead of reading it with an `events`
+token. Two steps, both an administrator's:
+
+1. **A worker for the endpoint.** In **Console → Workers → New worker**, type
+   **CloudEvents endpoint**: the receiver's address, which must be `https` (plain `http`
+   only for a loopback host), and optionally a vault key whose value is sent as
+   `Authorization: Bearer`.
+2. **A subscription.** In that worker's menu, **Feed…**, or over HTTP:
+
+```bash
+curl -sS -X POST http://127.0.0.1:8080/api/v1/feed-subscriptions \
+  -b cookies.txt -H 'Content-Type: application/json' \
+  -d '{"workerId":"<worker id>","reach":["<catalogue id>"],"from":"oldest"}'
+```
+
+`reach` narrows it to the catalogues named, as an `events` token's does; leave it out to
+send the whole feed. `from` is `oldest` (the oldest event the feed still holds, the default)
+or `now`. Atlas then POSTs the feed's events after the subscription's cursor, up to
+`batchSize` (default 100) at a time, as a JSON array with
+`Content-Type: application/cloudevents-batch+json`, and moves the cursor when the receiver
+answers `2xx`. The events are exactly what `GET /api/v1/events` answers.
+
+- **At least once.** A batch accepted just before a restart can arrive again; deduplicate
+  by each event's `id`.
+- **A refusal is held, never skipped.** The cursor stays put and the next attempt waits
+  10 s, doubling to 5 min, until the receiver accepts. `GET /api/v1/feed-subscriptions`
+  (and the panel, and the MCP tool `atlas_feed_subscriptions`) shows the hold with the
+  receiver's last answer; `feed.push_failing` is logged once when it starts.
+- **Falling behind the retention switches it off.** If `--event-feed-ttl` drops events a
+  subscription had not delivered, it is disabled with the reason rather than continuing
+  past the gap. `PATCH /api/v1/feed-subscriptions/{id}` with
+  `{"enabled":true,"from":"oldest"}` (or `"now"`) resumes it.
+
+Delivery runs inside the server, off its processing loop, every two seconds
+([ADR-draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint](adr/draft-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md)).
+Allow outbound `https` from the server to each receiver.
 
 ### Traces
 
