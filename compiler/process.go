@@ -1822,6 +1822,47 @@ type SignalStartEvent struct {
 	ElementId  int32
 }
 
+// SignalUse is one element that throws or waits for a signal, by name.
+type SignalUse struct {
+	SignalName string
+	ElementId  int32
+}
+
+// SignalListeners returns every element that waits for a signal: a signal start at any
+// scope (which is also how an event subprocess triggered by a signal starts), an
+// intermediate catch, and a boundary event (ADR-0088). The access rule on catalogued
+// events reads it at deploy and in validation (ADR-0435 §6). Computed by scanning the
+// node table, off the hot path.
+func (p *CompiledProcess) SignalListeners() []SignalUse {
+	var out []SignalUse
+	for id := range p.nodes {
+		n := &p.nodes[id]
+		switch {
+		case n.Type == TypeSignalStartEvent:
+			out = append(out, SignalUse{SignalName: p.signalStarts[n.Detail].SignalName, ElementId: int32(id)})
+		case n.Type == TypeSignalCatchEvent:
+			out = append(out, SignalUse{SignalName: p.signalCatches[n.Detail].SignalName, ElementId: int32(id)})
+		case n.Type == TypeBoundaryEvent && p.boundaryEventDets[n.Detail].Kind == BoundarySignal:
+			out = append(out, SignalUse{SignalName: p.boundaryEventDets[n.Detail].SignalName, ElementId: int32(id)})
+		}
+	}
+	return out
+}
+
+// SignalThrowers returns every element that broadcasts a signal: an intermediate throw
+// and a signal end event (ADR-0088). The event catalogue's drift test reads it to hold
+// the system processes to what the catalogue says they throw (ADR-0435 §5).
+func (p *CompiledProcess) SignalThrowers() []SignalUse {
+	var out []SignalUse
+	for id := range p.nodes {
+		n := &p.nodes[id]
+		if n.Type == TypeSignalThrowEvent || n.Type == TypeSignalEndEvent {
+			out = append(out, SignalUse{SignalName: p.signalThrows[n.Detail].SignalName, ElementId: int32(id)})
+		}
+	}
+	return out
+}
+
 // TimerStart returns the timer-start detail at the given table index.
 func (p *CompiledProcess) TimerStart(detail int32) *TimerStartDetail { return &p.timerStarts[detail] }
 

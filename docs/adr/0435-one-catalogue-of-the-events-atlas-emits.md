@@ -1,7 +1,7 @@
 # ADR-0435: Atlas keeps one catalogue of the events it emits
 
 - **Status:** Proposed
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-10-02
 - **Deciders:** Atlas maintainers
 - **Open question:** whether a deployment becomes a fact on the log.
@@ -165,8 +165,9 @@ domain entry:
 - **The payload holds no secret.** The throw sits where the instance holds none, and a test
   pins that position.
 - **Every domain payload carries the instance key of the process that emitted it,**
-  `atlasInstance`, so a receiver can point back at the request. The intake signal does not yet
-  carry it. Adding it is the first change made under this record.
+  `atlasInstance`, so a receiver can point back at the request. A script task sets it from
+  `processInstanceKey` just before the throw, so it is a string like that built-in. The intake
+  signal gained it in the first slice (§9).
 
 **Platform facts** are produced by the engine or the server from durable records. They are
 delivered through the feed, when the fact is on the log, and as log events.
@@ -304,11 +305,12 @@ The catalogue holds two kinds of information, and they are not equally sensitive
 | `atlas.entitlement.granted` | platform | feed | exists |
 | `atlas.entitlement.revoked` | platform | feed | exists |
 | action outcome (`<message>.<outcome>`, product-declared) | domain | feed | exists, described by shape |
-| `atlas.user.requested` | domain | signal | exists ([ADR-0431](0431-system-processes-announce-their-facts-as-signals.md)), gains `atlasInstance` |
+| `atlas.user.requested` | domain | signal | exists ([ADR-0431](0431-system-processes-announce-their-facts-as-signals.md)), carries `atlasInstance` since slice 1 |
 | `atlas.user.created`, `atlas.user.rejected` | domain | signal | planned |
 | `atlas.user.offboarding-requested`, `atlas.user.disabled` | domain | signal | planned |
 | `atlas.access-review.due`, `atlas.access-review.completed` | domain | signal | planned |
-| `atlas.approval.requested`, `atlas.approval.granted`, `atlas.approval.denied` | domain | signal | planned, for the three shop approval processes |
+| `atlas.approval.requested` | domain | signal | exists since slice 1, thrown by the three shop approval processes |
+| `atlas.approval.granted`, `atlas.approval.denied` | domain | signal | planned, for the three shop approval processes |
 | `atlas.incident.raised`, `atlas.incident.resolved` | platform | feed, log | planned, folded from `IntentIncidentCreated` / `IntentIncidentResolved` |
 | `atlas.deployment.created` | platform | log; feed once the open question is answered | planned |
 
@@ -327,7 +329,7 @@ facts of their own, is decided when the entries are built.
 *(Decided 2026-10-02.)* The first change has to carry the catalogue, because the access rule
 reads the personal-data marking from it. From there the work goes in this order:
 
-1. **The catalogue, its first new entry and the access rule.**
+1. **The catalogue, its first new entry and the access rule.** *(Landed 2026-10-02.)*
    - The `eventcatalog` package with its drift tests, holding the existing entries.
    - `atlas.approval.requested`, thrown by the three shop approval processes before their
      approval task.
@@ -377,6 +379,12 @@ reads the personal-data marking from it. From there the work goes in this order:
     findings on the same draft; the finding names both roles so that this is visible.
   - A modeler cannot see who else listens across projects and has to ask an administrator. That
     is accepted: that view is exactly what the rule protects.
+  - Machine credentials are never administrators: a deploy token publishing from a peer is a
+    modeler ([ADR-0129](0129-remote-deployment-targets.md)), and an API
+    token is never an admin ([ADR-0194](0194-api-tokens.md)). A release or a pipeline that
+    carries a listener on an event with personal data is therefore refused, and an
+    administrator deploys that listener on the receiving server. That is the rule working, not
+    a gap in it.
 - **Follow-ups / risks to watch:**
   - The open question about deployments on the log.
   - The feed leaving the service-catalogue area, so that platform facts keep flowing when the

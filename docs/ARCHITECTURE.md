@@ -291,6 +291,7 @@ atlas/
 ├── mcp/           MCP server over the HTTP API (ADR-0016)
 ├── metrics/       Prometheus metrics (ADR-0142)
 ├── opensearch/    OpenSearch event exporter (ADR-0114)
+├── eventcatalog/  The events Atlas emits, with payloads and personal-data marking (ADR-0435)
 └── cmd/atlas/     The single binary (ADR-0011)
 ```
 

@@ -941,6 +941,13 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Who may listen to a catalogued event, checked before anything is persisted
+	// (ADR-0435 §6). Off the run loop: it reads the model and the caller and nothing
+	// else (I3).
+	if ref := s.listenerAccessBlockingModel(r, body); ref != nil {
+		listenerRefusalResponse(w, ref)
+		return
+	}
 	var (
 		resp       deployResp
 		compErr    error

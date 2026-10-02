@@ -55,6 +55,11 @@ func (s *Server) handleValidate(w http.ResponseWriter, r *http.Request) {
 		problems = append(problems, s.dataFlowProblems(bytes.NewReader(body), appID)...)
 	}
 	problems = append(problems, s.ambiguousCallProblems(bytes.NewReader(body))...)
+	// Who may listen to a catalogued event: the same check the deploy runs, so the
+	// panel and the deploy cannot disagree (ADR-0435 §6). It depends on the caller —
+	// the same draft is clean for an administrator and has an error for a modeler —
+	// and the finding names both roles, so the two views explain each other.
+	problems = append(problems, s.listenerProblems(r, body)...)
 	// A nil slice would serialize as JSON null; the panel expects an array, so
 	// normalize "no problems" to an empty list.
 	if problems == nil {

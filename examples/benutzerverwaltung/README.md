@@ -55,6 +55,7 @@ aktiviert.
 ```
 Start (ba-antrag: Vorname, Nachname, E-Mail, Abteilung, Begründung)
   → [Script] Zugangsdaten vorschlagen   – FEEL: benutzername = vorname.nachname
+  → [Script] Instanz festhalten         – FEEL: atlasInstance = processInstanceKey
   → 📣 Signal "Aufnahme beantragt"      – atlas.user.requested (siehe unten)
   → 🔑 User-Task "Antrag freigeben" (ba-konto) – Admin vergibt Rolle, setzt Initialpasswort
   → (X) Angelegt?
@@ -91,9 +92,22 @@ dieser Stelle hat. Sie stehen im Empfänger als gewöhnliche FEEL-Variablen bere
 | `vorname`, `nachname`, `email` | Formular `ba-antrag` | ja (Pflichtfelder) |
 | `abteilung`, `begruendung` | Formular `ba-antrag` | nein |
 | `benutzername` | Script „Zugangsdaten vorschlagen" | ja |
+| `atlasInstance` | Script „Instanz festhalten": der Schlüssel dieser Antragsinstanz, als Text | ja |
 
 `initialpasswort`, `rolle` und `entscheidung` entstehen erst bei der Freigabe und sind
-deshalb **nie** dabei. Ein Test hält diese Stelle fest.
+deshalb **nie** dabei. Ein Test hält diese Stelle fest. Mit `atlasInstance` kann der
+Empfänger auf genau diesen Antrag zeigen.
+
+Die Tabelle ist ein Auszug aus dem Ereigniskatalog, dem Paket `eventcatalog`
+([ADR-0435](../../docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)). Ein Test hält
+fest, dass der Empfänger genau die dort deklarierten Variablen erhält.
+
+**Wer einen Empfänger deployen darf.** Das Signal trägt Personendaten. Deshalb braucht das
+Deployment eines Prozesses, der darauf wartet, die Rolle `admin` (ADR-0435 §6). Ein
+`modeler` erhält beim Deployment die Antwort 403, die Element, Ereignis, Personendaten-Felder
+und die nötige Rolle nennt. Das Problems-Panel des Modelers meldet denselben Befund schon
+beim Modellieren. Ein bereits deployter Empfänger läuft weiter; erst seine nächste Version
+braucht eine Administratorin oder einen Administrator.
 
 **Rezept: ein Antrag, eine Discord-Nachricht.** Das Rezept setzt einen eingerichteten
 Discord-Worker voraus

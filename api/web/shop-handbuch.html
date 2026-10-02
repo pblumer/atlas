@@ -244,6 +244,18 @@ th{color:var(--muted);font-weight:600}
     derselben Person lässt sich gesammelt entscheiden. Die Katalogpflege zeigt, welche Regeln niemanden erreichen.</p>
   <p data-l="en">Approvals appear in the approvers' inbox; an order with several positions for the same approver can
     be decided at once. The catalogue page shows which rules reach nobody.</p>
+  <p data-l="de">Jede der drei eingebauten Arten wirft das Signal <code>atlas.approval.requested</code>, unmittelbar bevor
+    die Genehmigung auf die genehmigende Person wartet. Ein eigener Prozess mit einem Signal-Start auf diesem Namen erfährt
+    so von jeder anstehenden Genehmigung, etwa um sie in einem Chat zu melden. Er erhält Auftrag, Position, Produkt,
+    Variante, bestellende und empfangende Person, <code>approvalRef</code>, bei <code>superior</code> auch
+    <code>vorgesetzter</code>, und <code>atlasInstance</code>, den Schlüssel der Genehmigungsinstanz. Weil darunter
+    Personenkennungen sind, braucht das Deployment eines solchen Prozesses die Rolle <code>admin</code>.</p>
+  <p data-l="en">Each of the three built-in kinds throws the signal <code>atlas.approval.requested</code> just before the
+    approval waits for the approver. A process of your own with a signal start on that name learns of every pending
+    approval, for instance to post it to a chat. It receives the order, the position, the product, the variant, the
+    ordering and the receiving person, <code>approvalRef</code>, for <code>superior</code> also <code>vorgesetzter</code>,
+    and <code>atlasInstance</code>, the key of the approval instance. Because these include people's ids, deploying such a
+    process needs the <code>admin</code> role.</p>
 </section>
 
 <section id="prozesse">

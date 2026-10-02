@@ -14,6 +14,25 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A pending shop approval announces itself, and Atlas lists the events it emits.** The
+  three built-in approval processes (`atlas-genehmigung-fix`, `atlas-genehmigung-rolle`,
+  `atlas-genehmigung-vorgesetzter`) now throw the signal `atlas.approval.requested` just
+  before the approval waits for the approver. A process of your own with a signal start on
+  that name hears of every pending approval, for example to post it to a chat. It receives
+  the order, the position, the product and its variant, the ordering and the receiving
+  person, `approvalRef`, the provisioning process, the two base addresses, for a line
+  manager's approval also `vorgesetzter`, and `atlasInstance`, the key of the approval
+  instance. The intake signal `atlas.user.requested` carries `atlasInstance` too. Every event
+  Atlas emits — these signals, the two messages the order service publishes to the
+  fulfilment process, and the event feed's types — is now an entry in the new package
+  `eventcatalog`, with its meaning, where it is emitted, its channels and its payload, each
+  field marked as personal data or not, with no default. Tests hold the catalogue to the code
+  in both directions: an event without an entry fails, an entry nothing emits fails, a
+  listener receiving a variable its entry does not declare fails, and a stable entry that
+  loses a field fails against `eventcatalog/testdata/stable.golden`. The three approval
+  diagrams are laid out anew around the two added steps.
+  [ADR-0435](docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md).
+
 - **A mail Worker can read its mailbox, and the mailbox stays its owner's.** An inbound
   watch on a mail Worker publishes the new mail of one folder as an Atlas message, so a mail
   starts a process — over IMAP for an SMTP Worker (a new, optional `mailboxEndpoint`), and
@@ -293,6 +312,20 @@ _Changed_ / _Removed_ for each version.
   against a live instance first.
 
 ### Changed
+
+- **Listening to an event that carries personal data needs an administrator.** Deploying a
+  process with a signal start, intermediate catch or boundary event on a catalogued event
+  whose payload carries personal data — today `atlas.user.requested` and
+  `atlas.approval.requested` — needs the `admin` role. A modeler's deploy is answered 403,
+  naming the element, the event, the personal-data fields the listener would receive, the
+  role it needs and the caller's roles, and the Problems panel reports the same finding as
+  an error (`signal.listener-access`) while the model is drawn. The single-model deploy, the
+  project deploy and the application import run the check, and the MCP deploy tools reach it
+  as their caller. Deploy tokens and API tokens are never administrators, so a release or a
+  pipeline carrying such a listener is refused, and an administrator deploys it. Listeners
+  already deployed keep running; their next version needs an administrator. A signal outside
+  the catalogue is not affected, and a server without authentication checks nothing.
+  [ADR-0435](docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md).
 
 - **A worker runs the jobs of one type concurrently.** A worker used to work the jobs of
   one type one after another, so twenty REST calls of two seconds each took forty

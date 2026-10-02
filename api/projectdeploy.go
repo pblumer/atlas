@@ -206,6 +206,15 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 				Definitions: []deployedProcess{}, Decisions: []deployedDecisionResp{}, References: refReports,
 			}}
 		}
+		// Who may listen to a catalogued event (ADR-0435 §6), under the same "validate
+		// all, then deploy all" rule: a refusal here leaves nothing registered.
+		if ref := firstListenerRefusal(s.listenerRefusals(r, deployables)); ref != nil {
+			return bundleOutcome{status: http.StatusForbidden, proj: proj, resp: projectDeployResp{
+				ID: proj.ID, Name: proj.Name, Deployed: false,
+				Reason:      fmt.Sprintf("draft %q listens to an event you may not receive — %s", d.ProcessID, listenerRefusalReason(ref)),
+				Definitions: []deployedProcess{}, Decisions: []deployedDecisionResp{}, References: refReports,
+			}}
+		}
 		needed := draftDecisions(deployables)
 		if len(needed) == 0 {
 			continue

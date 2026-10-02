@@ -117,6 +117,8 @@ api/        HTTP API, web UI, command submission and queries
 mcp/        MCP server over the HTTP API (ADR-0016)
 metrics/    Prometheus metrics (ADR-0142)
 opensearch/ OpenSearch event exporter (ADR-0114)
+eventcatalog/ The events Atlas emits: payloads, personal-data marking, held to the code
+            by drift tests (ADR-0435)
 cmd/atlas/  The single binary (ADR-0011)
 internal/dirsync/ Opening a directory so it can be fsynced — the one step that differs
             on Windows, shared by wal/, checkpoint/ and api/sidecar/

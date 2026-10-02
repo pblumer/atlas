@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/eventcatalog"
 )
 
 // intakeListenerBPMN is what an installation deploys to hear about intake requests
@@ -49,6 +51,8 @@ const intakeListenerBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 // itself still waits at "Antrag freigeben" — the notice must not hold up the request.
 // The approval that follows must not announce anything again: the throw sits before
 // the step where initialpasswort comes into being, and no listener may ever see it.
+// What the listener receives is exactly what the event catalogue declares, so no
+// undeclared variable, and therefore no secret, reaches it.
 func TestSystemIntakeAnnouncesTheRequestAsASignal(t *testing.T) {
 	srv, _ := newSystemServer(t, WithSystemProcesses())
 	h := srv.Handler()
@@ -135,6 +139,28 @@ func TestSystemIntakeAnnouncesTheRequestAsASignal(t *testing.T) {
 		if _, leaked := got[name]; leaked {
 			t.Errorf("listener received %s; the signal must be thrown before the approval decides it", name)
 		}
+	}
+	// What the listener received is what the catalogue declares (ADR-0435), and
+	// atlasInstance points back at the intake that threw it.
+	entry, ok := eventcatalog.Lookup("atlas.user.requested")
+	if !ok {
+		t.Fatal("atlas.user.requested is not catalogued")
+	}
+	var names []string
+	for name := range got {
+		names = append(names, name)
+	}
+	assertSameFields(t, entry, names)
+	code, raw = do(http.MethodGet, "/api/v1/instances?process="+strconv.FormatUint(intakeKey, 10), "", "")
+	if code != http.StatusOK {
+		t.Fatalf("list intake instances: %d %s", code, raw)
+	}
+	var intakes []listenerRow
+	if err := json.Unmarshal(listRows(t, raw), &intakes); err != nil || len(intakes) != 1 {
+		t.Fatalf("decode intake instances: %v (%s)", err, raw)
+	}
+	if want := strconv.FormatUint(intakes[0].Key, 10); !strings.Contains(got["atlasInstance"], want) {
+		t.Errorf("atlasInstance = %q, want the intake's instance key %s", got["atlasInstance"], want)
 	}
 
 	// The intake did not wait on the notice: its approval task is open.

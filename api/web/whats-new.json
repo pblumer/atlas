@@ -2,6 +2,29 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "a-pending-shop-approval-announces-itself-and-atlas-lists-the",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "You can now be told when a shop approval is waiting",
+        "de": "Sie können sich jetzt benachrichtigen lassen, wenn eine Shop-Genehmigung wartet"
+      },
+      "summary": {
+        "en": "When an order needs an approval, the approval waits in the approver's inbox, and nothing else told anyone. The three built-in approval processes now announce every pending approval with the signal \"atlas.approval.requested\", just before the approval waits. To be told, you deploy a small process of your own that starts on that signal and, for example, posts a message to your chat. It receives the order, the product, the people involved and a key that points back at the approval. Account requests now carry that key as well. Because these notices name people, deploying a process that listens to them needs an administrator; a modeler sees this already while drawing, in the Problems panel. Atlas now keeps one list of every event it emits, with what each one carries, and checks that list against what it really sends.",
+        "de": "Braucht eine Bestellung eine Genehmigung, wartet diese im Posteingang der genehmigenden Person, und sonst hat niemand davon erfahren. Die drei eingebauten Genehmigungsprozesse melden jetzt jede anstehende Genehmigung mit dem Signal «atlas.approval.requested», unmittelbar bevor die Genehmigung wartet. Um informiert zu werden, deployen Sie einen kleinen eigenen Prozess, der auf dieses Signal startet und zum Beispiel eine Nachricht in Ihren Chat schreibt. Er erhält den Auftrag, das Produkt, die beteiligten Personen und einen Schlüssel, der auf die Genehmigung zurückzeigt. Auch Konto-Anträge tragen diesen Schlüssel jetzt. Weil diese Meldungen Personen nennen, braucht das Deployment eines Prozesses, der darauf hört, eine Administratorin oder einen Administrator; wer modelliert, sieht das schon beim Zeichnen im Problems-Panel. Atlas führt jetzt eine Liste aller Ereignisse, die es aussendet, mit dem, was jedes davon trägt, und prüft diese Liste gegen das, was es tatsächlich sendet."
+      },
+      "link": {
+        "label": "ADR-0435",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md"
+      },
+      "tags": [
+        "Shop",
+        "Events",
+        "Security"
+      ]
+    },
+    {
       "id": "a-mail-worker-can-read-its-mailbox-and-the-mailbox-stays-its",
       "version": "Unreleased",
       "date": null,
@@ -265,28 +288,6 @@
       "tags": [
         "Service catalogue",
         "API"
-      ]
-    },
-    {
-      "id": "the-modeler-offers-a-message-name-from-where-it-comes-from",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Message names grouped by where they come from",
-        "de": "Nachrichtennamen nach Herkunft gruppiert"
-      },
-      "summary": {
-        "en": "When you pick a message in the Modeler, the list now says where each name comes from: events that Workers publish, the actions of products in the catalogue, and the processes already waiting for a message. A step that waits is offered the first two, a step that sends is offered the waiting processes. Shop tasks suggest the actions a product declares, and shop tasks are marked with a small badge next to their envelope.",
-        "de": "Beim Auswählen einer Nachricht im Modeler zeigt die Liste jetzt, woher jeder Name stammt: Ereignisse, die Worker veröffentlichen, die Aktionen der Produkte im Katalog und die Prozesse, die bereits auf eine Nachricht warten. Einem wartenden Schritt werden die ersten beiden angeboten, einem sendenden Schritt die wartenden Prozesse. Shop-Aufgaben schlagen die Aktionen vor, die ein Produkt festlegt, und tragen ein kleines Abzeichen neben ihrem Briefumschlag."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Modeler",
-        "Service catalogue"
       ]
     }
   ]

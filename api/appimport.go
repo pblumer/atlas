@@ -110,12 +110,20 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 	// Phase 1 (off-loop): compile every artifact before anything is registered. A
 	// bundle that does not compile is refused whole, exactly as a local publish is.
 	for _, a := range req.Artifacts {
-		if _, err := compiler.ParseAll(1, 1, bytes.NewReader([]byte(a.XML))); err != nil {
+		deployables, err := compiler.ParseAll(1, 1, bytes.NewReader([]byte(a.XML)))
+		if err != nil {
 			httpapi.JSON(w, http.StatusConflict, importBundleResp{
 				Application: name, Imported: false,
 				Reason:      fmt.Sprintf("artifact %q does not compile: %s", a.ProcessID, err.Error()),
 				Definitions: []deployedProcess{},
 			})
+			return
+		}
+		// Who may listen to a catalogued event (ADR-0435 §6). A deploy token is a
+		// modeler, never an administrator, so a release that listens to an event
+		// carrying personal data is deployed on this server by its administrator.
+		if ref := firstListenerRefusal(s.listenerRefusals(r, deployables)); ref != nil {
+			listenerRefusalResponse(w, ref)
 			return
 		}
 	}

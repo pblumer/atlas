@@ -252,3 +252,63 @@ func TestParseSignalNoName(t *testing.T) {
 		t.Fatal("Parse: want an error for a signal with no name, got nil")
 	}
 }
+
+// TestSignalListenersAndThrowers checks that every way a model can wait for a signal
+// is listed as a listener — a root start, an intermediate catch, a boundary event and
+// an event subprocess's start — and every way it can broadcast one as a thrower. The
+// access rule on catalogued events (ADR-0435 §6) relies on the listener list being
+// complete: an element it missed would be a listener nobody checked.
+func TestSignalListenersAndThrowers(t *testing.T) {
+	const xml = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+	             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+	  <signal id="SigStart" name="start-it"/>
+	  <signal id="SigCatch" name="catch-it"/>
+	  <signal id="SigBoundary" name="bound-it"/>
+	  <signal id="SigSub" name="sub-it"/>
+	  <signal id="SigThrow" name="throw-it"/>
+	  <signal id="SigEnd" name="end-it"/>
+	  <process id="p" isExecutable="true">
+	    <startEvent id="s"><signalEventDefinition signalRef="SigStart"/></startEvent>
+	    <intermediateCatchEvent id="c"><signalEventDefinition signalRef="SigCatch"/></intermediateCatchEvent>
+	    <intermediateThrowEvent id="t"><signalEventDefinition signalRef="SigThrow"/></intermediateThrowEvent>
+	    <serviceTask id="work"><extensionElements><zeebe:taskDefinition type="w"/></extensionElements></serviceTask>
+	    <boundaryEvent id="b" attachedToRef="work"><signalEventDefinition signalRef="SigBoundary"/></boundaryEvent>
+	    <endEvent id="e"><signalEventDefinition signalRef="SigEnd"/></endEvent>
+	    <endEvent id="be"/>
+	    <sequenceFlow id="f1" sourceRef="s" targetRef="c"/>
+	    <sequenceFlow id="f2" sourceRef="c" targetRef="t"/>
+	    <sequenceFlow id="f3" sourceRef="t" targetRef="work"/>
+	    <sequenceFlow id="f4" sourceRef="work" targetRef="e"/>
+	    <sequenceFlow id="f5" sourceRef="b" targetRef="be"/>
+	    <subProcess id="es" triggeredByEvent="true">
+	      <startEvent id="es_start"><signalEventDefinition signalRef="SigSub"/></startEvent>
+	      <endEvent id="es_end"/>
+	      <sequenceFlow id="ef" sourceRef="es_start" targetRef="es_end"/>
+	    </subProcess>
+	  </process>
+	</definitions>`
+	cp, err := Parse(1, 1, strings.NewReader(xml))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	collect := func(uses []SignalUse) map[string]string {
+		out := map[string]string{}
+		for _, u := range uses {
+			out[cp.ElementBpmnId(u.ElementId)] = u.SignalName
+		}
+		return out
+	}
+	listeners := collect(cp.SignalListeners())
+	for el, name := range map[string]string{"s": "start-it", "c": "catch-it", "b": "bound-it", "es_start": "sub-it"} {
+		if listeners[el] != name {
+			t.Errorf("listener %s = %q, want %q (all: %v)", el, listeners[el], name, listeners)
+		}
+	}
+	if len(listeners) != 4 {
+		t.Errorf("listeners = %v, want exactly the four waiting elements", listeners)
+	}
+	throwers := collect(cp.SignalThrowers())
+	if throwers["t"] != "throw-it" || throwers["e"] != "end-it" || len(throwers) != 2 {
+		t.Errorf("throwers = %v, want t:throw-it and e:end-it", throwers)
+	}
+}
