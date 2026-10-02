@@ -125,10 +125,10 @@ which therefore lapses with it.
   GitHub, as the feed's did, which an installation without internet access cannot
   follow. The landing page makes two requests where it made one.
 - **Follow-ups / risks to watch:**
-  - ADR-0375 is superseded in effect. Its status names this record as an amendment,
-    because the guard accepts `Superseded by ADR-NNNN` only with a number, and this
-    record has none until it lands; once it has, ADR-0375 becomes `Superseded by` it,
-    `Implementation: Superseded`.
+  - ADR-0375 is superseded by this record. It carried an amendment naming it while
+    this record was a draft, because the guard accepts `Superseded by ADR-NNNN` only
+    with a number; once this record had one, ADR-0375 became `Superseded by ADR-0444`,
+    `Implementation: Superseded` (2026-10-02).
   - The parser reads the changelog's conventions: `## [version] — date`, `###`
     categories, `- **Headline.** text` bullets. A bullet written another way still
     appears — its first sentence stands in for a headline — but a new convention, a
@@ -163,7 +163,7 @@ which therefore lapses with it.
 
 ## Links
 
-- supersedes in effect ADR-0375 — the Go generator, and the open question this answers
+- supersedes ADR-0375 — the Go generator, and the open question this answers
 - lapses ADR-0170's amendment of 2026-08-24 — the numbering commit no longer carries a feed
 - relates to ADR-0012 — the buildless web UI, which a runtime read keeps buildless
 - relates to ADR-0011 — the single binary the changelog is embedded in
