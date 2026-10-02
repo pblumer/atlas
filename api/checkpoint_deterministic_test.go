@@ -102,6 +102,17 @@ func (h *checkpointHarness) close() {
 	}
 }
 
+// checkpointPassFailsafe bounds the wait for one checkpoint pass in the harnesses here
+// and in compaction_deterministic_test.go. It is a failsafe against a deadlocked loop
+// and nothing else, so it is sized for the slowest runner the suite meets rather than
+// for a typical pass. It was two seconds, and that was not a failsafe: on a loaded
+// Windows runner a pass that publishes a checkpoint — hard-linking the state files,
+// checksumming them, fsyncing the directory — took about 3.7s, completed, and failed
+// TestCheckpointLoopPrunesToRetention anyway (seen on pblumer/atlas#1196). A longer
+// bound costs nothing on the passing path, because the handshake returns as soon as
+// the pass does; a loop that truly hangs still fails the test.
+const checkpointPassFailsafe = 30 * time.Second
+
 // checkpointNow triggers exactly one checkpoint pass and blocks until it finishes.
 // The handshake is what makes this deterministic; the timeouts are failsafes that fire
 // only if the loop deadlocks, never on the passing path.
@@ -109,12 +120,12 @@ func (h *checkpointHarness) checkpointNow() {
 	h.t.Helper()
 	select {
 	case h.ticks <- time.Time{}:
-	case <-time.After(2 * time.Second):
+	case <-time.After(checkpointPassFailsafe):
 		h.t.Fatal("checkpoint loop did not accept a tick")
 	}
 	select {
 	case <-h.done:
-	case <-time.After(2 * time.Second):
+	case <-time.After(checkpointPassFailsafe):
 		h.t.Fatal("checkpoint pass did not complete")
 	}
 }
