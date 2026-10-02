@@ -30,9 +30,14 @@ import (
 // as an unconfigured job worker, because the extension was gone before the panel
 // ever looked.
 
+// A digit is admitted after the first letter, and that is not cosmetic: <atlas:s3Connector>
+// was the first such tag, and a pattern of [a-zA-Z]+ did not see it — so both guards below
+// would have passed while saying nothing about the kind at all, which is the failure they
+// exist to catch arriving by the back door.
+//
 // connectorExtRe matches the worker extension elements compiler/parse.go reads,
 // e.g. `xml:"extensionElements>userConnector"`.
-var connectorExtRe = regexp.MustCompile(`xml:"extensionElements>([a-zA-Z]+Connector)"`)
+var connectorExtRe = regexp.MustCompile(`xml:"extensionElements>([a-zA-Z][a-zA-Z0-9]*Connector)"`)
 
 // nonServiceTaskConnectors are worker extensions that are deliberately absent
 // from the Modeler's service-task catalog, with the reason. They are still required
