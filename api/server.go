@@ -2096,6 +2096,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 			return nil, err
 		}
 	}
+	// Switching the catalogue off is never refused, but it is not silent about the
+	// orders it strands: after recovery and the deployments, before the loop serves,
+	// so the counters and the stores are read directly (ADR-0434).
+	if s.catalogueOff {
+		s.warnCatalogueWorkInFlight()
+	}
 	// Build the OpenSearch exporter when configured (ADR-0114). It tails the durable
 	// WAL under dataDir and is bounded by the state store's applied-position
 	// watermark (LastAppliedPosition), so it only ever indexes records that are on

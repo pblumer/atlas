@@ -47,6 +47,28 @@
       ]
     },
     {
+      "id": "switching-the-catalogue-off-says-at-start-what-it-strands",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Switching the shop off warns about orders still being worked",
+        "de": "Beim Ausschalten des Shops warnt Atlas vor laufenden Aufträgen"
+      },
+      "summary": {
+        "en": "If you start Atlas with the shop switched off (--catalogue=false) while orders are still being fulfilled or approved, the server log now says so at start: how many processes will fail at their next step and which ones. Switching off still always works; the warning only makes sure you hear about stranded orders before their incidents arrive one by one. Turn the shop back on and retry those incidents to finish the orders. Nothing is logged when nothing is running.",
+        "de": "Wenn Sie Atlas mit ausgeschaltetem Shop (--catalogue=false) starten, während noch Aufträge erfüllt oder genehmigt werden, meldet das Server-Log das jetzt beim Start: wie viele Prozesse bei ihrem nächsten Schritt scheitern werden und welche. Das Ausschalten funktioniert weiterhin immer; die Warnung sorgt nur dafür, dass Sie von liegengebliebenen Aufträgen erfahren, bevor deren Incidents einzeln eintreffen. Schalten Sie den Shop wieder ein und wiederholen Sie diese Incidents, um die Aufträge abzuschliessen. Läuft nichts, wird nichts gemeldet."
+      },
+      "link": {
+        "label": "ADR-0434",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0434-the-catalogue-can-be-switched-off.md"
+      },
+      "tags": [
+        "Shop",
+        "Operations"
+      ]
+    },
+    {
       "id": "the-shop-the-catalogue-the-orders-and-the-inventory-can-be-s",
       "version": "Unreleased",
       "date": null,
@@ -243,28 +265,6 @@
       "tags": [
         "Service catalogue",
         "Modeler"
-      ]
-    },
-    {
-      "id": "how-an-action-ended-is-a-fact",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "How an action ended is recorded",
-        "de": "Wie eine Aktion endete, wird festgehalten"
-      },
-      "summary": {
-        "en": "Everything asked of a service somebody holds — its provisioning, its return, a change, a service such as a password reset — now ends in a record: completed, rejected or failed, under the event type the product declares. A successful provisioning or return is recorded together with the right it grants or revokes, so the two can never disagree. A process that reports twice is recorded once, and a contradicting second report is refused. Operators and agents read how a position's actions ended over the API and MCP.",
-        "de": "Alles, was von einer bezogenen Leistung verlangt wird – ihre Bereitstellung, ihre Rückgabe, eine Änderung, eine Dienstleistung wie ein Passwort-Reset –, endet jetzt in einem Eintrag: abgeschlossen, abgelehnt oder fehlgeschlagen, unter dem Ereignistyp, den das Produkt dafür festlegt. Eine erfolgreiche Bereitstellung oder Rückgabe wird zusammen mit dem Recht festgehalten, das sie gewährt oder entzieht, sodass beide nie auseinanderlaufen. Meldet ein Prozess zweimal, wird einmal festgehalten, und eine widersprüchliche zweite Meldung wird abgewiesen. Betrieb und Agenten lesen über API und MCP, wie die Aktionen einer Position endeten."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Service catalogue",
-        "Engine"
       ]
     }
   ]

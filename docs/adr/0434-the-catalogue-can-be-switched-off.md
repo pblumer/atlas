@@ -4,11 +4,6 @@
 - **Implementation:** Landed
 - **Date:** 2026-10-02
 - **Deciders:** Atlas maintainers
-- **Open question:** Whether an operator who switches the area off while orders are still
-  in fulfilment needs a refusal or a warning at start, rather than the incidents the
-  fulfilment process then raises. Counting the open orders at start reads the order store
-  whole, which grows with the population, and no installation has reported the case yet.
-- **Question checked:** 2026-10
 
 ## Context and problem statement
 
@@ -126,6 +121,34 @@ held back are checked against what they call, and the MCP tools against the drif
 own tool→route classification. The tests that read the area from the OpenAPI document
 read it whole, so they cover routes added after them.
 
+### Starting with orders still in fulfilment: a warning, never a refusal
+
+The record first left open whether a server started with the area off while orders are
+still being worked should refuse, warn, or say nothing and let the incidents speak. It
+warns. A refusal would make the switch conditional on the state of the estate, and the
+switch exists so that an operator can always take the area away — the one moment that
+matters most, an incident or an audit finding, is the one a refusal would block. Saying
+nothing leaves the operator to reconstruct the cause from incidents that arrive one at a
+time, on whatever cadence the stranded processes happen to call.
+
+So `New` writes one WARN, `server.catalogue_disabled_in_flight`, and only when there is
+something to warn about. It names how many instances will fail and which processes they
+are (`shop_process_instances`, `product_process_instances`, `processes`), and what to do:
+switch the area back on and retry the incidents, or end the instances deliberately.
+
+**It counts processes, not orders**, and that is the answer to the cost that kept the
+question open. An order's status lives in a sidecar that is read whole and grows with every
+order ever placed; what actually fails is a running process, and the engine already keeps a
+live-instance counter per definition (ADR-0080). The count reads one counter per deployed
+version of the processes concerned — design-time size — and it counts exactly what will
+fail at the order routes: the shop's own fulfilment and approval processes, and the
+processes products bind in the two-process form, whose last step reports to the order by
+the convention of ADR-0312. A lifecycle process talks to its order through shop tasks,
+which keep their handlers, so it is not counted. Two limits, stated rather than hidden: a
+process a product binds and that is also started for other reasons is counted whole, and
+a binding a later edit removed from the product is not counted although a release may
+still name it.
+
 ### Consequences
 
 - **Positive:** an installation without a shop can say so once and be believed by the
@@ -135,10 +158,11 @@ read it whole, so they cover routes added after them.
   meaning beyond the explorer's grouping. An order still in fulfilment when the area is
   switched off fails its next call to the order routes like any REST task meeting a 404:
   the job is retried and, its retries spent, becomes an incident, which can be retried
-  once the area is on again. That follows from the REST worker's ordinary failure handling
-  and is not separately tested here. Approval tasks already in an inbox stay there and can
-  be completed; the approval process's call back then fails the same way.
-- **Follow-ups / risks to watch:** the open question above. A server that switched the area
+  once the area is on again. The start says so in one line (above); the failure itself
+  follows from the REST worker's ordinary handling and is not separately tested here.
+  Approval tasks already in an inbox stay there and can be completed; the approval
+  process's call back then fails the same way.
+- **Follow-ups / risks to watch:** a server that switched the area
   off after deploying the shop's system processes keeps those definitions; nothing starts
   them, and removing them is a deliberate act this record does not automate. Static assets
   of the area (`shop.js`, `catalog-admin.js`) are still served: they hold no data and every
