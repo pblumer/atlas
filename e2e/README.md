@@ -344,6 +344,12 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   subscribing sends the catalogues picked and where to start; a subscription is paused,
   rewound to the oldest event held and ended from its row, each one request. The New worker
   form explains the type and links its runbook.
+- **`shop-handbuch.spec.mjs`** ([ADR-0436](../docs/adr/0436-a-catalogue-is-imported-as-one-document.md)):
+  the **shop handbook** and its installer. The page switches language like the handbook;
+  the installer asks for the two audiences and the two approvers the example's catalogue
+  document leaves open, then creates the application, its ten forms and five processes,
+  publishes them and imports the catalogue last, with every placeholder replaced; a refused
+  import lists each problem by its catalogue or product.
 
 Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures live here.
 

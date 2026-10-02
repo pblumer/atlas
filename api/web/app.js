@@ -1037,6 +1037,11 @@ function initShell() {
 // help — the handbook page and the menu wiring are unchanged.
 function handbookHelp(path) {
   const H = (anchor, label) => ({ anchor, label });
+  // The shop has a handbook of its own (shop-handbuch.html): building catalogues,
+  // modelling products and designing their processes. shop() points into it, and the
+  // help-context spec holds its anchors to that page as it holds H()'s to the handbook.
+  const shop = (anchor, label) => ({ anchor, label, page: "shop-handbuch.html" });
+  if (path.startsWith("#/catalog")) return shop("katalog-aufbauen", "Building a catalogue");
   if (/^#\/modeler\/dmn\//.test(path)) return H("dmn", "Learn DMN");
   if (/^#\/modeler\/form\b/.test(path)) return H("formulare", "Forms & workers");
   // An application's detail view is where its artifacts are gathered and published —
@@ -1092,8 +1097,8 @@ function setHelpContext(path) {
   helpRoutePath = path;
   const ctx = document.getElementById("help-ctx");
   if (!ctx) return;
-  const { anchor, label } = handbookHelp(path);
-  ctx.href = `/handbuch.html#${anchor}`;
+  const { anchor, label, page } = handbookHelp(path);
+  ctx.href = `/${page || "handbuch.html"}#${anchor}`;
   ctx.innerHTML = `${esc(label)} <span class="ext" aria-hidden="true">↗</span>`;
 }
 
@@ -1113,7 +1118,11 @@ function initHelpMenu(docsEnabled) {
     ? `<a role="menuitem" href="/api/docs" target="_blank" rel="noopener">API Explorer <span class="ext" aria-hidden="true">↗</span></a>`
     : `<span class="help-note">API Explorer is disabled<br><span class="muted">start the server without <code>--docs=false</code></span></span>`;
   const gallery = `<a role="menuitem" href="/conformance-gallery.html" target="_blank" rel="noopener">Conformance Gallery <span class="ext" aria-hidden="true">↗</span></a>`;
-  const handbook = `<a role="menuitem" href="/handbuch.html" target="_blank" rel="noopener">Handbook <span class="ext" aria-hidden="true">↗</span></a>`;
+  // The shop handbook is the catalogue's, so it leaves the menu with the rest of the
+  // area when the server switched that off (ADR-0434).
+  const shopHandbook = `<a role="menuitem" href="/shop-handbuch.html" target="_blank" rel="noopener">Shop handbook <span class="ext" aria-hidden="true">↗</span></a>`;
+  const handbook = `<a role="menuitem" href="/handbuch.html" target="_blank" rel="noopener">Handbook <span class="ext" aria-hidden="true">↗</span></a>` +
+    (FEATURES.catalogue ? shopHandbook : "");
   // Not a link like its neighbours: it opens the overview dialog over the current view
   // rather than leaving it, so it carries no "opens elsewhere" mark.
   const overview = `<button type="button" role="menuitem" data-system-overview>System Overview</button>`;

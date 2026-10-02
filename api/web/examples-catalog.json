@@ -3233,6 +3233,586 @@
     {
       "id": "ad-objektmodell",
       "path": "ad-objektmodell"
+    },
+    {
+      "id": "verwaltung-dienstleistungen",
+      "path": "verwaltung-dienstleistungen",
+      "processes": [
+        {
+          "processId": "proc_vd_zutrittsbadge",
+          "name": "Zutrittsbadge: Lebenszyklus",
+          "file": "verwaltung-dienstleistungen/zutrittsbadge-lebenszyklus.bpmn",
+          "xml": "\u003c?xml version=\"1.0\" encoding=\"UTF-8\"?\u003e\n\u003cdefinitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n             xmlns:zeebe=\"http://camunda.org/schema/zeebe/1.0\"\n             xmlns:atlas=\"http://atlas/schema/1.0\"\n             xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\"\n             xmlns:omgdc=\"http://www.omg.org/spec/DD/20100524/DC\"\n             xmlns:omgdi=\"http://www.omg.org/spec/DD/20100524/DI\"\n             id=\"defs_vd_zutrittsbadge\" targetNamespace=\"http://atlas/beispiel/verwaltung-dienstleistungen\"\u003e\n  \u003cmessage id=\"m_ausgeben\" name=\"vd.badge.ausgeben\"/\u003e\n  \u003cmessage id=\"m_sperren\" name=\"vd.badge.sperren\"/\u003e\n  \u003cmessage id=\"m_ersatz\" name=\"vd.badge.ersatz\"/\u003e\n  \u003cmessage id=\"m_einziehen\" name=\"vd.badge.einziehen\"/\u003e\n  \u003cprocess id=\"proc_vd_zutrittsbadge\" name=\"Zutrittsbadge: Lebenszyklus\" isExecutable=\"true\"\u003e\n    \u003cdocumentation\u003eEin Prozess für den ganzen Lebenszyklus des Zutrittsbadges (ADR-0425/0429), Form pro Operation: jede Aktion des Produkts startet eine eigene Instanz über ihren Nachrichtenstart.\nAusgeben und Einziehen melden die Position über ihre eigene Route (done / returned), weil sie das Recht ändern. Sperren und Ersatz sind Änderung und Service: Sie melden ihr Ergebnis mit einer Shop-Aufgabe, die der Katalog beim Veröffentlichen verlangt.\nDie Bearbeitung liegt beim Empfang (Facility Desk): Wer die Aufgaben sieht, regelt die Installation.\u003c/documentation\u003e\n    \u003cstartEvent id=\"start_ausgeben\" name=\"Badge bestellt\"\u003e\u003coutgoing\u003ea1\u003c/outgoing\u003e\u003cmessageEventDefinition messageRef=\"m_ausgeben\"/\u003e\u003c/startEvent\u003e\n    \u003cuserTask id=\"ut_ausgeben\" name=\"Badge ausgeben\"\u003e\u003cextensionElements\u003e\u003czeebe:formDefinition formId=\"vd-badge-ausgabe\"/\u003e\u003c/extensionElements\u003e\u003cincoming\u003ea1\u003c/incoming\u003e\u003coutgoing\u003ea2\u003c/outgoing\u003e\u003c/userTask\u003e\n    \u003cserviceTask id=\"st_ausgabe_melden\" name=\"Position als ausgegeben melden\"\u003e\u003cdocumentation\u003eMeldet die Position als erledigt (status \"done\") über POST /api/v1/orders/{orderId}/lines/{positionId}: Erst damit erhält die Person das Recht im Bestand. Eine Serviceaufgabe und keine Shop-Aufgabe, weil Ausgabe und Rückgabe das Recht ändern und deshalb über die Positionsroute laufen. Braucht das Secret \"atlas\" mit einem API-Token.\u003c/documentation\u003e\u003cextensionElements\u003e\u003catlas:restConnector method=\"POST\" url=\"=(if atlasApiBase = null then \u0026#34;http://127.0.0.1:8080\u0026#34; else atlasApiBase) + \u0026#34;/api/v1/orders/\u0026#34; + orderId + \u0026#34;/lines/\u0026#34; + (if positionId = null then itemId else positionId)\" authType=\"bearer\" authSecret=\"atlas\"/\u003e\u003czeebe:ioMapping\u003e\u003czeebe:input source=\"=\u0026#34;done\u0026#34;\" target=\"status\"/\u003e\u003c/zeebe:ioMapping\u003e\u003c/extensionElements\u003e\u003cincoming\u003ea2\u003c/incoming\u003e\u003coutgoing\u003ea3\u003c/outgoing\u003e\u003c/serviceTask\u003e\n    \u003cendEvent id=\"end_ausgegeben\" name=\"Badge ausgegeben\"\u003e\u003cincoming\u003ea3\u003c/incoming\u003e\u003c/endEvent\u003e\n    \u003csequenceFlow id=\"a1\" sourceRef=\"start_ausgeben\" targetRef=\"ut_ausgeben\"/\u003e\n    \u003csequenceFlow id=\"a2\" sourceRef=\"ut_ausgeben\" targetRef=\"st_ausgabe_melden\"/\u003e\n    \u003csequenceFlow id=\"a3\" sourceRef=\"st_ausgabe_melden\" targetRef=\"end_ausgegeben\"/\u003e\n\n    \u003cstartEvent id=\"start_sperren\" name=\"Sperrung angefordert\"\u003e\u003coutgoing\u003es1\u003c/outgoing\u003e\u003cmessageEventDefinition messageRef=\"m_sperren\"/\u003e\u003c/startEvent\u003e\n    \u003cuserTask id=\"ut_sperren\" name=\"Badge sperren\"\u003e\u003cextensionElements\u003e\u003czeebe:formDefinition formId=\"vd-badge-sperren\"/\u003e\u003c/extensionElements\u003e\u003cincoming\u003es1\u003c/incoming\u003e\u003coutgoing\u003es2\u003c/outgoing\u003e\u003c/userTask\u003e\n    \u003csendTask id=\"send_sperren\" name=\"Sperrung als erledigt melden\"\u003e\u003cdocumentation\u003eEine Shop-Aufgabe (Modus outcome) meldet, dass die Aktion \"sperren\" erledigt ist. Sperren ist eine Änderung (effect change): Das Recht bleibt bestehen, der Befehl aus dem Shop wird damit abgeschlossen. Der Katalog verlangt beim Veröffentlichen, dass jede Änderung und jeder Service so beantwortet wird.\u003c/documentation\u003e\u003cextensionElements\u003e\u003catlas:shopTask mode=\"outcome\" action=\"sperren\" outcome=\"completed\"/\u003e\u003c/extensionElements\u003e\u003cincoming\u003es2\u003c/incoming\u003e\u003coutgoing\u003es3\u003c/outgoing\u003e\u003c/sendTask\u003e\n    \u003cendEvent id=\"end_gesperrt\" name=\"Badge gesperrt\"\u003e\u003cincoming\u003es3\u003c/incoming\u003e\u003c/endEvent\u003e\n    \u003csequenceFlow id=\"s1\" sourceRef=\"start_sperren\" targetRef=\"ut_sperren\"/\u003e\n    \u003csequenceFlow id=\"s2\" sourceRef=\"ut_sperren\" targetRef=\"send_sperren\"/\u003e\n    \u003csequenceFlow id=\"s3\" sourceRef=\"send_sperren\" targetRef=\"end_gesperrt\"/\u003e\n\n    \u003cstartEvent id=\"start_ersatz\" name=\"Ersatz angefordert\"\u003e\u003coutgoing\u003ee1\u003c/outgoing\u003e\u003cmessageEventDefinition messageRef=\"m_ersatz\"/\u003e\u003c/startEvent\u003e\n    \u003cuserTask id=\"ut_ersatz\" name=\"Ersatzbadge ausgeben\"\u003e\u003cextensionElements\u003e\u003czeebe:formDefinition formId=\"vd-badge-ersatz\"/\u003e\u003c/extensionElements\u003e\u003cincoming\u003ee1\u003c/incoming\u003e\u003coutgoing\u003ee2\u003c/outgoing\u003e\u003c/userTask\u003e\n    \u003csendTask id=\"send_ersatz\" name=\"Ersatz als erledigt melden\"\u003e\u003cdocumentation\u003eEine Shop-Aufgabe meldet den Service \"ersatz\" als erledigt. Ein Ersatzbadge ändert das Recht nicht, er ist eine Dienstleistung an einer gehaltenen Position.\u003c/documentation\u003e\u003cextensionElements\u003e\u003catlas:shopTask mode=\"outcome\" action=\"ersatz\" outcome=\"completed\"/\u003e\u003c/extensionElements\u003e\u003cincoming\u003ee2\u003c/incoming\u003e\u003coutgoing\u003ee3\u003c/outgoing\u003e\u003c/sendTask\u003e\n    \u003cendEvent id=\"end_ersatz\" name=\"Ersatzbadge ausgegeben\"\u003e\u003cincoming\u003ee3\u003c/incoming\u003e\u003c/endEvent\u003e\n    \u003csequenceFlow id=\"e1\" sourceRef=\"start_ersatz\" targetRef=\"ut_ersatz\"/\u003e\n    \u003csequenceFlow id=\"e2\" sourceRef=\"ut_ersatz\" targetRef=\"send_ersatz\"/\u003e\n    \u003csequenceFlow id=\"e3\" sourceRef=\"send_ersatz\" targetRef=\"end_ersatz\"/\u003e\n\n    \u003cstartEvent id=\"start_einziehen\" name=\"Rückgabe angefordert\"\u003e\u003coutgoing\u003er1\u003c/outgoing\u003e\u003cmessageEventDefinition messageRef=\"m_einziehen\"/\u003e\u003c/startEvent\u003e\n    \u003cuserTask id=\"ut_einziehen\" name=\"Badge einziehen\"\u003e\u003cextensionElements\u003e\u003czeebe:formDefinition formId=\"vd-badge-einzug\"/\u003e\u003c/extensionElements\u003e\u003cincoming\u003er1\u003c/incoming\u003e\u003coutgoing\u003er2\u003c/outgoing\u003e\u003c/userTask\u003e\n    \u003cserviceTask id=\"st_einzug_melden\" name=\"Rückgabe als erfolgt melden\"\u003e\u003cdocumentation\u003eMeldet die Rückgabe (status \"returned\") über die Positionsroute; damit endet das Recht im Bestand.\u003c/documentation\u003e\u003cextensionElements\u003e\u003catlas:restConnector method=\"POST\" url=\"=(if atlasApiBase = null then \u0026#34;http://127.0.0.1:8080\u0026#34; else atlasApiBase) + \u0026#34;/api/v1/orders/\u0026#34; + orderId + \u0026#34;/lines/\u0026#34; + (if positionId = null then itemId else positionId)\" authType=\"bearer\" authSecret=\"atlas\"/\u003e\u003czeebe:ioMapping\u003e\u003czeebe:input source=\"=\u0026#34;returned\u0026#34;\" target=\"status\"/\u003e\u003c/zeebe:ioMapping\u003e\u003c/extensionElements\u003e\u003cincoming\u003er2\u003c/incoming\u003e\u003coutgoing\u003er3\u003c/outgoing\u003e\u003c/serviceTask\u003e\n    \u003cendEvent id=\"end_eingezogen\" name=\"Badge eingezogen\"\u003e\u003cincoming\u003er3\u003c/incoming\u003e\u003c/endEvent\u003e\n    \u003csequenceFlow id=\"r1\" sourceRef=\"start_einziehen\" targetRef=\"ut_einziehen\"/\u003e\n    \u003csequenceFlow id=\"r2\" sourceRef=\"ut_einziehen\" targetRef=\"st_einzug_melden\"/\u003e\n    \u003csequenceFlow id=\"r3\" sourceRef=\"st_einzug_melden\" targetRef=\"end_eingezogen\"/\u003e\n  \u003c/process\u003e\n  \u003cbpmndi:BPMNDiagram id=\"proc_vd_zutrittsbadge_diagram\"\u003e\n    \u003cbpmndi:BPMNPlane id=\"proc_vd_zutrittsbadge_plane\" bpmnElement=\"proc_vd_zutrittsbadge\"\u003e\n      \u003cbpmndi:BPMNShape id=\"start_ausgeben_di\" bpmnElement=\"start_ausgeben\"\u003e\u003comgdc:Bounds x=\"132\" y=\"82\" width=\"36\" height=\"36\"/\u003e\u003cbpmndi:BPMNLabel\u003e\u003comgdc:Bounds x=\"100\" y=\"124\" width=\"100\" height=\"27\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"ut_ausgeben_di\" bpmnElement=\"ut_ausgeben\"\u003e\u003comgdc:Bounds x=\"230\" y=\"60\" width=\"100\" height=\"80\"/\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"st_ausgabe_melden_di\" bpmnElement=\"st_ausgabe_melden\"\u003e\u003comgdc:Bounds x=\"380\" y=\"60\" width=\"100\" height=\"80\"/\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"end_ausgegeben_di\" bpmnElement=\"end_ausgegeben\"\u003e\u003comgdc:Bounds x=\"562\" y=\"82\" width=\"36\" height=\"36\"/\u003e\u003cbpmndi:BPMNLabel\u003e\u003comgdc:Bounds x=\"530\" y=\"124\" width=\"100\" height=\"27\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"start_sperren_di\" bpmnElement=\"start_sperren\"\u003e\u003comgdc:Bounds x=\"132\" y=\"232\" width=\"36\" height=\"36\"/\u003e\u003cbpmndi:BPMNLabel\u003e\u003comgdc:Bounds x=\"100\" y=\"274\" width=\"100\" height=\"27\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"ut_sperren_di\" bpmnElement=\"ut_sperren\"\u003e\u003comgdc:Bounds x=\"230\" y=\"210\" width=\"100\" height=\"80\"/\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"send_sperren_di\" bpmnElement=\"send_sperren\"\u003e\u003comgdc:Bounds x=\"380\" y=\"210\" width=\"100\" height=\"80\"/\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"end_gesperrt_di\" bpmnElement=\"end_gesperrt\"\u003e\u003comgdc:Bounds x=\"562\" y=\"232\" width=\"36\" height=\"36\"/\u003e\u003cbpmndi:BPMNLabel\u003e\u003comgdc:Bounds x=\"530\" y=\"274\" width=\"100\" height=\"27\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"start_ersatz_di\" bpmnElement=\"start_ersatz\"\u003e\u003comgdc:Bounds x=\"132\" y=\"382\" width=\"36\" height=\"36\"/\u003e\u003cbpmndi:BPMNLabel\u003e\u003comgdc:Bounds x=\"100\" y=\"424\" width=\"100\" height=\"27\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"ut_ersatz_di\" bpmnElement=\"ut_ersatz\"\u003e\u003comgdc:Bounds x=\"230\" y=\"360\" width=\"100\" height=\"80\"/\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"send_ersatz_di\" bpmnElement=\"send_ersatz\"\u003e\u003comgdc:Bounds x=\"380\" y=\"360\" width=\"100\" height=\"80\"/\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"end_ersatz_di\" bpmnElement=\"end_ersatz\"\u003e\u003comgdc:Bounds x=\"562\" y=\"382\" width=\"36\" height=\"36\"/\u003e\u003cbpmndi:BPMNLabel\u003e\u003comgdc:Bounds x=\"530\" y=\"424\" width=\"100\" height=\"27\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"start_einziehen_di\" bpmnElement=\"start_einziehen\"\u003e\u003comgdc:Bounds x=\"132\" y=\"532\" width=\"36\" height=\"36\"/\u003e\u003cbpmndi:BPMNLabel\u003e\u003comgdc:Bounds x=\"100\" y=\"574\" width=\"100\" height=\"27\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"ut_einziehen_di\" bpmnElement=\"ut_einziehen\"\u003e\u003comgdc:Bounds x=\"230\" y=\"510\" width=\"100\" height=\"80\"/\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"st_einzug_melden_di\" bpmnElement=\"st_einzug_melden\"\u003e\u003comgdc:Bounds x=\"380\" y=\"510\" width=\"100\" height=\"80\"/\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"end_eingezogen_di\" bpmnElement=\"end_eingezogen\"\u003e\u003comgdc:Bounds x=\"562\" y=\"532\" width=\"36\" height=\"36\"/\u003e\u003cbpmndi:BPMNLabel\u003e\u003comgdc:Bounds x=\"530\" y=\"574\" width=\"100\" height=\"27\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNEdge id=\"a1_di\" bpmnElement=\"a1\"\u003e\u003comgdi:waypoint x=\"168\" y=\"100\"/\u003e\u003comgdi:waypoint x=\"230\" y=\"100\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"a2_di\" bpmnElement=\"a2\"\u003e\u003comgdi:waypoint x=\"330\" y=\"100\"/\u003e\u003comgdi:waypoint x=\"380\" y=\"100\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"a3_di\" bpmnElement=\"a3\"\u003e\u003comgdi:waypoint x=\"480\" y=\"100\"/\u003e\u003comgdi:waypoint x=\"562\" y=\"100\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"s1_di\" bpmnElement=\"s1\"\u003e\u003comgdi:waypoint x=\"168\" y=\"250\"/\u003e\u003comgdi:waypoint x=\"230\" y=\"250\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"s2_di\" bpmnElement=\"s2\"\u003e\u003comgdi:waypoint x=\"330\" y=\"250\"/\u003e\u003comgdi:waypoint x=\"380\" y=\"250\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"s3_di\" bpmnElement=\"s3\"\u003e\u003comgdi:waypoint x=\"480\" y=\"250\"/\u003e\u003comgdi:waypoint x=\"562\" y=\"250\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"e1_di\" bpmnElement=\"e1\"\u003e\u003comgdi:waypoint x=\"168\" y=\"400\"/\u003e\u003comgdi:waypoint x=\"230\" y=\"400\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"e2_di\" bpmnElement=\"e2\"\u003e\u003comgdi:waypoint x=\"330\" y=\"400\"/\u003e\u003comgdi:waypoint x=\"380\" y=\"400\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"e3_di\" bpmnElement=\"e3\"\u003e\u003comgdi:waypoint x=\"480\" y=\"400\"/\u003e\u003comgdi:waypoint x=\"562\" y=\"400\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"r1_di\" bpmnElement=\"r1\"\u003e\u003comgdi:waypoint x=\"168\" y=\"550\"/\u003e\u003comgdi:waypoint x=\"230\" y=\"550\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"r2_di\" bpmnElement=\"r2\"\u003e\u003comgdi:waypoint x=\"330\" y=\"550\"/\u003e\u003comgdi:waypoint x=\"380\" y=\"550\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"r3_di\" bpmnElement=\"r3\"\u003e\u003comgdi:waypoint x=\"480\" y=\"550\"/\u003e\u003comgdi:waypoint x=\"562\" y=\"550\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n    \u003c/bpmndi:BPMNPlane\u003e\n  \u003c/bpmndi:BPMNDiagram\u003e\n\u003c/definitions\u003e"
+        },
+        {
+          "processId": "proc_vd_geoportal_einrichten",
+          "name": "Geoportal: Zugang einrichten",
+          "file": "verwaltung-dienstleistungen/geoportal-einrichten.bpmn",
+          "xml": "\u003c?xml version=\"1.0\" encoding=\"UTF-8\"?\u003e\n\u003cdefinitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n             xmlns:zeebe=\"http://camunda.org/schema/zeebe/1.0\"\n             xmlns:atlas=\"http://atlas/schema/1.0\"\n             xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\"\n             xmlns:omgdc=\"http://www.omg.org/spec/DD/20100524/DC\"\n             xmlns:omgdi=\"http://www.omg.org/spec/DD/20100524/DI\"\n             id=\"defs_proc_vd_geoportal_einrichten\" targetNamespace=\"http://atlas/beispiel/verwaltung-dienstleistungen\"\u003e\n  \u003cprocess id=\"proc_vd_geoportal_einrichten\" name=\"Geoportal: Zugang einrichten\" isExecutable=\"true\"\u003e\n    \u003cdocumentation\u003eProvisionierung des Geoportal-Zugangs, nachdem die Geoportal-Verantwortlichen genehmigt haben.\u003c/documentation\u003e\n    \u003cstartEvent id=\"start\" name=\"Position gestartet\"\u003e\u003coutgoing\u003ef1\u003c/outgoing\u003e\u003c/startEvent\u003e\n    \u003cuserTask id=\"ut_einrichten\" name=\"Zugang im Geoportal einrichten\"\u003e\u003cextensionElements\u003e\u003czeebe:formDefinition formId=\"vd-geoportal-einrichtung\"/\u003e\u003c/extensionElements\u003e\u003cincoming\u003ef1\u003c/incoming\u003e\u003coutgoing\u003ef2\u003c/outgoing\u003e\u003c/userTask\u003e\n    \u003cserviceTask id=\"st_melden\" name=\"Position als erledigt melden\"\u003e\u003cdocumentation\u003eMeldet die Position über POST /api/v1/orders/{orderId}/lines/{positionId}: \"done\" nach der Provisionierung, \"returned\" nach der Deprovisionierung. Braucht das Secret \"atlas\" mit einem API-Token.\u003c/documentation\u003e\u003cextensionElements\u003e\u003catlas:restConnector method=\"POST\" url=\"=(if atlasApiBase = null then \u0026#34;http://127.0.0.1:8080\u0026#34; else atlasApiBase) + \u0026#34;/api/v1/orders/\u0026#34; + orderId + \u0026#34;/lines/\u0026#34; + (if positionId = null then itemId else positionId)\" authType=\"bearer\" authSecret=\"atlas\"/\u003e\u003czeebe:ioMapping\u003e\u003czeebe:input source=\"=\u0026#34;done\u0026#34;\" target=\"status\"/\u003e\u003c/zeebe:ioMapping\u003e\u003c/extensionElements\u003e\u003cincoming\u003ef2\u003c/incoming\u003e\u003coutgoing\u003ef3\u003c/outgoing\u003e\u003c/serviceTask\u003e\n    \u003cendEvent id=\"end\" name=\"Zugang eingerichtet\"\u003e\u003cincoming\u003ef3\u003c/incoming\u003e\u003c/endEvent\u003e\n    \u003csequenceFlow id=\"f1\" sourceRef=\"start\" targetRef=\"ut_einrichten\"/\u003e\n    \u003csequenceFlow id=\"f2\" sourceRef=\"ut_einrichten\" targetRef=\"st_melden\"/\u003e\n    \u003csequenceFlow id=\"f3\" sourceRef=\"st_melden\" targetRef=\"end\"/\u003e\n  \u003c/process\u003e\n  \u003cbpmndi:BPMNDiagram id=\"proc_vd_geoportal_einrichten_diagram\"\u003e\n    \u003cbpmndi:BPMNPlane id=\"proc_vd_geoportal_einrichten_plane\" bpmnElement=\"proc_vd_geoportal_einrichten\"\u003e\n      \u003cbpmndi:BPMNShape id=\"start_di\" bpmnElement=\"start\"\u003e\u003comgdc:Bounds x=\"132\" y=\"82\" width=\"36\" height=\"36\"/\u003e\u003cbpmndi:BPMNLabel\u003e\u003comgdc:Bounds x=\"100\" y=\"124\" width=\"100\" height=\"27\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"ut_einrichten_di\" bpmnElement=\"ut_einrichten\"\u003e\u003comgdc:Bounds x=\"230\" y=\"60\" width=\"100\" height=\"80\"/\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"st_melden_di\" bpmnElement=\"st_melden\"\u003e\u003comgdc:Bounds x=\"380\" y=\"60\" width=\"100\" height=\"80\"/\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"end_di\" bpmnElement=\"end\"\u003e\u003comgdc:Bounds x=\"562\" y=\"82\" width=\"36\" height=\"36\"/\u003e\u003cbpmndi:BPMNLabel\u003e\u003comgdc:Bounds x=\"530\" y=\"124\" width=\"100\" height=\"27\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNEdge id=\"f1_di\" bpmnElement=\"f1\"\u003e\u003comgdi:waypoint x=\"168\" y=\"100\"/\u003e\u003comgdi:waypoint x=\"230\" y=\"100\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f2_di\" bpmnElement=\"f2\"\u003e\u003comgdi:waypoint x=\"330\" y=\"100\"/\u003e\u003comgdi:waypoint x=\"380\" y=\"100\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f3_di\" bpmnElement=\"f3\"\u003e\u003comgdi:waypoint x=\"480\" y=\"100\"/\u003e\u003comgdi:waypoint x=\"562\" y=\"100\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n    \u003c/bpmndi:BPMNPlane\u003e\n  \u003c/bpmndi:BPMNDiagram\u003e\n\u003c/definitions\u003e"
+        },
+        {
+          "processId": "proc_vd_geoportal_entfernen",
+          "name": "Geoportal: Zugang entfernen",
+          "file": "verwaltung-dienstleistungen/geoportal-entfernen.bpmn",
+          "xml": "\u003c?xml version=\"1.0\" encoding=\"UTF-8\"?\u003e\n\u003cdefinitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n             xmlns:zeebe=\"http://camunda.org/schema/zeebe/1.0\"\n             xmlns:atlas=\"http://atlas/schema/1.0\"\n             xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\"\n             xmlns:omgdc=\"http://www.omg.org/spec/DD/20100524/DC\"\n             xmlns:omgdi=\"http://www.omg.org/spec/DD/20100524/DI\"\n             id=\"defs_proc_vd_geoportal_entfernen\" targetNamespace=\"http://atlas/beispiel/verwaltung-dienstleistungen\"\u003e\n  \u003cprocess id=\"proc_vd_geoportal_entfernen\" name=\"Geoportal: Zugang entfernen\" isExecutable=\"true\"\u003e\n    \u003cdocumentation\u003eDeprovisionierung des Geoportal-Zugangs: bei Rückgabe oder nach Ablauf der 180 Tage.\u003c/documentation\u003e\n    \u003cstartEvent id=\"start\" name=\"Position gestartet\"\u003e\u003coutgoing\u003ef1\u003c/outgoing\u003e\u003c/startEvent\u003e\n    \u003cuserTask id=\"ut_entfernen\" name=\"Zugang im Geoportal entfernen\"\u003e\u003cextensionElements\u003e\u003czeebe:formDefinition formId=\"vd-geoportal-entfernung\"/\u003e\u003c/extensionElements\u003e\u003cincoming\u003ef1\u003c/incoming\u003e\u003coutgoing\u003ef2\u003c/outgoing\u003e\u003c/userTask\u003e\n    \u003cserviceTask id=\"st_melden\" name=\"Rückgabe als erfolgt melden\"\u003e\u003cdocumentation\u003eMeldet die Position über POST /api/v1/orders/{orderId}/lines/{positionId}: \"done\" nach der Provisionierung, \"returned\" nach der Deprovisionierung. Braucht das Secret \"atlas\" mit einem API-Token.\u003c/documentation\u003e\u003cextensionElements\u003e\u003catlas:restConnector method=\"POST\" url=\"=(if atlasApiBase = null then \u0026#34;http://127.0.0.1:8080\u0026#34; else atlasApiBase) + \u0026#34;/api/v1/orders/\u0026#34; + orderId + \u0026#34;/lines/\u0026#34; + (if positionId = null then itemId else positionId)\" authType=\"bearer\" authSecret=\"atlas\"/\u003e\u003czeebe:ioMapping\u003e\u003czeebe:input source=\"=\u0026#34;returned\u0026#34;\" target=\"status\"/\u003e\u003c/zeebe:ioMapping\u003e\u003c/extensionElements\u003e\u003cincoming\u003ef2\u003c/incoming\u003e\u003coutgoing\u003ef3\u003c/outgoing\u003e\u003c/serviceTask\u003e\n    \u003cendEvent id=\"end\" name=\"Zugang entfernt\"\u003e\u003cincoming\u003ef3\u003c/incoming\u003e\u003c/endEvent\u003e\n    \u003csequenceFlow id=\"f1\" sourceRef=\"start\" targetRef=\"ut_entfernen\"/\u003e\n    \u003csequenceFlow id=\"f2\" sourceRef=\"ut_entfernen\" targetRef=\"st_melden\"/\u003e\n    \u003csequenceFlow id=\"f3\" sourceRef=\"st_melden\" targetRef=\"end\"/\u003e\n  \u003c/process\u003e\n  \u003cbpmndi:BPMNDiagram id=\"proc_vd_geoportal_entfernen_diagram\"\u003e\n    \u003cbpmndi:BPMNPlane id=\"proc_vd_geoportal_entfernen_plane\" bpmnElement=\"proc_vd_geoportal_entfernen\"\u003e\n      \u003cbpmndi:BPMNShape id=\"start_di\" bpmnElement=\"start\"\u003e\u003comgdc:Bounds x=\"132\" y=\"82\" width=\"36\" height=\"36\"/\u003e\u003cbpmndi:BPMNLabel\u003e\u003comgdc:Bounds x=\"100\" y=\"124\" width=\"100\" height=\"27\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"ut_entfernen_di\" bpmnElement=\"ut_entfernen\"\u003e\u003comgdc:Bounds x=\"230\" y=\"60\" width=\"100\" height=\"80\"/\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"st_melden_di\" bpmnElement=\"st_melden\"\u003e\u003comgdc:Bounds x=\"380\" y=\"60\" width=\"100\" height=\"80\"/\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"end_di\" bpmnElement=\"end\"\u003e\u003comgdc:Bounds x=\"562\" y=\"82\" width=\"36\" height=\"36\"/\u003e\u003cbpmndi:BPMNLabel\u003e\u003comgdc:Bounds x=\"530\" y=\"124\" width=\"100\" height=\"27\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNEdge id=\"f1_di\" bpmnElement=\"f1\"\u003e\u003comgdi:waypoint x=\"168\" y=\"100\"/\u003e\u003comgdi:waypoint x=\"230\" y=\"100\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f2_di\" bpmnElement=\"f2\"\u003e\u003comgdi:waypoint x=\"330\" y=\"100\"/\u003e\u003comgdi:waypoint x=\"380\" y=\"100\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f3_di\" bpmnElement=\"f3\"\u003e\u003comgdi:waypoint x=\"480\" y=\"100\"/\u003e\u003comgdi:waypoint x=\"562\" y=\"100\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n    \u003c/bpmndi:BPMNPlane\u003e\n  \u003c/bpmndi:BPMNDiagram\u003e\n\u003c/definitions\u003e"
+        },
+        {
+          "processId": "proc_vd_parkplatz_freigeben",
+          "name": "Parkplatz: freigeben",
+          "file": "verwaltung-dienstleistungen/parkplatz-freigeben.bpmn",
+          "xml": "\u003c?xml version=\"1.0\" encoding=\"UTF-8\"?\u003e\n\u003cdefinitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n             xmlns:zeebe=\"http://camunda.org/schema/zeebe/1.0\"\n             xmlns:atlas=\"http://atlas/schema/1.0\"\n             xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\"\n             xmlns:omgdc=\"http://www.omg.org/spec/DD/20100524/DC\"\n             xmlns:omgdi=\"http://www.omg.org/spec/DD/20100524/DI\"\n             id=\"defs_proc_vd_parkplatz_freigeben\" targetNamespace=\"http://atlas/beispiel/verwaltung-dienstleistungen\"\u003e\n  \u003cprocess id=\"proc_vd_parkplatz_freigeben\" name=\"Parkplatz: freigeben\" isExecutable=\"true\"\u003e\n    \u003cdocumentation\u003eDeprovisionierung des Parkplatzes: bei Rückgabe oder nach Ablauf der 365 Tage. Der Platz wird freigegeben und die Rückgabe gemeldet.\u003c/documentation\u003e\n    \u003cstartEvent id=\"start\" name=\"Position gestartet\"\u003e\u003coutgoing\u003ef1\u003c/outgoing\u003e\u003c/startEvent\u003e\n    \u003cuserTask id=\"ut_freigeben\" name=\"Parkplatz freigeben\"\u003e\u003cextensionElements\u003e\u003czeebe:formDefinition formId=\"vd-parkplatz-freigabe\"/\u003e\u003c/extensionElements\u003e\u003cincoming\u003ef1\u003c/incoming\u003e\u003coutgoing\u003ef2\u003c/outgoing\u003e\u003c/userTask\u003e\n    \u003cserviceTask id=\"st_melden\" name=\"Rückgabe als erfolgt melden\"\u003e\u003cdocumentation\u003eMeldet die Position über POST /api/v1/orders/{orderId}/lines/{positionId}: \"done\" nach der Provisionierung, \"returned\" nach der Deprovisionierung. Braucht das Secret \"atlas\" mit einem API-Token.\u003c/documentation\u003e\u003cextensionElements\u003e\u003catlas:restConnector method=\"POST\" url=\"=(if atlasApiBase = null then \u0026#34;http://127.0.0.1:8080\u0026#34; else atlasApiBase) + \u0026#34;/api/v1/orders/\u0026#34; + orderId + \u0026#34;/lines/\u0026#34; + (if positionId = null then itemId else positionId)\" authType=\"bearer\" authSecret=\"atlas\"/\u003e\u003czeebe:ioMapping\u003e\u003czeebe:input source=\"=\u0026#34;returned\u0026#34;\" target=\"status\"/\u003e\u003c/zeebe:ioMapping\u003e\u003c/extensionElements\u003e\u003cincoming\u003ef2\u003c/incoming\u003e\u003coutgoing\u003ef3\u003c/outgoing\u003e\u003c/serviceTask\u003e\n    \u003cendEvent id=\"end\" name=\"Parkplatz freigegeben\"\u003e\u003cincoming\u003ef3\u003c/incoming\u003e\u003c/endEvent\u003e\n    \u003csequenceFlow id=\"f1\" sourceRef=\"start\" targetRef=\"ut_freigeben\"/\u003e\n    \u003csequenceFlow id=\"f2\" sourceRef=\"ut_freigeben\" targetRef=\"st_melden\"/\u003e\n    \u003csequenceFlow id=\"f3\" sourceRef=\"st_melden\" targetRef=\"end\"/\u003e\n  \u003c/process\u003e\n  \u003cbpmndi:BPMNDiagram id=\"proc_vd_parkplatz_freigeben_diagram\"\u003e\n    \u003cbpmndi:BPMNPlane id=\"proc_vd_parkplatz_freigeben_plane\" bpmnElement=\"proc_vd_parkplatz_freigeben\"\u003e\n      \u003cbpmndi:BPMNShape id=\"start_di\" bpmnElement=\"start\"\u003e\u003comgdc:Bounds x=\"132\" y=\"82\" width=\"36\" height=\"36\"/\u003e\u003cbpmndi:BPMNLabel\u003e\u003comgdc:Bounds x=\"100\" y=\"124\" width=\"100\" height=\"27\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"ut_freigeben_di\" bpmnElement=\"ut_freigeben\"\u003e\u003comgdc:Bounds x=\"230\" y=\"60\" width=\"100\" height=\"80\"/\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"st_melden_di\" bpmnElement=\"st_melden\"\u003e\u003comgdc:Bounds x=\"380\" y=\"60\" width=\"100\" height=\"80\"/\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"end_di\" bpmnElement=\"end\"\u003e\u003comgdc:Bounds x=\"562\" y=\"82\" width=\"36\" height=\"36\"/\u003e\u003cbpmndi:BPMNLabel\u003e\u003comgdc:Bounds x=\"530\" y=\"124\" width=\"100\" height=\"27\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNEdge id=\"f1_di\" bpmnElement=\"f1\"\u003e\u003comgdi:waypoint x=\"168\" y=\"100\"/\u003e\u003comgdi:waypoint x=\"230\" y=\"100\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f2_di\" bpmnElement=\"f2\"\u003e\u003comgdi:waypoint x=\"330\" y=\"100\"/\u003e\u003comgdi:waypoint x=\"380\" y=\"100\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f3_di\" bpmnElement=\"f3\"\u003e\u003comgdi:waypoint x=\"480\" y=\"100\"/\u003e\u003comgdi:waypoint x=\"562\" y=\"100\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n    \u003c/bpmndi:BPMNPlane\u003e\n  \u003c/bpmndi:BPMNDiagram\u003e\n\u003c/definitions\u003e"
+        },
+        {
+          "processId": "proc_vd_parkplatz_zuteilen",
+          "name": "Parkplatz: zuteilen",
+          "file": "verwaltung-dienstleistungen/parkplatz-zuteilen.bpmn",
+          "xml": "\u003c?xml version=\"1.0\" encoding=\"UTF-8\"?\u003e\n\u003cdefinitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n             xmlns:zeebe=\"http://camunda.org/schema/zeebe/1.0\"\n             xmlns:atlas=\"http://atlas/schema/1.0\"\n             xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\"\n             xmlns:omgdc=\"http://www.omg.org/spec/DD/20100524/DC\"\n             xmlns:omgdi=\"http://www.omg.org/spec/DD/20100524/DI\"\n             id=\"defs_proc_vd_parkplatz_zuteilen\" targetNamespace=\"http://atlas/beispiel/verwaltung-dienstleistungen\"\u003e\n  \u003cprocess id=\"proc_vd_parkplatz_zuteilen\" name=\"Parkplatz: zuteilen\" isExecutable=\"true\"\u003e\n    \u003cdocumentation\u003eProvisionierung des Parkplatzes, als eigener Prozess (die zweite Form neben dem Lebenszyklus-Prozess). Die Bestellung startet ihn pro Position; das Facility Management teilt einen Platz zu und die Position wird als erledigt gemeldet. Das Kennzeichen kommt aus dem Bestellformular.\u003c/documentation\u003e\n    \u003cstartEvent id=\"start\" name=\"Position gestartet\"\u003e\u003coutgoing\u003ef1\u003c/outgoing\u003e\u003c/startEvent\u003e\n    \u003cuserTask id=\"ut_zuteilen\" name=\"Parkplatz zuteilen\"\u003e\u003cextensionElements\u003e\u003czeebe:formDefinition formId=\"vd-parkplatz-zuteilung\"/\u003e\u003c/extensionElements\u003e\u003cincoming\u003ef1\u003c/incoming\u003e\u003coutgoing\u003ef2\u003c/outgoing\u003e\u003c/userTask\u003e\n    \u003cserviceTask id=\"st_melden\" name=\"Position als erledigt melden\"\u003e\u003cdocumentation\u003eMeldet die Position über POST /api/v1/orders/{orderId}/lines/{positionId}: \"done\" nach der Provisionierung, \"returned\" nach der Deprovisionierung. Braucht das Secret \"atlas\" mit einem API-Token.\u003c/documentation\u003e\u003cextensionElements\u003e\u003catlas:restConnector method=\"POST\" url=\"=(if atlasApiBase = null then \u0026#34;http://127.0.0.1:8080\u0026#34; else atlasApiBase) + \u0026#34;/api/v1/orders/\u0026#34; + orderId + \u0026#34;/lines/\u0026#34; + (if positionId = null then itemId else positionId)\" authType=\"bearer\" authSecret=\"atlas\"/\u003e\u003czeebe:ioMapping\u003e\u003czeebe:input source=\"=\u0026#34;done\u0026#34;\" target=\"status\"/\u003e\u003c/zeebe:ioMapping\u003e\u003c/extensionElements\u003e\u003cincoming\u003ef2\u003c/incoming\u003e\u003coutgoing\u003ef3\u003c/outgoing\u003e\u003c/serviceTask\u003e\n    \u003cendEvent id=\"end\" name=\"Parkplatz zugeteilt\"\u003e\u003cincoming\u003ef3\u003c/incoming\u003e\u003c/endEvent\u003e\n    \u003csequenceFlow id=\"f1\" sourceRef=\"start\" targetRef=\"ut_zuteilen\"/\u003e\n    \u003csequenceFlow id=\"f2\" sourceRef=\"ut_zuteilen\" targetRef=\"st_melden\"/\u003e\n    \u003csequenceFlow id=\"f3\" sourceRef=\"st_melden\" targetRef=\"end\"/\u003e\n  \u003c/process\u003e\n  \u003cbpmndi:BPMNDiagram id=\"proc_vd_parkplatz_zuteilen_diagram\"\u003e\n    \u003cbpmndi:BPMNPlane id=\"proc_vd_parkplatz_zuteilen_plane\" bpmnElement=\"proc_vd_parkplatz_zuteilen\"\u003e\n      \u003cbpmndi:BPMNShape id=\"start_di\" bpmnElement=\"start\"\u003e\u003comgdc:Bounds x=\"132\" y=\"82\" width=\"36\" height=\"36\"/\u003e\u003cbpmndi:BPMNLabel\u003e\u003comgdc:Bounds x=\"100\" y=\"124\" width=\"100\" height=\"27\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"ut_zuteilen_di\" bpmnElement=\"ut_zuteilen\"\u003e\u003comgdc:Bounds x=\"230\" y=\"60\" width=\"100\" height=\"80\"/\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"st_melden_di\" bpmnElement=\"st_melden\"\u003e\u003comgdc:Bounds x=\"380\" y=\"60\" width=\"100\" height=\"80\"/\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"end_di\" bpmnElement=\"end\"\u003e\u003comgdc:Bounds x=\"562\" y=\"82\" width=\"36\" height=\"36\"/\u003e\u003cbpmndi:BPMNLabel\u003e\u003comgdc:Bounds x=\"530\" y=\"124\" width=\"100\" height=\"27\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNEdge id=\"f1_di\" bpmnElement=\"f1\"\u003e\u003comgdi:waypoint x=\"168\" y=\"100\"/\u003e\u003comgdi:waypoint x=\"230\" y=\"100\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f2_di\" bpmnElement=\"f2\"\u003e\u003comgdi:waypoint x=\"330\" y=\"100\"/\u003e\u003comgdi:waypoint x=\"380\" y=\"100\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"f3_di\" bpmnElement=\"f3\"\u003e\u003comgdi:waypoint x=\"480\" y=\"100\"/\u003e\u003comgdi:waypoint x=\"562\" y=\"100\"/\u003e\u003c/bpmndi:BPMNEdge\u003e\n    \u003c/bpmndi:BPMNPlane\u003e\n  \u003c/bpmndi:BPMNDiagram\u003e\n\u003c/definitions\u003e"
+        }
+      ],
+      "forms": [
+        {
+          "id": "vd-badge-ausgabe",
+          "name": "vd-badge-ausgabe",
+          "file": "verwaltung-dienstleistungen/vd-badge-ausgabe.form.json",
+          "schema": {
+            "type": "default",
+            "id": "vd-badge-ausgabe",
+            "components": [
+              {
+                "type": "text",
+                "text": "**Badge ausgeben · Issue the badge**\n\nBadge drucken, codieren und der Person übergeben. · Print, encode and hand over the badge."
+              },
+              {
+                "key": "recipient",
+                "type": "textfield",
+                "label": "Empfänger · Recipient",
+                "disabled": true
+              },
+              {
+                "key": "variantId",
+                "type": "textfield",
+                "label": "Variante · Variant",
+                "disabled": true
+              },
+              {
+                "key": "badgenummer",
+                "type": "textfield",
+                "label": "Badgenummer · Badge number",
+                "validate": {
+                  "required": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "vd-badge-einzug",
+          "name": "vd-badge-einzug",
+          "file": "verwaltung-dienstleistungen/vd-badge-einzug.form.json",
+          "schema": {
+            "type": "default",
+            "id": "vd-badge-einzug",
+            "components": [
+              {
+                "type": "text",
+                "text": "**Badge einziehen · Take the badge back**\n\nBadge entgegennehmen und im Zutrittssystem löschen. · Take the badge back and delete it from the access system."
+              },
+              {
+                "key": "recipient",
+                "type": "textfield",
+                "label": "Inhaber · Holder",
+                "disabled": true
+              },
+              {
+                "key": "eingezogen",
+                "type": "checkbox",
+                "label": "Badge zurückerhalten oder gesperrt · Badge returned or blocked",
+                "validate": {
+                  "required": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "vd-badge-ersatz",
+          "name": "vd-badge-ersatz",
+          "file": "verwaltung-dienstleistungen/vd-badge-ersatz.form.json",
+          "schema": {
+            "type": "default",
+            "id": "vd-badge-ersatz",
+            "components": [
+              {
+                "type": "text",
+                "text": "**Ersatzbadge ausgeben · Issue a replacement**\n\nDen alten Badge sperren, falls noch nicht geschehen, und einen neuen ausgeben. · Block the old badge if that has not happened yet, and issue a new one."
+              },
+              {
+                "key": "recipient",
+                "type": "textfield",
+                "label": "Inhaber · Holder",
+                "disabled": true
+              },
+              {
+                "key": "badgenummer",
+                "type": "textfield",
+                "label": "Neue Badgenummer · New badge number",
+                "validate": {
+                  "required": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "vd-badge-sperren",
+          "name": "vd-badge-sperren",
+          "file": "verwaltung-dienstleistungen/vd-badge-sperren.form.json",
+          "schema": {
+            "type": "default",
+            "id": "vd-badge-sperren",
+            "components": [
+              {
+                "type": "text",
+                "text": "**Badge sperren · Block the badge**\n\nBadge im Zutrittssystem sperren. · Block the badge in the access system."
+              },
+              {
+                "key": "recipient",
+                "type": "textfield",
+                "label": "Inhaber · Holder",
+                "disabled": true
+              },
+              {
+                "key": "grund",
+                "type": "textfield",
+                "label": "Grund · Reason",
+                "disabled": true
+              },
+              {
+                "key": "gesperrt",
+                "type": "checkbox",
+                "label": "Im Zutrittssystem gesperrt · Blocked in the access system",
+                "validate": {
+                  "required": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "vd-badge-sperrung",
+          "name": "vd-badge-sperrung",
+          "file": "verwaltung-dienstleistungen/vd-badge-sperrung.form.json",
+          "schema": {
+            "type": "default",
+            "id": "vd-badge-sperrung",
+            "components": [
+              {
+                "type": "text",
+                "text": "**Badge sperren · Block the badge**\n\nDer Badge wird sofort gesperrt; ein Ersatz ist eine eigene Anfrage. · The badge is blocked at once; a replacement is a request of its own."
+              },
+              {
+                "key": "grund",
+                "type": "radio",
+                "label": "Grund · Reason",
+                "values": [
+                  {
+                    "label": "Verloren · Lost",
+                    "value": "verloren"
+                  },
+                  {
+                    "label": "Gestohlen · Stolen",
+                    "value": "gestohlen"
+                  },
+                  {
+                    "label": "Defekt · Broken",
+                    "value": "defekt"
+                  }
+                ],
+                "validate": {
+                  "required": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "vd-geoportal-einrichtung",
+          "name": "vd-geoportal-einrichtung",
+          "file": "verwaltung-dienstleistungen/vd-geoportal-einrichtung.form.json",
+          "schema": {
+            "type": "default",
+            "id": "vd-geoportal-einrichtung",
+            "components": [
+              {
+                "type": "text",
+                "text": "**Zugang im Geoportal einrichten · Set up the geoportal access**\n\nLesenden Zugang auf die Pläne des Fachbereichs einrichten. · Set up read access to the department's plans."
+              },
+              {
+                "key": "recipient",
+                "type": "textfield",
+                "label": "Empfänger · Recipient",
+                "disabled": true
+              },
+              {
+                "key": "benutzerkennung",
+                "type": "textfield",
+                "label": "Benutzerkennung im Geoportal · Geoportal user id",
+                "validate": {
+                  "required": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "vd-geoportal-entfernung",
+          "name": "vd-geoportal-entfernung",
+          "file": "verwaltung-dienstleistungen/vd-geoportal-entfernung.form.json",
+          "schema": {
+            "type": "default",
+            "id": "vd-geoportal-entfernung",
+            "components": [
+              {
+                "type": "text",
+                "text": "**Zugang im Geoportal entfernen · Remove the geoportal access**\n\nDen Zugang im Geoportal löschen. · Delete the access in the geoportal."
+              },
+              {
+                "key": "recipient",
+                "type": "textfield",
+                "label": "Bisher · Previously",
+                "disabled": true
+              },
+              {
+                "key": "entfernt",
+                "type": "checkbox",
+                "label": "Zugang entfernt · Access removed",
+                "validate": {
+                  "required": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "vd-parkplatz-bestellung",
+          "name": "vd-parkplatz-bestellung",
+          "file": "verwaltung-dienstleistungen/vd-parkplatz-bestellung.form.json",
+          "schema": {
+            "type": "default",
+            "id": "vd-parkplatz-bestellung",
+            "components": [
+              {
+                "type": "text",
+                "text": "**Parkplatz · Parking space**\n\nAngaben zum Fahrzeug, für das der Platz bestimmt ist. · Details of the vehicle the space is for."
+              },
+              {
+                "key": "kennzeichen",
+                "type": "textfield",
+                "label": "Kennzeichen · Licence plate",
+                "validate": {
+                  "required": true
+                }
+              },
+              {
+                "key": "fahrzeug",
+                "type": "radio",
+                "label": "Fahrzeug · Vehicle",
+                "values": [
+                  {
+                    "label": "Auto · Car",
+                    "value": "auto"
+                  },
+                  {
+                    "label": "Motorrad · Motorcycle",
+                    "value": "motorrad"
+                  },
+                  {
+                    "label": "Elektroauto mit Ladeplatz · Electric car with charging",
+                    "value": "elektro"
+                  }
+                ],
+                "validate": {
+                  "required": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "vd-parkplatz-freigabe",
+          "name": "vd-parkplatz-freigabe",
+          "file": "verwaltung-dienstleistungen/vd-parkplatz-freigabe.form.json",
+          "schema": {
+            "type": "default",
+            "id": "vd-parkplatz-freigabe",
+            "components": [
+              {
+                "type": "text",
+                "text": "**Parkplatz freigeben · Release the parking space**\n\nDen Platz wieder als frei führen. · Mark the space as free again."
+              },
+              {
+                "key": "recipient",
+                "type": "textfield",
+                "label": "Bisher · Previously",
+                "disabled": true
+              },
+              {
+                "key": "freigegeben",
+                "type": "checkbox",
+                "label": "Platz freigegeben · Space released",
+                "validate": {
+                  "required": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "vd-parkplatz-zuteilung",
+          "name": "vd-parkplatz-zuteilung",
+          "file": "verwaltung-dienstleistungen/vd-parkplatz-zuteilung.form.json",
+          "schema": {
+            "type": "default",
+            "id": "vd-parkplatz-zuteilung",
+            "components": [
+              {
+                "type": "text",
+                "text": "**Parkplatz zuteilen · Assign a parking space**\n\nEinen freien Platz zuteilen und die Person informieren. Das Kennzeichen hat die bestellende Person im Bestellformular angegeben; es steht in ihrer Bestellung. · Assign a free space and tell the person. The licence plate was entered on the order form and is in their order."
+              },
+              {
+                "key": "recipient",
+                "type": "textfield",
+                "label": "Empfänger · Recipient",
+                "disabled": true
+              },
+              {
+                "key": "parkplatz",
+                "type": "textfield",
+                "label": "Parkplatznummer · Space number",
+                "validate": {
+                  "required": true
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "shop": {
+        "app": "Beispiel: Dienstleistungen der Verwaltung",
+        "document": {
+          "publish": true,
+          "catalogs": [
+            {
+              "id": "cat-verwaltung-dienste",
+              "texts": {
+                "de": "Dienstleistungen der Verwaltung",
+                "en": "Administration services"
+              },
+              "rank": 100,
+              "languages": [
+                "de",
+                "en"
+              ],
+              "items": [
+                "vd-zutrittsbadge",
+                "vd-parkplatz"
+              ],
+              "groups": [
+                "{{zielgruppe}}"
+              ],
+              "edges": [
+                {
+                  "from": "vd-parkplatz",
+                  "to": "vd-zutrittsbadge",
+                  "kind": "requires"
+                }
+              ]
+            },
+            {
+              "id": "cat-fachbereich-bau",
+              "texts": {
+                "de": "Fachbereich Bau",
+                "en": "Building department"
+              },
+              "rank": 110,
+              "languages": [
+                "de",
+                "en"
+              ],
+              "items": [
+                "vd-geoportal",
+                "vd-zutrittsbadge",
+                "vd-parkplatz"
+              ],
+              "groups": [
+                "{{zielgruppe-bau}}"
+              ],
+              "edges": [
+                {
+                  "from": "vd-parkplatz",
+                  "to": "vd-zutrittsbadge",
+                  "kind": "requires"
+                }
+              ]
+            }
+          ],
+          "products": [
+            {
+              "id": "vd-zutrittsbadge",
+              "homeCatalog": "cat-verwaltung-dienste",
+              "state": "active",
+              "texts": {
+                "de": "Zutrittsbadge",
+                "en": "Access badge"
+              },
+              "descriptions": {
+                "de": "Der persönliche Badge für die Gebäude der Verwaltung. Die Variante mit Serverraum öffnet zusätzlich den Technikbereich.",
+                "en": "The personal badge for the administration's buildings. The server-room variant also opens the technical area."
+              },
+              "variants": [
+                {
+                  "id": "standard",
+                  "texts": {
+                    "de": "Standard",
+                    "en": "Standard"
+                  }
+                },
+                {
+                  "id": "serverraum",
+                  "texts": {
+                    "de": "Mit Zutritt Serverraum",
+                    "en": "Including the server room"
+                  }
+                }
+              ],
+              "approval": {
+                "kind": "superior"
+              },
+              "lifecycleProcess": "proc_vd_zutrittsbadge",
+              "actions": [
+                {
+                  "key": "provision",
+                  "message": "vd.badge.ausgeben",
+                  "effect": "provision"
+                },
+                {
+                  "key": "deprovision",
+                  "message": "vd.badge.einziehen",
+                  "effect": "deprovision",
+                  "triggers": [
+                    "customer",
+                    "operator"
+                  ],
+                  "labels": {
+                    "de": "Badge zurückgeben",
+                    "en": "Return the badge"
+                  }
+                },
+                {
+                  "key": "sperren",
+                  "message": "vd.badge.sperren",
+                  "effect": "change",
+                  "triggers": [
+                    "customer",
+                    "operator"
+                  ],
+                  "labels": {
+                    "de": "Badge sperren",
+                    "en": "Block the badge"
+                  },
+                  "form": "vd-badge-sperrung"
+                },
+                {
+                  "key": "ersatz",
+                  "message": "vd.badge.ersatz",
+                  "effect": "service",
+                  "triggers": [
+                    "customer"
+                  ],
+                  "labels": {
+                    "de": "Ersatzbadge anfordern",
+                    "en": "Request a replacement"
+                  }
+                }
+              ],
+              "category": "arbeitsplatz",
+              "categoryTexts": {
+                "de": "Arbeitsplatz",
+                "en": "Workplace"
+              },
+              "keywords": [
+                "Badge",
+                "Zutritt",
+                "Access"
+              ],
+              "price": "CHF 0.–"
+            },
+            {
+              "id": "vd-parkplatz",
+              "homeCatalog": "cat-verwaltung-dienste",
+              "state": "active",
+              "texts": {
+                "de": "Parkplatz",
+                "en": "Parking space"
+              },
+              "descriptions": {
+                "de": "Ein fester Parkplatz in der Einstellhalle, für ein Jahr. Er setzt einen Zutrittsbadge voraus.",
+                "en": "A fixed space in the car park, for one year. It requires an access badge."
+              },
+              "approval": {
+                "kind": "fixed",
+                "ref": "{{facility-management}}"
+              },
+              "provisionProcess": "proc_vd_parkplatz_zuteilen",
+              "deprovisionProcess": "proc_vd_parkplatz_freigeben",
+              "configForm": "vd-parkplatz-bestellung",
+              "maxDays": 365,
+              "category": "arbeitsplatz",
+              "categoryTexts": {
+                "de": "Arbeitsplatz",
+                "en": "Workplace"
+              },
+              "keywords": [
+                "Parkplatz",
+                "Auto",
+                "Parking"
+              ],
+              "price": "CHF 40.– / Monat"
+            },
+            {
+              "id": "vd-geoportal",
+              "homeCatalog": "cat-fachbereich-bau",
+              "state": "active",
+              "texts": {
+                "de": "Zugang Geoportal",
+                "en": "Geoportal access"
+              },
+              "descriptions": {
+                "de": "Lesender Zugang zum Geoportal mit den Plänen des Fachbereichs, für ein halbes Jahr.",
+                "en": "Read access to the geoportal with the department's plans, for half a year."
+              },
+              "approval": {
+                "kind": "role",
+                "ref": "{{geoportal-verantwortliche}}"
+              },
+              "provisionProcess": "proc_vd_geoportal_einrichten",
+              "deprovisionProcess": "proc_vd_geoportal_entfernen",
+              "maxDays": 180,
+              "category": "fachanwendungen",
+              "categoryTexts": {
+                "de": "Fachanwendungen",
+                "en": "Specialist applications"
+              },
+              "keywords": [
+                "GIS",
+                "Geoportal",
+                "Pläne"
+              ],
+              "price": "CHF 0.–"
+            }
+          ]
+        }
+      }
     }
   ]
 }

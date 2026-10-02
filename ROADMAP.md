@@ -1943,6 +1943,17 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   unpublished ([ADR-0376](docs/adr/0376-catalogue-maintenance-over-mcp.md)); a product's
   usage is answered across catalogues ([ADR-0353](docs/adr/0353-product-usage.md)), and the
   starmap draws catalogues and products ([ADR-0396](docs/adr/0396-catalogue-on-the-starmap.md)).
+- ✅ **A shop as one document.** `POST /api/v1/catalogs/import` (MCP `atlas_import_catalog`)
+  writes catalogues, their products and edges, and optionally their releases, all or nothing,
+  under the authority the single writes need; ids are the document's own, so importing again
+  updates
+  ([ADR-0436](docs/adr/0436-a-catalogue-is-imported-as-one-document.md)).
+  Export is a follow-up.
+- ✅ **A shop handbook with an example to install.** `shop-handbuch.html` (DE/EN) on building
+  catalogues, several catalogues, products and services and their processes, with the
+  administration-services example (`examples/verwaltung-dienstleistungen/`, both process
+  forms, bilingual) and an installer that asks for audiences and approvers and imports the
+  shop as one document.
 
 **The shop & ordering**
 - ✅ **Browsing.** A person sees the one catalogue their groups reach, by rank, narrowed per

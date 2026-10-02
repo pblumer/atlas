@@ -31,6 +31,51 @@
       }
     },
     {
+      "id": "the-shop-has-a-handbook-of-its-own-with-an-example-to-instal",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A handbook for the shop, with an example to install",
+        "de": "Ein Handbuch für den Shop, mit einem Beispiel zum Installieren"
+      },
+      "summary": {
+        "en": "A new shop handbook explains how to build a catalogue, how several catalogues work together, how to describe products and services, and how to design the processes behind them. It follows one example throughout, the services of a public administration in German and English, which you can install with one click after naming who orders and who approves.",
+        "de": "Ein neues Shop-Handbuch erklärt, wie man einen Katalog aufbaut, wie mehrere Kataloge zusammenspielen, wie man Produkte und Services beschreibt und wie man die Prozesse dahinter entwirft. Es begleitet ein durchgehendes Beispiel, die Dienstleistungen einer Verwaltung auf Deutsch und Englisch, das sich mit einem Klick installieren lässt, nachdem man festgelegt hat, wer bestellt und wer genehmigt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue",
+        "Handbook",
+        "Examples"
+      ]
+    },
+    {
+      "id": "a-whole-shop-can-be-imported-as-one-document",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A whole shop in one file",
+        "de": "Ein ganzer Shop in einer Datei"
+      },
+      "summary": {
+        "en": "Catalogues, their products and how the products fit together can now be brought into Atlas as one document, published straight away if you like. Either everything arrives or nothing changes, with every problem listed at once, and importing the same file again updates what is there instead of adding it twice.",
+        "de": "Kataloge, ihre Produkte und wie die Produkte zusammengehören lassen sich jetzt als ein Dokument in Atlas übernehmen und auf Wunsch gleich veröffentlichen. Entweder kommt alles an oder es ändert sich nichts, mit allen Problemen auf einmal, und derselbe Import ein zweites Mal aktualisiert, was da ist, statt es doppelt anzulegen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue",
+        "API"
+      ]
+    },
+    {
       "id": "switching-the-catalogue-off-says-at-start-what-it-strands",
       "version": "Unreleased",
       "date": null,
@@ -227,50 +272,6 @@
       "tags": [
         "Service catalogue",
         "Modeler"
-      ]
-    },
-    {
-      "id": "a-product-s-process-states-how-an-action-ended-without-calli",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Processes report how an action ended with a Shop task",
-        "de": "Prozesse melden mit einer Shop-Aufgabe, wie eine Aktion endete"
-      },
-      "summary": {
-        "en": "A send task can now be of the kind Shop: choose the action and the outcome — completed, rejected or failed — and the task records that ending for the request its process is handling. It needs no token and no address, because it runs inside Atlas and finds the order and the request in the process itself. When the process took a path that does not fit the action, the task stops with an incident instead of reporting the wrong thing. Publishing a catalogue now checks that every change and service a product offers has a task that reports it completed.",
-        "de": "Eine Sendeaufgabe kann jetzt von der Art Shop sein: Aktion und Ergebnis wählen – abgeschlossen, abgelehnt oder fehlgeschlagen –, und die Aufgabe hält dieses Ende für die Anfrage fest, die ihr Prozess bearbeitet. Sie braucht weder Token noch Adresse, weil sie in Atlas läuft und Bestellung und Anfrage im Prozess selbst findet. Hat der Prozess einen Weg genommen, der nicht zur Aktion passt, hält die Aufgabe mit einem Vorfall an, statt das Falsche zu melden. Beim Veröffentlichen eines Katalogs wird jetzt geprüft, dass jede Änderung und jede Dienstleistung eines Produkts eine Aufgabe hat, die sie als abgeschlossen meldet."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Service catalogue",
-        "Modeler"
-      ]
-    },
-    {
-      "id": "how-an-action-ended-is-a-fact",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "How an action ended is recorded",
-        "de": "Wie eine Aktion endete, wird festgehalten"
-      },
-      "summary": {
-        "en": "Everything asked of a service somebody holds — its provisioning, its return, a change, a service such as a password reset — now ends in a record: completed, rejected or failed, under the event type the product declares. A successful provisioning or return is recorded together with the right it grants or revokes, so the two can never disagree. A process that reports twice is recorded once, and a contradicting second report is refused. Operators and agents read how a position's actions ended over the API and MCP.",
-        "de": "Alles, was von einer bezogenen Leistung verlangt wird – ihre Bereitstellung, ihre Rückgabe, eine Änderung, eine Dienstleistung wie ein Passwort-Reset –, endet jetzt in einem Eintrag: abgeschlossen, abgelehnt oder fehlgeschlagen, unter dem Ereignistyp, den das Produkt dafür festlegt. Eine erfolgreiche Bereitstellung oder Rückgabe wird zusammen mit dem Recht festgehalten, das sie gewährt oder entzieht, sodass beide nie auseinanderlaufen. Meldet ein Prozess zweimal, wird einmal festgehalten, und eine widersprüchliche zweite Meldung wird abgewiesen. Betrieb und Agenten lesen über API und MCP, wie die Aktionen einer Position endeten."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Service catalogue",
-        "Engine"
       ]
     }
   ]
