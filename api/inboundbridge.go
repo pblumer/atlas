@@ -86,7 +86,7 @@ func (s *Server) pollInbound(ctx context.Context) {
 		if len(events) == 0 {
 			// Nothing to publish — but a source may still have moved: a mail watch
 			// whose page held only senders it does not admit, a folder the server
-			// renumbered (ADR-draft-mailbox-worker). Leaving the cursor behind would
+			// renumbered (ADR-0438). Leaving the cursor behind would
 			// re-read that page every tick, and a page of refused mail longer than the
 			// batch would stop the watch for good. Every other source answers no cursor
 			// for an empty page, so for them this is the no-op it always was.
@@ -399,7 +399,7 @@ func (s *Server) resolveInboundSubs() []pendingSub {
 				continue
 			}
 			// A mail Worker that only sends — SMTP without an IMAP endpoint, the
-			// preview provider — has no mailbox to watch (ADR-draft-mailbox-worker).
+			// preview provider — has no mailbox to watch (ADR-0438).
 			mb, err := mail.MailboxOf(client)
 			if err != nil {
 				continue

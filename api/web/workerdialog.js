@@ -49,7 +49,7 @@ export function workerCreateBody(form) {
   };
   if (body.kind === "mail") body.provider = get("provider") || "smtp";
   // An SMTP mail Worker reads its mailbox over IMAP when it names an endpoint for it
-  // (ADR-draft-mailbox-worker); the native providers read through their own API, so
+  // (ADR-0438); the native providers read through their own API, so
   // the field belongs to SMTP alone and a value left in it for another provider stays
   // behind rather than being refused by the server.
   if (workerShape(body.kind, body.provider).mailbox) {
@@ -140,7 +140,7 @@ export function workerShape(kind, provider) {
     mail,
     sql,
     // An SMTP mail Worker can name an IMAP endpoint, which is what lets it read the
-    // mailbox it sends from (ADR-draft-mailbox-worker). Gmail and Graph read through the
+    // mailbox it sends from (ADR-0438). Gmail and Graph read through the
     // API they send with; preview has no mailbox at all.
     mailbox: mail && !native && !preview,
     // The example for this product's connection string, empty for a kind that has

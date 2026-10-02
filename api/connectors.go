@@ -768,7 +768,7 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		// (ADR-0255).
 		Model *string `json:"model"`
 		// MailboxEndpoint is an SMTP mail Worker's IMAP endpoint; "" removes it, which
-		// makes the Worker a sender only again (ADR-draft-mailbox-worker).
+		// makes the Worker a sender only again (ADR-0438).
 		MailboxEndpoint *string `json:"mailboxEndpoint"`
 		Enabled         *bool   `json:"enabled"`
 	}

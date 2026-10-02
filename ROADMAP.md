@@ -577,7 +577,7 @@ The control-flow basics most real models use.
   in, and the in-process handler remains as the fallback `--in-process-connectors` returns
   to. Attachments and inbound events are follow-ups — for the inbound half see
   [the Jira issue-watch draft](docs/adr/0214-jira-inbound-issue-watch.md).
-  **The mail Worker reads its mailbox** ([ADR-draft-mailbox-worker](docs/adr/draft-mailbox-worker.md)):
+  **The mail Worker reads its mailbox** ([ADR-0438](docs/adr/0438-mailbox-worker.md)):
   an inbound watch on a mail Worker publishes the new mail of one folder as an Atlas
   message — over IMAP for an SMTP Worker that names a `mailboxEndpoint`, through the Gmail
   history and the Microsoft Graph messages API for those providers — and a mail task's

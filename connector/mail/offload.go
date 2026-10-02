@@ -54,7 +54,7 @@ type Job struct {
 	// MessageID is the job key, so a message resent after a lease elapsed is
 	// identifiable as the same one rather than looking like a second mail.
 	MessageID string `json:"messageId,omitempty"`
-	// The mailbox half (ADR-draft-mailbox-worker). Operation is empty for a send.
+	// The mailbox half (ADR-0438). Operation is empty for a send.
 	// Target is the message an operation addresses — the messageId a watch or a list
 	// answered — named apart from MessageID above, which is this job's own key.
 	Operation      string `json:"operation,omitempty"`

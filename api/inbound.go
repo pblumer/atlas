@@ -247,7 +247,7 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 		Enabled        *bool   `json:"enabled"`
 		StartFromTip   *bool   `json:"startFromTip"`
 		MaxPerHour     *int    `json:"maxPerHour"`
-		// A mail watch's policy knobs (ADR-draft-mailbox-worker): what an event
+		// A mail watch's policy knobs (ADR-0438): what an event
 		// carries and who may start a process with one.
 		IncludeBody      *bool     `json:"includeBody"`
 		AllowedSenders   *[]string `json:"allowedSenders"`

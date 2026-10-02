@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// Who may use a mailbox (ADR-draft-mailbox-worker).
+// Who may use a mailbox (ADR-0438).
 //
 // ADR-0205 made a mail Worker its owner's to see and change. A mail task that reads the
 // mailbox would have walked straight around that — the Console would say "private"

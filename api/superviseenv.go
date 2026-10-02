@@ -121,7 +121,7 @@ func mailConnectorEnv(key string, c connector, secret string) []string {
 		p + "ENDPOINT=" + strings.TrimSpace(c.Endpoint),
 		p + "SENDER=" + strings.TrimSpace(c.Sender),
 	}
-	// The IMAP side, when the Worker reads its mailbox (ADR-draft-mailbox-worker): a
+	// The IMAP side, when the Worker reads its mailbox (ADR-0438): a
 	// Worker Instance serving a list or a get needs to reach the same mailbox the
 	// engine's watch reads.
 	if m := strings.TrimSpace(c.MailboxEndpoint); m != "" {

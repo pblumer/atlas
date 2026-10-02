@@ -81,7 +81,7 @@ type createConnectorParams struct {
 	Provider       string `json:"provider"`
 	Sender         string `json:"sender"`
 	// MailboxEndpoint is an SMTP mail Worker's IMAP endpoint
-	// (ADR-draft-mailbox-worker); cleared for every other kind.
+	// (ADR-0438); cleared for every other kind.
 	MailboxEndpoint string `json:"mailboxEndpoint"`
 	Enabled         *bool  `json:"enabled"`
 	// ConnectionString is a SQL worker's whole configuration, sealed into the vault

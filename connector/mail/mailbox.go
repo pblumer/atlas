@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// The mailbox half of the mail Worker (ADR-draft-mailbox-worker).
+// The mailbox half of the mail Worker (ADR-0438).
 //
 // Until this file the mail Worker could only send. A mailbox Worker reads as well:
 // an inbound watch publishes what arrives in a folder, and a mail task with an
@@ -44,7 +44,7 @@ func Operations() []string {
 // ReadsMailbox reports whether an operation reads the mailbox without changing it.
 // ChangesMailbox reports whether it changes the mailbox or writes from it. Send is
 // neither: it is the one operation a mail Worker always had, and who may use a sender
-// is not what the deploy check governs (ADR-draft-mailbox-worker).
+// is not what the deploy check governs (ADR-0438).
 func ReadsMailbox(op string) bool { return op == OpList || op == OpGet }
 
 // ChangesMailbox — see [ReadsMailbox].
@@ -75,7 +75,7 @@ const (
 const MaxBodyBytes = 64 << 10
 
 // Attachment is what a process learns about an attachment: that it exists, and what it
-// is called, its type and its size. Never its content (ADR-draft-mailbox-worker).
+// is called, its type and its size. Never its content (ADR-0438).
 type Attachment struct {
 	Name        string
 	ContentType string

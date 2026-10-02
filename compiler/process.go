@@ -559,7 +559,7 @@ type ConnectorTaskDetail struct {
 	MailSubject RestExpr
 	Body        RestExpr
 	BodyHTML    RestExpr
-	// Mailbox fields (JobType == MailJobType, ADR-draft-mailbox-worker). MailOp is the
+	// Mailbox fields (JobType == MailJobType, ADR-0438). MailOp is the
 	// operation, "" being send — every mail task authored before mailboxes existed.
 	// MailFolder is the folder a list reads, MailMessage the message an operation
 	// addresses and MailDestination where a move files it, each literal-or-FEEL.
@@ -2016,7 +2016,7 @@ type MailboxUse struct {
 
 // MailboxUses lists the mail tasks whose operation is not send, in node order. It is
 // what the deploy check reads to decide whether the deployer may use each mailbox
-// (ADR-draft-mailbox-worker); a send is not listed, because who may use a sender is
+// (ADR-0438); a send is not listed, because who may use a sender is
 // not what that check governs.
 func (p *CompiledProcess) MailboxUses() []MailboxUse {
 	var out []MailboxUse

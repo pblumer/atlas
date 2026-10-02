@@ -872,7 +872,7 @@ const mailWatchBatch = 50
 // worker budget each, since a Gmail page is one history read and a get per message.
 const mailWatchBudget = 3 * nettimeout.Default
 
-// mailSource reads one folder of a mail Worker's mailbox (ADR-draft-mailbox-worker).
+// mailSource reads one folder of a mail Worker's mailbox (ADR-0438).
 // Which mark a message is deduplicated under is the provider's business — one per
 // folder for IMAP and Gmail, whose sequences are logs, one per message for Graph,
 // whose receive time two messages can share — so the source passes the mailbox's own
@@ -1031,7 +1031,7 @@ func validateInboundWatch(kind string, rec *inboundSubscription) string {
 	}
 }
 
-// validateMailWatch checks a watch on a mail Worker (ADR-draft-mailbox-worker). It
+// validateMailWatch checks a watch on a mail Worker (ADR-0438). It
 // names a folder, defaulted to the inbox, and nothing that belongs to another kind's
 // watch. A mailbox's sequence is the provider's own — a UID, a history id, a receive
 // time with the delivered ids beside it — so there is no cursor field to choose and

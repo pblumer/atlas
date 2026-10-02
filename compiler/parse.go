@@ -2677,7 +2677,7 @@ type xmlMailConnector struct {
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 	// Operation is what the task does with the Worker's mailbox
-	// (ADR-draft-mailbox-worker); blank is send, which is every mail task authored
+	// (ADR-0438); blank is send, which is every mail task authored
 	// before mailboxes existed. The attributes below belong to the other operations,
 	// and the compiler refuses one an operation does not use.
 	Operation      string `xml:"operation,attr"`

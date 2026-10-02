@@ -3722,7 +3722,7 @@ const SERVICE_TASK_KINDS = [
       { key: "connector", label: "Worker", datalist: "mail", placeholder: "office365", hint: "The configured mail Worker this task sends through or whose mailbox it works with, by the name it has under Workers in the Console. Its host, credentials and default sender live on the server, never in the model. Reading or changing a mailbox needs access to that Worker: a deploy by somebody it is not shared with is refused." },
       {
         // Empty is send, which is every mail task authored before mailboxes existed
-        // (ADR-draft-mailbox-worker) — so an untouched task keeps meaning what it meant.
+        // (ADR-0438) — so an untouched task keeps meaning what it meant.
         key: "operation", label: "Operation", type: "select", reRender: true,
         options: [
           { v: "", l: "Send message" },

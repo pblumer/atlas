@@ -123,7 +123,7 @@ test("a non-database kind offers no connection-string example", async ({ page })
 });
 
 // An SMTP mail Worker reads its mailbox over IMAP when it names an endpoint for it
-// (ADR-draft-mailbox-worker). The field is SMTP's alone: Gmail and Graph read through
+// (ADR-0438). The field is SMTP's alone: Gmail and Graph read through
 // their own API, and the server refuses an IMAP endpoint beside them — so a value left
 // in the hidden field after switching provider must not ride along.
 test("an SMTP mail create carries its IMAP endpoint", async ({ page }) => {

@@ -57,7 +57,7 @@ type Message struct {
 	MessageID string
 	// InReplyTo and References thread a reply under the message it answers (RFC 5322
 	// §3.6.4): the original's Message-ID, and its References followed by that id. Both
-	// are empty for every message that is not a reply (ADR-draft-mailbox-worker).
+	// are empty for every message that is not a reply (ADR-0438).
 	InReplyTo  string
 	References string
 }
@@ -114,7 +114,7 @@ type SMTPClient struct {
 	conn Connector
 	send sendFunc
 	// mailbox is the IMAP side of the same mailbox, when the worker names an IMAP
-	// endpoint (ADR-draft-mailbox-worker). SMTP can only send; reading needs the
+	// endpoint (ADR-0438). SMTP can only send; reading needs the
 	// second protocol, and a worker that configures none is a sender only.
 	mailbox    Mailbox
 	mailboxErr error

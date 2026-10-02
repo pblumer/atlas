@@ -45,7 +45,7 @@ type ProviderConfig struct {
 	Name     string
 	Outbox   Sink
 	// Mailbox is an SMTP worker's IMAP endpoint, which is what lets it read the
-	// mailbox it sends from (ADR-draft-mailbox-worker). Gmail and Graph read through
+	// mailbox it sends from (ADR-0438). Gmail and Graph read through
 	// the API they send through and ignore it.
 	Mailbox string
 }

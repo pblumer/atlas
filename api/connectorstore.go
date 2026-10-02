@@ -106,7 +106,7 @@ type configuredWorker struct {
 	Provider string `json:"provider,omitempty"`
 	Sender   string `json:"sender,omitempty"`
 	// MailboxEndpoint is an SMTP mail Worker's IMAP endpoint ("imaps://host:993"),
-	// what lets it read the mailbox it sends from (ADR-draft-mailbox-worker). It
+	// what lets it read the mailbox it sends from (ADR-0438). It
 	// uses the sender and the credential above as login. Empty for a Worker that only
 	// sends, and for Gmail and Microsoft, which read through the API they send with.
 	MailboxEndpoint string `json:"mailboxEndpoint,omitempty"`

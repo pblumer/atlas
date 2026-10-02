@@ -618,7 +618,7 @@ func TestValidateInboundWatchPerKind(t *testing.T) {
 		{"a complete jira watch", connectorKindJira, inboundSubscription{JQL: "project = OPS"}, ""},
 
 		{"a worker that does not exist", "", inboundSubscription{}, "no worker with that id"},
-		// Mail had none until ADR-draft-mailbox-worker; Remedy still has none.
+		// Mail had none until ADR-0438; Remedy still has none.
 		{"a kind with no inbound half", connectorKindRemedy, inboundSubscription{}, "has no inbound half"},
 		{"a complete mail watch", connectorKindMail, inboundSubscription{}, ""},
 	} {

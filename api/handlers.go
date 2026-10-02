@@ -951,7 +951,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	)
 	s.do(func() {
 		// Who may use a mailbox, checked before anything is persisted
-		// (ADR-draft-mailbox-worker): a definition that reads somebody else's mailbox
+		// (ADR-0438): a definition that reads somebody else's mailbox
 		// must not exist even briefly.
 		if refused, e = s.mailboxUseBlockingModel(r, body); e != nil {
 			persistErr = e
@@ -6440,7 +6440,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		return &connectorPayload{Kind: "mail", Fields: map[string]any{
 			"connector": j.Connector, "from": j.From, "to": j.To, "cc": j.Cc, "bcc": j.Bcc,
 			"subject": j.Subject, "body": j.Body, "html": j.HTML, "messageId": j.MessageID,
-			// The mailbox half (ADR-draft-mailbox-worker): what to do and to which
+			// The mailbox half (ADR-0438): what to do and to which
 			// message — never how to reach the mailbox, which the worker holds.
 			"operation": j.Operation, "folder": j.Folder, "target": j.Target,
 			"destination": j.Destination, "maxResults": j.MaxResults,

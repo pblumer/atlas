@@ -26,7 +26,7 @@ type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 // ADR-0067/0068) — resolves the named worker's provider client from reg, and either
 // sends the message keyed by the job key so an at-least-once retry de-duplicates
 // (ADR-0079), or performs the mailbox operation the task names and returns its answer
-// as the task's result variable (ADR-draft-mailbox-worker). Returning an error leaves
+// as the task's result variable (ADR-0438). Returning an error leaves
 // the job pending (retry, then an incident, ADR-0061); the runner completes it only
 // on success.
 func Handler(store state.Reader, lookup ProcessLookup, reg *Registry, dir Directory) job.OutputHandler {

@@ -30,7 +30,7 @@ _Changed_ / _Removed_ for each version.
   is refused. Sending is not checked. The application import now runs that check and
   ADR-0205's message-name claim, which it had skipped. What a process receives is still
   readable by every operator of a shared installation; that gap, ADR-0275's follow-up, is
-  stated and not closed here. ADR-draft-mailbox-worker.
+  stated and not closed here. ADR-0438.
 
 - **A package installs from the command line.** `atlas import DIR` installs what the shop
   handbook's installer installs, without a browser — from a terminal, or from a pipeline

@@ -134,7 +134,7 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 	s.do(func() {
 		// The two checks every other door runs, before anything — not even the
 		// application record — is written: who may use a mailbox
-		// (ADR-draft-mailbox-worker) and the claim on a message name (ADR-0205). An
+		// (ADR-0438) and the claim on a message name (ADR-0205). An
 		// import is a deploy, and a check that one door skips is decoration.
 		for _, a := range req.Artifacts {
 			var err error

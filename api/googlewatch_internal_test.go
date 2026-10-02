@@ -486,7 +486,7 @@ func TestGoogleWatchCadenceDefaultsToAMinute(t *testing.T) {
 // inbound half, because the usual cause is a watch on the wrong Worker.
 func TestOtherKindsStillRefuseAWatch(t *testing.T) {
 	rec := inboundSubscription{}
-	// Mail carried no watch until ADR-draft-mailbox-worker; Remedy still carries none.
+	// Mail carried no watch until ADR-0438; Remedy still carries none.
 	msg := validateInboundWatch(connectorKindRemedy, &rec)
 	if !strings.Contains(msg, "googlesheets") || !strings.Contains(msg, "mail") {
 		t.Errorf("message %q should name every Worker Type that can carry a watch", msg)

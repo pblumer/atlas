@@ -1683,7 +1683,7 @@ type MailConfig struct {
 	Body      RestExpr
 	BodyHTML  RestExpr
 	Retries   int32
-	// The mailbox half (ADR-draft-mailbox-worker): the operation ("" is send) and
+	// The mailbox half (ADR-0438): the operation ("" is send) and
 	// what it takes. ResultVar names the variable list, get and move answer into.
 	Operation   string
 	Folder      RestExpr

@@ -879,7 +879,7 @@ func TestAnUnreadableConnectorStoreRendersNothingForEveryKind(t *testing.T) {
 
 // A Worker Instance serving a list or a get must reach the mailbox the engine's watch
 // reads, so an SMTP Worker's IMAP endpoint travels with the rest of its configuration
-// (ADR-draft-mailbox-worker) — and a Worker that only sends hands over no such variable.
+// (ADR-0438) — and a Worker that only sends hands over no such variable.
 func TestSupervisedMailEnvCarriesTheMailbox(t *testing.T) {
 	srv, _ := newValidateServer(t, WithSupervisedWorkers("http://s", nil, nil))
 	for _, c := range []connector{

@@ -95,7 +95,7 @@ type inboundSubscription struct {
 	// share it.
 	ChannelID string `json:"channelId,omitempty"`
 
-	// The fields below are a *mail watch* (ADR-draft-mailbox-worker): new mail in one
+	// The fields below are a *mail watch* (ADR-0438): new mail in one
 	// folder of the Worker's mailbox.
 	//
 	// MailFolder is the folder — an IMAP mailbox name, a Gmail label id, a Graph

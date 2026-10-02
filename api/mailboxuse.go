@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/connector/mail"
 )
 
-// Who may use a mailbox (ADR-draft-mailbox-worker).
+// Who may use a mailbox (ADR-0438).
 //
 // ADR-0205 decides who may see and change a mail Worker and who may point a watch at
 // a message name. It never asked who may *use* a Worker from a model, because until

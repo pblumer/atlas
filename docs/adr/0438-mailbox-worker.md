@@ -1,4 +1,4 @@
-# ADR-DRAFT: The mail Worker reads its mailbox — an inbound watch, mailbox operations, and who may use them
+# ADR-0438: The mail Worker reads its mailbox — an inbound watch, mailbox operations, and who may use them
 
 - **Status:** Accepted
 - **Implementation:** Landed

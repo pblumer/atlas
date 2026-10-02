@@ -1252,7 +1252,7 @@ func compileRestConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 // compileMailConnectorTask compiles an <atlas:mailConnector> task: it sends a
 // model-authored message through a server-registered mail provider via the job path
 // (ADR-0079), or — with an operation — reads or changes the Worker's mailbox
-// (ADR-draft-mailbox-worker). The provider (host, credentials) is resolved
+// (ADR-0438). The provider (host, credentials) is resolved
 // server-side by worker name, like clio; only the message, or the operation and what
 // it addresses, lives in the model.
 func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
@@ -1353,7 +1353,7 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	return b.AddMailConnectorTask(cfg), nil
 }
 
-// The mail task's operations (ADR-draft-mailbox-worker). Send is the one every mail
+// The mail task's operations (ADR-0438). Send is the one every mail
 // task authored before mailboxes existed carries, written as no operation at all.
 const (
 	mailOpSend = "send"

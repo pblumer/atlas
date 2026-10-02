@@ -238,7 +238,7 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 		for _, d := range drafts {
 			var e error
 			// Who may use a mailbox, under the same "validate all, then deploy all"
-			// rule (ADR-draft-mailbox-worker).
+			// rule (ADR-0438).
 			if refused, e = s.mailboxUseBlockingModel(r, []byte(d.XML)); e != nil {
 				persistErr = e
 				return

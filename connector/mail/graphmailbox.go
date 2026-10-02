@@ -19,7 +19,7 @@ import (
 // graphMailbox is a Microsoft 365 mailbox read and changed through Graph, as the
 // worker's sender mailbox, with the worker's token. Whether the token may read that
 // mailbox — and only that one — is decided in Entra and Exchange Online, not here
-// (ADR-draft-mailbox-worker): Mail.Read or Mail.ReadWrite as an application
+// (ADR-0438): Mail.Read or Mail.ReadWrite as an application
 // permission reaches every mailbox in the tenant until RBAC for Applications confines
 // it.
 //
@@ -305,7 +305,7 @@ func (m graphMailbox) WatchSince(ctx context.Context, req WatchRequest) (WatchPa
 			return WatchPage{}, err
 		}
 		// One mark per message: two messages can share a receive time, and a scalar
-		// mark on it would drop the second (ADR-draft-mailbox-worker).
+		// mark on it would drop the second (ADR-0438).
 		page.Items = append(page.Items, Received{MarkKey: g.ID, Seq: uint64(at.UnixMilli()), Envelope: e})
 		if at.After(next.at) {
 			next = graphCursor{at: at, seen: map[string]bool{}}

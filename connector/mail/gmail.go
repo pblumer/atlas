@@ -25,7 +25,7 @@ type GmailClient struct {
 	baseURL string
 	sender  string
 	// readTokens and modifyTokens are the mailbox half's tokens, scoped to reading and
-	// to changing the mailbox (ADR-draft-mailbox-worker); nil uses tokens.
+	// to changing the mailbox (ADR-0438); nil uses tokens.
 	readTokens   TokenSource
 	modifyTokens TokenSource
 }
