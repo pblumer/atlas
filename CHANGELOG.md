@@ -14,6 +14,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An administrator sees on the dashboard what the switched-off catalogue strands.** The
+  start's warning is a log line, and a log line is lost wherever nobody reads the start.
+  The Console's dashboard now shows an administrator the same thing while it is true:
+  with `--catalogue=false` and processes still working orders, a notice at the top names
+  how many instances will fail at the order routes, which processes they are, and links
+  to the incidents and the instances. It is read live, so it goes away once those
+  instances are finished or ended. Behind it is `GET /api/v1/catalogue-switch`
+  (admin-only, tag System): it is not switched off with the catalogue, because it is the
+  route with something to say precisely then. ADR-0434.
+
 - **What the orderer answered reaches the approver and the processes.** The answers given on
   a product's configuration form — the licence plate a parking space is for, the cost centre
   a laptop is booked to — are shown to the approver in the inbox, labelled as the form labels

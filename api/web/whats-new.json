@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "an-administrator-sees-on-the-dashboard-what-the-switched-off",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The dashboard shows orders left mid-way by a switched-off shop",
+        "de": "Das Dashboard zeigt Aufträge, die ein ausgeschalteter Shop liegen lässt"
+      },
+      "summary": {
+        "en": "If the shop is switched off (--catalogue=false) while orders are still being fulfilled or approved, administrators now see a notice at the top of the Console dashboard: how many processes will fail at their next step, which ones, and links to the incidents and the instances. The notice follows the live state and disappears once those processes are finished or ended. Until now the only place this was said was the server log at start.",
+        "de": "Ist der Shop ausgeschaltet (--catalogue=false), während noch Aufträge erfüllt oder genehmigt werden, sehen Administratoren jetzt oben auf dem Console-Dashboard einen Hinweis: wie viele Prozesse bei ihrem nächsten Schritt scheitern werden, welche es sind, und Links zu den Incidents und Instanzen. Der Hinweis folgt dem aktuellen Stand und verschwindet, sobald diese Prozesse abgeschlossen oder beendet sind. Bisher stand das nur im Server-Log beim Start."
+      },
+      "link": {
+        "label": "ADR-0434",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0434-the-catalogue-can-be-switched-off.md"
+      },
+      "tags": [
+        "Shop",
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the dashboard",
+          "de": "Dashboard öffnen"
+        },
+        "route": "#/console"
+      }
+    },
+    {
       "id": "what-the-orderer-answered-reaches-the-approver-and-the-proce",
       "version": "Unreleased",
       "date": null,
@@ -291,28 +320,6 @@
         "Organization",
         "Events",
         "Workers"
-      ]
-    },
-    {
-      "id": "a-system-that-follows-the-event-feed-can-hold-a-credential-t",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A key for the event feed that opens nothing else",
-        "de": "Ein Schlüssel für den Ereignis-Feed, der sonst nichts öffnet"
-      },
-      "summary": {
-        "en": "A CMDB or a billing system that follows the event feed can now be given an API token that reads the feed and nothing more: it cannot deploy, start or read instances, or touch orders. A new role, Feed reader, opens the feed for people too; operators no longer see it automatically, because it shows who holds what across every catalogue.",
-        "de": "Eine CMDB oder die Verrechnung, die den Ereignis-Feed verfolgt, erhält jetzt einen API-Token, der den Feed liest und sonst nichts: Er kann weder deployen noch Instanzen starten oder lesen noch Bestellungen bearbeiten. Eine neue Rolle, Feed-Leser, öffnet den Feed auch für Personen; Operatoren sehen ihn nicht mehr automatisch, weil er zeigt, wer was hält, über alle Kataloge."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Security",
-        "API"
       ]
     }
   ]

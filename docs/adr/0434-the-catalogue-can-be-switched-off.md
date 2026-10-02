@@ -149,6 +149,16 @@ process a product binds and that is also started for other reasons is counted wh
 a binding a later edit removed from the product is not counted although a release may
 still name it.
 
+**The Console says it too.** A log line at start is lost wherever nobody reads the start,
+which in a container is most places. So the same count is served live at
+`GET /api/v1/catalogue-switch` (admin-only) and the Console's dashboard shows an
+administrator a notice while anything is stranded, with links to the incidents and the
+instances. The route is tagged System, not Catalogue: it is the one with something to
+say precisely when the area is off, so the switch leaves it served. The set of processes
+it counts is read once at start — with the area off nothing can change a product — and
+each request reads only the deployments and their counters, on the loop. If the products
+could not be read at start, it answers 503 rather than a count of zero it does not know.
+
 ### Consequences
 
 - **Positive:** an installation without a shop can say so once and be believed by the
