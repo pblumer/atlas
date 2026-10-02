@@ -2,6 +2,29 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "a-new-account-request-announces-itself-so-an-installation-ca",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "You can now be told when someone asks for an account",
+        "de": "Sie können sich jetzt benachrichtigen lassen, wenn jemand ein Konto beantragt"
+      },
+      "summary": {
+        "en": "When someone registers through the login screen, their request waits for approval, and until now nothing told anyone it was there. The built-in intake process now announces every new request with the signal \"atlas.user.requested\", just before it waits for approval. The process itself stays protected and unchanged for you. To be told, you deploy a small process of your own that starts on that signal and, for example, posts a message to your Discord channel. It receives the name, email, department, justification and proposed username, never the role or the initial password. If nobody listens, nothing happens, and a notice that fails never holds up the request.",
+        "de": "Wer sich über die Login-Seite registriert, wartet mit seinem Antrag auf die Freigabe, und bisher hat niemanden etwas darauf hingewiesen. Der eingebaute Aufnahmeprozess meldet jetzt jeden neuen Antrag mit dem Signal «atlas.user.requested», unmittelbar bevor er auf die Freigabe wartet. Der Prozess selbst bleibt geschützt. Um informiert zu werden, deployen Sie einen kleinen eigenen Prozess, der auf dieses Signal startet und zum Beispiel eine Nachricht in Ihren Discord-Kanal schreibt. Er erhält Name, E-Mail, Abteilung, Begründung und den vorgeschlagenen Benutzernamen, nie aber die Rolle oder das Initialpasswort. Hört niemand zu, geschieht nichts, und eine fehlgeschlagene Meldung hält den Antrag nie auf."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Organization",
+        "Events",
+        "Workers"
+      ]
+    },
+    {
       "id": "what-happens-to-a-right-leaves-atlas-as-a-feed-of-cloudevent",
       "version": "Unreleased",
       "date": null,
@@ -292,28 +315,6 @@
       "tags": [
         "Service catalogue",
         "Shop"
-      ]
-    },
-    {
-      "id": "an-inbound-watch-may-no-longer-publish-a-catalogue-product-s",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "A Worker's event can no longer drive a product's lifecycle",
-        "de": "Ein Worker-Ereignis kann keinen Produkt-Lebenszyklus mehr steuern"
-      },
-      "summary": {
-        "en": "An event watch under Workers → Events… could be given the very message a catalogue product's process waits for — its return, for example — and then return rights without the order ever knowing. Such a watch is now refused, naming the product and the action, and a catalogue whose product would take a name a watch already publishes cannot be published.",
-        "de": "Einer Ereignisüberwachung unter «Workers → Events…» konnte genau die Nachricht zugewiesen werden, auf die der Prozess eines Katalogprodukts wartet – etwa seine Rückgabe –, und sie hätte dann Rechte zurückgegeben, ohne dass die Bestellung davon erfuhr. Eine solche Überwachung wird jetzt abgewiesen, mit Nennung von Produkt und Aktion, und ein Katalog, dessen Produkt einen bereits überwachten Namen übernehmen würde, lässt sich nicht publizieren."
-      },
-      "link": {
-        "label": "ADR-0425",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0425-a-product-lifecycle-is-one-process-with-message-triggers.md"
-      },
-      "tags": [
-        "Workers",
-        "Service catalogue"
       ]
     }
   ]

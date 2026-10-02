@@ -14,6 +14,20 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A new account request announces itself, so an installation can be told.** The intake
+  process (`proc_benutzer_aufnahme`), the one behind the login screen's "Registrieren" link,
+  now throws the signal `atlas.user.requested` just before the request waits at "Antrag
+  freigeben". The process stays protected and names no target. An installation that wants to
+  hear about requests deploys a process of its own with a signal start on that name, for
+  example one that posts to Discord. Where nobody listens, the signal does nothing. The
+  listener receives what the requester entered (`vorname`, `nachname`, `email`, `abteilung`,
+  `begruendung`) and the proposed `benutzername`. It never receives the role or the initial
+  password, because those come into being only at the approval, after the throw. A failing
+  notice is an incident in the listener and does not hold up the request.
+  `examples/benutzerverwaltung/README.md` carries a Discord recipe that silences
+  `@everyone` from form input.
+  ADR-draft-system-processes-announce-their-facts-as-signals.
+
 - **What happens to a right leaves Atlas as a feed of CloudEvents.** Every action asked of a
   held position that ends, every right granted and every right revoked is now an event a
   system beyond Atlas — a CMDB, a billing system — reads from `GET /api/v1/events`, in the
