@@ -150,13 +150,9 @@ func (s *Server) feedPusher(every time.Duration) {
 // the run loop, then delivers each off it. Subscriptions are delivered one after another,
 // so a slow endpoint delays the others by at most its timeout; a held one is not asked.
 func (s *Server) pushFeed(ctx context.Context) {
-	// The feed is the catalogue's, and a server that switched the catalogue off
-	// serves neither its pull route nor its subscriptions — so nothing of it leaves
-	// by push either. Every subscription keeps its cursor, and delivery picks up
-	// there when the area is back (ADR-0434).
-	if s.catalogueOff {
-		return
-	}
+	// A server that switched the catalogue off still pushes the feed: it carries the
+	// engine's facts too, and readFeedPage passes over the catalogue's own rows
+	// there (ADR-0435 §6).
 	now := s.feedPushNow()
 	var due []pendingFeedPush
 	s.do(func() { due = s.resolveFeedPushes(now) })
@@ -232,7 +228,7 @@ var errFeedBehind = errors.New("feed behind")
 // to move to, whether anything was sent, and whether more is waiting. A batch the
 // subscription's reach passes over entirely moves the cursor without a request.
 func (s *Server) deliverFeedBatch(ctx context.Context, p pendingFeedPush, after uint64) (uint64, bool, bool, error) {
-	view, nodeID, part, err := s.feedSnapshot()
+	view, nodeID, part, defs, err := s.feedSnapshot()
 	if err != nil {
 		return after, false, false, err
 	}
@@ -249,7 +245,7 @@ func (s *Server) deliverFeedBatch(ctx context.Context, p pendingFeedPush, after 
 	if size <= 0 {
 		size = defaultFeedPushBatch
 	}
-	page, err := s.readFeedPage(view, part, nodeID, after, size, reachSet(p.sub.Reach))
+	page, err := s.readFeedPage(view, defs, part, nodeID, after, size, reachSet(p.sub.Reach))
 	if err != nil {
 		return after, false, false, err
 	}

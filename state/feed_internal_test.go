@@ -119,3 +119,39 @@ func TestAFeedRowCutShortIsAnError(t *testing.T) {
 		}
 	}
 }
+
+// TestAnIncidentRowKeepsTheDefinitionItWasFoldedWith: an incident row reads back with
+// the incident and the definition key the fold found, in position order among the
+// catalogue's rows, and is no catalogue fact; an incident kind cannot be written
+// without its definition, nor a catalogue kind as an incident.
+func TestAnIncidentRowKeepsTheDefinitionItWasFoldedWith(t *testing.T) {
+	s := openStore(t)
+	tx := s.NewTransaction()
+	inc := &model.IncidentValue{ProcessInstanceKey: 41, ElementInstanceKey: 42, JobKey: 43, ElementId: 3, RaisedAt: 90, Message: "boom"}
+	must(t, tx.PutFeedIncident(1, 5, 100, FeedIncidentRaised, 7, inc))
+	must(t, tx.PutFeedEntry(1, 6, 150, FeedGranted, &model.EntitlementValue{Principal: "usr_ada", ItemID: "vpn"}))
+	must(t, tx.PutFeedIncident(1, 8, 200, FeedIncidentResolved, 0, inc))
+	if err := tx.PutFeedEntry(1, 9, 300, FeedIncidentRaised, inc); err == nil {
+		t.Fatal("an incident row was written without its definition")
+	}
+	if err := tx.PutFeedIncident(1, 9, 300, FeedGranted, 7, inc); err == nil {
+		t.Fatal("a grant row was written as an incident")
+	}
+	commit(t, tx)
+
+	rows := readFeed(t, s, 1, 0)
+	if len(rows) != 3 {
+		t.Fatalf("rows = %+v", rows)
+	}
+	raised, grant, resolved := rows[0], rows[1], rows[2]
+	if raised.Kind != FeedIncidentRaised || raised.Incident == nil || raised.Definition != 7 ||
+		raised.Incident.ElementInstanceKey != 42 || raised.Incident.JobKey != 43 || raised.At != 100 {
+		t.Fatalf("raised = %+v (%+v)", raised, raised.Incident)
+	}
+	if resolved.Kind != FeedIncidentResolved || resolved.Incident == nil || resolved.Definition != 0 {
+		t.Fatalf("resolved = %+v", resolved)
+	}
+	if raised.IsCatalogue() || resolved.IsCatalogue() || !grant.IsCatalogue() {
+		t.Fatalf("catalogue facts: raised %v resolved %v grant %v", raised.IsCatalogue(), resolved.IsCatalogue(), grant.IsCatalogue())
+	}
+}

@@ -17,11 +17,13 @@ const CATALOG = {
       payload: [field("orderId", false)], neverSecret: "TestTheOrderMessagesCarryNoSecret",
       access: { message: "Atlas's own fulfilment process" } },
     { type: "atlas.entitlement.granted", kind: "platform", channels: ["feed"], since: "Unreleased", stability: "stable",
+      serviceCatalogue: true,
       meaning: { en: "A right was granted.", de: "Ein Recht wurde erteilt." },
       moment: { producer: "the entitlement store" },
       payload: [field("principal", false), field("until", false, false)], neverSecret: "TestTheFeedCarriesNoSecret",
       access: { feed: "feedreader, or an events token" } },
     { type: "<message>.<outcome>", shaped: true, kind: "domain", channels: ["feed"], since: "Unreleased", stability: "stable",
+      serviceCatalogue: true,
       meaning: { en: "An action ended.", de: "Eine Aktion endete." }, moment: { producer: "the outcome route" },
       payload: [], neverSecret: "TestTheFeedCarriesNoSecret", access: { feed: "feedreader, or an events token" } },
     { type: "atlas.user.requested", kind: "domain", channels: ["signal"], since: "Unreleased", stability: "experimental",
@@ -30,10 +32,15 @@ const CATALOG = {
       moment: { places: [{ process: "proc_benutzer_aufnahme", element: "beantragt_melden" }], producer: "the intake process" },
       payload: [field("atlasInstance", false), field("vorname", true), field("email", true)],
       neverSecret: "TestSystemIntakeAnnouncesTheRequestAsASignal", access: { signal: "a deployed model with a signal start or catch" } },
+    { type: "atlas.incident.raised", kind: "platform", channels: ["feed"], since: "Unreleased", stability: "experimental",
+      meaning: { en: "A token parked on an element.", de: "Ein Token blieb stehen." },
+      moment: { producer: "the incident record" },
+      payload: [field("elementInstanceKey", false)], neverSecret: "TestTheFeedCarriesNoSecret",
+      access: { feed: "feedreader, or an events token without a reach" } },
   ],
 };
 
-const LISTENERS = (feedDelivered) => ({
+const LISTENERS = (catalogueWithheld) => ({
   processes: [
     { type: "atlas.order.placed", channel: "message", processId: "atlas-auftrag-erfuellung", processName: "Auftrag erfüllen",
       version: 3, definitionKey: 11, system: true, element: "Start", role: "start", catalogued: true, personal: [] },
@@ -43,12 +50,15 @@ const LISTENERS = (feedDelivered) => ({
     { type: "atlas.user.vanished", channel: "signal", processId: "hr-wait", processName: "Wartet ewig",
       version: 1, definitionKey: 13, projectId: "p-hr", element: "Catch_gone", role: "catch", catalogued: false },
   ],
-  feed: [{ subscriptionId: "fs-1", workerId: "w-billing", workerName: "billing", reach: [], enabled: true }],
-  feedTypes: ["atlas.entitlement.granted", "<message>.<outcome>"],
-  feedDelivered,
+  feed: [
+    { subscriptionId: "fs-1", workerId: "w-billing", workerName: "billing", reach: [], enabled: true },
+    { subscriptionId: "fs-2", workerId: "w-hr", workerName: "hr-cmdb", reach: ["cat-hr"], enabled: true },
+  ],
+  feedTypes: ["atlas.entitlement.granted", "<message>.<outcome>", "atlas.incident.raised"],
+  catalogueWithheld,
 });
 
-function installMock(page, { admin, feedDelivered = true }) {
+function installMock(page, { admin, catalogueWithheld = false }) {
   const calls = [];
   page.route("**/api/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -59,7 +69,7 @@ function installMock(page, { admin, feedDelivered = true }) {
     if (path.endsWith("/event-catalog")) return route.fulfill({ json: CATALOG });
     if (path.endsWith("/event-catalog/listeners")) {
       return admin
-        ? route.fulfill({ json: LISTENERS(feedDelivered) })
+        ? route.fulfill({ json: LISTENERS(catalogueWithheld) })
         : route.fulfill({ status: 403, json: { error: "forbidden: requires role admin" } });
     }
     return route.fulfill({ json: [] });
@@ -81,7 +91,7 @@ test.beforeEach(async ({ page }) => {
 test("a modeler reads every entry and has no listening-now column", async ({ page }) => {
   const calls = installMock(page, { admin: false });
   await openEvents(page);
-  await expect(page.locator("#ev-rows tr[data-i]")).toHaveCount(4);
+  await expect(page.locator("#ev-rows tr[data-i]")).toHaveCount(5);
   await expect(page.locator("#ev-head th")).toHaveCount(6);
   await expect(page.locator("#ev-head")).not.toContainText("Listening now");
   await expect(page.locator(".ev-count")).toHaveCount(0);
@@ -119,9 +129,11 @@ test("an administrator sees who listens, per event, with the personal data each 
   const count = (type) => page.locator(`#ev-rows tr[data-type="${type}"] .ev-count`);
   await expect(count("atlas.order.placed")).toHaveText("1");
   await expect(count("atlas.user.requested")).toHaveText("1");
-  // Every feed subscription receives every feed type.
-  await expect(count("atlas.entitlement.granted")).toHaveText("1");
-  await expect(count("<message>.<outcome>")).toHaveText("1");
+  // A subscription receives every catalogue type its reach allows; a fact of the
+  // engine reaches only the subscription narrowed to no catalogue.
+  await expect(count("atlas.entitlement.granted")).toHaveText("2");
+  await expect(count("<message>.<outcome>")).toHaveText("2");
+  await expect(count("atlas.incident.raised")).toHaveText("1");
 
   await page.locator('#ev-rows tr[data-type="atlas.user.requested"]').focus();
   await page.keyboard.press("Enter");
@@ -148,14 +160,35 @@ test("an administrator is warned about a model waiting for a name atlas never em
   expect(page.__errors).toEqual([]);
 });
 
-test("a feed entry lists the subscriptions, and says when the shop is off they wait", async ({ page }) => {
-  installMock(page, { admin: true, feedDelivered: false });
+test("a feed entry lists the subscriptions it reaches", async ({ page }) => {
+  installMock(page, { admin: true });
   await openEvents(page);
   await page.locator('#ev-rows tr[data-type="atlas.entitlement.granted"]').click();
-  const listeners = page.locator(".ev-detail .ev-listeners");
+  let listeners = page.locator(".ev-detail .ev-listeners");
   await expect(listeners).toContainText("No deployed model listens to this name.");
   await expect(listeners).toContainText("billing");
   await expect(listeners).toContainText("the whole feed");
-  await expect(listeners).toContainText("the feed is neither served nor pushed");
+  await expect(listeners).toContainText("hr-cmdb");
+  await expect(page.locator(".ev-detail")).toContainText("Part of the service catalogue");
+
+  await page.locator('#ev-rows tr[data-type="atlas.incident.raised"]').click();
+  listeners = page.locator(".ev-detail .ev-listeners");
+  await expect(listeners).toContainText("billing");
+  await expect(listeners).not.toContainText("hr-cmdb");
+  await expect(page.locator(".ev-detail")).not.toContainText("Part of the service catalogue");
+  expect(page.__errors).toEqual([]);
+});
+
+test("with the shop switched off the catalogue's events are withheld and the engine's still flow", async ({ page }) => {
+  installMock(page, { admin: true, catalogueWithheld: true });
+  await openEvents(page);
+  const count = (type) => page.locator(`#ev-rows tr[data-type="${type}"] .ev-count`);
+  await expect(count("atlas.entitlement.granted")).toHaveText("0");
+  await expect(count("atlas.incident.raised")).toHaveText("1");
+  await page.locator('#ev-rows tr[data-type="atlas.entitlement.granted"]').click();
+  await expect(page.locator(".ev-detail .ev-withheld")).toContainText("the feed passes over this event");
+  await page.locator('#ev-rows tr[data-type="atlas.incident.raised"]').click();
+  await expect(page.locator(".ev-detail .ev-withheld")).toHaveCount(0);
+  await expect(page.locator(".ev-detail .ev-listeners")).toContainText("billing");
   expect(page.__errors).toEqual([]);
 });

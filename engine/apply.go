@@ -303,8 +303,17 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 	case model.VTIncident:
 		switch h.Intent {
 		case model.IntentIncidentCreated:
-			return tx.PutIncident(&v.incident)
+			if err := tx.PutIncident(&v.incident); err != nil {
+				return err
+			}
+			return putIncidentFeedRow(tx, h, state.FeedIncidentRaised, &v.incident)
 		case model.IntentIncidentResolved:
+			// The row first: it reads the element the incident parked, which the
+			// resolution leaves in place, and the incident it names is the one the
+			// event carries.
+			if err := putIncidentFeedRow(tx, h, state.FeedIncidentResolved, &v.incident); err != nil {
+				return err
+			}
 			return tx.DeleteIncident(v.incident.ElementInstanceKey)
 		}
 
@@ -536,4 +545,24 @@ func setVariableElement(tx *stateTx, v *model.VariableValue) error {
 	next := *cur
 	next.Kind, next.Bool, next.Text = model.VarKind(kind), b, text
 	return tx.PutVariable(&next)
+}
+
+// putIncidentFeedRow puts an incident raised or resolved on the feed (ADR-0435): a
+// fact of the engine a receiver beyond Atlas can be told, keyed by where its record
+// sits on the log. The definition the instance ran is read from the parked element,
+// through the same indexed batch, live and on replay alike (I4); an element the batch
+// no longer holds leaves it zero rather than failing the fold. The row carries the
+// incident whole, and the feed decides what of it leaves: never the message, which is
+// whatever text a worker or an expression produced.
+func putIncidentFeedRow(tx *state.Tx, h model.RecordHeader, kind state.FeedKind, inc *model.IncidentValue) error {
+	var definition uint64
+	var ei model.ElementInstanceValue
+	found, err := tx.GetElementInstanceInto(inc.ElementInstanceKey, &ei)
+	if err != nil {
+		return err
+	}
+	if found {
+		definition = ei.ProcessDefKey
+	}
+	return tx.PutFeedIncident(h.PartitionId, h.Position, h.Timestamp, kind, definition, inc)
 }

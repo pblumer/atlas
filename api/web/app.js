@@ -833,7 +833,7 @@ const WORKER_TYPES = [
   },
   {
     id: "cloudevents", name: "CloudEvents endpoint", kind: "Event feed",
-    desc: "Where the event feed is pushed: a system beyond atlas \u2014 billing, a CMDB \u2014 is sent how each action asked of a held position ended and every right granted and revoked, as CloudEvents batches over https, instead of pulling the feed itself. No task names this Worker; its Feed\u2026 panel subscribes it to the feed, narrowed to some catalogues if you like. atlas delivers from the feed it already holds, off the processor loop, and moves its cursor only when the endpoint accepted a batch: a refusal is held and tried again, never skipped. Administrator configuration.",
+    desc: "Where the event feed is pushed: a system beyond atlas \u2014 billing, a CMDB \u2014 is sent how each action asked of a held position ended, every right granted and revoked, and every incident raised and resolved, as CloudEvents batches over https, instead of pulling the feed itself. No task names this Worker; its Feed\u2026 panel subscribes it to the feed, narrowed to some catalogues if you like. atlas delivers from the feed it already holds, off the processor loop, and moves its cursor only when the endpoint accepted a batch: a refusal is held and tried again, never skipped. Administrator configuration.",
     refs: "ADR-0429 \u00b7 ADR-0430", status: "active", statusLabel: "configured below",
   },
   {
@@ -1988,7 +1988,7 @@ const GRANTABLE_ROLES = [
   { id: "operator", name: "Operator", what: "start, cancel and repair instances; read runtime data" },
   { id: "user", name: "User", what: "work on tasks and read what they are given" },
   { id: "productmanager", name: "Product manager", what: "maintain the shop's catalogues and products, and publish releases" },
-  { id: "feedreader", name: "Feed reader", what: "read the event feed of action outcomes and granted and revoked rights, and nothing else" },
+  { id: "feedreader", name: "Feed reader", what: "read the event feed of action outcomes, granted and revoked rights and incidents, and nothing else" },
 ];
 
 function userForm(u) {
@@ -2276,9 +2276,9 @@ async function viewConsoleWorkers() {
     if (c.kind === "clio" || c.kind === "jira" || c.kind === "googlesheets" || c.kind === "discord" || c.kind === "mail") items.push({ label: "Events…", icon: "⇄", act: "subs" });
     // A CloudEvents endpoint is subscribed to the event feed, which is administrator
     // configuration: the panel lists what the worker is sent and how delivery stands.
-    // The feed is the catalogue's: with the area switched off its subscriptions are not
-    // served, so the entry would open a panel whose every call is a 404.
-    if (c.kind === "cloudevents" && mayUse("admin") && FEATURES.catalogue) items.push({ label: "Feed…", icon: "⇉", act: "feed" });
+    // The feed carries the engine's facts too, so it stays when the service catalogue
+    // is switched off (ADR-0435 §6).
+    if (c.kind === "cloudevents" && mayUse("admin")) items.push({ label: "Feed…", icon: "⇉", act: "feed" });
     // Every Worker Type the check covers: mail connects and authenticates (or sends a
     // test message), a SQL worker dials its connection string. workerShape is the one
     // place that knows, so the menu does not go stale the next type that gains one.
@@ -5050,7 +5050,7 @@ async function toggleFeedSubs(row, workerId) {
   const panel = document.createElement("tr");
   panel.className = "subs-row";
   panel.innerHTML = `<td colspan="3" style="background:var(--surface); padding:12px 18px">
-    <div class="muted" style="margin-bottom:8px">The event feed pushed to this endpoint — how each action asked of a held position ended, and every right granted and revoked — as CloudEvents batches. A batch the endpoint refuses is <b>held and tried again</b>, never skipped; the receiver deduplicates by each event's <code>id</code>. Narrowed to some catalogues, it is sent only the events about the products they maintain. If the feed's retention passes a subscription that fell behind, it is switched off and says so: enable it again from the oldest event held.</div>
+    <div class="muted" style="margin-bottom:8px">The event feed pushed to this endpoint — how each action asked of a held position ended, every right granted and revoked, and every incident raised and resolved — as CloudEvents batches. A batch the endpoint refuses is <b>held and tried again</b>, never skipped; the receiver deduplicates by each event's <code>id</code>. Narrowed to some catalogues, it is sent only the events about the products they maintain. If the feed's retention passes a subscription that fell behind, it is switched off and says so: enable it again from the oldest event held.</div>
     <table style="width:100%"><tbody id="feed-body">${list}</tbody></table>
     <form id="feed-form" style="display:grid;gap:8px;grid-template-columns:2fr 1fr 1fr auto;align-items:end;margin-top:10px">
       <label class="field" style="margin:0"><span>Catalogues (none selected: the whole feed)</span><select name="reach" multiple size="3">${options}</select></label>

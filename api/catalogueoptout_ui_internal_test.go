@@ -67,10 +67,11 @@ func TestTheMenusLeaveOutWhatTheServerSwitchedOff(t *testing.T) {
 	if !strings.Contains(src, `(FEATURES.catalogue ? shopHandbook : "")`) {
 		t.Error("the help menu offers the shop handbook whether or not the catalogue is on")
 	}
-	// The feed's subscriptions hang off a CloudEvents Worker's row, not off a menu,
-	// and are the catalogue's all the same (ADR-0433).
-	if !strings.Contains(src, `c.kind === "cloudevents" && mayUse("admin") && FEATURES.catalogue`) {
-		t.Error("a CloudEvents Worker still offers its feed subscriptions with the catalogue off")
+	// The feed's subscriptions hang off a CloudEvents Worker's row, and are not the
+	// catalogue's: the feed carries the engine's facts too, and stays when the shop is
+	// off (ADR-0435 §6).
+	if !strings.Contains(src, `c.kind === "cloudevents" && mayUse("admin")) items.push({ label: "Feed…"`) {
+		t.Error("a CloudEvents Worker does not offer its feed subscriptions whatever the catalogue's state")
 	}
 	// A bookmark into a view of the area must say why there is nothing there, not
 	// open a view whose every call answers 404.

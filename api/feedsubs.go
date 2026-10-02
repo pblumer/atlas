@@ -289,7 +289,7 @@ func (s *Server) deleteFeedSubscriptionsOf(workerID string) error {
 // feedCursorAt is the cursor "oldest" or "now" names in the feed as it stands: after the
 // cut its retention made, or after its newest row.
 func (s *Server) feedCursorAt(from string) (uint64, error) {
-	view, _, part, err := s.feedSnapshot()
+	view, _, part, _, err := s.feedSnapshot()
 	if err != nil {
 		return 0, err
 	}

@@ -12,8 +12,9 @@ import (
 
 // The event feed (ADR-0429 §5): what leaves Atlas, as state.
 //
-// applyToState folds every action outcome, every grant and every revocation into one
-// row keyed by the partition and the log position of the record that carried it —
+// applyToState folds every action outcome, every grant, every revocation and every
+// incident raised or resolved into one row keyed by the partition and the log position
+// of the record that carried it —
 // both fixed by the log, so replay writes the same rows under the same keys (I4). A
 // reader pages through the rows in position order from a cursor. The rows are
 // dropped by an explicit prune fact through a position, never by a delete nobody
@@ -31,6 +32,11 @@ const (
 	FeedGranted FeedKind = 2
 	// FeedRevoked is a right ended, with the hold it ended.
 	FeedRevoked FeedKind = 3
+	// FeedIncidentRaised is an incident raised: a token parked on an element
+	// (ADR-0435). It is a fact of the engine, not of the catalogue.
+	FeedIncidentRaised FeedKind = 4
+	// FeedIncidentResolved is an incident resolved.
+	FeedIncidentResolved FeedKind = 5
 )
 
 const (
@@ -51,7 +57,7 @@ func keyFeedPrunedThrough(partition uint16) []byte {
 }
 
 // FeedEntry is one row of the feed: where the fact sits on the log, when it was
-// recorded, and the fact itself — exactly one of the three values, by Kind.
+// recorded, and the fact itself — exactly one of the values, by Kind.
 type FeedEntry struct {
 	Partition uint16
 	Position  uint64
@@ -60,6 +66,18 @@ type FeedEntry struct {
 	Outcome   *model.ActionOutcomeValue
 	Granted   *model.EntitlementValue
 	Revoked   *model.EntitlementHistoryValue
+	// Incident is the incident a raised or resolved row is about, and Definition
+	// the process definition its instance ran, read when the row was folded: an
+	// incident names its instance, and the instance may be long gone when a
+	// receiver reads the row. Zero when the fold could not find it.
+	Incident   *model.IncidentValue
+	Definition uint64
+}
+
+// IsCatalogue reports whether the row is a fact of the service catalogue — an
+// outcome, a grant or a revocation — rather than of the engine.
+func (e FeedEntry) IsCatalogue() bool {
+	return e.Outcome != nil || e.Granted != nil || e.Revoked != nil
 }
 
 // feedValueType is the value type a kind's payload is encoded as.
@@ -71,18 +89,40 @@ func feedValueType(k FeedKind) (model.ValueType, bool) {
 		return model.VTEntitlement, true
 	case FeedRevoked:
 		return model.VTEntitlementHistory, true
+	case FeedIncidentRaised, FeedIncidentResolved:
+		return model.VTIncident, true
 	}
 	return 0, false
 }
 
+// feedCarriesDefinition reports whether a kind's row holds a definition key between
+// the time and the value.
+func feedCarriesDefinition(k FeedKind) bool {
+	return k == FeedIncidentRaised || k == FeedIncidentResolved
+}
+
 // PutFeedEntry writes the row for the fact at position on partition, recorded at at.
 func (t *Tx) PutFeedEntry(partition uint16, position uint64, at int64, kind FeedKind, v model.Value) error {
-	if vt, ok := feedValueType(kind); !ok || v.ValueType() != vt {
+	if vt, ok := feedValueType(kind); !ok || feedCarriesDefinition(kind) || v.ValueType() != vt {
 		return fmt.Errorf("state: a feed row of kind %d cannot carry a %s", kind, v.ValueType())
 	}
 	row := make([]byte, 0, 64)
 	row = append(row, byte(kind))
 	row = binary.BigEndian.AppendUint64(row, uint64(at))
+	row = model.AppendValue(row, v)
+	return t.b.Set(keyFeedRow(partition, position), row, nil)
+}
+
+// PutFeedIncident writes the row for an incident raised or resolved at position on
+// partition, recorded at at, with the definition its instance ran.
+func (t *Tx) PutFeedIncident(partition uint16, position uint64, at int64, kind FeedKind, definition uint64, v *model.IncidentValue) error {
+	if !feedCarriesDefinition(kind) {
+		return fmt.Errorf("state: a feed row of kind %d is not an incident", kind)
+	}
+	row := make([]byte, 0, 80)
+	row = append(row, byte(kind))
+	row = binary.BigEndian.AppendUint64(row, uint64(at))
+	row = binary.BigEndian.AppendUint64(row, definition)
 	row = model.AppendValue(row, v)
 	return t.b.Set(keyFeedRow(partition, position), row, nil)
 }
@@ -125,7 +165,15 @@ func decodeFeedRow(partition uint16, key, raw []byte) (FeedEntry, error) {
 	if !ok {
 		return FeedEntry{}, fmt.Errorf("state: a feed row of unknown kind %d", e.Kind)
 	}
-	v, err := model.DecodeValue(vt, raw[9:])
+	body := raw[9:]
+	if feedCarriesDefinition(e.Kind) {
+		if len(body) < 8 {
+			return FeedEntry{}, fmt.Errorf("state: an incident feed row of %d bytes is cut short", len(raw))
+		}
+		e.Definition = binary.BigEndian.Uint64(body[:8])
+		body = body[8:]
+	}
+	v, err := model.DecodeValue(vt, body)
 	if err != nil {
 		return FeedEntry{}, err
 	}
@@ -136,6 +184,8 @@ func decodeFeedRow(partition uint16, key, raw []byte) (FeedEntry, error) {
 		e.Granted = val
 	case *model.EntitlementHistoryValue:
 		e.Revoked = val
+	case *model.IncidentValue:
+		e.Incident = val
 	}
 	return e, nil
 }
