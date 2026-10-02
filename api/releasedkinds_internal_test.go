@@ -80,34 +80,33 @@ func TestEveryReservedJobTypeIsRegistered(t *testing.T) {
 // meaningful exemption if the citation is real, so the record has to exist and its
 // status has to be read rather than assumed.
 //
-// A row cites either a numbered record or a draft, and exactly one of the two. The draft
+// A row cites a record either by number or by slug, and exactly one of the two. The slug
 // case is not a loophole, it is the normal state of a kind on the branch that adds it:
 // ADR-0170 assigns numbers when a record lands on main, so a kind shipping with its own
 // decision has nothing but a slug to cite until then. Both are read the same way — the
-// record must exist and must say Accepted — and the draft half carries one extra rule the
-// numbered half does not need: once the draft file is gone, the record was numbered, and
-// the row has to be updated to say so.
+// record must exist and must say Accepted — and a slug is resolved against either file
+// name the record can have, draft-<slug>.md before numbering and NNNN-<slug>.md after, so
+// the automatic numbering step on main cannot turn a green row red.
 func TestReleasedKindsCiteAnAcceptedRecord(t *testing.T) {
 	status := adrStatuses(t)
-	drafts := adrDraftStatuses(t)
+	bySlug := adrStatusesBySlug(t)
 	for _, k := range releasedKinds {
 		switch {
-		case k.ADR != 0 && k.Draft != "":
-			t.Errorf("%s cites both ADR-%04d and draft %q; a kind was decided once", k.JobType, k.ADR, k.Draft)
-		case k.ADR == 0 && k.Draft == "":
-			t.Errorf("%s cites no record at all — say which ADR decided it, or which draft does "+
-				"while that record is still in flight (ADR-0167, ADR-0170)", k.JobType)
-		case k.Draft != "":
-			st, ok := drafts[k.Draft]
+		case k.ADR != 0 && k.Slug != "":
+			t.Errorf("%s cites both ADR-%04d and slug %q; a kind was decided once", k.JobType, k.ADR, k.Slug)
+		case k.ADR == 0 && k.Slug == "":
+			t.Errorf("%s cites no record at all — say which ADR decided it, or name its slug "+
+				"while that record has no number yet (ADR-0167, ADR-0170)", k.JobType)
+		case k.Slug != "":
+			st, ok := bySlug[k.Slug]
 			if !ok {
-				t.Errorf("%s cites draft %q, and docs/adr/draft-%s.md does not exist. If the record was just "+
-					"numbered, replace Draft with that number in its ADR field — `make adr-number` rewrites "+
-					"citations in comments, not this row", k.JobType, k.Draft, k.Draft)
+				t.Errorf("%s cites slug %q, and docs/adr holds neither draft-%s.md nor NNNN-%s.md",
+					k.JobType, k.Slug, k.Slug, k.Slug)
 				continue
 			}
 			if st != "Accepted" {
-				t.Errorf("%s cites draft %q, whose status is %q. A kind that ships is a decision that was taken; "+
-					"either the record is out of date or this row cites the wrong one", k.JobType, k.Draft, st)
+				t.Errorf("%s cites slug %q, whose status is %q. A kind that ships is a decision that was taken; "+
+					"either the record is out of date or this row cites the wrong one", k.JobType, k.Slug, st)
 			}
 		default:
 			st, ok := status[k.ADR]
@@ -280,20 +279,63 @@ func adrStatuses(t *testing.T) map[int]string {
 	return out
 }
 
+// TestASlugCitationSurvivesNumbering is the point of reading both file names, pinned on
+// its own because the failure it prevents happens on a step nobody runs by hand.
+//
+// `make adr-number` renames draft-<slug>.md to NNNN-<slug>.md on main, automatically, and
+// it does not know this registry exists. If the slug lookup ever read drafts only, every
+// row citing a slug would go red the moment its record was numbered — on main, after the
+// branch that could have fixed it had already merged. So the lookup is checked against a
+// record that is already numbered as well as against one that is not.
+func TestASlugCitationSurvivesNumbering(t *testing.T) {
+	bySlug := adrStatusesBySlug(t)
+	dir := filepath.Join("..", "docs", "adr")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read docs/adr: %v", err)
+	}
+	var numbered, draft string
+	for _, e := range entries {
+		switch {
+		case numbered == "" && adrFileName.MatchString(e.Name()):
+			numbered = strings.TrimSuffix(e.Name()[5:], ".md")
+		case draft == "" && strings.HasPrefix(e.Name(), "draft-"):
+			draft = strings.TrimSuffix(strings.TrimPrefix(e.Name(), "draft-"), ".md")
+		}
+	}
+	if numbered == "" {
+		t.Fatal("no numbered record found; this guard would pass vacuously")
+	}
+	if _, ok := bySlug[numbered]; !ok {
+		t.Errorf("the slug lookup does not resolve %q, which is a numbered record — a row citing a slug "+
+			"would break the moment `make adr-number` ran on main", numbered)
+	}
+	// A draft is the other half, and there is not always one in the tree: once this
+	// branch's own record is numbered there may be none at all, which is not a failure.
+	if draft != "" {
+		if _, ok := bySlug[draft]; !ok {
+			t.Errorf("the slug lookup does not resolve the draft %q", draft)
+		}
+	}
+}
+
 // citationOf renders a row's record for a message, whichever half it cites.
 func citationOf(k releasedKind) string {
-	if k.Draft != "" {
-		return "draft-" + k.Draft
+	if k.Slug != "" {
+		return k.Slug
 	}
 	return fmt.Sprintf("ADR-%04d", k.ADR)
 }
 
-var adrDraftFileName = regexp.MustCompile(`^draft-([a-z0-9-]+)\.md$`)
+// A record's slug is what stays the same across numbering: draft-<slug>.md becomes
+// NNNN-<slug>.md and nothing else about it changes. Both names are read here so a row
+// citing a slug keeps resolving after the numbering workflow has run on main.
+var adrSlugFileName = regexp.MustCompile(`^(?:draft|\d{4})-([a-z0-9-]+)\.md$`)
 
-// adrDraftStatuses reads the status of each record still in flight, keyed by slug. It is
-// adrStatuses for the other half of the directory, and it exists because a kind that ships
-// with its own decision has no number to cite yet — see the guard above.
-func adrDraftStatuses(t *testing.T) map[string]string {
+// adrStatusesBySlug reads each record's declared status, keyed by slug rather than by
+// number. It is adrStatuses read through the other key, and it exists because a kind that
+// ships with its own decision has no number to cite yet — see the guard above.
+func adrStatusesBySlug(t *testing.T) map[string]string {
 	t.Helper()
 	dir := filepath.Join("..", "docs", "adr")
 	entries, err := os.ReadDir(dir)
@@ -303,7 +345,7 @@ func adrDraftStatuses(t *testing.T) map[string]string {
 	statusLine := regexp.MustCompile(`(?m)^- \*\*Status:\*\* (.+)$`)
 	out := map[string]string{}
 	for _, e := range entries {
-		m := adrDraftFileName.FindStringSubmatch(e.Name())
+		m := adrSlugFileName.FindStringSubmatch(e.Name())
 		if m == nil {
 			continue
 		}
