@@ -1700,12 +1700,13 @@ async function viewConsoleAudit() {
               <option value="unshare">Revoke</option>
               <option value="visibility">Visibility</option>
               <option value="transfer">Transfer</option>
+              <option value="confidential">Confidential</option>
             </select>
           </label>
           <button class="btn neutral" id="audit-refresh" title="Reload the audit log">Refresh</button>
         </div>
       </div>
-      <p class="muted">Access-control changes across every application — shares, revokes, visibility changes, and ownership transfers — newest first.</p>
+      <p class="muted">Access-control changes across every application — shares, revokes, visibility changes, ownership transfers, and the confidential mark — newest first.</p>
       <div id="audit-out">loading…</div>
     </div>`;
 
@@ -1725,11 +1726,12 @@ async function viewConsoleAudit() {
       case "unshare": return `removed ${esc(nameOf(e.subjectId))}${isGroup(e.subjectId) ? " (group)" : ""}`;
       case "visibility": return `visibility ${esc(e.from)} → ${esc(e.to)}`;
       case "transfer": return `ownership ${esc(nameOf(e.from))} → ${esc(nameOf(e.to))}`;
+      case "confidential": return e.to === "true" ? "marked confidential" : "confidential mark removed";
       default: return esc(e.action);
     }
   };
   const actionPill = (a) => {
-    const cls = { share: "ok", unshare: "err", visibility: "warn", transfer: "warn" }[a] || "";
+    const cls = { share: "ok", unshare: "err", visibility: "warn", transfer: "warn", confidential: "warn" }[a] || "";
     return `<span class="pill ${cls}">${esc(a)}</span>`;
   };
 
@@ -3917,6 +3919,19 @@ function openShareModal(proj, users, degraded, reload) {
          </div>`
       : "";
 
+    // The confidential mark (ADR-draft-confidential-projects): the instances of what
+    // this application deploys are seen and acted on by the people with access here
+    // and by admins — not by every operator. Owner only, like the other access
+    // changes; a protected system application cannot carry it.
+    const confidentialSec = p.myRole === "owner" && !p.protected
+      ? `<div class="share-sec">
+           <label class="field inline" style="margin:0"><input type="checkbox" id="conf-toggle"${p.confidential ? " checked" : ""}> Confidential instances</label>
+           <p class="muted small">Running and finished instances, their variables, incidents and tasks are visible only to the people with access above and to admins — operators of other teams no longer see or act on them. Workers keep serving the jobs. Backups and an OpenSearch export are not covered.</p>
+         </div>`
+      : p.confidential
+        ? `<div class="share-sec"><p class="muted small">Confidential: instances are visible to the people with access and to admins only.</p></div>`
+        : "";
+
     body.innerHTML = `
       <div class="share-sec">
         <div class="seg" role="group" aria-label="Visibility">
@@ -3933,6 +3948,7 @@ function openShareModal(proj, users, degraded, reload) {
         <div class="mlabel">Add people</div>
         ${addControl}
       </div>
+      ${confidentialSec}
       ${transferSec}
       ${p.myRole === "owner" ? `<div class="share-sec" id="share-activity"></div>` : ""}`;
     wire();
@@ -3951,6 +3967,7 @@ function openShareModal(proj, users, degraded, reload) {
       case "unshare": return `${who} removed ${subj()}`;
       case "visibility": return `${who} set visibility to ${esc(e.to)}`;
       case "transfer": return `${who} transferred ownership to ${esc(nameOf(e.to))}`;
+      case "confidential": return e.to === "true" ? `${who} marked the instances confidential` : `${who} removed the confidential mark`;
       default: return `${who} changed access`;
     }
   };
@@ -3973,6 +3990,13 @@ function openShareModal(proj, users, degraded, reload) {
   const apply = async (fn) => { try { p = await fn(); renderBody(); } catch (e) { toast(e.message, "err"); } };
   const setVisibility = (v) => apply(() =>
     api("PATCH", `/api/v1/applications/${encodeURIComponent(p.id)}`, { visibility: v }));
+  // The answer may carry warnings — today, that an OpenSearch export still carries
+  // the instances — which the owner has to read, not just the new state.
+  const setConfidential = (on) => apply(async () => {
+    const next = await api("PATCH", `/api/v1/applications/${encodeURIComponent(p.id)}`, { confidential: on });
+    for (const w of next.warnings || []) toast(w, "warn");
+    return next;
+  });
   // A member ref is a user by default, or a group; resolve the type from the
   // existing member (role change) or the directory entry (fresh add), so the PUT
   // records the right kind (ADR-0180).
@@ -4018,6 +4042,8 @@ function openShareModal(proj, users, degraded, reload) {
       const uid = (body.querySelector("#add-uid").value || "").trim();
       setMember(uid, body.querySelector("#add-role").value);
     });
+    const confToggle = body.querySelector("#conf-toggle");
+    if (confToggle) confToggle.addEventListener("change", () => setConfidential(confToggle.checked));
     const xferBtn = body.querySelector("#xfer-btn");
     if (xferBtn) xferBtn.addEventListener("click", () =>
       transferOwnership((body.querySelector("#xfer-uid").value || "").trim()));

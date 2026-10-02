@@ -194,8 +194,13 @@ func (s *Server) handleDecisionEvaluations(w http.ResponseWriter, r *http.Reques
 	out := []decisionEvaluationRow{}
 	var scanErr error
 	s.do(func() {
+		veil := s.veilOnLoop(httpapi.PrincipalFrom(r.Context()))
 		scanErr = s.store.EachDecisionEvaluation(func(_ uint64, ts int64, v *model.DecisionEvaluationValue) error {
 			if v.DecisionId != id {
+				return nil
+			}
+			if veil.hides(v.ProcessDefKey) {
+				// Its inputs are the instance's data (confidential.go).
 				return nil
 			}
 			row := decisionEvaluationRow{

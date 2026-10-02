@@ -52,6 +52,7 @@ import (
 	"github.com/pblumer/atlas/api/infomodel"
 	"github.com/pblumer/atlas/api/panorama"
 	"github.com/pblumer/atlas/api/runloop"
+	"github.com/pblumer/atlas/api/sidecar"
 	"github.com/pblumer/atlas/api/taskfolder"
 	"github.com/pblumer/atlas/checkpoint"
 	"github.com/pblumer/atlas/compiler"
@@ -392,6 +393,10 @@ type Server struct {
 	// report a healthy peer as gone. Same lifetime rules as remoteNodes otherwise —
 	// set once before Handler is mounted, mutated under its own mutex.
 	remoteLandscapes *remoteLandscapeCache
+
+	// confidential is the projects marked confidential, kept current by the project
+	// store's own change hook (confidential.go).
+	confidential *confidentialIndex
 
 	// panoramaMesh is Panorama's derived landscape altitude (ADR-0211): a graph
 	// computed from this server's own resources, never stored. Separate from the
@@ -1313,9 +1318,17 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
-	projects, err := newProjectStore(filepath.Join(dataDir, "projects"))
+	confidential := newConfidentialIndex()
+	projects, err := newProjectStore(filepath.Join(dataDir, "projects"), sidecar.Observe(confidential.observe))
 	if err != nil {
 		return nil, err
+	}
+	// Seeded before the server answers anything: an index that started empty and
+	// filled later would serve the first requests with every project open.
+	if all, err := projects.LoadAll(); err != nil {
+		return nil, fmt.Errorf("load projects: %w", err)
+	} else {
+		confidential.seed(all)
 	}
 	processDocStore, err := processdoc.NewStore(filepath.Join(dataDir, "process-docs"))
 	if err != nil {
@@ -1515,6 +1528,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		registerRate:      newRateLimiter(30, 0.2),
 		logins:            newLoginGuard(),
 		projects:          projects,
+		confidential:      confidential,
 		releases:          releases,
 		grantAudit:        grantAudit,
 		deployTokenStore:  deployTokenStore,
@@ -3318,13 +3332,19 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	for _, r := range s.apiRoutes() {
 		route := r.method + " " + r.pattern
 		class := apiRouteAccess(route)
+		h := r.handler
+		if r.op.veil != veilNone {
+			// Inside the role gate, so the check runs only for a caller the route admits
+			// at all (confidential.go).
+			h = s.veiled(r.op.veil, h)
+		}
 		if s.traceRoutes {
 			// The span is named for the *pattern*, which is fixed by this table, so the
 			// set of span names is bounded by the code rather than by traffic (ADR-0142).
-			mount(class, r.op.role, route, tracing.Handler(route, r.handler))
+			mount(class, r.op.role, route, tracing.Handler(route, h))
 			continue
 		}
-		mountFunc(class, r.op.role, route, r.handler)
+		mountFunc(class, r.op.role, route, h)
 	}
 
 	// The MCP transport, when the binary supplied one (ADR-0016). It is mounted

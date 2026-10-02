@@ -587,10 +587,16 @@ The control-flow basics most real models use.
   optionally, only a DMARC pass, and never changes the mailbox. A task that reads a mail
   Worker's mailbox deploys only for a viewer of it and one that changes it for an editor,
   at every deploy door — the application import included, which also gained ADR-0205's
-  message-name claim it had skipped. Still open: instance reads by relationship rather
-  than by role (ADR-0275), so what a process receives is not yet hidden from the
-  installation's other operators; IMAP `XOAUTH2`; push instead of polling (IMAP `IDLE`,
-  Graph change notifications).
+  message-name claim it had skipped. What a process receives is hidden from the
+  installation's other operators once its application is marked **confidential**
+  ([the confidential-projects draft](docs/adr/draft-confidential-projects.md)): its
+  instances — lists, counts, search, per-instance views, incidents, jobs, tasks and every
+  operator action on them — are then its members' and the admins', and no longer every
+  operator's; workers with a machine credential serve its jobs as before. The mark is
+  opt-in per application and a visibility rule of the API, not encryption: admins,
+  backups and an OpenSearch export still hold everything. Still open: per-application
+  filtering in the OpenSearch exporter; IMAP `XOAUTH2`; push instead of polling (IMAP
+  `IDLE`, Graph change notifications).
   The same reader also runs the other way: `atlas openapi-template --spec x.yaml --out
   dir` writes one element-template package per operation, in the repository catalog's
   own shape ([ADR-0300](docs/adr/0300-openapi-element-templates.md)) —

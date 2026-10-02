@@ -201,6 +201,13 @@ func fillInstanceRow(rv *state.ReadView, defs defIndex, key uint64, v *model.Pro
 func listInstances(rv *state.ReadView, defs defIndex, q instanceListQuery) (instancePage, error) {
 	var page instancePage
 
+	if q.hasDef && defs.hides(q.defKey) {
+		// A definition the caller may not see into has, for them, no instances — an
+		// exact zero, the same answer a definition with none gives (confidential.go).
+		page.rows = []instanceResp{}
+		page.countedBy(0)
+		return page, nil
+	}
 	if q.element != "" {
 		return listInstancesOnElement(rv, defs, q)
 	}
@@ -212,6 +219,9 @@ func listInstances(rv *state.ReadView, defs defIndex, q instanceListQuery) (inst
 	// sentinel rather than enriching rows it will not return.
 	collect := func(into *[]instanceResp) func(uint64, *model.ProcessInstanceValue) error {
 		return func(key uint64, v *model.ProcessInstanceValue) error {
+			if defs.hides(v.ProcessDefKey) {
+				return nil // a confidential project's, and not the caller's (confidential.go)
+			}
 			if len(*into) >= q.limit {
 				page.truncated = true
 				return errListTruncated
@@ -260,8 +270,8 @@ func listInstances(rv *state.ReadView, defs defIndex, q instanceListQuery) (inst
 				page.countedBy(n)
 			}
 		case q.state == "active":
-			if n, err := rv.TotalActiveInstances(); err == nil {
-				page.countedBy(int(n))
+			if n, err := activeTotalFor(rv, defs); err == nil {
+				page.countedBy(n)
 			}
 		}
 		page.floorFromRows()
@@ -309,6 +319,29 @@ func listInstances(rv *state.ReadView, defs defIndex, q instanceListQuery) (inst
 	// with ?process= or ?state=active is what buys an exact one.
 	page.floorFromRows()
 	return page, nil
+}
+
+// activeTotalFor is the engine's live total as the caller may see it: the maintained
+// counter, less the live instances of every definition hidden from them. Each term
+// is a counter read, so the answer stays exact and costs one read per hidden
+// definition rather than a scan — and on a server with nothing hidden, one read.
+func activeTotalFor(rv *state.ReadView, defs defIndex) (int, error) {
+	n, err := rv.TotalActiveInstances()
+	if err != nil {
+		return 0, err
+	}
+	total := int(n)
+	for _, k := range defs.hiddenKeys() {
+		live, err := rv.DefInstanceCount(k)
+		if err != nil {
+			return 0, err
+		}
+		total -= live
+	}
+	if total < 0 {
+		total = 0
+	}
+	return total, nil
 }
 
 // listInstancesOnElement pages the instances whose token is sitting on one element
@@ -391,7 +424,7 @@ func (s *Server) handleListInstances(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var page instancePage
-	scanErr := s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
+	scanErr := s.readOffLoopAs(r, func(rv *state.ReadView, defs defIndex) error {
 		page, err = listInstances(rv, defs, q)
 		return err
 	})

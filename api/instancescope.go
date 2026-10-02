@@ -28,7 +28,9 @@ import (
 //   - Authentication off: everything, as everywhere else — single-user mode is a
 //     single user.
 //   - Operator or admin: everything. They can already list every instance; this
-//     endpoint is not where that is narrowed.
+//     endpoint is not where that is narrowed. The exception is an instance of a
+//     confidential project the caller is not a member of, where the role counts
+//     for nothing and the rules below decide (confidential.go).
 //   - A member of the project the instance's definition was deployed from:
 //     everything. This is ADR-0071's inheritance, followed one step further —
 //     from the project to the draft to the deployment to the instance it runs.
@@ -80,15 +82,29 @@ func (s *Server) instanceAccessFor(r *http.Request, scopeKey uint64) (instanceAc
 	if pr == nil {
 		return instanceAccess{}, http.StatusUnauthorized, "sign in to read instance data"
 	}
-	if pr.HasRole(RoleOperator) || pr.HasRole(RoleAdmin) {
-		return instanceAccess{full: true}, 0, ""
+	privileged := pr.HasRole(RoleOperator) || pr.HasRole(RoleAdmin)
+	if privileged && s.confidential.none() {
+		return instanceAccess{full: true}, 0, "" // nothing is confidential: no turn on the loop
 	}
 	var (
 		acc   instanceAccess
 		known bool
 		err   error
 	)
-	s.do(func() { acc, known, err = s.instanceAccessOnLoop(pr, scopeKey) })
+	s.do(func() {
+		if privileged {
+			// Everything — unless the instance belongs to a confidential project the
+			// caller is not a member of. Then their role buys nothing here, and they
+			// are asked the questions everybody else is: a task they hold still opens
+			// its form's fields (confidential.go).
+			var hidden bool
+			if hidden, err = s.instanceHiddenOnLoop(s.veilOnLoop(pr), scopeKey); err != nil || !hidden {
+				acc, known = instanceAccess{full: true}, true
+				return
+			}
+		}
+		acc, known, err = s.instanceAccessOnLoop(pr, scopeKey)
+	})
 	switch {
 	case err != nil:
 		return instanceAccess{}, http.StatusInternalServerError, "read instance: " + err.Error()

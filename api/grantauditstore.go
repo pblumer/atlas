@@ -20,6 +20,10 @@ const (
 	GrantActionUnshare    = "unshare"    // a member was revoked
 	GrantActionVisibility = "visibility" // visibility changed (From → To)
 	GrantActionTransfer   = "transfer"   // ownership moved (From owner → To owner)
+	// GrantActionConfidential: the project was marked confidential or the mark was
+	// removed (From → To, "true"/"false"). It changes who may see the instances of
+	// everything deployed from the project, which is an access change by any reading.
+	GrantActionConfidential = "confidential"
 )
 
 // grantAudit is one immutable access-control event on a project. Everything is

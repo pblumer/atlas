@@ -49,6 +49,13 @@ type apiOp struct {
 	// nobody, and TestEveryRouteDeclaresARole makes empty a failing build.
 	role string
 
+	// veil puts the confidential-projects check in front of the route
+	// (confidential.go): the kind says what its {key} names, and a key naming an
+	// instance of a confidential project the caller is not a member of answers 404,
+	// as a key naming nothing does. Declared here, beside the role, for the same
+	// reason the role is — TestEveryInstanceRouteIsVeiled reads this table.
+	veil veilKind
+
 	status     int       // primary success status; 0 means 200 OK
 	deprecated bool      // renders openapi `deprecated: true` (e.g. an alias kept for compat)
 	req        *bodySpec // request body, or nil when the route takes none
@@ -263,7 +270,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Delete a deployment (must have no running instances)", tag: "Processes", role: RoleModeler,
 			status: http.StatusNoContent}},
 		{"GET", "/api/v1/processes/{key}/runtime", s.handleProcessRuntime, apiOp{
-			summary: "Read a process's live runtime state", tag: "Processes", role: roleAny, resp: jsonBody("Runtime state", tObject())}},
+			summary: "Read a process's live runtime state", tag: "Processes", role: roleAny, veil: veilDefinition, resp: jsonBody("Runtime state", tObject())}},
 		{"PUT", "/api/v1/processes/{key}/active", s.handleSetProcessActive, apiOp{
 			summary: "Activate or deactivate a deployed process (a deactivated process stays deployed but does not auto-start new instances from its timer/message/signal start events)", tag: "Processes", role: RoleOperator,
 			req:  jsonBody("Active flag", schemaObj(map[string]any{"active": tBool()})),
@@ -276,7 +283,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/call-activities/overrides/{processId}", s.handleDeleteCallOverride, apiOp{
 			summary: "Clear a called process id's per-server target override", tag: "Processes", role: RoleAdmin, status: http.StatusNoContent}},
 		{"GET", "/api/v1/collaborations/{key}/runtime", s.handleCollaborationRuntime, apiOp{
-			summary: "Read a collaboration's live runtime state", tag: "Collaborations", role: roleAny, resp: jsonBody("Runtime state", tObject())}},
+			summary: "Read a collaboration's live runtime state", tag: "Collaborations", role: roleAny, veil: veilDefinition, resp: jsonBody("Runtime state", tObject())}},
 
 		{"POST", "/api/v1/instances", s.handleCreateInstanceByProcessID, apiOp{
 			summary: "Start the newest deployed version of a process by its BPMN process id — the way a model addresses another process, which knows an id and must not pin a version (a definition key pins one; use the route below for that)", tag: "Instances", role: RoleOperator,
@@ -326,28 +333,28 @@ func (s *Server) apiRoutes() []apiRoute {
 				"instanceKey": tInteger(), "variablesSet": tInteger(),
 			}))}},
 		{"GET", "/api/v1/instances/{key}/variable-audit", s.handleInstanceVariableAudit, apiOp{
-			summary: "Read the external variable overrides a process instance received — the \"who changed it\" audit trail, each with actor, scope, variable name, and typed new value (ADR-0098)", tag: "Instances", role: RoleOperator,
+			summary: "Read the external variable overrides a process instance received — the \"who changed it\" audit trail, each with actor, scope, variable name, and typed new value (ADR-0098)", tag: "Instances", role: RoleOperator, veil: veilInstance,
 			resp: jsonBody("Variable overrides", tArray())}},
 		{"GET", "/api/v1/instances/{key}/data-objects", s.handleInstanceDataObjects, apiOp{
-			summary: "Read a process instance's data objects — each with its name, data state, typed value, declared class (itemSubjectRef), collection flag, and the trail of every state it passed through with the element that wrote it", tag: "Instances", role: RoleOperator,
+			summary: "Read a process instance's data objects — each with its name, data state, typed value, declared class (itemSubjectRef), collection flag, and the trail of every state it passed through with the element that wrote it", tag: "Instances", role: RoleOperator, veil: veilInstance,
 			resp: jsonBody("Instance data objects", tArray())}},
 		{"GET", "/api/v1/instances/{key}/object-graph", s.handleInstanceObjectGraph, apiOp{
-			summary: "Derive a process instance's object diagram — its data objects as UML object nodes with their attributes and business keys, linked by containment and by matching business keys, plus the references this instance cannot resolve (ADR-0230)", tag: "Instances", role: RoleOperator,
+			summary: "Derive a process instance's object diagram — its data objects as UML object nodes with their attributes and business keys, linked by containment and by matching business keys, plus the references this instance cannot resolve (ADR-0230)", tag: "Instances", role: RoleOperator, veil: veilInstance,
 			resp: jsonBody("Object graph", tObject())}},
 		{"GET", "/api/v1/instances/{key}/lifecycle", s.handleInstanceLifecycle, apiOp{
-			summary: "Read a process instance's data objects against the lifecycles their classes declare — the declared state machine with the states this instance has been through, the moves it made and the element that made each, plus the states and moves the model does not account for (ADR-0259)", tag: "Instances", role: RoleOperator,
+			summary: "Read a process instance's data objects against the lifecycles their classes declare — the declared state machine with the states this instance has been through, the moves it made and the element that made each, plus the states and moves the model does not account for (ADR-0259)", tag: "Instances", role: RoleOperator, veil: veilInstance,
 			resp: jsonBody("Instance lifecycles", tArray())}},
 		{"GET", "/api/v1/instances/{key}/timeline", s.handleInstanceTimeline, apiOp{
-			summary: "Read a process instance's step-by-step replay timeline — each step's variables carry an actor when the value was set by an external operator override (ADR-0098)", tag: "Instances", role: RoleOperator,
+			summary: "Read a process instance's step-by-step replay timeline — each step's variables carry an actor when the value was set by an external operator override (ADR-0098)", tag: "Instances", role: RoleOperator, veil: veilInstance,
 			resp: jsonBody("Instance timeline", tObject())}},
 		{"GET", "/api/v1/instances/{key}/decisions", s.handleInstanceDecisions, apiOp{
-			summary: "Read the DMN decision evaluations a process instance made — each with its inputs, outputs, and trace", tag: "Instances", role: RoleOperator,
+			summary: "Read the DMN decision evaluations a process instance made — each with its inputs, outputs, and trace", tag: "Instances", role: RoleOperator, veil: veilInstance,
 			resp: jsonBody("Decision evaluations", tArray())}},
 		{"GET", "/api/v1/instances/{key}/decisions/{at}/graph", s.handleInstanceDecisionGraph, apiOp{
-			summary: "Read one decision evaluation with the requirements graph of the model it ran against — the decision drawn as the case saw it, for the Operations viewers' decision modal", tag: "Instances", role: RoleOperator,
+			summary: "Read one decision evaluation with the requirements graph of the model it ran against — the decision drawn as the case saw it, for the Operations viewers' decision modal", tag: "Instances", role: RoleOperator, veil: veilInstance,
 			resp: jsonBody("Decision evaluation and graph", tObject())}},
 		{"GET", "/api/v1/instances/{key}/jobs", s.handleListInstanceJobs, apiOp{
-			summary: "List the activatable jobs an instance is parked on (any type) — the read side of POST /jobs/{key}/complete", tag: "Instances", role: RoleOperator,
+			summary: "List the activatable jobs an instance is parked on (any type) — the read side of POST /jobs/{key}/complete", tag: "Instances", role: RoleOperator, veil: veilInstance,
 			resp: jsonBody("Activatable jobs", tArray())}},
 		{"POST", "/api/v1/decision-deployments", s.handleDeployDecision, apiOp{
 			summary: "Deploy one DMN model as a decision deployment — the counterpart of POST /api/v1/deployments for a single diagram, through the same durable path a publish uses (ADR-0322). Body: the DMN XML. ?projectId= files it under an application, ?artifactId= and ?modelRef= record where it was authored", tag: "Decisions", role: RoleModeler,
@@ -411,9 +418,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Bring a bounded batch of a definition's running instances back in line with what it declares atlas:searchable, oldest first (?limit=, default 500, max 5000); repeat while the response reports remaining=true, passing its nextCursor as ?after= — a repaired instance stays on the version, and without the cursor the next call would select the same page again. Needed only for instances migrated onto a version whose declaration differs from the one that wrote their values (ADR-0244)", tag: "Instances", role: RoleAdmin,
 			resp: jsonBody("Reindex result", tObject())}},
 		{"DELETE", "/api/v1/instances/{key}", s.handleCancelInstance, apiOp{
-			summary: "Cancel a running instance", tag: "Instances", role: RoleOperator, resp: jsonBody("Cancellation result", tObject())}},
+			summary: "Cancel a running instance", tag: "Instances", role: RoleOperator, veil: veilInstance, resp: jsonBody("Cancellation result", tObject())}},
 		{"POST", "/api/v1/processes/{key}/cancel-instances", s.handleCancelInstancesOfProcess, apiOp{
-			summary: "Cancel a bounded batch of a definition's running instances (?limit=, default 5000, max 50000); repeat while the response reports remaining=true", tag: "Instances", role: RoleOperator,
+			summary: "Cancel a bounded batch of a definition's running instances (?limit=, default 5000, max 50000); repeat while the response reports remaining=true", tag: "Instances", role: RoleOperator, veil: veilDefinition,
 			resp: jsonBody("Bulk cancellation result", tObject())}},
 		{"POST", "/api/v1/instances/terminate", s.handleTerminateInstances, apiOp{
 			summary: "Terminate a selected set of running instances — body {keys:[…]} for an explicit selection, or {processDefKey, q?, limit?} to terminate a definition's matching instances (repeat while remaining=true)", tag: "Instances", role: RoleOperator,
@@ -452,19 +459,19 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "type")),
 			resp: jsonBody("The leased jobs, with the variables visible at each task", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/activate", s.handleActivateJob, apiOp{
-			summary: "Lease a job to an external worker for a bounded time (ADR-0007)", tag: "Incidents", role: RoleOperator,
+			summary: "Lease a job to an external worker for a bounded time (ADR-0007)", tag: "Incidents", role: RoleOperator, veil: veilJob,
 			req: jsonBody("Worker id and how long to hold the job", schemaObj(map[string]any{
 				"worker": tString(), "leaseMs": tInteger(),
 			})),
 			resp: jsonBody("Job key, holder, and when the lease runs out", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/complete", s.handleCompleteJob, apiOp{
-			summary: "Complete a job — as its lease-holding worker (\"worker\" + \"leaseToken\"), or by hand as an operator (\"reason\", recorded for audit)", tag: "Incidents", role: RoleOperator,
+			summary: "Complete a job — as its lease-holding worker (\"worker\" + \"leaseToken\"), or by hand as an operator (\"reason\", recorded for audit)", tag: "Incidents", role: RoleOperator, veil: veilJob,
 			req: jsonBody("Either the holding worker id with the lease token its activation returned (protocol completion) or a reason (operator intervention), plus optional completion variables", schemaObj(map[string]any{
 				"worker": tString(), "leaseToken": tInteger(), "reason": tString(), "variables": tObject(),
 			})),
 			resp: jsonBody("Job key", tObject())}},
 		{"POST", "/api/v1/jobs/{key}/fail", s.handleFailJob, apiOp{
-			summary: "Fail a job, carrying remaining retries (0 raises an incident)", tag: "Incidents", role: RoleOperator,
+			summary: "Fail a job, carrying remaining retries (0 raises an incident)", tag: "Incidents", role: RoleOperator, veil: veilJob,
 			req: jsonBody("Retries left and a failure message; a worker also presents its id and the lease token its activation returned", schemaObj(map[string]any{
 				"retries": tInteger(), "message": tString(), "worker": tString(), "leaseToken": tInteger(),
 			})),
@@ -483,7 +490,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			})),
 			resp: jsonBody("Bulk resolve result", tObject())}},
 		{"POST", "/api/v1/incidents/{key}/resolve", s.handleResolveIncident, apiOp{
-			summary: "Resolve the incident on an element instance and retry its job", tag: "Incidents", role: RoleOperator,
+			summary: "Resolve the incident on an element instance and retry its job", tag: "Incidents", role: RoleOperator, veil: veilElement,
 			req:  jsonBody("Retries to grant the resumed job (default 1)", schemaObj(map[string]any{"retries": tInteger()})),
 			resp: jsonBody("Element instance key and stats", tObject())}},
 
@@ -1292,11 +1299,11 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/applications", s.handleListProjects, apiOp{
 			summary: "List process applications", tag: "Applications", role: roleAny, resp: jsonBody("Applications", tArray())}},
 		{"PATCH", "/api/v1/applications/{id}", s.handleUpdateProject, apiOp{
-			summary: "Update an application: rename, set visibility (private/shared), or transfer ownership (ADR-0071)", tag: "Applications", role: RoleModeler,
-			req:  jsonBody("Update", schemaObj(map[string]any{"name": tString(), "visibility": tString(), "ownerId": tString()})),
+			summary: "Update an application: rename, set visibility (private/shared), transfer ownership (ADR-0071), or mark it confidential — its instances are then visible to its members and admins only, not to every operator; owner only, and the answer carries warnings when an OpenSearch export still carries the instances", tag: "Applications", role: RoleModeler,
+			req:  jsonBody("Update", schemaObj(map[string]any{"name": tString(), "visibility": tString(), "ownerId": tString(), "confidential": tBool()})),
 			resp: jsonBody("Updated application", tObject())}},
 		{"DELETE", "/api/v1/applications/{id}", s.handleDeleteProject, apiOp{
-			summary: "Delete a process application", tag: "Applications", role: RoleModeler, status: http.StatusNoContent}},
+			summary: "Delete a process application (409 while it is marked confidential: remove the mark first)", tag: "Applications", role: RoleModeler, status: http.StatusNoContent}},
 		{"PUT", "/api/v1/applications/{id}/members/{userId}", s.handleSetProjectMember, apiOp{
 			summary: "Share an application with a user, or change their role (ADR-0071)", tag: "Applications", role: RoleModeler,
 			req:  jsonBody("Member role", schemaObj(map[string]any{"role": tString()}, "role")),
@@ -1413,7 +1420,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "List projects (deprecated: use GET /api/v1/applications)", tag: "Projects", role: roleAny, deprecated: true, resp: jsonBody("Projects", tArray())}},
 		{"PATCH", "/api/v1/projects/{id}", s.handleUpdateProject, apiOp{
 			summary: "Update a project (deprecated: use PATCH /api/v1/applications/{id})", tag: "Projects", role: RoleModeler, deprecated: true,
-			req:  jsonBody("Update", schemaObj(map[string]any{"name": tString(), "visibility": tString(), "ownerId": tString()})),
+			req:  jsonBody("Update", schemaObj(map[string]any{"name": tString(), "visibility": tString(), "ownerId": tString(), "confidential": tBool()})),
 			resp: jsonBody("Updated project", tObject())}},
 		{"DELETE", "/api/v1/projects/{id}", s.handleDeleteProject, apiOp{
 			summary: "Delete a project (deprecated: use DELETE /api/v1/applications/{id})", tag: "Projects", role: RoleModeler, deprecated: true, status: http.StatusNoContent}},

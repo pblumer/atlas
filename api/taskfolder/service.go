@@ -139,7 +139,7 @@ func Viewer(r *http.Request) User {
 		// The role names are the api package's RoleOperator and RoleAdmin, spelt out
 		// because this package sits below it.
 		return User{ID: p.UserID, Name: p.Username, Groups: p.GroupIDs,
-			SeesAll: p.HasRole("operator") || p.HasRole("admin")}
+			SeesAll: p.HasRole("operator") || p.HasRole("admin"), Principal: p}
 	}
 	return User{Name: strings.TrimSpace(r.URL.Query().Get("me"))}
 }

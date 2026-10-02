@@ -34,7 +34,10 @@ import (
 //
 // Operators and administrators keep every task, as they keep every instance. They
 // can already cancel the instance underneath it; withholding the task would be a
-// gate in front of an open door.
+// gate in front of an open door. The exception closes that door first: in a
+// confidential project the operator is not a member of, they cannot cancel the
+// instance either, and a task there is theirs only if it was addressed to them
+// (confidential.go).
 
 // taskAuthority is the answer to "may this request act on this task".
 type taskAuthority struct {
@@ -72,11 +75,22 @@ func (s *Server) mayWorkTask(r *http.Request, key uint64) (taskAuthority, error)
 		if pr == nil {
 			return
 		}
+		tr := s.enrichTask(key, jv)
+		if s.veilOnLoop(pr).hides(tr.ProcessDefKey) {
+			// A confidential project's task, and the caller is not a member: it is
+			// theirs only if the model addressed it to them, whatever their role
+			// (confidential.go). Open work there is the members' open work.
+			out.allowed = (tr.Assignee != "" || tr.CandidateGroups != "") &&
+				s.holdsTask(pr, tr.Assignee, tr.CandidateGroups)
+			// And one they do not hold is not there for them at all: 404, as the
+			// task views answer it, rather than a 403 confirming it exists.
+			out.known = out.allowed
+			return
+		}
 		if pr.HasRole(RoleOperator) || pr.HasRole(RoleAdmin) {
 			out.allowed = true
 			return
 		}
-		tr := s.enrichTask(key, jv)
 		// A task the model addressed belongs to whoever it addressed; one it did
 		// not is open work.
 		if tr.Assignee == "" && tr.CandidateGroups == "" {
@@ -118,8 +132,20 @@ func (s *Server) refuseTaskWork(w http.ResponseWriter, a taskAuthority, err erro
 //
 // It reads the group store, which is safe off the run loop, so it serves both the
 // loop-bound lookups and the off-loop walks.
-func (s *Server) taskVisibleTo(u taskfolder.User, tr taskResp) bool {
-	if !s.authEnabled || u.SeesAll {
+//
+// A task of a confidential project the viewer is not a member of (v hides its
+// definition) is shown only to whoever the model addressed it to — not to an
+// operator for being one, and not as open work to everybody (confidential.go).
+// v is computed once per view, by the caller, for the viewer.
+func (s *Server) taskVisibleTo(u taskfolder.User, v veil, tr taskResp) bool {
+	if !s.authEnabled {
+		return true
+	}
+	if v.hides(tr.ProcessDefKey) {
+		return (tr.Assignee != "" || tr.CandidateGroups != "") &&
+			s.holdsTaskAs(u.Name, u.ID, u.Groups, tr.Assignee, tr.CandidateGroups)
+	}
+	if u.SeesAll {
 		return true
 	}
 	if tr.Assignee == "" && tr.CandidateGroups == "" {

@@ -1473,6 +1473,13 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 		if scanErr != nil || running > 0 {
 			return
 		}
+		// A definition of a confidential project leaves its finished instances behind,
+		// and the deployment is the only thing that says where they belonged. The
+		// project keeps the key, before the deployment goes, so a failure here leaves
+		// both in place rather than the history uncovered (confidential.go).
+		if persistErr = s.retireConfidentialOnLoop(d.ProjectID, key); persistErr != nil {
+			return
+		}
 		// Durable before visible (I2, ADR-0019): remove the on-disk record first,
 		// so a deletion that is acknowledged never reappears on restart.
 		if err := s.deploys.delete(key); err != nil {
@@ -3671,8 +3678,12 @@ func (s *Server) handleDataObjectsAcrossInstances(w http.ResponseWriter, r *http
 			state string
 		}
 		var rows []instanceRow
+		veil := s.veilOnLoop(httpapi.PrincipalFrom(r.Context()))
 		collect := func(state string) func(uint64, *model.ProcessInstanceValue) error {
 			return func(key uint64, v *model.ProcessInstanceValue) error {
+				if veil.hides(v.ProcessDefKey) {
+					return nil // a confidential project's, and not the caller's (confidential.go)
+				}
 				rows = append(rows, instanceRow{key: key, pi: *v, state: state})
 				return nil
 			}
@@ -4001,11 +4012,15 @@ type instanceSummaryRow struct {
 // thousands of instances: the earlier scan-based version blocked the single-writer loop
 // on every load (the reported flood), and draining active instances into the history
 // only moved that cost rather than removing it.
-func (s *Server) handleInstancesSummary(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleInstancesSummary(w http.ResponseWriter, r *http.Request) {
 	var out []instanceSummaryRow
 	s.do(func() {
+		v := s.veilOnLoop(httpapi.PrincipalFrom(r.Context()))
 		out = make([]instanceSummaryRow, 0, len(s.order))
 		for _, key := range s.order {
+			if v.hides(key) {
+				continue // a confidential project's, and not the caller's (confidential.go)
+			}
 			d := s.deployments[key]
 			// Each is one O(1) point read of a maintained counter (ADR-0083/0080); the
 			// only failure mode is a catastrophic store error, and this is a display
@@ -4307,9 +4322,9 @@ func (s *Server) handleTerminateInstances(w http.ResponseWriter, r *http.Request
 		httpapi.Error(w, http.StatusBadRequest, "specify either keys or processDefKey, not both")
 		return
 	case len(req.Keys) > 0:
-		s.terminateByKeys(w, req.Keys)
+		s.terminateByKeys(w, r, req.Keys)
 	case req.ProcessDefKey != 0:
-		s.terminateByFilter(w, req)
+		s.terminateByFilter(w, r, req)
 	default:
 		httpapi.Error(w, http.StatusBadRequest, "want keys or processDefKey")
 	}
@@ -4323,7 +4338,10 @@ func (s *Server) handleTerminateInstances(w http.ResponseWriter, r *http.Request
 // the batch (a few thousand keys at most), which keeps one call from holding the run
 // loop; the unbounded "drain everything" path is filter mode, which batches with
 // remaining.
-func (s *Server) terminateByKeys(w http.ResponseWriter, keys []uint64) {
+//
+// An instance of a confidential project the caller is not a member of is not found,
+// as it is everywhere else for them (confidential.go).
+func (s *Server) terminateByKeys(w http.ResponseWriter, r *http.Request, keys []uint64) {
 	uniq := make(map[uint64]struct{}, len(keys))
 	for _, k := range keys {
 		uniq[k] = struct{}{}
@@ -4335,6 +4353,7 @@ func (s *Server) terminateByKeys(w http.ResponseWriter, keys []uint64) {
 	)
 	var driveNeeded bool
 	s.do(func() {
+		veil := s.veilOnLoop(httpapi.PrincipalFrom(r.Context()))
 		active := make([]uint64, 0, len(uniq))
 		for k := range uniq {
 			v, ok, err := s.store.ProcessInstance(k)
@@ -4344,7 +4363,7 @@ func (s *Server) terminateByKeys(w http.ResponseWriter, keys []uint64) {
 			}
 			// Only a record in the active keyspace (State PIActive) is terminable; a
 			// key found only in history is already finished → notFound.
-			if ok && v.State == model.PIActive {
+			if ok && v.State == model.PIActive && !veil.hides(v.ProcessDefKey) {
 				active = append(active, k)
 			}
 		}
@@ -4374,7 +4393,7 @@ func (s *Server) terminateByKeys(w http.ResponseWriter, keys []uint64) {
 // the request's optional variable query, up to a per-call cap. A blank query matches
 // all of the definition's active instances. Like the bulk-drain endpoint it reports
 // remaining=true when the cap was hit, so the caller repeats until it clears.
-func (s *Server) terminateByFilter(w http.ResponseWriter, req terminateInstancesReq) {
+func (s *Server) terminateByFilter(w http.ResponseWriter, r *http.Request, req terminateInstancesReq) {
 	limit := bulkCancelBatchDefault
 	if req.Limit != 0 {
 		if req.Limit < 0 {
@@ -4401,8 +4420,10 @@ func (s *Server) terminateByFilter(w http.ResponseWriter, req terminateInstances
 	// [Server.handleCancelInstancesOfProcess]. With a query this read is the heavier
 	// of the two by far: it reads every candidate's variables, which is the instances
 	// search's cost with a definition filter in front of it.
-	opErr = s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
-		if _, ok := defs[req.ProcessDefKey]; !ok {
+	opErr = s.readOffLoopAs(r, func(rv *state.ReadView, defs defIndex) error {
+		// A definition the caller may not see into is, to them, not deployed
+		// (confidential.go).
+		if d, ok := defs[req.ProcessDefKey]; !ok || d.hidden {
 			return nil
 		}
 		found = true
@@ -4681,7 +4702,11 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 	// theirs skipped (see [Server.taskVisibleTo]). That walk grows with the tasks it
 	// skips, so it runs off the loop like a folder does; operators and
 	// administrators keep the loop-bound page below.
-	if viewer := taskfolder.Viewer(r); s.authEnabled && !viewer.SeesAll {
+	//
+	// An operator on a server with a confidential project they are not a member of is
+	// such a viewer too: they see that project's tasks only where addressed to them
+	// (confidential.go).
+	if viewer := taskfolder.Viewer(r); s.authEnabled && (!viewer.SeesAll || s.veilFor(r).active()) {
 		s.listVisibleTasks(w, viewer, limit, before, wantsTaskContent(r))
 		return
 	}
@@ -4749,6 +4774,7 @@ func (s *Server) listTasksForInstance(w http.ResponseWriter, viewer taskfolder.U
 	truncated := false
 	var scanErr error
 	s.do(func() {
+		v := s.veilOnLoop(viewer.Principal)
 		err := s.store.ElementInstancesOfProcess(instKey, func(elKey uint64) error {
 			if len(tasks) >= limit {
 				truncated = true
@@ -4767,7 +4793,7 @@ func (s *Server) listTasksForInstance(w http.ResponseWriter, viewer taskfolder.U
 			if jv.JobType != compiler.UserTaskJobTypeIndex || jv.Retries <= 0 {
 				return nil
 			}
-			if tr := s.enrichTask(jobKey, jv); s.taskVisibleTo(viewer, tr) {
+			if tr := s.enrichTask(jobKey, jv); s.taskVisibleTo(viewer, v, tr) {
 				tasks = append(tasks, tr)
 			}
 			return nil
@@ -4884,7 +4910,7 @@ func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
 		}
 		// A task the viewer may not see answers exactly as an absent one does: the
 		// by-key read must not be a way round the list's filter.
-		if tr := s.enrichTask(key, jv); s.taskVisibleTo(viewer, tr) {
+		if tr := s.enrichTask(key, jv); s.taskVisibleTo(viewer, s.veilOnLoop(viewer.Principal), tr) {
 			found = true
 			task = tr
 		}
@@ -5404,7 +5430,7 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 	// long as the engine is busy, and this is an endpoint somebody reaches for
 	// precisely when it is. The view is a second gain — an incident resolved while
 	// the page is being built can no longer appear half-described.
-	scanErr := s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
+	scanErr := s.readOffLoopAs(r, func(rv *state.ReadView, defs defIndex) error {
 		// One resolver for the whole page: the worker store is read once, not once
 		// per parked token, and not at all when nothing on the page is on a worker
 		// task (ADR-0159). It reads a durable sidecar, which is safe to do off the
@@ -6168,6 +6194,11 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 		wait = maxJobPollWait
 	}
 
+	// A person leasing work is subject to the confidential-projects rule like any
+	// other read of an instance's variables, which is what a leased job carries; a
+	// machine credential is the worker protocol itself and is not (confidential.go).
+	pr := httpapi.PrincipalFrom(r.Context())
+	personal := s.authEnabled && !isMachinePrincipal(pr)
 	var (
 		unknown  bool
 		inProc   bool
@@ -6203,6 +6234,17 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 			// worker's heartbeat grew with the backlog it was there to drain
 			// (ADR-0270).
 			var keys []uint64
+			var v veil
+			if personal {
+				v = s.veilOnLoop(pr)
+			}
+			hidden := func(k uint64) (bool, error) {
+				if !v.active() {
+					return false, nil
+				}
+				def, ok, err := s.definitionOfOnLoop(veilJob, k)
+				return ok && v.hides(def), err
+			}
 			held = s.breakers.holdingFor(jobType)
 			if held {
 				// A target under this type is down, so the candidates have to be
@@ -6216,6 +6258,9 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 				// down a rotation that ended when the last one recovered.
 				delete(s.gateResume, jobType)
 				scanErr = unlessTruncated(s.store.ActivatableJobs(jobType, func(k uint64) error {
+					if h, err := hidden(k); err != nil || h {
+						return err
+					}
 					keys = append(keys, k)
 					if len(keys) >= want {
 						return errListTruncated
@@ -6225,6 +6270,22 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 			}
 			if scanErr != nil {
 				return
+			}
+			if held && v.active() {
+				// The gated scan chose its page already; what the caller may not see is
+				// dropped from it rather than leased to them.
+				kept := keys[:0]
+				for _, k := range keys {
+					h, err := hidden(k)
+					if err != nil {
+						scanErr = err
+						return
+					}
+					if !h {
+						kept = append(kept, k)
+					}
+				}
+				keys = kept
 			}
 			for _, k := range keys {
 				s.proc.ActivateJob(k, body.Worker, int64(lease))

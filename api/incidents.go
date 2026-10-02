@@ -202,6 +202,11 @@ func walkIncidents(rv *state.ReadView, defs defIndex, sel incidentSelector,
 		if err != nil {
 			return err
 		}
+		if defs.hides(ctx.defKey) {
+			// A confidential project's, and not the caller's: not listed, not counted,
+			// not resolved in bulk (confidential.go).
+			return nil
+		}
 		elementID := ""
 		if ctx.cp != nil {
 			elementID = ctx.cp.ElementBpmnId(v.ElementId)
@@ -293,7 +298,7 @@ func (s *Server) handleIncidentSummary(w http.ResponseWriter, r *http.Request) {
 		// older incident turns up.
 		firstMessage = map[groupKey]string{}
 	)
-	scanErr := s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
+	scanErr := s.readOffLoopAs(r, func(rv *state.ReadView, defs defIndex) error {
 		connectorFor := s.incidentConnectorLookup()
 		return walkIncidents(rv, defs, sel, func(_ uint64, v *model.IncidentValue, ctx incidentCtx, elementID string) error {
 			resp.Total++
@@ -459,7 +464,7 @@ func (s *Server) handleResolveIncidents(w http.ResponseWriter, r *http.Request) 
 		opErr     error
 	)
 	if len(req.Keys) > 0 {
-		keys, notFound, opErr = s.selectIncidentsByKey(req.Keys)
+		keys, notFound, opErr = s.selectIncidentsByKey(r, req.Keys)
 	} else {
 		limit := req.Limit
 		if limit == 0 {
@@ -468,7 +473,7 @@ func (s *Server) handleResolveIncidents(w http.ResponseWriter, r *http.Request) 
 		if limit > bulkResolveBatchMax {
 			limit = bulkResolveBatchMax
 		}
-		keys, remaining, opErr = s.selectIncidentsByScope(sel, limit)
+		keys, remaining, opErr = s.selectIncidentsByScope(r, sel, limit)
 	}
 	if opErr == nil && len(keys) > 0 {
 		s.do(func() {
@@ -510,7 +515,10 @@ func (s *Server) handleResolveIncidents(w http.ResponseWriter, r *http.Request) 
 // run loop. Duplicates collapse; a key that holds no incident is counted as not
 // found rather than failing the call — it is usually an incident somebody else
 // resolved while the page was open.
-func (s *Server) selectIncidentsByKey(requested []uint64) (keys []uint64, notFound int, err error) {
+//
+// An incident of a confidential project the caller is not a member of counts as not
+// found, which is what it is to them (confidential.go).
+func (s *Server) selectIncidentsByKey(r *http.Request, requested []uint64) (keys []uint64, notFound int, err error) {
 	uniq := make(map[uint64]struct{}, len(requested))
 	ordered := make([]uint64, 0, len(requested))
 	for _, k := range requested {
@@ -521,6 +529,7 @@ func (s *Server) selectIncidentsByKey(requested []uint64) (keys []uint64, notFou
 		ordered = append(ordered, k)
 	}
 	s.do(func() {
+		v := s.veilOnLoop(httpapi.PrincipalFrom(r.Context()))
 		for _, k := range ordered {
 			inc, getErr := s.store.GetIncident(k)
 			if getErr != nil {
@@ -528,6 +537,13 @@ func (s *Server) selectIncidentsByKey(requested []uint64) (keys []uint64, notFou
 				return
 			}
 			if inc == nil {
+				notFound++
+				continue
+			}
+			if hidden, hErr := s.instanceHiddenOnLoop(v, inc.ProcessInstanceKey); hErr != nil {
+				err = hErr
+				return
+			} else if hidden {
 				notFound++
 				continue
 			}
@@ -545,8 +561,8 @@ func (s *Server) selectIncidentsByKey(requested []uint64) (keys []uint64, notFou
 // incident that disappears between them — resolved by somebody else, or dropped with
 // a cancelled instance — is harmless: resolving a key that holds no incident is the
 // same no-op the keys mode already relies on.
-func (s *Server) selectIncidentsByScope(sel incidentSelector, limit int) (keys []uint64, remaining bool, err error) {
-	err = s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
+func (s *Server) selectIncidentsByScope(r *http.Request, sel incidentSelector, limit int) (keys []uint64, remaining bool, err error) {
+	err = s.readOffLoopAs(r, func(rv *state.ReadView, defs defIndex) error {
 		walkErr := walkIncidents(rv, defs, sel, func(elKey uint64, _ *model.IncidentValue, _ incidentCtx, _ string) error {
 			keys = append(keys, elKey)
 			if len(keys) >= limit {

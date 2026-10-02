@@ -103,6 +103,37 @@ func (s *Server) handleMoveProcess(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Out of a confidential application is owner's work: the instances move with the
+	// definition, and taking them out from under the mark is the same decision as
+	// removing it, which the owner makes (confidential.go).
+	var (
+		closing bool
+		readErr error
+	)
+	s.do(func() {
+		for _, scope := range scopes {
+			if scope[0] == "" || scope[0] == payload.ProjectID {
+				continue
+			}
+			proj, ok, e := s.projects.Get(scope[0])
+			if e != nil {
+				readErr = e
+				return
+			}
+			if ok && proj.Confidential && scopeRank(proj.effectiveRole(httpapi.PrincipalFrom(r.Context()), s.authEnabled)) < scopeRank(ScopeRoleOwner) {
+				closing = true
+			}
+		}
+	})
+	if readErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read application: "+readErr.Error())
+		return
+	}
+	if closing {
+		httpapi.Error(w, http.StatusForbidden, "this definition belongs to a confidential application: "+
+			"only its owner may move it out, because its instances leave the confidentiality with it")
+		return
+	}
 	if payload.ProjectID != "" {
 		if code, msg := s.authorizeTargetProject(r, payload.ProjectID, ScopeRoleEditor); code != 0 {
 			httpapi.Error(w, code, msg)

@@ -14,6 +14,26 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An application's instances can be kept to its team, operators included.** On a shared
+  installation the `operator` role reaches every team's instances. The owner of an application
+  can now mark it **confidential** — in the share dialog, or with `PATCH
+  /api/v1/applications/{id}` and `{"confidential":true}` — and from then on the instances of
+  everything deployed from it are visible only to the people with access to the application and
+  to admins. For everybody else, operators of other teams included, they are gone from the
+  instance list, its counts and totals, the summary, the search, the incidents and their
+  summary, the data objects and a decision's evaluations; a per-instance view, a job, an
+  incident or a runtime overlay of theirs answers 404; and no action reaches them — cancel,
+  terminate, drain, resolve, complete or fail a job by hand, lease one by type, claim or
+  complete a task. A task the model addresses to a person or a group stays theirs, with its
+  form's fields, member or not; open work in a confidential application is its members'.
+  Workers with a machine credential lease and complete jobs as before. Marking and unmarking
+  are owner-only and recorded in the application's activity. A marked application cannot be
+  deleted, only its owner may move a definition out of it, and a deleted definition keeps its
+  finished instances hidden. It is a visibility rule of the API, not encryption: admins,
+  backups, the server log and an OpenSearch export still hold everything, and marking an
+  application on a server that exports answers with a warning saying so. Nothing changes for
+  an application that is not marked. ADR-draft-confidential-projects.
+
 - **A mail Worker can read its mailbox, and the mailbox stays its owner's.** An inbound
   watch on a mail Worker publishes the new mail of one folder as an Atlas message, so a mail
   starts a process — over IMAP for an SMTP Worker (a new, optional `mailboxEndpoint`), and
@@ -28,9 +48,9 @@ _Changed_ / _Removed_ for each version.
   is checked at deploy: a task that reads a mail Worker's mailbox needs viewer on it, one that
   changes it or answers from it needs editor, and one naming a mail Worker that does not exist
   is refused. Sending is not checked. The application import now runs that check and
-  ADR-0205's message-name claim, which it had skipped. What a process receives is still
-  readable by every operator of a shared installation; that gap, ADR-0275's follow-up, is
-  stated and not closed here. ADR-0438.
+  ADR-0205's message-name claim, which it had skipped. What a process receives is
+  readable by every operator of a shared installation unless its application is marked
+  confidential (above). ADR-0438.
 
 - **A package installs from the command line.** `atlas import DIR` installs what the shop
   handbook's installer installs, without a browser — from a terminal, or from a pipeline

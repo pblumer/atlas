@@ -43,6 +43,9 @@ type Store[T any] struct {
 	enc  func(string) string
 	ok   func(string) bool
 	less func(a, b T) bool
+	// observe, when set, hears every record a Save wrote and every key a Delete
+	// removed (see [Observe]).
+	observe func(key string, rec T, present bool)
 }
 
 // Option configures a Store at construction. The defaults cover the common case
@@ -69,6 +72,21 @@ func Names[T any](enc func(string) string, ok func(string) bool) Option[T] {
 // projects. less has sort.Slice semantics.
 func Order[T any](less func(a, b T) bool) Option[T] {
 	return func(s *Store[T]) { s.less = less }
+}
+
+// Observe registers fn to hear every change this store makes: after a Save that
+// returned nil it is called with the record and present=true, after a Delete that
+// returned nil with the key, the zero record and present=false. It runs on the
+// goroutine that made the change, before Save or Delete returns.
+//
+// It exists for a caller that keeps a small derived index of a store in memory —
+// the projects marked confidential, which every instance read consults — and must
+// not let that index go stale behind a write made through a path it never heard
+// of. Hooking the store is what makes "every write" true by construction rather
+// than by an audit of the call sites. A write that bypasses the store (a restore,
+// which writes files directly) is not heard; such a write requires a restart.
+func Observe[T any](fn func(key string, rec T, present bool)) Option[T] {
+	return func(s *Store[T]) { s.observe = fn }
 }
 
 // NewStore opens (creating if needed) the directory backing a store. name is the
@@ -121,7 +139,13 @@ func (s *Store[T]) Save(rec T) error {
 	if !s.addressable(key) {
 		return fmt.Errorf("%s: refusing unsafe key %q", s.name, key)
 	}
-	return WriteJSON(s.dir, s.FileFor(key), rec)
+	if err := WriteJSON(s.dir, s.FileFor(key), rec); err != nil {
+		return err
+	}
+	if s.observe != nil {
+		s.observe(key, rec, true)
+	}
+	return nil
 }
 
 // Get returns the record filed under key, or ok=false if there is none. A
@@ -162,7 +186,14 @@ func (s *Store[T]) Delete(key string) error {
 			return err
 		}
 	}
-	return FsyncDir(s.dir)
+	if err := FsyncDir(s.dir); err != nil {
+		return err
+	}
+	if s.observe != nil {
+		var zero T
+		s.observe(key, zero, false)
+	}
+	return nil
 }
 
 // brokenDir is the error for a read, remove or listing that found no record because

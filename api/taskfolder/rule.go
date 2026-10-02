@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/expr"
 )
 
@@ -455,14 +456,19 @@ type Task struct {
 // condition generates.
 //
 // SeesAll says the viewer is an operator or an administrator, who keep every open
-// task in view. Everybody else sees the tasks addressed to them, to one of their
-// groups, or to nobody at all; the server applies that, since only it has the
-// task's resolved assignment in hand.
+// task in view — except those of a confidential project they are not a member of,
+// which the server withholds using Principal. Everybody else sees the tasks
+// addressed to them, to one of their groups, or to nobody at all; the server
+// applies that, since only it has the task's resolved assignment in hand.
 type User struct {
 	ID      string
 	Name    string
 	Groups  []string
 	SeesAll bool
+	// Principal is who asked, for the checks only the server can make — which
+	// confidential projects' tasks the viewer sees only when they hold them. Nil
+	// with authentication off. Nothing in this package reads it.
+	Principal *httpapi.Principal
 }
 
 // BuiltinFolder is one of the fixed inbox folders the console lists above the saved

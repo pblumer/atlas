@@ -165,6 +165,10 @@ func lookupInstanceByKey(rv *state.ReadView, defs defIndex, key uint64) (instanc
 // walk — the expensive part, and the part whose cost grows with the store — run
 // off the loop without breaking the single-writer invariant (I3, ADR-0239).
 func searchInstances(rv *state.ReadView, defs defIndex, defKey uint64, raw string, pred varQuery) ([]instanceResp, error) {
+	if defKey != 0 && defs.hides(defKey) {
+		// Nothing of a definition the caller may not see into (confidential.go).
+		return []instanceResp{}, nil
+	}
 	// A declared name is answered by the value index: a seek to the instances holding
 	// that value, rather than a walk that reads every instance's variables. It is
 	// available only under a scope, because the declaration is per definition — the
@@ -183,7 +187,7 @@ func searchInstances(rv *state.ReadView, defs defIndex, defKey uint64, raw strin
 		if err != nil {
 			return nil, err
 		}
-		if found && (defKey == 0 || row.ProcessDefKey == defKey) {
+		if found && !defs.hides(row.ProcessDefKey) && (defKey == 0 || row.ProcessDefKey == defKey) {
 			return []instanceResp{row}, nil
 		}
 	}
@@ -213,6 +217,9 @@ func searchInstances(rv *state.ReadView, defs defIndex, defKey uint64, raw strin
 		return func(key uint64, v *model.ProcessInstanceValue) error {
 			if bounded && len(active)+len(done) >= maxInstanceSearchResults {
 				return errListTruncated
+			}
+			if defs.hides(v.ProcessDefKey) {
+				return nil // before the variables are read, not after
 			}
 			hits, err := matchingVars(key)
 			if err != nil || len(hits) == 0 {
@@ -330,7 +337,7 @@ func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
 	}
 	out := []instanceResp{}
 	var defs defIndex
-	scanErr := s.readOffLoop(func(rv *state.ReadView, d defIndex) error {
+	scanErr := s.readOffLoopAs(r, func(rv *state.ReadView, d defIndex) error {
 		var err error
 		defs = d
 		if out, err = searchInstances(rv, d, defKey, raw, pred); err != nil {
@@ -353,7 +360,15 @@ func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
 	if shouldAskArchive(out, pred) {
 		archive := s.searchArchive(r.Context(), defKey, pred)
 		w.Header().Set("X-Archive-State", archive.State)
-		out = append(out, archiveRows(archive.Instances, defs)...)
+		// The archive is another system and knows nothing of who may see what, so its
+		// rows pass the same filter the live ones did. A row of a definition this
+		// server no longer remembers at all cannot be placed and is shown — the
+		// exported index is outside what the mark covers (confidential.go).
+		for _, row := range archiveRows(archive.Instances, defs) {
+			if !defs.hides(row.ProcessDefKey) {
+				out = append(out, row)
+			}
+		}
 	}
 	// This listing said nothing about its own cap until now, and the console filled the
 	// gap by guessing: it printed "showing first 200" whenever it received exactly 200

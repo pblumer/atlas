@@ -462,3 +462,47 @@ func TestABrokenStoreDirectoryIsNeverAnEmptyStore(t *testing.T) {
 		t.Errorf("LoadAll = %v, nil error; want an error", recs)
 	}
 }
+
+// An observer hears what was written and what was removed, and nothing that failed.
+// The confidential-projects index depends on all three: a missed save would leave a
+// project readable that its owner just closed, and a heard failure would close one
+// whose record says it is open.
+func TestObserveHearsEverySuccessfulChange(t *testing.T) {
+	type heard struct {
+		key     string
+		name    string
+		present bool
+	}
+	var got []heard
+	s := newItemStore(t, Observe(func(key string, rec item, present bool) {
+		got = append(got, heard{key, rec.Name, present})
+	}))
+	if err := s.Save(item{ID: "a", Name: "Anna"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Delete("a"); err != nil {
+		t.Fatal(err)
+	}
+	want := []heard{{"a", "Anna", true}, {"a", "", false}}
+	if len(got) != len(want) {
+		t.Fatalf("heard %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("change %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+
+	broken := newItemStore(t, Observe(func(string, item, bool) {
+		t.Error("a failed save was reported as a change")
+	}))
+	if err := os.RemoveAll(broken.Dir()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(broken.Dir(), []byte("not a directory"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := broken.Save(item{ID: "b"}); err == nil {
+		t.Fatal("a save into a file that is not a directory succeeded")
+	}
+}

@@ -266,10 +266,11 @@ func (s *Server) countTaskFolders(matchers []*taskfolder.Matcher, u taskfolder.U
 	// One instant for the whole scan, so "overdue" cannot mean two different
 	// moments within a single answer.
 	now := time.Now()
+	v := s.veilForPrincipal(u.Principal)
 	budgetHit, err := s.visitOpenTasks(0, needInstance, func(_ uint64, tr taskResp, ft taskfolder.Task) bool {
 		// A badge counts what the viewer's list would show, not what exists: a count
 		// that includes tasks the list withholds is the withheld inbox by another name.
-		if !s.taskVisibleTo(u, tr) {
+		if !s.taskVisibleTo(u, v, tr) {
 			return true
 		}
 		tally.Total++
@@ -308,8 +309,9 @@ func (s *Server) listTasksForFolder(w http.ResponseWriter, r *http.Request, fold
 		return
 	}
 	now := time.Now()
+	v := s.veilFor(r)
 	s.pageOpenTasks(w, limit, before, matcher.NeedsInstance(), wantsTaskContent(r), func(tr taskResp, ft taskfolder.Task) bool {
-		return s.taskVisibleTo(viewer, tr) && matcher.Match(ft, viewer, now)
+		return s.taskVisibleTo(viewer, v, tr) && matcher.Match(ft, viewer, now)
 	})
 }
 
@@ -318,8 +320,9 @@ func (s *Server) listTasksForFolder(w http.ResponseWriter, r *http.Request, fold
 // what [Server.taskVisibleTo] withholds, exactly as a folder skips what its rule
 // does not select.
 func (s *Server) listVisibleTasks(w http.ResponseWriter, viewer taskfolder.User, limit int, before uint64, content bool) {
+	v := s.veilForPrincipal(viewer.Principal)
 	s.pageOpenTasks(w, limit, before, false, content, func(tr taskResp, _ taskfolder.Task) bool {
-		return s.taskVisibleTo(viewer, tr)
+		return s.taskVisibleTo(viewer, v, tr)
 	})
 }
 

@@ -34,9 +34,19 @@ type project struct {
 	// into through the design-time API — by any caller, admins included. Additive
 	// and omitempty, so every pre-0119 record deserializes as an ordinary
 	// (Protected=false) project with no migration.
-	Protected bool  `json:"protected,omitempty"`
-	CreatedAt int64 `json:"createdAt"`
-	UpdatedAt int64 `json:"updatedAt"`
+	Protected bool `json:"protected,omitempty"`
+	// Confidential hides the instances of every definition deployed from this
+	// project from anyone the project grants less than viewer — operators included
+	// (ADR-draft-confidential-projects, confidential.go). Set by the owner; additive
+	// and omitempty like Protected, so every earlier record reads as not marked.
+	Confidential bool `json:"confidential,omitempty"`
+	// RetiredDefinitions are the keys of definitions deployed from this project and
+	// deleted while it was marked confidential. Their finished instances outlive
+	// them in the store, and this is the only record left of where they belonged —
+	// without it, deleting a definition would publish its history.
+	RetiredDefinitions []uint64 `json:"retiredDefinitions,omitempty"`
+	CreatedAt          int64    `json:"createdAt"`
+	UpdatedAt          int64    `json:"updatedAt"`
 }
 
 // projectStore is a durable store for projects, one JSON file per project id
@@ -49,14 +59,15 @@ type projectStore = sidecar.Store[project]
 // oldest first (creation order), so the Modeler's order does not reshuffle on a
 // rename; the id breaks ties between projects created within the same second, so
 // the order is deterministic.
-func newProjectStore(dir string) (*projectStore, error) {
+func newProjectStore(dir string, opts ...sidecar.Option[project]) (*projectStore, error) {
+	order := sidecar.Order(func(a, b project) bool {
+		if a.CreatedAt != b.CreatedAt {
+			return a.CreatedAt < b.CreatedAt
+		}
+		return a.ID < b.ID
+	})
 	return sidecar.NewStore(dir, "projectstore",
 		func(rec project) string { return rec.ID },
-		sidecar.Order(func(a, b project) bool {
-			if a.CreatedAt != b.CreatedAt {
-				return a.CreatedAt < b.CreatedAt
-			}
-			return a.ID < b.ID
-		}),
+		append([]sidecar.Option[project]{order}, opts...)...,
 	)
 }

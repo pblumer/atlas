@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,9 +30,16 @@ type projectView struct {
 	Members    []projectMember `json:"members"`
 	MyRole     string          `json:"myRole"`
 	Protected  bool            `json:"protected"`
-	CreatedAt  int64           `json:"createdAt"`
-	UpdatedAt  int64           `json:"updatedAt"`
-	Artifacts  int             `json:"artifacts"`
+	// Confidential: the instances of what is deployed from this project are
+	// visible to its members and admins only (confidential.go).
+	Confidential bool  `json:"confidential"`
+	CreatedAt    int64 `json:"createdAt"`
+	UpdatedAt    int64 `json:"updatedAt"`
+	Artifacts    int   `json:"artifacts"`
+	// Warnings are what the caller should know about the change just made — today,
+	// that a confidential project's instances still leave the server through the
+	// OpenSearch exporter. Only an update answers with any.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // projectViewFor renders a project for the requesting principal. It normalizes
@@ -48,17 +56,18 @@ func (s *Server) projectViewFor(r *http.Request, p project, artifacts int) proje
 		members = []projectMember{}
 	}
 	return projectView{
-		ID:         p.ID,
-		Name:       p.Name,
-		Key:        p.Key,
-		OwnerID:    p.OwnerID,
-		Visibility: vis,
-		Members:    members,
-		MyRole:     p.effectiveRole(httpapi.PrincipalFrom(r.Context()), s.authEnabled),
-		Protected:  p.Protected,
-		CreatedAt:  p.CreatedAt,
-		UpdatedAt:  p.UpdatedAt,
-		Artifacts:  artifacts,
+		ID:           p.ID,
+		Name:         p.Name,
+		Key:          p.Key,
+		OwnerID:      p.OwnerID,
+		Visibility:   vis,
+		Members:      members,
+		MyRole:       p.effectiveRole(httpapi.PrincipalFrom(r.Context()), s.authEnabled),
+		Protected:    p.Protected,
+		Confidential: p.Confidential,
+		CreatedAt:    p.CreatedAt,
+		UpdatedAt:    p.UpdatedAt,
+		Artifacts:    artifacts,
 	}
 }
 
@@ -194,12 +203,15 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 		Name       *string `json:"name"`
 		Visibility *string `json:"visibility"`
 		OwnerID    *string `json:"ownerId"`
+		// Confidential marks the project, or removes the mark (confidential.go).
+		// Owner only, like every other access change here.
+		Confidential *bool `json:"confidential"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
-	if payload.Name == nil && payload.Visibility == nil && payload.OwnerID == nil {
+	if payload.Name == nil && payload.Visibility == nil && payload.OwnerID == nil && payload.Confidential == nil {
 		httpapi.Error(w, http.StatusBadRequest, "no fields to update")
 		return
 	}
@@ -257,6 +269,10 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 			oldVisibility = VisibilityPrivate
 		}
 		oldOwner := rec.OwnerID
+		oldConfidential := rec.Confidential
+		if payload.Confidential != nil {
+			rec.Confidential = *payload.Confidential
+		}
 		if payload.Name != nil {
 			rec.Name = name
 		}
@@ -297,12 +313,23 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		if rec.Confidential != oldConfidential {
+			if saveErr = s.recordGrantAudit(r, grantAudit{
+				ApplicationID: id, Action: GrantActionConfidential,
+				From: strconv.FormatBool(oldConfidential), To: strconv.FormatBool(rec.Confidential),
+			}); saveErr != nil {
+				return
+			}
+		}
 		n, e := s.countArtifactsInProject(id)
 		if e != nil {
 			countErr = e
 			return
 		}
 		view = s.projectViewFor(r, rec, n)
+		if rec.Confidential && s.osExportCfg.Enabled() {
+			view.Warnings = append(view.Warnings, confidentialExportWarning)
+		}
 	})
 	switch {
 	case getErr != nil:
@@ -332,12 +359,13 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var (
-		notFound        bool
-		panoramaBlocked bool
-		forbidden       int
-		fmsg            string
-		getErr          error
-		delErr          error
+		notFound            bool
+		panoramaBlocked     bool
+		confidentialBlocked bool
+		forbidden           int
+		fmsg                string
+		getErr              error
+		delErr              error
 	)
 	s.do(func() {
 		rec, ok, e := s.projects.Get(id)
@@ -355,6 +383,14 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		}
 		if code, msg := protectedGuard(rec); code != 0 {
 			forbidden, fmsg = code, msg
+			return
+		}
+		// A confidential project is the only record of which definitions are hidden
+		// (confidential.go): its deployments would fall back to Ungrouped and their
+		// instances — finished ones included — into every operator's view. Removing the
+		// mark first is one more step, and it is the step the audit trail records.
+		if rec.Confidential {
+			confidentialBlocked = true
 			return
 		}
 		// Panorama models have strict application ownership (ADR-0189), unlike the
@@ -403,6 +439,9 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, forbidden, fmsg)
 	case panoramaBlocked:
 		httpapi.Error(w, http.StatusConflict, "application contains Panorama models; delete them before deleting the application")
+	case confidentialBlocked:
+		httpapi.Error(w, http.StatusConflict, "application is confidential; remove the mark before deleting it, "+
+			"or the instances of everything deployed from it become visible to every operator")
 	case delErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "delete project: "+delErr.Error())
 	case notFound:

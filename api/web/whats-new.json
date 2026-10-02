@@ -2,6 +2,47 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "an-application-s-instances-can-be-kept-to-its-team-operators",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Keep an application's instances to its team — operators included",
+        "de": "Die Instanzen einer Anwendung bleiben beim Team – auch vor Operatoren"
+      },
+      "summary": {
+        "en": "On a shared server every operator saw every team's instances. Mark an application as Confidential instances in its share dialog, and what it deploys runs as before, but its instances — their variables, incidents, jobs and tasks — are visible only to the people with access to the application and to admins. Operators of other teams no longer see them or act on them. Workers keep serving the jobs, and a task addressed to someone stays theirs. Admins, backups and an OpenSearch export still hold everything; the mark is a visibility rule, not encryption.",
+        "de": "Auf einem gemeinsam genutzten Server sah jeder Operator die Instanzen aller Teams. Markieren Sie eine Anwendung im Freigabedialog als Confidential instances: Was sie deployt, läuft wie bisher, aber ihre Instanzen – Variablen, Incidents, Jobs und Aufgaben – sehen nur die Personen mit Zugriff auf die Anwendung und Administratoren. Operatoren anderer Teams sehen sie nicht mehr und können nicht mehr darauf einwirken. Worker bedienen die Jobs weiter, und eine zugewiesene Aufgabe bleibt bei ihrer Person. Administratoren, Backups und ein OpenSearch-Export enthalten weiterhin alles; die Markierung ist eine Sichtbarkeitsregel, keine Verschlüsselung."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Security",
+        "Operations"
+      ],
+      "tutorial": {
+        "en": [
+          "In the Modeler, open the application's share dialog. Only its owner sees the switch.",
+          "Make sure everybody who runs this application has access to it — directly or through a group.",
+          "Turn on Confidential instances. If the server exports to OpenSearch, the answer says the index is not covered."
+        ],
+        "de": [
+          "Im Modeler den Freigabedialog der Anwendung öffnen. Den Schalter sieht nur ihre Ownerin oder ihr Owner.",
+          "Sicherstellen, dass alle, die diese Anwendung betreiben, Zugriff haben – direkt oder über eine Gruppe.",
+          "Confidential instances einschalten. Exportiert der Server nach OpenSearch, weist die Antwort darauf hin, dass der Index nicht abgedeckt ist."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "a-mail-worker-can-read-its-mailbox-and-the-mailbox-stays-its",
       "version": "Unreleased",
       "date": null,
@@ -265,28 +306,6 @@
       "tags": [
         "Service catalogue",
         "API"
-      ]
-    },
-    {
-      "id": "the-modeler-offers-a-message-name-from-where-it-comes-from",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Message names grouped by where they come from",
-        "de": "Nachrichtennamen nach Herkunft gruppiert"
-      },
-      "summary": {
-        "en": "When you pick a message in the Modeler, the list now says where each name comes from: events that Workers publish, the actions of products in the catalogue, and the processes already waiting for a message. A step that waits is offered the first two, a step that sends is offered the waiting processes. Shop tasks suggest the actions a product declares, and shop tasks are marked with a small badge next to their envelope.",
-        "de": "Beim Auswählen einer Nachricht im Modeler zeigt die Liste jetzt, woher jeder Name stammt: Ereignisse, die Worker veröffentlichen, die Aktionen der Produkte im Katalog und die Prozesse, die bereits auf eine Nachricht warten. Einem wartenden Schritt werden die ersten beiden angeboten, einem sendenden Schritt die wartenden Prozesse. Shop-Aufgaben schlagen die Aktionen vor, die ein Produkt festlegt, und tragen ein kleines Abzeichen neben ihrem Briefumschlag."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Modeler",
-        "Service catalogue"
       ]
     }
   ]

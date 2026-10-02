@@ -8663,9 +8663,11 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
               execution, which is why it takes this role rather than merely being signed in.</td></tr>
           <tr><td><b><code>operator</code></b></td>
             <td data-l="de">Instanzen starten, abbrechen und reparieren, Incidents auflösen, Workers und Outbox –
-              der Betrieb dessen, was deployt ist.</td>
+              der Betrieb dessen, was deployt ist. Ausgenommen sind die Instanzen vertraulicher Anwendungen, in denen
+              man nicht Mitglied ist (siehe unten).</td>
             <td data-l="en">Starting, cancelling and repairing instances, resolving incidents, workers and the
-              outbox – running what is deployed.</td></tr>
+              outbox – running what is deployed. Except the instances of confidential applications one is not a
+              member of (see below).</td></tr>
           <tr><td><b><code>user</code></b></td>
             <td data-l="de">Die eigene Aufgabenliste: Aufgaben sehen, übernehmen und abschliessen.</td>
             <td data-l="en">Their own task list: seeing, claiming and completing tasks.</td></tr>
@@ -8721,6 +8723,53 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         <i>which kind</i> of endpoint somebody reaches, sharing with a group says <i>which object</i> – a project or
         a worker is shared with the team once instead of person by person. A membership change takes effect at
         the member's next sign-in.</p>
+
+      <h3 data-l="de">Vertrauliche Anwendungen</h3><h3 data-l="en">Confidential applications</h3>
+      <p data-l="de">Die Rolle <code>operator</code> gilt für den ganzen Server: Wer sie hat, sieht und bedient die
+        Instanzen aller Teams. Auf einer gemeinsam genutzten Installation ist das nicht immer gewollt – ein Prozess, der
+        Lohndaten oder ein Postfach liest, trägt diese Daten in seinen Variablen. Die Ownerin einer Anwendung kann sie
+        deshalb im Freigabedialog als <b>Confidential instances</b> markieren
+        (<code>PATCH /api/v1/applications/{id}</code> mit <code>{"confidential":true}</code>). Danach sind die
+        Instanzen von allem, was aus dieser Anwendung deployt ist, nur noch für die Personen mit Zugriff auf die
+        Anwendung (Ownerin, Mitglieder, Gruppenmitglieder) und für Administratoren sichtbar – für Operatoren anderer
+        Teams nicht mehr.</p>
+      <p data-l="en">The <code>operator</code> role applies to the whole server: whoever holds it sees and runs every
+        team's instances. On a shared installation that is not always wanted – a process that reads payroll data or a
+        mailbox carries that data in its variables. The owner of an application can therefore mark it as
+        <b>Confidential instances</b> in the share dialog (<code>PATCH /api/v1/applications/{id}</code> with
+        <code>{"confidential":true}</code>). From then on the instances of everything deployed from that application
+        are visible only to the people with access to it (owner, members, group members) and to administrators – no
+        longer to operators of other teams.</p>
+      <ul>
+        <li data-l="de"><b>Was verborgen ist:</b> Instanzliste, Zähler, Suche, Zeitachse, Variablen, Jobs, Incidents,
+          Entscheidungsauswertungen und Datenobjekte – und jede Aktion darauf: abbrechen, beenden, Incidents auflösen,
+          Jobs von Hand abschliessen, Aufgaben übernehmen. Ein verborgener Schlüssel antwortet mit 404.</li>
+        <li data-l="en"><b>What is hidden:</b> the instance list, counts, search, timeline, variables, jobs,
+          incidents, decision evaluations and data objects – and every action on them: cancelling, terminating,
+          resolving incidents, completing jobs by hand, claiming tasks. A hidden key answers 404.</li>
+        <li data-l="de"><b>Was weiterläuft:</b> Worker mit einem API-Token oder der Dienstidentität des Servers holen
+          ihre Jobs wie bisher. Eine Aufgabe, die das Modell einer Person oder Gruppe zuweist, bleibt deren Aufgabe –
+          auch ohne Mitgliedschaft, und mit genau den Feldern ihres Formulars. Die Definition selbst bleibt sichtbar
+          und startbar.</li>
+        <li data-l="en"><b>What carries on:</b> workers with an API token or the server's service identity lease
+          their jobs as before. A task the model addresses to a person or a group stays theirs – without membership,
+          and with exactly the fields of its form. The definition itself stays visible and startable.</li>
+        <li data-l="de"><b>Was die Markierung nicht abdeckt:</b> Administratoren, Backups, das Server-Log und den
+          OpenSearch-Export. Exportiert der Server, enthält der Index auch die vertraulichen Instanzen; die Antwort
+          auf das Markieren sagt das als Warnung. Die Markierung ist eine Sichtbarkeitsregel der API, keine
+          Verschlüsselung. Zähler über den ganzen Server (<code>/api/v1/stats</code>) zählen weiterhin alles.</li>
+        <li data-l="en"><b>What the mark does not cover:</b> administrators, backups, the server log and the
+          OpenSearch export. If the server exports, the index contains the confidential instances too; the answer to
+          marking says so as a warning. The mark is a visibility rule of the API, not encryption. Server-wide counts
+          (<code>/api/v1/stats</code>) still count everything.</li>
+        <li data-l="de"><b>Damit sie geschlossen bleibt:</b> Eine markierte Anwendung lässt sich nicht löschen
+          (zuerst die Markierung entfernen), eine Definition darf nur die Ownerin aus ihr herausverschieben, und eine
+          gelöschte Definition behält ihre beendeten Instanzen verborgen. Markieren und Entfernen stehen im
+          Aktivitätsprotokoll der Anwendung.</li>
+        <li data-l="en"><b>To keep it closed:</b> a marked application cannot be deleted (remove the mark first),
+          only its owner may move a definition out of it, and a deleted definition keeps its finished instances
+          hidden. Marking and unmarking are recorded in the application's activity log.</li>
+      </ul>
 
       <h3 data-l="de">Wer gerade angemeldet ist</h3><h3 data-l="en">Who is signed in right now</h3>
       <p data-l="de">Die Benutzerliste hat neben <b>Status</b> – darf sich anmelden – eine Spalte <b>Presence</b>:

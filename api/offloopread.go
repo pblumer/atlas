@@ -2,7 +2,9 @@ package api
 
 import (
 	"errors"
+	"net/http"
 
+	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/state"
 )
@@ -25,6 +27,11 @@ type defMeta struct {
 	DeployedAt int64
 	Inactive   bool
 	cp         *compiler.CompiledProcess
+	// hidden says the caller of [Server.readOffLoopAs] may not see this
+	// definition's instances: it was deployed from a confidential project the
+	// caller is not a member of (confidential.go). Always false through
+	// [Server.readOffLoop], which answers for nobody in particular.
+	hidden bool
 }
 
 // VersionTag is the tag the definition was deployed under, or "" when it carries
@@ -41,6 +48,23 @@ func (d defMeta) VersionTag() string {
 // sized by how many definitions are *deployed*, which is design-time size: the
 // copy stays cheap however many instances exist.
 type defIndex map[uint64]defMeta
+
+// hides reports whether the request this index was built for may not see the
+// instances of a definition. Every row a scan returns, and every count it adds up,
+// asks this first.
+func (d defIndex) hides(defKey uint64) bool { return d[defKey].hidden }
+
+// hiddenKeys lists the definitions the index hides, for a total that has to
+// subtract them. Nil when nothing is hidden, which is the common case.
+func (d defIndex) hiddenKeys() []uint64 {
+	var out []uint64
+	for k, m := range d {
+		if m.hidden {
+			out = append(out, k)
+		}
+	}
+	return out
+}
 
 // readOffLoop runs a read-only query with the run loop free.
 //
@@ -64,12 +88,32 @@ type defIndex map[uint64]defMeta
 // must also not dispatch onto the loop while it holds the view for longer than it
 // has to — a view left open holds back compaction of everything written since.
 func (s *Server) readOffLoop(fn func(v *state.ReadView, defs defIndex) error) error {
+	return s.readOffLoopVeiled(nil, fn)
+}
+
+// readOffLoopAs is [Server.readOffLoop] for a request whose answer depends on who
+// asked: the definitions whose instances the caller may not see — those of a
+// confidential project they are not a member of — come marked as hidden, and the
+// scan skips them (see [defIndex.hides]). The veil is computed in the same turn
+// the view is taken, so the rows and the rule describe one moment.
+//
+// Every read that lists or counts instances, incidents, jobs or anything else that
+// carries instance data goes through this, not through readOffLoop.
+func (s *Server) readOffLoopAs(r *http.Request, fn func(v *state.ReadView, defs defIndex) error) error {
+	return s.readOffLoopVeiled(r, fn)
+}
+
+func (s *Server) readOffLoopVeiled(r *http.Request, fn func(v *state.ReadView, defs defIndex) error) error {
 	var (
 		view *state.ReadView
 		defs defIndex
 	)
 	s.do(func() {
 		view = s.store.ReadView()
+		var v veil
+		if r != nil {
+			v = s.veilOnLoop(httpapi.PrincipalFrom(r.Context()))
+		}
 		defs = make(defIndex, len(s.deployments))
 		for key, d := range s.deployments {
 			defs[key] = defMeta{
@@ -79,6 +123,15 @@ func (s *Server) readOffLoop(fn func(v *state.ReadView, defs defIndex) error) er
 				DeployedAt: d.DeployedAt,
 				Inactive:   d.inactive,
 				cp:         d.cp,
+				hidden:     v.hides(key),
+			}
+		}
+		// A definition deleted while its project was confidential is no longer in the
+		// deployment map, and its finished instances are still in the store. It is
+		// entered here, labels empty, only so that hides answers for it.
+		for key := range v.hidden {
+			if _, ok := defs[key]; !ok {
+				defs[key] = defMeta{hidden: true}
 			}
 		}
 	})
