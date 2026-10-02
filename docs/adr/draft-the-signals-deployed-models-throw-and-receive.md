@@ -1,4 +1,4 @@
-# ADR-DRAFT: Atlas shows the signals and messages its deployed models exchange
+# ADR-DRAFT: Atlas shows the signals its deployed models throw and receive
 
 - **Status:** Proposed
 - **Implementation:** Not started
@@ -34,13 +34,14 @@ Behind the misunderstanding is a real gap. A signal couples models by name alone
 - **Only a model throws one.** `api/openapi.go` declares no route that broadcasts a signal. The
   deployed definitions are therefore the complete set of throwers.
 - **Every variable is the payload.** The throw writes every variable of the throwing instance
-  into each receiving instance's scope
-  ([ADR-0431](0431-system-processes-announce-their-facts-as-signals.md)).
-- **Only the newest version starts.** A redeploy supersedes the signal and message starts of
-  older versions (`supersedeStarts` in `engine/processor.go`). Catches, boundaries, event
-  subprocesses and throws of an older version stay live while its instances run. A deactivated
-  definition does not start on a broadcast
-  ([ADR-0119](0119-deactivate-deployed-process.md)).
+  into each receiving instance's scope (`instanceVariables` in `engine/behavior.go`,
+  [ADR-0431](0431-system-processes-announce-their-facts-as-signals.md)). Nothing on the throw
+  narrows it: a throw event carries no I/O mapping, and declared signal payloads are an open item
+  of ADR-0435 §10.
+- **Only the newest version starts.** A redeploy supersedes the signal starts of older versions
+  (`supersedeStarts` in `engine/processor.go`). Catches, boundaries, event subprocesses and
+  throws of an older version stay live while its instances run. A deactivated definition does
+  not start on a broadcast ([ADR-0119](0119-deactivate-deployed-process.md)).
 
 Four things can go wrong without anybody seeing them:
 
@@ -62,14 +63,14 @@ What exists today:
   (`GET /api/v1/event-catalog/listeners`, ADR-0435 §7).
 - **For messages:** `GET /api/v1/message-sources`
   ([ADR-0429](0429-product-actions-are-commands-with-published-outcomes.md) §6). It lists inbound
-  watches, product actions and where processes wait, and the Modeler's message picker reads it.
-  A process's own message throw is not listed as a source.
+  watches, product actions and where processes wait, and the Modeler's message picker reads it to
+  say whether a name is fed.
 - **For signals:** nothing beyond the model. The Modeler's signal picker offers the model's own
   signals and the listenable catalogue entries, not the names other deployed models use.
 
-The question this record answers: **how Atlas shows the signals and messages the installation's
-own models exchange, so that a modeler and an operator can see who throws a name, who receives
-it, and where it crosses a project, without presenting an observation as a contract and without
+The question this record answers: **how Atlas shows the signals the installation's own models
+throw and receive, so that a modeler and an operator can see who throws a name, who receives it,
+and where it crosses a project, without presenting an observation as a contract and without
 undoing ADR-0435's split.**
 
 ## Decision drivers
@@ -93,7 +94,7 @@ undoing ADR-0435's split.**
 
 1. **Status quo, with clearer page text.**
 2. **Admit own signals to the catalogue.** Either as entries in `eventcatalog.Entries`, or as a
-   design-time registry of installation events with a declared meaning and payload.
+   design-time registry of installation signals with a declared meaning and payload.
 3. **A derived inventory of the deployed definitions.**
 4. **Runtime observation.** Record every broadcast and show how often a name was thrown, when
    last, and how many receivers it reached.
@@ -105,23 +106,17 @@ are follow-ups that build on it (§7).
 
 ### 1. What the inventory is
 
-For each name and channel, the inventory lists every deployed element that throws or receives
-it. It is derived on request from the compiled definitions and is not stored, so there is
-nothing to drift.
-
-- **Signals** come from `CompiledProcess.SignalPoints` (ADR-0435's as-built note added it).
-- **Messages** need a `MessageSenders` beside the existing `MessageReceivers`: the message throw
-  event and the message end event, which share the throw detail table. A send task that names a
-  message compiles to a message throw ([ADR-0112](0112-send-tasks.md)) and is listed with them. A
-  send task without one creates a job (`AddSendTask`), publishes nothing, and is not a sender here.
+For each signal name, the inventory lists every deployed element that throws or receives it. It
+is derived on request from the compiled definitions, through `CompiledProcess.SignalPoints`
+(added by ADR-0435's first slice). It is not stored, so there is nothing to drift.
 
 A point carries:
 
 - the process id, name, version, and whether that version is the newest of its process;
 - its project, and whether it is a system process;
 - whether the definition is active;
-- the element id and its role: `throw`, `end`, `start`, `catch`, `boundary` or
-  `event-subprocess`;
+- the element id and its role: `throw`, `start`, `catch`, `boundary` or `event-subprocess`. A
+  signal end event throws, and is reported with the role `throw`, as `SignalPoints` does;
 - for a boundary or event subprocess, whether it interrupts.
 
 ### 2. What it covers
@@ -130,11 +125,12 @@ A point carries:
 - **A throw of an `atlas.*` name by a model outside the system project.** It appears with the
   finding `signal.reserved-name` (§4), because the throw is the installation's own act. A
   receiver of an `atlas.*` name stays where ADR-0435 put it.
-- **Messages.** `GET /api/v1/message-sources` gains a fourth kind, `process-throw`: a deployed
-  process that throws or ends with the name. A throw is a source, and the message picker already
-  asks the question this answers, "is this name fed". No second message route is introduced.
 - **Not drafts.** A draft runs nothing.
 - **Not instances.** See §7.
+- **Not messages.** A message has sources the definitions do not show: the publish route, inbound
+  watches, product actions. Message-sources already answers "is this name fed" for the Modeler.
+  What it lacks, a process's own message throw as a source, is a smaller change with its own
+  record (§7). Keeping it out keeps this record to the channel that has no view at all.
 
 ### 3. Versions
 
@@ -157,14 +153,9 @@ surfaces cannot disagree.
 | `signal.crosses-projects` | The name is thrown in one project and received in another, or by a definition without a project. | Not an error. Every variable of the throwing instance is written into an instance of the other project, whose members may read it (ADR-0275). A throw here fires an interrupting receiver there, which cancels the work it guards. |
 | `signal.reserved-name` | A model outside the system project throws an `atlas.*` name. | It speaks for Atlas. The Modeler already warns before the deploy (ADR-0435); this shows what was deployed anyway. |
 
-Two findings are deliberately not computed:
-
-- **Similar names** (`order-cancelled` beside `order_cancelled`). A heuristic produces false
-  positives in a list meant to be trusted. The typo case is caught from both ends anyway, as one
-  `signal.unreceived` and one `signal.unthrown`.
-- **Message findings.** A message has sources this inventory does not see: the publish route,
-  inbound watches, product actions. "Received, nothing sends it" is therefore not decidable from
-  definitions. Message-sources already answers that question for the Modeler.
+**Similar names are not a finding** (`order-cancelled` beside `order_cancelled`). A heuristic
+produces false positives in a list meant to be trusted. The typo case is caught from both ends
+anyway, as one `signal.unreceived` and one `signal.unthrown`.
 
 **Not in the Problems panel.** Whether a receiver exists depends on other deployments, and the
 order of deploys is legitimately free: a receiver may be deployed after its thrower. Validation
@@ -205,8 +196,8 @@ The cost is accepted: a modeler with bad intent finds a name to catch faster.
 
 - **The Console's *Events* page** gets two sections.
   - *Events atlas emits*: the catalogue, unchanged.
-  - *Signals and messages of this installation*: the inventory, grouped by name, with its
-    findings and a filter for names that have one.
+  - *Signals of this installation*: the inventory, grouped by name, with its findings and a
+    filter for names that have one.
 
   The introduction says which section is which. It no longer opens with "Everything atlas emits"
   unqualified.
@@ -215,7 +206,6 @@ The cost is accepted: a modeler with bad intent finds a name to catch faster.
     *Events atlas emits*.
   - A throwing element shows one line: "received by N deployed processes", or "no deployed
     process receives it". The line links to the page.
-  - The message picker groups the `process-throw` rows like the other kinds.
 - **MCP.** A tool `atlas_signals` proxies the route. It is a read that leaks nothing the route
   hides, so it is a tool (ADR-0016). The tool count in `README.md` moves with it.
 - **The handbook.** The chapter *Ereignisse / Events* gains a section, in both languages, on what
@@ -235,13 +225,18 @@ The cost is accepted: a modeler with bad intent finds a name to catch faster.
     installation's.
 
   That is a record of its own.
+- **Declared signal payloads.** Choosing on the throw which variables a signal carries, instead
+  of every variable of the instance, is an engine change named in ADR-0435 §10. It is a record of
+  its own.
 - **A deploy rule for receivers in another project.** This would close, for own signals, what
-  ADR-0435 §6 closed for catalogued ones. It needs declared signal payloads (ADR-0435 §10) or a
-  project rule, and it is a record of its own. This record makes the gap visible. It does not
-  close it.
-- **A registry of the installation's own events** (option 2). Once payloads can be declared, a
+  ADR-0435 §6 closed for catalogued ones. It needs declared signal payloads or a project rule,
+  and it is a record of its own. This record makes the gap visible. It does not close it.
+- **A registry of the installation's own signals** (option 2). Once payloads can be declared, a
   declared own signal can carry the same contract and the same access rule as a catalogue entry.
   The inventory then marks which names are declared.
+- **Messages.** A process's own message throw as a fourth kind of message source, beside inbound
+  watches, product actions and waiting processes. A message-kind send task compiles to a message
+  throw ([ADR-0112](0112-send-tasks.md)) and belongs there too.
 - **Cross-partition broadcast** ([ADR-0006](0006-partition-routing-and-cross-partition.md),
   ADR-0088). The inventory reads definitions, which are server-wide, so it is unaffected.
 
@@ -266,11 +261,13 @@ The cost is accepted: a modeler with bad intent finds a name to catch faster.
     Atlas is uncomfortable, and it is accepted because the alternative is not knowing.
   - Two lists on one page invite the question this record started from: why a name is in one and
     not the other. The page has to answer it in its own text.
+  - Messages keep their own, narrower view until their record lands.
 - **Follow-ups / risks to watch:**
   - The open question. If deployed definitions become object-gated, §5's filter must follow
     them.
+  - Declared signal payloads, then a deploy rule for cross-project receivers.
   - Runtime counts (§7).
-  - A deploy rule for cross-project receivers, after declared signal payloads.
+  - A process's own message throws in message-sources (§7).
   - Whether `signal.crosses-projects` should also be raised to a project's owner, not only shown
     to whoever looks.
 
@@ -320,11 +317,9 @@ The cost is accepted: a modeler with bad intent finds a name to catch faster.
 - [ADR-0431](0431-system-processes-announce-their-facts-as-signals.md): a signal carries every
   variable of the throwing instance.
 - [ADR-0429](0429-product-actions-are-commands-with-published-outcomes.md) §6: message sources,
-  the pattern this follows and extends.
+  the pattern this follows for signals.
 - [ADR-0071](0071-sharing-scopes.md), [ADR-0275](0275-instance-visibility.md): what a project
   member may read, and why a signal crossing projects matters.
-- [ADR-0020](0020-message-correlation.md), [ADR-0370](0370-durable-message-buffer.md): message
-  correlation, and a buffer that is not built yet.
 - [ADR-0119](0119-deactivate-deployed-process.md): a deactivated definition does not start on a
   broadcast.
 - [ADR-0026](0026-problems-panel-and-versioned-validation.md): why the findings are not in the
