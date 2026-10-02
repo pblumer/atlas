@@ -14,6 +14,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Switching the catalogue off says at start what it strands.** A server started with
+  `--catalogue=false` while the shop's fulfilment or approval processes, or a product's
+  provisioning process, are still running writes one WARN,
+  `event=server.catalogue_disabled_in_flight`, with how many instances will fail at their
+  next call to the order routes and which processes they are
+  (`processes="atlas-auftrag-erfuellung=1,…"`). The start is never refused: the switch must
+  always work. It counts running processes from the engine's per-definition counters,
+  never the orders themselves, so the check costs the same whether a hundred orders were
+  placed or a million. Nothing is written when nothing is running. ADR-0434.
+
 - **The shop, the catalogue, the orders and the inventory can be switched off.** Start the
   server with `--catalogue=false` (or `ATLAS_CATALOGUE=false`, or
   `atlas.catalogue.enabled: false` in the Helm chart) to run Atlas as a workflow engine

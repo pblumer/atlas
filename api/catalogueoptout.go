@@ -1,7 +1,13 @@
 package api
 
 import (
+	"fmt"
+	"log/slog"
 	"net/http"
+	"sort"
+	"strings"
+
+	"github.com/pblumer/atlas/logging"
 )
 
 // Switching the catalogue off (ADR-0434).
@@ -84,4 +90,93 @@ func (s *Server) handleSwitchedOffPage(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
 	_, _ = w.Write([]byte("Der Shop ist auf diesem Server ausgeschaltet.\n" +
 		"The shop is switched off on this server.\n"))
+}
+
+// warnCatalogueWorkInFlight says, once at start, what switching the catalogue off
+// is about to break (ADR-0434, its open question answered). The switch is never
+// refused — an operator must always be able to take the area away — but a process
+// still running that calls the order routes will fail at that call and, its retries
+// spent, raise an incident. One line at start names how many and which, so the
+// operator meets the consequence before the incidents do.
+//
+// It counts processes, not orders. An order's status lives in a sidecar read whole,
+// which grows with every order ever placed; what fails is a running process, and the
+// engine keeps a live-instance counter per definition (ADR-0080). So the cost is one
+// read per deployed version of the processes concerned — design-time size — and the
+// count is of exactly what will fail: the shop's own fulfilment and approval
+// processes, and the processes products bind in the two-process form, whose last step
+// reports to the order by convention (ADR-0312). A lifecycle process talks to its
+// order through shop tasks, which keep their handlers, so it is not counted.
+//
+// Runs in New before the loop serves, like loadDeployments, so it reads the stores
+// directly.
+func (s *Server) warnCatalogueWorkInFlight() {
+	byProcess, err := s.catalogueWorkInFlight()
+	if err != nil {
+		logging.Warn(logging.ServerCatalogueInFlight,
+			"the catalogue is switched off, and whether processes are still working orders could not be read",
+			slog.String("error", err.Error()))
+		return
+	}
+	shop, product := 0, 0
+	ids := make([]string, 0, len(byProcess))
+	for id, n := range byProcess {
+		ids = append(ids, id)
+		if catalogueSystemProcesses[id] {
+			shop += n
+		} else {
+			product += n
+		}
+	}
+	if shop+product == 0 {
+		return
+	}
+	sort.Strings(ids)
+	parts := make([]string, len(ids))
+	for i, id := range ids {
+		parts[i] = fmt.Sprintf("%s=%d", id, byProcess[id])
+	}
+	logging.Warn(logging.ServerCatalogueInFlight,
+		"the catalogue is switched off while processes are still working orders: each fails at its next call to the "+
+			"order routes and, its retries spent, raises an incident. Switch the catalogue back on and retry those "+
+			"incidents to finish the orders, or end the instances deliberately",
+		slog.Int("shop_process_instances", shop),
+		slog.Int("product_process_instances", product),
+		slog.String("processes", strings.Join(parts, ",")))
+}
+
+// catalogueWorkInFlight counts the live instances, by BPMN process id, of every
+// process that calls the order routes: the shop's system processes and the
+// two-process bindings of the catalogue's products. Ids with none running are left
+// out.
+func (s *Server) catalogueWorkInFlight() (map[string]int, error) {
+	items, err := s.catalogStore.Items()
+	if err != nil {
+		return nil, err
+	}
+	reports := map[string]bool{}
+	for id := range catalogueSystemProcesses {
+		reports[id] = true
+	}
+	for _, it := range items {
+		for _, p := range []string{it.ProvisionProcess, it.DeprovisionProcess} {
+			if p = strings.TrimSpace(p); p != "" {
+				reports[p] = true
+			}
+		}
+	}
+	out := map[string]int{}
+	for key, d := range s.deployments {
+		if !reports[d.ProcessID] {
+			continue
+		}
+		n, err := s.store.DefInstanceCount(key)
+		if err != nil {
+			return nil, err
+		}
+		if n > 0 {
+			out[d.ProcessID] += n
+		}
+	}
+	return out, nil
 }
