@@ -499,6 +499,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The shop's approval models open as a readable diagram.** The three approval processes
+  the shop ships — fixed approver, group and superior — printed both deadlines' captions
+  over each other, two of them drew their parallel gateway on top of the approval task,
+  and the superior variant drew its deadlines away from the task they are attached to.
+  The diagrams are redrawn: the notification on a row above, the decision on one axis with
+  its two outcomes rejoining at an exclusive gateway before *Entschieden*, and reminder and
+  escalation each on a row of their own. The joining gateway changes no behaviour, since
+  only one of the two outcomes ever arrives. A server deploys the redrawn models as a new
+  version of each; instances already running stay on theirs. The diagrams the binary ships
+  are now held to the generator's layout invariants (`go test ./api/layout`), so a model
+  drawn like that no longer passes.
+
 - **On Windows, a crashed server no longer leaves its workers running.** Stopping Atlas
   stopped the workers it supervises, but a server that crashed, was ended in the Task
   Manager, or was killed by its service wrapper left them running. They retried the dead
