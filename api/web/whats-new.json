@@ -2,6 +2,51 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "the-shop-has-a-handbook-of-its-own-with-an-example-to-instal",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A handbook for the shop, with an example to install",
+        "de": "Ein Handbuch für den Shop, mit einem Beispiel zum Installieren"
+      },
+      "summary": {
+        "en": "A new shop handbook explains how to build a catalogue, how several catalogues work together, how to describe products and services, and how to design the processes behind them. It follows one example throughout, the services of a public administration in German and English, which you can install with one click after naming who orders and who approves.",
+        "de": "Ein neues Shop-Handbuch erklärt, wie man einen Katalog aufbaut, wie mehrere Kataloge zusammenspielen, wie man Produkte und Services beschreibt und wie man die Prozesse dahinter entwirft. Es begleitet ein durchgehendes Beispiel, die Dienstleistungen einer Verwaltung auf Deutsch und Englisch, das sich mit einem Klick installieren lässt, nachdem man festgelegt hat, wer bestellt und wer genehmigt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue",
+        "Handbook",
+        "Examples"
+      ]
+    },
+    {
+      "id": "a-whole-shop-can-be-imported-as-one-document",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A whole shop in one file",
+        "de": "Ein ganzer Shop in einer Datei"
+      },
+      "summary": {
+        "en": "Catalogues, their products and how the products fit together can now be brought into Atlas as one document, published straight away if you like. Either everything arrives or nothing changes, with every problem listed at once, and importing the same file again updates what is there instead of adding it twice.",
+        "de": "Kataloge, ihre Produkte und wie die Produkte zusammengehören lassen sich jetzt als ein Dokument in Atlas übernehmen und auf Wunsch gleich veröffentlichen. Entweder kommt alles an oder es ändert sich nichts, mit allen Problemen auf einmal, und derselbe Import ein zweites Mal aktualisiert, was da ist, statt es doppelt anzulegen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue",
+        "API"
+      ]
+    },
+    {
       "id": "the-event-feed-can-be-pushed-to-a-system-that-cannot-poll-it",
       "version": "Unreleased",
       "date": null,
@@ -232,88 +277,6 @@
           "Drücken Sie unter einer bezogenen Leistung den Knopf der gewünschten Aktion.",
           "Füllen Sie das Formular aus, falls es eines gibt, und senden Sie es ab; die Zeile meldet, dass die Aktion angefordert wurde."
         ]
-      }
-    },
-    {
-      "id": "a-product-declares-its-actions",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A product lists what can be asked of it",
-        "de": "Ein Produkt listet, was man von ihm verlangen kann"
-      },
-      "summary": {
-        "en": "A product with a lifecycle process no longer stops at three start events. It lists its actions: the provisioning and the return the order runs, then any number of changes such as more storage and services such as a password reset or an inactivation — each with the message its process waits for, who may ask for it (the customer, an operator or the system) and what its button says in each language. Publishing checks every action against the process. Existing products open as the actions they already had. Asking for an action from the shop follows in the next step.",
-        "de": "Ein Produkt mit Lebenszyklus-Prozess ist nicht mehr auf drei Startereignisse beschränkt. Es listet seine Aktionen: die Bereitstellung und die Rückgabe, die die Bestellung ausführt, dann beliebig viele Änderungen wie mehr Speicher und Dienstleistungen wie ein Passwort-Reset oder eine Inaktivierung – jede mit der Nachricht, auf die ihr Prozess wartet, wer sie auslösen darf (der Kunde, der Betrieb oder das System) und was ihr Knopf in jeder Sprache sagt. Beim Publizieren wird jede Aktion gegen den Prozess geprüft. Bestehende Produkte öffnen sich mit den Aktionen, die sie schon hatten. Das Auslösen einer Aktion im Shop folgt im nächsten Schritt."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Service catalogue",
-        "Shop"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the catalogue and edit a product.",
-          "Under «How it is fulfilled», choose a lifecycle process — the provision and deprovision messages are pre-filled.",
-          "Press «Add an action» for each change or service, choose who may ask for it and write its label."
-        ],
-        "de": [
-          "Öffnen Sie den Katalog und bearbeiten Sie ein Produkt.",
-          "Wählen Sie unter «How it is fulfilled» einen Lebenszyklus-Prozess – die Nachrichten für Bereitstellung und Rückgabe werden vorbelegt.",
-          "Fügen Sie mit «Add an action» jede Änderung oder Dienstleistung hinzu, wählen Sie, wer sie auslösen darf, und schreiben Sie ihre Beschriftung."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the catalogue",
-          "de": "Katalog öffnen"
-        },
-        "route": "#/catalog"
-      }
-    },
-    {
-      "id": "the-modeler-offers-the-events-your-workers-publish-when-you-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Pick your Workers' events instead of typing them",
-        "de": "Ereignisse der Worker auswählen statt abtippen"
-      },
-      "summary": {
-        "en": "When a start event, a catch event, a boundary event or a receive task waits for a message, its message picker now lists the events your Workers publish — a Jira, clio, Google Sheets or Discord watch configured under Workers → Events… in the Console — with the worker behind each and a mark where a watch is switched off. Picking one creates the message with exactly that name. Before, the name had to be typed by hand, and one wrong character meant a process that never started.",
-        "de": "Wartet ein Startereignis, ein Zwischenereignis, ein Randereignis oder eine Empfangsaufgabe auf eine Nachricht, listet die Nachrichtenauswahl jetzt die Ereignisse Ihrer Worker auf – eine Jira-, clio-, Google-Sheets- oder Discord-Überwachung aus «Workers → Events…» in der Konsole –, mit dem jeweiligen Worker und einer Markierung, wo eine Überwachung ausgeschaltet ist. Ein Klick legt die Nachricht mit genau diesem Namen an. Bisher musste der Name von Hand eingetippt werden, und ein falsches Zeichen bedeutete einen Prozess, der nie startete."
-      },
-      "link": {
-        "label": "ADR-0205",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0205-connector-ownership-and-event-delivery.md"
-      },
-      "tags": [
-        "Modeler",
-        "Workers"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a process in the Modeler and switch to the «Implement» tab.",
-          "Select a message start event, catch event, boundary event or receive task.",
-          "Open «Message» and choose a name under «Events from Workers»."
-        ],
-        "de": [
-          "Öffnen Sie einen Prozess im Modeler und wechseln Sie zum Reiter «Implement».",
-          "Wählen Sie ein Nachrichten-Startereignis, ein Zwischenereignis, ein Randereignis oder eine Empfangsaufgabe.",
-          "Öffnen Sie «Message» und wählen Sie einen Namen unter «Events from Workers»."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]

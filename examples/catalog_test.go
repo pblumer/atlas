@@ -1,6 +1,7 @@
 package examples
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -57,6 +58,14 @@ type catalogSource struct {
 	// already owns the artifacts (the system processes). It still gets a card, and
 	// still opens in the Modeler; it just has no install button.
 	NoInstall bool
+	// Shop marks an example that ships a shop: its directory carries a catalogue
+	// document (katalog.json, shopcatalog_test.go) beside the processes and forms its
+	// products are bound to, and it installs from the shop handbook
+	// (api/web/shop-handbuch.html), whose installer also imports the catalogue. The
+	// value is the application that installer creates. Such an example is NoInstall
+	// here: the Beispiele chapter's button would deploy the processes without the
+	// shop they serve, so its card links to the shop handbook instead.
+	Shop string
 }
 
 type catalogStart struct {
@@ -252,6 +261,12 @@ var catalogSources = []catalogSource{
 	{ID: "identitaet-lebenszyklus", App: "Beispiel: Identitäts-Lebenszyklus", Dir: "identitaet-lebenszyklus",
 		Main: "identitaet-lebenszyklus/identitaet-lebenszyklus.bpmn"},
 	{ID: "ad-objektmodell", Dir: "ad-objektmodell", NoInstall: true},
+	// A whole shop: two catalogues, three products in both process forms, bilingual.
+	// It installs from the shop handbook, which asks the reader for the audience
+	// groups and the approvers the catalogue document leaves open.
+	{ID: "verwaltung-dienstleistungen", Dir: "verwaltung-dienstleistungen", NoInstall: true,
+		Main: "verwaltung-dienstleistungen/zutrittsbadge-lebenszyklus.bpmn",
+		Shop: "Beispiel: Dienstleistungen der Verwaltung"},
 }
 
 // formDisplayNames gives a form the name the Modeler and the Tasks inbox list it
@@ -315,6 +330,14 @@ type catalogExample struct {
 	Decisions []catalogDecision `json:"decisions,omitempty"`
 	Forms     []catalogForm     `json:"forms,omitempty"`
 	Start     *catalogStartJSON `json:"start,omitempty"`
+	// Shop is the catalogue document of an example that ships a shop, and the
+	// application the shop handbook's installer creates for its processes and forms.
+	Shop *catalogShop `json:"shop,omitempty"`
+}
+
+type catalogShop struct {
+	App      string          `json:"app"`
+	Document json.RawMessage `json:"document"`
 }
 
 type catalogProcess struct {
@@ -467,6 +490,14 @@ func buildCatalog(t *testing.T) string {
 		}
 		if !src.NoInstall {
 			ex.App = src.App
+		}
+		if src.Shop != "" {
+			doc := readFile(t, filepath.Join(src.Dir, shopDocumentName))
+			var compact bytes.Buffer
+			if err := json.Compact(&compact, []byte(doc)); err != nil {
+				t.Fatalf("%s/%s: %v", src.Dir, shopDocumentName, err)
+			}
+			ex.Shop = &catalogShop{App: src.Shop, Document: compact.Bytes()}
 		}
 		for _, f := range files {
 			switch {
