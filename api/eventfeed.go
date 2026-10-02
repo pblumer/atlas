@@ -26,7 +26,7 @@ import (
 // The route reads a snapshot off the run loop (ADR-0239). It requires the `feedreader`
 // role, which a token minted with the `events` scope carries and nothing else, so a
 // system that follows the feed holds a credential that reads the feed and no more
-// (ADR-draft-the-event-feed-has-its-own-role-and-token-scope).
+// (ADR-0430).
 
 // defaultEventFeedTTL is how long a feed row is kept when the operator set nothing.
 const defaultEventFeedTTL = 30 * 24 * time.Hour

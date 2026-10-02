@@ -8,7 +8,7 @@ import (
 )
 
 // The event feed's own role and token scope
-// (ADR-draft-the-event-feed-has-its-own-role-and-token-scope).
+// (ADR-0430).
 //
 // A system that follows the feed — a CMDB, a billing system — holds a credential on
 // another host for as long as the integration runs. The credential it is given must

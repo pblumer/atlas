@@ -1,4 +1,4 @@
-# ADR-DRAFT: The event feed has its own role and its own token scope
+# ADR-0430: The event feed has its own role and its own token scope
 
 - **Status:** Accepted
 - **Implementation:** Landed

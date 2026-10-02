@@ -292,7 +292,7 @@ func TestKnownRoles(t *testing.T) {
 // else whoever mints it, so a leaked feed token reads the feed and does nothing more;
 // an account that does not hold feedreader cannot mint one; and a scope with no roles
 // of its own still carries the minter's, as before
-// (ADR-draft-the-event-feed-has-its-own-role-and-token-scope).
+// (ADR-0430).
 func TestAConfinedScopeCarriesItsOwnRoles(t *testing.T) {
 	admin := &httpapi.Principal{UserID: "usr_1", Roles: []string{RoleAdmin}}
 	reader := &httpapi.Principal{UserID: "usr_2", Roles: []string{RoleFeedReader}}

@@ -195,7 +195,7 @@ func tokenRoles(p *httpapi.Principal) []string {
 // roles its allowlist needs and no others. A token minted for the event feed holds
 // `feedreader` and nothing else, so the scope says it may reach one route and the role
 // says it may do one kind of thing — both locks name the feed, and a leaked feed token
-// is a leaked read of the feed (ADR-draft-the-event-feed-has-its-own-role-and-token-scope).
+// is a leaked read of the feed (ADR-0430).
 //
 // A scope absent here carries the minter's roles, as every scope did before this
 // map existed (ADR-0209).

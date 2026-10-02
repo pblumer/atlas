@@ -78,7 +78,7 @@ const (
 
 	// RoleFeedReader reads the event feed and nothing else: how each action asked of
 	// a held position ended, and every right granted or revoked (ADR-0429 §5,
-	// ADR-draft-the-event-feed-has-its-own-role-and-token-scope). It is what a system
+	// ADR-0430). It is what a system
 	// beyond Atlas that follows those facts — a CMDB, a billing system — holds, through
 	// a token minted with the `events` scope, and what a person who integrates one may
 	// be given to look at the feed by hand.

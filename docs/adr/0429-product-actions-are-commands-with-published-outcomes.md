@@ -491,7 +491,7 @@ loop (ADR-0239), answers at least once, and leaves deduplication to the consumer
 still held — loud, not silent. It requires `operator` in the first cut; a role scoped to
 the feed alone (ADR-0209) and scoped tokens (ADR-0194) are follow-ups, as ADR-0425
 already notes for operator tokens held by external systems. *(Both built by
-[ADR-draft-the-event-feed-has-its-own-role-and-token-scope](draft-the-event-feed-has-its-own-role-and-token-scope.md):
+[ADR-0430](0430-the-event-feed-has-its-own-role-and-token-scope.md):
 the route requires `feedreader`, and an `events` token carries that role and nothing else.)*
 
 **Push delivery is prepared and not built.** A later slice delivers the same envelopes
@@ -513,7 +513,7 @@ cutoff — stopping at the first that is not, so the window is a lower bound and
 through the middle of the log — and freezes that position into the command; the fold drops
 the rows through it and keeps the cut, so a reader can tell a cursor that fell behind.
 `GET /api/v1/events` (`api/eventfeed.go`; first `operator`, since
-[ADR-draft-the-event-feed-has-its-own-role-and-token-scope](draft-the-event-feed-has-its-own-role-and-token-scope.md)
+[ADR-0430](0430-the-event-feed-has-its-own-role-and-token-scope.md)
 the `feedreader` role, which an `events` token carries and nothing else) reads a snapshot off the loop and
 answers `{events, next, more}`; `after` left out reads from the oldest row held, and an
 `after` below the cut answers 410 with `oldest`. The envelope is as the table above says,
@@ -711,7 +711,7 @@ Each is binding on the slice that builds it; none changes a slice already landed
    other missing translation is (ADR-0414).
 8. **The feed keeps 30 days** by default, and its pull route requires `operator` in
    the first cut, as §5 says. *(Superseded for the role by
-   [ADR-draft-the-event-feed-has-its-own-role-and-token-scope](draft-the-event-feed-has-its-own-role-and-token-scope.md):
+   [ADR-0430](0430-the-event-feed-has-its-own-role-and-token-scope.md):
    the route requires `feedreader`.)*
 9. **The run loop is measured** (the open question) before a per-position product is
    rolled out beyond a pilot.
