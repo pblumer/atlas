@@ -25,6 +25,20 @@ _Changed_ / _Removed_ for each version.
   cursor moves past the events it is not given, and a page that read 10 000 rows without
   filling up answers what it found with `more` set.
 
+- **A new account request announces itself, so an installation can be told.** The intake
+  process (`proc_benutzer_aufnahme`), the one behind the login screen's "Registrieren" link,
+  now throws the signal `atlas.user.requested` just before the request waits at "Antrag
+  freigeben". The process stays protected and names no target. An installation that wants to
+  hear about requests deploys a process of its own with a signal start on that name, for
+  example one that posts to Discord. Where nobody listens, the signal does nothing. The
+  listener receives what the requester entered (`vorname`, `nachname`, `email`, `abteilung`,
+  `begruendung`) and the proposed `benutzername`. It never receives the role or the initial
+  password, because those come into being only at the approval, after the throw. A failing
+  notice is an incident in the listener and does not hold up the request.
+  `examples/benutzerverwaltung/README.md` carries a Discord recipe that silences
+  `@everyone` from form input.
+  ADR-0431.
+
 - **A system that follows the event feed can hold a credential that reads it and nothing
   else.** There is a new role, `feedreader`, and a new API-token scope, `events`. A token
   minted with `{"scope":"events"}` reaches `GET /api/v1/events` and no other route, and it

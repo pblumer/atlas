@@ -55,6 +55,7 @@ aktiviert.
 ```
 Start (ba-antrag: Vorname, Nachname, E-Mail, Abteilung, Begründung)
   → [Script] Zugangsdaten vorschlagen   – FEEL: benutzername = vorname.nachname
+  → 📣 Signal "Aufnahme beantragt"      – atlas.user.requested (siehe unten)
   → 🔑 User-Task "Antrag freigeben" (ba-konto) – Admin vergibt Rolle, setzt Initialpasswort
   → (X) Angelegt?
         anlegen (Default) → [userConnector create] "Konto anlegen" → Zugangs-Mail
@@ -70,6 +71,83 @@ die vier Rollen, die atlas durchsetzt: `user` (Aufgaben), `modeler` (modellieren
 und deployen), `operator` (Instanzen betreiben) und `admin`. Das Feld trägt eine
 kommagetrennte Liste, weil ein Konto mehrere Rollen hält; `modeler,user` ist
 deshalb ein einziger Wert und keine Ausnahme.
+
+#### Von neuen Anträgen erfahren: das Signal `atlas.user.requested`
+
+Ein eingegangener Antrag wartet bei „Antrag freigeben", und niemand wird darauf
+hingewiesen. Den geschützten Prozess kann eine Installation nicht um eine
+Benachrichtigung ergänzen. Deshalb wirft er selbst ein Signal,
+**`atlas.user.requested`**, unmittelbar bevor die Freigabe wartet
+([ADR-0431](../../docs/adr/0431-system-processes-announce-their-facts-as-signals.md)).
+Der Prozess kennt seine Empfänger nicht. Wer informiert werden will, deployt einen
+**eigenen** Prozess mit einem Signal-Start auf diesen Namen. Ohne einen solchen Prozess
+bleibt der Wurf folgenlos.
+
+**Was der Empfänger bekommt.** Das Signal überträgt alle Variablen, die der Antrag an
+dieser Stelle hat. Sie stehen im Empfänger als gewöhnliche FEEL-Variablen bereit:
+
+| Variable | Herkunft | immer gesetzt |
+|---|---|---|
+| `vorname`, `nachname`, `email` | Formular `ba-antrag` | ja (Pflichtfelder) |
+| `abteilung`, `begruendung` | Formular `ba-antrag` | nein |
+| `benutzername` | Script „Zugangsdaten vorschlagen" | ja |
+
+`initialpasswort`, `rolle` und `entscheidung` entstehen erst bei der Freigabe und sind
+deshalb **nie** dabei. Ein Test hält diese Stelle fest.
+
+**Rezept: ein Antrag, eine Discord-Nachricht.** Das Rezept setzt einen eingerichteten
+Discord-Worker voraus
+([ADR-0258](../../docs/adr/0258-discord-worker.md)). `discord` und die Kanal-Id sind
+durch die eigenen Werte zu ersetzen:
+
+```xml
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:atlas="http://atlas/schema/1.0"
+             id="defs_aufnahme_discord" targetNamespace="http://atlas/examples">
+  <signal id="sig_user_requested" name="atlas.user.requested"/>
+  <process id="proc_aufnahme_discord" name="Aufnahme-Antrag nach Discord melden" isExecutable="true">
+    <startEvent id="start" name="Aufnahme beantragt">
+      <outgoing>f_start_melden</outgoing>
+      <signalEventDefinition signalRef="sig_user_requested"/>
+    </startEvent>
+    <serviceTask id="melden" name="In Discord melden">
+      <extensionElements>
+        <atlas:discordConnector connector="discord" operation="send-message"
+          channel="123456789012345678"
+          content="=&quot;Neuer Aufnahme-Antrag von &quot; + vorname + &quot; &quot; + nachname + &quot; (&quot; + benutzername + &quot;). Die Freigabe wartet in den Aufgaben.&quot;"
+          resultVariable="gesendet">
+          <atlas:discordField name="allowed_mentions" value="={parse: []}"/>
+        </atlas:discordConnector>
+      </extensionElements>
+      <incoming>f_start_melden</incoming>
+      <outgoing>f_melden_ende</outgoing>
+    </serviceTask>
+    <endEvent id="ende" name="Gemeldet">
+      <incoming>f_melden_ende</incoming>
+    </endEvent>
+    <sequenceFlow id="f_start_melden" sourceRef="start" targetRef="melden"/>
+    <sequenceFlow id="f_melden_ende" sourceRef="melden" targetRef="ende"/>
+  </process>
+</definitions>
+```
+
+Drei Punkte darin sind Absicht:
+
+- **`allowed_mentions` mit leerer `parse`-Liste.** Der Text stammt aus einem öffentlichen
+  Formular. Ohne diese Zeile könnte jemand mit dem Vornamen `@everyone` den ganzen Kanal
+  anpingen.
+- **Nur Pflichtfelder im Text.** In FEEL ergibt `"Text" + null` den Wert `null`. Ein leeres
+  optionales Feld wie `begruendung` würde den ganzen Text auslöschen, und die Aufgabe
+  scheitert. Wer optionale Felder zeigen will, schützt sie mit
+  `if begruendung = null then "-" else begruendung`. Discord nimmt höchstens 2000 Zeichen
+  an.
+- **Wenig Personendaten.** Was in Discord steht, liegt bei Discord. Name und
+  Benutzername genügen als Hinweis. Die Details stehen in der Aufgabe.
+
+Zwei Eigenschaften eines Signals sind zu kennen. Es wird **nicht gepuffert**: Ist der
+Empfänger beim Eingang eines Antrags nicht deployt oder deaktiviert, erfährt er nie davon.
+Und es gilt **für die ganze Engine**: Jeder Prozess mit diesem Signalnamen empfängt
+dieselben Daten.
 
 ### 2. Zugriffs-Review — `proc_benutzer_review`
 ```

@@ -24,6 +24,29 @@
       ]
     },
     {
+      "id": "a-new-account-request-announces-itself-so-an-installation-ca",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "You can now be told when someone asks for an account",
+        "de": "Sie können sich jetzt benachrichtigen lassen, wenn jemand ein Konto beantragt"
+      },
+      "summary": {
+        "en": "When someone registers through the login screen, their request waits for approval, and until now nothing told anyone it was there. The built-in intake process now announces every new request with the signal \"atlas.user.requested\", just before it waits for approval. The process itself stays protected and unchanged for you. To be told, you deploy a small process of your own that starts on that signal and, for example, posts a message to your Discord channel. It receives the name, email, department, justification and proposed username, never the role or the initial password. If nobody listens, nothing happens, and a notice that fails never holds up the request.",
+        "de": "Wer sich über die Login-Seite registriert, wartet mit seinem Antrag auf die Freigabe, und bisher hat niemanden etwas darauf hingewiesen. Der eingebaute Aufnahmeprozess meldet jetzt jeden neuen Antrag mit dem Signal «atlas.user.requested», unmittelbar bevor er auf die Freigabe wartet. Der Prozess selbst bleibt geschützt. Um informiert zu werden, deployen Sie einen kleinen eigenen Prozess, der auf dieses Signal startet und zum Beispiel eine Nachricht in Ihren Discord-Kanal schreibt. Er erhält Name, E-Mail, Abteilung, Begründung und den vorgeschlagenen Benutzernamen, nie aber die Rolle oder das Initialpasswort. Hört niemand zu, geschieht nichts, und eine fehlgeschlagene Meldung hält den Antrag nie auf."
+      },
+      "link": {
+        "label": "ADR-0431",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0431-system-processes-announce-their-facts-as-signals.md"
+      },
+      "tags": [
+        "Organization",
+        "Events",
+        "Workers"
+      ]
+    },
+    {
       "id": "a-system-that-follows-the-event-feed-can-hold-a-credential-t",
       "version": "Unreleased",
       "date": null,
@@ -292,28 +315,6 @@
         "Handbook",
         "Operations",
         "Security"
-      ]
-    },
-    {
-      "id": "the-handbook-has-a-guiding-case-that-runs-one-process-throug",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "One case through all six modules — the course's guiding process",
-        "de": "Ein Fall durch alle sechs Module – der Leitfall des Lehrgangs"
-      },
-      "summary": {
-        "en": "The reference chapters each teach one thing; a course needs one case they all apply to. `examples/lehrgang/` — an employee onboarding — is that case, and a new capstone chapter walks it module by module: modelling, testing, delivering, evolving, writing your own worker, and monitoring, each with a starting point and a scenario. A DMN maps the new hire's role to laptop, software, access and AD groups; one step is deliberately not a mockup but a job over the Job API, so it parks for your own worker and, on repeated failure, raises an incident. Install it from its card in the Beispiele chapter — every call was run against a live instance first.",
-        "de": "Die Referenzkapitel lehren je eine Sache; ein Lehrgang braucht einen Fall, auf den alle zutreffen. `examples/lehrgang/` – ein Mitarbeitereintritt – ist dieser Fall, und ein neues Abschlusskapitel geht ihn Modul für Modul durch: Modellieren, Testen, Ausliefern, Weiterentwickeln, ein eigener Worker und Überwachen, je mit Startpunkt und Szenario. Eine DMN bildet die Rolle auf Laptop, Software, Zugriffe und AD-Gruppen ab; ein Schritt ist bewusst kein Mockup, sondern ein Job über die Job-API – er parkt für den eigenen Worker und wirft bei wiederholtem Fehlschlag einen Incident. Installierbar über die Karte im Kapitel «Beispiele» – jeder Aufruf wurde zuerst an einer laufenden Instanz ausgeführt."
-      },
-      "link": {
-        "label": "examples/lehrgang/",
-        "url": "https://github.com/pblumer/atlas/tree/main/examples/lehrgang"
-      },
-      "tags": [
-        "Handbook",
-        "Examples"
       ]
     }
   ]
