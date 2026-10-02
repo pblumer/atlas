@@ -942,6 +942,13 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Who may listen to the personal data atlas emits (ADR-0435 §6), before anything
+	// is persisted. It reads only the bytes and the caller, so it runs here rather
+	// than on the loop.
+	if found := s.personalListenersBlocking(r, body); len(found) > 0 {
+		personalListenerRefusal(w, r, found)
+		return
+	}
 	var (
 		resp       deployResp
 		compErr    error

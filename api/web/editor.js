@@ -6355,7 +6355,8 @@ function signalEventNote(entries, name, listens) {
   if (!e) return `<p class="hint warn">atlas emits no event named ${esc(n)}; this element would wait for something that never comes.</p>`;
   const personal = (e.payload || []).filter((f) => f.data === "personal").map((f) => f.name);
   return `<p class="hint" data-event="${esc(e.type)}">${esc((e.meaning || {}).en || "")}${
-    personal.length ? ` The listener receives personal data: ${personal.map(esc).join(", ")}.` : ""
+    personal.length ? ` The listener receives personal data: ${personal.map(esc).join(", ")}. ` +
+      "Only an administrator may deploy a model that listens to it." : ""
   } <a href="/#/console/events" target="_blank" rel="noopener">Events ↗</a></p>`;
 }
 

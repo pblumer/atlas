@@ -1,0 +1,18 @@
+{
+  "tags": ["Security", "Modeler"],
+  "title": {
+    "en": "Only an administrator deploys a model that listens to somebody's data",
+    "de": "Nur die Administration deployt ein Modell, das Personendaten empfängt"
+  },
+  "summary": {
+    "en": "Some events Atlas emits carry personal data: a new account request carries the requester's name and address to every model that listens to it. Such a listener is now deployed by an administrator. A modeler's deploy, project deploy or application import is refused with the element, the event, the data it would receive, the role it needs and the caller's own. The Problems panel reports the same finding while you model, and the Modeler says it where the event is chosen. Events without personal data, signals Atlas does not catalogue and throws stay open, and listeners deployed earlier keep running.",
+    "de": "Einige Ereignisse, die Atlas aussendet, tragen Personendaten: Ein neuer Kontoantrag bringt Namen und Adresse der antragstellenden Person zu jedem Modell, das darauf hört. Ein solcher Listener wird jetzt von der Administration deployt. Deploy, Projekt-Deploy oder Anwendungsimport einer Modelliererin oder eines Modellierers werden abgewiesen; die Antwort nennt das Element, das Ereignis, die Daten, die es empfangen würde, die nötige Rolle und die eigene. Der Bereich «Probleme» meldet denselben Befund schon beim Modellieren, und der Modeler sagt es dort, wo das Ereignis gewählt wird. Ereignisse ohne Personendaten, Signale, die Atlas nicht katalogisiert, und Elemente, die ein Signal nur auslösen, bleiben offen; bereits deployte Listener laufen weiter."
+  },
+  "try": {
+    "label": {
+      "en": "Open Events",
+      "de": "Events öffnen"
+    },
+    "route": "#/console/events"
+  }
+}

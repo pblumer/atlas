@@ -2156,9 +2156,10 @@ actions with closed effects, each a command whose outcome is a fact published be
     The Console page *Events* reads it (`modeler`); who listens now is a route of its own
     (`admin`). The Modeler's signal picker offers the events a model may listen to.
     `atlas.user.requested` carries `atlasInstance`.
-  - 🔲 A signal start or catch on a catalogued event whose payload carries personal data
-    requires `admin`: refused at deploy, and the same finding in the Problems panel. With it,
-    `atlas.approval.requested` from the three shop approval processes.
+  - ✅ A signal start or catch on a catalogued event whose payload carries personal data
+    requires `admin`. It is refused at the deploy, the bundle deploy and the application import,
+    and the same finding, from the same check, is in the Problems panel.
+  - 🔲 `atlas.approval.requested` from the three shop approval processes.
   - 🔲 Incidents in the feed, after the feed leaves the service-catalogue area.
   - 🔲 The remaining entries: user created and rejected, offboarding, access review,
     deployments.

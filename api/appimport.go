@@ -119,6 +119,15 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Who may listen to the personal data atlas emits (ADR-0435 §6): an import is a
+	// deploy, and an import credential is never an administrator's, so a listener on
+	// personal data is deployed on this server by an administrator, not shipped to it.
+	for _, a := range req.Artifacts {
+		if found := s.personalListenersBlocking(r, []byte(a.XML)); len(found) > 0 {
+			personalListenerRefusal(w, r, found)
+			return
+		}
+	}
 
 	var (
 		appID       string
