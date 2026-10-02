@@ -287,6 +287,16 @@ func describeInboundWatch(kind string, sub inboundSubscription) string {
 	if kind == connectorKindDiscord {
 		return fmt.Sprintf("new messages in channel %s", sub.ChannelID)
 	}
+	if kind == connectorKindMail {
+		folder := strings.TrimSpace(sub.MailFolder)
+		if folder == "" {
+			folder = "INBOX"
+		}
+		if len(sub.AllowedSenders) > 0 {
+			return fmt.Sprintf("new mail in folder %s from %s", folder, strings.Join(sub.AllowedSenders, ", "))
+		}
+		return fmt.Sprintf("new mail in folder %s", folder)
+	}
 	if kind == connectorKindJira {
 		field := strings.TrimSpace(sub.CursorField)
 		if field == "" {

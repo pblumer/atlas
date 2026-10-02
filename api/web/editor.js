@@ -3710,24 +3710,78 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "mail", name: "E-Mail Outbound", group: "Messaging & events", desc: "Send an e-mail via a mail provider", icon: "M",
-    // An envelope on a warm amber tile reads "outbound mail" at a glance — the mail
-    // Worker Type's counterpart to REST's globe and clio's event stream. The
+    id: "mail", name: "E-Mail", group: "Messaging & events", desc: "Send an e-mail, or read and manage the Worker's mailbox", icon: "M",
+    // An envelope on a warm amber tile reads "mail" at a glance — the mail Worker
+    // Type's counterpart to REST's globe and clio's event stream. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
     // fill and the white envelope strokes.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#e5484d"/><rect x="3" y="4.6" width="10" height="6.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 5.2L8 8.6l4.6-3.4" fill="none" stroke="#fff" stroke-width="1.1"/></svg>`,
     ext: "atlas:MailConnector",
     fields: [
       { group: "Mail worker" },
-      { key: "connector", label: "Worker", datalist: "mail", placeholder: "office365", hint: "The configured mail Worker this task sends through, by the name it has under Workers in the Console. Its host, credentials and default sender live on the server, never in the model." },
-      { group: "Message" },
-      { key: "to", label: "To", placeholder: "ops@example.com, =customer.email", fx: true, hint: "Comma-separated recipients. A value may be a FEEL expression (fx)." },
-      { key: "cc", label: "Cc", placeholder: "team@example.com", fx: true },
-      { key: "bcc", label: "Bcc", placeholder: "audit@example.com", fx: true, hint: "Delivered but never shown in the message headers." },
-      { key: "from", label: "From", placeholder: "leave empty for the Worker's default sender", fx: true },
-      { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true },
-      { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, rows: 8, hint: "Plain-text body, or a FEEL expression (fx) composed from the instance's variables — switch on fx, then press Ctrl+Space for variable completion." },
-      { key: "bodyHtml", label: "HTML body", type: "html", rows: 10, placeholder: "<p>Your order is <b>on its way</b>.</p>", hint: "Optional. With both bodies the mail goes out as multipart/alternative — this markup for clients that render HTML, the plain text above for those that don't. A leading '=' makes it a FEEL expression composing the markup from variables. Press F2 for the developer view." },
+      { key: "connector", label: "Worker", datalist: "mail", placeholder: "office365", hint: "The configured mail Worker this task sends through or whose mailbox it works with, by the name it has under Workers in the Console. Its host, credentials and default sender live on the server, never in the model. Reading or changing a mailbox needs access to that Worker: a deploy by somebody it is not shared with is refused." },
+      {
+        // Empty is send, which is every mail task authored before mailboxes existed
+        // (ADR-draft-mailbox-worker) — so an untouched task keeps meaning what it meant.
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "", l: "Send message" },
+          { v: "list", l: "List messages" },
+          { v: "get", l: "Read message" },
+          { v: "move", l: "Move message" },
+          { v: "mark-read", l: "Mark as read" },
+          { v: "mark-unread", l: "Mark as unread" },
+          { v: "delete", l: "Delete message (to the trash)" },
+          { v: "reply", l: "Reply to message" },
+        ],
+      },
+      { group: "Message", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" },
+      { key: "to", label: "To", placeholder: "ops@example.com, =customer.email", fx: true, showIf: (v) => !v.operation || v.operation === "send", hint: "Comma-separated recipients. A value may be a FEEL expression (fx)." },
+      { key: "cc", label: "Cc", placeholder: "team@example.com", fx: true, showIf: (v) => !v.operation || v.operation === "send" },
+      { key: "bcc", label: "Bcc", placeholder: "audit@example.com", fx: true, showIf: (v) => !v.operation || v.operation === "send", hint: "Delivered but never shown in the message headers." },
+      { key: "from", label: "From", placeholder: "leave empty for the Worker's default sender", fx: true, showIf: (v) => !v.operation || v.operation === "send" },
+      { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true, showIf: (v) => !v.operation || v.operation === "send" },
+      { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, rows: 8, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply", hint: (v) => (v.operation === "reply"
+        ? "The reply's text. It goes to the original's Reply-To, or its From, under \"Re: \" and its subject, threaded beneath it."
+        : "Plain-text body, or a FEEL expression (fx) composed from the instance's variables — switch on fx, then press Ctrl+Space for variable completion.") },
+      { key: "bodyHtml", label: "HTML body", type: "html", rows: 10, placeholder: "<p>Your order is <b>on its way</b>.</p>", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply", hint: "Optional. With both bodies the mail goes out as multipart/alternative — this markup for clients that render HTML, the plain text above for those that don't. A leading '=' makes it a FEEL expression composing the markup from variables. Press F2 for the developer view." },
+      { group: "Mailbox", showIf: (v) => !!v.operation && v.operation !== "send" && v.operation !== "reply" },
+      {
+        key: "folder", label: "Folder", placeholder: "INBOX", fx: true, showIf: (v) => v.operation === "list",
+        hint: "The folder to list — an IMAP folder name, a Gmail label id (INBOX, Label_…) or a Microsoft folder id or well-known name (inbox, archive). Empty is the inbox.",
+      },
+      {
+        key: "messageId", label: "Message", placeholder: "=mail.messageId", fx: true,
+        showIf: (v) => !!v.operation && v.operation !== "send" && v.operation !== "list",
+        hint: "The message this operation acts on: the messageId a mail watch published, or one a List messages answered. Usually a FEEL expression (fx), e.g. =messageId.",
+      },
+      {
+        key: "destination", label: "Move to", placeholder: "Archiv", fx: true, showIf: (v) => v.operation === "move",
+        hint: "The folder the message is filed into — an IMAP folder name, a Gmail label id, a Microsoft folder id or well-known name. In Gmail a move adds this label and takes the message out of the inbox.",
+      },
+      {
+        key: "maxResults", label: "Maximum messages", placeholder: "25", showIf: (v) => v.operation === "list",
+        hint: "Caps what lands in the result variable, newest first. Empty uses 25; at most 100.",
+      },
+      {
+        key: "unreadOnly", label: "Which", type: "select", showIf: (v) => v.operation === "list",
+        options: [{ v: "", l: "All messages" }, { v: "true", l: "Unread messages only" }],
+      },
+      {
+        key: "includeBody", label: "Text", type: "select", showIf: (v) => v.operation === "list" || v.operation === "get",
+        options: [{ v: "", l: "Envelope only" }, { v: "true", l: "Include the text" }],
+        hint: "The envelope is sender, recipients, subject, date, attachment names and sizes and the receiving server's SPF/DKIM/DMARC verdict. The text is cut at 64 KiB; attachment content is never read. What a process receives, every operator of a shared server can read — include the text only where the process needs it.",
+      },
+      { group: "Output", showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move" },
+      {
+        key: "resultVariable", label: "Result variable",
+        resultType: (v) => (v.operation === "list" ? "array" : v.operation === "move" ? "string" : "object"),
+        placeholder: "mail",
+        showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move",
+        hint: (v) => (v.operation === "move"
+          ? "Optional. Receives the message's id in its new folder — the same id for Gmail and Microsoft, a new one for IMAP."
+          : "Receives what the mailbox answered: " + (v.operation === "list" ? "a list of messages, newest first." : "the message.")),
+      },
     ],
   },
   {

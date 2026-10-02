@@ -1683,6 +1683,16 @@ type MailConfig struct {
 	Body      RestExpr
 	BodyHTML  RestExpr
 	Retries   int32
+	// The mailbox half (ADR-draft-mailbox-worker): the operation ("" is send) and
+	// what it takes. ResultVar names the variable list, get and move answer into.
+	Operation   string
+	Folder      RestExpr
+	Message     RestExpr
+	Destination RestExpr
+	MaxResults  int32
+	IncludeBody bool
+	UnreadOnly  bool
+	ResultVar   string
 }
 
 // AddMailConnectorTask adds an outbound mail task and returns its element
@@ -1694,24 +1704,35 @@ type MailConfig struct {
 // the named worker, never authored in the model — mirroring clio (ADR-0036).
 func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
 	detail := int32(len(b.connectorTasks))
+	resultVar := int32(-1) // a send produces no result variable
+	if cfg.ResultVar != "" {
+		resultVar = b.intern(cfg.ResultVar)
+	}
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
-		JobType:     b.intern(MailJobType),
-		Connector:   b.intern(cfg.Connector),
-		Subject:     -1, // not a clio task
-		EventType:   -1,
-		ClioQuery:   -1,
-		ReduceSpec:  -1,
-		Method:      -1, // not a REST task
-		ResultVar:   -1, // mail sends, it produces no result variable
-		Auth:        -1,
-		To:          cfg.To,
-		Cc:          cfg.Cc,
-		Bcc:         cfg.Bcc,
-		From:        cfg.From,
-		MailSubject: cfg.Subject,
-		Body:        cfg.Body,
-		BodyHTML:    cfg.BodyHTML,
-		Retries:     cfg.Retries,
+		JobType:         b.intern(MailJobType),
+		Connector:       b.intern(cfg.Connector),
+		Subject:         -1, // not a clio task
+		EventType:       -1,
+		ClioQuery:       -1,
+		ReduceSpec:      -1,
+		Method:          -1, // not a REST task
+		ResultVar:       resultVar,
+		Auth:            -1,
+		To:              cfg.To,
+		Cc:              cfg.Cc,
+		Bcc:             cfg.Bcc,
+		From:            cfg.From,
+		MailSubject:     cfg.Subject,
+		Body:            cfg.Body,
+		BodyHTML:        cfg.BodyHTML,
+		Retries:         cfg.Retries,
+		MailOp:          cfg.Operation,
+		MailFolder:      cfg.Folder,
+		MailMessage:     cfg.Message,
+		MailDestination: cfg.Destination,
+		MailMaxResults:  cfg.MaxResults,
+		MailIncludeBody: cfg.IncludeBody,
+		MailUnreadOnly:  cfg.UnreadOnly,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

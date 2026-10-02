@@ -232,15 +232,18 @@ export const WORKER_TYPE_DOCS = {
   mail: {
     anchor: "runbook-mail", title: "Mail",
     checked: "2026-09",
-    needs: `A configured mail Worker in ${WORKERS} — and one of its four transports needs no mail server at all.`,
+    needs: `A configured mail Worker in ${WORKERS} — and one of its four transports needs no mail server at all. Reading the mailbox (a watch, or a task that lists, files or answers mail) needs read access as well.`,
     steps: [
       `<b>Start with Preview.</b> ${WORKERS} &rarr; <b>New worker</b>: type <b>Mail</b>, provider <b>Preview</b>, a name, a sender address. It frames the message exactly as it would be sent and puts it in <i>Operations &rsaquo; Outbox</i> instead of delivering it — a mail task can be built and demonstrated with no credentials.`,
       `<b>SMTP:</b> provider <b>SMTP</b>, endpoint <code>smtp.example.com:587</code> (587 is assumed without a port), plus user and password. The only route that also works with a mail server in your own basement.`,
       `<b>Gmail:</b> provider <b>Gmail API</b>, no endpoint, and a vault bundle — a service account <code>{"method": "serviceAccount", "clientEmail": "…", "privateKey": "-----BEGIN PRIVATE KEY-----\\n…", "subject": "sender@your-domain"}</code> (Workspace, domain-wide delegation for the <code>gmail.send</code> scope), or <code>{"method": "refreshToken", "clientId": …, "clientSecret": …, "refreshToken": …}</code> for a single mailbox.`,
       `<b>Microsoft Graph:</b> provider <b>Microsoft Graph</b>, no endpoint, vault bundle <code>{"method": "clientCredentials", "tenantId": "…", "clientId": "…", "clientSecret": "…"}</code> from an app registration with the <code>Mail.Send</code> application permission and admin consent. This is the route when your organisation has switched off SMTP basic authentication.`,
       `Going live is a change of <b>worker</b>, not of model: the task keeps naming the same worker name.`,
+      `<b>To read the mailbox</b> — an inbound watch, or a task that lists, reads, files, marks, deletes or answers mail: <b>SMTP</b> names an <b>IMAP endpoint</b> (<code>imaps://imap.example.com:993</code>; plaintext is refused) and logs in as the sender with the same password. <b>Microsoft Graph</b> needs the application permission <code>Mail.Read</code> (<code>Mail.ReadWrite</code> to change the mailbox) — and because an application permission reaches every mailbox in the tenant, an Exchange Online <b>RBAC for Applications</b> assignment that confines the app to this one. <b>Gmail</b>'s delegation needs <code>gmail.readonly</code>, and <code>gmail.modify</code> to change the mailbox. <i>This step is written from the providers' documentation and has not yet been walked at a tenant.</i>`,
+      `<b>Decide who may use it.</b> A task that reads or changes a mailbox deploys only for people the Worker is shared with — viewer to read, editor to change (Workers &rsaquo; ⋯ &rsaquo; Share). Keep a personal mailbox in a Worker of its own, apart from a shared sender, ideally with its own read-only credential.`,
+      `<b>Receive mail:</b> on the worker under <b>Events…</b> — a folder (empty is the inbox), a message name, and who may start a process: <b>Allowed senders</b> and <b>Require a DMARC pass</b>. The watch never changes the mailbox; a process files or marks a message with a task, addressing the <code>messageId</code> the watch published.`,
     ],
-    trap: `Send the first real batch to yourself, and check that the sender address is allowed to send (SPF/DKIM). An automation sending two hundred wrong mails is faster than any correction.`,
+    trap: `Send the first real batch to yourself, and check that the sender address is allowed to send (SPF/DKIM). An automation sending two hundred wrong mails is faster than any correction. And a watch publishes mail from <b>anyone</b> who can write to the address: a sender address is a claim anybody can make, so restrict the watch to allowed senders <i>and</i> require a DMARC pass.`,
   },
 
   csv: {

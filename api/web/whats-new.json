@@ -2,6 +2,49 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "a-mail-worker-can-read-its-mailbox-and-the-mailbox-stays-its",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A mail Worker reads its mailbox — and the mailbox stays yours",
+        "de": "Ein Mail-Worker liest sein Postfach – und das Postfach bleibt Ihres"
+      },
+      "summary": {
+        "en": "New mail in a folder can now start a process: open the mail Worker's Events… and add a watch. A mail task can also list, read, move, mark, delete or answer mail. Who may start a process is up to you — allow only certain senders and require a DMARC pass. Who may read the mail is too: a process that reads or changes a mailbox can only be deployed by people the Worker is shared with. A process receives the envelope by default and the text only when you ask for it; attachments only by name and size.",
+        "de": "Neue Mail in einem Ordner kann jetzt einen Prozess starten: beim Mail-Worker unter Events… einen Watch anlegen. Ein Mail-Task kann ausserdem Mails auflisten, lesen, verschieben, markieren, löschen oder beantworten. Wer einen Prozess auslösen darf, bestimmen Sie – nur bestimmte Absender zulassen und ein DMARC pass verlangen. Wer mitlesen darf ebenfalls: Ein Prozess, der ein Postfach liest oder ändert, lässt sich nur von Personen deployen, mit denen der Worker geteilt ist. Ein Prozess erhält standardmässig den Umschlag, den Text nur auf Wunsch, Anhänge nur mit Name und Grösse."
+      },
+      "link": {
+        "label": "ADR-0205",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0205-connector-ownership-and-event-delivery.md"
+      },
+      "tags": [
+        "Workers",
+        "Security"
+      ],
+      "tutorial": {
+        "en": [
+          "Under Workers, open the mail Worker (or create one). For SMTP, add the IMAP endpoint; for Gmail and Microsoft the credential needs read access.",
+          "Share the Worker with the people who may use the mailbox — viewer to read, editor to change.",
+          "Open ⋯ › Events…, name the folder and a message name, and set Allowed senders and Require a DMARC pass.",
+          "Model a process with a message start event on that name; a mail task with an operation files or answers the message by its messageId."
+        ],
+        "de": [
+          "Unter Workers den Mail-Worker öffnen (oder anlegen). Bei SMTP den IMAP-Endpoint ergänzen; bei Gmail und Microsoft braucht die Berechtigung Lesezugriff.",
+          "Den Worker mit den Personen teilen, die das Postfach nutzen dürfen – darf sehen zum Lesen, darf ändern zum Ändern.",
+          "Unter ⋯ › Events… Ordner und Message-Namen angeben und Erlaubte Absender sowie DMARC pass verlangen setzen.",
+          "Einen Prozess mit einem Message-Startereignis auf diesen Namen modellieren; ein Mail-Task mit einer Operation legt die Mail über ihre messageId ab oder beantwortet sie."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Workers öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
       "id": "a-new-account-request-announces-itself-so-an-installation-ca",
       "version": "Unreleased",
       "date": null,
@@ -293,28 +336,6 @@
         "Handbook",
         "Operations",
         "Security"
-      ]
-    },
-    {
-      "id": "the-handbook-has-a-guiding-case-that-runs-one-process-throug",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "One case through all six modules — the course's guiding process",
-        "de": "Ein Fall durch alle sechs Module – der Leitfall des Lehrgangs"
-      },
-      "summary": {
-        "en": "The reference chapters each teach one thing; a course needs one case they all apply to. `examples/lehrgang/` — an employee onboarding — is that case, and a new capstone chapter walks it module by module: modelling, testing, delivering, evolving, writing your own worker, and monitoring, each with a starting point and a scenario. A DMN maps the new hire's role to laptop, software, access and AD groups; one step is deliberately not a mockup but a job over the Job API, so it parks for your own worker and, on repeated failure, raises an incident. Install it from its card in the Beispiele chapter — every call was run against a live instance first.",
-        "de": "Die Referenzkapitel lehren je eine Sache; ein Lehrgang braucht einen Fall, auf den alle zutreffen. `examples/lehrgang/` – ein Mitarbeitereintritt – ist dieser Fall, und ein neues Abschlusskapitel geht ihn Modul für Modul durch: Modellieren, Testen, Ausliefern, Weiterentwickeln, ein eigener Worker und Überwachen, je mit Startpunkt und Szenario. Eine DMN bildet die Rolle auf Laptop, Software, Zugriffe und AD-Gruppen ab; ein Schritt ist bewusst kein Mockup, sondern ein Job über die Job-API – er parkt für den eigenen Worker und wirft bei wiederholtem Fehlschlag einen Incident. Installierbar über die Karte im Kapitel «Beispiele» – jeder Aufruf wurde zuerst an einer laufenden Instanz ausgeführt."
-      },
-      "link": {
-        "label": "examples/lehrgang/",
-        "url": "https://github.com/pblumer/atlas/tree/main/examples/lehrgang"
-      },
-      "tags": [
-        "Handbook",
-        "Examples"
       ]
     }
   ]

@@ -6046,6 +6046,49 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         <p data-l="en"><b>Before the first real send:</b> check that the sender address is actually allowed to send
           (SPF/DKIM), and send the first batch to yourself. An automation sending two hundred wrong emails is faster
           than any correction.</p>
+        <p data-l="de"><b>Das Postfach lesen.</b> Derselbe Worker kann sein Postfach auch lesen: ein
+          <b>Watch</b> unter <i>Events…</i> veröffentlicht neue Mail eines Ordners als Message, und ein Mail-Task mit
+          einer <b>Operation</b> listet, liest, verschiebt, markiert, löscht (in den Papierkorb) oder beantwortet eine
+          Mail. Dafür braucht der Worker Lesezugriff: <b>SMTP</b> nennt einen <b>IMAP-Endpoint</b>
+          (<code>imaps://imap.example.com:993</code>, unverschlüsselt wird abgelehnt) und meldet sich mit Absender und
+          Passwort an; <b>Microsoft Graph</b> braucht die Anwendungsberechtigung <code>Mail.Read</code>
+          (<code>Mail.ReadWrite</code> zum Ändern) und – weil eine Anwendungsberechtigung jedes Postfach des Mandanten
+          erreicht – eine Zuweisung über <b>RBAC for Applications</b> in Exchange Online, die die App auf dieses
+          Postfach beschränkt; <b>Gmail</b> braucht in der Delegierung <code>gmail.readonly</code> und zum Ändern
+          <code>gmail.modify</code>. <i>Diese Anbieter-Schritte stammen aus der Dokumentation der Anbieter und sind noch
+          nicht an einem echten Mandanten nachvollzogen.</i></p>
+        <p data-l="en"><b>Reading the mailbox.</b> The same worker can read its mailbox too: a <b>watch</b> under
+          <i>Events…</i> publishes a folder's new mail as messages, and a mail task with an <b>operation</b> lists,
+          reads, moves, marks, deletes (to the trash) or answers mail. That needs read access: <b>SMTP</b> names an
+          <b>IMAP endpoint</b> (<code>imaps://imap.example.com:993</code>; plaintext is refused) and logs in with the
+          sender and password; <b>Microsoft Graph</b> needs the application permission <code>Mail.Read</code>
+          (<code>Mail.ReadWrite</code> to change) and – because an application permission reaches every mailbox in
+          the tenant – an Exchange Online <b>RBAC for Applications</b> assignment confining the app to this mailbox;
+          <b>Gmail</b>'s delegation needs <code>gmail.readonly</code>, and <code>gmail.modify</code> to change.
+          <i>These provider steps are taken from the providers' documentation and have not yet been walked at a real
+          tenant.</i></p>
+        <p data-l="de"><b>Wer darf mitlesen?</b> Ein Mail-Worker gehört dem, der ihn angelegt hat, und ist privat, bis
+          er geteilt wird. Ein Prozess, der ein Postfach liest oder ändert, lässt sich nur deployen, wenn der Worker mit
+          dir geteilt ist – lesen braucht <i>darf sehen</i>, ändern <i>darf ändern</i>. Der Watch beansprucht seinen
+          Message-Namen: Ein fremder Prozess, der auf denselben Namen wartet, wird beim Deploy abgewiesen. Zwei Grenzen
+          bleiben: Was ein Prozess erhält, sehen auf einem geteilten Server alle mit der Rolle <i>Operator</i> (Timeline,
+          Suche) – deshalb liefert ein Watch standardmässig nur den Umschlag, den Text nur auf Wunsch und Anhänge nie
+          mit Inhalt. Und Administratoren sehen alles; davor schützt nur eine eigene Instanz.</p>
+        <p data-l="en"><b>Who may read along?</b> A mail worker belongs to whoever created it and is private until
+          shared. A process that reads or changes a mailbox deploys only when the worker is shared with you – reading
+          needs <i>may see it</i>, changing <i>may change it</i>. The watch claims its message name: somebody else's
+          process waiting for the same name is refused at deploy. Two limits remain: what a process receives, everyone
+          with the <i>operator</i> role on a shared server can see (timeline, search) – which is why a watch delivers
+          only the envelope by default, the text only on request and attachments never with their content. And
+          administrators see everything; only an installation of your own protects against that.</p>
+        <p data-l="de"><b>Wer darf einen Prozess auslösen?</b> Jede Person, die an die Adresse schreiben kann. Eine
+          Absenderadresse ist eine Behauptung, die jede und jeder aufstellen kann – beschränke den Watch auf
+          <b>erlaubte Absender</b> <i>und</i> verlange ein <b>DMARC pass</b>. Das Urteil stammt aus dem obersten
+          <code>Authentication-Results</code>-Header, den dein empfangender Server geschrieben hat.</p>
+        <p data-l="en"><b>Who may start a process?</b> Anyone who can write to the address. A sender address is a
+          claim anybody can make – restrict the watch to <b>allowed senders</b> <i>and</i> require a <b>DMARC
+          pass</b>. The verdict is read from the topmost <code>Authentication-Results</code> header, the one your
+          receiving server wrote.</p>
         <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
       </div>
 

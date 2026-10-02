@@ -226,6 +226,7 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 	var (
 		persistErr error
 		claimed    string
+		refused    *mailboxRefusal
 		deployed   []deployedProcess
 		decisions  []persistedDecision
 		warnings   []string
@@ -236,6 +237,14 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 		// two registered (ADR-0205) — nor, now, its decisions deployed.
 		for _, d := range drafts {
 			var e error
+			// Who may use a mailbox, under the same "validate all, then deploy all"
+			// rule (ADR-draft-mailbox-worker).
+			if refused, e = s.mailboxUseBlockingModel(r, []byte(d.XML)); e != nil {
+				persistErr = e
+				return
+			} else if refused != nil {
+				return
+			}
 			if claimed, e = s.claimBlockingModel(r, []byte(d.XML)); e != nil {
 				persistErr = e
 				return
@@ -269,6 +278,13 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 	})
 	if persistErr != nil {
 		return bundleOutcome{status: http.StatusInternalServerError, errMsg: "persist deployment: " + persistErr.Error(), proj: proj}
+	}
+	if refused != nil {
+		return bundleOutcome{status: http.StatusForbidden, proj: proj, resp: projectDeployResp{
+			ID: proj.ID, Name: proj.Name, Deployed: false,
+			Reason:      "a draft uses a mailbox you may not use — " + mailboxRefusalReason(refused),
+			Definitions: []deployedProcess{}, Decisions: []deployedDecisionResp{}, References: refReports,
+		}}
 	}
 	if claimed != "" {
 		return bundleOutcome{status: http.StatusConflict, proj: proj, resp: projectDeployResp{

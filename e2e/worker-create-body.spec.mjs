@@ -121,3 +121,32 @@ test("a non-database kind offers no connection-string example", async ({ page })
   expect(sh.sql).toBe(false);
   expect(sh.dsnPlaceholder || "").toBe("");
 });
+
+// An SMTP mail Worker reads its mailbox over IMAP when it names an endpoint for it
+// (ADR-draft-mailbox-worker). The field is SMTP's alone: Gmail and Graph read through
+// their own API, and the server refuses an IMAP endpoint beside them — so a value left
+// in the hidden field after switching provider must not ride along.
+test("an SMTP mail create carries its IMAP endpoint", async ({ page }) => {
+  const body = await build(page, {
+    kind: "mail",
+    name: "postfach",
+    endpoint: "smtp.example.com:587",
+    sender: "desk@example.com",
+    provider: "smtp",
+    mailboxEndpoint: " imaps://imap.example.com:993 ",
+  });
+  expect(body.mailboxEndpoint).toBe("imaps://imap.example.com:993");
+});
+
+test("a Gmail create carries no IMAP endpoint, even with one left in the hidden field", async ({ page }) => {
+  const body = await build(page, {
+    kind: "mail",
+    name: "gpost",
+    sender: "desk@example.com",
+    provider: "gmail",
+    credentialsRef: "gmail_auth",
+    mailboxEndpoint: "imaps://imap.example.com:993",
+  });
+  expect(body.provider).toBe("gmail");
+  expect(body).not.toHaveProperty("mailboxEndpoint");
+});

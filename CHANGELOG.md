@@ -14,6 +14,24 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A mail Worker can read its mailbox, and the mailbox stays its owner's.** An inbound
+  watch on a mail Worker publishes the new mail of one folder as an Atlas message, so a mail
+  starts a process — over IMAP for an SMTP Worker (a new, optional `mailboxEndpoint`), and
+  through the Gmail and Microsoft Graph APIs for those providers. A mail task gains an
+  `operation`: `list`, `get`, `move`, `mark-read`, `mark-unread`, `delete` (to the trash) and
+  `reply`, each addressing the `messageId` a watch or a list answered; a task with no operation
+  sends, exactly as before. A process receives the envelope — sender, recipients, subject,
+  receive time, attachment names and sizes, and the receiving server's SPF/DKIM/DMARC verdict —
+  and the text only when the watch or the task asks for it, cut at 64 KiB; attachment content
+  never. A watch never changes the mailbox. It can admit only `allowedSenders` and only mail
+  with a DMARC pass; refused mail is consumed without starting anything. Who may use a mailbox
+  is checked at deploy: a task that reads a mail Worker's mailbox needs viewer on it, one that
+  changes it or answers from it needs editor, and one naming a mail Worker that does not exist
+  is refused. Sending is not checked. The application import now runs that check and
+  ADR-0205's message-name claim, which it had skipped. What a process receives is still
+  readable by every operator of a shared installation; that gap, ADR-0275's follow-up, is
+  stated and not closed here. ADR-draft-mailbox-worker.
+
 - **A new account request announces itself, so an installation can be told.** The intake
   process (`proc_benutzer_aufnahme`), the one behind the login screen's "Registrieren" link,
   now throws the signal `atlas.user.requested` just before the request waits at "Antrag
