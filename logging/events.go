@@ -85,6 +85,12 @@ var (
 	// (ADR-0434). One line at start, so the
 	// question "why is there no shop" has an answer in the log.
 	ServerCatalogueDisabled = newEvent("server.catalogue_disabled")
+	// ServerCatalogueInFlight is that start finding processes still working orders —
+	// the shop's fulfilment and approval processes, or a product's provisioning — that
+	// will fail at their next call to the order routes (ADR-0434). A WARN, written only
+	// when there are any: it names how many and which, so the operator meets the
+	// consequence before the incidents do.
+	ServerCatalogueInFlight = newEvent("server.catalogue_disabled_in_flight")
 	// The operator-supplied certificate, where this server terminates TLS itself
 	// (ADR-0191). ServerTLSReloaded is one line per renewal picked up without a
 	// restart; ServerTLSReloadFailed is the pair that changed on disk and could not
