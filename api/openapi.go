@@ -1614,9 +1614,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			req: jsonBody("Mock journal", tObject()), status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/connectors/{id}/inbound-subscriptions", s.handleListInboundSubscriptions, apiOp{
-			summary: "List a clio worker's inbound event subscriptions", tag: "Workers", role: RoleModeler, resp: jsonBody("Subscriptions", tArray())}},
+			summary: "List a worker's inbound event watches — clio, Jira, Google, Discord and mail Workers carry them", tag: "Workers", role: RoleModeler, resp: jsonBody("Subscriptions", tArray())}},
 		{"POST", "/api/v1/connectors/{id}/inbound-subscriptions", s.handleCreateInboundSubscription, apiOp{
-			summary: "Create an inbound event subscription for a clio worker", tag: "Workers", role: RoleModeler, req: jsonBody("Subscription", tObject()), resp: jsonBody("Created subscription", tObject())}},
+			summary: "Create an inbound event watch on a worker; what it names follows the worker's kind (a clio subject, a JQL, a sheet or Drive folder, a Discord channel, a mail folder with its allowedSenders, requireDmarcPass and includeBody)", tag: "Workers", role: RoleModeler, req: jsonBody("Subscription", tObject()), resp: jsonBody("Created subscription", tObject())}},
 		{"PATCH", "/api/v1/inbound-subscriptions/{id}", s.handleUpdateInboundSubscription, apiOp{
 			summary: "Update an inbound event subscription", tag: "Workers", role: RoleModeler, req: jsonBody("Subscription update", tObject()), resp: jsonBody("Updated subscription", tObject())}},
 		{"DELETE", "/api/v1/inbound-subscriptions/{id}", s.handleDeleteInboundSubscription, apiOp{

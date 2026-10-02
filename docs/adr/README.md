@@ -522,6 +522,10 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0434](0434-the-catalogue-can-be-switched-off.md) | The catalogue can be switched off, and switching it off removes a surface, not a semantics | Accepted | Landed |
 | [0435](0435-one-catalogue-of-the-events-atlas-emits.md) | Atlas keeps one catalogue of the events it emits | Proposed | Not started |
 | [0436](0436-a-catalogue-is-imported-as-one-document.md) | A catalogue is imported as one document | Accepted | Landed |
+| [0437](0437-a-package-is-imported-from-the-command-line.md) | A package is imported from the command line | Accepted | Landed |
+| [0438](0438-mailbox-worker.md) | The mail Worker reads its mailbox — an inbound watch, mailbox operations, and who may use them | Accepted | Landed |
+| [0439](0439-supervised-workers-end-with-the-server.md) | On Windows, a supervised worker ends with the server, however the server ends | Accepted | Landed |
+| [0440](0440-worker-runs-jobs-concurrently.md) | A worker runs the jobs of one type concurrently, up to the places it has free | Accepted | Landed |
 
 ## The two states of a record
 

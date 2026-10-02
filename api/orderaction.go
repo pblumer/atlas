@@ -285,7 +285,12 @@ func (s *Server) fireAction(h heldLine, id, key, commandID, reason string, extra
 		}
 		instKey, err = s.deliverChange(strand, b, positionCorrelationKey(id, position), triggerID, vars)
 	} else {
-		instKey, err = s.startBinding(b, triggerID, vars)
+		// A start carries the position's answers, under what the action itself was
+		// given: its own form's input is newer, and asked for this act.
+		var answers []model.VariableValue
+		if answers, err = s.orderAnswerVars(line, vars); err == nil {
+			instKey, err = s.startBinding(b, triggerID, append(vars, answers...))
+		}
 	}
 	if err != nil {
 		var refused errTriggerRefused

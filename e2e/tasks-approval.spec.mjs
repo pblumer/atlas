@@ -47,6 +47,13 @@ const APPROVALS = [
     recipientName: "Rosa Meier", ordererName: "Max Muster",
     price: "CHF 1'200.–", texts: { de: "Apple iPhone 18 Pro", en: "Apple iPhone 18 Pro" },
     catalogId: "cat_mobil", catalogTexts: { de: "Mobile Geräte", en: "Mobile devices" },
+    // What the orderer answered on the product's form, labelled as the form labels
+    // it, and corrected since (ADR-draft-a-position-s-answers-reach-its-processes).
+    answers: [
+      { key: "kostenstelle", label: "Kostenstelle", value: "4711-IT" },
+      { key: "stray", value: "<b>not markup</b>" },
+    ],
+    amended: true,
   },
   {
     task: TASKS[1], orderId: "ord_4711", itemId: "huelle", positionId: "huelle",
@@ -124,6 +131,21 @@ test("an approval says what it decides, in names rather than ids", async ({ page
   // catalogue's colours; the Console wears nobody's brand, so it says it in words —
   // an approver deciding for two customers needs to know which one they are in.
   await expect(block).toContainText("Mobile devices");
+  expect(page.__errors).toEqual([]);
+});
+
+test("an approval shows what the orderer answered on the product's form", async ({ page }) => {
+  await bootTasks(page);
+  await select(page, 101);
+  const block = page.locator(".tasks-approval");
+  await expect(block.locator(".tasks-field", { hasText: "Kostenstelle" })).toContainText("4711-IT");
+  // A field the form no longer has is named by its key, and an answer is text.
+  await expect(block.locator(".tasks-field", { hasText: "stray" })).toContainText("<b>not markup</b>");
+  await expect(block).toContainText("corrected after the order was placed");
+
+  // An approval without answers shows none, and says nothing about a correction.
+  await select(page, 102);
+  await expect(page.locator(".tasks-approval")).not.toContainText("Order form");
   expect(page.__errors).toEqual([]);
 });
 

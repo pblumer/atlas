@@ -13,6 +13,12 @@
       "disabled": true
     },
     {
+      "key": "kennzeichen",
+      "type": "textfield",
+      "label": "Kennzeichen · Licence plate",
+      "disabled": true
+    },
+    {
       "key": "freigegeben",
       "type": "checkbox",
       "label": "Platz freigegeben · Space released",

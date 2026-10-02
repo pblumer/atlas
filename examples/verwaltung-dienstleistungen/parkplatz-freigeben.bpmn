@@ -6,8 +6,8 @@
              xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
              xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
              id="defs_proc_vd_parkplatz_freigeben" targetNamespace="http://atlas/beispiel/verwaltung-dienstleistungen">
-  <process id="proc_vd_parkplatz_freigeben" name="Parkplatz: freigeben" isExecutable="true">
-    <documentation>Deprovisionierung des Parkplatzes: bei Rückgabe oder nach Ablauf der 365 Tage. Der Platz wird freigegeben und die Rückgabe gemeldet.</documentation>
+  <process id="proc_vd_parkplatz_freigeben" name="Parkplatz: freigeben" isExecutable="true" atlas:personal="kennzeichen" atlas:dataSubject="recipient">
+    <documentation>Deprovisionierung des Parkplatzes: bei Rückgabe oder nach Ablauf der 365 Tage. Der Platz wird freigegeben und die Rückgabe gemeldet. Das Kennzeichen kommt wie beim Zuteilen aus dem Bestellformular und ist als Personenangabe deklariert.</documentation>
     <startEvent id="start" name="Position gestartet"><outgoing>f1</outgoing></startEvent>
     <userTask id="ut_freigeben" name="Parkplatz freigeben"><extensionElements><zeebe:formDefinition formId="vd-parkplatz-freigabe"/></extensionElements><incoming>f1</incoming><outgoing>f2</outgoing></userTask>
     <serviceTask id="st_melden" name="Rückgabe als erfolgt melden"><documentation>Meldet die Position über POST /api/v1/orders/{orderId}/lines/{positionId}: "done" nach der Provisionierung, "returned" nach der Deprovisionierung. Braucht das Secret "atlas" mit einem API-Token.</documentation><extensionElements><atlas:restConnector method="POST" url="=(if atlasApiBase = null then &#34;http://127.0.0.1:8080&#34; else atlasApiBase) + &#34;/api/v1/orders/&#34; + orderId + &#34;/lines/&#34; + (if positionId = null then itemId else positionId)" authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source="=&#34;returned&#34;" target="status"/></zeebe:ioMapping></extensionElements><incoming>f2</incoming><outgoing>f3</outgoing></serviceTask>

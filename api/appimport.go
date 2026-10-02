@@ -128,8 +128,25 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 		opErr       error
 		conflictMsg string
 		warnings    []string
+		refused     *mailboxRefusal
+		claimed     string
 	)
 	s.do(func() {
+		// The two checks every other door runs, before anything — not even the
+		// application record — is written: who may use a mailbox
+		// (ADR-0438) and the claim on a message name (ADR-0205). An
+		// import is a deploy, and a check that one door skips is decoration.
+		for _, a := range req.Artifacts {
+			var err error
+			if refused, err = s.mailboxUseBlockingModel(r, []byte(a.XML)); err != nil || refused != nil {
+				opErr = err
+				return
+			}
+			if claimed, err = s.claimBlockingModel(r, []byte(a.XML)); err != nil || claimed != "" {
+				opErr = err
+				return
+			}
+		}
 		// Resolve or create the application. Matching by name is what makes the
 		// publisher's first import work without either side knowing the other's ids.
 		projs, err := s.projects.LoadAll()
@@ -234,6 +251,11 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case opErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "import bundle: "+opErr.Error())
+	case refused != nil:
+		mailboxRefusalResponse(w, refused)
+	case claimed != "":
+		claimRefusal(w, claimed, "An inbound worker you cannot reach publishes under this "+
+			"message name. Rename the message in the model, or ask whoever owns that worker to share it.")
 	case already:
 		httpapi.JSON(w, http.StatusConflict, importBundleResp{
 			ApplicationID: appID, Application: name, Imported: false,

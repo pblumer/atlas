@@ -400,3 +400,21 @@ func TestSupervisorStartsNothingAfterQuit(t *testing.T) {
 		t.Errorf("starts = %d, want 0 — nothing should have been spawned", got[0].Starts)
 	}
 }
+
+// A supervised worker is told how many jobs of one type to run at once. Left unset,
+// the flag is omitted and the worker keeps its own default, which is how a --supervise
+// command worker the operator wrote is started.
+func TestSupervisedWorkerReceivesItsConcurrency(t *testing.T) {
+	args := supervisedWorkerArgs("http://127.0.0.1:8080", SuperviseSpec{
+		ID: "rest", Connectors: []string{"rest"}, MaxJobs: 16,
+	}, nil)
+	if got := strings.Join(args, " "); !strings.Contains(got, "--max-jobs 16") {
+		t.Errorf("worker args = %q, want --max-jobs 16", got)
+	}
+	args = supervisedWorkerArgs("http://127.0.0.1:8080", SuperviseSpec{
+		ID: "mailer-1", Kinds: []string{"send-email"},
+	}, []string{"send-email=mailer"})
+	if got := strings.Join(args, " "); strings.Contains(got, "--max-jobs") {
+		t.Errorf("worker args = %q, want no --max-jobs when none was configured", got)
+	}
+}

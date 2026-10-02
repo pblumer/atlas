@@ -2,6 +2,95 @@
   "generatedAt": "2026-09-30",
   "entries": [
     {
+      "id": "what-the-orderer-answered-reaches-the-approver-and-the-proce",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Approvers and processes see what was ordered",
+        "de": "Genehmigende und Prozesse sehen, was bestellt wurde"
+      },
+      "summary": {
+        "en": "The answers from a product's order form, such as a licence plate, now appear for the approver in the inbox and reach the product's own processes as separate variables. A process can mark an answer as personal data, so it is stored encrypted and can be erased with the person. Atlas's built-in approval processes no longer keep these answers in their history.",
+        "de": "Die Antworten aus dem Bestellformular eines Produkts, etwa ein Kennzeichen, erscheinen jetzt bei der genehmigenden Person in der Inbox und erreichen die Prozesse des Produkts als eigene Variablen. Ein Prozess kann eine Antwort als Personendaten kennzeichnen; sie wird dann verschlüsselt gespeichert und lässt sich mit der Person löschen. Atlas' eingebaute Genehmigungsprozesse bewahren diese Antworten nicht mehr in ihrem Verlauf auf."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Shop",
+        "Service catalogue",
+        "Security"
+      ]
+    },
+    {
+      "id": "a-mail-worker-can-read-its-mailbox-and-the-mailbox-stays-its",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A mail Worker reads its mailbox — and the mailbox stays yours",
+        "de": "Ein Mail-Worker liest sein Postfach – und das Postfach bleibt Ihres"
+      },
+      "summary": {
+        "en": "New mail in a folder can now start a process: open the mail Worker's Events… and add a watch. A mail task can also list, read, move, mark, delete or answer mail. Who may start a process is up to you — allow only certain senders and require a DMARC pass. Who may read the mail is too: a process that reads or changes a mailbox can only be deployed by people the Worker is shared with. A process receives the envelope by default and the text only when you ask for it; attachments only by name and size.",
+        "de": "Neue Mail in einem Ordner kann jetzt einen Prozess starten: beim Mail-Worker unter Events… einen Watch anlegen. Ein Mail-Task kann ausserdem Mails auflisten, lesen, verschieben, markieren, löschen oder beantworten. Wer einen Prozess auslösen darf, bestimmen Sie – nur bestimmte Absender zulassen und ein DMARC pass verlangen. Wer mitlesen darf ebenfalls: Ein Prozess, der ein Postfach liest oder ändert, lässt sich nur von Personen deployen, mit denen der Worker geteilt ist. Ein Prozess erhält standardmässig den Umschlag, den Text nur auf Wunsch, Anhänge nur mit Name und Grösse."
+      },
+      "link": {
+        "label": "ADR-0205",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0205-connector-ownership-and-event-delivery.md"
+      },
+      "tags": [
+        "Workers",
+        "Security"
+      ],
+      "tutorial": {
+        "en": [
+          "Under Workers, open the mail Worker (or create one). For SMTP, add the IMAP endpoint; for Gmail and Microsoft the credential needs read access.",
+          "Share the Worker with the people who may use the mailbox — viewer to read, editor to change.",
+          "Open ⋯ › Events…, name the folder and a message name, and set Allowed senders and Require a DMARC pass.",
+          "Model a process with a message start event on that name; a mail task with an operation files or answers the message by its messageId."
+        ],
+        "de": [
+          "Unter Workers den Mail-Worker öffnen (oder anlegen). Bei SMTP den IMAP-Endpoint ergänzen; bei Gmail und Microsoft braucht die Berechtigung Lesezugriff.",
+          "Den Worker mit den Personen teilen, die das Postfach nutzen dürfen – darf sehen zum Lesen, darf ändern zum Ändern.",
+          "Unter ⋯ › Events… Ordner und Message-Namen angeben und Erlaubte Absender sowie DMARC pass verlangen setzen.",
+          "Einen Prozess mit einem Message-Startereignis auf diesen Namen modellieren; ein Mail-Task mit einer Operation legt die Mail über ihre messageId ab oder beantwortet sie."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Workers öffnen"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
+      "id": "a-package-installs-from-the-command-line",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Install a package from the command line",
+        "de": "Ein Paket im Terminal installieren"
+      },
+      "summary": {
+        "en": "The new command atlas import installs an application, and the shop it serves, into a running instance without a browser, for example from a pipeline. It asks for who orders and who approves through an answers file, accepts groups and people by name so the same file works on every instance, and refuses before writing anything if an answer is missing or unknown.",
+        "de": "Der neue Befehl atlas import installiert eine Applikation und den Shop dazu ohne Browser in eine laufende Instanz, etwa aus einer Pipeline. Wer bestellt und wer genehmigt, steht in einer Antwortdatei; Gruppen und Personen dürfen beim Namen genannt werden, damit dieselbe Datei auf jeder Instanz gilt. Fehlt eine Antwort oder ist sie unbekannt, bricht der Befehl ab, bevor er etwas schreibt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Service catalogue",
+        "Examples",
+        "Deployment"
+      ]
+    },
+    {
       "id": "a-process-can-put-a-document-in-a-bucket-find-it-again-and-h",
       "version": "Unreleased",
       "date": null,
@@ -224,72 +313,6 @@
       "tags": [
         "Security",
         "API"
-      ]
-    },
-    {
-      "id": "what-happens-to-a-right-leaves-atlas-as-a-feed-of-cloudevent",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A feed of what happens to rights",
-        "de": "Ein Feed, was mit Rechten geschieht"
-      },
-      "summary": {
-        "en": "Systems outside Atlas, such as a CMDB or billing, can now follow everything that happens to the services people hold: each right granted or revoked and how each requested action ended. They read it from one feed of standard CloudEvents, in order, picking up where they left off. The feed keeps 30 days; a system that falls further behind is told so instead of silently missing events.",
-        "de": "Systeme ausserhalb von Atlas, etwa eine CMDB oder die Verrechnung, können jetzt alles verfolgen, was mit den bezogenen Leistungen geschieht: jedes gewährte oder entzogene Recht und wie jede angefragte Aktion endete. Sie lesen es aus einem Feed standardisierter CloudEvents, in der richtigen Reihenfolge und ab der Stelle, an der sie aufgehört haben. Der Feed hält 30 Tage; ein System, das weiter zurückliegt, erfährt das, statt stillschweigend Ereignisse zu verpassen."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Service catalogue",
-        "API"
-      ]
-    },
-    {
-      "id": "the-modeler-offers-a-message-name-from-where-it-comes-from",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Message names grouped by where they come from",
-        "de": "Nachrichtennamen nach Herkunft gruppiert"
-      },
-      "summary": {
-        "en": "When you pick a message in the Modeler, the list now says where each name comes from: events that Workers publish, the actions of products in the catalogue, and the processes already waiting for a message. A step that waits is offered the first two, a step that sends is offered the waiting processes. Shop tasks suggest the actions a product declares, and shop tasks are marked with a small badge next to their envelope.",
-        "de": "Beim Auswählen einer Nachricht im Modeler zeigt die Liste jetzt, woher jeder Name stammt: Ereignisse, die Worker veröffentlichen, die Aktionen der Produkte im Katalog und die Prozesse, die bereits auf eine Nachricht warten. Einem wartenden Schritt werden die ersten beiden angeboten, einem sendenden Schritt die wartenden Prozesse. Shop-Aufgaben schlagen die Aktionen vor, die ein Produkt festlegt, und tragen ein kleines Abzeichen neben ihrem Briefumschlag."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Modeler",
-        "Service catalogue"
-      ]
-    },
-    {
-      "id": "a-process-can-ask-somebody-s-held-service-for-an-action-in-t",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Processes can ask a held service for an action",
-        "de": "Prozesse können eine bezogene Leistung um eine Aktion bitten"
-      },
-      "summary": {
-        "en": "A Shop task can now issue a command: an HR leaver process returns a person's mailbox, a maintenance process resets a password — through the same checks the shop applies to a person. Because no person stands behind a process, each product lists the applications it trusts with this, and only actions meant for operators or systems can be commanded. The list is read fresh every time, so removing an application stops it at once for everything already held.",
-        "de": "Eine Shop-Aufgabe kann jetzt einen Befehl erteilen: Ein Austrittsprozess gibt die Mailbox einer Person zurück, ein Wartungsprozess setzt ein Passwort zurück – mit denselben Prüfungen, die der Shop bei einer Person anwendet. Weil hinter einem Prozess keine Person steht, führt jedes Produkt die Applikationen auf, denen es das erlaubt, und nur Aktionen für Betrieb oder Systeme lassen sich befehlen. Die Liste wird jedes Mal neu gelesen; wird eine Applikation entfernt, ist sie sofort für alles bereits Bezogene gesperrt."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Service catalogue",
-        "Modeler"
       ]
     }
   ]

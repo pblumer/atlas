@@ -238,6 +238,7 @@ func (s *Server) buildMailClients() (map[string]mail.Client, map[string]string, 
 			Secret:   s.resolveConnectorSecret(c.CredentialsRef),
 			Name:     c.Name,
 			Outbox:   s.mailOutbox,
+			Mailbox:  strings.TrimSpace(c.MailboxEndpoint),
 		})
 		if err != nil {
 			// Misconfigured provider: its tasks park until it is fixed (ADR-0093) — and
@@ -677,6 +678,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	p.Provider = strings.TrimSpace(p.Provider)
 	p.Sender = strings.TrimSpace(p.Sender)
 	p.Model = strings.TrimSpace(p.Model)
+	p.MailboxEndpoint = strings.TrimSpace(p.MailboxEndpoint)
 	p.CredentialsRef = strings.TrimSpace(p.CredentialsRef)
 	if p.Name == "" {
 		httpapi.Error(w, http.StatusBadRequest, "worker name is required")
@@ -720,6 +722,9 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, msg)
 		return
 	}
+	if p.Kind != connectorKindMail {
+		p.MailboxEndpoint = "" // a mail-only field, cleared like Provider and Sender are
+	}
 	// And the one rule a pure validator cannot state, because it depends on a stored
 	// setting: whether a database needs a connection string at all. The read rides the
 	// run loop, which owns the settings store (I3).
@@ -739,7 +744,8 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		ID: id, Name: p.Name, Kind: p.Kind, Endpoint: p.Endpoint,
 		CredentialsRef: p.CredentialsRef, Enabled: enabled,
 		Provider: p.Provider, Sender: p.Sender, Model: p.Model,
-		CreatedAt: time.Now().Unix(),
+		MailboxEndpoint: p.MailboxEndpoint,
+		CreatedAt:       time.Now().Unix(),
 		// Whoever made it owns it, and it starts private (ADR-0205). Private is the
 		// only defensible default for a thing that may hold a personal mailbox; what
 		// it costs — a colleague not seeing the endpoint until it is shared — is
@@ -813,8 +819,11 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		// Model is an agent Worker's model name — the setting an operator changes
 		// most often, and the reason this kind is a Console record at all
 		// (ADR-0255).
-		Model   *string `json:"model"`
-		Enabled *bool   `json:"enabled"`
+		Model *string `json:"model"`
+		// MailboxEndpoint is an SMTP mail Worker's IMAP endpoint; "" removes it, which
+		// makes the Worker a sender only again (ADR-0438).
+		MailboxEndpoint *string `json:"mailboxEndpoint"`
+		Enabled         *bool   `json:"enabled"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -859,6 +868,9 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		}
 		if p.Model != nil {
 			rec.Model = strings.TrimSpace(*p.Model)
+		}
+		if p.MailboxEndpoint != nil {
+			rec.MailboxEndpoint = strings.TrimSpace(*p.MailboxEndpoint)
 		}
 		if p.Enabled != nil {
 			rec.Enabled = *p.Enabled

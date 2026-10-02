@@ -132,14 +132,18 @@ func positionCorrelationKey(orderID, position string) string { return orderID + 
 // deliverOrStart delivers operation b to the strand instance when there is one and
 // it is still running, and starts b's start event when there is none. It returns the
 // instance that took the operation.
-func (s *Server) deliverOrStart(strand uint64, b catalog.Binding, correlationKey, triggerID string, vars []model.VariableValue) (uint64, error) {
+//
+// startOnly are variables a start carries and a delivery does not: the position's
+// answers, which the strand has held since it started, and which a delivery could
+// not seal where its model declares them personal (ADR-0314).
+func (s *Server) deliverOrStart(strand uint64, b catalog.Binding, correlationKey, triggerID string, vars, startOnly []model.VariableValue) (uint64, error) {
 	if strand != 0 && b.Triggered() {
 		key, gone, err := s.deliverToStrand(strand, b, correlationKey, triggerID, vars)
 		if !gone {
 			return key, err
 		}
 	}
-	return s.startBinding(b, triggerID, vars)
+	return s.startBinding(b, triggerID, append(vars, startOnly...))
 }
 
 // deliverChange delivers a change or a service to the strand and to nothing else:

@@ -202,6 +202,9 @@ what the channel's envelope adds.
   - Every entry with a `log` channel names an event in `logging`'s catalogue.
   - A `stable` entry may gain payload fields and never lose one. A golden file of the stable
     entries makes a removal a failing test, not a review comment.
+  - Every payload field states whether it is personal data, with no default. The access rule
+    (§6) reads this marking, so a field left unmarked fails the build instead of passing as
+    "not personal".
 - **Generated from the catalogue:**
   - a handbook chapter, *Ereignisse / Events*, in both languages;
   - the event table of `docs/runtime-contract.md`;
@@ -231,11 +234,24 @@ what the channel's envelope adds.
   - The alternative is a second feed for platform facts. That would split the cursor, the
     subscription and the retention a receiver has to manage, so it is the weaker choice.
   - Which of the two is decided with the first platform entry.
-- **Signals.** Deploying a process with a signal start or catch on an `atlas.*` name requires a
-  role, proposed: `admin`. This closes the trade-off
+- **Signals.** Deploying a process with a signal start or catch on a catalogued event whose
+  payload has a personal-data field requires the `admin` role. *(Decided 2026-10-02. The first
+  draft tied the rule to every `atlas.*` name.)* This closes the trade-off
   [ADR-0431](0431-system-processes-announce-their-facts-as-signals.md) accepted, where anyone who
   may deploy can receive a requester's data. It closes it before offboarding and access-review
   facts make the same trade worse.
+  - **The rule follows the data, not the name.** What it protects is personal data. An event
+    without any, such as `atlas.order.placed`, stays open to every modeler. The rule reads the
+    personal-data marking of each payload field in the catalogue, which is why the catalogue
+    lands together with the rule (§9).
+  - **An entry that gains a personal-data field changes who may deploy its listeners.**
+    Listeners already deployed keep running, because the rule acts at deploy. Their next version
+    needs an administrator. Adding such a field to a `stable` entry is therefore called out in
+    the changelog as an access change, not only as an added field.
+  - **Signals outside the catalogue are outside the rule.** Their payload is every variable of
+    the throwing instance, and nothing declares which of them are personal, so the rule cannot
+    see them. That is the state today. Declared signal payloads (§10) would let a model's own
+    signal declare its fields and fall under the same rule.
   - **Refused at deploy.** The error names the element, the event, the personal-data fields the
     listener would receive, the role the deploy needs, and the caller's role.
   - **Reported before the deploy.** The Problems panel's validation (`POST /api/v1/validate`,
@@ -306,7 +322,26 @@ from the thousandth incident of a known one, without a flood reaching a chat cha
 incident at a time. Whether the feed should rather carry the cause opening and clearing, as
 facts of their own, is decided when the entries are built.
 
-### 9. What this record does not decide
+### 9. The order of the first slices
+
+*(Decided 2026-10-02.)* The first change has to carry the catalogue, because the access rule
+reads the personal-data marking from it. From there the work goes in this order:
+
+1. **The catalogue, its first new entry and the access rule.**
+   - The `eventcatalog` package with its drift tests, holding the existing entries.
+   - `atlas.approval.requested`, thrown by the three shop approval processes before their
+     approval task.
+   - `atlasInstance` added to `atlas.user.requested`.
+   - The access rule at deploy, and the same finding in validation (§6).
+2. **Incidents in the feed.**
+   - The feed leaves the service-catalogue area (§6).
+   - Then `atlas.incident.raised` and `atlas.incident.resolved` are folded into it.
+3. **The rest.**
+   - The Console page *Events* and the Modeler's name picker (§5, §7).
+   - The remaining domain entries, one system process at a time.
+   - `atlas.deployment.created`, once the open question is answered.
+
+### 10. What this record does not decide
 
 - **Declared signal payloads.** Narrowing what a throw sends by input mappings on the throw
   event, instead of every instance variable, is an engine change with its own record.
@@ -333,8 +368,11 @@ facts of their own, is decided when the entries are built.
     is the point, and it is also friction.
   - Generating documentation adds a step like `make whats-new`: forgetting it fails CI rather
     than shipping stale pages.
-  - The `admin` rule for `atlas.*` listeners narrows who may customize. An installation that
-    trusts every modeler gains nothing from it.
+  - The `admin` rule for listeners on events carrying personal data narrows who may customize.
+    An installation that trusts every modeler gains nothing from it.
+  - Because the rule follows the data, an entry gaining a personal-data field moves its
+    listeners' next deploy to an administrator. That is less predictable than a rule on the
+    name, and it is accepted because it protects exactly what needs protecting.
   - Validation now depends on the caller as well as the model. Two people can see different
     findings on the same draft; the finding names both roles so that this is visible.
   - A modeler cannot see who else listens across projects and has to ask an administrator. That
@@ -348,6 +386,25 @@ facts of their own, is decided when the entries are built.
     endpoint. That would give in-Atlas reactions to platform facts the feed's guarantees.
   - The contract version in API metadata, already an open item of the runtime contract. A
     receiver branching on an event's version needs it.
+  - **A deployment request instead of a dead end.** A modeler whose deploy the `admin` rule
+    refuses has nothing but a copied link to hand an administrator, a step outside Atlas. The
+    governed way is a protected system process, after the intake process's pattern
+    ([ADR-0122](0122-protected-system-project-and-bootstrap-deployment.md),
+    [ADR-0431](0431-system-processes-announce-their-facts-as-signals.md)):
+    - **Starting it.** The refused deploy, and the finding in the Problems panel, offer
+      *Request deployment*.
+    - **What the request carries.** The process id, a hash of the exact content to deploy, the
+      requester, and the catalogued events whose personal-data fields put the deploy under
+      the rule.
+    - **Announcing it.** Before the request waits at an administrator's approval task, the
+      process throws `atlas.deployment.requested`, a domain entry of its own.
+    - **The outcome.** Approval deploys exactly the requested content, never what the draft
+      holds by then; the hash is what makes that checkable. Rejection tells the requester why.
+    - **Why it needs its own record.** A deploy is code execution
+      ([ADR-0315](0315-portal-roles-and-responsibilities.md)), so a process that deploys is a
+      privileged write path. Like user provisioning
+      ([ADR-0123](0123-sanctioned-user-provisioning-for-system-processes.md)), it would be a
+      narrow capability gated to the system project, opened only after a human approves.
 
 ## Pros and cons of the options
 

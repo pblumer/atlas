@@ -1,0 +1,85 @@
+{
+  "formatVersion": 1,
+  "key": "beispiel-dienstleistungen-der-verwaltung",
+  "name": "Beispiel: Dienstleistungen der Verwaltung",
+  "processes": [
+    {
+      "id": "proc_vd_geoportal_einrichten",
+      "name": "Geoportal: Zugang einrichten",
+      "path": "geoportal-einrichten.bpmn"
+    },
+    {
+      "id": "proc_vd_geoportal_entfernen",
+      "name": "Geoportal: Zugang entfernen",
+      "path": "geoportal-entfernen.bpmn"
+    },
+    {
+      "id": "proc_vd_parkplatz_freigeben",
+      "name": "Parkplatz: freigeben",
+      "path": "parkplatz-freigeben.bpmn"
+    },
+    {
+      "id": "proc_vd_parkplatz_zuteilen",
+      "name": "Parkplatz: zuteilen",
+      "path": "parkplatz-zuteilen.bpmn"
+    },
+    {
+      "id": "proc_vd_zutrittsbadge",
+      "name": "Zutrittsbadge: Lebenszyklus",
+      "path": "zutrittsbadge-lebenszyklus.bpmn"
+    }
+  ],
+  "forms": [
+    {
+      "id": "vd-badge-ausgabe",
+      "name": "vd-badge-ausgabe",
+      "path": "vd-badge-ausgabe.form.json"
+    },
+    {
+      "id": "vd-badge-einzug",
+      "name": "vd-badge-einzug",
+      "path": "vd-badge-einzug.form.json"
+    },
+    {
+      "id": "vd-badge-ersatz",
+      "name": "vd-badge-ersatz",
+      "path": "vd-badge-ersatz.form.json"
+    },
+    {
+      "id": "vd-badge-sperren",
+      "name": "vd-badge-sperren",
+      "path": "vd-badge-sperren.form.json"
+    },
+    {
+      "id": "vd-badge-sperrung",
+      "name": "vd-badge-sperrung",
+      "path": "vd-badge-sperrung.form.json"
+    },
+    {
+      "id": "vd-geoportal-einrichtung",
+      "name": "vd-geoportal-einrichtung",
+      "path": "vd-geoportal-einrichtung.form.json"
+    },
+    {
+      "id": "vd-geoportal-entfernung",
+      "name": "vd-geoportal-entfernung",
+      "path": "vd-geoportal-entfernung.form.json"
+    },
+    {
+      "id": "vd-parkplatz-bestellung",
+      "name": "vd-parkplatz-bestellung",
+      "path": "vd-parkplatz-bestellung.form.json"
+    },
+    {
+      "id": "vd-parkplatz-freigabe",
+      "name": "vd-parkplatz-freigabe",
+      "path": "vd-parkplatz-freigabe.form.json"
+    },
+    {
+      "id": "vd-parkplatz-zuteilung",
+      "name": "vd-parkplatz-zuteilung",
+      "path": "vd-parkplatz-zuteilung.form.json"
+    }
+  ],
+  "decisions": []
+}

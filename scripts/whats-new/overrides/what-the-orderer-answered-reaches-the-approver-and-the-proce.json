@@ -1,0 +1,15 @@
+{
+  "tags": [
+    "Shop",
+    "Service catalogue",
+    "Security"
+  ],
+  "title": {
+    "en": "Approvers and processes see what was ordered",
+    "de": "Genehmigende und Prozesse sehen, was bestellt wurde"
+  },
+  "summary": {
+    "en": "The answers from a product's order form, such as a licence plate, now appear for the approver in the inbox and reach the product's own processes as separate variables. A process can mark an answer as personal data, so it is stored encrypted and can be erased with the person. Atlas's built-in approval processes no longer keep these answers in their history.",
+    "de": "Die Antworten aus dem Bestellformular eines Produkts, etwa ein Kennzeichen, erscheinen jetzt bei der genehmigenden Person in der Inbox und erreichen die Prozesse des Produkts als eigene Variablen. Ein Prozess kann eine Antwort als Personendaten kennzeichnen; sie wird dann verschlüsselt gespeichert und lässt sich mit der Person löschen. Atlas' eingebaute Genehmigungsprozesse bewahren diese Antworten nicht mehr in ihrem Verlauf auf."
+  }
+}

@@ -577,6 +577,20 @@ The control-flow basics most real models use.
   in, and the in-process handler remains as the fallback `--in-process-connectors` returns
   to. Attachments and inbound events are follow-ups — for the inbound half see
   [the Jira issue-watch draft](docs/adr/0214-jira-inbound-issue-watch.md).
+  **The mail Worker reads its mailbox** ([ADR-0438](docs/adr/0438-mailbox-worker.md)):
+  an inbound watch on a mail Worker publishes the new mail of one folder as an Atlas
+  message — over IMAP for an SMTP Worker that names a `mailboxEndpoint`, through the Gmail
+  history and the Microsoft Graph messages API for those providers — and a mail task's
+  `operation` lists, reads, moves, marks, deletes (to the trash) or answers mail by the
+  `messageId` a watch or a list answered. A process receives the envelope by default and
+  the text only on request; attachment content never. A watch admits `allowedSenders` and,
+  optionally, only a DMARC pass, and never changes the mailbox. A task that reads a mail
+  Worker's mailbox deploys only for a viewer of it and one that changes it for an editor,
+  at every deploy door — the application import included, which also gained ADR-0205's
+  message-name claim it had skipped. Still open: instance reads by relationship rather
+  than by role (ADR-0275), so what a process receives is not yet hidden from the
+  installation's other operators; IMAP `XOAUTH2`; push instead of polling (IMAP `IDLE`,
+  Graph change notifications).
   The same reader also runs the other way: `atlas openapi-template --spec x.yaml --out
   dir` writes one element-template package per operation, in the repository catalog's
   own shape ([ADR-0300](docs/adr/0300-openapi-element-templates.md)) —
@@ -923,6 +937,13 @@ What it takes to run this for real.
 - 🔲 Public API surface (deploy, create instance, publish message, complete job, queries)
 - 🔲 gRPC job-worker protocol (streaming pull, leases, fencing) — ADR-0007
 - 🔲 Worker SDK (Go first)
+- ✅ A worker runs the jobs of one type concurrently: `--max-jobs` places, a poll asking only
+  for the free ones, and supervised built-in workers at the engine's in-process bound
+  (`--worker-max-jobs`, default 16)
+  ([ADR-0440](docs/adr/0440-worker-runs-jobs-concurrently.md)).
+  On Windows a kill-on-close job object ends every supervised worker, and what it started,
+  with the server however the server ends
+  ([ADR-0439](docs/adr/0439-supervised-workers-end-with-the-server.md)).
 - 🚧 Metrics (throughput, batch size, fsync latency, queue depth), structured logs, OTel traces
   ([ADR-0142](docs/adr/0142-prometheus-metrics.md), v0.2.0 programme E): a Prometheus
   exposition at `/metrics` on Atlas's own registry. The **durability** metrics landed —
@@ -1936,6 +1957,12 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   [ADR-0358](docs/adr/0358-order-line-configuration.md), [ADR-0360](docs/adr/0360-product-category.md),
   [ADR-0361](docs/adr/0361-product-price.md), [ADR-0391](docs/adr/0391-product-picture.md),
   [ADR-0395](docs/adr/0395-product-construction-kit.md)).
+- ✅ **The answers reach the approver and the processes.** The approver reads a position's
+  configuration answers on the approval, labelled as the form labels them; the processes the
+  product binds receive each answer as a variable of its own, sealed where the model declares
+  it personal, never in place of a variable the order sets; Atlas's own approval models and
+  the orchestration no longer receive them
+  ([ADR-draft-a-position-s-answers-reach-its-processes](docs/adr/draft-a-position-s-answers-reach-its-processes.md)).
 - ✅ **Maintaining a catalogue.** A grantable `productmanager` role creates catalogues, and
   each catalogue is the scope its members work in
   ([ADR-0315](docs/adr/0315-portal-roles-and-responsibilities.md)). The Console screen and
@@ -1954,6 +1981,13 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   administration-services example (`examples/verwaltung-dienstleistungen/`, both process
   forms, bilingual) and an installer that asks for audiences and approvers and imports the
   shop as one document.
+- ✅ **A package installs from the command line.** `atlas import DIR` installs a package — an
+  application in the source layout (`atlas.json`), and optionally its shop (`katalog.json`)
+  with the questions its placeholders ask (`fragen.json`) — through the source import, a
+  publish and the catalogue import; answers come from a file or `--set`, groups and people by
+  id or by name, and every open answer is refused before the first write
+  ([ADR-0437](docs/adr/0437-a-package-is-imported-from-the-command-line.md)).
+  An `atlas.json` for the other examples is a follow-up.
 
 **The shop & ordering**
 - ✅ **Browsing.** A person sees the one catalogue their groups reach, by rank, narrowed per

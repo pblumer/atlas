@@ -162,14 +162,20 @@ func (s *Server) startReturnAttempt(b catalog.Binding, orderID, ref string, o or
 	triggerID := positionTriggerID(orderID, position, catalog.OpDeprovision,
 		line.StartsOf(catalog.OpDeprovision)+1)
 	vars = append(vars, model.VariableValue{Name: commandIDVar, Kind: model.VarString, Text: triggerID})
+	// The answers go to a process this return starts, which has not seen them; the
+	// strand a delivery reaches has had them since it started.
+	answers, err := s.orderAnswerVars(line, vars)
+	if err != nil {
+		return "", err
+	}
 	var instKey uint64
 	if line.PerPosition() {
 		// A per-position line's return is delivered to the instance that carries it,
 		// and starts the process only where that instance is gone
 		// (ADR-0428).
-		instKey, err = s.deliverOrStart(line.StrandOf(), b, positionCorrelationKey(orderID, position), triggerID, vars)
+		instKey, err = s.deliverOrStart(line.StrandOf(), b, positionCorrelationKey(orderID, position), triggerID, vars, answers)
 	} else {
-		instKey, err = s.startBinding(b, triggerID, vars)
+		instKey, err = s.startBinding(b, triggerID, append(vars, answers...))
 	}
 	if err != nil {
 		return "", err

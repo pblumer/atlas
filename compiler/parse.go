@@ -2681,6 +2681,18 @@ type xmlMailConnector struct {
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
+	// Operation is what the task does with the Worker's mailbox
+	// (ADR-0438); blank is send, which is every mail task authored
+	// before mailboxes existed. The attributes below belong to the other operations,
+	// and the compiler refuses one an operation does not use.
+	Operation      string `xml:"operation,attr"`
+	Folder         string `xml:"folder,attr"`
+	MessageID      string `xml:"messageId,attr"`
+	Destination    string `xml:"destination,attr"`
+	MaxResults     string `xml:"maxResults,attr"`
+	IncludeBody    string `xml:"includeBody,attr"`
+	UnreadOnly     string `xml:"unreadOnly,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
 }
 
 // xmlUserConnector is the <atlas:userConnector> extension of a user-provisioning

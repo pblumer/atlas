@@ -14,6 +14,51 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **What the orderer answered reaches the approver and the processes.** The answers given on
+  a product's configuration form — the licence plate a parking space is for, the cost centre
+  a laptop is booked to — are shown to the approver in the inbox, labelled as the form labels
+  them and marked when they were corrected after ordering. The processes the product binds
+  (its provisioning, lifecycle, return or action process, or an approval model of the
+  installation's own) receive each answer as a variable of its own under the field's key, so a
+  task form shows it and a model can declare it personal data with `atlas:personal` and
+  `atlas:dataSubject="recipient"`, which seals it under the recipient's key and makes it
+  erasable. Only the form's own fields are passed, and never in place of a variable the order
+  sets itself; publishing refuses a form with a field named like one (`recipient`,
+  `orderId`, …). Atlas's own approval processes and the fulfilment orchestration no longer
+  receive the answers, so they are not kept in their history in the clear. The
+  administration-services example now shows the plate to whoever assigns and frees the
+  parking space, and declares it personal.
+
+- **A mail Worker can read its mailbox, and the mailbox stays its owner's.** An inbound
+  watch on a mail Worker publishes the new mail of one folder as an Atlas message, so a mail
+  starts a process — over IMAP for an SMTP Worker (a new, optional `mailboxEndpoint`), and
+  through the Gmail and Microsoft Graph APIs for those providers. A mail task gains an
+  `operation`: `list`, `get`, `move`, `mark-read`, `mark-unread`, `delete` (to the trash) and
+  `reply`, each addressing the `messageId` a watch or a list answered; a task with no operation
+  sends, exactly as before. A process receives the envelope — sender, recipients, subject,
+  receive time, attachment names and sizes, and the receiving server's SPF/DKIM/DMARC verdict —
+  and the text only when the watch or the task asks for it, cut at 64 KiB; attachment content
+  never. A watch never changes the mailbox. It can admit only `allowedSenders` and only mail
+  with a DMARC pass; refused mail is consumed without starting anything. Who may use a mailbox
+  is checked at deploy: a task that reads a mail Worker's mailbox needs viewer on it, one that
+  changes it or answers from it needs editor, and one naming a mail Worker that does not exist
+  is refused. Sending is not checked. The application import now runs that check and
+  ADR-0205's message-name claim, which it had skipped. What a process receives is still
+  readable by every operator of a shared installation; that gap, ADR-0275's follow-up, is
+  stated and not closed here. ADR-0438.
+
+- **A package installs from the command line.** `atlas import DIR` installs what the shop
+  handbook's installer installs, without a browser — from a terminal, or from a pipeline
+  that equips a test and a production installation alike. A package is a directory: the
+  application's `atlas.json` in the source layout *Download source…* produces, the processes
+  and forms it names, and optionally the shop as `katalog.json` with the questions its
+  placeholders ask in `fragen.json`. The command imports the application, publishes it and
+  then imports the catalogue. Answers come from `--answers FILE` or `--set name=value`; a
+  group or a person may be named rather than given by id, since ids differ from server to
+  server, and an answer the server's directory does not have, a name two people share or a
+  question left open is refused, all at once, before anything is written. Running it again
+  updates. The handbook's installer now reads the same questions from the package.
+
 - **A process can put a document in a bucket, find it again, and hand somebody a link
   to open it.** A process produces and consumes documents — a generated letter, a scan,
   an export, an invoice — and until now there was nowhere to put one. A process variable
@@ -298,6 +343,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **A worker runs the jobs of one type concurrently.** A worker used to work the jobs of
+  one type one after another, so twenty REST calls of two seconds each took forty
+  seconds. `--max-jobs` now means how many jobs of one type a worker runs at once. A poll
+  asks only for as many jobs as there are free places, so every leased job starts the
+  moment it arrives, and none waits on a lease while the job before it finishes. A
+  worker Atlas supervises for a built-in Worker Type now runs up to 16 at once, the same
+  bound the engine puts on its own in-process handlers. Set it with
+  `atlas serve --worker-max-jobs`, and `1` restores one at a time. A `--supervise`
+  command and a worker you start yourself without `--max-jobs` still run one job at a
+  time. [ADR-0440](docs/adr/0440-worker-runs-jobs-concurrently.md).
+
 - **The person a service was ordered for may now give it back and change it.** Returning
   a position, and asking it for a change, was the orderer's or an operator's to do; the
   person who holds the right got a give-back button in the shop and a refusal from the
@@ -334,6 +390,15 @@ _Changed_ / _Removed_ for each version.
   unchanged (ADR-0429).
 
 ### Fixed
+
+- **On Windows, a crashed server no longer leaves its workers running.** Stopping Atlas
+  stopped the workers it supervises, but a server that crashed, was ended in the Task
+  Manager, or was killed by its service wrapper left them running. They retried the dead
+  address forever, and the restarted server started a second set beside them. Every
+  supervised worker now goes into a Windows job object that ends its processes when
+  the server's process ends, however it ends, including the script interpreters a
+  worker started.
+  [ADR-0439](docs/adr/0439-supervised-workers-end-with-the-server.md).
 
 - **A task the server works itself no longer trips a worker breaker.** The breaker that
   holds a worker's jobs back while its target is down (ADR-0340) also counted the failures
