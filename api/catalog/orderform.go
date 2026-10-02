@@ -6,7 +6,7 @@ import (
 )
 
 // What a product's configuration form asks reaches the processes the product binds
-// (ADR-draft-a-position-s-answers-reach-its-processes): each answer as a process
+// (ADR-0441): each answer as a process
 // variable under its field's key. A few names are the order's own — which order and
 // position this is, who it is for, which approval applies — and a field may not take
 // one of them. Its answer would be left out rather than stand in for what the order

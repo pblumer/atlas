@@ -841,7 +841,7 @@ func (s *Service) HandleNext(w http.ResponseWriter, r *http.Request) {
 			// Without the answers: the orchestration keeps what it reads here as
 			// variables, in its history and in the clear, and it starts processes
 			// rather than reading forms. The processes it starts are given the answers
-			// by the order (ADR-draft-a-position-s-answers-reach-its-processes).
+			// by the order (ADR-0441).
 			l.Config, l.Amendments = nil, nil
 			out = append(out, readyLine{ID: l.Key(), Line: l, ApprovalProcess: l.ApprovalProcess()})
 		}

@@ -48,7 +48,7 @@ const APPROVALS = [
     price: "CHF 1'200.–", texts: { de: "Apple iPhone 18 Pro", en: "Apple iPhone 18 Pro" },
     catalogId: "cat_mobil", catalogTexts: { de: "Mobile Geräte", en: "Mobile devices" },
     // What the orderer answered on the product's form, labelled as the form labels
-    // it, and corrected since (ADR-draft-a-position-s-answers-reach-its-processes).
+    // it, and corrected since (ADR-0441).
     answers: [
       { key: "kostenstelle", label: "Kostenstelle", value: "4711-IT" },
       { key: "stray", value: "<b>not markup</b>" },

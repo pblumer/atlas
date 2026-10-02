@@ -12,7 +12,7 @@ import (
 )
 
 // A position's answers reach its processes
-// (ADR-draft-a-position-s-answers-reach-its-processes).
+// (ADR-0441).
 //
 // What the orderer answered on a product's configuration form is on the order line
 // (ADR-0358). The processes the product binds — its provisioning, its lifecycle, its

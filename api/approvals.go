@@ -101,7 +101,7 @@ type approvalResp struct {
 	Assignment *order.Assignment `json:"assignment,omitempty"`
 	// Answers are what the orderer answered on the product's configuration form, as
 	// the order holds them now, labelled as the form labels them
-	// (ADR-draft-a-position-s-answers-reach-its-processes). Read from the order and
+	// (ADR-0441). Read from the order and
 	// not from the process: Atlas's own approval models are not given them, so they
 	// never sit in an approval's history in the clear.
 	Answers []approvalAnswer `json:"answers,omitempty"`

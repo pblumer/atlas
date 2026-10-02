@@ -599,7 +599,7 @@ func (l Line) ApprovalProcess() string {
 
 // AtlasApproval reports whether one of Atlas's own approval processes decides this
 // line, rather than a model the installation binds by name. Atlas's own are not
-// given the line's answers (ADR-draft-a-position-s-answers-reach-its-processes).
+// given the line's answers (ADR-0441).
 func (l Line) AtlasApproval() bool {
 	_, ok := approvalProcesses[l.Approval.Kind]
 	return ok && l.NeedsApproval()

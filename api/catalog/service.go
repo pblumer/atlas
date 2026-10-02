@@ -68,7 +68,7 @@ type Service struct {
 
 	// Forms answers which fields a configuration form has, so publishing can refuse
 	// one that names a field after a variable the order sets itself
-	// (ADR-draft-a-position-s-answers-reach-its-processes). Nil skips that check.
+	// (ADR-0441). Nil skips that check.
 	Forms FormFieldLookup
 
 	// Remainders counts the order lines a converted product left on its old

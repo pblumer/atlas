@@ -9029,7 +9029,7 @@ async function viewTasks(preselectKey) {
             catalogTexts: a.catalogTexts || {},
             // What the orderer answered on the product's form, read from the order,
             // and whether it was corrected since
-            // (ADR-draft-a-position-s-answers-reach-its-processes).
+            // (ADR-0441).
             answers: Array.isArray(a.answers) ? a.answers : [], amended: !!a.amended,
           });
         }

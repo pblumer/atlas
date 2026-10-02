@@ -1962,7 +1962,7 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   product binds receive each answer as a variable of its own, sealed where the model declares
   it personal, never in place of a variable the order sets; Atlas's own approval models and
   the orchestration no longer receive them
-  ([ADR-draft-a-position-s-answers-reach-its-processes](docs/adr/draft-a-position-s-answers-reach-its-processes.md)).
+  ([ADR-0441](docs/adr/0441-a-position-s-answers-reach-its-processes.md)).
 - ✅ **Maintaining a catalogue.** A grantable `productmanager` role creates catalogues, and
   each catalogue is the scope its members work in
   ([ADR-0315](docs/adr/0315-portal-roles-and-responsibilities.md)). The Console screen and
