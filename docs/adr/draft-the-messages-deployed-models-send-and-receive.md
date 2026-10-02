@@ -160,9 +160,10 @@ depends on other deployments, and deploy order is free.
   - **What the rule would add** is that a model cannot speak for Atlas, by a name chosen by
     accident or on purpose, and that the attempt is refused where it is made instead of found
     later.
-  - **It does not replace the measure R-09 names.** A narrow circle of `modeler` accounts on a
-    production server (M-05) bounds what any model may do. A rule on names bounds only this one
-    way of doing it.
+  - **It does not replace the measures R-09 names.** These are a defined circle of accounts that
+    may deploy (M-05), the `modeler` role given only to authors, and script languages switched
+    off where they are not needed (M-09). They bound what any model may do. A rule on names
+    bounds only this one way of doing it.
 - **Publishes through the route.** Who called `POST /api/v1/messages` with which name is a runtime
   fact. It belongs with the runtime counts the signal record defers.
 - **Declared message payloads.** As for signals, choosing on the throw which variables a message
