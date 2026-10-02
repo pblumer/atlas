@@ -278,8 +278,50 @@ func TestKnownRoles(t *testing.T) {
 	if isGrantableRole(roleAny) {
 		t.Error("roleAny is grantable — it describes a route, not a person")
 	}
-	if !isGrantableRole(RoleOperator) || isGrantableRole("wizard") {
-		t.Error("grantable roles are exactly the four")
+	if !isGrantableRole(RoleOperator) || !isGrantableRole(RoleFeedReader) || isGrantableRole("wizard") {
+		t.Error("operator and feedreader must be grantable and a role nobody declared must not")
+	}
+	for _, role := range legacyRoles() {
+		if role == RoleFeedReader || role == RoleProductManager {
+			t.Errorf("the legacy upgrade grants %s; it hands that reach to every existing account", role)
+		}
+	}
+}
+
+// TestAConfinedScopeCarriesItsOwnRoles: an events token holds feedreader and nothing
+// else whoever mints it, so a leaked feed token reads the feed and does nothing more;
+// an account that does not hold feedreader cannot mint one; and a scope with no roles
+// of its own still carries the minter's, as before
+// (ADR-0430).
+func TestAConfinedScopeCarriesItsOwnRoles(t *testing.T) {
+	admin := &httpapi.Principal{UserID: "usr_1", Roles: []string{RoleAdmin}}
+	reader := &httpapi.Principal{UserID: "usr_2", Roles: []string{RoleFeedReader}}
+	operator := &httpapi.Principal{UserID: "usr_3", Roles: []string{RoleOperator, RoleUser}}
+	for _, tc := range []struct {
+		name  string
+		scope string
+		p     *httpapi.Principal
+		want  string
+	}{
+		{"an administrator's events token", apiScopeEvents, admin, "feedreader"},
+		{"auth off", apiScopeEvents, nil, "feedreader"},
+		{"a feed reader's own events token", apiScopeEvents, reader, "feedreader"},
+		{"a full token is the minter's set, without feedreader", apiScopeFull, admin, "modeler operator user"},
+		{"a worker token is the minter's set", apiScopeWorker, operator, "operator user"},
+	} {
+		got, refusal := tokenRolesFor(tc.scope, tc.p)
+		if refusal != "" || strings.Join(got, " ") != tc.want {
+			t.Errorf("%s: tokenRolesFor = %q (%q), want %q", tc.name, strings.Join(got, " "), refusal, tc.want)
+		}
+	}
+	if got, refusal := tokenRolesFor(apiScopeEvents, operator); got != nil || !strings.Contains(refusal, "feedreader") {
+		t.Errorf("an operator minting an events token = %v (%q), want a refusal naming feedreader", got, refusal)
+	}
+	// The map hands out a copy: a token's roles are its own.
+	got, _ := tokenRolesFor(apiScopeEvents, admin)
+	got[0] = "admin"
+	if scopeRoles[apiScopeEvents][0] != RoleFeedReader {
+		t.Fatal("changing one token's roles changed the scope's")
 	}
 }
 

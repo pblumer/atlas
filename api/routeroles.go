@@ -47,7 +47,7 @@ const roleAny = "any"
 // routeRoles is every role a route may name. The inventory test holds the table
 // against it, so a typo ("moduler") is a failing build rather than an endpoint
 // nobody can reach.
-var routeRoles = []string{roleAny, RoleAdmin, RoleModeler, RoleOperator, RoleUser, RoleProductManager}
+var routeRoles = []string{roleAny, RoleAdmin, RoleModeler, RoleOperator, RoleUser, RoleProductManager, RoleFeedReader}
 
 // grantableRoles is every role an account may be given. roleAny is deliberately
 // absent: it describes a route, not a person.
@@ -59,7 +59,10 @@ var routeRoles = []string{roleAny, RoleAdmin, RoleModeler, RoleOperator, RoleUse
 // an administrator, which is the option that record refused. It is granted
 // deliberately, never by the legacy upgrade: legacyRoles() does not carry it, and
 // a test holds that.
-var grantableRoles = []string{RoleAdmin, RoleModeler, RoleOperator, RoleUser, RoleProductManager}
+//
+// RoleFeedReader is here for the same reason: a person who integrates a CMDB with the
+// feed must be able to read it without being an administrator.
+var grantableRoles = []string{RoleAdmin, RoleModeler, RoleOperator, RoleUser, RoleProductManager, RoleFeedReader}
 
 // isRouteRole reports whether a string is one of the roles a route may name.
 func isRouteRole(role string) bool {
@@ -186,4 +189,33 @@ func tokenRoles(p *httpapi.Principal) []string {
 		}
 	}
 	return out
+}
+
+// scopeRoles are the roles a token of a confined scope carries, whoever mints it: the
+// roles its allowlist needs and no others. A token minted for the event feed holds
+// `feedreader` and nothing else, so the scope says it may reach one route and the role
+// says it may do one kind of thing — both locks name the feed, and a leaked feed token
+// is a leaked read of the feed (ADR-0430).
+//
+// A scope absent here carries the minter's roles, as every scope did before this
+// map existed (ADR-0209).
+var scopeRoles = map[string][]string{
+	apiScopeEvents: {RoleFeedReader},
+}
+
+// tokenRolesFor returns the roles a token of scope minted by p carries, and why it
+// cannot be minted when p does not hold them. A confined scope's roles are never more
+// than the minter holds: an administrator holds every role, and anybody else must
+// hold the ones the scope carries.
+func tokenRolesFor(scope string, p *httpapi.Principal) ([]string, string) {
+	fixed, ok := scopeRoles[scope]
+	if !ok {
+		return tokenRoles(p), ""
+	}
+	for _, role := range fixed {
+		if p != nil && !p.HasRole(RoleAdmin) && !p.HasRole(role) {
+			return nil, "a " + scope + " token carries the " + role + " role, which you do not hold"
+		}
+	}
+	return append([]string(nil), fixed...), ""
 }

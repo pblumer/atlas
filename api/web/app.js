@@ -1824,7 +1824,7 @@ async function viewConsoleBackup() {
 // userForm renders the create or edit form for a user. In edit mode the username
 // is immutable (it identifies existing sessions and references) and the password
 // has its own action, so neither appears here.
-// GRANTABLE_ROLES is the four roles an account can be given, in the order the form
+// GRANTABLE_ROLES is the roles an account can be given, in the order the form
 // offers them, each with what it lets the person do. The wording matters more than
 // it looks: an administrator picking roles is deciding who may deploy a model,
 // which is code execution, and "modeler" alone does not say that.
@@ -1834,6 +1834,7 @@ const GRANTABLE_ROLES = [
   { id: "operator", name: "Operator", what: "start, cancel and repair instances; read runtime data" },
   { id: "user", name: "User", what: "work on tasks and read what they are given" },
   { id: "productmanager", name: "Product manager", what: "maintain the shop's catalogues and products, and publish releases" },
+  { id: "feedreader", name: "Feed reader", what: "read the event feed of action outcomes and granted and revoked rights, and nothing else" },
 ];
 
 function userForm(u) {
@@ -2478,7 +2479,9 @@ async function viewConsoleOrg() {
           rest of the instance's configuration, <span class="chip">modeler</span> to deploy and to author,
           <span class="chip">operator</span> to run what is deployed, <span class="chip">user</span> for a
           person's own task list, <span class="chip">productmanager</span> to maintain the shop's
-          catalogues without administering the instance.${showPresence ? ` <b>Presence</b> is who is signed in this minute, and only
+          catalogues without administering the instance, <span class="chip">feedreader</span> to read
+          the event feed a CMDB or a billing system follows — what an <code>events</code> API token
+          carries, and nothing more.${showPresence ? ` <b>Presence</b> is who is signed in this minute, and only
           administrators see it: <b>online</b> means somebody did something in the last five minutes,
           <b>idle</b> that a session is open but untouched, <b>offline</b> that no browser is reporting.
           It is read from the live sessions and never stored — a restart shows nobody.` : ""}</p>
@@ -2673,7 +2676,7 @@ function wireOrgPresence(showPresence, presencePill) {
 // installation whose accounts come from the provider — which is the installation
 // this mapping exists for — a role the form offers and this list does not is a role
 // that cannot be held for longer than one login, however carefully it was granted.
-const SSO_ROLES = ["admin", "modeler", "operator", "productmanager"];
+const SSO_ROLES = ["admin", "modeler", "operator", "productmanager", "feedreader"];
 
 function ssoRuleRow(rule, groups) {
   const roles = new Set(rule.roles || []);

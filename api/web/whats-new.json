@@ -25,6 +25,28 @@
       ]
     },
     {
+      "id": "a-system-that-follows-the-event-feed-can-hold-a-credential-t",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A key for the event feed that opens nothing else",
+        "de": "Ein Schlüssel für den Ereignis-Feed, der sonst nichts öffnet"
+      },
+      "summary": {
+        "en": "A CMDB or a billing system that follows the event feed can now be given an API token that reads the feed and nothing more: it cannot deploy, start or read instances, or touch orders. A new role, Feed reader, opens the feed for people too; operators no longer see it automatically, because it shows who holds what across every catalogue.",
+        "de": "Eine CMDB oder die Verrechnung, die den Ereignis-Feed verfolgt, erhält jetzt einen API-Token, der den Feed liest und sonst nichts: Er kann weder deployen noch Instanzen starten oder lesen noch Bestellungen bearbeiten. Eine neue Rolle, Feed-Leser, öffnet den Feed auch für Personen; Operatoren sehen ihn nicht mehr automatisch, weil er zeigt, wer was hält, über alle Kataloge."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Security",
+        "API"
+      ]
+    },
+    {
       "id": "what-happens-to-a-right-leaves-atlas-as-a-feed-of-cloudevent",
       "version": "Unreleased",
       "date": null,
@@ -293,28 +315,6 @@
       "tags": [
         "Handbook",
         "Examples"
-      ]
-    },
-    {
-      "id": "the-person-a-service-was-ordered-for-may-now-give-it-back-an",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "Whoever holds a service may give it back",
-        "de": "Wer eine Leistung bezieht, darf sie zurückgeben"
-      },
-      "summary": {
-        "en": "The shop offered the person a service was ordered for a give-back button, and the server refused them: only whoever placed the order, or an operator, could return or change it. Both now follow the product's actions — the person who holds the right may give it back and ask for its changes, beside the orderer and an operator. A product whose return only operators may give is no longer offered for return in the shop.",
-        "de": "Der Shop bot der Person, für die eine Leistung bestellt wurde, einen Rückgabe-Knopf an, und der Server wies sie ab: Zurückgeben oder ändern durfte nur, wer bestellt hatte, oder der Betrieb. Beides folgt jetzt den Aktionen des Produkts – wer das Recht bezieht, darf es zurückgeben und Änderungen anfordern, neben der Bestellerin und dem Betrieb. Ein Produkt, dessen Rückgabe nur der Betrieb auslösen darf, wird im Shop nicht mehr zur Rückgabe angeboten."
-      },
-      "link": {
-        "label": "ADR-0429",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0429-product-actions-are-commands-with-published-outcomes.md"
-      },
-      "tags": [
-        "Service catalogue",
-        "Shop"
       ]
     }
   ]

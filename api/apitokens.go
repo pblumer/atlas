@@ -43,7 +43,8 @@ func (s *Server) loadAPITokens() error {
 }
 
 // handleCreateAPIToken mints a token. Body:
-// {"name": "...", "scope": "full|worker", "expiresInDays": 90}.
+// {"name": "...", "scope": "full|worker|metrics|status|directory|inventory|landscape|events",
+// "expiresInDays": 90}.
 //
 // The name is required and the scope is required, both because the alternative is
 // a credential nobody can identify later and one whose reach nobody chose. An
@@ -125,7 +126,12 @@ func (s *Server) handleCreateAPIToken(w http.ResponseWriter, r *http.Request) {
 	if p != nil {
 		rec.CreatedBy = p.UserID
 	}
-	rec.Roles = tokenRoles(p)
+	roles, refusal := tokenRolesFor(scope, p)
+	if refusal != "" {
+		httpapi.Error(w, http.StatusForbidden, refusal)
+		return
+	}
+	rec.Roles = roles
 
 	var saveErr error
 	s.do(func() {
@@ -207,6 +213,11 @@ func (s *Server) reachFor(r *http.Request, scope string, asked []string) (reach 
 		if id = strings.TrimSpace(id); id != "" {
 			reach = append(reach, id)
 		}
+	}
+	if len(reach) > 0 && scope == apiScopeEvents {
+		// The feed is one stream for the installation; a reach the route never reads
+		// would be a narrowing the holder believes in and nothing enforces.
+		return nil, "an " + apiScopeEvents + " token reads the whole feed; reach does not narrow it", nil
 	}
 	if len(reach) == 0 {
 		if scope == apiScopeLandscape {

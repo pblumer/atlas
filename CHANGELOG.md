@@ -28,6 +28,18 @@ _Changed_ / _Removed_ for each version.
   `@everyone` from form input.
   ADR-draft-system-processes-announce-their-facts-as-signals.
 
+- **A system that follows the event feed can hold a credential that reads it and nothing
+  else.** There is a new role, `feedreader`, and a new API-token scope, `events`. A token
+  minted with `{"scope":"events"}` reaches `GET /api/v1/events` and no other route, and it
+  carries `feedreader` and no other role, whoever mints it — so a CMDB's or a billing
+  system's token can neither deploy, nor start or read instances, nor act on orders, even
+  if its scope were ever wrong. The feed itself now requires `feedreader` instead of
+  `operator`: it lists who holds what across every catalogue, which starting and repairing
+  instances does not imply. An administrator still reaches it, and a person who integrates
+  such a system can be given the role in **Organization → Users** or through the sign-on
+  mapping; the upgrade never grants it. A `full` token does not read the feed. The token
+  listing now shows each token's roles beside its scope.
+
 - **What happens to a right leaves Atlas as a feed of CloudEvents.** Every action asked of a
   held position that ends, every right granted and every right revoked is now an event a
   system beyond Atlas — a CMDB, a billing system — reads from `GET /api/v1/events`, in the

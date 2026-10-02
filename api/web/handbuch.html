@@ -8529,6 +8529,19 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
               processes and publishing them – the <a href="/#/catalog">Catalogue</a> app. Deliberately not
               <code>modeler</code>: a product picks processes that are already deployed and never deploys one
               itself. Which catalogues somebody may touch is decided by the catalogue.</td></tr>
+          <tr><td><b><code>feedreader</code></b></td>
+            <td data-l="de">Den Ereignis-Feed lesen (<code>GET /api/v1/events</code>): wie jede Aktion an einer
+              bezogenen Position endete und jedes gewährte und entzogene Recht – und sonst nichts. Für ein Umsystem
+              wie eine CMDB oder die Verrechnung stellt ein Administrator einen API-Token mit dem Scope
+              <code>events</code> aus; er trägt genau diese Rolle und erreicht genau diese eine Route:
+              <code>POST /api/v1/api-tokens</code> mit <code>{"name":"cmdb","scope":"events","expiresInDays":365}</code>.
+              Bewusst kein Teil von <code>operator</code>: Der Feed zeigt, wer was hält, über alle Kataloge.</td>
+            <td data-l="en">Reading the event feed (<code>GET /api/v1/events</code>): how each action asked of a held
+              position ended and every right granted and revoked – and nothing else. For a system beyond Atlas such as
+              a CMDB or billing, an administrator mints an API token with the <code>events</code> scope; it carries
+              exactly this role and reaches exactly that one route: <code>POST /api/v1/api-tokens</code> with
+              <code>{"name":"cmdb","scope":"events","expiresInDays":365}</code>. Deliberately not part of
+              <code>operator</code>: the feed shows who holds what, across every catalogue.</td></tr>
         </tbody>
       </table>
       <ul>
@@ -8627,11 +8640,13 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         <li data-l="en"><b>Nothing is granted by absence.</b> Every rule is an exact value match. Somebody the
           provider says nothing about matches no rule and is granted nothing.</li>
         <li data-l="de"><b><code>user</code> ist ein Boden, keine Vergabe.</b> Entschieden werden
-          <code>admin</code>, <code>modeler</code>, <code>operator</code> und <code>productmanager</code>; wer sich
+          <code>admin</code>, <code>modeler</code>, <code>operator</code>, <code>productmanager</code> und
+          <code>feedreader</code>; wer sich
           anmelden kann, behält <code>user</code> – eine verschwundene Gruppe nimmt niemandem die eigene
           Aufgabenliste.</li>
         <li data-l="en"><b><code>user</code> is a floor, not a grant.</b> What is decided is <code>admin</code>,
-          <code>modeler</code>, <code>operator</code> and <code>productmanager</code>; anybody who can sign in keeps
+          <code>modeler</code>, <code>operator</code>, <code>productmanager</code> and <code>feedreader</code>; anybody
+          who can sign in keeps
           <code>user</code> – a group that goes away does not cost somebody their own task list.</li>
         <li data-l="de"><b>Nur die genannten Gruppen gehören der Abbildung.</b> Rollen sind ein geschlossener Satz
           von Namen, die atlas selbst vergibt – die Abbildung entscheidet sie deshalb vollständig, und eine von

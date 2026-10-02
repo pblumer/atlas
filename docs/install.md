@@ -254,6 +254,8 @@ grant and every MCP tool call alike.
 | `modeler` | author drafts, forms and decisions — and **deploy** them |
 | `operator` | start, cancel, terminate and repair instances; read runtime data |
 | `user` | work on tasks and read what they are given |
+| `productmanager` | maintain the shop's catalogues and products, and publish releases — without deploying |
+| `feedreader` | read the event feed (`GET /api/v1/events`) and nothing else — what a CMDB's or a billing system's `events` token carries |
 
 An account carries **several** roles, not one: they are a list, not a ladder, so a
 modeller who also starts test instances holds `modeler` *and* `operator`. An
@@ -277,8 +279,10 @@ Two things to know when you upgrade an installation that predates this:
 - **What you narrow, stays narrow.** The carry-over runs once per account, so an
   account you set back to `user` is still `user` after the next restart.
 
-New accounts get `user`. An API token carries the roles of the account that minted
-it and is **never** an administrator, whoever mints it. With `--auth=false` there is
+New accounts get `user`; `productmanager` and `feedreader` are never carried over by
+the upgrade, only granted. An API token carries the roles of the account that minted
+it and is **never** an administrator, whoever mints it — except an `events` token,
+which carries `feedreader` and nothing else. With `--auth=false` there is
 no account and none of this is enforced.
 
 ### Single sign-on with an identity provider
@@ -941,7 +945,8 @@ curl -sS -X POST http://127.0.0.1:8080/api/v1/api-tokens \
 |-------|---------|
 | `worker` | Only what `atlas worker` does: lease a batch of jobs, settle each one, and post a preview mail back to the outbox. Nothing else — the right scope for a worker running in another network zone |
 | `metrics` | Only `GET /metrics`. The narrowest scope there is, for a Prometheus scraper |
-| `full` | Everything a signed-in non-admin reaches, for a CI job or an MCP adapter whose calls cannot be enumerated in advance. Broad by design, and never an admin: user management, secrets and backups stay refused |
+| `events` | Only `GET /api/v1/events`, the event feed of action outcomes and granted and revoked rights. The token carries the `feedreader` role and no other, so it reads the feed and nothing else — the right scope for a CMDB or a billing system that follows the feed. It takes no `reach`: the feed is one stream |
+| `full` | Everything a signed-in non-admin reaches, for a CI job or an MCP adapter whose calls cannot be enumerated in advance. Broad by design, and never an admin: user management, secrets and backups stay refused. It does **not** read the event feed, which needs `feedreader` |
 
 Then hand it over as `--token` or `ATLAS_TOKEN`:
 
