@@ -527,6 +527,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0439](0439-supervised-workers-end-with-the-server.md) | On Windows, a supervised worker ends with the server, however the server ends | Accepted | Landed |
 | [0440](0440-worker-runs-jobs-concurrently.md) | A worker runs the jobs of one type concurrently, up to the places it has free | Accepted | Landed |
 | [0441](0441-a-position-s-answers-reach-its-processes.md) | A position's answers reach its processes | Accepted | Landed |
+| [0442](0442-s3-object-store-worker.md) | An S3 Worker Type — a process puts a file down, finds it again, and hands it out | Accepted | Landed |
 
 ## The two states of a record
 

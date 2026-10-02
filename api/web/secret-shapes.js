@@ -9,9 +9,9 @@
 //
 // The shapes track the Go side: connector/mail/oauth.go's credentialBundle,
 // connector/sharepoint/oauth.go's, api/connectors.go's remedyCredentials, and
-// connector/jira/rest.go's, connector/googlesheets/oauth.go's and
-// connector/discord/rest.go's credentialBundle. A field added there is a field added
-// here.
+// connector/jira/rest.go's, connector/googlesheets/oauth.go's,
+// connector/discord/rest.go's and connector/s3/rest.go's credentialBundle. A field added
+// there is a field added here.
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -23,8 +23,8 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 // back, a wrong shape is invisible until a task parks behind an incident hours later
 // (ADR-0155). The shapes mirror the Go decoders — connector/mail/oauth.go's
 // credentialBundle, connector/sharepoint/oauth.go's, api/connectors.go's
-// remedyCredentials, and the connector/jira, connector/googlesheets and
-// connector/discord bundles — so a change there is a change here.
+// remedyCredentials, and the connector/jira, connector/googlesheets, connector/discord
+// and connector/s3 bundles — so a change there is a change here.
 export const SECRET_SHAPES = {
   "mail:gmail": {
     what: "a Google OAuth credential bundle (JSON)",
@@ -80,6 +80,12 @@ export const SECRET_SHAPES = {
     fields: ["botToken"],
     skeleton: { botToken: "MTIz\u2026" },
     note: "The bot token from <b>Discord Developer Portal &rsaquo; your application &rsaquo; Bot &rsaquo; Reset Token</b>. Store the token alone: Atlas composes the <code>Bot </code> scheme itself, so a value pasted with the prefix has it stripped rather than sent twice. The bot must be invited to the server and have <b>View Channel</b> and <b>Send Messages</b> in each channel a process writes to \u2014 a missing grant is answered with code 50001, <i>Missing Access</i>.",
+  },
+  "s3:": {
+    what: "an S3 access key (JSON): {accessKeyId, secretAccessKey, region}",
+    fields: ["accessKeyId", "secretAccessKey", "region"],
+    skeleton: { accessKeyId: "AKIA\u2026", secretAccessKey: "\u2026", region: "eu-central-1" },
+    note: "From <b>AWS console &rsaquo; IAM &rsaquo; Users &rsaquo; Security credentials &rsaquo; Create access key</b>, or your store's own console (MinIO: <b>Access Keys &rsaquo; Create</b>). The <b>region</b> belongs in here rather than beside it because the signature is computed with it — a self-hosted store that has no regions commonly answers to <code>us-east-1</code>. Add <code>\"sessionToken\"</code> for a key issued by STS. The bucket is not part of the credential: a task names it, so one key can serve several.",
   },
   "mail:smtp": { what: "the SMTP password for the worker's sender address (a plain string)" },
   "mail:preview": { what: "nothing — the preview provider needs no credential" },

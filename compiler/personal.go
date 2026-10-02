@@ -83,8 +83,8 @@ var engineEvaluatedExpressions = map[string]bool{
 // Every one of these is a ConnectorTaskDetail field, and none of them is evaluated in
 // engine/: the evaluation sites are connector/rest/worker.go:95, connector/mail/worker.go:89,
 // connector/ldap/worker.go:190, connector/ad/worker.go:296, connector/jira/worker.go:82,
-// connector/discord/offload.go:141 and connector/agent/aitask.go:133, each over the scope
-// variables handed to that call.
+// connector/discord/offload.go:141, connector/s3/offload.go:155 and
+// connector/agent/aitask.go:133, each over the scope variables handed to that call.
 //
 // THE EXEMPTION IS CONDITIONAL, and the condition is the next step's to satisfy: it holds
 // only while the values a worker binds are deciphered before it binds them. If the
@@ -146,6 +146,16 @@ var workerEvaluatedExpressions = map[string]string{
 	"connectorTasks.Query.Val.Expr":         "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.RemedyFields.Val.Expr":  "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.RemedyForm.Expr":        "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.S3Bucket.Expr":          "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.S3Content.Expr":         "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.S3ContentType.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.S3Delimiter.Expr":       "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.S3Key.Expr":             "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.S3Metadata.Val.Expr":    "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.S3Prefix.Expr":          "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.S3SourceBucket.Expr":    "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.S3SourceKey.Expr":       "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.S3StartAfter.Expr":      "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.ScimBaseURL.Expr":       "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.ScimFilter.Expr":        "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.ScimResource.Expr":      "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",

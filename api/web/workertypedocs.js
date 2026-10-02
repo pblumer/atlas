@@ -343,6 +343,20 @@ export const WORKER_TYPE_DOCS = {
     trap: `Delivery is at least once: a batch accepted just before a restart can arrive again. Deduplicate by each event's <code>id</code>. A receiver that refuses a batch holds the subscription — nothing is skipped — so a permanent refusal shows as a hold that does not lift.`,
   },
 
+  s3: {
+    anchor: "runbook-s3", title: "S3 object storage",
+    checked: "2026-09",
+    needs: `A configured S3 Worker in ${WORKERS}: a vault bundle with an access key and the region it signs for. The endpoint stays empty for AWS and names the host for anything else.`,
+    steps: [
+      `Create the <b>bucket</b> at your store first — AWS S3, MinIO, Ceph, Garage, Cloudflare R2 or whatever the installation runs — and note the <b>region</b> it is in. Self-hosted stores that have no regions commonly answer to <code>us-east-1</code>.`,
+      `Issue an <b>access key</b> scoped to that bucket: <b>AWS console &rsaquo; IAM &rsaquo; Users &rsaquo; Security credentials &rsaquo; Create access key</b>, or <b>MinIO console &rsaquo; Access Keys &rsaquo; Create</b>. Give it only the actions the processes need — <code>s3:GetObject</code>, <code>s3:PutObject</code>, <code>s3:ListBucket</code>, and <code>s3:DeleteObject</code> where a process removes anything.`,
+      `Store it in the vault: ${VAULT}, e.g. <code>s3_archiv</code> holding <code>{"accessKeyId": "…", "secretAccessKey": "…", "region": "eu-central-1"}</code>. Add <code>"sessionToken"</code> as well if the key came from STS.`,
+      `${WORKERS} &rarr; <b>New worker</b>: type <b>S3 object storage</b>, a name, credential reference <code>s3_archiv</code>. Leave the <b>endpoint empty for AWS</b>; for any other store enter its base URL (<code>https://minio.example:9000</code>), which is also what tells Atlas to address buckets path-style.`,
+      `Try it with a <b>Check object</b> task on a key you know: <code>=datei.exists</code> answers without needing the object to be readable in full, so a wrong permission shows up as an error rather than as an empty result.`,
+    ],
+    trap: `A document larger than a process variable's budget — <b>1 MiB</b> unless this installation raised it — cannot be read into one. Use <b>Link to download</b>, which hands out a signed URL and lets the browser fetch the bytes straight from the store. Keep the link's lifetime short: it opens that object for anyone who has it, and it is stored in the instance's variables like any other value.`,
+  },
+
   aitask: {
     anchor: "runbook-ai", title: "AI worker",
     checked: "2026-09",
