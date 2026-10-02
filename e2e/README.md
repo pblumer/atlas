@@ -31,6 +31,15 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   message **delivers to a waiting catch** (both pools complete), a message with **nothing
   waiting is not buffered** (the later catch still parks), and a parked catch **still fires
   manually** (the ⚡ / `step()` path).
+- **`message-flows.spec.mjs`** ([ADR-draft-token-simulation-follows-message-flows](../docs/adr/draft-token-simulation-follows-message-flows.md)):
+  a message travels along the **drawn message flow** in a descriptive collaboration. A plain
+  task's flow starts the other pool's message start, the answer releases a catch that names
+  no message, and a black-box pool is reached. A flow between two ends that name
+  **different messages** does not deliver. Model: `message-flows.bpmn`.
+- **`message-tasks.spec.mjs`** (ADR-0102 / ADR-0112 / ADR-0110): a **send task's**
+  `messageRef` fires a waiting **receive task** in another pool. A send task naming its
+  message through an **`operationRef`** decides an **event-based gateway's** race for that
+  message: the token takes the message branch, not the timer's. Model: `message-tasks.bpmn`.
 - **`playground.spec.mjs`** ([ADR-0215](../docs/adr/0215-modeler-playground.md)):
   the **Playground tab** — a mode rather than a level of detail, so it takes the control
   strip and a side panel and gives the properties panel's width back to the diagram;

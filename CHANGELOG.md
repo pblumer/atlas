@@ -475,6 +475,23 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Messages between pools flow on their own in the token simulation.** In a collaboration
+  the simulation stalled at the pool boundary, and the reader had to start or fire the other
+  pool by hand. It found a message's receiver only by message name, read from an event
+  definition. A plain task with a message flow drawn to another pool therefore sent nothing,
+  and that is how a descriptive collaboration is usually drawn. Send and receive tasks never
+  sent or received either, because they carry their message on the task.
+  ([ADR-draft-token-simulation-follows-message-flows](docs/adr/draft-token-simulation-follows-message-flows.md))
+  - A message now also travels along every message flow drawn out of an element when its
+    token leaves. The dot follows the drawn flow, and starts, fires or pings the element at
+    its end as a named message does (ADR-0097, ADR-0101).
+  - A flow between two ends that name *different* messages still does not deliver, because
+    the engine would not correlate them.
+  - Send and receive tasks use their `messageRef`, and a send task the message its
+    `operationRef` names.
+  - A message reaching a catch behind an event-based gateway now decides that gateway's race.
+  - A message that arrives before its receiver waits is still not kept, as in the engine.
+
 - **On Windows, a crashed server no longer leaves its workers running.** Stopping Atlas
   stopped the workers it supervises, but a server that crashed, was ended in the Task
   Manager, or was killed by its service wrapper left them running. They retried the dead

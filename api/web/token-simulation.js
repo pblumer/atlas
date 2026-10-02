@@ -18,6 +18,9 @@
 const isSequenceFlow = (c) => c && c.type === "bpmn:SequenceFlow";
 const outFlows = (el) => (el.outgoing || []).filter(isSequenceFlow);
 const inFlows = (el) => (el.incoming || []).filter(isSequenceFlow);
+// The message flows drawn out of an element — the collaboration's own statement of where
+// that element sends a message (ADR-draft-token-simulation-follows-message-flows).
+const outMessageFlows = (el) => (el.outgoing || []).filter((c) => c && c.type === "bpmn:MessageFlow");
 
 const isStart = (el) => el.type === "bpmn:StartEvent";
 const isEnd = (el) => el.type === "bpmn:EndEvent";
@@ -41,7 +44,23 @@ const defName = (el, defType, ref) => {
   const d = eventDefs(el).find((x) => x.$type === defType);
   return (d && d[ref] && d[ref].name) || null;
 };
-const messageName = (el) => defName(el, "bpmn:MessageEventDefinition", "messageRef");
+// A receive task (ADR-0102) and a message-kind send task (ADR-0112) carry no event
+// definition: they hold messageRef on the task itself, and a send task may instead name an
+// operationRef whose inMessageRef is the message it sends — the compiler resolves both the
+// same way, so the simulation must too, or their messages never reach the other pool.
+const taskMessage = (bo) => {
+  if (bo.messageRef) return bo.messageRef;
+  if (bo.$type === "bpmn:SendTask" && bo.operationRef) return bo.operationRef.inMessageRef;
+  return null;
+};
+const messageName = (el) => {
+  const bo = el.businessObject;
+  if (bo && (bo.$type === "bpmn:SendTask" || bo.$type === "bpmn:ReceiveTask")) {
+    const m = taskMessage(bo);
+    return (m && m.name) || null;
+  }
+  return defName(el, "bpmn:MessageEventDefinition", "messageRef");
+};
 const signalName = (el) => defName(el, "bpmn:SignalEventDefinition", "signalRef");
 
 // A catch parks the token until the modelled event "occurs" — the user fires it. Message,
@@ -60,6 +79,21 @@ const isThrow = (el) =>
 // A catch-like target can receive a thrown message/signal dot — a catch event, a boundary
 // event, or a start event (a message can begin a new instance). A throw is never a target.
 const isCatchLike = (el) => isCatch(el) || isBoundary(el) || isStart(el);
+
+// sendsMessage is true for an element whose departing token sends something: a throw, or
+// any element a message flow leaves — in a descriptive collaboration a plain task is often
+// the sender, and the drawn flow is the only place that says so.
+const sendsMessage = (el) => isThrow(el) || outMessageFlows(el).length > 0;
+
+// flowDelivers decides whether a message flow carries its message to the element it points
+// at. It does unless both ends name a message and the names differ: names are what the
+// engine correlates on (ADR-0023), so a flow drawn between two different messages is a
+// modelling error the simulation must show rather than paper over.
+const flowDelivers = (from, to) => {
+  const a = messageName(from);
+  const b = messageName(to);
+  return !a || !b || a === b;
+};
 
 // arrivesFromEventGateway: a catch immediately after an event-based gateway does not park
 // again — the gateway's own "which event fires first?" choice already represented it.
@@ -526,7 +560,7 @@ TokenSimulation.prototype._emit = function (el) {
     }
     this._miRemaining.delete(el.id); // last instance — fall through and leave the activity
   }
-  if (isThrow(el)) this._throwEvent(el);
+  if (sendsMessage(el)) this._throwEvent(el);
   const outs = outFlows(el);
   this._rest(el.id, -1);
   if (outs.length === 0) {
@@ -551,28 +585,40 @@ TokenSimulation.prototype._fireTrigger = function (el) {
   this._emit(el);
 };
 
-// _throwEvent visualises a message/signal throw: a dot flies from the throwing element to
-// every catch-like element that names the same message (1:1) or signal (broadcast). What
-// happens when the dot lands depends on the target (see _deliverToCatch): a modelled throw
-// that reaches a *waiting* catch delivers — it fires it — so throw→catch correlation
-// actually completes; a start event begins a new instance; nothing waiting is only pinged.
-// Matching is by message/signal name only; correlation keys are the engine's job.
+// _throwEvent visualises a message/signal throw: a dot flies from the sending element along
+// every message flow drawn out of it, and to every catch-like element that names the same
+// message (1:1) or signal (broadcast). What happens when the dot lands depends on the target
+// (see _deliverToCatch): a modelled throw that reaches a *waiting* catch delivers — it fires
+// it — so throw→catch correlation actually completes; a start event begins a new instance;
+// nothing waiting is only pinged. A drawn flow delivers even where no name is modelled, so
+// a descriptive collaboration plays through (ADR-draft-token-simulation-follows-message-flows);
+// a target reached both ways is delivered to once. Correlation keys are the engine's job.
 TokenSimulation.prototype._throwEvent = function (el) {
   const mName = messageName(el);
   const sName = signalName(el);
-  if (!mName && !sName) return;
   const from = centerOf(el);
+  const epoch = this._epoch;
+  const send = (path, t, deliver) =>
+    this._animateDot(path, () => this._epoch !== epoch, "atlas-sim-msg-dot").then(() => {
+      if (this._epoch !== epoch || !this._active) return;
+      if (deliver) this._deliverToCatch(t);
+      else this._ping(t);
+    });
+  const reached = new Set();
+  for (const mf of outMessageFlows(el)) {
+    const t = mf.target;
+    if (!t || reached.has(t.id)) continue;
+    reached.add(t.id);
+    // The dot follows the drawn flow, so the reader sees which arrow carried the message.
+    const path = mf.waypoints && mf.waypoints.length >= 2 ? mf.waypoints : [from, centerOf(t)];
+    send(path, t, flowDelivers(el, t));
+  }
+  if (!mName && !sName) return;
   this._registry.forEach((t) => {
-    if (t === el || !isCatchLike(t)) return;
+    if (t === el || reached.has(t.id) || !isCatchLike(t)) return;
     const match = (mName && messageName(t) === mName) || (sName && signalName(t) === sName);
     if (!match) return;
-    const epoch = this._epoch;
-    this._animateDot([from, centerOf(t)], () => this._epoch !== epoch, "atlas-sim-msg-dot").then(
-      () => {
-        if (this._epoch !== epoch || !this._active) return;
-        this._deliverToCatch(t);
-      },
-    );
+    send([from, centerOf(t)], t, true);
   });
 };
 
@@ -601,7 +647,19 @@ TokenSimulation.prototype._deliverToCatch = function (t) {
   // pool actually complete a catch in another. With nothing waiting there is no token to
   // release (the message finds no one home), so it is only pinged; a catch reached before
   // its token, or a timer/external event, still waits for a manual fire or Auto-decide.
-  if (needsTrigger(t) && (this._resting.get(t.id) || 0) > 0) this._fireTrigger(t);
+  if (needsTrigger(t) && (this._resting.get(t.id) || 0) > 0) {
+    this._fireTrigger(t);
+    return;
+  }
+  // A catch behind an event-based gateway never parks a token of its own: the token waits
+  // on the gateway, which races its events (ADR-0110). The delivered message is the event
+  // that won, so it takes this catch's branch — what a click on that flow would do.
+  // Anything else a message flow points at — a black-box pool, a plain task — has nothing to
+  // release, so it is only pinged.
+  const race =
+    isCatch(t) &&
+    inFlows(t).find((f) => f.source && isEventBased(f.source) && (this._resting.get(f.source.id) || 0) > 0);
+  if (race) this._takeSingle(race.source, race);
   else this._ping(t);
 };
 
@@ -769,7 +827,7 @@ TokenSimulation.prototype._arrive = function (target, viaFlow) {
     return;
   }
   if (isEnd(target)) {
-    if (isThrow(target)) this._throwEvent(target);
+    if (sendsMessage(target)) this._throwEvent(target);
     this._creditCompletion(target);
     this._flash(target);
     this._render();
@@ -984,6 +1042,9 @@ TokenSimulation.prototype._completeScope = function (sub) {
   this._removeMarker(sub.id, "atlas-sim-scope");
   this._rest(sub.id, -count);
   this._flash(sub);
+  // A message flow drawn from the subprocess's border goes out as it completes, as it does
+  // from any other activity its token leaves.
+  if (sendsMessage(sub)) this._throwEvent(sub);
   const outs = outFlows(sub);
   this._render();
   this._notify();

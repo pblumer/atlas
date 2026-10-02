@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  id="Defs_flows" targetNamespace="http://bpmn.io/schema/bpmn">
+  <!-- A descriptive collaboration: the senders are plain tasks, so the only statement of who
+       talks to whom is the drawn message flow. Pool A's task asks Pool B, whose message start
+       begins it; Pool B's task answers Pool A, whose catch names no message at all; Pool A
+       also tells a black-box pool. One flow, X → Y, joins two ends that name *different*
+       messages: there the names decide, as they do for the engine, so it must not deliver. -->
+  <bpmn:message id="Msg_req" name="request" />
+  <bpmn:message id="Msg_x" name="x" />
+  <bpmn:message id="Msg_y" name="y" />
+  <bpmn:collaboration id="Collab_flows">
+    <bpmn:participant id="Part_A" name="Pool A" processRef="Process_A" />
+    <bpmn:participant id="Part_B" name="Pool B" processRef="Process_B" />
+    <bpmn:participant id="Part_Ext" name="Black box" />
+    <bpmn:messageFlow id="MF_ask" sourceRef="TaskA" targetRef="StartB" />
+    <bpmn:messageFlow id="MF_answer" sourceRef="TaskB" targetRef="CatchA" />
+    <bpmn:messageFlow id="MF_tell" sourceRef="TaskA" targetRef="Part_Ext" />
+    <bpmn:messageFlow id="MF_mismatch" sourceRef="ThrowX" targetRef="CatchY" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_A" isExecutable="false">
+    <bpmn:startEvent id="StartA"><bpmn:outgoing>A1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:task id="TaskA" name="ask B">
+      <bpmn:incoming>A1</bpmn:incoming><bpmn:outgoing>A2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:intermediateCatchEvent id="CatchA" name="answer received">
+      <bpmn:incoming>A2</bpmn:incoming><bpmn:outgoing>A3</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="med_a" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:endEvent id="EndA"><bpmn:incoming>A3</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="A1" sourceRef="StartA" targetRef="TaskA" />
+    <bpmn:sequenceFlow id="A2" sourceRef="TaskA" targetRef="CatchA" />
+    <bpmn:sequenceFlow id="A3" sourceRef="CatchA" targetRef="EndA" />
+    <bpmn:startEvent id="StartX"><bpmn:outgoing>X1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:intermediateThrowEvent id="ThrowX" name="send x">
+      <bpmn:incoming>X1</bpmn:incoming><bpmn:outgoing>X2</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="med_x" messageRef="Msg_x" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:endEvent id="EndX"><bpmn:incoming>X2</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="X1" sourceRef="StartX" targetRef="ThrowX" />
+    <bpmn:sequenceFlow id="X2" sourceRef="ThrowX" targetRef="EndX" />
+  </bpmn:process>
+  <bpmn:process id="Process_B" isExecutable="false">
+    <bpmn:startEvent id="StartB" name="asked">
+      <bpmn:outgoing>B1</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="med_b" messageRef="Msg_req" />
+    </bpmn:startEvent>
+    <bpmn:task id="TaskB" name="answer A">
+      <bpmn:incoming>B1</bpmn:incoming><bpmn:outgoing>B2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="EndB"><bpmn:incoming>B2</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="B1" sourceRef="StartB" targetRef="TaskB" />
+    <bpmn:sequenceFlow id="B2" sourceRef="TaskB" targetRef="EndB" />
+    <bpmn:startEvent id="StartY"><bpmn:outgoing>Y1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:intermediateCatchEvent id="CatchY" name="await y">
+      <bpmn:incoming>Y1</bpmn:incoming><bpmn:outgoing>Y2</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="med_y" messageRef="Msg_y" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:endEvent id="EndY"><bpmn:incoming>Y2</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="Y1" sourceRef="StartY" targetRef="CatchY" />
+    <bpmn:sequenceFlow id="Y2" sourceRef="CatchY" targetRef="EndY" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diag_flows">
+    <bpmndi:BPMNPlane id="Plane_flows" bpmnElement="Collab_flows">
+      <bpmndi:BPMNShape id="Part_Ext_di" bpmnElement="Part_Ext" isHorizontal="true">
+        <dc:Bounds x="150" y="20" width="560" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Part_A_di" bpmnElement="Part_A" isHorizontal="true">
+        <dc:Bounds x="150" y="100" width="560" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="StartA_di" bpmnElement="StartA">
+        <dc:Bounds x="200" y="142" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TaskA_di" bpmnElement="TaskA">
+        <dc:Bounds x="280" y="120" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="CatchA_di" bpmnElement="CatchA">
+        <dc:Bounds x="442" y="142" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndA_di" bpmnElement="EndA">
+        <dc:Bounds x="572" y="142" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="A1_di" bpmnElement="A1">
+        <di:waypoint x="236" y="160" /><di:waypoint x="280" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="A2_di" bpmnElement="A2">
+        <di:waypoint x="380" y="160" /><di:waypoint x="442" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="A3_di" bpmnElement="A3">
+        <di:waypoint x="478" y="160" /><di:waypoint x="572" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="StartX_di" bpmnElement="StartX">
+        <dc:Bounds x="200" y="232" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ThrowX_di" bpmnElement="ThrowX">
+        <dc:Bounds x="312" y="232" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndX_di" bpmnElement="EndX">
+        <dc:Bounds x="572" y="232" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="X1_di" bpmnElement="X1">
+        <di:waypoint x="236" y="250" /><di:waypoint x="312" y="250" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="X2_di" bpmnElement="X2">
+        <di:waypoint x="348" y="250" /><di:waypoint x="572" y="250" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Part_B_di" bpmnElement="Part_B" isHorizontal="true">
+        <dc:Bounds x="150" y="320" width="560" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="StartB_di" bpmnElement="StartB">
+        <dc:Bounds x="312" y="362" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="TaskB_di" bpmnElement="TaskB">
+        <dc:Bounds x="410" y="340" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndB_di" bpmnElement="EndB">
+        <dc:Bounds x="572" y="362" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="B1_di" bpmnElement="B1">
+        <di:waypoint x="348" y="380" /><di:waypoint x="410" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="B2_di" bpmnElement="B2">
+        <di:waypoint x="510" y="380" /><di:waypoint x="572" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="StartY_di" bpmnElement="StartY">
+        <dc:Bounds x="200" y="452" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="CatchY_di" bpmnElement="CatchY">
+        <dc:Bounds x="312" y="452" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndY_di" bpmnElement="EndY">
+        <dc:Bounds x="572" y="452" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Y1_di" bpmnElement="Y1">
+        <di:waypoint x="236" y="470" /><di:waypoint x="312" y="470" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Y2_di" bpmnElement="Y2">
+        <di:waypoint x="348" y="470" /><di:waypoint x="572" y="470" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_ask_di" bpmnElement="MF_ask">
+        <di:waypoint x="330" y="200" /><di:waypoint x="330" y="362" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_answer_di" bpmnElement="MF_answer">
+        <di:waypoint x="460" y="340" /><di:waypoint x="460" y="178" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_tell_di" bpmnElement="MF_tell">
+        <di:waypoint x="300" y="120" /><di:waypoint x="300" y="80" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_mismatch_di" bpmnElement="MF_mismatch">
+        <di:waypoint x="340" y="268" /><di:waypoint x="340" y="452" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
