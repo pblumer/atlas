@@ -237,6 +237,26 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Evaluation result", schemaObj(map[string]any{
 				"ok": tBool(), "result": tObject(), "kind": tString(), "error": tString(),
 			}))}},
+		// The FEEL assistant (ADR-draft-feel-assistant): a conversation that writes an
+		// expression, asked of the agent Worker an operator configured (ADR-0255), and
+		// checked by this engine before the author sees it. Nothing is stored — the
+		// expression goes to the assistant's editor, and from there to whatever field
+		// the author copies or applies it to.
+		{"GET", "/api/v1/feel/generate/workers", s.feelGen.HandleCapability, apiOp{
+			summary: "Report whether an AI Worker is configured to write FEEL expressions, and which ones may be named — what the FEEL assistant asks before it offers its chat",
+			tag:     "FEEL", role: RoleModeler, resp: jsonBody("Assistant capability", tObject())}},
+		{"POST", "/api/v1/feel/generate", s.feelGen.HandleGenerate, apiOp{
+			summary: "Answer the author's last message in a conversation with a FEEL expression, an explanation and an example, after compiling and evaluating it with this engine and letting the model correct what failed. Nothing is stored",
+			tag:     "FEEL", role: RoleModeler,
+			req: jsonBody("The conversation and the assistant's editor", schemaObj(map[string]any{
+				"messages": tArray(), "expression": tString(), "variables": tObject(), "target": tString(),
+				"worker": tString(), "model": tString(),
+			}, "messages")),
+			resp: jsonBody("A checked proposal", schemaObj(map[string]any{
+				"expression": tString(), "explanation": tString(), "variables": tObject(),
+				"check": tObject(), "reply": tString(), "attempts": tInteger(), "warning": tString(),
+				"worker": tString(), "model": tString(),
+			}))}},
 		{"POST", "/api/v1/scripts/run", s.handleRunScript, apiOp{
 			summary: "Run a script task against sample variables (admin-only when auth is on)", tag: "Scripts", role: RoleAdmin,
 			req: jsonBody("Language, source, and sample variables", schemaObj(map[string]any{

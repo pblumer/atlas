@@ -92,6 +92,7 @@ import (
 
 	"github.com/pblumer/atlas/api/catalog"
 	"github.com/pblumer/atlas/api/decisiondoc"
+	"github.com/pblumer/atlas/api/feelgen"
 	"github.com/pblumer/atlas/api/formgen"
 	"github.com/pblumer/atlas/api/order"
 	playgroundapi "github.com/pblumer/atlas/api/playground"
@@ -355,6 +356,13 @@ type Server struct {
 	// loop, because it owns no state: it stores nothing, and the three closures in
 	// formgeneration.go are its whole reach into this server.
 	formGen *formgen.Service
+	// feelGen writes a FEEL expression from a conversation with the author
+	// (ADR-draft-feel-assistant). Like formGen it owns no state and holds no run
+	// loop; feelgeneration.go is its whole reach into this server.
+	feelGen *feelgen.Service
+	// feelMetrics counts what the FEEL assistant's requests came to; nil when this
+	// server exports no metrics (feelgeneration.go).
+	feelMetrics *feelAssistantMetrics
 	// releaseNotes serves the Console's release notes, read from the CHANGELOG this
 	// binary embeds (ADR-0444). Like formGen it
 	// owns no state and holds no run loop.
@@ -1604,6 +1612,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		s.dialAgentWorker,
 		s.processSourceForGeneration,
 	)
+	// The FEEL assistant asks the same AI Workers through the same dial: what a model
+	// writes there is checked by the engine before the author sees it, which is the
+	// one thing it adds to form generation's pattern.
+	s.feelGen = feelgen.New(s.agentWorkersForFeel, s.dialAgentWorker)
+	s.feelGen.Observe = s.observeFeelAssistant
 	s.releaseNotes = releasenotes.New(atlas.Changelog, atlas.ADRIndex)
 	s.processDocs = processdoc.New(
 		s.runLoop,
@@ -1838,6 +1851,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// A service added without a line here keeps the defaults — the completeness test
 	// in the limits package is what notices.
 	s.formGen.Limits = s.budgets()
+	s.feelGen.Limits = s.budgets()
 	s.processDocs.Limits = s.budgets()
 	s.decisionDocs.Limits = s.budgets()
 	s.taskFolders.Limits = s.budgets()

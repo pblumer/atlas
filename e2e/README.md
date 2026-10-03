@@ -27,6 +27,16 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 
 ## What's covered
 
+- **`feel-assistant.spec.mjs`** ([ADR-draft-feel-assistant](../docs/adr/draft-feel-assistant.md)):
+  the **FEEL assistant** against a stubbed API — Ctrl+Shift+E opens and closes it from anywhere;
+  a message sends the whole conversation, the model's earlier turn as the reply it came with and
+  what the editor holds now, and the checked proposal lands in the editor with the engine's verdict;
+  a failed request leaves the message where it was typed; invalid test variables are refused
+  before anything is sent; Copy, the history and the favourites survive closing and reloading;
+  the mini spark on a FEEL field opens it on that field and Apply writes back through the field's
+  change event, keeping an fx field's `=`; a focused dmn-js output cell gets a spark and Apply types
+  into it, while an input cell (a unary test) is not written to; and without an AI Worker the chat
+  is absent and the rest still works.
 - **`token-simulation.spec.mjs`** — message semantics across two pools (ADR-0101): a thrown
   message **delivers to a waiting catch** (both pools complete), a message with **nothing
   waiting is not buffered** (the later catch still parks), and a parked catch **still fires

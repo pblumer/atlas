@@ -1,6 +1,7 @@
 package expr_test
 
 import (
+	"sort"
 	"strings"
 	"testing"
 
@@ -177,5 +178,34 @@ func TestTheEngineStillEvaluatesAnUnknownCallToNull(t *testing.T) {
 	}
 	if got := v.String(); got != "null" {
 		t.Errorf("evaluated to %s, want null — the engine's semantics must not have changed", got)
+	}
+}
+
+// TestBuiltinNamesIsTheRegistry: what BuiltinNames reports is exactly what CheckCalls
+// accepts, sorted, so a prompt or a picker built from it offers only what this build
+// can call — and offers it in an order that does not change between runs.
+func TestBuiltinNamesIsTheRegistry(t *testing.T) {
+	names := expr.BuiltinNames()
+	if len(names) < 50 {
+		t.Fatalf("only %d built-ins reported; the registry was not read", len(names))
+	}
+	if !sort.StringsAreSorted(names) {
+		t.Error("BuiltinNames is not sorted")
+	}
+	for _, name := range names {
+		// One argument is wrong for some of them; what matters is that none is
+		// reported as a name this build does not have.
+		for _, f := range expr.CheckCalls(name + "(1)") {
+			if strings.Contains(f.Message, "not a FEEL function") || strings.Contains(f.Message, "not a function this build has") {
+				t.Errorf("%q is listed but CheckCalls does not know it: %s", name, f.Message)
+			}
+		}
+	}
+	for _, foreign := range []string{"is defined", "trim", "uuid"} {
+		for _, name := range names {
+			if name == foreign {
+				t.Errorf("%q is listed, but this build speaks the standard dialect", foreign)
+			}
+		}
 	}
 }
