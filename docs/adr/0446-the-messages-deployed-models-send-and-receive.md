@@ -1,4 +1,4 @@
-# ADR-DRAFT: Atlas shows the messages its deployed models send and receive
+# ADR-0446: Atlas shows the messages its deployed models send and receive
 
 - **Status:** Proposed
 - **Implementation:** Not started
@@ -7,7 +7,7 @@
 
 ## Context and problem statement
 
-[ADR-draft-the-signals-deployed-models-throw-and-receive](draft-the-signals-deployed-models-throw-and-receive.md)
+[ADR-0447](0447-the-signals-deployed-models-throw-and-receive.md)
 gives the installation's own signals a view: who throws a name, who receives it, and where it
 crosses a project. It leaves messages out, because messages already have a partial view and more
 sources than the models show. This record decides the message half.
@@ -224,7 +224,7 @@ depends on other deployments, and deploy order is free.
 
 ## Links
 
-- [ADR-draft-the-signals-deployed-models-throw-and-receive](draft-the-signals-deployed-models-throw-and-receive.md):
+- [ADR-0447](0447-the-signals-deployed-models-throw-and-receive.md):
   the signal half, whose drivers, version rule and Console section this record shares.
 - [ADR-0429](0429-product-actions-are-commands-with-published-outcomes.md) §6: message-sources,
   which this record completes.
