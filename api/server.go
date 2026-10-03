@@ -357,7 +357,7 @@ type Server struct {
 	// formgeneration.go are its whole reach into this server.
 	formGen *formgen.Service
 	// feelGen writes a FEEL expression from a conversation with the author
-	// (ADR-draft-feel-assistant). Like formGen it owns no state and holds no run
+	// (ADR-0445). Like formGen it owns no state and holds no run
 	// loop; feelgeneration.go is its whole reach into this server.
 	feelGen *feelgen.Service
 	// feelMetrics counts what the FEEL assistant's requests came to; nil when this

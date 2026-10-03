@@ -327,7 +327,7 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/forms/generate":        "an agent writes the form-js schema itself and saves it with atlas_save_form; asking Atlas to ask a second model is a detour",
 	"GET /api/v1/forms/generate/workers": "the form editor's own probe for whether to show its Generate button",
 
-	// The FEEL assistant (ADR-draft-feel-assistant) is omitted for the reason form
+	// The FEEL assistant (ADR-0445) is omitted for the reason form
 	// generation is: the caller of an MCP tool is already a language model, and
 	// asking Atlas to ask a second one to write an expression is a detour through a
 	// second provider and a second bill. An agent writes the FEEL itself and checks it

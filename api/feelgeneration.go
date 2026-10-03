@@ -13,7 +13,7 @@ import (
 	"github.com/pblumer/atlas/metrics"
 )
 
-// What the FEEL assistant is allowed to reach (ADR-draft-feel-assistant).
+// What the FEEL assistant is allowed to reach (ADR-0445).
 //
 // It reaches less than form generation does, and the same of it: the agent Workers an
 // operator configured, and one of them dialled with its vault-held key. There is no

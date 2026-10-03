@@ -530,6 +530,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0442](0442-s3-object-store-worker.md) | An S3 Worker Type — a process puts a file down, finds it again, and hands it out | Accepted | Landed |
 | [0443](0443-publishing-warns-about-answers-in-the-clear.md) | Publishing warns about answers in the clear | Accepted | Landed |
 | [0444](0444-release-notes-from-the-changelog.md) | The Console shows the CHANGELOG as release notes, read while the server runs | Accepted | Landed |
+| [0445](0445-feel-assistant.md) | A FEEL expression is written in a conversation, and checked by the engine before anybody reads it | Accepted | Landed |
 
 ## The two states of a record
 

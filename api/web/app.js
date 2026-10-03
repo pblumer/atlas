@@ -1006,7 +1006,7 @@ function initShell() {
     }
   });
 
-  // The FEEL assistant (ADR-draft-feel-assistant): Ctrl/⌘+Shift+E anywhere, the spark
+  // The FEEL assistant (ADR-0445): Ctrl/⌘+Shift+E anywhere, the spark
   // in the top bar, the mini spark on every FEEL field and beside a focused dmn-js
   // cell. Its routes are the modeler's, so the role is asked at the moment it opens —
   // the principal is known only once /auth/me has answered.

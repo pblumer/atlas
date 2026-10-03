@@ -338,7 +338,7 @@ export const feel = {
 // ---------- Widget ----------
 
 // assistantOffered says whether FEEL fields carry the FEEL assistant's mini button
-// (feel-assistant.js, ADR-draft-feel-assistant). It is the console's to switch on when it
+// (feel-assistant.js, ADR-0445). It is the console's to switch on when it
 // installs the assistant: a page that never installed it — a test harness, a screen
 // outside the console — would otherwise show a button that opens nothing.
 let assistantOffered = false;

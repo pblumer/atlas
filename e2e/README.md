@@ -27,7 +27,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 
 ## What's covered
 
-- **`feel-assistant.spec.mjs`** ([ADR-draft-feel-assistant](../docs/adr/draft-feel-assistant.md)):
+- **`feel-assistant.spec.mjs`** ([ADR-0445](../docs/adr/0445-feel-assistant.md)):
   the **FEEL assistant** against a stubbed API — Ctrl+Shift+E opens and closes it from anywhere;
   a message sends the whole conversation, the model's earlier turn as the reply it came with and
   what the editor holds now, and the checked proposal lands in the editor with the engine's verdict;

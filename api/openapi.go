@@ -237,7 +237,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Evaluation result", schemaObj(map[string]any{
 				"ok": tBool(), "result": tObject(), "kind": tString(), "error": tString(),
 			}))}},
-		// The FEEL assistant (ADR-draft-feel-assistant): a conversation that writes an
+		// The FEEL assistant (ADR-0445): a conversation that writes an
 		// expression, asked of the agent Worker an operator configured (ADR-0255), and
 		// checked by this engine before the author sees it. Nothing is stored — the
 		// expression goes to the assistant's editor, and from there to whatever field

@@ -9,7 +9,7 @@ import "time"
 // request that reached a model reports how it went: how many rounds it took, what each
 // round failed on, whether the model kept to the contract, and which foreign functions
 // it reached for. The server turns that into a log line and, where metrics are on, into
-// counters (ADR-0142) — and the open question of ADR-draft-feel-assistant, whether a
+// counters (ADR-0142) — and the open question of ADR-0445, whether a
 // small free model is good enough, becomes a number somebody can read.
 //
 // What it deliberately does not carry is what the author wrote or what the model

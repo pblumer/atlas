@@ -119,7 +119,7 @@ const CATALOGS = {
     "tasks.folders.unit.h": "Stunden",
     "tasks.folders.unit.d": "Tagen",
 
-    // The FEEL assistant (feel-assistant.js, ADR-draft-feel-assistant).
+    // The FEEL assistant (feel-assistant.js, ADR-0445).
     "feel.title": "FEEL-Assistent",
     "feel.open": "FEEL-Assistent öffnen (Ctrl/⌘ ⇧ E)",
     "feel.for": "Für: {name}",

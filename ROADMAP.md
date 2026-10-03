@@ -761,7 +761,7 @@ Making processes wait, react, and time out.
   one root type, a curated component vocabulary (an `iframe` is refused **by name**, not dropped),
   a unique key on every input, and a bound on the document — and an answer that is not a form is a
   422 with the reason rather than a broken editor.
-- ✅ **The FEEL assistant** ([ADR-draft-feel-assistant](docs/adr/draft-feel-assistant.md)): a
+- ✅ **The FEEL assistant** ([ADR-0445](docs/adr/0445-feel-assistant.md)): a
   conversation with the same AI Worker that writes a **FEEL expression**, opened from anywhere with
   **Ctrl/⌘+Shift+E**, the spark in the top bar, a **mini spark on every FEEL field** of the Modeler,
   or a spark beside a focused output cell, literal expression or input expression in the DMN editor.

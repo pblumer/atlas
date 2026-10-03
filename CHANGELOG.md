@@ -18,7 +18,7 @@ _Changed_ / _Removed_ for each version.
   Ctrl/⌘+Shift+E opens it from any screen of the console, as do the spark in the top bar, a mini
   spark on every FEEL field of the Modeler, and a spark beside a focused output cell, literal
   expression or input expression in the DMN editor
-  ([ADR-draft-feel-assistant](docs/adr/draft-feel-assistant.md)). An author says what an
+  ([ADR-0445](docs/adr/0445-feel-assistant.md)). An author says what an
   expression should compute; the AI Worker an operator configured writes one, with an explanation
   and an example. Before it is shown, Atlas compiles it, refuses calls a deploy would refuse, and
   evaluates it against the example; an answer that fails or disagrees with the result it claimed

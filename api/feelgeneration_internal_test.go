@@ -13,7 +13,7 @@ import (
 	"github.com/pblumer/atlas/api/feelgen"
 )
 
-// Server wiring for the FEEL assistant (ADR-draft-feel-assistant). The area's behaviour —
+// Server wiring for the FEEL assistant (ADR-0445). The area's behaviour —
 // the prompt, the check, the correction rounds — is tested against the service in
 // api/feelgen. What is here is that this server connects it to the agent Workers an
 // operator configured, through the real adapter and the real routes.

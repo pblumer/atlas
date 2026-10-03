@@ -1,5 +1,5 @@
 // Package feelgen writes a FEEL expression from a conversation with the author
-// (ADR-draft-feel-assistant).
+// (ADR-0445).
 //
 // It is design-time authoring, the way form generation is (ADR-0260), and it stands on
 // the same three legs. There is no instance, no token, no job and no event: an author

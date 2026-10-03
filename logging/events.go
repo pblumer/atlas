@@ -437,7 +437,7 @@ var (
 	PersonalDataKeyWriteRefused = newEvent("personal_data.key_write_refused")
 )
 
-// The FEEL assistant (ADR-draft-feel-assistant).
+// The FEEL assistant (ADR-0445).
 var (
 	// FeelAssistantAnswered is one request of the FEEL assistant that reached a model:
 	// which Worker and model answered, how the request ended, and what each round

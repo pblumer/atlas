@@ -1,5 +1,5 @@
 // End-to-end coverage for the FEEL assistant (api/web/feel-assistant.js,
-// ADR-draft-feel-assistant).
+// ADR-0445).
 //
 // The server's half — the prompt, the engine's check, the correction rounds — is tested
 // in api/feelgen. What only a browser can show is the other half: that the shortcut and

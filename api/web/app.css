@@ -6764,7 +6764,7 @@ button.im-problem:hover { background: var(--accent-soft); }
   .rct-table td.row-actions .btn { min-height: 40px; }
 }
 
-/* ---------- FEEL assistant (feel-assistant.js, ADR-draft-feel-assistant) ---------- */
+/* ---------- FEEL assistant (feel-assistant.js, ADR-0445) ---------- */
 /* A conversation on the left, the expression and its test on the right, the history
    and favourites under them. It looks like the Developer View on purpose: it is the
    same kind of tool, for the same fields. */

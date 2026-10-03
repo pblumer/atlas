@@ -1,4 +1,4 @@
-// The FEEL assistant (ADR-draft-feel-assistant): a conversation with the AI Worker an
+// The FEEL assistant (ADR-0445): a conversation with the AI Worker an
 // operator configured that writes a FEEL expression, an editor and a test pane to try
 // it in, and a history and favourites to come back to it.
 //
