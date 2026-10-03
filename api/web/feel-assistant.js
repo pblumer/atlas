@@ -246,16 +246,20 @@ export function checkLine(check) {
 // ---------- the assistant ----------
 
 let live = null; // the open assistant, if any
-let capability = null; // the AI Worker probe, asked once per page
+
+// knownWorkers is the AI Worker list the last opening was told, null before the first.
+// It is what an opening paints at once; the list itself is asked again every time,
+// because an operator adds, renames and switches off Workers in the Console while this
+// page stays open — asking once per page kept a Worker added in another tab out of the
+// picker until somebody reloaded.
+let knownWorkers = null;
 
 function workersOf(api) {
-  if (!capability) {
-    capability = Promise.resolve()
-      .then(() => api("GET", "/api/v1/feel/generate/workers"))
-      .then((c) => (c && c.available && Array.isArray(c.workers) ? c.workers : []))
-      .catch(() => []);
-  }
-  return capability;
+  return Promise.resolve()
+    .then(() => api("GET", "/api/v1/feel/generate/workers"))
+    .then((c) => (c && c.available && Array.isArray(c.workers) ? c.workers : []))
+    .catch(() => [])
+    .then((list) => { knownWorkers = list; return list; });
 }
 
 export function feelAssistantOpen() {
@@ -356,8 +360,9 @@ export function openFeelAssistant(opts = {}) {
     validate: api ? (expression) => api("POST", "/api/v1/feel/validate", { expression }) : undefined,
   });
 
-  let workers = [];
-  let probed = !api; // without an api there is nothing to ask, and nothing to wait for
+  // What the last opening was told, until this one's own answer arrives.
+  let workers = knownWorkers || [];
+  let probed = !api || knownWorkers !== null; // nothing to ask, or an answer to show meanwhile
   let busy = false;
   // self is this opening of the assistant. A request can outlive it — the author
   // closes the assistant, or closes and opens it again, while the AI Worker is still
@@ -662,7 +667,7 @@ export function openFeelAssistant(opts = {}) {
   });
   live = self;
 
-  paintStar(); paintLog(); paintChatState(); paintLists();
+  paintStar(); paintWorker(); paintLog(); paintChatState(); paintLists();
   (workers.length ? askEl : exprEl).focus();
   if (api) {
     workersOf(api).then((list) => {

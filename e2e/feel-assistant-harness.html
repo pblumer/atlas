@@ -60,8 +60,11 @@
 
       async function api(method, path, body) {
         if (method === "GET" && path === "/api/v1/feel/generate/workers") {
-          return none ? { available: false, workers: [] }
-            : { available: true, workers: [{ name: "openrouter", model: "meta-llama/llama-3.3-70b-instruct:free" }] };
+          // window.__workerList lets a test add a Worker while the page stays open,
+          // the way an operator does in the Console in another tab.
+          const list = window.__workerList
+            || (none ? [] : [{ name: "openrouter", model: "meta-llama/llama-3.3-70b-instruct:free" }]);
+          return { available: list.length > 0, workers: list };
         }
         if (method === "POST" && path === "/api/v1/feel/validate") return { ok: true };
         if (method === "POST" && path === "/api/v1/feel/evaluate") {

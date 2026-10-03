@@ -231,3 +231,37 @@ test("the top-bar button opens it and remembers the field that had the focus", a
   await btn.click();
   await expect(page.locator("[data-target]")).toHaveText("Für: Condition");
 });
+
+test("a Worker added while the page is open is offered the next time the assistant opens", async ({ page }) => {
+  await openWithShortcut(page);
+  await expect(page.locator("[data-worker]")).toContainText("openrouter");
+  await expect(page.locator("[data-worker-pick]")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
+  // An operator adds a second AI Worker in the Console; this page is not reloaded.
+  await page.evaluate(() => {
+    window.__workerList = [
+      { name: "openrouter", model: "meta-llama/llama-3.3-70b-instruct:free" },
+      { name: "openrouter-feel", model: "qwen/qwen3-coder:free" },
+    ];
+  });
+  await openWithShortcut(page);
+  const pick = page.locator("[data-worker-pick]");
+  await expect(pick.locator("option")).toHaveCount(2);
+
+  // The choice is kept, and it is what the next request names.
+  await pick.selectOption("openrouter-feel");
+  await page.keyboard.press("Escape");
+  await openWithShortcut(page);
+  await expect(page.locator("[data-worker-pick]")).toHaveValue("openrouter-feel");
+  await page.locator("[data-ask]").fill("x");
+  await page.locator("[data-send]").click();
+  await expect(sent(page)).toContainText('"worker":"openrouter-feel"');
+
+  // And a Worker switched off disappears again without a reload.
+  await page.keyboard.press("Escape");
+  await page.evaluate(() => { window.__workerList = [{ name: "openrouter", model: "m" }]; });
+  await openWithShortcut(page);
+  await expect(page.locator("[data-worker-pick]")).toHaveCount(0);
+  await expect(page.locator("[data-worker]")).toContainText("openrouter · m");
+});

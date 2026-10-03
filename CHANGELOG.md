@@ -28,6 +28,8 @@ _Changed_ / _Removed_ for each version.
     conversation for the browser session; nothing is stored on the server.
   - A decision table's input cell is recognised and not written to: it takes a unary test, not an
     expression.
+  - The list of AI Workers is asked each time the assistant opens, so a Worker added or switched
+    off in the Console is offered, or withdrawn, without reloading the page.
   - Routes `GET /api/v1/feel/generate/workers` and `POST /api/v1/feel/generate` (modeler role).
     Like form generation they are not MCP tools: an agent writes the FEEL itself.
   - The prompt's function list is the engine's own registry, and every rule it teaches the model
