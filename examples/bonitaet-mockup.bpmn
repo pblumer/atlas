@@ -98,7 +98,7 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_ausfall" bpmnElement="ausfall">
         <dc:Bounds x="292" y="162" width="36" height="36"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="236" y="205" width="98" height="27"/></bpmndi:BPMNLabel>
+        <bpmndi:BPMNLabel><dc:Bounds x="208" y="199" width="79" height="27"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_gw" bpmnElement="gw" isMarkerVisible="true">
         <dc:Bounds x="440" y="115" width="50" height="50"/>
@@ -129,7 +129,7 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_gw_nok" bpmnElement="f_gw_nok">
         <di:waypoint x="465" y="165"/><di:waypoint x="465" y="250"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="470" y="185" width="56" height="14"/></bpmndi:BPMNLabel>
+        <bpmndi:BPMNLabel><dc:Bounds x="471" y="200" width="49" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_ausfall_manuell" bpmnElement="f_ausfall_manuell">
         <di:waypoint x="310" y="198"/><di:waypoint x="310" y="300"/>

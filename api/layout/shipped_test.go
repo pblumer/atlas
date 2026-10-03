@@ -11,17 +11,18 @@ import (
 	"testing"
 )
 
-// The diagrams Atlas ships in its binary are held to the same invariants as the
-// generator.
+// The diagrams Atlas ships are held to the same invariants as the generator.
 //
-// The platform processes under api/systemprocesses carry hand-authored BPMN-DI,
-// and nothing ever looked at it: they compile, they deploy, and the first person
-// to see one is whoever opens it in the Modeler. That is how the three approval
-// models shipped with their parallel gateway drawn on top of the approval task,
-// both deadlines' captions printed over each other, and in one of them the
-// deadlines riding a different task than the one they are attached to. A model
-// that renders like that is not done (AGENTS.md, "Authoring BPMN models"), and
-// here it is the first diagram an operator of the shop opens.
+// The platform processes under api/systemprocesses and the examples the handbook
+// and the Modeler's example gallery hand out (api/web/examples-catalog.json) carry
+// hand-authored BPMN-DI, and nothing ever looked at it: they compile, they deploy,
+// and the first person to see one is whoever opens it in the Modeler. That is how
+// the three approval models shipped with their parallel gateway drawn on top of
+// the approval task, both deadlines' captions printed over each other, and in one
+// of them the deadlines riding a different task than the one they are attached
+// to — and how an example shipped with a flow that ends in empty space a hand's
+// width before the task it leads to. A model that renders like that is not done
+// (AGENTS.md, "Authoring BPMN models").
 //
 // Hand-authored DI owes a few things the generator gets for free, so it is
 // checked for them too: every edge has to touch the shapes it connects, a
@@ -29,26 +30,28 @@ import (
 // needs an explicit caption position — without one bpmn-js parks the caption
 // under the shape, where the label checks cannot see it.
 //
-// Not checked: the trunk invariant. It states how the generator chooses a main
-// axis, and a person drawing a model may centre a branch differently and still
-// draw it legibly.
-const shippedProcessesDir = "../systemprocesses"
+// Two of the generator's invariants are replaced rather than applied. The trunk
+// invariant states how the generator chooses a main axis, and a person drawing a
+// model may centre a branch differently and still draw it legibly. And the
+// generator's left-to-right rule compares the left edges of source and target,
+// which a column of equal-width nodes satisfies but a hand-drawn drop from a
+// gateway to the wider task beneath it does not, though nothing in it runs
+// backwards; here the rule is read off the edge itself — a forward flow never
+// steps left.
+var shippedModelDirs = []string{"../systemprocesses", "../../examples"}
 
 func TestShippedDiagramsAreReadable(t *testing.T) {
-	paths, err := filepath.Glob(filepath.Join(shippedProcessesDir, "*.bpmn"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(paths) == 0 {
-		t.Fatalf("no models under %s — this test would pass on an empty set", shippedProcessesDir)
-	}
-	for _, p := range paths {
-		t.Run(filepath.Base(p), func(t *testing.T) {
+	for _, p := range shippedModels(t) {
+		t.Run(strings.TrimLeft(filepath.ToSlash(p), "./"), func(t *testing.T) {
 			src, err := os.ReadFile(p)
 			if err != nil {
 				t.Fatal(err)
 			}
 			h := newHandAuthoredModel(t, string(src))
+			if len(h.shapes) == 0 {
+				t.Fatal("the model carries no diagram, so whoever opens it sees whatever the generator " +
+					"makes of it; a shipped model is laid out by hand (AGENTS.md)")
+			}
 			m := h.layoutModel
 			m.checkCompleteness(t)
 			m.checkNoShapeOverlap(t)
@@ -56,7 +59,6 @@ func TestShippedDiagramsAreReadable(t *testing.T) {
 			m.checkNoEdgeThroughShape(t)
 			m.checkLabelsClear(t)
 			m.checkNamedFlowsLabelled(t)
-			m.checkForwardEdgesReadLeftToRight(t)
 			m.checkGatewayBranchesLeaveSeparately(t)
 			for _, v := range h.violations() {
 				t.Error(v)
@@ -67,6 +69,33 @@ func TestShippedDiagramsAreReadable(t *testing.T) {
 			}
 		})
 	}
+}
+
+// shippedModels lists every .bpmn under shippedModelDirs, at any depth. A
+// directory that yields none fails: a test that silently checks nothing because
+// a tree moved is a test that passes for the wrong reason.
+func shippedModels(t *testing.T) []string {
+	t.Helper()
+	var out []string
+	for _, dir := range shippedModelDirs {
+		n := len(out)
+		err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if !d.IsDir() && strings.HasSuffix(p, ".bpmn") {
+				out = append(out, p)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk %s: %v", dir, err)
+		}
+		if len(out) == n {
+			t.Fatalf("no models under %s — this test would pass on an empty set", dir)
+		}
+	}
+	return out
 }
 
 // TestShippedDiagramChecksBite: each check added for hand-authored DI, run on the
@@ -81,18 +110,22 @@ func TestShippedDiagramChecksBite(t *testing.T) {
     <bpmn:startEvent id="Start" name="Los"/>
     <bpmn:userTask id="A"/>
     <bpmn:userTask id="B"/>
+    <bpmn:userTask id="C"/>
     <bpmn:boundaryEvent id="T" name="Frist" attachedToRef="A"/>
     <bpmn:sequenceFlow id="f1" sourceRef="Start" targetRef="A"/>
     <bpmn:sequenceFlow id="f2" sourceRef="A" targetRef="B"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="B" targetRef="C"/>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="D">
     <bpmndi:BPMNPlane id="Pl" bpmnElement="P">
       <bpmndi:BPMNShape id="S_Start" bpmnElement="Start"><dc:Bounds x="100" y="100" width="36" height="36" /></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_A" bpmnElement="A"><dc:Bounds x="200" y="78" width="100" height="80" /></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_B" bpmnElement="B"><dc:Bounds x="400" y="78" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_C" bpmnElement="C"><dc:Bounds x="380" y="250" width="100" height="80" /></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="S_T" bpmnElement="T"><dc:Bounds x="432" y="140" width="36" height="36" /></bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="E1" bpmnElement="f1"><di:waypoint x="136" y="118" /><di:waypoint x="250" y="118" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="E2" bpmnElement="f2"><di:waypoint x="300" y="118" /><di:waypoint x="400" y="118" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E3" bpmnElement="f3"><di:waypoint x="450" y="158" /><di:waypoint x="450" y="200" /><di:waypoint x="430" y="200" /><di:waypoint x="430" y="250" /></bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>`
@@ -105,6 +138,7 @@ func TestShippedDiagramChecksBite(t *testing.T) {
 		{"edge-attached", h.unattachedEdges(), `edge "f1" ends at (250,118)`},
 		{"boundary-on-host", h.boundaryEventsOffHost(), `boundary event "T"`},
 		{"node-label", h.unlabelledNamedNodes(), `"Start" ("Los")`},
+		{"left-to-right", h.flowsSteppingLeft(), `flow "f3" steps left`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := strings.Join(tc.found, "\n"); !strings.Contains(got, tc.want) {
@@ -175,6 +209,7 @@ func (h *handModel) violations() []string {
 	out = append(out, h.unattachedEdges()...)
 	out = append(out, h.boundaryEventsOffHost()...)
 	out = append(out, h.unlabelledNamedNodes()...)
+	out = append(out, h.flowsSteppingLeft()...)
 	return out
 }
 
@@ -356,6 +391,29 @@ func (h *handModel) unlabelledNamedNodes() []string {
 	for _, id := range sortedKeys(h.names) {
 		if _, ok := h.labels[id]; !ok {
 			out = append(out, fmt.Sprintf("invariant[node-label]: %q (%q) is named but has no label position", id, h.names[id]))
+		}
+	}
+	return out
+}
+
+// flowsSteppingLeft: a forward sequence flow never moves left. A process reads
+// left to right, and an edge that doubles back reads as a loop that is not there.
+// Read off the waypoints rather than off the shapes: a drop from a gateway
+// straight down into a wider task is not a step back, though the task's left edge
+// lies left of the gateway's. Loops are exempt — returning is what they are for.
+func (h *handModel) flowsSteppingLeft() []string {
+	var out []string
+	for _, f := range h.flows {
+		if f.Id == "" || h.backEdge[f.Id] {
+			continue
+		}
+		pts := h.edges[f.Id]
+		for k := 1; k < len(pts); k++ {
+			if pts[k].x < pts[k-1].x {
+				out = append(out, fmt.Sprintf("invariant[left-to-right]: forward flow %q steps left from (%d,%d) to (%d,%d)",
+					f.Id, pts[k-1].x, pts[k-1].y, pts[k].x, pts[k].y))
+				break
+			}
 		}
 	}
 	return out

@@ -276,7 +276,11 @@ it will be read by humans.
   doesn't collide with an edge or node.
 - **Check the render, not just the deploy.** Open the model in the
   Operations/Modeler view (or a rendered preview) and confirm there are no
-  overlaps before calling it done.
+  overlaps before calling it done. `go test ./api/layout` holds every model
+  under `api/systemprocesses/` and `examples/` to the layout invariants — no
+  overlapping shapes or captions, no edge through a shape or ending beside it, a
+  position for every caption — and a model it rejects is not done. It cannot see
+  everything: a caption it passes may still sit awkwardly, so look anyway.
 - **Document the model in the model.** Every BPMN element may carry a
   `<bpmn:documentation>`, and Atlas reads it: the Modeler shows it in the
   Documentation field, the replay shows it beside the selected element, and it
