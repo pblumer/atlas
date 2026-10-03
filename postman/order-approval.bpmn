@@ -1,21 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
-             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
-  <process id="order-approval" isExecutable="true">
-    <startEvent id="start"/>
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_order_approval" targetNamespace="https://github.com/pblumer/atlas/postman">
+  <process id="order-approval" name="Order approval" isExecutable="true">
+    <documentation>The Postman onboarding model: a two-step human approval with no gateways, workers or timers, so every state it can be in is one you can see from the API. Start it with any variables — the Golden Path sends orderId, amount and a customer object — and it parks on "Review order" until somebody completes that task. Nothing in the model reads the variables; they are there to show that what you send arrives, and that what a task completion submits is merged into the same instance.</documentation>
+    <startEvent id="start" name="Order received"/>
     <userTask id="review" name="Review order">
+      <documentation>First human step. Offered to the candidate group "reviewers"; an admin or a member of that group can claim and complete it. Completing it with {"variables": {...}} merges those variables into the instance and moves the token to "Approve order".</documentation>
       <extensionElements>
         <zeebe:assignmentDefinition candidateGroups="reviewers"/>
       </extensionElements>
     </userTask>
     <userTask id="approve" name="Approve order">
+      <documentation>Second human step, offered to "managers". It is a separate task rather than a second form on the first one so that the instance visibly waits twice: after the Golden Path the instance is still active here, which is what the User Tasks folder of the collection then finishes.</documentation>
       <extensionElements>
         <zeebe:assignmentDefinition candidateGroups="managers"/>
       </extensionElements>
     </userTask>
-    <endEvent id="end"/>
+    <endEvent id="end" name="Order approved"/>
     <sequenceFlow id="f1" sourceRef="start" targetRef="review"/>
     <sequenceFlow id="f2" sourceRef="review" targetRef="approve"/>
     <sequenceFlow id="f3" sourceRef="approve" targetRef="end"/>
   </process>
+  <bpmndi:BPMNDiagram id="diagram_order_approval">
+    <bpmndi:BPMNPlane id="plane_order_approval" bpmnElement="order-approval">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="152" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_review" bpmnElement="review"><dc:Bounds x="240" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_approve" bpmnElement="approve"><dc:Bounds x="390" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="542" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="188" y="200"/><di:waypoint x="240" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="340" y="200"/><di:waypoint x="390" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3"><di:waypoint x="490" y="200"/><di:waypoint x="542" y="200"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 </definitions>

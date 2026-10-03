@@ -27,6 +27,16 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 
 ## What's covered
 
+- **`feel-assistant.spec.mjs`** ([ADR-0445](../docs/adr/0445-feel-assistant.md)):
+  the **FEEL assistant** against a stubbed API — Ctrl+Shift+E opens and closes it from anywhere;
+  a message sends the whole conversation, the model's earlier turn as the reply it came with and
+  what the editor holds now, and the checked proposal lands in the editor with the engine's verdict;
+  a failed request leaves the message where it was typed; invalid test variables are refused
+  before anything is sent; Copy, the history and the favourites survive closing and reloading;
+  the mini spark on a FEEL field opens it on that field and Apply writes back through the field's
+  change event, keeping an fx field's `=`; a focused dmn-js output cell gets a spark and Apply types
+  into it, while an input cell (a unary test) is not written to; and without an AI Worker the chat
+  is absent and the rest still works.
 - **`token-simulation.spec.mjs`** — message semantics across two pools (ADR-0101): a thrown
   message **delivers to a waiting catch** (both pools complete), a message with **nothing
   waiting is not buffered** (the later catch still parks), and a parked catch **still fires
@@ -358,7 +368,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   - counts the listeners per event;
   - names each listener with its version, project and the personal data it receives;
   - warns about a model waiting for an `atlas.*` name atlas never emits;
-  - says that feed subscriptions wait while the shop is switched off.
+  - lists for a feed entry the subscriptions it reaches: a subscription narrowed to catalogues
+    is not sent an incident, which belongs to none;
+  - says, with the shop switched off, that the feed passes over the catalogue's events while
+    the engine's still reach every subscription.
 - **`signal-events-modeler.spec.mjs`** ([ADR-0435](../docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)):
   the **events atlas emits in the Modeler's signal picker**, driven through the real
   vendored bpmn-js.

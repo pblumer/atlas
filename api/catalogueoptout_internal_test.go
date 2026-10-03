@@ -38,10 +38,9 @@ var catalogueSegments = map[string]bool{
 	"reconciliation":   true,
 	"recertification":  true,
 	"pending-work":     true,
-	"events":           true,
-	// The event feed's push subscriptions (ADR-0433): the same facts as /events,
-	// sent rather than fetched.
-	"feed-subscriptions": true,
+	// Not "events" nor "feed-subscriptions": the event feed carries the engine's facts
+	// too, and a platform fact must not fall silent because the shop is off
+	// (ADR-0435 §6). With the area off the feed passes over the catalogue's rows.
 }
 
 // catalogueHandlerPackages is the third: a handler written in either package of the
@@ -255,27 +254,29 @@ func TestTheModelerIsNotShownTheProductActionsOfASwitchedOffCatalogue(t *testing
 	}
 }
 
-// TestTheFeedIsNotPushedWithTheCatalogueOff: the feed says who holds what across the
-// catalogue, and with the area off its pull route is not served — so it does not
-// leave Atlas by push either. A subscription made while the area was on keeps its
-// cursor, and delivery picks up there once the area is back; setting the field on a
-// running server here stands in for that restart.
-func TestTheFeedIsNotPushedWithTheCatalogueOff(t *testing.T) {
+// TestWithTheCatalogueOffTheFeedIsPushedWithoutItsEvents (ADR-0435 §6): the feed carries
+// the engine's facts too, so a server whose area is off still pushes it — passing over
+// the catalogue's own rows. A cursor cannot wait behind a row and move past the rows
+// after it, so the subscription's cursor moves past what is withheld: those events
+// are not sent later when the area is back. Setting the field on a running server
+// stands in for the restart that switches it.
+func TestWithTheCatalogueOffTheFeedIsPushedWithoutItsEvents(t *testing.T) {
 	srv, ep, _ := feedPushServer(t)
 	sub := subscribe(t, srv, `{"workerId":"wk-billing"}`)
 
 	srv.catalogueOff = true
 	srv.pushFeed(context.Background())
 	if n := len(ep.received()); n != 0 {
-		t.Fatalf("%d batch(es) were pushed with the catalogue off", n)
+		t.Fatalf("%d batch(es) of the catalogue's events were pushed with the catalogue off", n)
 	}
-	if rec := storedSub(t, srv, sub.ID); rec.Cursor != sub.Cursor || !rec.Enabled {
-		t.Fatalf("the subscription moved while the catalogue was off: %+v", rec)
+	rec := storedSub(t, srv, sub.ID)
+	if rec.Cursor != lastPosition(t, srv) || !rec.Enabled {
+		t.Fatalf("the subscription = %+v, want its cursor past the withheld rows at %d", rec, lastPosition(t, srv))
 	}
 
 	srv.catalogueOff = false
 	srv.pushFeed(context.Background())
-	if n := len(ep.received()); n != 1 {
-		t.Fatalf("after switching back on, %d batch(es) were pushed, want the one it held back", n)
+	if n := len(ep.received()); n != 0 {
+		t.Fatalf("after switching back on, %d batch(es) of withheld events were pushed; they were passed over", n)
 	}
 }

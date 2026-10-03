@@ -249,6 +249,13 @@ var mcpOmittedRoutes = map[string]string{
 	// the one it was pointed at, and the write half is an operator naming the
 	// instance for other operators to recognise.
 	"GET /api/v1/node": "runtime identity for cross-server correlation, not an agent action",
+	// The Console's release notes: prose for a person opening the landing page,
+	// read from the CHANGELOG the binary embeds. atlas_info already says which
+	// version an agent is talking to, and the same text is CHANGELOG.md in the
+	// repository; a tool would put several hundred kilobytes of prose one call
+	// away from every agent's context for no action it could take on it.
+	"GET /api/v1/release-notes":           "the Console's release notes, prose for a person; atlas_info names the version and CHANGELOG.md holds the text",
+	"GET /api/v1/release-notes/{version}": "the Console's release notes, prose for a person; atlas_info names the version and CHANGELOG.md holds the text",
 	// The observation projection (ADR-0189 §6). The facts in it are ones an agent
 	// already reaches directly — instances, incidents, deployments, releases — and
 	// what this route adds is the *correlation onto an architecture model*, which
@@ -319,6 +326,14 @@ var mcpOmittedRoutes = map[string]string{
 	// configured rather than one the author has to bring.
 	"POST /api/v1/forms/generate":        "an agent writes the form-js schema itself and saves it with atlas_save_form; asking Atlas to ask a second model is a detour",
 	"GET /api/v1/forms/generate/workers": "the form editor's own probe for whether to show its Generate button",
+
+	// The FEEL assistant (ADR-0445) is omitted for the reason form
+	// generation is: the caller of an MCP tool is already a language model, and
+	// asking Atlas to ask a second one to write an expression is a detour through a
+	// second provider and a second bill. An agent writes the FEEL itself and checks it
+	// with the FEEL validation and evaluation the Modeler uses.
+	"POST /api/v1/feel/generate":        "an agent writes the FEEL expression itself; asking Atlas to ask a second model is a detour",
+	"GET /api/v1/feel/generate/workers": "the FEEL assistant's own probe for whether to show its chat",
 
 	// Backup/restore: an admin file-transfer of the data directory (ADR-0107 design-
 	// time, ADR-0109 whole-instance snapshot), not an agent authoring/runtime action.

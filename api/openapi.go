@@ -161,6 +161,21 @@ func (s *Server) apiRoutes() []apiRoute {
 			req: jsonBody("Node identity", schemaObj(map[string]any{
 				"name": tString(), "environment": tString(), "labels": tObject(),
 			})), resp: jsonBody("Node descriptor", tObject())}},
+		// The release notes the Console's landing page shows: CHANGELOG.md as this
+		// binary was built from it (ADR-0444). Behind
+		// the login like the page that reads them; /api/v1/info already tells a visitor
+		// which version this is, and the notes are the Console's, not the login screen's.
+		{"GET", "/api/v1/release-notes", s.releaseNotes.HandleList, apiOp{
+			summary: "The releases in this server's release notes, newest first, with the number of changes each carries",
+			tag:     "System", role: roleAny,
+			resp: jsonBody("Releases", schemaObj(map[string]any{"releases": tArray()}, "releases"))}},
+		{"GET", "/api/v1/release-notes/{version}", s.releaseNotes.HandleGet, apiOp{
+			summary: "One release's notes — its introduction and its changes — by version, Unreleased included",
+			tag:     "System", role: roleAny,
+			resp: jsonBody("Release", schemaObj(map[string]any{
+				"version": tString(), "date": tString(),
+				"intro": tArray(), "changes": tArray(), "link": tObject(),
+			}, "version", "intro", "changes"))}},
 		{"GET", "/api/v1/stats", s.handleStats, apiOp{
 			summary: "Live active-instance counts, plus how many tokens are parked behind an unresolved incident", tag: "System", role: roleAny,
 			resp: jsonBody("Instance counts", schemaObj(map[string]any{
@@ -221,6 +236,26 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "expression")),
 			resp: jsonBody("Evaluation result", schemaObj(map[string]any{
 				"ok": tBool(), "result": tObject(), "kind": tString(), "error": tString(),
+			}))}},
+		// The FEEL assistant (ADR-0445): a conversation that writes an
+		// expression, asked of the agent Worker an operator configured (ADR-0255), and
+		// checked by this engine before the author sees it. Nothing is stored — the
+		// expression goes to the assistant's editor, and from there to whatever field
+		// the author copies or applies it to.
+		{"GET", "/api/v1/feel/generate/workers", s.feelGen.HandleCapability, apiOp{
+			summary: "Report whether an AI Worker is configured to write FEEL expressions, and which ones may be named — what the FEEL assistant asks before it offers its chat",
+			tag:     "FEEL", role: RoleModeler, resp: jsonBody("Assistant capability", tObject())}},
+		{"POST", "/api/v1/feel/generate", s.feelGen.HandleGenerate, apiOp{
+			summary: "Answer the author's last message in a conversation with a FEEL expression, an explanation and an example, after compiling and evaluating it with this engine and letting the model correct what failed. Nothing is stored",
+			tag:     "FEEL", role: RoleModeler,
+			req: jsonBody("The conversation and the assistant's editor", schemaObj(map[string]any{
+				"messages": tArray(), "expression": tString(), "variables": tObject(), "target": tString(),
+				"worker": tString(), "model": tString(),
+			}, "messages")),
+			resp: jsonBody("A checked proposal", schemaObj(map[string]any{
+				"expression": tString(), "explanation": tString(), "variables": tObject(),
+				"check": tObject(), "reply": tString(), "attempts": tInteger(), "warning": tString(),
+				"worker": tString(), "model": tString(),
 			}))}},
 		{"POST", "/api/v1/scripts/run", s.handleRunScript, apiOp{
 			summary: "Run a script task against sample variables (admin-only when auth is on)", tag: "Scripts", role: RoleAdmin,
@@ -1632,31 +1667,31 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/inbound-subscriptions/{id}", s.handleDeleteInboundSubscription, apiOp{
 			summary: "Delete an inbound event subscription", tag: "Workers", role: RoleModeler, status: http.StatusNoContent}},
 		{"GET", "/api/v1/events", s.handleListEvents, apiOp{
-			summary: "The event feed (ADR-0429 §5): every action outcome, grant and revocation, as CloudEvents 1.0 structured JSON in log order. `after` is the cursor of the last event the caller holds (a decimal position, the `next` of the previous page); leave it out to read from the oldest held. `limit` is 1–1000, default 100. Delivery is at least once: deduplicate by `id`. The feed keeps its rows for `--event-feed-ttl` (30 days); a cursor older than the oldest held is answered 410 with `oldest`, the cursor to resume from. Every event's data names the catalogue that maintains its product as `homeCatalog`; an `events` token minted with a reach of catalogues is answered only the events whose `homeCatalog` it names, its cursor moving past the rest, and a page reads at most 10000 rows, so a narrowed page can be short or empty with `more` set. It requires the `feedreader` role, which a token minted with the `events` scope carries and nothing else", tag: "Catalogue", role: RoleFeedReader,
+			summary: "The event feed (ADR-0429 §5, ADR-0435): every action outcome, grant and revocation, and every incident raised and resolved, as CloudEvents 1.0 structured JSON in log order. `after` is the cursor of the last event the caller holds (a decimal position, the `next` of the previous page); leave it out to read from the oldest held. `limit` is 1–1000, default 100. Delivery is at least once: deduplicate by `id`. The feed keeps its rows for `--event-feed-ttl` (30 days); a cursor older than the oldest held is answered 410 with `oldest`, the cursor to resume from. Every catalogue event's data names the catalogue that maintains its product as `homeCatalog`; an `events` token minted with a reach of catalogues is answered only the events whose `homeCatalog` it names, never an incident, which belongs to no catalogue, its cursor moving past the rest, and a page reads at most 10000 rows, so a narrowed page can be short or empty with `more` set. On a server whose service catalogue is switched off the feed is still served, without the catalogue's events. It requires the `feedreader` role, which a token minted with the `events` scope carries and nothing else", tag: "Events", role: RoleFeedReader,
 			resp: jsonBody("A page of events: {events, next, more}", tObject())}},
 		{"GET", "/api/v1/feed-subscriptions", s.handleListFeedSubscriptions, apiOp{
-			summary: "List the event feed's push subscriptions (ADR-0433): each names the cloudevents Worker it is delivered to, the catalogues it is narrowed to, its cursor, whether it is enabled and why delivery switched it off, when its endpoint last accepted a batch, and — while the endpoint is failing — its hold: failures in a row, since when, the next attempt and the last error (admin-only)", tag: "Catalogue", role: RoleAdmin,
+			summary: "List the event feed's push subscriptions (ADR-0433): each names the cloudevents Worker it is delivered to, the catalogues it is narrowed to, its cursor, whether it is enabled and why delivery switched it off, when its endpoint last accepted a batch, and — while the endpoint is failing — its hold: failures in a row, since when, the next attempt and the last error (admin-only)", tag: "Events", role: RoleAdmin,
 			resp: jsonBody("Feed subscriptions", tArray())}},
 		{"POST", "/api/v1/feed-subscriptions", s.handleCreateFeedSubscription, apiOp{
-			summary: "Push the event feed to a cloudevents Worker's endpoint: the server POSTs the feed's events after the subscription's cursor as CloudEvents batches (application/cloudevents-batch+json), with the Worker's credential as a bearer token, and moves the cursor when the endpoint answers 2xx — at least once, deduplicated by id. A failing endpoint is held on a backoff ladder, never skipped (admin-only)", tag: "Catalogue", role: RoleAdmin,
+			summary: "Push the event feed to a cloudevents Worker's endpoint: the server POSTs the feed's events after the subscription's cursor as CloudEvents batches (application/cloudevents-batch+json), with the Worker's credential as a bearer token, and moves the cursor when the endpoint answers 2xx — at least once, deduplicated by id. A failing endpoint is held on a backoff ladder, never skipped (admin-only)", tag: "Events", role: RoleAdmin,
 			req: jsonBody("The cloudevents Worker, the catalogues it is narrowed to as reach (none delivers the whole feed), the batch size (1–1000, default 100), whether it starts enabled, and from: oldest (the default) or now", schemaObj(map[string]any{
 				"workerId": tString(), "reach": tArray(), "batchSize": tInteger(), "enabled": tBool(), "from": tString(),
 			}, "workerId")),
 			resp: jsonBody("Created subscription", tObject()), status: http.StatusCreated}},
 		{"PATCH", "/api/v1/feed-subscriptions/{id}", s.handleUpdateFeedSubscription, apiOp{
-			summary: "Change a feed subscription: its reach, its batch size, whether it is enabled (enabling clears why delivery switched it off), or with from (oldest or now) where its cursor stands. Moving the cursor or enabling lifts a hold (admin-only)", tag: "Catalogue", role: RoleAdmin,
+			summary: "Change a feed subscription: its reach, its batch size, whether it is enabled (enabling clears why delivery switched it off), or with from (oldest or now) where its cursor stands. Moving the cursor or enabling lifts a hold (admin-only)", tag: "Events", role: RoleAdmin,
 			req: jsonBody("Subscription update", schemaObj(map[string]any{
 				"reach": tArray(), "batchSize": tInteger(), "enabled": tBool(), "from": tString(),
 			})),
 			resp: jsonBody("Updated subscription", tObject())}},
 		{"DELETE", "/api/v1/feed-subscriptions/{id}", s.handleDeleteFeedSubscription, apiOp{
-			summary: "End a feed subscription (admin-only)", tag: "Catalogue", role: RoleAdmin, status: http.StatusNoContent}},
+			summary: "End a feed subscription (admin-only)", tag: "Events", role: RoleAdmin, status: http.StatusNoContent}},
 		{"GET", "/api/v1/event-catalog", s.handleEventCatalog, apiOp{
 			summary: "The catalogue of the events Atlas emits (ADR-0435): for each, its name, kind (domain or platform), meaning in English and German, the moment it is emitted, its channels (signal, message, feed, log), its payload with every field marked as personal data or not, the test that holds it free of secrets, the version it arrived in, its stability and who may receive it. Readable by modelers, because choosing an event to listen to is modelling", tag: "Events", role: RoleModeler,
 			resp: jsonBody("Event catalogue", schemaObj(map[string]any{"entries": tArray()}))}},
 		{"GET", "/api/v1/event-catalog/listeners", s.handleEventListeners, apiOp{
 			summary: "Who listens to Atlas's events in this installation (ADR-0435 §7): every deployed definition with a signal start, catch, boundary or event subprocess, or a message receiver, on an atlas.* name — with process, version, project, element and the personal-data fields it receives — and every feed subscription. A map of where personal data flows across every project, so administrator-only", tag: "Events", role: RoleAdmin,
-			resp: jsonBody("Event listeners", schemaObj(map[string]any{"processes": tArray(), "feed": tArray(), "feedTypes": tArray(), "feedDelivered": map[string]any{"type": "boolean"}}))}},
+			resp: jsonBody("Event listeners", schemaObj(map[string]any{"processes": tArray(), "feed": tArray(), "feedTypes": tArray(), "catalogueWithheld": map[string]any{"type": "boolean"}}))}},
 		{"GET", "/api/v1/message-sources", s.handleListMessageSources, apiOp{
 			summary: "List every message name with where it comes from (ADR-0429 §6), each row tagged by `sourceKind`: `inbound-watch` — a Worker's event, with the worker and, for a viewer of it, the watch; `product-action` — a product's action, with the product, the action's key, effect and triggers and the process the product binds it to, for the catalogues the caller maintains; `process` — where the newest deployed version of a process waits for it, at a message `start` or a `catch`. The Modeler groups its message picker by these and tells a model whether its message has a source", tag: "Workers", role: RoleModeler, resp: jsonBody("Message sources", tArray())}},
 

@@ -2,7 +2,7 @@
 # Agents and CI: prefer these targets so the canonical commands live in one place.
 
 .PHONY: all build test race vet fmt fmt-check lint check cover tidy clean run server \
-        whats-new whats-new-resolve nuggets nuggets-check adr-number docker docker-powershell docker-buildx helm-lint helm-template helm-package
+        nuggets nuggets-check postman-smoke adr-number docker docker-powershell docker-buildx helm-lint helm-template helm-package
 
 all: check
 
@@ -63,34 +63,11 @@ nuggets:
 nuggets-check:
 	node scripts/nuggets/capture.mjs --check
 
-# Regenerate the Console "What's New" feed (api/web/whats-new.json) from CHANGELOG.md
-# and scripts/whats-new/overrides/. Commit the regenerated JSON. See
-# scripts/whats-new/README.md.
-whats-new:
-	go run ./scripts/whats-new
-
-# Resolve the feed's merge conflict. `.gitattributes` marks api/web/whats-new.json
-# unmergeable on purpose, so any merge where both sides added a changelog entry stops
-# here — which is every merge of a branch that has one, in a repository where main
-# moves. The resolution is never to pick a side: the feed is a *function* of the
-# merged CHANGELOG, so it is regenerated from it.
-#
-# This is that, in one command instead of three remembered ones. It refuses while any
-# other conflict is still open, because regenerating from a half-merged CHANGELOG is
-# the failure the generator's own guard exists to stop — and a resolution that ran
-# anyway would defeat it from the outside.
-whats-new-resolve:
-	@unresolved="$$(git diff --name-only --diff-filter=U | grep -v '^api/web/whats-new\.json$$' || true)"; \
-	if [ -n "$$unresolved" ]; then \
-		echo "Resolve these first — the feed is generated from CHANGELOG.md, and"; \
-		echo "regenerating it from a half-merged one puts both sides in the feed:"; \
-		echo "$$unresolved" | sed 's/^/  /'; \
-		exit 1; \
-	fi
-	@git checkout --theirs -- api/web/whats-new.json 2>/dev/null || true
-	go run ./scripts/whats-new
-	@git add api/web/whats-new.json
-	@echo "The feed is regenerated from the merged CHANGELOG.md and staged."
+# Run the Postman collection (postman/) end to end with Newman against a throwaway
+# Atlas built from this tree: every request, chained id and assertion in the kit.
+# Needs Node.js; Newman is fetched by npx. See postman/README.md.
+postman-smoke:
+	./scripts/postman-smoke.sh
 
 # Assign a number to every ADR still in flight (docs/adr/draft-<slug>.md): rename it
 # to NNNN-<slug>.md, fix its heading, add its index row, and rewrite every

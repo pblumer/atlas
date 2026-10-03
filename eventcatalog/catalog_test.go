@@ -48,8 +48,13 @@ func TestEveryEntrySaysWhatTheRecordAsks(t *testing.T) {
 		if e.Meaning.EN == "" || e.Meaning.DE == "" {
 			t.Errorf("%s: its meaning is not in both languages", at)
 		}
-		if e.Moment.Producer == "" || (e.Kind == eventcatalog.Domain && !e.Shaped && (e.Moment.Process == "" || e.Moment.Element == "")) {
+		if e.Moment.Producer == "" || (e.Kind == eventcatalog.Domain && !e.Shaped && len(e.Moment.Places) == 0) {
 			t.Errorf("%s: its moment does not say where it is emitted: %+v", at, e.Moment)
+		}
+		for _, pl := range e.Moment.Places {
+			if pl.Process == "" || pl.Element == "" {
+				t.Errorf("%s: a place without its process or element: %+v", at, pl)
+			}
 		}
 		if len(e.Channels) == 0 {
 			t.Errorf("%s: no channel", at)

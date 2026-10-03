@@ -31,8 +31,12 @@ func HandbookHTML() string {
 			channels = append(channels, string(c))
 		}
 		where := esc(e.Moment.Producer)
-		if e.Moment.Process != "" {
-			where = "<code>" + esc(e.Moment.Process) + "</code> / <code>" + esc(e.Moment.Element) + "</code> — " + where
+		if len(e.Moment.Places) > 0 {
+			places := make([]string, 0, len(e.Moment.Places))
+			for _, pl := range e.Moment.Places {
+				places = append(places, "<code>"+esc(pl.Process)+"</code> / <code>"+esc(pl.Element)+"</code>")
+			}
+			where = strings.Join(places, ", ") + " — " + where
 		}
 		fmt.Fprintf(&b, "      <p class=\"muted\"><span data-l=\"de\">Art</span><span data-l=\"en\">Kind</span>: %s · "+
 			"<span data-l=\"de\">Kanäle</span><span data-l=\"en\">Channels</span>: %s · "+

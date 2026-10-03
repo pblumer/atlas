@@ -47,23 +47,29 @@ those surfaces unless an adapter documents a transport-specific reason.
 
 ### The event feed, version 1
 
-What leaves Atlas about the catalogue — how each action asked of a held position ended,
-and every right granted or revoked — is one feed of CloudEvents 1.0 envelopes in
+What leaves Atlas — about the catalogue, how each action asked of a held position ended
+and every right granted or revoked, and about the engine, every incident raised or
+resolved — is one feed of CloudEvents 1.0 envelopes in
 structured JSON, in log order, pulled from a cursor the consumer keeps
 (`GET /api/v1/events?after={cursor}&limit={n}`, role `feedreader`, which an API token
 minted with the `events` scope carries and nothing else). Delivery is at least
-once; a consumer deduplicates by `id`.
+once; a consumer deduplicates by `id`, and ignores a `type` it does not know: the feed
+gains types without a new version.
+
+The feed is not switched off with the service catalogue (ADR-0434, ADR-0435 §6). A server
+whose catalogue is off still serves and pushes it, without the catalogue's events: their
+rows are passed over, cursors with them, so they are not delivered later either.
 
 | Attribute | Value |
 |---|---|
 | `specversion` | `1.0` |
 | `id` | `<node id>:<partition>:<log position>` — unique per installation, the same on every re-read |
-| `source` | the installation's external URL + `/catalog`, or `urn:atlas:<node id>:catalog` on a server given none |
-| `type` | an action's declared event type (default `<message>.<outcome>`), or `atlas.entitlement.granted` / `atlas.entitlement.revoked` |
-| `subject` | `orders/{orderId}/positions/{position}`; `principals/{id}/items/{itemId}` for a right no order produced |
+| `source` | the installation's external URL + `/catalog` for the catalogue's facts and + `/engine` for the engine's, or `urn:atlas:<node id>:catalog` / `urn:atlas:<node id>:engine` on a server given none |
+| `type` | an action's declared event type (default `<message>.<outcome>`), `atlas.entitlement.granted` / `atlas.entitlement.revoked`, or `atlas.incident.raised` / `atlas.incident.resolved` |
+| `subject` | `orders/{orderId}/positions/{position}`; `principals/{id}/items/{itemId}` for a right no order produced; `instances/{processInstanceKey}` for an incident |
 | `time` | when Atlas recorded the fact, RFC 3339 in UTC |
 | `datacontenttype` | `application/json` |
-| `data` | for an action: `orderId`, `position`, `commandId`, `action`, `effect`, `outcome`, `source`, `principal`, `itemId`, `at`, and when set `variantId`, `instanceKey`, `result`; for a grant: `principal`, `itemId`, `orderId`, `since`, `origin`, and when set `variantId`, `until`; for a revocation: `principal`, `itemId`, `orderId`, `since`, `endedAt`, `reason`, `endedBy`, and when set `variantId`; every type, when its product is in the catalogue: `homeCatalog` |
+| `data` | for an action: `orderId`, `position`, `commandId`, `action`, `effect`, `outcome`, `source`, `principal`, `itemId`, `at`, and when set `variantId`, `instanceKey`, `result`; for a grant: `principal`, `itemId`, `orderId`, `since`, `origin`, and when set `variantId`, `until`; for a revocation: `principal`, `itemId`, `orderId`, `since`, `endedAt`, `reason`, `endedBy`, and when set `variantId`; every catalogue type, when its product is in the catalogue: `homeCatalog`; for an incident: `elementInstanceKey`, `processInstanceKey`, `elementIndex`, `incidentType`, `raisedAt`, for a resolution `resolvedAt`, and when known `jobKey`, `processDefKey`, `processId`, `version`, `elementId` — never its message |
 
 The event types, as the event catalogue states them (ADR-0435; the payload of each, field by
 field and with personal data marked, is in the handbook's chapter *Events* and at
@@ -75,6 +81,8 @@ field and with personal data marked, is in the handbook's chapter *Events* and a
 | `atlas.entitlement.granted` | A right was granted to a person: a position was provisioned, or a right was recorded by hand or by a load. | Unreleased | stable |
 | `atlas.entitlement.revoked` | A right a person held ended: it was returned, expired, or taken away. | Unreleased | stable |
 | `<message>.<outcome>` | An action asked of a held position ended. Its type is the product author's: the action's declared event type, by default its message and the outcome; atlas.action.<outcome> where the action names neither. | Unreleased | stable |
+| `atlas.incident.raised` | A token parked on an element and waits for somebody to fix the cause: an incident was raised. | Unreleased | experimental |
+| `atlas.incident.resolved` | An incident was resolved: the token that had parked runs again. | Unreleased | experimental |
 <!-- eventcatalog:feed:end -->
 
 People are named by id only. A page answers `{events, next, more}`: `next` is the cursor to

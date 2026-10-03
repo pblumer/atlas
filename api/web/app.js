@@ -13,6 +13,7 @@ import { enhanceTable } from "./table.js";
 import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
 import { renderDrgSvg, openDecisionGraph } from "./decision-graph.js";
 import { copyText } from "./clipboard.js";
+import { installFeelAssistant } from "./feel-assistant.js";
 import { restoreSummary } from "./restore-report.js";
 // Documentation prose is Markdown (ADR-0250). The renderer
 // is a module of its own because every surface that shows an element's documentation
@@ -833,7 +834,7 @@ const WORKER_TYPES = [
   },
   {
     id: "cloudevents", name: "CloudEvents endpoint", kind: "Event feed",
-    desc: "Where the event feed is pushed: a system beyond atlas \u2014 billing, a CMDB \u2014 is sent how each action asked of a held position ended and every right granted and revoked, as CloudEvents batches over https, instead of pulling the feed itself. No task names this Worker; its Feed\u2026 panel subscribes it to the feed, narrowed to some catalogues if you like. atlas delivers from the feed it already holds, off the processor loop, and moves its cursor only when the endpoint accepted a batch: a refusal is held and tried again, never skipped. Administrator configuration.",
+    desc: "Where the event feed is pushed: a system beyond atlas \u2014 billing, a CMDB \u2014 is sent how each action asked of a held position ended, every right granted and revoked, and every incident raised and resolved, as CloudEvents batches over https, instead of pulling the feed itself. No task names this Worker; its Feed\u2026 panel subscribes it to the feed, narrowed to some catalogues if you like. atlas delivers from the feed it already holds, off the processor loop, and moves its cursor only when the endpoint accepted a batch: a refusal is held and tried again, never skipped. Administrator configuration.",
     refs: "ADR-0429 \u00b7 ADR-0430", status: "active", statusLabel: "configured below",
   },
   {
@@ -1003,6 +1004,16 @@ function initShell() {
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
       e.preventDefault(); openSearchPalette();
     }
+  });
+
+  // The FEEL assistant (ADR-0445): Ctrl/⌘+Shift+E anywhere, the spark
+  // in the top bar, the mini spark on every FEEL field and beside a focused dmn-js
+  // cell. Its routes are the modeler's, so the role is asked at the moment it opens —
+  // the principal is known only once /auth/me has answered.
+  installFeelAssistant({
+    api, copy: copyText, toast,
+    allowed: () => mayUse("modeler"),
+    button: document.getElementById("feel-assistant-btn"),
   });
 
   const nav = document.getElementById("drawer-apps");
@@ -1316,123 +1327,177 @@ function setChrome(appId, route) {
   document.body.classList.toggle("incidents-mode", route === "#/operations/incidents");
 }
 
-// ---------- What's New ----------
-// The Console landing page surfaces recent, user-facing features from
-// /whats-new.json, which the generator in scripts/whats-new builds from CHANGELOG.md and a
-// curated bilingual overrides file (see scripts/whats-new/README.md). It is DE/EN
-// with a local toggle, and every layer is collapsible so it stays compact: the whole
-// section is a <details>, only the newest few entries show at first, and each entry
-// is a <details> whose body carries the plain-language summary, an optional
-// step-by-step tutorial, a link to the PR/ADR, and an optional "Try it" deep link.
-const WN_STRINGS = {
-  en: { title: "What's New", latest: "New", tutorial: "Try it out", more: "Show older", less: "Show fewer", empty: "" },
-  de: { title: "Neu in atlas", latest: "Neu", tutorial: "Ausprobieren", more: "Ältere anzeigen", less: "Weniger anzeigen", empty: "" },
+// ---------- Release notes ----------
+// The Console landing page shows the release notes: CHANGELOG.md as this binary was
+// built from it, read by the server at /api/v1/release-notes
+// (ADR-0444). They replace the curated What's New
+// feed, whose per-entry translation and regeneration cost more on every change than
+// the feed gave back. The notes are English, as the CHANGELOG is; the section's own
+// labels follow the landing page's language.
+//
+// Every layer is collapsible so the section stays compact: the section, each release
+// (the newest is open; an older one loads its changes when opened) and each change.
+const RN_STRINGS = {
+  en: {
+    title: "Release notes", unreleased: "Unreleased",
+    changes: (n) => `${n} change${n === 1 ? "" : "s"}`,
+    all: "Show all changes", older: "Show older releases", changelog: "Read in the changelog",
+    loading: "Loading…", failed: "These notes could not be loaded.",
+    categories: {},
+  },
+  de: {
+    title: "Release Notes", unreleased: "Unveröffentlicht",
+    changes: (n) => `${n} Änderung${n === 1 ? "" : "en"}`,
+    all: "Alle Änderungen anzeigen", older: "Ältere Releases anzeigen", changelog: "Im Changelog lesen",
+    loading: "Wird geladen…", failed: "Diese Notes konnten nicht geladen werden.",
+    categories: {
+      Added: "Neu", Changed: "Geändert", Fixed: "Behoben", Removed: "Entfernt",
+      Deprecated: "Veraltet", Security: "Sicherheit", Notes: "Hinweise",
+    },
+  },
 };
-// Only these hash-route prefixes are accepted as a "Try it" target, so a bad or
-// hostile route in the data can never point the button somewhere unexpected.
-const WN_ROUTE_OK = /^#\/(console|modeler|operations|tasks)(\/|$)/;
-const WN_INITIAL = 4;
+const RN_INITIAL_RELEASES = 3;
+const RN_INITIAL_CHANGES = 8;
 
-function wnLang() {
+// The landing page carries two bilingual sections — the release notes and the
+// key-features tile — and they share one language: switching the tile's toggle
+// repaints both, so the page is never half English and half German. The storage key
+// keeps the name it had under What's New, so a reader's earlier choice still holds.
+const CONSOLE_LANG_KEY = "atlas.whatsnew.lang";
+function consoleLang() {
   try {
-    const s = localStorage.getItem("atlas.whatsnew.lang");
+    const s = localStorage.getItem(CONSOLE_LANG_KEY);
     if (s === "de" || s === "en") return s;
   } catch { /* ignore */ }
   return /^de/i.test(navigator.language || "") ? "de" : "en";
 }
-function wnSetLang(l) {
-  try { localStorage.setItem("atlas.whatsnew.lang", l); } catch { /* ignore */ }
-}
-
-// The landing page carries two bilingual sections — What's New and the key-features
-// tile — and they share one language: switching either toggle repaints both, so the
-// page is never half English and half German. wnEntries caches what renderWhatsNew
-// fetched, so the repaint costs nothing.
-let wnEntries = [];
 function setConsoleLang(l) {
-  wnSetLang(l);
-  const wn = document.getElementById("whats-new-slot");
-  if (wn && wnEntries.length) paintWhatsNew(wn, wnEntries, l);
+  try { localStorage.setItem(CONSOLE_LANG_KEY, l); } catch { /* ignore */ }
+  paintReleaseNotes(document.getElementById("release-notes-slot"), l);
   paintKeyFeatures(document.getElementById("key-features-slot"), l, setConsoleLang);
 }
 
-// wnText resolves a {en, de} field for the active language, falling back to English.
-const wnText = (b, lang) => (b && (b[lang] != null ? b[lang] : b.en)) || "";
+// rn caches what the section has fetched, and what the reader opened, so a language
+// switch or a return to the landing page repaints without going back to the network.
+// releases maps a version to its notes: null while loading, false when that failed.
+const rn = { index: null, releases: new Map(), open: new Set(), all: new Set(), older: false };
 
-async function renderWhatsNew(slot) {
+// rnInline renders the inline markdown the notes keep — `code`, **bold** and *emphasis*.
+// It escapes first, so the tags it adds are the only markup in the result.
+function rnInline(s) {
+  return esc(s)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+    .replace(/(^|[\s(])\*([^*\s](?:[^*]*[^*\s])?)\*(?=[\s.,;:!?)]|$)/g, "$1<i>$2</i>");
+}
+
+const rnLink = (link, label) => link && /^https?:\/\//.test(link.url)
+  ? `<a class="rn-link" href="${esc(link.url)}" target="_blank" rel="noopener">${esc(label)} <span class="ext" aria-hidden="true">↗</span></a>`
+  : "";
+
+async function renderReleaseNotes(slot) {
   if (!slot) return;
   let doc;
-  try {
-    const res = await fetch("/whats-new.json", { headers: { Accept: "application/json" } });
-    if (!res.ok) return; // no What's New shipped; leave the slot empty and silent
-    doc = await res.json();
-  } catch { return; } // offline or malformed — the landing page works without it
-  const entries = (doc && Array.isArray(doc.entries)) ? doc.entries : [];
-  wnEntries = entries;
-  if (entries.length) paintWhatsNew(slot, entries, wnLang());
+  try { doc = await api("GET", "/api/v1/release-notes"); } catch { return; } // the landing page works without it
+  const releases = doc && Array.isArray(doc.releases) ? doc.releases : [];
+  if (!releases.length) return;
+  rn.index = releases;
+  if (!rn.open.size) rn.open.add(releases[0].version);
+  paintReleaseNotes(slot, consoleLang());
 }
 
-function wnEntryHTML(e, lang, t) {
-  const title = esc(wnText(e.title, lang));
-  const when = e.date
-    ? `<span class="wn-date">${esc(e.date)}</span>`
-    : `<span class="wn-date wn-new">${esc(t.latest)}</span>`;
-  const tags = (e.tags || []).map((tag) => `<span class="chip">${esc(tag)}</span>`).join("");
-  const summary = esc(wnText(e.summary, lang));
-
-  let tutorial = "";
-  const steps = e.tutorial && wnText(e.tutorial, lang);
-  if (Array.isArray(steps) && steps.length) {
-    tutorial = `<div class="wn-tutorial"><div class="wn-tut-label">${esc(t.tutorial)}</div>` +
-      `<ol>${steps.map((s) => `<li>${esc(s)}</li>`).join("")}</ol></div>`;
-  }
-
-  const links = [];
-  if (e.link && /^https?:\/\//.test(e.link.url)) {
-    links.push(`<a class="wn-link" href="${esc(e.link.url)}" target="_blank" rel="noopener">${esc(e.link.label)} <span class="ext" aria-hidden="true">↗</span></a>`);
-  }
-  if (e.try && WN_ROUTE_OK.test(e.try.route || "")) {
-    links.push(`<a class="btn neutral wn-try" href="${esc(e.try.route)}">${esc(wnText(e.try.label, lang))} →</a>`);
-  }
-  const linksHTML = links.length ? `<div class="wn-links">${links.join("")}</div>` : "";
-
-  return `<details class="wn-item">` +
-    `<summary>${when}<span class="wn-item-title">${title}</span>${tags}</summary>` +
-    `<div class="wn-body"><p>${summary}</p>${tutorial}${linksHTML}</div>` +
-    `</details>`;
+// rnLoad fetches one release's notes once, and again only after a failure.
+function rnLoad(slot, version) {
+  const have = rn.releases.get(version);
+  if (have || have === null) return;
+  rn.releases.set(version, null);
+  api("GET", "/api/v1/release-notes/" + encodeURIComponent(version))
+    .then((r) => rn.releases.set(version, r))
+    .catch(() => rn.releases.set(version, false))
+    .finally(() => rnFill(slot, version, consoleLang()));
 }
 
-function paintWhatsNew(slot, entries, lang) {
-  const t = WN_STRINGS[lang] || WN_STRINGS.en;
-  const head = entries.slice(0, WN_INITIAL).map((e) => wnEntryHTML(e, lang, t)).join("");
-  const rest = entries.slice(WN_INITIAL);
-  const restHTML = rest.length
-    ? `<div class="wn-rest" hidden>${rest.map((e) => wnEntryHTML(e, lang, t)).join("")}</div>` +
-      `<button type="button" class="wn-more" title="Show older What’s-new entries">${esc(t.more)} (${rest.length})</button>`
+// rnFill repaints one release's body in place, leaving the rest of the section — and
+// whatever the reader has opened in it — alone.
+function rnFill(slot, version, lang) {
+  if (!slot) return;
+  const t = RN_STRINGS[lang] || RN_STRINGS.en;
+  for (const d of slot.querySelectorAll(".rn-release")) {
+    if (d.dataset.version === version) d.querySelector(".rn-body").innerHTML = rnBodyHTML(version, t);
+  }
+}
+
+function rnChangeHTML(c, t) {
+  const cat = t.categories[c.category] || c.category || "";
+  return `<details class="rn-change"><summary>` +
+    (cat ? `<span class="chip rn-cat">${esc(cat)}</span>` : "") +
+    `<span class="rn-change-title">${rnInline(c.title || "")}</span></summary>` +
+    `<div class="rn-change-body">${c.text ? `<p>${rnInline(c.text)}</p>` : ""}` +
+    `${c.link ? rnLink(c.link, c.link.label) : ""}</div></details>`;
+}
+
+function rnBodyHTML(version, t) {
+  const r = rn.releases.get(version);
+  if (r === false) return `<p class="muted">${esc(t.failed)}</p>`;
+  if (!r) return `<p class="muted">${esc(t.loading)}</p>`;
+  const intro = (r.intro || []).map((b) => b.kind === "list"
+    ? `<ul class="rn-intro">${(b.items || []).map((i) => `<li>${rnInline(i)}</li>`).join("")}</ul>`
+    : `<p class="rn-intro">${rnInline(b.text || "")}</p>`).join("");
+  const changes = r.changes || [];
+  const shown = rn.all.has(version) ? changes : changes.slice(0, RN_INITIAL_CHANGES);
+  const list = shown.length ? `<div class="rn-changes">${shown.map((c) => rnChangeHTML(c, t)).join("")}</div>` : "";
+  const more = shown.length < changes.length
+    ? `<button type="button" class="rn-more" data-all="${esc(version)}">${esc(t.all)} (${changes.length})</button>`
     : "";
+  return intro + list + `<div class="rn-foot">${more}${rnLink(r.link, t.changelog)}</div>`;
+}
+
+function rnReleaseHTML(s, t) {
+  const name = s.version === "Unreleased" ? t.unreleased : s.version;
+  return `<details class="rn-release" data-version="${esc(s.version)}"${rn.open.has(s.version) ? " open" : ""}>` +
+    `<summary><span class="rn-version">${esc(name)}</span>` +
+    (s.date ? `<span class="rn-date">${esc(s.date)}</span>` : "") +
+    `<span class="rn-count">${esc(t.changes(s.changeCount || 0))}</span></summary>` +
+    `<div class="rn-body">${rnBodyHTML(s.version, t)}</div></details>`;
+}
+
+function paintReleaseNotes(slot, lang) {
+  if (!slot || !rn.index) return;
+  const t = RN_STRINGS[lang] || RN_STRINGS.en;
+  const shown = rn.older ? rn.index : rn.index.slice(0, RN_INITIAL_RELEASES);
+  const hidden = rn.index.length - shown.length;
   slot.innerHTML =
-    `<div class="card whats-new"><details class="wn-root" open>` +
-    `<summary class="wn-head"><span class="wn-title">${esc(t.title)}</span>` +
-    `<span class="wn-lang">` +
-    `<button type="button" data-lang="en" class="${lang === "en" ? "active" : ""}" title="Show these notes in English">EN</button>` +
-    `<button type="button" data-lang="de" class="${lang === "de" ? "active" : ""}" title="Show these notes in German">DE</button>` +
-    `</span></summary>` +
-    `<div class="wn-list">${head}${restHTML}</div>` +
+    `<div class="card release-notes"><details class="rn-root" open>` +
+    `<summary class="rn-head"><span class="rn-title">${esc(t.title)}</span></summary>` +
+    `<div class="rn-list">${shown.map((s) => rnReleaseHTML(s, t)).join("")}</div>` +
+    (hidden > 0 ? `<button type="button" class="rn-more" data-older>${esc(t.older)} (${hidden})</button>` : "") +
     `</details></div>`;
 
-  // The language toggle lives inside the <summary>; stop the click from also toggling
-  // the section open/closed, and switch the whole landing page's language.
-  slot.querySelectorAll(".wn-lang button").forEach((b) => b.addEventListener("click", (ev) => {
-    ev.preventDefault();
-    ev.stopPropagation();
-    setConsoleLang(b.dataset.lang);
+  // A release loads its changes the first time it is opened.
+  slot.querySelectorAll(".rn-release").forEach((d) => d.addEventListener("toggle", () => {
+    const v = d.dataset.version;
+    if (d.open) { rn.open.add(v); rnLoad(slot, v); } else rn.open.delete(v);
   }));
-  const more = slot.querySelector(".wn-more");
-  if (more) more.addEventListener("click", () => {
-    const r = slot.querySelector(".wn-rest");
-    if (r) r.hidden = false;
-    more.remove();
-  });
+  // Assigned rather than added: the slot outlives every repaint, and a listener per
+  // repaint would answer one click several times.
+  slot.onclick = (e) => {
+    const btn = e.target instanceof Element && e.target.closest(".rn-more");
+    if (!btn) return;
+    if (btn.dataset.all) {
+      // Appended rather than repainted, so a change the reader has open stays open.
+      const v = btn.dataset.all, r = rn.releases.get(v);
+      const list = btn.closest(".rn-body")?.querySelector(".rn-changes");
+      rn.all.add(v);
+      if (!r || !list) { rnFill(slot, v, consoleLang()); return; }
+      const t = RN_STRINGS[consoleLang()] || RN_STRINGS.en;
+      list.insertAdjacentHTML("beforeend", r.changes.slice(RN_INITIAL_CHANGES).map((c) => rnChangeHTML(c, t)).join(""));
+      btn.remove();
+    } else {
+      rn.older = true;
+      paintReleaseNotes(slot, consoleLang());
+    }
+  };
+  for (const v of rn.open) rnLoad(slot, v);
 }
 
 // ---------- Views ----------
@@ -1462,7 +1527,7 @@ async function viewConsoleDashboard() {
         <button type="button" class="btn ghost" data-system-overview title="Show how atlas is built, from the apps down to its persistence">System Overview</button>
       </div>
     </div>
-    <div id="whats-new-slot"></div>
+    <div id="release-notes-slot"></div>
     <div class="grid2" style="margin-top:18px">
       <div class="card">
         <div class="between"><h2>Deployments</h2><a href="#/modeler">View all</a></div>
@@ -1483,11 +1548,11 @@ async function viewConsoleDashboard() {
   // an answer — the catalogue off, and an administrator looking — so nobody else pays a
   // request for it. Fills its own slot, and is silent when nothing is stranded.
   if (!FEATURES.catalogue && mayUse("admin")) renderCatalogueStranded(document.getElementById("catalogue-stranded-slot"));
-  renderWhatsNew(document.getElementById("whats-new-slot")); // fills its own slot; safe if it fails
+  renderReleaseNotes(document.getElementById("release-notes-slot")); // fills its own slot; safe if it fails
   // The key-features tile sits below the dashboard's own tiles: what Atlas is, for
   // someone who arrived here without having read the README. Fills its own slot,
   // and is silent if the asset is missing.
-  renderKeyFeatures(document.getElementById("key-features-slot"), wnLang(), setConsoleLang);
+  renderKeyFeatures(document.getElementById("key-features-slot"), consoleLang(), setConsoleLang);
   // The running version next to the heading, so "which build is this?" is answered
   // on the first screen rather than only on the admin-only Engine view. Loaded on
   // its own and silent on failure: a missing badge must not cost the dashboard.
@@ -1934,7 +1999,7 @@ const GRANTABLE_ROLES = [
   { id: "operator", name: "Operator", what: "start, cancel and repair instances; read runtime data" },
   { id: "user", name: "User", what: "work on tasks and read what they are given" },
   { id: "productmanager", name: "Product manager", what: "maintain the shop's catalogues and products, and publish releases" },
-  { id: "feedreader", name: "Feed reader", what: "read the event feed of action outcomes and granted and revoked rights, and nothing else" },
+  { id: "feedreader", name: "Feed reader", what: "read the event feed of action outcomes, granted and revoked rights and incidents, and nothing else" },
 ];
 
 function userForm(u) {
@@ -2222,9 +2287,9 @@ async function viewConsoleWorkers() {
     if (c.kind === "clio" || c.kind === "jira" || c.kind === "googlesheets" || c.kind === "discord" || c.kind === "mail") items.push({ label: "Events…", icon: "⇄", act: "subs" });
     // A CloudEvents endpoint is subscribed to the event feed, which is administrator
     // configuration: the panel lists what the worker is sent and how delivery stands.
-    // The feed is the catalogue's: with the area switched off its subscriptions are not
-    // served, so the entry would open a panel whose every call is a 404.
-    if (c.kind === "cloudevents" && mayUse("admin") && FEATURES.catalogue) items.push({ label: "Feed…", icon: "⇉", act: "feed" });
+    // The feed carries the engine's facts too, so it stays when the service catalogue
+    // is switched off (ADR-0435 §6).
+    if (c.kind === "cloudevents" && mayUse("admin")) items.push({ label: "Feed…", icon: "⇉", act: "feed" });
     // Every Worker Type the check covers: mail connects and authenticates (or sends a
     // test message), a SQL worker dials its connection string. workerShape is the one
     // place that knows, so the menu does not go stale the next type that gains one.
@@ -4996,7 +5061,7 @@ async function toggleFeedSubs(row, workerId) {
   const panel = document.createElement("tr");
   panel.className = "subs-row";
   panel.innerHTML = `<td colspan="3" style="background:var(--surface); padding:12px 18px">
-    <div class="muted" style="margin-bottom:8px">The event feed pushed to this endpoint — how each action asked of a held position ended, and every right granted and revoked — as CloudEvents batches. A batch the endpoint refuses is <b>held and tried again</b>, never skipped; the receiver deduplicates by each event's <code>id</code>. Narrowed to some catalogues, it is sent only the events about the products they maintain. If the feed's retention passes a subscription that fell behind, it is switched off and says so: enable it again from the oldest event held.</div>
+    <div class="muted" style="margin-bottom:8px">The event feed pushed to this endpoint — how each action asked of a held position ended, every right granted and revoked, and every incident raised and resolved — as CloudEvents batches. A batch the endpoint refuses is <b>held and tried again</b>, never skipped; the receiver deduplicates by each event's <code>id</code>. Narrowed to some catalogues, it is sent only the events about the products they maintain. If the feed's retention passes a subscription that fell behind, it is switched off and says so: enable it again from the oldest event held.</div>
     <table style="width:100%"><tbody id="feed-body">${list}</tbody></table>
     <form id="feed-form" style="display:grid;gap:8px;grid-template-columns:2fr 1fr 1fr auto;align-items:end;margin-top:10px">
       <label class="field" style="margin:0"><span>Catalogues (none selected: the whole feed)</span><select name="reach" multiple size="3">${options}</select></label>
@@ -10399,6 +10464,10 @@ async function route() {
   document.getElementById("scrim").hidden = true;
   if (window.__atlasCleanup) { try { window.__atlasCleanup(); } catch { /* ignore */ } }
   navGen++; // supersede any view handler still awaiting from a previous navigation
+  // The FEEL assistant's top-bar button is offered to whoever may use its routes; this
+  // is the first point after boot at which the principal is known.
+  const feelBtn = document.getElementById("feel-assistant-btn");
+  if (feelBtn) feelBtn.hidden = !mayUse("modeler");
 
   const hash = location.hash || "#/console";
   // #/console/connectors is the pre-ADR-0203 spelling of the Workers page. A

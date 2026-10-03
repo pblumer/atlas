@@ -14,6 +14,66 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A FEEL assistant writes expressions in a conversation, and the engine checks them first.**
+  Ctrl/⌘+Shift+E opens it from any screen of the console, as do the spark in the top bar, a mini
+  spark on every FEEL field of the Modeler, and a spark beside a focused output cell, literal
+  expression or input expression in the DMN editor
+  ([ADR-0445](docs/adr/0445-feel-assistant.md)). An author says what an
+  expression should compute; the AI Worker an operator configured writes one, with an explanation
+  and an example. Before it is shown, Atlas compiles it, refuses calls a deploy would refuse, and
+  evaluates it against the example; an answer that fails or disagrees with the result it claimed
+  goes back to the model with the engine's own words, at most twice. Beside the chat are a FEEL
+  editor, a test pane, Copy, and Apply, which writes into the field the assistant was opened from.
+  - The last thirty expressions and the author's favourites are kept in the browser, the
+    conversation for the browser session; nothing is stored on the server.
+  - A decision table's input cell is recognised and not written to: it takes a unary test, not an
+    expression.
+  - Routes `GET /api/v1/feel/generate/workers` and `POST /api/v1/feel/generate` (modeler role).
+    Like form generation they are not MCP tools: an agent writes the FEEL itself.
+  - The prompt's function list is the engine's own registry, and every rule it teaches the model
+    is an expression a test evaluates.
+  - Every request that reached a model is measured, so the prompt can be improved from data: a
+    log line `event=feel_assistant.answered` names the Worker and model, how the request ended,
+    and per round the form of the answer, what the engine's check found and which foreign
+    functions were refused. With metrics on, `atlas_feel_assistant_requests_total{outcome}`,
+    `atlas_feel_assistant_attempts_total{format}`, `atlas_feel_assistant_attempt_faults_total{fault}`
+    and `atlas_feel_assistant_request_seconds` count the same by closed labels. Neither carries
+    the conversation or an expression.
+  - Each answer, log line and metric names the prompt version that produced it (`prompt`), so the
+    measurements of two prompts stay apart. A test holds the version to a fingerprint of the
+    prompt and fails when the prompt changes without it.
+
+- **Incidents leave Atlas on the event feed.** Every incident raised and every incident resolved
+  is now an event of the CloudEvents feed, `atlas.incident.raised` and
+  `atlas.incident.resolved`, pulled from `GET /api/v1/events` or pushed to a subscribed
+  endpoint like the catalogue's events
+  ([ADR-0435](docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)).
+  - An event names the parked element instance (the key the resolve route takes), its process
+    instance, and its cause: definition, element and incident type, the triple a flood is
+    grouped by (ADR-0337). A receiver can therefore tell a new cause from the thousandth
+    incident of a known one.
+  - It never carries the incident's message, which may hold anything a worker reported.
+  - Its source is the installation's address + `/engine`, beside `/catalog`.
+  - A reader or subscription narrowed to catalogues does not receive it: an incident belongs to
+    no catalogue.
+
+- **An approval announces itself before it waits.** Each of the shop's three built-in
+  approvals — a fixed person, a role, the orderer's line manager — now throws the signal
+  `atlas.approval.requested` before its approval task waits
+  ([ADR-0435](docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)). A model of the
+  installation listens with a signal start, for instance to tell the approver in a chat,
+  without changing the approval.
+  - The signal carries the rule (`approvalKind`), who decides (`approver`), the order, position,
+    product and variant, orderer and recipient by principal id, and `atlasInstance`, the
+    approval instance.
+  - It carries nothing decided and none of the order form's answers.
+  - No field is personal data, so any modeler may deploy a listener.
+  - The event catalogue lists it, so the Console page *Events* and the Modeler's signal
+    picker offer it, and the handbook's chapter describes it.
+  - A catalogue entry now names every place that throws it, rather than one.
+  - The shop handbook said the `superior` approval asks the recipient's line manager; it asks
+    the orderer's, as the process always did, and now says so.
+
 - **Atlas says in one place which events it emits, and who listens.** A Console page
   *Events* lists every signal, message and feed event atlas emits: what has happened when it
   comes, what it carries with personal data marked, since which version, how stable, and who
@@ -383,6 +443,27 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The event feed no longer goes away with the shop.** A server started with
+  `--catalogue=false` now serves `GET /api/v1/events` and its feed subscriptions, and pushes
+  the feed, without the service catalogue's events. Before, it served and pushed nothing.
+  - Their rows are passed over, a subscription's cursor with them, so they are not delivered
+    later when the catalogue is switched back on.
+  - The Console's *Feed…* panel and the MCP tool `atlas_feed_subscriptions` stay with the shop
+    off.
+  - The routes moved from the *Catalogue* tag to *Events*
+    ([ADR-0435](docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md) §6).
+
+- **The Console's landing page shows the release notes instead of What's New.** The
+  section lists the releases of the changelog this server was built from, newest first:
+  the newest opens with its introduction, what to read before upgrading and its changes,
+  and an older one loads when it is opened. `GET /api/v1/release-notes` and
+  `GET /api/v1/release-notes/{version}` answer the same to anybody signed in. The notes
+  are English, as the changelog is; the old feed's curated German and English summaries,
+  tutorials and "Try it" links are gone, and so is everything that kept the feed in step
+  with the changelog — `make whats-new`, `make whats-new-resolve`, the committed
+  `api/web/whats-new.json` and the workflow that repaired it on main. A changelog entry now
+  reaches the Console with nothing else to do. ADR-0444.
+
 - **Only an administrator deploys a model that listens to somebody's data.** A signal start,
   catch, boundary or event subprocess on an event atlas emits whose payload carries personal
   data is now deployed by an administrator
@@ -446,6 +527,42 @@ _Changed_ / _Removed_ for each version.
   unchanged (ADR-0429).
 
 ### Fixed
+
+- **The shop's approval models open as a readable diagram.** The three approval processes
+  the shop ships — fixed approver, group and superior — printed both deadlines' captions
+  over each other, two of them drew their parallel gateway on top of the approval task,
+  and the superior variant drew its deadlines away from the task they are attached to.
+  The diagrams are redrawn: the notification on a row above, the decision on one axis with
+  its two outcomes rejoining at an exclusive gateway before *Entschieden*, and reminder and
+  escalation each on a row of their own. The joining gateway changes no behaviour, since
+  only one of the two outcomes ever arrives. A server deploys the redrawn models as a new
+  version of each; instances already running stay on theirs. The diagrams the binary ships
+  are now held to the generator's layout invariants (`go test ./api/layout`), so a model
+  drawn like that no longer passes.
+
+- **The Postman collection works against today's server again.** It had not been
+  revised since login became the default
+  ([ADR-0195](docs/adr/0195-auth-on-by-default.md)), and it showed.
+  - Its README still told a local user to skip the login, so every request answered 401.
+  - *Log out* ran directly after *Log in*, so a Collection Runner pass was refused from
+    the second folder on.
+  - Even with the session kept, nine reference requests answered 400 or 404 when run in
+    order, unnoticed because they asserted nothing.
+  - The Modeler folder taught the deprecated `/api/v1/projects` alias
+    ([ADR-0128](docs/adr/0128-process-applications.md)), and the MCP folder called `/mcp`
+    unauthenticated.
+
+  The collection now runs green top to bottom with a password, with an API token
+  (`apiToken`, sent as a Bearer header), and against a server started with
+  `--auth=false`.
+  - Every request documents the role it needs, its body and its answers, asserts its
+    status and shape, and carries saved example responses, the common errors included.
+  - The Messages folder shows correlation end to end with a new `payment-wait` model.
+  - Both sample models ship with a diagram layout and their documentation.
+  - `make postman-smoke` runs the whole collection against a throwaway server.
+  - `go test ./api` now fails when a request names a route the server does not serve
+    or a deprecated alias, lacks a description, an assertion or an example, or deploys
+    a model that differs from its file under `postman/`.
 
 - **On Windows, a crashed server no longer leaves its workers running.** Stopping Atlas
   stopped the workers it supervises, but a server that crashed, was ended in the Task

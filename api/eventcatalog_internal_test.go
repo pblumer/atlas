@@ -83,10 +83,13 @@ func TestEverySystemProcessEventIsCatalogued(t *testing.T) {
 			t.Errorf("%s is a %s at %s/%s, and its entry does not name that channel", p.name, p.channel, p.process, p.element)
 		case e.Kind != eventcatalog.Domain:
 			t.Errorf("%s is emitted by a system process, so it is a domain entry, not %s", p.name, e.Kind)
-		case e.Moment.Process != p.process || e.Moment.Element != p.element:
-			t.Errorf("%s is at %s/%s, and its entry says %s/%s", p.name, p.process, p.element, e.Moment.Process, e.Moment.Element)
+		case !slices.Contains(e.Moment.Places, eventcatalog.At(p.process, p.element)):
+			t.Errorf("%s is at %s/%s, and its entry says %+v", p.name, p.process, p.element, e.Moment.Places)
 		case p.channel == eventcatalog.Signal && !p.throws:
 			t.Errorf("system process %s listens to the signal %s; Atlas's own processes do not", p.process, p.name)
+		case e.ServiceCatalogue != catalogueSystemProcesses[p.process]:
+			t.Errorf("%s at %s: serviceCatalogue=%v, and the process is the catalogue's: %v",
+				p.name, p.process, e.ServiceCatalogue, catalogueSystemProcesses[p.process])
 		}
 	}
 	for _, e := range eventcatalog.Entries {
@@ -94,11 +97,13 @@ func TestEverySystemProcessEventIsCatalogued(t *testing.T) {
 			if !e.Has(ch) {
 				continue
 			}
-			found := slices.ContainsFunc(points, func(p systemPoint) bool {
-				return p.name == e.Type && p.channel == ch && p.process == e.Moment.Process && p.element == e.Moment.Element
-			})
-			if !found {
-				t.Errorf("%s says it is a %s at %s/%s, and no system process has it there", e.Type, ch, e.Moment.Process, e.Moment.Element)
+			for _, pl := range e.Moment.Places {
+				found := slices.ContainsFunc(points, func(p systemPoint) bool {
+					return p.name == e.Type && p.channel == ch && p.process == pl.Process && p.element == pl.Element
+				})
+				if !found {
+					t.Errorf("%s says it is a %s at %s/%s, and no system process has it there", e.Type, ch, pl.Process, pl.Element)
+				}
 			}
 		}
 	}
@@ -124,7 +129,30 @@ func fullFeedRows() []state.FeedEntry {
 		{Partition: 1, Position: 3, At: 3, Revoked: &model.EntitlementHistoryValue{
 			Principal: "u", ItemID: "i", VariantID: "v", OrderID: "o", Since: 1, EndedAt: 2, EndedBy: "x",
 		}},
+		{Partition: 1, Position: 4, At: 4, Kind: state.FeedIncidentRaised, Definition: feedTestDefinition, Incident: &model.IncidentValue{
+			ProcessInstanceKey: 40, ElementInstanceKey: 41, JobKey: 42, ElementId: 0, RaisedAt: 4,
+			Message: "worker said: user anna@example.org has password hunter2",
+		}},
+		{Partition: 1, Position: 5, At: 5, Kind: state.FeedIncidentResolved, Definition: feedTestDefinition, Incident: &model.IncidentValue{
+			ProcessInstanceKey: 40, ElementInstanceKey: 41, JobKey: 42, ElementId: 0, RaisedAt: 4,
+			Message: "worker said: user anna@example.org has password hunter2",
+		}},
 	}
+}
+
+// feedTestDefinition is the definition the incident rows above name, and
+// feedTestDefs the deployment it stands for, so the envelope can name the process and
+// the element as it does while a definition is deployed.
+const feedTestDefinition = 77
+
+func feedTestDefs(t *testing.T) defIndex {
+	t.Helper()
+	cp, err := compiler.Parse(feedTestDefinition, 2, strings.NewReader(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="p" isExecutable="true"><startEvent id="s"/></process></definitions>`))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	return defIndex{feedTestDefinition: {ProcessID: "p", Version: 2, cp: cp}}
 }
 
 // TestTheFeedCarriesNoSecret: every type the feed names is an entry with the feed
@@ -133,8 +161,20 @@ func fullFeedRows() []state.FeedEntry {
 // none the entry does not know of.
 func TestTheFeedCarriesNoSecret(t *testing.T) {
 	produced := map[string]bool{}
+	defs := feedTestDefs(t)
+	sources := feedSources{catalogue: "urn:test:catalog", engine: "urn:test:engine"}
 	for _, row := range fullFeedRows() {
-		ev := feedEnvelope(row, "n1", "urn:test", "cat-home")
+		ev := feedEnvelope(row, "n1", sources, "cat-home", defs)
+		if want := map[bool]string{true: sources.catalogue, false: sources.engine}[row.IsCatalogue()]; ev.Source != want {
+			t.Errorf("%s is from %s, want %s", ev.Type, ev.Source, want)
+		}
+		if data, _ := ev.Data.(map[string]any); data != nil {
+			for k, v := range data {
+				if s, ok := v.(string); ok && strings.Contains(s, "hunter2") {
+					t.Errorf("%s carries the incident's message in %s", ev.Type, k)
+				}
+			}
+		}
 		var entry eventcatalog.Entry
 		switch {
 		case strings.HasPrefix(ev.Type, eventcatalog.ActionOutcomePrefix) || row.Outcome != nil:
@@ -151,6 +191,10 @@ func TestTheFeedCarriesNoSecret(t *testing.T) {
 			}
 			entry = e
 			produced[ev.Type] = true
+		}
+		if entry.ServiceCatalogue != row.IsCatalogue() {
+			t.Errorf("%s: the catalogue says serviceCatalogue=%v, and the feed treats its row as a catalogue fact: %v",
+				ev.Type, entry.ServiceCatalogue, row.IsCatalogue())
 		}
 		data, _ := ev.Data.(map[string]any)
 		declared := map[string]bool{}
@@ -174,7 +218,7 @@ func TestTheFeedCarriesNoSecret(t *testing.T) {
 	// An outcome whose action names no event type takes Atlas's own name.
 	row := fullFeedRows()[0]
 	row.Outcome.EventType = ""
-	if ev := feedEnvelope(row, "n1", "urn:test", ""); ev.Type != eventcatalog.ActionOutcomePrefix+"completed" {
+	if ev := feedEnvelope(row, "n1", sources, "", defs); ev.Type != eventcatalog.ActionOutcomePrefix+"completed" {
 		t.Errorf("an undeclared outcome is typed %s", ev.Type)
 	}
 }
@@ -236,8 +280,8 @@ func TestTheEventCatalogueIsServedAndItsListenersAreAnAdministratorsView(t *test
 	if !sawSystem || !sawIntake {
 		t.Fatalf("listeners = %+v, want the fulfilment process on atlas.order.placed and the installation's intake listener with its personal fields", ls.Processes)
 	}
-	if !slices.Contains(ls.FeedTypes, eventcatalog.EntitlementGranted) || !ls.FeedDelivered {
-		t.Errorf("feed types = %v, delivered = %v", ls.FeedTypes, ls.FeedDelivered)
+	if !slices.Contains(ls.FeedTypes, eventcatalog.EntitlementGranted) || !slices.Contains(ls.FeedTypes, eventcatalog.IncidentRaised) || ls.CatalogueWithheld {
+		t.Errorf("feed types = %v, catalogue withheld = %v", ls.FeedTypes, ls.CatalogueWithheld)
 	}
 	if role := routeRoleOf(t, srv, "GET /api/v1/event-catalog/listeners"); role != RoleAdmin {
 		t.Errorf("the listeners route is %s, want admin", role)
@@ -251,7 +295,7 @@ func TestTheEventCatalogueIsServedAndItsListenersAreAnAdministratorsView(t *test
 		t.Errorf("with the shop switched off the event catalogue answers %d %s", code, body)
 	}
 	code, body = serveInternal(t, off, http.MethodGet, "/api/v1/event-catalog/listeners", "", "")
-	if code != http.StatusOK || !strings.Contains(string(body), `"feedDelivered":false`) {
+	if code != http.StatusOK || !strings.Contains(string(body), `"catalogueWithheld":true`) {
 		t.Errorf("with the shop switched off the listeners answer %d %s", code, body)
 	}
 }

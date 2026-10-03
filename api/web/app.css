@@ -3985,6 +3985,24 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 }
 .code-editor:hover .dev-open, .code-editor:focus-within .dev-open { opacity: 1; }
 .code-editor .dev-open:hover { color: var(--accent); border-color: var(--accent); }
+/* The FEEL assistant's mini button (feel.js, feel-assistant.js). Unlike "</>" it is
+   always shown, quietly: it is how an author learns that the assistant exists at all.
+   It takes the top-right corner, and "</>" moves one place left beside it. */
+.code-editor .feel-ai-open {
+  position: absolute; top: 4px; right: 4px; z-index: 3;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 18px; padding: 0;
+  border: 1px solid var(--border); border-radius: 5px; background: var(--surface);
+  color: var(--muted); opacity: 0.7; cursor: pointer; transition: opacity 0.12s ease;
+}
+.code-editor:hover .feel-ai-open, .code-editor:focus-within .feel-ai-open { opacity: 1; }
+.code-editor .feel-ai-open:hover { color: var(--accent); border-color: var(--accent); }
+.code-editor.has-feel-ai .dev-open { right: 28px; }
+/* Room for the button, on the input and on both layers behind it (the highlight and
+   its measuring twin) alike — a padding on one alone would shift the colouring off
+   the text it colours. */
+.code-editor.has-feel-ai .ce-input,
+.code-editor.has-feel-ai .ce-highlight { padding-right: 30px; }
 
 /* The verdict of a worker check, under the worker form (ADR-0150). It says
    what was proved, so it is a sentence and not a status dot — and a failure keeps the
@@ -4099,79 +4117,82 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 }
 .secret-set-row .field { margin: 0; }
 
-/* ---------- What's New (Console landing page) ----------
-   A compact, collapsible feed of recent user-facing features (see renderWhatsNew in
-   app.js). Everything is theme-variable driven so it follows the accent and any
-   theme. The whole section, and each entry, is a native <details>. */
-.whats-new { margin-top: 18px; }
-/* The section header doubles as the collapse toggle: title on the left, the DE/EN
-   toggle on the right. A caret marks open/closed in place of the default marker. */
-.whats-new .wn-head {
+/* ---------- Release notes (Console landing page) ----------
+   The CHANGELOG as this binary was built from it, release by release (see
+   renderReleaseNotes in app.js). Everything is theme-variable driven so it follows
+   the accent and any theme. The section, each release and each change is a native
+   <details>. */
+.release-notes { margin-top: 18px; }
+/* The section header doubles as the collapse toggle. A caret marks open/closed in
+   place of the default marker. */
+.release-notes .rn-head {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; cursor: pointer; list-style: none;
 }
-.whats-new .wn-head::-webkit-details-marker { display: none; }
-.whats-new .wn-title {
+.release-notes .rn-head::-webkit-details-marker { display: none; }
+.release-notes .rn-title {
   font-size: 18px; font-weight: 650; display: inline-flex; align-items: center; gap: 8px;
 }
-.whats-new .wn-title::before {
+.release-notes .rn-title::before {
   content: "▸"; color: var(--muted); font-size: 12px; transition: transform .12s ease;
 }
-.whats-new .wn-root[open] .wn-title::before { transform: rotate(90deg); }
+.release-notes .rn-root[open] .rn-title::before { transform: rotate(90deg); }
 
-/* Segmented DE/EN toggle. */
-.whats-new .wn-lang { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-.whats-new .wn-lang button {
-  appearance: none; border: 0; background: var(--surface); color: var(--muted);
-  font: 600 12px/1 system-ui, sans-serif; padding: 5px 9px; cursor: pointer;
+.release-notes .rn-list { margin-top: 10px; }
+
+/* One release. The row with its version, date and size is always visible. */
+.release-notes .rn-release { border-top: 1px solid var(--border); padding: 10px 2px; }
+.release-notes .rn-release:first-child { border-top: 0; }
+.release-notes .rn-release > summary {
+  cursor: pointer; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; list-style: none;
 }
-.whats-new .wn-lang button + button { border-left: 1px solid var(--border); }
-.whats-new .wn-lang button:hover { background: var(--bg); }
-.whats-new .wn-lang button.active { background: var(--accent-soft); color: var(--accent); }
-
-.whats-new .wn-list { margin-top: 10px; }
-
-/* One feature. The summary row is always visible; the body opens on click. */
-.whats-new .wn-item { border-top: 1px solid var(--border); padding: 10px 2px; }
-.whats-new .wn-item:first-child { border-top: 0; }
-.whats-new .wn-item > summary {
-  cursor: pointer; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+/* A flex summary loses its marker, so a release and a change draw the caret the
+   section header draws: a row that opens should say so before it is clicked. */
+.release-notes .rn-release > summary::-webkit-details-marker,
+.release-notes .rn-change > summary::-webkit-details-marker { display: none; }
+.release-notes .rn-release > summary::before,
+.release-notes .rn-change > summary::before {
+  content: "▸"; color: var(--muted); font-size: 11px; flex: none; transition: transform .12s ease;
 }
-.whats-new .wn-item > summary::marker { color: var(--muted); }
-.whats-new .wn-item-title { font-weight: 600; }
-.whats-new .wn-date { font: 12px/1.6 ui-monospace, monospace; color: var(--muted); }
-.whats-new .wn-date.wn-new {
-  font-family: system-ui, sans-serif; font-weight: 600; color: var(--accent);
-  background: var(--accent-soft); border-radius: 999px; padding: 1px 8px;
+.release-notes .rn-release[open] > summary::before,
+.release-notes .rn-change[open] > summary::before { transform: rotate(90deg); }
+.release-notes .rn-version { font-weight: 650; }
+.release-notes .rn-date,
+.release-notes .rn-count { font: 12px/1.6 ui-monospace, monospace; color: var(--muted); }
+
+.release-notes .rn-body { margin: 8px 0 2px; padding-left: 18px; }
+.release-notes .rn-body p { margin: 0 0 8px; color: var(--text); }
+.release-notes .rn-intro { line-height: 1.5; }
+.release-notes ul.rn-intro { margin: 0 0 8px; padding-left: 20px; }
+.release-notes ul.rn-intro li { margin: 3px 0; }
+.release-notes .rn-body code { font-size: 0.92em; overflow-wrap: anywhere; }
+
+/* One change: its category and headline, with the rest of the entry on click. */
+.release-notes .rn-changes { margin-top: 4px; }
+.release-notes .rn-change { border-top: 1px solid var(--border); padding: 7px 0; }
+.release-notes .rn-change:first-child { border-top: 0; }
+.release-notes .rn-change > summary {
+  cursor: pointer; display: flex; align-items: baseline; gap: 8px; list-style: none;
 }
+.release-notes .rn-cat { flex: none; }
+.release-notes .rn-change-title { font-weight: 600; }
+.release-notes .rn-change-body { margin: 6px 0 2px; padding-left: 18px; }
 
-.whats-new .wn-body { margin: 8px 0 2px; padding-left: 18px; }
-.whats-new .wn-body > p { margin: 0; color: var(--text); }
+.release-notes .rn-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 8px; }
+.release-notes .rn-link { font-size: 13px; font-weight: 600; }
 
-/* The optional step-by-step tutorial, boxed off from the summary. */
-.whats-new .wn-tutorial {
-  margin-top: 10px; padding: 8px 12px; border: 1px solid var(--border);
-  border-radius: 6px; background: var(--bg);
-}
-.whats-new .wn-tut-label { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
-.whats-new .wn-tutorial ol { margin: 0; padding-left: 20px; }
-.whats-new .wn-tutorial li { margin: 3px 0; }
-
-.whats-new .wn-links { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 10px; }
-.whats-new .wn-link { font-size: 13px; font-weight: 600; }
-.whats-new .wn-try { padding: 4px 12px; font-size: 13px; }
-
-/* "Show older" reveals the entries beyond the initial few. */
-.whats-new .wn-more {
-  appearance: none; margin-top: 10px; background: transparent; border: 0;
+/* "Show all changes" and "Show older releases" reveal what the first paint leaves out. */
+.release-notes .rn-more {
+  appearance: none; background: transparent; border: 0;
   color: var(--accent); font: 600 13px/1 system-ui, sans-serif; cursor: pointer; padding: 4px 0;
 }
-.whats-new .wn-more:hover { text-decoration: underline; }
+.release-notes .rn-list + .rn-more { margin-top: 10px; }
+.release-notes .rn-more:hover { text-decoration: underline; }
 
 /* ---------- Key features (Console landing page) ----------
    A short statement of what Atlas is, below the dashboard's own tiles (see
-   key-features.js). Bilingual like What's New, and collapsible for the same
-   reason: someone who has read it once should be able to fold it away. The
+   key-features.js). Bilingual, and collapsible like the release notes above it:
+   someone who has read it once should be able to fold it away. The
    entries are a responsive two-column grid that collapses to one on a narrow
    window, so fourteen short items stay scannable instead of becoming a wall. */
 .key-features { margin-top: 18px; }
@@ -4188,7 +4209,7 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 }
 .key-features .kf-root[open] .kf-title::before { transform: rotate(90deg); }
 
-/* Segmented EN/DE toggle, matching the What's New header. */
+/* Segmented EN/DE toggle. It sets the language of the whole landing page. */
 .key-features .kf-lang { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .key-features .kf-lang button {
   appearance: none; border: 0; background: var(--surface); color: var(--muted);
@@ -6742,3 +6763,122 @@ button.im-problem:hover { background: var(--accent-soft); }
   .rct-table td.row-actions:empty { display: none; }
   .rct-table td.row-actions .btn { min-height: 40px; }
 }
+
+/* ---------- FEEL assistant (feel-assistant.js, ADR-0445) ---------- */
+/* A conversation on the left, the expression and its test on the right, the history
+   and favourites under them. It looks like the Developer View on purpose: it is the
+   same kind of tool, for the same fields. */
+.fa-overlay {
+  position: fixed; inset: 0; z-index: 70;
+  background: rgba(20, 22, 26, 0.45);
+  display: grid; place-items: center; padding: 24px;
+}
+.fa-modal {
+  width: min(1180px, 96vw); height: min(780px, 92vh);
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--surface); border-radius: 10px;
+  box-shadow: 0 18px 60px rgba(20, 22, 26, 0.35);
+}
+.fa-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-bottom: 1px solid var(--border);
+}
+.fa-mark { display: inline-flex; color: var(--accent); }
+.fa-mark svg { width: 16px; height: 16px; }
+.fa-title { margin: 0; font-size: 15px; }
+.fa-target {
+  font-size: 12px; color: var(--muted); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px;
+  max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fa-sp { flex: 1 1 auto; }
+.fa-worker { font-size: 12px; color: var(--muted); }
+.fa-worker select { font: inherit; margin-left: 4px; }
+.fa-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(300px, 5fr) 6fr; }
+.fa-chat {
+  min-height: 0; display: flex; flex-direction: column;
+  border-right: 1px solid var(--border); background: var(--bg);
+}
+.fa-log { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.fa-intro { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.fa-msg { border-radius: 10px; padding: 8px 10px; font-size: 13px; line-height: 1.5; max-width: 92%; }
+.fa-msg.user { align-self: flex-end; background: var(--accent-soft); white-space: pre-wrap; }
+.fa-msg.ai { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); display: grid; gap: 6px; }
+.fa-expl { white-space: pre-wrap; }
+.fa-code {
+  margin: 0; padding: 6px 8px; border-radius: 6px; background: var(--bg); border: 1px solid var(--border);
+  font: 12px/1.5 ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.fa-check { font: 12px/1.4 ui-monospace, monospace; }
+.fa-check.ok, .fa-out.ok { color: var(--ok); }
+.fa-check.warn { color: var(--warn); }
+.fa-check.err, .fa-out.err { color: var(--danger); }
+.fa-msg-foot { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+.fa-meta { font-size: 11px; color: var(--muted); }
+.fa-status { margin: 0; padding: 6px 12px; font-size: 12px; color: var(--muted); }
+.fa-status.err { color: var(--danger); }
+.fa-status.busy::before {
+  content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: -1px;
+  border: 2px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%;
+  animation: fa-spin 0.8s linear infinite;
+}
+@keyframes fa-spin { to { transform: rotate(360deg); } }
+.fa-ask { display: flex; gap: 8px; align-items: flex-end; padding: 10px 12px; border-top: 1px solid var(--border); }
+.fa-ask textarea {
+  flex: 1 1 auto; resize: vertical; min-height: 3.2em; max-height: 30vh;
+  font: inherit; font-size: 13px; line-height: 1.5; padding: 6px 8px; border: 1px solid var(--border-strong); border-radius: 6px;
+  background: var(--surface); color: var(--text);
+}
+.fa-work { min-height: 0; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+.fa-label { font-size: 12px; color: var(--muted); }
+.fa-vars {
+  width: 100%; font: 12px/1.5 ui-monospace, monospace; padding: 6px 8px;
+  border: 1px solid var(--border-strong); border-radius: 6px; background: var(--bg); color: var(--text);
+  resize: vertical; max-height: 26vh;
+}
+.fa-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.fa-out { font: 12px/1.5 ui-monospace, monospace; color: var(--muted); overflow-wrap: anywhere; }
+.fa-star { font-size: 16px; color: var(--muted); }
+.fa-star.on { color: var(--warn); }
+.fa-note { margin: 0; font-size: 12px; }
+.fa-note.warn { color: var(--warn); }
+.fa-lists { margin-top: 10px; border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; min-height: 140px; }
+.fa-tabs { display: flex; align-items: center; gap: 2px; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+.fa-tabs [role="tab"] {
+  border: 0; background: none; padding: 5px 8px; border-radius: 6px; cursor: pointer;
+  font-size: 12px; color: var(--muted);
+}
+.fa-tabs [role="tab"].on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.fa-local { font-size: 11px; color: var(--muted); }
+.fa-list { list-style: none; margin: 0; padding: 4px; overflow: auto; max-height: 26vh; }
+.fa-list li { display: flex; align-items: center; gap: 4px; }
+.fa-list li + li { border-top: 1px solid var(--border); }
+.fa-pick {
+  flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; text-align: left;
+  border: 0; background: none; padding: 6px; border-radius: 6px; cursor: pointer; color: var(--text);
+}
+.fa-pick:hover { background: var(--bg); }
+.fa-pick-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fa-pick-expr {
+  font: 11px/1.4 ui-monospace, monospace; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fa-rename { flex: 1 1 auto; font: inherit; font-size: 12px; padding: 2px 4px; }
+.fa-empty { padding: 8px; font-size: 12px; color: var(--muted); }
+.fa-list-foot { justify-content: flex-end; padding: 4px 6px; }
+@media (max-width: 760px) {
+  .fa-overlay { padding: 0; }
+  .fa-modal { width: 100vw; height: 100vh; border-radius: 0; }
+  .fa-body { grid-template-columns: 1fr; grid-template-rows: minmax(240px, 1fr) auto; overflow: auto; }
+  .fa-chat { border-right: 0; border-bottom: 1px solid var(--border); }
+}
+/* The spark beside a focused dmn-js cell: one button, moved to whichever cell has the
+   focus, because dmn-js re-renders the cells themselves on every change. */
+.feel-ai-float {
+  position: fixed; z-index: 65; width: 20px; height: 18px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--accent); border-radius: 5px; background: var(--surface);
+  color: var(--accent); cursor: pointer; box-shadow: 0 1px 3px rgba(20, 22, 26, 0.2);
+}
+.feel-ai-float[hidden] { display: none; }
+#feel-assistant-btn svg { width: 18px; height: 18px; }
