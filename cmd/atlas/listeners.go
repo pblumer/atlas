@@ -57,7 +57,7 @@ const (
 // Both also write net/http's own complaints through the logging package rather than
 // the bare standard logger, so a load balancer's TCP health check — a connection that
 // closes before its TLS handshake begins — is a DEBUG line instead of an INFO one every
-// interval (ADR-draft-trusted-proxies).
+// interval (ADR-0448).
 func newHTTPServer(addr string, h http.Handler, tlsCfg *tls.Config) *http.Server {
 	return &http.Server{
 		Addr:              addr,
@@ -70,7 +70,7 @@ func newHTTPServer(addr string, h http.Handler, tlsCfg *tls.Config) *http.Server
 }
 
 // newPublicServer is the server --addr is served by: newHTTPServer, taking the client's
-// address from the proxies --trusted-proxies names (ADR-draft-trusted-proxies). With
+// address from the proxies --trusted-proxies names (ADR-0448). With
 // none named the handler is the handler and the hook finds nothing to record.
 //
 // The loopback server is deliberately not one. Its peers are this process's own

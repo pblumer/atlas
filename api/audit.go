@@ -45,7 +45,7 @@ import (
 func auditActor(r *http.Request) []slog.Attr {
 	attrs := []slog.Attr{slog.String("client_ip", httpapi.ClientIP(r))}
 	// Behind a load balancer the connection is the balancer's, and client_ip is the
-	// client it vouched for (ADR-draft-trusted-proxies). The balancer is kept beside
+	// client it vouched for (ADR-0448). The balancer is kept beside
 	// it, so a request that came round it — no via — can be told from one that came
 	// through it.
 	if via := httpapi.Via(r); via != "" {

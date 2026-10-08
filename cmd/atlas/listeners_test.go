@@ -220,7 +220,7 @@ func TestHTTPServerCarriesItsAddressAndTLS(t *testing.T) {
 
 // TestHTTPServerErrorLog: both servers write net/http's own complaints through the
 // logging package, which is what demotes a load balancer's TCP health check to DEBUG
-// instead of an INFO line every ten seconds (ADR-draft-trusted-proxies).
+// instead of an INFO line every ten seconds (ADR-0448).
 func TestHTTPServerErrorLog(t *testing.T) {
 	for name, srv := range map[string]*http.Server{
 		"public":   newPublicServer(":8080", http.NewServeMux(), nil, trustedproxy.Set{}),

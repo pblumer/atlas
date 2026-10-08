@@ -1,4 +1,4 @@
-# ADR-DRAFT: Trusted proxies — the client's address behind a load balancer, and the health check that is not news
+# ADR-0448: Trusted proxies — the client's address behind a load balancer, and the health check that is not news
 
 - **Status:** Accepted
 - **Implementation:** Landed

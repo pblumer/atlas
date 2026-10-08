@@ -8285,11 +8285,11 @@ curl -H "Authorization: Bearer $ATLAS_METRICS_TOKEN" https://atlas.example.com/m
       <p data-l="de">Hinter einem Load Balancer kommt jede Verbindung vom Load Balancer. Ohne weitere Angabe
         zeichnet atlas deshalb dessen Adresse als <code>client_ip</code> jeder Anmeldung auf, und die
         Login-Drosselung teilt ein einziges Budget auf alle Personen auf. <code>--trusted-proxies</code> nennt die
-        Load Balancer, deren Angabe atlas übernimmt (ADR-draft-trusted-proxies):</p>
+        Load Balancer, deren Angabe atlas übernimmt (ADR-0448):</p>
       <p data-l="en">Behind a load balancer every connection comes from the load balancer. Without more, atlas
         therefore records its address as the <code>client_ip</code> of every sign-in, and the login throttle shares
         one budget among everybody. <code>--trusted-proxies</code> names the load balancers whose word atlas takes
-        (ADR-draft-trusted-proxies):</p>
+        (ADR-0448):</p>
       <pre><code>atlas serve ... --trusted-proxies 10.179.2.139</code></pre>
       <ul>
         <li data-l="de"><b>Load Balancer mit HTTP</b> (Re-Encryption, Ingress) hängen die Client-Adresse an

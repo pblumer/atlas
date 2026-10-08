@@ -50,7 +50,7 @@ func Error(w http.ResponseWriter, status int, msg string) {
 // X-Forwarded-For or a PROXY protocol header. From anywhere else it is the host
 // part of the connection's own address, and a forwarded header is never read: a
 // client-supplied value would let one caller spread its login attempts across as
-// many throttle buckets as it cares to invent (ADR-0197, ADR-draft-trusted-proxies).
+// many throttle buckets as it cares to invent (ADR-0197, ADR-0448).
 // An address that carries no port is used as-is.
 func ClientIP(r *http.Request) string {
 	if ip, ok := trustedproxy.Client(r); ok {

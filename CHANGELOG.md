@@ -16,7 +16,7 @@ _Changed_ / _Removed_ for each version.
 
 - **The client's address survives a load balancer.** `--trusted-proxies` (or
   `ATLAS_TRUSTED_PROXIES`) lists the balancers in front of the server, as addresses or
-  CIDR prefixes ([ADR-draft-trusted-proxies](docs/adr/draft-trusted-proxies.md)). On a
+  CIDR prefixes ([ADR-0448](docs/adr/0448-trusted-proxies.md)). On a
   connection from one of them the client's address is taken from a PROXY protocol header
   — v1 or v2, for a balancer that forwards TCP and leaves TLS to Atlas — or from
   `X-Forwarded-For`, for one that speaks HTTP, read from the right so that what a client
@@ -467,7 +467,7 @@ _Changed_ / _Removed_ for each version.
   instead of an INFO line without an event name: 8640 a day at a ten-second check. Every
   other complaint from the HTTP server keeps its wording and its INFO level, so a client that
   cannot speak TLS 1.3 stands out again. `--log-level=debug` shows the health checks
-  ([ADR-draft-trusted-proxies](docs/adr/draft-trusted-proxies.md)).
+  ([ADR-0448](docs/adr/0448-trusted-proxies.md)).
 
 - **The event feed no longer goes away with the shop.** A server started with
   `--catalogue=false` now serves `GET /api/v1/events` and its feed subscriptions, and pushes

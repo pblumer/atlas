@@ -977,7 +977,7 @@ What it takes to run this for real.
   the lease/timeout counters, which wait on ADR-0007; readiness distinct from liveness;
   then structured log event names and OTel traces.
 - ✅ **Running behind a load balancer**
-  ([ADR-draft-trusted-proxies](docs/adr/draft-trusted-proxies.md)): `--trusted-proxies`
+  ([ADR-0448](docs/adr/0448-trusted-proxies.md)): `--trusted-proxies`
   names the balancers whose word about a client's address is taken — a PROXY protocol
   header (v1/v2) from one that forwards TCP to a TLS-terminating Atlas, `X-Forwarded-For`
   read from the right from one that speaks HTTP, and neither from anybody else — so the

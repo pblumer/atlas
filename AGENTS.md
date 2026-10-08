@@ -126,7 +126,7 @@ internal/ownerfile/ Making a file this account's alone, and checking it is: mode
             and on Windows, which ignores modes, an access list — the vault key uses it
 internal/trustedproxy/ The client's address behind a load balancer: --trusted-proxies,
             the PROXY protocol under the public listener and X-Forwarded-For in front of
-            the handler, read from listed peers only (ADR-draft-trusted-proxies)
+            the handler, read from listed peers only (ADR-0448)
 ```
 
 **`connector/` holds the Worker Types.** Every capability a model can put on a

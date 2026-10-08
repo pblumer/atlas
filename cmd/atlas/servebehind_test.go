@@ -39,7 +39,7 @@ func healthzThroughATCPBalancer(addr string, pool *x509.CertPool) (int, error) {
 }
 
 // TestServeBehindATCPBalancer boots the real server the way the deployment that
-// prompted ADR-draft-trusted-proxies runs it: Atlas terminates TLS, a balancer forwards
+// prompted ADR-0448 runs it: Atlas terminates TLS, a balancer forwards
 // TCP in front of it. With the balancer listed, a PROXY header ahead of the handshake is
 // read and the request is served; a client that connects without one — the balancer's
 // own health check, or anything else from that address — is served as before.

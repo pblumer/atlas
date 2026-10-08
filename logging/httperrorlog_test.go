@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// ADR-draft-trusted-proxies: what net/http says about a connection.
+// ADR-0448: what net/http says about a connection.
 //
 // A load balancer's TCP health check opens a connection to the TLS port and closes it
 // before sending a ClientHello. net/http reports every one of them as

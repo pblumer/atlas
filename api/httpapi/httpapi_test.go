@@ -84,7 +84,7 @@ func TestClientIPStripsThePort(t *testing.T) {
 // TestClientIPIsWhatATrustedProxyVouchedFor: behind a load balancer the connection is
 // the balancer's, and ClientIP — what the login throttle buckets on and every audit line
 // records — must be the client the balancer named, with the balancer kept beside it as
-// Via (ADR-draft-trusted-proxies). A request nobody vouched for answers from its
+// Via (ADR-0448). A request nobody vouched for answers from its
 // connection exactly as before.
 func TestClientIPIsWhatATrustedProxyVouchedFor(t *testing.T) {
 	proxies, err := trustedproxy.Parse("10.179.2.139")

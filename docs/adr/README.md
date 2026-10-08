@@ -533,6 +533,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0445](0445-feel-assistant.md) | A FEEL expression is written in a conversation, and checked by the engine before anybody reads it | Accepted | Landed |
 | [0446](0446-the-messages-deployed-models-send-and-receive.md) | Atlas shows the messages its deployed models send and receive | Proposed | Not started |
 | [0447](0447-the-signals-deployed-models-throw-and-receive.md) | Atlas shows the signals its deployed models throw and receive | Proposed | Not started |
+| [0448](0448-trusted-proxies.md) | Trusted proxies — the client's address behind a load balancer, and the health check that is not news | Accepted | Landed |
 
 ## The two states of a record
 

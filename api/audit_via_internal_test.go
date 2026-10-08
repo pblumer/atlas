@@ -8,7 +8,7 @@ import (
 	"github.com/pblumer/atlas/internal/trustedproxy"
 )
 
-// TestAuditNamesTheClientBehindTheBalancer: the log that prompted ADR-draft-trusted-proxies
+// TestAuditNamesTheClientBehindTheBalancer: the log that prompted ADR-0448
 // recorded every login, password change and role change with client_ip set to the load
 // balancer — true of the connection, useless to an audit. Behind a trusted proxy the
 // line names the client and keeps the balancer as via; a request that came round the

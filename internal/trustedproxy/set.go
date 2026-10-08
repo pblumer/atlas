@@ -1,5 +1,5 @@
 // Package trustedproxy takes a client's address from the proxy in front of Atlas, and
-// from nobody else (ADR-draft-trusted-proxies).
+// from nobody else (ADR-0448).
 //
 // Behind a load balancer every connection comes from the balancer. The login throttle
 // then charges every person to one bucket (ADR-0197), and every audit line names the

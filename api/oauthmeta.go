@@ -52,7 +52,7 @@ func WithExternalURL(origin string) Option {
 //
 // That is a deliberate difference from httpapi.ClientIP, which reads
 // X-Forwarded-For only from a proxy listed in --trusted-proxies and refuses it from
-// everyone else (ADR-draft-trusted-proxies). The question there feeds a security
+// everyone else (ADR-0448). The question there feeds a security
 // decision: which bucket a login attempt is charged to, where a client-supplied
 // value would let an attacker spread a password guess across as many buckets as it
 // likes. The question here

@@ -221,7 +221,7 @@ func runServe(args []string) error {
 	tlsCert := fs.String("tls-cert", os.Getenv("ATLAS_TLS_CERT"), "PEM certificate chain to serve --addr with, e.g. /etc/atlas/tls.crt. Set it together with --tls-key to have this server terminate TLS 1.3 itself instead of a reverse proxy doing it (ADR-0191); leave both unset for plaintext. The pair is re-read when either file changes, so a renewal needs no restart. TLS 1.3 only: there is no cipher list to configure and no --tls-min-version (or ATLAS_TLS_CERT)")
 	tlsKey := fs.String("tls-key", os.Getenv("ATLAS_TLS_KEY"), "PEM private key for --tls-cert, e.g. /etc/atlas/tls.key. Both or neither (or ATLAS_TLS_KEY)")
 	// The load balancers in front of this server, whose word about a client's address
-	// is taken (ADR-draft-trusted-proxies). Empty trusts nobody, which is what every
+	// is taken (ADR-0448). Empty trusts nobody, which is what every
 	// deployment had before: the connection's own address is the client.
 	trustedProxies := fs.String("trusted-proxies", os.Getenv("ATLAS_TRUSTED_PROXIES"), "comma-separated addresses or CIDR prefixes of the load balancers in front of this server, e.g. 10.179.2.139 or 10.179.2.0/28. On a connection from one of them the client's address is taken from a PROXY protocol header (v1 or v2, for a balancer that forwards TCP and leaves TLS to this server) or from X-Forwarded-For (for one that speaks HTTP), so the login throttle and the audit log see the person rather than the balancer; from any other address neither is read. Empty (default) trusts nobody (or ATLAS_TRUSTED_PROXIES)")
 	tlsCA := fs.String("tls-ca", os.Getenv("ATLAS_TLS_CA"), "PEM bundle of certificate authorities to trust *in addition to* the host's, when this server calls another atlas — publishing an application to a deployment target, and reading that target's status back (ADR-0129). Point it at your internal CA where the other server's certificate comes from one; without it the host trust store is the only answer, and an internally issued certificate is refused. It never replaces the system roots, it is never a way to skip verification, and it does not touch the REST, mail or Graph workers, whose endpoints are somebody else's (or ATLAS_TLS_CA)")
@@ -299,7 +299,7 @@ func runServe(args []string) error {
 	logFormat := fs.String("log-format", string(logging.DefaultFormat), "how to render logs: \"text\" (logfmt-style key=value, for a terminal) or \"json\" (one object per line, for a log shipper). Every line carries a stable event= name either way (ADR-0142)")
 	// The floor below which nothing is written. ADR-0142 left it out while nothing
 	// logged below Info; a load balancer's health check is the first thing that does.
-	logLevel := fs.String("log-level", string(logging.DefaultLevel), "least severe log line written: \"debug\", \"info\" (default), \"warn\" or \"error\". Debug adds lines that are true but not news, such as a load balancer's TCP health check closing a connection before TLS began (ADR-draft-trusted-proxies)")
+	logLevel := fs.String("log-level", string(logging.DefaultLevel), "least severe log line written: \"debug\", \"info\" (default), \"warn\" or \"error\". Debug adds lines that are true but not news, such as a load balancer's TCP health check closing a connection before TLS began (ADR-0448)")
 	// Prometheus metrics (ADR-0142): on by default. The exposition carries only
 	// bounded-cardinality aggregates, so the cost of having it is a path an operator may
 	// not want reachable rather than data leaking.

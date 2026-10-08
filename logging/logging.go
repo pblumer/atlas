@@ -64,7 +64,7 @@ const (
 
 // DefaultLevel is info: what Atlas has always written. Debug exists for the lines that
 // are true but not news — a load balancer's health check closing a connection before
-// TLS began is the first of them (ADR-draft-trusted-proxies) — and an operator asks for
+// TLS began is the first of them (ADR-0448) — and an operator asks for
 // it while chasing something, rather than living with it.
 const DefaultLevel = LevelInfo
 

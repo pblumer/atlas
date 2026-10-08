@@ -20,7 +20,7 @@ import (
 // the handshake failures that do mean something — a client that cannot speak TLS 1.3
 // (ADR-0191), a certificate somebody refused. So that one shape is written at DEBUG
 // under server.tls_handshake_aborted, with the peer as an attribute, and everything
-// else goes on through the standard logger exactly as before (ADR-draft-trusted-proxies).
+// else goes on through the standard logger exactly as before (ADR-0448).
 //
 // It is demoted rather than dropped: a scan of the port leaves the same trace, and an
 // operator who wants to see it asks for --log-level=debug.
