@@ -6,7 +6,7 @@ was entschieden ist, was offen ist und welche Arbeit in welcher Reihenfolge anst
 damit spätere Arbeitssitzungen daran anschliessen können, ohne die Herleitung zu
 wiederholen. Anders als ein ADR wird es fortgeschrieben, sobald sich etwas ändert.
 
-**Stand:** 2026-09-29 · **Basis:** `main` nach Release 0.7.0
+**Stand:** 2026-10-01 · **Basis:** `main` nach Release 0.8.0
 
 ---
 
@@ -121,6 +121,15 @@ Quelle, `api/web/examples-catalog.json` wird daraus erzeugt, `examples/catalog_t
 verhindert Drift und kompiliert die Modelle. Auf Wunsch vor der Beobachtungssitzung gebaut;
 deren Ergebnis kann das Thema später schärfen.
 
+**Sitzungsmaterial.** Zum Leitfall gehören zwei Moderationsdokumente, die ihn in eine
+durchführbare Sitzung übersetzen: die Moderationsfassung
+[lehrgang-drehbuch.md](lehrgang-drehbuch.md) (Zeitfenster, Vorhersagefrage und erwartete
+Antwort, Tätigkeit und Erfolgsmass je Modul, Vorbereitungs-Checkliste) und das
+Teilnehmenden-Arbeitsblatt [lehrgang-arbeitsblatt.md](lehrgang-arbeitsblatt.md) (dieselben
+Vorhersagefragen ohne Antworten, Erfolg als Beobachtungsauftrag). Getrennt gehalten, damit
+die didaktische Leitlinie «Vorhersage vor Ausführung» nicht durch mitgelieferte Antworten
+entwertet wird. Beide liegen in `docs/planning/` neben diesem Plan.
+
 ### Phase 4 — Lehrgangsseite
 
 Eigene Seite neben dem Handbuch oder Kapitelgruppe im Handbuch: noch zu entscheiden.
@@ -130,6 +139,12 @@ Eigene Seite neben dem Handbuch oder Kapitelgruppe im Handbuch: noch zu entschei
 Zwei bis drei Tandems aus Fach und Entwicklung. Gemessen werden Zeit je Modul,
 Szenarien, die rot bleiben, und die Qualität der Abschlussarbeiten; zum Vergleich
 dient die Ausgangsmessung der Beobachtungssitzung.
+
+Das Sitzungsinstrument liegt bereit (Phase 3): Der Ablauf je Tandem folgt der
+Moderationsfassung [lehrgang-drehbuch.md](lehrgang-drehbuch.md), die Teilnehmenden
+arbeiten am [Arbeitsblatt](lehrgang-arbeitsblatt.md), und gemessen wird an den
+Erfolgsmassen je Modul. Die Zeitfenster im Drehbuch sind Richtwerte, die der Pilot durch
+Ist-Zeiten ersetzt.
 
 ## 7. Was nicht bekannt ist
 
