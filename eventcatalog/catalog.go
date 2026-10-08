@@ -258,7 +258,7 @@ var Entries = []Entry{
 			{Name: "homeCatalog", Type: "string", Data: NotPersonal, Meaning: Text{EN: "The catalogue that maintains the product.", DE: "Der Katalog, der das Produkt pflegt."}},
 		},
 		NeverSecret: "TestTheFeedCarriesNoSecret",
-		Since:       Unreleased, Stability: Stable,
+		Since:       "0.9.0", Stability: Stable,
 		Access: map[Channel]string{Feed: accessFeed},
 	},
 	{
@@ -281,7 +281,7 @@ var Entries = []Entry{
 			{Name: "homeCatalog", Type: "string", Data: NotPersonal, Meaning: Text{EN: "The catalogue that maintains the product.", DE: "Der Katalog, der das Produkt pflegt."}},
 		},
 		NeverSecret: "TestTheFeedCarriesNoSecret",
-		Since:       Unreleased, Stability: Stable,
+		Since:       "0.9.0", Stability: Stable,
 		Access: map[Channel]string{Feed: accessFeed},
 	},
 	{
@@ -309,7 +309,7 @@ var Entries = []Entry{
 			{Name: "homeCatalog", Type: "string", Data: NotPersonal, Meaning: Text{EN: "The catalogue that maintains the product.", DE: "Der Katalog, der das Produkt pflegt."}},
 		},
 		NeverSecret: "TestTheFeedCarriesNoSecret",
-		Since:       Unreleased, Stability: Stable,
+		Since:       "0.9.0", Stability: Stable,
 		Access: map[Channel]string{Feed: accessFeed},
 	},
 	{
@@ -330,7 +330,7 @@ var Entries = []Entry{
 			{Name: "begruendung", Type: "string", Data: PersonalData, Meaning: Text{EN: "Why the account is needed, in the requester's words.", DE: "Begründung, in den Worten der antragstellenden Person."}},
 		},
 		NeverSecret: "TestSystemIntakeAnnouncesTheRequestAsASignal",
-		Since:       Unreleased, Stability: Experimental,
+		Since:       "0.9.0", Stability: Experimental,
 		Access:     map[Channel]string{Signal: accessSignal},
 		Listenable: true,
 	},
@@ -366,7 +366,7 @@ var Entries = []Entry{
 			{Name: "vorgesetzter", Type: "string", Data: NotPersonal, Meaning: Text{EN: "For superior only: the line manager found in the directory, the same as approver.", DE: "Nur bei superior: die im Verzeichnis gefundene vorgesetzte Person, dieselbe wie approver."}},
 		},
 		NeverSecret: "TestTheApprovalProcessesAnnounceTheRequestAsASignal",
-		Since:       Unreleased, Stability: Experimental,
+		Since:       "0.9.0", Stability: Experimental,
 		Access:     map[Channel]string{Signal: accessSignal},
 		Listenable: true,
 	},
@@ -391,7 +391,7 @@ var Entries = []Entry{
 			{Name: "elementId", Type: "string", Data: NotPersonal, Meaning: Text{EN: "The BPMN id of the element, while the definition is deployed.", DE: "Die BPMN-ID des Elements, solange die Definition deployt ist."}},
 		},
 		NeverSecret: "TestTheFeedCarriesNoSecret",
-		Since:       Unreleased, Stability: Experimental,
+		Since:       "0.9.0", Stability: Experimental,
 		Access: map[Channel]string{Feed: accessPlatform},
 	},
 	{
@@ -416,7 +416,7 @@ var Entries = []Entry{
 			{Name: "elementId", Type: "string", Data: NotPersonal, Meaning: Text{EN: "The BPMN id of the element, while the definition is deployed.", DE: "Die BPMN-ID des Elements, solange die Definition deployt ist."}},
 		},
 		NeverSecret: "TestTheFeedCarriesNoSecret",
-		Since:       Unreleased, Stability: Experimental,
+		Since:       "0.9.0", Stability: Experimental,
 		Access: map[Channel]string{Feed: accessPlatform},
 	},
 }

@@ -12,6 +12,98 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-10-08
+
+**What happens in Atlas can now leave it.** A system beyond Atlas — a CMDB, a billing
+system, a chat — no longer has to ask Atlas what changed. Every right granted or revoked,
+every action asked of a held position that ended, and every incident raised or resolved is
+an event of a CloudEvents feed, read from `GET /api/v1/events` from a cursor the reader
+keeps or pushed to a receiver by the new CloudEvents endpoint Worker Type, at least once and
+in the order Atlas recorded it
+([ADR-0429](docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)). It is
+read with a credential that reads nothing else — the `feedreader` role and the `events`
+token scope — which can be confined to the catalogues it is for. A new account request and
+an approval about to wait are thrown as signals a model of the installation can listen to.
+A Console page *Events* lists every signal, message and feed event Atlas emits, what it
+carries and who may receive it, and only an administrator deploys a model that listens to
+an event carrying personal data
+([ADR-0435](docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)).
+
+**A held service can be asked for more than its return.** A product declares its actions —
+changes such as more storage, services such as a password reset — and who may ask for each.
+The shop shows them as buttons under a held position, a process asks for one in the name of
+an application the product trusts, and how each ended is an engine record, which the
+product's process can report with a Shop send task instead of a REST call. The answers given
+on a product's order form reach the approver and the product's processes, and the person a
+service was ordered for may give it back and change it. A whole shop is imported as one
+document, and `atlas import DIR` installs an application with its shop from the command
+line. The shop has a handbook of its own with an example to install. And the shop, the
+catalogue, the orders and the inventory can be switched off with `--catalogue=false`, for an
+installation that runs Atlas as a workflow engine only
+([ADR-0434](docs/adr/0434-the-catalogue-can-be-switched-off.md)).
+
+**Workers reach further, and the server runs better behind a load balancer.** An S3 object
+storage Worker Type puts documents in a bucket and mints time-limited links to them
+([ADR-0442](docs/adr/0442-s3-object-store-worker.md)), a mail Worker reads its mailbox and
+starts processes from mail ([ADR-0438](docs/adr/0438-mailbox-worker.md)), a worker runs the
+jobs of one type concurrently ([ADR-0440](docs/adr/0440-worker-runs-jobs-concurrently.md)),
+and a FEEL assistant writes expressions in a conversation, checked by the engine before they
+are shown ([ADR-0445](docs/adr/0445-feel-assistant.md)). Behind a load balancer,
+`--trusted-proxies` gives the login throttle and the audit log the client's address instead
+of the balancer's ([ADR-0448](docs/adr/0448-trusted-proxies.md)), its health checks are
+DEBUG lines, and `--log-level` sets a floor. Among the fixes, listing one instance's jobs no
+longer walks every job on the server while holding the run loop, a deploy refused for its job
+types no longer reappears after a restart, and on Windows a crashed server no longer leaves
+its supervised workers running. The handbook gains chapters on TLS and certificates and a
+guiding case that runs one process through all six modules, and the Console's landing page
+shows these release notes, read from the changelog the binary carries
+([ADR-0444](docs/adr/0444-release-notes-from-the-changelog.md)).
+
+**Read this before upgrading from 0.8.0.** These act on an existing installation:
+
+- Each worker the server supervises for a built-in Worker Type now runs up to 16 jobs of one
+  type at once, where 0.8.0 ran one at a time, so a target system can see up to 16 parallel
+  calls per type. For a target that takes fewer, set `atlas serve --worker-max-jobs` lower;
+  `1` restores one at a time. On a worker you start yourself, `--max-jobs` now means how many
+  jobs run at once rather than how many one poll leases, and its default stays 1.
+- A deploy refuses a process whose start event carries a condition (rule
+  `start.conditional`), which 0.8.0 accepted and then never started on its own. A definition
+  deployed before keeps loading and running as it did, is named at start by a WARN
+  `event=deployment.reloaded_with_problems`, and its next deploy is refused.
+- The first start deploys a new version of the shop's three approval processes and of the
+  account-request intake, which now throw the signals of the event catalogue; instances
+  already running stay on their version. With `--catalogue=false` only the intake gets one.
+- Publishing a catalogue refuses an order form with a field named like a variable the order
+  sets itself: `orderId`, `itemId`, `positionId`, `variantId`, `recipient`, `orderer`,
+  `provisionProcess`, `approvalRef`, `atlasApiBase`, `portalBaseUrl`, `commandId`, `reason`.
+  It also refuses an action, or an operation of a product that still carries the operation
+  map, whose message an enabled inbound watch publishes. Releases already made stay.
+- A product saved in the Console's catalogue editor is saved with actions instead of the
+  operation map, and from then on its publish requires a Shop send task that reports each of
+  its changes and services completed. A 0.8.0 product with a `change` operation that is left
+  as it is, or saved over the API with its `operations`, publishes as before.
+- `POST /api/v1/messages` answers **409** for every message a catalogue product's action owns,
+  so a client that started a per-operation product's lifecycle process by publishing its
+  message by name has to go through the order. Creating, renaming or enabling an inbound watch
+  under such a message is refused with 409 too.
+- The person a service was ordered for may now return it and ask it for a change, as its
+  orderer and an operator could; a product whose return names only operators is returned by
+  an operator. A change now refuses a variable the order sets itself, such as `orderId` or
+  `recipient`, which before it passed on.
+- Atlas's own approval processes and the order fulfilment no longer receive the answers of a
+  product's order form; the processes the product binds receive each answer as a variable of
+  its own.
+- The application import now checks a message name an enabled inbound watch claims
+  (ADR-0205), as a single deploy already did: a model that can receive such a message is
+  refused with 409 unless the importing identity may view that watch's Worker.
+- Resolving a `VariableTooLarge` incident still neither writes the value again nor resumes
+  the element (issue #1123): raise `ATLAS_LIMIT_VARIABLE` or `ATLAS_LIMIT_COLLECTION`
+  before the work runs.
+- Treat the upgrade as one-way. 0.9.0 writes records 0.8.x has no replay rule for — how an
+  action asked of a position ended, and how far the event feed was pruned — so take a backup
+  before upgrading and restore it, rather than starting 0.8.x on a data directory 0.9.0 has
+  written.
+
 ### Added
 
 - **The client's address survives a load balancer.** `--trusted-proxies` (or
@@ -13890,7 +13982,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/pblumer/atlas/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/pblumer/atlas/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/pblumer/atlas/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/pblumer/atlas/compare/v0.5.0...v0.6.0
