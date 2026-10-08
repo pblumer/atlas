@@ -469,6 +469,51 @@ If you do not want an agent surface at all, block it at the proxy:
 location /mcp { deny all; }
 ```
 
+#### The client's address behind a proxy
+
+Behind a proxy or load balancer every connection comes from the proxy, and by default
+that is the address Atlas records: the login throttle charges everybody to the proxy's
+one bucket, and every audit line's `client_ip` names the proxy. Name the proxy with
+`--trusted-proxies` (or `ATLAS_TRUSTED_PROXIES`) and Atlas takes the client's address
+from it instead — but only from it
+([ADR-draft-trusted-proxies](adr/draft-trusted-proxies.md)):
+
+```bash
+atlas serve ... --trusted-proxies 10.179.2.139
+```
+
+How the proxy says who the client is depends on what it is:
+
+- **A proxy that speaks HTTP** — the nginx sketch above, HAProxy in `mode http`,
+  Traefik, a cloud application load balancer — appends the client to
+  `X-Forwarded-For`. Atlas reads that header right to left and stops at the first
+  address that is not a listed proxy, so whatever a client wrote into the header
+  itself is never read.
+- **A load balancer that forwards TCP** and leaves TLS to Atlas (`--tls-cert`) cannot
+  add a header to a stream it does not decrypt. Have it send the PROXY protocol
+  instead — v1 or v2, Atlas detects which. In HAProxy:
+
+  ```
+  backend atlas
+      mode tcp
+      server atlas1 10.179.2.20:8443 send-proxy-v2 check
+  ```
+
+A connection from a listed proxy that sends neither is served as before, with the
+proxy as the client. A connection from any other address is never read for either: a
+PROXY header from it is just the first bytes of a TLS stream, and the handshake
+refuses it. Audit lines from a request a proxy vouched for carry the proxy as `via`
+beside `client_ip`, so a request that came round the balancer — no `via` — stands
+out. Only the public listener reads proxies; the plaintext loopback listener for this
+server's own children never does.
+
+**Point the balancer's health check at `/readyz`, over HTTPS.** A TCP check — connect,
+close — tells the balancer the port is open, not that this instance can serve:
+`/readyz` answers whether it can, unauthenticated, for exactly this caller. A TCP
+check against the TLS port also produces a `server.tls_handshake_aborted` line per
+interval; it is written at DEBUG, so it is not in the log unless you ask for
+`--log-level=debug`. The checker must speak TLS 1.3.
+
 **What TLS does not cover, whichever way you terminate it.** Encryption is not
 authorization. `/healthz` and `/readyz` are unauthenticated by design, because a
 kubelet has no credential to offer, and turning the built-in listener on does not
@@ -700,6 +745,7 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--external-url` | *(derived)* | Public origin this server is reachable under, e.g. `https://atlas.example.com`. **Set this behind a reverse proxy:** the scheme such a request arrives with is `http`, so every absolute URL Atlas publishes — the OAuth discovery documents, the `WWW-Authenticate` challenge, the authorization and token endpoints — would name something no client can use ([ADR-0200](adr/0200-mcp-oauth-resource-server.md)). With `--tls-cert` and clients reaching the server by the name on its certificate, the derived origin is already right; set it anyway if they reach it by anything else. Also `ATLAS_EXTERNAL_URL` |
 | `--tls-cert` | *(none)* | PEM certificate chain to serve `--addr` with. With `--tls-key`, this server terminates TLS 1.3 itself instead of a proxy doing it; unset, it serves plain HTTP. Both or neither — one alone refuses to start. The pair is re-read when either file changes, so a renewal needs no restart ([ADR-0191](adr/0191-built-in-tls-listener.md)). Also `ATLAS_TLS_CERT` |
 | `--tls-key` | *(none)* | PEM private key for `--tls-cert`. Also `ATLAS_TLS_KEY` |
+| `--trusted-proxies` | *(none)* | Addresses or CIDR prefixes of the load balancers in front of this server, comma-separated, e.g. `10.179.2.139` or `10.179.2.0/28`. On a connection from one of them the client's address is taken from a PROXY protocol header (v1 or v2) or from `X-Forwarded-For`; from anywhere else neither is read. A prefix covering every address is refused. See [The client's address behind a proxy](#the-clients-address-behind-a-proxy) ([ADR-draft-trusted-proxies](adr/draft-trusted-proxies.md)). Also `ATLAS_TRUSTED_PROXIES` |
 | `--tls-ca` | *(none)* | PEM bundle of certificate authorities to trust **in addition to** the host's, when this server calls another Atlas — publishing to a deployment target and reading its status back ([ADR-0129](adr/0129-remote-deployment-targets.md)). For an internally issued peer certificate. Never replaces the system roots, never skips verification, and does not touch Worker Types calling third parties. `atlas worker` and `atlas mcp` take the same flag, for their own hop to an `https://` server. Also `ATLAS_TLS_CA` |
 | `--oidc-issuer` | *(none)* | OpenID Connect issuer URL. Setting it makes Atlas a relying party: the login screen gains a "Sign in with …" button and two routes are mounted. With it unset nothing is mounted and no outbound connection is made. Also `ATLAS_OIDC_ISSUER` |
 | `--oidc-client-id` | *(none)* | Client id this server was registered under at that provider. Also `ATLAS_OIDC_CLIENT_ID` |
@@ -721,6 +767,7 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--compact-wal` | `false` | Delete WAL segments already covered by a checkpoint and every consumer watermark. Irreversible, so opt-in; requires checkpointing |
 | `--metrics` | `true` | Serve the Prometheus exposition at `/metrics`. Gated by `--auth` like every other route — give the scraper an API token scoped `metrics` (see [Credentials for machines](#credentials-for-machines)) |
 | `--log-format` | `text` | `text` for a terminal, `json` for a log shipper — see [Logs](#logs) |
+| `--log-level` | `info` | Least severe line written: `debug`, `info`, `warn` or `error` — see [Logs](#logs) |
 | `--trace-endpoint` | `$OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP/HTTP collector base URL to export request traces to; empty disables tracing — see [Traces](#traces) |
 | `--trace-sample-ratio` | `0.1` | Fraction of traces to record, `0` to `1` |
 | `--opensearch-url` | `$ATLAS_OPENSEARCH_URL` | Mirror the event log into OpenSearch; empty disables |
@@ -885,6 +932,13 @@ terminal is the audience Atlas has always had.
 {"time":"2026-01-31T09:19:02.884Z","level":"INFO","msg":"published a recovery checkpoint; recovery replays only past it","event":"checkpoint.published","position":48213}
 ```
 
+`--log-level` sets the least severe line written: `debug`, `info` (the default),
+`warn` or `error`. Debug holds lines that are true but not news — so far one: a
+connection that closed before its TLS handshake began, which is what a load balancer's
+TCP health check looks like (`server.tls_handshake_aborted`, with the peer as
+`remote`). Every other complaint from the HTTP server itself — a client that cannot
+speak TLS 1.3, a certificate it refused — stays at INFO in the HTTP server's own words.
+
 Everything goes to **stderr**, including lines from libraries, so `journalctl -u atlas`
 and `docker logs` see one stream in one shape. The most recent lines are also readable
 over the API at `GET /api/v1/logs` and in the UI, which is a diagnostic tail rather than
@@ -896,6 +950,8 @@ Event names an operator is most likely to alert on:
 |-------|-------|---------|
 | `server.listening` | INFO | The listener is up. It comes *after* recovery, so this is also "this instance finished starting" |
 | `server.shutting_down` | INFO | SIGTERM received; in-flight requests are being drained |
+| `server.trusted_proxies` | INFO | Said once at start where `--trusted-proxies` names any: the list as the server understood it |
+| `server.tls_handshake_aborted` | DEBUG | A connection to the TLS listener closed before its handshake began, with the peer as `remote` — a TCP health check, or a port scan |
 | `command.failed` | ERROR | A command exited non-zero |
 | `checkpoint.published` | INFO | A recovery checkpoint was captured, with the log `position` it covers |
 | `checkpoint.failed` | WARN | The checkpoint pass failed; the next tick retries. Persistent failures mean restarts replay more log |
@@ -912,7 +968,9 @@ Event names an operator is most likely to alert on:
 | `auth.disabled` | WARN | The server was started with `--auth=false` and requires no login for anything |
 
 **The security audit trail.** Every line below carries the acting principal
-(`actor`, `actor_id`) where the request has one, and the `client_ip` always. None
+(`actor`, `actor_id`) where the request has one, and the `client_ip` always — behind
+a proxy listed in `--trusted-proxies`, the client that proxy named, with the proxy
+itself as `via`. None
 of them carries a password, a hash or a token. Ship them with `--log-format=json`.
 
 | Event | Level | Meaning |

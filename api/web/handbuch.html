@@ -8279,6 +8279,47 @@ curl -H "Authorization: Bearer $ATLAS_METRICS_TOKEN" https://atlas.example.com/m
         <li data-l="en">A cert-manager renewal reaches the running pod without a restart.</li>
       </ul>
 
+      <div id="tls-client-address" style="scroll-margin-top:66px"></div>
+      <h3 data-l="de">Die Client-Adresse hinter dem Load Balancer</h3>
+      <h3 data-l="en">The client's address behind the load balancer</h3>
+      <p data-l="de">Hinter einem Load Balancer kommt jede Verbindung vom Load Balancer. Ohne weitere Angabe
+        zeichnet atlas deshalb dessen Adresse als <code>client_ip</code> jeder Anmeldung auf, und die
+        Login-Drosselung teilt ein einziges Budget auf alle Personen auf. <code>--trusted-proxies</code> nennt die
+        Load Balancer, deren Angabe atlas übernimmt (ADR-draft-trusted-proxies):</p>
+      <p data-l="en">Behind a load balancer every connection comes from the load balancer. Without more, atlas
+        therefore records its address as the <code>client_ip</code> of every sign-in, and the login throttle shares
+        one budget among everybody. <code>--trusted-proxies</code> names the load balancers whose word atlas takes
+        (ADR-draft-trusted-proxies):</p>
+      <pre><code>atlas serve ... --trusted-proxies 10.179.2.139</code></pre>
+      <ul>
+        <li data-l="de"><b>Load Balancer mit HTTP</b> (Re-Encryption, Ingress) hängen die Client-Adresse an
+          <code>X-Forwarded-For</code> an. atlas liest den Header von rechts und hält beim ersten Eintrag an, der
+          kein genannter Proxy ist – was ein Client selbst hineinschreibt, wird nie übernommen.</li>
+        <li data-l="en"><b>Load balancers that speak HTTP</b> (re-encryption, ingress) append the client's address
+          to <code>X-Forwarded-For</code>. atlas reads the header from the right and stops at the first entry that
+          is not a listed proxy – whatever a client writes into it itself is never taken.</li>
+        <li data-l="de"><b>Load Balancer mit TCP-Durchreichung</b>, bei denen atlas TLS terminiert, können keinen
+          Header in einen Strom schreiben, den sie nicht entschlüsseln. Sie senden das PROXY-Protokoll (v1 oder
+          v2) vor dem Strom, bei HAProxy etwa mit <code>send-proxy-v2</code>.</li>
+        <li data-l="en"><b>Load balancers that pass TCP through</b>, with atlas terminating TLS, cannot write a
+          header into a stream they do not decrypt. They send the PROXY protocol (v1 or v2) ahead of the stream,
+          in HAProxy for instance with <code>send-proxy-v2</code>.</li>
+        <li data-l="de"><b>Nur von den genannten Adressen.</b> Von jeder anderen Adresse liest atlas weder das
+          eine noch das andere; ein PROXY-Header ist dort nur der Anfang eines TLS-Stroms, den der Handshake
+          abweist. Audit-Zeilen nennen den Load Balancer zusätzlich als <code>via</code>.</li>
+        <li data-l="en"><b>From the listed addresses only.</b> From any other address atlas reads neither; a PROXY
+          header there is only the start of a TLS stream, which the handshake refuses. Audit lines also name the
+          load balancer as <code>via</code>.</li>
+        <li data-l="de"><b>Health Check auf <code>/readyz</code>.</b> Ein TCP-Check öffnet und schliesst nur eine
+          Verbindung und meldet, dass der Port offen ist – nicht, dass atlas bedienen kann. atlas schreibt diese
+          Verbindungen als <code>server.tls_handshake_aborted</code> auf Stufe DEBUG, sichtbar erst mit
+          <code>--log-level=debug</code>.</li>
+        <li data-l="en"><b>Health check on <code>/readyz</code>.</b> A TCP check only opens and closes a
+          connection and reports that the port is open – not that atlas can serve. atlas writes those connections
+          as <code>server.tls_handshake_aborted</code> at DEBUG, visible only with
+          <code>--log-level=debug</code>.</li>
+      </ul>
+
       <div id="tls-windows" style="scroll-margin-top:66px"></div>
       <h3 data-l="de">Windows Server hinter einem Load Balancer</h3>
       <h3 data-l="en">Windows Server behind a load balancer</h3>

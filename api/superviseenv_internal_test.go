@@ -778,10 +778,10 @@ func TestAnUnknownATLASTOKENIsSaidOutLoudAtStartup(t *testing.T) {
 func captureWarnings(t *testing.T) *lockedBuffer {
 	t.Helper()
 	sink := &lockedBuffer{}
-	if err := logging.Setup(sink, logging.FormatJSON); err != nil {
+	if err := logging.Setup(sink, logging.FormatJSON, logging.DefaultLevel); err != nil {
 		t.Fatalf("logging.Setup: %v", err)
 	}
-	t.Cleanup(func() { _ = logging.Setup(os.Stderr, logging.DefaultFormat) })
+	t.Cleanup(func() { _ = logging.Setup(os.Stderr, logging.DefaultFormat, logging.DefaultLevel) })
 	return sink
 }
 

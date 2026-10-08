@@ -41,6 +41,7 @@ import (
 	"github.com/pblumer/atlas/connector/rest/openapitemplate"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/internal/trustedproxy"
 	"github.com/pblumer/atlas/jobtype"
 	"github.com/pblumer/atlas/limits"
 	"github.com/pblumer/atlas/logging"
@@ -219,6 +220,10 @@ func runServe(args []string) error {
 	// behind the boundary in ADR-0198 and no longer does.
 	tlsCert := fs.String("tls-cert", os.Getenv("ATLAS_TLS_CERT"), "PEM certificate chain to serve --addr with, e.g. /etc/atlas/tls.crt. Set it together with --tls-key to have this server terminate TLS 1.3 itself instead of a reverse proxy doing it (ADR-0191); leave both unset for plaintext. The pair is re-read when either file changes, so a renewal needs no restart. TLS 1.3 only: there is no cipher list to configure and no --tls-min-version (or ATLAS_TLS_CERT)")
 	tlsKey := fs.String("tls-key", os.Getenv("ATLAS_TLS_KEY"), "PEM private key for --tls-cert, e.g. /etc/atlas/tls.key. Both or neither (or ATLAS_TLS_KEY)")
+	// The load balancers in front of this server, whose word about a client's address
+	// is taken (ADR-draft-trusted-proxies). Empty trusts nobody, which is what every
+	// deployment had before: the connection's own address is the client.
+	trustedProxies := fs.String("trusted-proxies", os.Getenv("ATLAS_TRUSTED_PROXIES"), "comma-separated addresses or CIDR prefixes of the load balancers in front of this server, e.g. 10.179.2.139 or 10.179.2.0/28. On a connection from one of them the client's address is taken from a PROXY protocol header (v1 or v2, for a balancer that forwards TCP and leaves TLS to this server) or from X-Forwarded-For (for one that speaks HTTP), so the login throttle and the audit log see the person rather than the balancer; from any other address neither is read. Empty (default) trusts nobody (or ATLAS_TRUSTED_PROXIES)")
 	tlsCA := fs.String("tls-ca", os.Getenv("ATLAS_TLS_CA"), "PEM bundle of certificate authorities to trust *in addition to* the host's, when this server calls another atlas — publishing an application to a deployment target, and reading that target's status back (ADR-0129). Point it at your internal CA where the other server's certificate comes from one; without it the host trust store is the only answer, and an internally issued certificate is refused. It never replaces the system roots, it is never a way to skip verification, and it does not touch the REST, mail or Graph workers, whose endpoints are somebody else's (or ATLAS_TLS_CA)")
 	dataDir := fs.String("data-dir", "atlas-data", "directory for the write-ahead log and state store")
 	shutdownTimeout := fs.Duration("shutdown-timeout", 10*time.Second, "grace period for in-flight requests on shutdown")
@@ -292,6 +297,9 @@ func runServe(args []string) error {
 	// that would otherwise need a parsing rule of its own. Either way every line carries
 	// a stable event= name, so what an alert matches on does not depend on this flag.
 	logFormat := fs.String("log-format", string(logging.DefaultFormat), "how to render logs: \"text\" (logfmt-style key=value, for a terminal) or \"json\" (one object per line, for a log shipper). Every line carries a stable event= name either way (ADR-0142)")
+	// The floor below which nothing is written. ADR-0142 left it out while nothing
+	// logged below Info; a load balancer's health check is the first thing that does.
+	logLevel := fs.String("log-level", string(logging.DefaultLevel), "least severe log line written: \"debug\", \"info\" (default), \"warn\" or \"error\". Debug adds lines that are true but not news, such as a load balancer's TCP health check closing a connection before TLS began (ADR-draft-trusted-proxies)")
 	// Prometheus metrics (ADR-0142): on by default. The exposition carries only
 	// bounded-cardinality aggregates, so the cost of having it is a path an operator may
 	// not want reachable rather than data leaking.
@@ -322,6 +330,10 @@ func runServe(args []string) error {
 	metricsInstance := fs.String("metrics-instance", os.Getenv("ATLAS_METRICS_INSTANCE"), "how this node appears in --metrics-url's `instance` label, e.g. atlas-01.internal. Atlas cannot derive it: a scrape target is your configuration, and guessing would answer about a different process while looking exactly like an answer about this one. Left empty, a Panorama element bound to this server's own runtime reports itself unidentifiable and says why")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	proxies, err := trustedproxy.Parse(*trustedProxies)
+	if err != nil {
+		return fmt.Errorf("--trusted-proxies: %w", err)
 	}
 	enabled := map[string]bool{"powershell": *powershell, "python": *python, "javascript": *javascript}
 	scriptSandbox, err := script.ParseSandboxMode(*scriptSandboxRaw)
@@ -385,7 +397,7 @@ func runServe(args []string) error {
 		ClientSecret: *oidcClientSecret,
 		Scopes:       *oidcScopes,
 		Name:         *oidcName,
-	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, *vault, *userProvisioning, enabled, *scriptTimeout, scriptSandbox, osCfg, metricsCfg, retention, storeCfg, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, *catalogue, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *workerMaxJobs, *inProcess, *history, *historyScope, *publicFormsCORS, budgets)
+	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, proxies, *vault, *userProvisioning, enabled, *scriptTimeout, scriptSandbox, osCfg, metricsCfg, retention, storeCfg, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, *catalogue, logging.Format(*logFormat), logging.Level(*logLevel), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *workerMaxJobs, *inProcess, *history, *historyScope, *publicFormsCORS, budgets)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -504,12 +516,12 @@ func (c storeConfig) options() []state.Option {
 	}
 }
 
-func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, scriptSandbox script.SandboxMode, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, storeCfg storeConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn, catalogue bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, workerMaxJobs int, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string, budgets limits.Limits) error {
+func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, proxies trustedproxy.Set, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, scriptSandbox script.SandboxMode, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, storeCfg storeConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn, catalogue bool, logFormat logging.Format, logLevel logging.Level, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, workerMaxJobs int, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string, budgets limits.Limits) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
 	logs := api.NewLogBuffer(2000)
-	if err := logging.Setup(io.MultiWriter(os.Stderr, logs), logFormat); err != nil {
+	if err := logging.Setup(io.MultiWriter(os.Stderr, logs), logFormat, logLevel); err != nil {
 		return err
 	}
 
@@ -895,15 +907,9 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	}
 	defer srv.Close()
 
-	httpSrv := newHTTPServer(addr, srv.Handler(), serverTLS)
+	httpSrv := newPublicServer(addr, srv.Handler(), serverTLS, proxies)
 	listeners := []httpListener{{srv: httpSrv, serve: func() error {
-		if !tlsOn {
-			return httpSrv.ListenAndServe()
-		}
-		// The pair is served by TLSConfig's GetCertificate, which re-reads it when it
-		// changes; the filename arguments here would read it once and never again,
-		// so they are deliberately empty (ADR-0191).
-		return httpSrv.ListenAndServeTLS("", "")
+		return servePublic(httpSrv, tlsOn, proxies)
 	}}}
 	if loopbackLn != nil {
 		loopbackSrv := newHTTPServer("", srv.Handler(), nil)
@@ -918,6 +924,11 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	logging.Info(logging.ServerListening, "listening; recovery is complete and this instance is ready",
 		slog.String("addr", addr), slog.String("ui", base+"/"), slog.String("mcp", base+"/mcp"),
 		slog.Bool("tls", tlsOn))
+	if !proxies.Empty() {
+		logging.Info(logging.ServerTrustedProxies,
+			"client addresses are taken from a PROXY protocol header or X-Forwarded-For, on connections from these proxies only",
+			slog.String("proxies", proxies.String()))
+	}
 	if docs {
 		logging.Info(logging.ServerDocsEnabled, "API explorer enabled",
 			slog.String("docs", base+"/api/docs"), slog.String("openapi", base+"/api/v1/openapi.json"))
@@ -940,7 +951,7 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 // go to stderr so they never corrupt the JSON-RPC stream.
 func runMCP(args []string) error {
 	// Protocol traffic owns stdout, so logs go to stderr and nothing else.
-	if err := logging.Setup(os.Stderr, logging.DefaultFormat); err != nil {
+	if err := logging.Setup(os.Stderr, logging.DefaultFormat, logging.DefaultLevel); err != nil {
 		return err
 	}
 	return runMCPOn(args, os.Stdin, os.Stdout)
@@ -1293,7 +1304,7 @@ func runWorker(args []string) error {
 		return err
 	}
 
-	if err := logging.Setup(os.Stderr, logging.DefaultFormat); err != nil {
+	if err := logging.Setup(os.Stderr, logging.DefaultFormat, logging.DefaultLevel); err != nil {
 		return err
 	}
 	if len(handles) == 0 && len(builtin.Handlers) == 0 {

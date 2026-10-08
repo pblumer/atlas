@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/pblumer/atlas/internal/trustedproxy"
 )
 
 // TestJSONWritesContentTypeAndStatus pins the response envelope every Atlas
@@ -76,6 +78,40 @@ func TestClientIPStripsThePort(t *testing.T) {
 		if got := ClientIP(r); got != tc.want {
 			t.Errorf("ClientIP(%q) = %q, want %q", tc.remote, got, tc.want)
 		}
+	}
+}
+
+// TestClientIPIsWhatATrustedProxyVouchedFor: behind a load balancer the connection is
+// the balancer's, and ClientIP — what the login throttle buckets on and every audit line
+// records — must be the client the balancer named, with the balancer kept beside it as
+// Via (ADR-draft-trusted-proxies). A request nobody vouched for answers from its
+// connection exactly as before.
+func TestClientIPIsWhatATrustedProxyVouchedFor(t *testing.T) {
+	proxies, err := trustedproxy.Parse("10.179.2.139")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, remote, xff, client, via string
+	}{
+		{"through the balancer", "10.179.2.139:40000", "1.1.1.1, 203.0.113.5", "203.0.113.5", "10.179.2.139"},
+		{"round the balancer", "192.0.2.50:5555", "203.0.113.5", "192.0.2.50", ""},
+		{"the balancer itself", "10.179.2.139:40000", "", "10.179.2.139", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			r.RemoteAddr = tc.remote
+			if tc.xff != "" {
+				r.Header.Set("X-Forwarded-For", tc.xff)
+			}
+			var client, via string
+			proxies.Handler(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+				client, via = ClientIP(r), Via(r)
+			})).ServeHTTP(httptest.NewRecorder(), r)
+			if client != tc.client || via != tc.via {
+				t.Errorf("ClientIP = %q, Via = %q; want %q, %q", client, via, tc.client, tc.via)
+			}
+		})
 	}
 }
 

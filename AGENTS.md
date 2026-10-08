@@ -124,6 +124,9 @@ internal/sharedread/ Reading a file without blocking a delete of it or a rename 
             which an os.Open handle does on Windows — api/sidecar/'s readers use it
 internal/ownerfile/ Making a file this account's alone, and checking it is: mode 0600,
             and on Windows, which ignores modes, an access list — the vault key uses it
+internal/trustedproxy/ The client's address behind a load balancer: --trusted-proxies,
+            the PROXY protocol under the public listener and X-Forwarded-For in front of
+            the handler, read from listed peers only (ADR-draft-trusted-proxies)
 ```
 
 **`connector/` holds the Worker Types.** Every capability a model can put on a

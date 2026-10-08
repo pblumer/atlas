@@ -51,6 +51,38 @@ const (
 // JSON is one flag away for the deployment that wants it.
 const DefaultFormat = FormatText
 
+// Level is the least severe record that is written.
+type Level string
+
+// The levels --log-level accepts, named as slog names them.
+const (
+	LevelDebug Level = "debug"
+	LevelInfo  Level = "info"
+	LevelWarn  Level = "warn"
+	LevelError Level = "error"
+)
+
+// DefaultLevel is info: what Atlas has always written. Debug exists for the lines that
+// are true but not news — a load balancer's health check closing a connection before
+// TLS began is the first of them (ADR-draft-trusted-proxies) — and an operator asks for
+// it while chasing something, rather than living with it.
+const DefaultLevel = LevelInfo
+
+// slogLevel maps l onto slog, refusing anything that is not one of the four.
+func (l Level) slogLevel() (slog.Level, error) {
+	switch l {
+	case LevelDebug:
+		return slog.LevelDebug, nil
+	case LevelInfo:
+		return slog.LevelInfo, nil
+	case LevelWarn:
+		return slog.LevelWarn, nil
+	case LevelError:
+		return slog.LevelError, nil
+	}
+	return 0, fmt.Errorf("logging: unknown level %q (want %q, %q, %q or %q)", l, LevelDebug, LevelInfo, LevelWarn, LevelError)
+}
+
 // eventKey is the attribute the event name is carried under. Fixed here so it cannot
 // drift per call site — it is the field alerts are written against.
 const eventKey = "event"
@@ -60,19 +92,24 @@ const eventKey = "event"
 // read as "this line has no event", which is a different and wrong statement.
 const unregisteredEvent = "unregistered"
 
-// Setup points the default logger at w in the given format. Everything the process
-// emits — including lines from dependencies that log through the standard library —
-// then arrives as one stream in one shape.
+// Setup points the default logger at w in the given format, writing records at level l
+// and above. Everything the process emits — including lines from dependencies that log
+// through the standard library — then arrives as one stream in one shape.
 //
 // w is the caller's to compose: the server tees stderr into the bounded buffer behind
 // GET /api/v1/logs, and that keeps working because this writes to the same place.
-func Setup(w io.Writer, f Format) error {
+func Setup(w io.Writer, f Format, l Level) error {
+	floor, err := l.slogLevel()
+	if err != nil {
+		return err
+	}
+	opts := &slog.HandlerOptions{Level: floor}
 	var h slog.Handler
 	switch f {
 	case FormatText:
-		h = slog.NewTextHandler(w, nil)
+		h = slog.NewTextHandler(w, opts)
 	case FormatJSON:
-		h = slog.NewJSONHandler(w, nil)
+		h = slog.NewJSONHandler(w, opts)
 	default:
 		return fmt.Errorf("logging: unknown format %q (want %q or %q)", f, FormatText, FormatJSON)
 	}
