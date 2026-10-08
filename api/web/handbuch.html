@@ -10218,7 +10218,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
       <h3 id="ev-atlas-entitlement-granted"><code>atlas.entitlement.granted</code></h3>
       <p data-l="de">Einer Person wurde ein Recht erteilt: Eine Position wurde bereitgestellt, oder ein Recht wurde von Hand oder durch einen Abgleich erfasst.</p>
       <p data-l="en">A right was granted to a person: a position was provisioned, or a right was recorded by hand or by a load.</p>
-      <p class="muted"><span data-l="de">Art</span><span data-l="en">Kind</span>: platform · <span data-l="de">Kanäle</span><span data-l="en">Channels</span>: feed · <span data-l="de">seit</span><span data-l="en">since</span> Unreleased · stable<br>the entitlement record (IntentEntitlementGranted), folded into the feed by applyToState</p>
+      <p class="muted"><span data-l="de">Art</span><span data-l="en">Kind</span>: platform · <span data-l="de">Kanäle</span><span data-l="en">Channels</span>: feed · <span data-l="de">seit</span><span data-l="en">since</span> 0.9.0 · stable<br>the entitlement record (IntentEntitlementGranted), folded into the feed by applyToState</p>
       <table>
         <thead><tr><th data-l="de">Feld</th><th data-l="en">Field</th><th data-l="de">Typ</th><th data-l="en">Type</th><th></th><th data-l="de">Bedeutung</th><th data-l="en">Meaning</th></tr></thead>
         <tbody>
@@ -10235,7 +10235,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
       <h3 id="ev-atlas-entitlement-revoked"><code>atlas.entitlement.revoked</code></h3>
       <p data-l="de">Ein Recht, das eine Person hielt, endete: Es wurde zurückgegeben, ist abgelaufen oder wurde entzogen.</p>
       <p data-l="en">A right a person held ended: it was returned, expired, or taken away.</p>
-      <p class="muted"><span data-l="de">Art</span><span data-l="en">Kind</span>: platform · <span data-l="de">Kanäle</span><span data-l="en">Channels</span>: feed · <span data-l="de">seit</span><span data-l="en">since</span> Unreleased · stable<br>the entitlement record (IntentEntitlementRevoked), folded into the feed by applyToState</p>
+      <p class="muted"><span data-l="de">Art</span><span data-l="en">Kind</span>: platform · <span data-l="de">Kanäle</span><span data-l="en">Channels</span>: feed · <span data-l="de">seit</span><span data-l="en">since</span> 0.9.0 · stable<br>the entitlement record (IntentEntitlementRevoked), folded into the feed by applyToState</p>
       <table>
         <thead><tr><th data-l="de">Feld</th><th data-l="en">Field</th><th data-l="de">Typ</th><th data-l="en">Type</th><th></th><th data-l="de">Bedeutung</th><th data-l="en">Meaning</th></tr></thead>
         <tbody>
@@ -10253,7 +10253,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
       <h3 id="ev-message-outcome"><code>&lt;message&gt;.&lt;outcome&gt;</code></h3>
       <p data-l="de">Eine Aktion an einer gehaltenen Position ist abgeschlossen. Den Typ bestimmt der Produktautor: der deklarierte Ereignistyp der Aktion, sonst ihre Nachricht und das Ergebnis; atlas.action.&lt;outcome&gt;, wo die Aktion keines von beiden nennt.</p>
       <p data-l="en">An action asked of a held position ended. Its type is the product author&#39;s: the action&#39;s declared event type, by default its message and the outcome; atlas.action.&lt;outcome&gt; where the action names neither.</p>
-      <p class="muted"><span data-l="de">Art</span><span data-l="en">Kind</span>: domain · <span data-l="de">Kanäle</span><span data-l="en">Channels</span>: feed · <span data-l="de">seit</span><span data-l="en">since</span> Unreleased · stable<br>the action outcome record (VTActionOutcome), written by the outcome route or a shop task and folded into the feed by applyToState</p>
+      <p class="muted"><span data-l="de">Art</span><span data-l="en">Kind</span>: domain · <span data-l="de">Kanäle</span><span data-l="en">Channels</span>: feed · <span data-l="de">seit</span><span data-l="en">since</span> 0.9.0 · stable<br>the action outcome record (VTActionOutcome), written by the outcome route or a shop task and folded into the feed by applyToState</p>
       <table>
         <thead><tr><th data-l="de">Feld</th><th data-l="en">Field</th><th data-l="de">Typ</th><th data-l="en">Type</th><th></th><th data-l="de">Bedeutung</th><th data-l="en">Meaning</th></tr></thead>
         <tbody>
@@ -10276,7 +10276,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
       <h3 id="ev-atlas-user-requested"><code>atlas.user.requested</code></h3>
       <p data-l="de">Jemand hat ein Konto beantragt; der Antrag wartet nun auf die Freigabe durch die Administration.</p>
       <p data-l="en">Somebody asked for an account, and the request now waits for an administrator to approve it.</p>
-      <p class="muted"><span data-l="de">Art</span><span data-l="en">Kind</span>: domain · <span data-l="de">Kanäle</span><span data-l="en">Channels</span>: signal · <span data-l="de">seit</span><span data-l="en">since</span> Unreleased · experimental<br><code>proc_benutzer_aufnahme</code> / <code>beantragt_melden</code> — the intake process, before its approval waits</p>
+      <p class="muted"><span data-l="de">Art</span><span data-l="en">Kind</span>: domain · <span data-l="de">Kanäle</span><span data-l="en">Channels</span>: signal · <span data-l="de">seit</span><span data-l="en">since</span> 0.9.0 · experimental<br><code>proc_benutzer_aufnahme</code> / <code>beantragt_melden</code> — the intake process, before its approval waits</p>
       <table>
         <thead><tr><th data-l="de">Feld</th><th data-l="en">Field</th><th data-l="de">Typ</th><th data-l="en">Type</th><th></th><th data-l="de">Bedeutung</th><th data-l="en">Meaning</th></tr></thead>
         <tbody>
@@ -10292,7 +10292,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
       <h3 id="ev-atlas-approval-requested"><code>atlas.approval.requested</code></h3>
       <p data-l="de">Eine Bestellposition braucht eine Genehmigung; die Genehmigungsaufgabe wartet nun auf die Person oder Gruppe, die entscheidet.</p>
       <p data-l="en">A position of an order needs an approval, and the approval task now waits for whoever decides it.</p>
-      <p class="muted"><span data-l="de">Art</span><span data-l="en">Kind</span>: domain · <span data-l="de">Kanäle</span><span data-l="en">Channels</span>: signal · <span data-l="de">seit</span><span data-l="en">since</span> Unreleased · experimental<br><code>atlas-genehmigung-fix</code> / <code>Angefragt</code>, <code>atlas-genehmigung-rolle</code> / <code>Angefragt</code>, <code>atlas-genehmigung-vorgesetzter</code> / <code>Angefragt</code> — the shop&#39;s three approval processes, before their approval task waits; a server whose service catalogue is switched off runs none of them</p>
+      <p class="muted"><span data-l="de">Art</span><span data-l="en">Kind</span>: domain · <span data-l="de">Kanäle</span><span data-l="en">Channels</span>: signal · <span data-l="de">seit</span><span data-l="en">since</span> 0.9.0 · experimental<br><code>atlas-genehmigung-fix</code> / <code>Angefragt</code>, <code>atlas-genehmigung-rolle</code> / <code>Angefragt</code>, <code>atlas-genehmigung-vorgesetzter</code> / <code>Angefragt</code> — the shop&#39;s three approval processes, before their approval task waits; a server whose service catalogue is switched off runs none of them</p>
       <table>
         <thead><tr><th data-l="de">Feld</th><th data-l="en">Field</th><th data-l="de">Typ</th><th data-l="en">Type</th><th></th><th data-l="de">Bedeutung</th><th data-l="en">Meaning</th></tr></thead>
         <tbody>
@@ -10315,7 +10315,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
       <h3 id="ev-atlas-incident-raised"><code>atlas.incident.raised</code></h3>
       <p data-l="de">Ein Token ist an einem Element stehen geblieben und wartet, bis jemand die Ursache behebt: ein Incident wurde ausgelöst.</p>
       <p data-l="en">A token parked on an element and waits for somebody to fix the cause: an incident was raised.</p>
-      <p class="muted"><span data-l="de">Art</span><span data-l="en">Kind</span>: platform · <span data-l="de">Kanäle</span><span data-l="en">Channels</span>: feed · <span data-l="de">seit</span><span data-l="en">since</span> Unreleased · experimental<br>the incident record (IntentIncidentCreated), folded into the feed by applyToState</p>
+      <p class="muted"><span data-l="de">Art</span><span data-l="en">Kind</span>: platform · <span data-l="de">Kanäle</span><span data-l="en">Channels</span>: feed · <span data-l="de">seit</span><span data-l="en">since</span> 0.9.0 · experimental<br>the incident record (IntentIncidentCreated), folded into the feed by applyToState</p>
       <table>
         <thead><tr><th data-l="de">Feld</th><th data-l="en">Field</th><th data-l="de">Typ</th><th data-l="en">Type</th><th></th><th data-l="de">Bedeutung</th><th data-l="en">Meaning</th></tr></thead>
         <tbody>
@@ -10334,7 +10334,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
       <h3 id="ev-atlas-incident-resolved"><code>atlas.incident.resolved</code></h3>
       <p data-l="de">Ein Incident wurde gelöst: das stehen gebliebene Token läuft wieder.</p>
       <p data-l="en">An incident was resolved: the token that had parked runs again.</p>
-      <p class="muted"><span data-l="de">Art</span><span data-l="en">Kind</span>: platform · <span data-l="de">Kanäle</span><span data-l="en">Channels</span>: feed · <span data-l="de">seit</span><span data-l="en">since</span> Unreleased · experimental<br>the incident record (IntentIncidentResolved), folded into the feed by applyToState</p>
+      <p class="muted"><span data-l="de">Art</span><span data-l="en">Kind</span>: platform · <span data-l="de">Kanäle</span><span data-l="en">Channels</span>: feed · <span data-l="de">seit</span><span data-l="en">since</span> 0.9.0 · experimental<br>the incident record (IntentIncidentResolved), folded into the feed by applyToState</p>
       <table>
         <thead><tr><th data-l="de">Feld</th><th data-l="en">Field</th><th data-l="de">Typ</th><th data-l="en">Type</th><th></th><th data-l="de">Bedeutung</th><th data-l="en">Meaning</th></tr></thead>
         <tbody>
