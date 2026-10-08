@@ -8083,11 +8083,13 @@ curl -H "Authorization: Bearer $ATLAS_METRICS_TOKEN" https://atlas.example.com/m
     <section id="tls">
       <h2 data-l="de">TLS &amp; Zertifikate</h2><h2 data-l="en">TLS &amp; certificates</h2>
       <p class="lead" data-l="de">Nichts sollte atlas im Klartext erreichen. Dieses Kapitel zeigt, wie atlas mit
-        einem Zertifikat selbst HTTPS spricht, wie es das Zertifikat eines anderen atlas prüft, und wie du einen
+        einem Zertifikat selbst HTTPS spricht, wie es das Zertifikat eines anderen atlas prüft, wie es hinter einem
+        Load Balancer <a href="#tls-client-address">die Adresse des Clients erfährt</a>, und wie du einen
         Server auf Windows hinter einem Load Balancer absicherst.</p>
       <p class="lead" data-l="en">Nothing should reach atlas in the clear. This chapter shows how atlas speaks HTTPS
-        itself from a certificate, how it verifies another atlas's certificate, and how to secure a server on
-        Windows behind a load balancer.</p>
+        itself from a certificate, how it verifies another atlas's certificate, how it
+        <a href="#tls-client-address">learns the client's address</a> behind a load balancer, and how to secure a
+        server on Windows behind a load balancer.</p>
 
       <h3 data-l="de">Zwei Wege</h3><h3 data-l="en">Two ways</h3>
       <ul>
@@ -8099,10 +8101,14 @@ curl -H "Authorization: Bearer $ATLAS_METRICS_TOKEN" https://atlas.example.com/m
           speaks HTTP.</li>
         <li data-l="de"><b>Davor.</b> Ein Reverse Proxy, Load Balancer oder Ingress terminiert TLS, und atlas
           spricht dahinter HTTP. Eine gute Antwort, wo ein solcher ohnehin läuft und die Zertifikate für alles
-          andere verwaltet.</li>
+          andere verwaltet. Damit atlas dahinter die Adresse des Clients sieht und nicht die des Proxys, nennst
+          du ihn mit <code>--trusted-proxies</code> – siehe
+          <a href="#tls-client-address">Die Client-Adresse hinter dem Load Balancer</a>.</li>
         <li data-l="en"><b>In front of it.</b> A reverse proxy, load balancer or ingress terminates TLS, and atlas
           speaks HTTP behind it. A good answer wherever one runs anyway and manages the certificates for
-          everything else.</li>
+          everything else. For atlas to see the client's address behind it rather than the proxy's, name the
+          proxy with <code>--trusted-proxies</code> – see
+          <a href="#tls-client-address">The client's address behind the load balancer</a>.</li>
       </ul>
       <p data-l="de">Beides lässt sich verbinden: Der Load Balancer terminiert TLS für die Clients und baut zu
         atlas eine neue TLS-Verbindung auf. Diesen Fall zeigt <a href="#tls-windows">Windows Server hinter einem
@@ -8361,6 +8367,14 @@ curl -H "Authorization: Bearer $ATLAS_METRICS_TOKEN" https://atlas.example.com/m
             <td data-l="de">ja</td><td data-l="en">yes</td>
             <td data-l="de">nein</td><td data-l="en">no</td>
             <td data-l="de">ja</td><td data-l="en">yes</td></tr>
+          <tr><td data-l="de">Client-Adresse bei atlas (<a href="#tls-client-address">mehr</a>)</td>
+            <td data-l="en">Client address at atlas (<a href="#tls-client-address">more</a>)</td>
+            <td data-l="de"><code>X-Forwarded-For</code> vom LB; LB in <code>--trusted-proxies</code></td>
+            <td data-l="en"><code>X-Forwarded-For</code> from the LB; LB in <code>--trusted-proxies</code></td>
+            <td data-l="de">PROXY-Protokoll vom LB; LB in <code>--trusted-proxies</code></td>
+            <td data-l="en">PROXY protocol from the LB; LB in <code>--trusted-proxies</code></td>
+            <td data-l="de"><code>X-Forwarded-For</code> von ARR; <code>--trusted-proxies 127.0.0.1</code></td>
+            <td data-l="en"><code>X-Forwarded-For</code> from ARR; <code>--trusted-proxies 127.0.0.1</code></td></tr>
         </tbody>
       </table>
       <p data-l="de"><b>A</b>, wenn dein LB zum Backend TLS 1.3 spricht und das Backend-Zertifikat prüfen kann – das
@@ -8504,19 +8518,26 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
 
       <div class="note warn">
         <div class="lbl" data-l="de">Stolpersteine</div><div class="lbl" data-l="en">Traps</div>
-        <p data-l="de"><b>Hinter dem LB haben alle dieselbe Adresse.</b> atlas nimmt die Client-Adresse aus der
-          TCP-Verbindung und wertet <code>X-Forwarded-For</code> bewusst nicht aus – ein Client könnte den Header
-          frei setzen. Bei A kommt jede Verbindung vom LB, sofern er die Client-Adresse nicht transparent
-          durchreicht, bei C von <code>127.0.0.1</code>. Dann teilen sich alle Benutzer die Begrenzungen pro
-          Adresse: bei der Anmeldung mit Passwort 20 Versuche sofort, danach einer alle zwei Sekunden, bei
-          öffentlichen Links 20 und danach einer pro Sekunde. Das Audit-Log nennt als <code>client_ip</code> nur
-          diese eine Adresse.</p>
-        <p data-l="en"><b>Behind the LB everybody has the same address.</b> atlas takes the client address from the
-          TCP connection and deliberately ignores <code>X-Forwarded-For</code> – a client could set that header to
-          anything. With A every connection comes from the LB, unless it passes the client address through
-          transparently; with C from <code>127.0.0.1</code>. Every user then shares the per-address limits: 20
-          password sign-in attempts at once, then one every two seconds; for public links 20, then one per second.
-          The audit log names only that one address as <code>client_ip</code>.</p>
+        <p data-l="de"><b>Ohne <code>--trusted-proxies</code> haben hinter dem LB alle dieselbe Adresse.</b> atlas
+          nimmt die Client-Adresse aus der TCP-Verbindung und übernimmt <code>X-Forwarded-For</code> oder das
+          PROXY-Protokoll nur von Adressen, die <code>--trusted-proxies</code> nennt – von jeder anderen könnte ein
+          Client sie frei setzen. Ohne die Angabe kommt bei A und B jede Verbindung vom LB, sofern er die
+          Client-Adresse nicht transparent durchreicht, bei C von <code>127.0.0.1</code>. Dann teilen sich alle
+          Benutzer die Begrenzungen pro Adresse: bei der Anmeldung mit Passwort 20 Versuche sofort, danach einer
+          alle zwei Sekunden, bei öffentlichen Links 20 und danach einer pro Sekunde, und das Audit-Log nennt als
+          <code>client_ip</code> nur diese eine Adresse. Was der LB je Variante senden muss, steht in der Zeile
+          «Client-Adresse bei atlas» der Tabelle; bei C prüfe in den Proxy-Einstellungen der ARR-Serverfarm, dass
+          die Client-Adresse in <code>X-Forwarded-For</code> weitergegeben wird.</p>
+        <p data-l="en"><b>Without <code>--trusted-proxies</code> everybody behind the LB has the same address.</b>
+          atlas takes the client address from the TCP connection and accepts <code>X-Forwarded-For</code> or the
+          PROXY protocol only from addresses <code>--trusted-proxies</code> names – from any other, a client could
+          set them to anything. Without it, with A and B every connection comes from the LB, unless it passes the
+          client address through transparently; with C from <code>127.0.0.1</code>. Every user then shares the
+          per-address limits: 20 password sign-in attempts at once, then one every two seconds; for public links
+          20, then one per second; and the audit log names only that one address as <code>client_ip</code>. What
+          the LB has to send for each variant is in the table's "Client address at atlas" row; with C, check in
+          the ARR server farm's proxy settings that the client address is passed on in
+          <code>X-Forwarded-For</code>.</p>
         <p data-l="de"><b>Ein LB macht atlas nicht hochverfügbar.</b> Genau ein Prozess besitzt ein
           Datenverzeichnis; zwei Server auf demselben Verzeichnis beschädigen es, und zwei Server mit je eigenem
           Verzeichnis sind zwei getrennte Engines. Hinter dem LB ist höchstens ein Backend aktiv.</p>
