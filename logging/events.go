@@ -99,7 +99,17 @@ var (
 	// certificate that is still being served expires.
 	ServerTLSReloaded     = newEvent("server.tls_reloaded")
 	ServerTLSReloadFailed = newEvent("server.tls_reload_failed")
-	DataDirOpened         = newEvent("server.data_dir_opened")
+	// ServerTLSHandshakeAborted is a connection to the TLS listener that closed before
+	// its handshake began — net/http's "TLS handshake error … EOF". A load balancer's
+	// TCP health check produces one per interval, so it is DEBUG: true, countable, and
+	// not news (ADR-draft-trusted-proxies). A handshake that failed for a reason keeps
+	// net/http's own wording at INFO.
+	ServerTLSHandshakeAborted = newEvent("server.tls_handshake_aborted")
+	// ServerTrustedProxies is said once at startup where --trusted-proxies names any:
+	// the list as the server understood it, so whoever reads an audit line's client_ip
+	// later can see whose word it was taken on (ADR-draft-trusted-proxies).
+	ServerTrustedProxies = newEvent("server.trusted_proxies")
+	DataDirOpened        = newEvent("server.data_dir_opened")
 	// AuthDisabled is a server started with --auth=false: no login is required for
 	// anything. It is a WARN and it is loud because it is now the deliberate
 	// exception rather than the default — the one line that says this instance is

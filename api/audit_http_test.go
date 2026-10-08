@@ -43,10 +43,10 @@ func (b *syncBuffer) String() string {
 func captureLog(t *testing.T) *syncBuffer {
 	t.Helper()
 	sink := &syncBuffer{}
-	if err := logging.Setup(sink, logging.FormatJSON); err != nil {
+	if err := logging.Setup(sink, logging.FormatJSON, logging.DefaultLevel); err != nil {
 		t.Fatalf("logging.Setup: %v", err)
 	}
-	t.Cleanup(func() { _ = logging.Setup(os.Stderr, logging.DefaultFormat) })
+	t.Cleanup(func() { _ = logging.Setup(os.Stderr, logging.DefaultFormat, logging.DefaultLevel) })
 	return sink
 }
 

@@ -976,6 +976,14 @@ What it takes to run this for real.
   an explicit resolution event for the path where an incident is dropped with an element;
   the lease/timeout counters, which wait on ADR-0007; readiness distinct from liveness;
   then structured log event names and OTel traces.
+- ✅ **Running behind a load balancer**
+  ([ADR-draft-trusted-proxies](docs/adr/draft-trusted-proxies.md)): `--trusted-proxies`
+  names the balancers whose word about a client's address is taken — a PROXY protocol
+  header (v1/v2) from one that forwards TCP to a TLS-terminating Atlas, `X-Forwarded-For`
+  read from the right from one that speaks HTTP, and neither from anybody else — so the
+  login throttle and the audit trail see the person rather than the balancer, with the
+  balancer kept as `via`. A balancer's TCP health check is a DEBUG line, and
+  `--log-level` sets the floor.
 - ✅ Log compaction / snapshotting so recovery doesn't replay from genesis
   ([ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), v0.2.0
   programme D): the mechanism is complete. A checkpoint is a Pebble snapshot of the state
