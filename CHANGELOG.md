@@ -12,6 +12,13 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **`atlas.exe` carries its version.** The Windows binary of a release has a version
+  resource, so Properties → Details in Explorer shows the product version, the file
+  version, the product name and a description instead of empty fields. The release
+  workflow writes it from the tag, the same version `atlas version` reports.
+
 ## [0.9.0] — 2026-10-08
 
 **What happens in Atlas can now leave it.** A system beyond Atlas — a CMDB, a billing
