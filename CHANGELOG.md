@@ -12,6 +12,13 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.9.1] — 2026-10-09
+
+**A patch release for how atlas presents itself.** `atlas.exe` shows its version in
+Explorer's Properties, and the name is written lowercase wherever a person reads it — the
+changelog, the README and the installation and deployment guides included. Nothing about
+how atlas runs changes, and 0.9.1 reads and writes the same data directory as 0.9.0.
+
 ### Added
 
 - **`atlas.exe` carries its version.** The Windows binary of a release has a version
@@ -14000,7 +14007,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/pblumer/atlas/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/pblumer/atlas/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/pblumer/atlas/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/pblumer/atlas/compare/v0.6.0...v0.7.0
