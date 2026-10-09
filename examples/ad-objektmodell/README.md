@@ -18,7 +18,7 @@ oder `nestedClassifier`. Eine ArchiMate-Datei fuehrt ihre Elemente unter
 `<elements><element>`, also findet der Reader nichts und `ParseImport` bricht ab:
 
 ```
-this document contains no classes Atlas could read
+this document contains no classes atlas could read
 ```
 
 Der Unterschied ist nicht nur syntaktisch. ArchiMate kennt fuer ein

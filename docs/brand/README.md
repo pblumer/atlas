@@ -44,6 +44,17 @@ The examples under `examples/` follow the rule in what they show a person
 (process and form texts, mails, their READMEs and pages); their XML comments
 and script docstrings are code comments and stay as they are.
 
+So do the documents an operator reads — the README, the installation guide
+(`docs/install.md`) and the deployment docs under `deploy/` — and the changelog,
+whose entries the Console shows as release notes. A message or a label quoted
+there keeps the spelling it has where it is shown (`"Atlas has stopped serving
+this"`, `Atlas bindings`), and a path such as `C:\Atlas` is a name a program
+reads. The version resource of `atlas.exe` sets the name as the wordmark, as the
+Console's page titles do: product name `atlas`, description `atlas – BPMN
+workflow engine`. The prompt the FEEL assistant sends a model is read by no
+person and stays as it is: a change to it raises its `PromptVersion` and splits
+the measurements the prompt is improved by.
+
 **The card is set in English.** It is read wherever the repository link is
 pasted, so the copy stays in English even where the surrounding docs are not.
 

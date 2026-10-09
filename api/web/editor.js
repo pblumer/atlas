@@ -4255,7 +4255,7 @@ const SERVICE_TASK_KINDS = [
       {
         key: "sourceBucket", label: "From bucket", placeholder: "eingang", fx: true,
         showIf: (v) => v.operation === "copy-object",
-        hint: "The bucket the object is copied from. The copy happens inside the store, so the bytes never pass through Atlas — which is what makes archiving a large document a step a process can take.",
+        hint: "The bucket the object is copied from. The copy happens inside the store, so the bytes never pass through atlas — which is what makes archiving a large document a step a process can take.",
       },
       {
         key: "sourceKey", label: "From key", placeholder: "=eingang.key", fx: true,
@@ -4291,7 +4291,7 @@ const SERVICE_TASK_KINDS = [
               return "Whether the object is there is =datei.exists, and when it is, =datei.size, =datei.contentType and =datei.lastModified come with it. A missing object is an answer here, not an incident.";
             case "presign-get":
             case "presign-put":
-              return "The link lands in =datei.url, with =datei.expiresAt beside it. Put it in a user task, a mail or a message — whoever opens it reaches the store directly, so the document never passes through Atlas.";
+              return "The link lands in =datei.url, with =datei.expiresAt beside it. Put it in a user task, a mail or a message — whoever opens it reaches the store directly, so the document never passes through atlas.";
             case "copy-object":
               return "The copy's identity lands here: =datei.key, =datei.etag and the source it came from. Leave empty to discard it.";
             default:

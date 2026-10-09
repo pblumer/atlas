@@ -48,7 +48,7 @@
       { "label": "Maximum keys (List objects)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:maxKeys" },
         "description": "Caps what may land in the result variable. Empty uses 1000, which is also the most the store returns in one call; a larger value is refused at deploy rather than silently answered with 1000." },
       { "label": "From bucket (Copy object)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:sourceBucket" },
-        "description": "The bucket the object is copied from. The copy happens inside the store, so the bytes never pass through Atlas." },
+        "description": "The bucket the object is copied from. The copy happens inside the store, so the bytes never pass through atlas." },
       { "label": "From key (Copy object)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:sourceKey" },
         "description": "The key the object is copied from — often the key an earlier List objects found." },
       { "label": "Valid for, seconds (the two links)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:expiresIn" },

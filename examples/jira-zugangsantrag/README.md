@@ -62,7 +62,7 @@ Der Prozess koordiniert, Jira dokumentiert, ein Mensch entscheidet:
 ```
 Antrag (Formular)
   → Jira-Vorgang anlegen        create-issue      → ticket
-  → Zugang freigeben            User-Task in Atlas
+  → Zugang freigeben            User-Task in atlas
   → Freigegeben?                (X) Default: ablehnen
        ja   → Vorgang abschliessen   transition-issue + Kommentar
        nein → Ablehnung vermerken    add-comment
