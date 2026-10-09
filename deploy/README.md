@@ -1,6 +1,6 @@
-# Deploying Atlas
+# Deploying atlas
 
-Artifacts for running the single-binary Atlas server as a container.
+Artifacts for running the single-binary atlas server as a container.
 
 | I want to… | Go to |
 |------------|-------|
@@ -31,7 +31,7 @@ To let people sign in with an identity provider instead, pass
 together with `-e ATLAS_EXTERNAL_URL=…`, and register
 `<external-url>/auth/oidc/callback` at the provider. Keep the local administrator:
 it is the way back in when the provider is unreachable. Details, and how the
-provider's groups can decide Atlas roles, are in
+provider's groups can decide atlas roles, are in
 [`docs/install.md`](../docs/install.md#single-sign-on-with-an-identity-provider).
 
 The image is a Debian-slim build running as nonroot (uid 65532), storing durable

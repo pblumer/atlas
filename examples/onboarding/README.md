@@ -10,7 +10,7 @@ Grundlagen geführt.
 
 ```
 Start (Start-Formular: Name + Track)
-  → 👋 Willkommen an Bord          – Was ist Atlas? Die drei Säulen
+  → 👋 Willkommen an Bord          – Was ist atlas? Die drei Säulen
   → 🧩 Grundbegriffe verstehen     – Prozess / Instanz / Token / Task / Gateway (+ Mini-Quiz)
   → [Script-Task] Begrüßung        – FEEL baut einen personalisierten Gruß
   → (X) Auch mitentwickeln? ───────┐

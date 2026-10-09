@@ -6483,11 +6483,11 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             signature is computed with it.</li>
           <li data-l="de">Worker anlegen: Typ <b>S3-Objektspeicher</b>, ein Name, Credential-Referenz
             <code>s3_archiv</code>. <b>Endpoint bei AWS leer lassen</b>; bei jedem anderen Speicher dessen Basis-URL
-            eintragen (<code>https://minio.example:9000</code>) – genau das sagt Atlas auch, dass die Buckets im Pfad
+            eintragen (<code>https://minio.example:9000</code>) – genau das sagt atlas auch, dass die Buckets im Pfad
             adressiert werden und nicht im Hostnamen.</li>
           <li data-l="en">Create the worker: type <b>S3 object storage</b>, a name, credential reference
             <code>s3_archiv</code>. <b>Leave the endpoint empty for AWS</b>; for any other store enter its base URL
-            (<code>https://minio.example:9000</code>) – which is also what tells Atlas to address buckets in the path
+            (<code>https://minio.example:9000</code>) – which is also what tells atlas to address buckets in the path
             rather than in the hostname.</li>
           <li data-l="de">Ausprobieren mit einer <b>Check object</b>-Aufgabe auf einem bekannten Key:
             <code>=datei.exists</code> antwortet, ohne das Objekt lesen zu müssen, also zeigt sich ein falsches Recht
@@ -8830,7 +8830,7 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
               Bewusst kein Teil von <code>operator</code>: Der Feed zeigt, wer was hält, über alle Kataloge.</td>
             <td data-l="en">Reading the event feed (<code>GET /api/v1/events</code>): how each action asked of a held
               position ended, every right granted and revoked, and every incident raised and resolved – and nothing else.
-              For a system beyond Atlas such as
+              For a system beyond atlas such as
               a CMDB or billing, an administrator mints an API token with the <code>events</code> scope; it carries
               exactly this role and reaches exactly that one route: <code>POST /api/v1/api-tokens</code> with
               <code>{"name":"cmdb","scope":"events","expiresInDays":365}</code>. With

@@ -150,7 +150,7 @@ func catalogItemProps() map[string]any {
 			"inactivation). triggers says who may ask for a change or service: \"customer\" (the orderer " +
 			"or the recipient), \"operator\", \"system\". key is [a-z0-9-], unique; message is the " +
 			"message the process starts or waits at, unique within the product. labels are button texts " +
-			"per language (a missing one is reported, not refused). form is an Atlas form id for what the " +
+			"per language (a missing one is reported, not refused). form is an atlas form id for what the " +
 			"action needs. outcomes maps \"completed\" / \"rejected\" / \"failed\" to the event type it " +
 			"is published under (default <message>.<outcome>). Publishing checks each message against the " +
 			"newest deployed version: a message start in the per-operation form; in the per-position form " +

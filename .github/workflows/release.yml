@@ -79,13 +79,14 @@ jobs:
             # run); the strings carry the version as tagged. --manifest none adds
             # the version and nothing else. go-winres runs here, so it is built
             # for the runner: GOOS and GOARCH are cleared for go run alone, after
-            # --arch has been expanded from them.
+            # --arch has been expanded from them. The name is the wordmark, set
+            # lowercase as in the Console's page titles (docs/brand/README.md).
             GOOS= GOARCH= go run github.com/tc-hib/go-winres@v0.3.3 simply \
               --arch "${GOARCH}" \
               --out cmd/atlas/rsrc \
               --manifest none \
-              --product-name "Atlas" \
-              --file-description "Atlas BPMN workflow engine" \
+              --product-name "atlas" \
+              --file-description "atlas – BPMN workflow engine" \
               --original-filename "${bin}" \
               --product-version "${version}" \
               --file-version "${version}"
