@@ -352,6 +352,16 @@ var (
 	OrderOutcomeConflict = newEvent("order.outcome_conflict")
 )
 
+// Wizards (ADR-0449).
+var (
+	// WizardContinuationFailed: a step of a wizard was completed, and reading where the
+	// sitting stands afterwards — or claiming the next step for the person — failed. The
+	// completion stands; what is lost is the hand-over to the next screen, which the
+	// person then finds in their inbox. A warning and not a failed completion, because
+	// failing it would make the caller submit the same answer twice.
+	WizardContinuationFailed = newEvent("wizard.continuation_failed")
+)
+
 // History retention (ADR-0115/0144) and the OpenSearch exporter (ADR-0114).
 var (
 	RetentionEnabled   = newEvent("retention.enabled")

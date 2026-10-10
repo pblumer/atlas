@@ -2767,6 +2767,16 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   background: var(--bg);
 }
 .tasks-doc > h2 { margin: 0 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+/* A step of a wizard (ADR-0449, wizardBlock): which step this is in the person's walk
+   through the form, and the screens before it. The instruction panel's shape, so the two
+   read as one family above the form. */
+.tasks-wizard {
+  margin: 0 0 16px; padding: 10px 14px; max-width: 70ch;
+  border-left: 3px solid var(--accent); border-radius: 0 var(--radius) var(--radius) 0;
+  background: var(--bg);
+}
+.tasks-wizard > h2 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.tasks-wizard > p { margin: 4px 0 0; font-size: 13px; }
 /* The instruction panel is itself tinted, so code inside it takes the surface colour:
    a chip the same shade as its background is not a chip. */
 .tasks-doc .md code, .tasks-doc .md pre { background: var(--surface); }

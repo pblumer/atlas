@@ -591,6 +591,9 @@ type createInstanceResp struct {
 	// created none — a call answered before anything was minted.
 	InstanceKey uint64    `json:"instanceKey,omitempty"`
 	Stats       statsResp `json:"stats"`
+	// Wizard is where the first sitting the instance entered stands, when the start
+	// led into a wizard (ADR-0449): the starter is carried to its first screen.
+	Wizard *wizardResp `json:"wizard,omitempty"`
 }
 
 type cancelInstanceResp struct {
@@ -2744,7 +2747,7 @@ func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	s.startInstance(w, key, startVars)
+	s.startInstance(w, r, key, startVars)
 }
 
 // parseStartVariables reads {"variables": {name: value}} from a request body
@@ -4606,6 +4609,11 @@ type taskResp struct {
 	// in it and not only by what it is called. Only filled when the caller asks for it
 	// with ?content=1, because it costs a variable read per row (see taskContent).
 	Content []string `json:"content,omitempty"`
+	// WizardScopeKey is the sitting this task is a step of — the element instance of
+	// its wizard subprocess — and Wizard that wizard's kind, "internal" or "public"
+	// (ADR-0449). Both are empty for a task in no wizard.
+	WizardScopeKey uint64 `json:"wizardScopeKey,omitempty"`
+	Wizard         string `json:"wizard,omitempty"`
 }
 
 // handleListTasks lists open user tasks — activatable jobs of the reserved
@@ -4838,6 +4846,14 @@ func enrichTaskWith(r elementReader, def taskDefLookup, jobKey uint64, jv *model
 				// (nanoseconds); expose it as Unix ms for the browser.
 				if jv.Deadline != 0 {
 					tr.DueDate = jv.Deadline / int64(time.Millisecond)
+				}
+			}
+			// The sitting the task is a step of (ADR-0449). Only a task the compiled
+			// graph puts inside a wizard pays for the walk; a sitting that cannot be
+			// read leaves the row as a plain task.
+			if w := cp.EnclosingWizard(ei.ElementId); w >= 0 {
+				if scope, err := enclosingWizardInstance(r, cp, ei); err == nil && scope != 0 {
+					tr.WizardScopeKey, tr.Wizard = scope, cp.Wizard(w).String()
 				}
 			}
 		}
@@ -5484,15 +5500,23 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	var (
 		found  bool
 		runErr error
+		// sitting is the wizard the task is a step of (ADR-0449), 0 for none. It is
+		// read before the completion, because a completed task's element instance is
+		// gone, and with it the way up to the sitting.
+		sitting, sittingPI uint64
 	)
 	s.do(func() {
 		// A job that can't be read — absent, already completed, or unreadable — is
 		// simply not an open task (reported 404 below); GetJob reports ok=false in
 		// every such case, so there's no separate error path to plumb here.
-		if _, ok, err := s.store.GetJob(key); err != nil || !ok {
+		jv, ok, err := s.store.GetJob(key)
+		if err != nil || !ok {
 			return
 		}
 		found = true
+		// A sitting that cannot be read is no reason to refuse the answer: the
+		// completion goes ahead, and the next screen is found in the inbox instead.
+		sitting, sittingPI, _ = s.wizardOfElement(jv.ElementInstanceKey)
 		s.proc.CompleteJob(key, vars...)
 	})
 	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
@@ -5507,7 +5531,17 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no open task with that key")
 	default:
-		httpapi.JSON(w, http.StatusOK, map[string]any{"taskKey": key})
+		resp := map[string]any{"taskKey": key}
+		// A step of a wizard answers with where the sitting now stands, so the person
+		// is carried to the next screen rather than back to the inbox (ADR-0449).
+		if sitting != 0 {
+			if wz, err := s.continueWizard(r, sittingPI, sitting); err != nil {
+				logWizardFailure(r, sittingPI, err)
+			} else {
+				resp["wizard"] = wz
+			}
+		}
+		httpapi.JSON(w, http.StatusOK, resp)
 	}
 }
 

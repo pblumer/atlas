@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -254,33 +253,14 @@ func (s *Server) holdsTaskAs(username, userID string, groupIDs []string, assigne
 	return false
 }
 
-// collectFormFieldKeys walks a form-js schema and adds every component's key to out.
-// Components nest (a group holds components of its own), so it recurses; anything
-// that is not an object with a string key is skipped rather than guessed at. A
-// schema that will not parse contributes nothing, which fails closed.
+// collectFormFieldKeys adds to out the variables a form-js schema reads and writes: the
+// root of every value path the form can submit (publicstartfields.go). A keyed field
+// inside a group or a dynamic list with a path lives under that path, so the variable is
+// the path's root and not the field's own key; reading only keys used to name a variable
+// the form never binds and miss the one it does. A schema that will not parse
+// contributes nothing, which fails closed.
 func collectFormFieldKeys(schema []byte, out map[string]bool) {
-	var doc any
-	if err := json.Unmarshal(schema, &doc); err != nil {
-		return
+	for k := range formShapeOf(schema).children {
+		out[k] = true
 	}
-	var walk func(any)
-	walk = func(v any) {
-		switch t := v.(type) {
-		case map[string]any:
-			if k, ok := t["key"].(string); ok && k != "" {
-				// A key addresses a nested value by path; the variable it reads is the
-				// root of the path, and that is what an instance scope holds.
-				if i := strings.IndexByte(k, '.'); i > 0 {
-					k = k[:i]
-				}
-				out[k] = true
-			}
-			walk(t["components"])
-		case []any:
-			for _, e := range t {
-				walk(e)
-			}
-		}
-	}
-	walk(doc)
 }

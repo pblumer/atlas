@@ -7951,12 +7951,42 @@ const TASK_FOLDERS = [
   { id: "group", label: "Group tasks", match: (t) => !!t.candidateGroups },
 ];
 
+// wizardHistory remembers, per sitting of a wizard (ADR-0449), the titles of the screens
+// this tab has submitted, so a step can show where the person has come from. It is this
+// tab's memory and nothing more: a sitting continued in another tab starts its list
+// there, which is why a step says "Step n" and never "n of m" — the branches between the
+// screens make the total unknowable anyway.
+const wizardHistory = {
+  key: (scope) => "atlas.wizard." + scope,
+  get(scope) {
+    try { return JSON.parse(sessionStorage.getItem(this.key(scope)) || "[]"); } catch { return []; }
+  },
+  add(scope, title) {
+    try {
+      const list = this.get(scope);
+      list.push(title);
+      sessionStorage.setItem(this.key(scope), JSON.stringify(list.slice(-20)));
+    } catch { /* storage unavailable: the step shows no history */ }
+  },
+  clear(scope) {
+    try { sessionStorage.removeItem(this.key(scope)); } catch { /* storage unavailable */ }
+  },
+};
+
+// WIZARD_WAIT_DELAYS is how long the Tasks app waits before each look for a sitting's
+// next screen when a worker or a timer stands between two (ADR-0449): soon at first,
+// then less often, for about two minutes in all.
+const WIZARD_WAIT_DELAYS = [1000, 2000, 4000, 8000, 15000, 30000, 60000];
+
 async function viewTasks(preselectKey) {
   // With auth on, identity is the signed-in user (server-authoritative); with auth
   // off it stays a typed, display-only identity (ADR-0045).
   const authOn = AUTH.enabled;
   const state = {
     tasks: [],
+    // wizardWait is set while the pane waits for a wizard's next screen (ADR-0449,
+    // waitForWizard): { scopeKey, gaveUp }. Null otherwise.
+    wizardWait: null,
     // filtered holds the page of a saved folder, kept apart from tasks above rather
     // than replacing it: "All tasks" is the unfiltered page, and overwriting it with a
     // folder's three rows would make the list read 3 wherever the operator went next.
@@ -8306,6 +8336,7 @@ async function viewTasks(preselectKey) {
         const key = Number(li.dataset.key);
         if (state.selectMode) { togglePick(key, li); return; }
         state.selected = key;
+        state.wizardWait = null; // picking a task ends a wait for a wizard's next screen
         renderList();
         renderDetail();
       });
@@ -8403,6 +8434,15 @@ async function viewTasks(preselectKey) {
     await load();
   }
 
+  // wizardBlock marks a step of a wizard (ADR-0449) with its number in this tab's walk
+  // through the sitting and the screens before it; a task in no wizard has none.
+  function wizardBlock(t) {
+    if (!t.wizardScopeKey) return "";
+    const past = wizardHistory.get(t.wizardScopeKey);
+    const before = past.length ? `<p class="muted">Before: ${past.map((x) => esc(x)).join(" &rarr; ")}</p>` : "";
+    return `<div class="tasks-wizard"><h2>Step ${past.length + 1} of a multi-step form</h2>${before}</div>`;
+  }
+
   // completeCurrent completes the selected task, then lands on the task that slides
   // into its place (auto-advance), so an operator can clear a queue without
   // reaching for the mouse between tasks. Bound to the button and Ctrl/⌘+Enter.
@@ -8476,7 +8516,7 @@ async function viewTasks(preselectKey) {
     if (btn) btn.disabled = true;
     const idx = visible().findIndex((x) => x.key === t.key); // the slot to land back on
     try {
-      await api("POST", "/api/v1/tasks/" + t.key + "/complete", payload);
+      const res = await api("POST", "/api/v1/tasks/" + t.key + "/complete", payload);
       toast("Task completed");
       // Reload through load(), not a bare GET: the page is capped, and its truncation
       // flag and cursor ride the response *headers*. Re-reading only the body left both
@@ -8487,6 +8527,12 @@ async function viewTasks(preselectKey) {
       // that out. The slot it occupied is re-selected below.
       state.selected = null;
       await load();
+      // A step of a wizard lands on the sitting's next screen rather than on the next
+      // slot of the queue (ADR-0449).
+      if (res && res.wizard && followWizard(res.wizard, t)) {
+        renderAll();
+        return;
+      }
       const after = visible();
       state.selected = after.length ? after[Math.min(Math.max(idx, 0), after.length - 1)].key : null;
       renderAll();
@@ -8494,6 +8540,76 @@ async function viewTasks(preselectKey) {
       toast("Complete failed: " + err.message, "err");
       if (btn) btn.disabled = false;
     }
+  }
+
+  // followWizard carries the person on through a wizard (ADR-0449). It records the
+  // screen just submitted, and selects the sitting's next screen when the server has
+  // claimed one for them, or holds the pane while the sitting waits on a worker or a
+  // timer. It reports whether it chose the selection; when it did not, the queue's
+  // auto-advance does.
+  function followWizard(wz, done) {
+    wizardHistory.add(wz.scopeKey, taskTitle(done));
+    switch (wz.state) {
+      case "step":
+        if (!wz.task) return false;
+        if (!state.tasks.some((x) => x.key === wz.task.key)) state.tasks.push(wz.task);
+        state.selected = wz.task.key;
+        return true;
+      case "pending":
+        waitForWizard(wz);
+        return true;
+      case "handedOver":
+        wizardHistory.clear(wz.scopeKey);
+        toast("The next step of this form is with somebody else");
+        return false;
+      case "done":
+        wizardHistory.clear(wz.scopeKey);
+        toast("All steps of this form are done");
+        return false;
+      default:
+        return false;
+    }
+  }
+
+  // waitForWizard holds the pane on a sitting that has nothing open, and looks again,
+  // less often each time (WIZARD_WAIT_DELAYS), for its next screen among the tasks this
+  // person may see. A screen nobody holds is claimed for them, as the server does when
+  // it can answer at once. It stops when the person picks another task or leaves the
+  // view, and after the last delay it says where the screen will turn up instead.
+  function waitForWizard(wz) {
+    const gen = navGen;
+    const wait = { scopeKey: wz.scopeKey, gaveUp: false };
+    state.wizardWait = wait;
+    state.selected = null;
+    let attempt = 0;
+    const tick = async () => {
+      if (superseded(gen) || state.wizardWait !== wait) return;
+      let page = null;
+      try { page = await api("GET", "/api/v1/tasks?processInstance=" + wz.processInstanceKey); } catch { /* look again */ }
+      if (superseded(gen) || state.wizardWait !== wait) return;
+      const next = ((page && page.items) || []).find((x) => x.wizardScopeKey === wz.scopeKey);
+      if (next) {
+        if (!next.assignee && authOn) {
+          try {
+            await api("POST", "/api/v1/tasks/" + next.key + "/claim");
+            next.assignee = state.me;
+          } catch { /* taken meanwhile: it opens as whoever holds it now */ }
+          if (superseded(gen) || state.wizardWait !== wait) return;
+        }
+        state.wizardWait = null;
+        if (!state.tasks.some((x) => x.key === next.key)) state.tasks.push(next);
+        state.selected = next.key;
+        renderAll();
+        return;
+      }
+      if (attempt >= WIZARD_WAIT_DELAYS.length) {
+        wait.gaveUp = true;
+        renderDetail();
+        return;
+      }
+      setTimeout(tick, WIZARD_WAIT_DELAYS[attempt++]);
+    };
+    setTimeout(tick, WIZARD_WAIT_DELAYS[attempt++]);
   }
 
   // destroyForm tears down the live form-js instance (if any) before the detail
@@ -8866,9 +8982,15 @@ async function viewTasks(preselectKey) {
     // A narrow screen shows the list or the task, not both side by side
     // (ADR-0417); the grid says which.
     const grid = detailEl.closest(".tasks");
-    if (grid) grid.classList.toggle("has-selection", !!t);
+    if (grid) grid.classList.toggle("has-selection", !!t || !!state.wizardWait);
     if (!t) {
-      detailEl.innerHTML = `<div class="tasks-detail-empty muted">Select a task to see its details.</div>`;
+      // A wizard waiting on a worker or a timer between two screens (ADR-0449).
+      const w = state.wizardWait;
+      detailEl.innerHTML = w
+        ? `<div class="tasks-form-placeholder tasks-wizard-wait"><p class="muted">${w.gaveUp
+            ? "Your answers are saved. The next step of this form is taking longer than usual; it will appear in your inbox when it is ready."
+            : "Your answers are saved. Waiting for the next step of this form&hellip;"}</p></div>`
+        : `<div class="tasks-detail-empty muted">Select a task to see its details.</div>`;
       return;
     }
     const row = (label, val) =>
@@ -8938,6 +9060,7 @@ async function viewTasks(preselectKey) {
           ${decidedHere(t) ? "" : `<button class="btn" id="task-complete" title="Complete (Ctrl/⌘ + Enter)">Complete task</button>`}
         </div>
       </header>
+      ${wizardBlock(t)}
       ${docBlock}
       ${approvalBlock(t)}
       <div class="tasks-fields">
@@ -9384,9 +9507,12 @@ async function viewStartProcess() {
       }
       btn.disabled = true;
       try {
-        await api("POST", `/api/v1/processes/${p.key}/instances`, { variables });
+        const res = await api("POST", `/api/v1/processes/${p.key}/instances`, { variables });
         toast("Process started");
-        location.hash = "#/tasks"; // land in the inbox where its first task appears
+        // A start that runs into a wizard opens its first screen, claimed for the
+        // starter (ADR-0449); any other lands in the inbox where its first task appears.
+        const wz = res && res.wizard;
+        location.hash = wz && wz.state === "step" && wz.task ? "#/tasks/t/" + wz.task.key : "#/tasks";
       } catch (err) { toast("Start failed: " + err.message, "err"); btn.disabled = false; }
     });
     mountStartForm(p);
