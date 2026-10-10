@@ -12,6 +12,17 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Security
+
+- **A task row's content carries only what the task's form asks for.** `GET
+  /api/v1/tasks?content=1` — what the inbox's search reads — filled each row with up to
+  40 short values from the task's whole scope. An open task, which every signed-in
+  account sees, so handed an unrelated account values the instance's variables endpoint
+  refuses it (ADR-0275, audit F11). A row now carries the values of the fields its form
+  asks for, under the same allowlist the variables endpoint gives a task holder, and a
+  task without a form carries none. The rule is the same for every viewer, operators
+  included; a page asked for its content is now read off the run loop.
+
 ## [0.9.1] — 2026-10-09
 
 **A patch release for how atlas presents itself.** `atlas.exe` shows its version in

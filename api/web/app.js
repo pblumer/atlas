@@ -8092,7 +8092,7 @@ async function viewTasks(preselectKey) {
   // visible applies the folder, then the free-text query, then the chosen sort.
   //
   // The query reads what a task is about as well as what it is called: the values
-  // at its scope (the list asks for them with ?content=1), each id among them also
+  // of its form's fields (the list asks for them with ?content=1), each id among them also
   // under the name of the person it is, and the product an approval decides. A task
   // "for Patrick Blumer" holds his id, never his name; without the directory the
   // search for the name a person knows would find nothing. Every word of the query

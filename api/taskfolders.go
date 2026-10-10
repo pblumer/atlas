@@ -95,15 +95,27 @@ const (
 	maxTaskContentLen    = 200
 )
 
-// taskContent is the short text and number values visible at a task's scope: the
-// task's own variables and those of every enclosing scope up to the instance, the
-// same set its form is filled from. The inbox's filter matches against them, so a
-// person can find "every task about this recipient" by the recipient rather than by
-// a task name that is the same on every row.
+// taskContent is the short text and number values of the variables a task's form
+// asks for, as they are visible at the task's scope: the task's own variables over
+// those of every enclosing scope up to the instance. The inbox's filter matches
+// against them, so a person can find "every task about this recipient" by the
+// recipient rather than by a task name that is the same on every row.
 //
-// It returns what the viewer's form would already show them for the tasks they may
-// see, so it widens what a list row says, not who may read it.
-func taskContent(r elementReader, tr taskResp) []string {
+// fields is that form's allowlist ([Server.taskFormFields]); a task with no form,
+// or a form that cannot be read, has none and carries no content. The list only
+// shows a viewer the tasks they may work ([Server.taskVisibleTo]), so the row says
+// what the task's form shows whoever works it, and nothing more. For an open task
+// that is somewhat earlier than the variables endpoint, which hands its fields out
+// only once somebody has claimed it — but anybody may claim it, so the row tells a
+// viewer nothing a claim would not. It used to carry every value at the scope, and
+// an open task, which every signed-in account sees, then handed out what no form
+// asks for and the variables endpoint refuses (ADR-0275; status report of
+// 2026-10-10).
+func taskContent(r elementReader, tr taskResp, fields map[string]bool) []string {
+	if len(fields) == 0 {
+		return nil
+	}
+	allowed := instanceAccess{fields: fields}
 	scope := tr.ElementInstanceKey
 	if scope == 0 {
 		scope = tr.ProcessInstanceKey
@@ -111,6 +123,9 @@ func taskContent(r elementReader, tr taskResp) []string {
 	var out []string
 	err := r.VisibleVariablesOfScope(scope, func(v *model.VariableValue) error {
 		if v.Kind != model.VarString && v.Kind != model.VarNumber {
+			return nil
+		}
+		if !allowed.allows(v.Name) {
 			return nil
 		}
 		text := strings.TrimSpace(v.Text)
@@ -130,6 +145,29 @@ func taskContent(r elementReader, tr taskResp) []string {
 		return nil
 	}
 	return out
+}
+
+// taskFormFields is the allowlist a task's content is drawn from: the field keys of
+// the form the task names, collected as [Server.taskFieldsFor] collects them for the
+// variables endpoint, so a row and that endpoint cannot disagree about what a form
+// asks for. A page reads each form once, through seen; a form that is not saved or
+// will not read contributes nothing, which fails closed.
+//
+// It reads the form store from disk, so it belongs off the run loop.
+func (s *Server) taskFormFields(formID string, seen map[string]map[string]bool) map[string]bool {
+	if formID == "" {
+		return nil
+	}
+	if fields, ok := seen[formID]; ok {
+		return fields
+	}
+	var fields map[string]bool
+	if rec, ok, err := s.forms.Get(formID); err == nil && ok {
+		fields = map[string]bool{}
+		collectFormFieldKeys([]byte(rec.Schema), fields)
+	}
+	seen[formID] = fields
+	return fields
 }
 
 // deploymentMeta reads the loop-owned deployment registry. Only call it on the
@@ -314,9 +352,10 @@ func (s *Server) listTasksForFolder(w http.ResponseWriter, r *http.Request, fold
 }
 
 // listVisibleTasks is the unfiltered listing for a viewer who does not see every
-// task: the same page, cap and cursor, walked off the loop because it has to skip
-// what [Server.taskVisibleTo] withholds, exactly as a folder skips what its rule
-// does not select.
+// task, and for any page asked for its content: the same page, cap and cursor,
+// walked off the loop because it has to skip what [Server.taskVisibleTo] withholds,
+// exactly as a folder skips what its rule does not select. For a viewer who sees
+// everything it skips nothing.
 func (s *Server) listVisibleTasks(w http.ResponseWriter, viewer taskfolder.User, limit int, before uint64, content bool) {
 	s.pageOpenTasks(w, limit, before, false, content, func(tr taskResp, _ taskfolder.Task) bool {
 		return s.taskVisibleTo(viewer, tr)
@@ -331,6 +370,7 @@ func (s *Server) pageOpenTasks(w http.ResponseWriter, limit int, before uint64, 
 	tasks := []taskResp{}
 	var nextCursor uint64
 	full := false
+	forms := map[string]map[string]bool{}
 	budgetHit, scanErr := s.visitOpenTasksIn(before, needInstance, func(rv *state.ReadView, jobKey uint64, tr taskResp, ft taskfolder.Task) bool {
 		if !keep(tr, ft) {
 			// A skipped task still advances the cursor: the next page must resume
@@ -343,7 +383,7 @@ func (s *Server) pageOpenTasks(w http.ResponseWriter, limit int, before uint64, 
 			return false
 		}
 		if content {
-			tr.Content = taskContent(rv, tr)
+			tr.Content = taskContent(rv, tr, s.taskFormFields(tr.FormID, forms))
 		}
 		tasks = append(tasks, tr)
 		nextCursor = jobKey

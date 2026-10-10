@@ -9,13 +9,35 @@ import (
 	"time"
 )
 
+// formTaskBPMN is userTaskBPMN's task with a form, which is what gives a row content.
+const formTaskBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="approval" isExecutable="true">
+    <startEvent id="start"/>
+    <userTask id="review" name="Review order">
+      <extensionElements>
+        <zeebe:formDefinition formId="order-form"/>
+      </extensionElements>
+    </userTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="review"/>
+    <sequenceFlow id="f2" sourceRef="review" targetRef="end"/>
+  </process>
+</definitions>`
+
 // Every task row says when the task was opened, and a list asked for it carries
-// what the task is about — the values its form is filled from — so the inbox can
-// find "every task for this recipient" by more than a task name that is the same
-// on every row.
+// what the task is about — the values its form shows — so the inbox can find
+// "every task for this recipient" by more than a task name that is the same on
+// every row.
 func TestTaskRowsSayWhenTheyOpenedAndCarryTheirContentOnRequest(t *testing.T) {
 	ts := newTestServer(t)
-	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", userTaskBPMN, "application/xml")
+	form := `{"id":"order-form","name":"Order","schema":{"type":"default","components":[` +
+		`{"type":"textfield","key":"recipient"},{"type":"number","key":"anzahl"},` +
+		`{"type":"checkbox","key":"eilig"},{"type":"textfield","key":"leer"}]}}`
+	if code, body := doReq(t, ts, http.MethodPost, "/api/v1/forms", form, "application/json"); code != http.StatusOK {
+		t.Fatalf("save form status=%d body=%s", code, body)
+	}
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", formTaskBPMN, "application/xml")
 	if code != http.StatusOK {
 		t.Fatalf("deploy status=%d body=%s", code, body)
 	}
