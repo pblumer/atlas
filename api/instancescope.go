@@ -254,33 +254,51 @@ func (s *Server) holdsTaskAs(username, userID string, groupIDs []string, assigne
 	return false
 }
 
-// collectFormFieldKeys walks a form-js schema and adds every component's key to out.
-// Components nest (a group holds components of its own), so it recurses; anything
-// that is not an object with a string key is skipped rather than guessed at. A
-// schema that will not parse contributes nothing, which fails closed.
+// collectFormFieldKeys walks a form-js schema and adds to out the variable every
+// field reads and submits. Components nest (a group holds components of its own),
+// so it recurses; anything that is not an object with a string key is skipped
+// rather than guessed at. A schema that will not parse contributes nothing, which
+// fails closed.
+//
+// The variable is a root, because that is what an instance scope holds. A key
+// addresses a nested value by path ("customer.name" reads customer), and a group or
+// dynamic list with a path nests its fields' data under it — a field keyed street
+// inside a group with path address reads address, and a variable named street at
+// the root is one that form never touches.
 func collectFormFieldKeys(schema []byte, out map[string]bool) {
 	var doc any
 	if err := json.Unmarshal(schema, &doc); err != nil {
 		return
 	}
-	var walk func(any)
-	walk = func(v any) {
+	rootOf := func(path string) string {
+		if i := strings.IndexByte(path, '.'); i > 0 {
+			return path[:i]
+		}
+		return path
+	}
+	// root is the variable the nearest enclosing path has claimed, or "" while none
+	// has: an inner path nests under an outer one, so the outermost decides.
+	var walk func(v any, root string)
+	walk = func(v any, root string) {
 		switch t := v.(type) {
 		case map[string]any:
 			if k, ok := t["key"].(string); ok && k != "" {
-				// A key addresses a nested value by path; the variable it reads is the
-				// root of the path, and that is what an instance scope holds.
-				if i := strings.IndexByte(k, '.'); i > 0 {
-					k = k[:i]
+				if root != "" {
+					out[root] = true
+				} else {
+					out[rootOf(k)] = true
 				}
-				out[k] = true
 			}
-			walk(t["components"])
+			inner := root
+			if p, ok := t["path"].(string); ok && p != "" && root == "" {
+				inner = rootOf(p)
+			}
+			walk(t["components"], inner)
 		case []any:
 			for _, e := range t {
-				walk(e)
+				walk(e, root)
 			}
 		}
 	}
-	walk(doc)
+	walk(doc, "")
 }

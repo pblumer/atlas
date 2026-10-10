@@ -417,6 +417,44 @@ func TestPublicFormSchemaBranches(t *testing.T) {
 	}
 }
 
+// TestPublicStartFieldsNeedTheLinksForm covers the form the field check reads. A
+// submission that names a field cannot be checked against a form that is gone, so
+// it is refused as the schema endpoint refuses that link; one that will not read is
+// a 500. An empty submission names nothing and still starts.
+func TestPublicStartFieldsNeedTheLinksForm(t *testing.T) {
+	srv := newServerForErrors(t)
+	h := srv.Handler()
+	do := func(method, path, body, ct string) int {
+		r := httptest.NewRequest(method, path, strings.NewReader(body))
+		if ct != "" {
+			r.Header.Set("Content-Type", ct)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, r)
+		return rec.Code
+	}
+	if code := do(http.MethodPost, "/api/v1/deployments", startFormBPMNInternal, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy: %d", code)
+	}
+	if err := srv.publicLinks.Save(publicLink{Token: "bbbb", ProcessID: "onboard", FormID: "onboarding-form", CreatedAt: 1}); err != nil {
+		t.Fatalf("save link: %v", err)
+	}
+	start := "/public/forms/bbbb/start"
+
+	if code := do(http.MethodPost, start, `{"variables":{"customer":"Acme"}}`, "application/json"); code != http.StatusNotFound {
+		t.Errorf("start naming a field, form gone: %d, want 404", code)
+	}
+	if code := do(http.MethodPost, start, `{}`, "application/json"); code != http.StatusOK {
+		t.Errorf("empty start, form gone: %d, want 200", code)
+	}
+	if err := os.WriteFile(srv.forms.FileFor("onboarding-form"), []byte("{not json"), 0o644); err != nil {
+		t.Fatalf("corrupt form: %v", err)
+	}
+	if code := do(http.MethodPost, start, `{"variables":{"customer":"Acme"}}`, "application/json"); code != http.StatusInternalServerError {
+		t.Errorf("start over a corrupt form: %d, want 500", code)
+	}
+}
+
 // startFormBPMNInternal mirrors the api_test start-form fixture for white-box
 // tests that need a deployed process whose start event binds a form.
 const startFormBPMNInternal = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"

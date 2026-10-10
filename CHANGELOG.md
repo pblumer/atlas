@@ -22,6 +22,23 @@ _Changed_ / _Removed_ for each version.
   asks for, under the same allowlist the variables endpoint gives a task holder, and a
   task without a form carries none. The rule is the same for every viewer, operators
   included; a page asked for its content is now read off the run loop.
+- **A public start form takes only the fields it asks for.** `POST
+  /public/forms/{token}/start`, the one anonymous write into an instance, accepted any
+  variable a caller named — the one a gateway decides on included — although ADR-0029
+  promised a submission validated against the form. A submission naming a variable the
+  link's form does not submit is now refused whole with **400**, naming the fields, and
+  nothing starts; one naming any field on a link whose form is gone answers **404**, as
+  that link's schema endpoint already did. This changes behaviour for a page that posts
+  more than its form: the public page and the example widget send only their form's
+  fields. Only the names are checked, not the values.
+
+### Fixed
+
+- **A form-js group or dynamic list with a path is read at that path.** The allowlist
+  of fields a task holder may read took the keys inside such a container as variables
+  of their own, so a task's form could not prefill `address` from a group whose path is
+  `address`, and a variable named like one of its fields was handed out instead. The
+  container's path now names the variable, as it does in the form.
 
 ## [0.9.1] — 2026-10-09
 

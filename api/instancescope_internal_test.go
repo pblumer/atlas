@@ -35,6 +35,33 @@ func TestCollectFormFieldKeysWalksTheWholeSchema(t *testing.T) {
 	}
 }
 
+// TestCollectFormFieldKeysFollowsAContainersPath: a form-js group or dynamic list
+// with a path nests its fields' data under that path, so the variable the form
+// reads and submits is the path's root — never a field key inside it, which at the
+// root would name some other variable.
+func TestCollectFormFieldKeysFollowsAContainersPath(t *testing.T) {
+	out := map[string]bool{}
+	collectFormFieldKeys([]byte(`{"type":"default","components":[
+		{"type":"group","path":"address","components":[
+			{"type":"textfield","key":"street"},
+			{"type":"group","path":"geo","components":[{"type":"number","key":"lat"}]}
+		]},
+		{"type":"dynamiclist","path":"order.items","components":[{"type":"textfield","key":"sku"}]},
+		{"type":"group","path":"empty","components":[{"type":"text"}]},
+		{"type":"group","path":"","components":[{"type":"textfield","key":"plain"}]}
+	]}`), out)
+	for _, want := range []string{"address", "order", "plain"} {
+		if !out[want] {
+			t.Errorf("field %q was not collected: %v", want, out)
+		}
+	}
+	for _, not := range []string{"street", "geo", "lat", "sku", "order.items", "empty"} {
+		if out[not] {
+			t.Errorf("%q was collected, but the form neither reads nor submits it at the root: %v", not, out)
+		}
+	}
+}
+
 // TestAFormNobodyCanParseGrantsNothing: the allowlist decides what a task holder is
 // handed, so a schema the walk cannot read must contribute no fields rather than
 // fall back to something. Failing closed here costs a blank form; failing open
