@@ -43,6 +43,9 @@ type taskAuthority struct {
 	known bool
 	// allowed is whether the caller may complete, claim or release it.
 	allowed bool
+	// publicStep says the task is a step of a public wizard, which is refused for a
+	// reason of its own: it belongs to the visitor who started the sitting (ADR-0449).
+	publicStep bool
 }
 
 // mayWorkTask decides whether the caller may act on the user task with this job
@@ -77,6 +80,12 @@ func (s *Server) mayWorkTask(r *http.Request, key uint64) (taskAuthority, error)
 			return
 		}
 		tr := s.enrichTask(key, jv)
+		// A step of a public wizard is the anonymous visitor's who started the
+		// sitting, and nobody else's but an operator's (ADR-0449).
+		if tr.Wizard == compiler.WizardPublic.String() {
+			out.publicStep = true
+			return
+		}
 		// A task the model addressed belongs to whoever it addressed; one it did
 		// not is open work.
 		if tr.Assignee == "" && tr.CandidateGroups == "" {
@@ -99,6 +108,9 @@ func (s *Server) refuseTaskWork(w http.ResponseWriter, a taskAuthority, err erro
 		httpapi.Error(w, http.StatusInternalServerError, "read task: "+err.Error())
 	case !a.known:
 		httpapi.Error(w, http.StatusNotFound, "no open task with that key")
+	case a.publicStep && !a.allowed:
+		httpapi.Error(w, http.StatusForbidden,
+			"this is a step of a public form and belongs to the visitor who started it; an operator can act on it")
 	case !a.allowed:
 		httpapi.Error(w, http.StatusForbidden,
 			"this task is assigned to somebody else; ask them, or an operator, to act on it")
@@ -121,6 +133,12 @@ func (s *Server) refuseTaskWork(w http.ResponseWriter, a taskAuthority, err erro
 func (s *Server) taskVisibleTo(u taskfolder.User, tr taskResp) bool {
 	if !s.authEnabled || u.SeesAll {
 		return true
+	}
+	// A step of a public wizard names nobody, and is still nobody's to pick up: it is
+	// the visitor's who started the sitting. Listed to everybody, every customer's
+	// half-filled screens would sit in every signed-in inbox (ADR-0449).
+	if tr.Wizard == compiler.WizardPublic.String() {
+		return false
 	}
 	if tr.Assignee == "" && tr.CandidateGroups == "" {
 		return true

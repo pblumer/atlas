@@ -169,6 +169,13 @@ func (s *Server) continueWizard(r *http.Request, piKey, scope uint64) (*wizardRe
 		out.State, out.Task = wizardStep, &tr
 		return out, nil
 	}
+	// A public sitting is the visitor's who started it. Nobody signed in is carried
+	// into it, and nothing in it is claimed: a claim would put the visitor's screen
+	// in one person's inbox (ADR-0449).
+	if tr.Wizard == compiler.WizardPublic.String() {
+		out.State = wizardHandedOver
+		return out, nil
+	}
 	// The screen is the caller's when it names nobody, or names them: as its assignee,
 	// or through a candidate group they are in (ADR-0317's rule for who may act).
 	pr := httpapi.PrincipalFrom(r.Context())

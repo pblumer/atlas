@@ -323,3 +323,67 @@ func TestTheNextScreenIsClaimedForThePersonAndPassesOnWhenItIsNotTheirs(t *testi
 		t.Fatalf("a screen addressed to another group: %+v, want handedOver without the task", last.Wizard)
 	}
 }
+
+// TestAPublicWizardsStepsAreNobodysButAnOperators: a step of a public wizard names
+// nobody, and is still nobody's to pick up — it belongs to the visitor who started the
+// sitting. It is in no signed-in person's inbox, not by key either, and refused to them;
+// an operator still sees it and can act on it. Nobody signed in is carried into the
+// sitting, and nothing in it is claimed (ADR-0449).
+func TestAPublicWizardsStepsAreNobodysButAnOperators(t *testing.T) {
+	ts, _ := newAuthServer(t, "root", "rootpassword")
+	admin := newClient(t)
+	if login(t, admin, ts, "root", "rootpassword") != http.StatusOK {
+		t.Fatal("admin login failed")
+	}
+	alice := twoUsers(t, ts, admin, "alice", "mallory")[0]
+
+	bpmn := strings.Replace(wizardBPMN(""), `atlas:wizard="internal"`, `atlas:wizard="public"`, 1)
+	key := deployKey(t, ts, admin, bpmn)
+	code, body := cReq(t, admin, ts, "POST", fmt.Sprintf("/api/v1/processes/%d/instances", key), "{}")
+	start := decodeWizardAnswer(t, code, body)
+	if start.Wizard == nil || start.Wizard.State != "handedOver" || start.Wizard.Task != nil {
+		t.Fatalf("an operator's start into a public wizard: %+v, want handedOver without the task", start.Wizard)
+	}
+
+	// The operator sees the step, unclaimed and marked public.
+	code, body = cReq(t, admin, ts, "GET", "/api/v1/tasks", "")
+	var page struct {
+		Items []struct {
+			Key      uint64 `json:"key"`
+			Assignee string `json:"assignee"`
+			Wizard   string `json:"wizard"`
+		} `json:"items"`
+	}
+	if code != http.StatusOK {
+		t.Fatalf("admin task list: %d (%s)", code, body)
+	}
+	if err := json.Unmarshal(body, &page); err != nil || len(page.Items) != 1 {
+		t.Fatalf("admin task list: %v (%s)", err, body)
+	}
+	step := page.Items[0]
+	if step.Wizard != "public" || step.Assignee != "" {
+		t.Fatalf("the public step: %+v, want an unclaimed public step", step)
+	}
+
+	// A signed-in person does not: not in the list, not by key, not to complete.
+	code, body = cReq(t, alice, ts, "GET", "/api/v1/tasks", "")
+	if code != http.StatusOK || strings.Contains(string(body), fmt.Sprint(step.Key)) {
+		t.Errorf("a public step is in alice's inbox: %d (%s)", code, body)
+	}
+	if code, body := cReq(t, alice, ts, "GET", fmt.Sprintf("/api/v1/tasks/%d", step.Key), ""); code != http.StatusNotFound {
+		t.Errorf("alice read a public step by key: %d (%s)", code, body)
+	}
+	for _, action := range []string{"complete", "claim"} {
+		code, body := cReq(t, alice, ts, "POST", fmt.Sprintf("/api/v1/tasks/%d/%s", step.Key, action), `{}`)
+		if code != http.StatusForbidden || !strings.Contains(string(body), "public form") {
+			t.Errorf("alice could %s a public step: %d (%s)", action, code, body)
+		}
+	}
+
+	// An operator can act on it, and is not carried on: the next screen is the
+	// visitor's too.
+	next := completeTask(t, ts, admin, step.Key, `{"weiter":"a"}`)
+	if next.Wizard == nil || next.Wizard.State != "handedOver" {
+		t.Fatalf("after an operator completed a public step: %+v, want handedOver", next.Wizard)
+	}
+}
