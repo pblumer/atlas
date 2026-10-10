@@ -3205,15 +3205,24 @@ const SERVICE_TASK_KINDS = [
       { key: "queryParameters", label: "Query parameters", type: "map", childType: "atlas:QueryParam", fx: true, hint: "Appended to the request URL. A value may be a FEEL expression (fx)." },
       { group: "Authentication" },
       {
+        // oauth2 is the REST worker's alone (ADR-0152): the client-credentials grant needs
+        // a token endpoint and a client id, which only <atlas:restConnector> carries.
         key: "authType", label: "Type", type: "select", reRender: true,
-        options: [{ v: "", l: "None" }, { v: "basic", l: "Basic" }, { v: "bearer", l: "Bearer token" }, { v: "apiKey", l: "API key" }],
+        options: [{ v: "", l: "None" }, { v: "basic", l: "Basic" }, { v: "bearer", l: "Bearer token" }, { v: "apiKey", l: "API key" }, { v: "oauth2", l: "OAuth2 client credentials" }],
       },
       { key: "authUsername", label: "Username", showIf: (v) => v.authType === "basic" },
       { key: "authApiKeyName", label: "API key header name", placeholder: "X-API-Key", showIf: (v) => v.authType === "apiKey" },
       {
+        key: "authTokenUrl", label: "Token URL", placeholder: "https://login.example.com/oauth2/token",
+        showIf: (v) => v.authType === "oauth2",
+        hint: "The token endpoint the worker obtains an access token from with the client-credentials grant, reusing it until shortly before it expires.",
+      },
+      { key: "authClientId", label: "Client ID", showIf: (v) => v.authType === "oauth2" },
+      { key: "authScope", label: "Scope", placeholder: "api://example/.default", showIf: (v) => v.authType === "oauth2", hint: "Optional. Sent with the token request when the provider asks for one." },
+      {
         key: "authSecret", label: "Secret reference", placeholder: "MY_TOKEN",
-        showIf: (v) => v.authType === "basic" || v.authType === "bearer" || v.authType === "apiKey",
-        hint: "The credential lives on the server as ATLAS_CONNECTOR_<REF>_TOKEN; the model stores only this reference, never the secret value.",
+        showIf: (v) => v.authType === "basic" || v.authType === "bearer" || v.authType === "apiKey" || v.authType === "oauth2",
+        hint: "The credential lives on the server as ATLAS_CONNECTOR_<REF>_TOKEN; the model stores only this reference, never the secret value. For OAuth2 it is the client secret.",
       },
       { group: "Output" },
       { key: "resultVariable", label: "Result variable", resultType: "json", placeholder: "response", hint: "The JSON response is written into this process variable (leave empty to discard it)." },
