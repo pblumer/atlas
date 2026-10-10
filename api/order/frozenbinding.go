@@ -149,10 +149,8 @@ func Rebind(o Order, it catalog.Item, by, reason string, at int64) (Order, int) 
 		l.ProvisionProcess, l.DeprovisionProcess = "", ""
 		l.LifecycleProcess = it.LifecycleProcess
 		l.LifecycleForm = it.LifecycleForm
-		l.Operations = make(map[string]string, len(it.Operations))
-		for k, v := range it.Operations {
-			l.Operations[k] = v
-		}
+		l.Operations = copyAnswers(it.Operations)
+		l.Actions = catalog.CopyActions(it.Actions)
 		lines[i] = l
 		moved++
 	}

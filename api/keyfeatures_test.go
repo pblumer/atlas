@@ -11,9 +11,8 @@ import (
 )
 
 // The Console landing page's key-features tile is a static asset
-// (web/key-features.json) rendered by web/key-features.js. Like the What's New
-// feed it is served straight off the embedded FS with no Go code in the path, so
-// nothing else would notice if it were emptied or hand-edited into a shape the UI
+// (web/key-features.json) rendered by web/key-features.js. It is served straight
+// off the embedded FS with no Go code in the path, so nothing else would notice if it were emptied or hand-edited into a shape the UI
 // cannot render. This test guards the served file: it must parse, carry a title
 // and intro, and every feature must be complete in *both* languages — a tile that
 // silently falls back to English is exactly what the bilingual toggle is there to
@@ -168,12 +167,9 @@ func TestKeyFeaturesTileIsReviewedAgainstTheChangelog(t *testing.T) {
 // changelogAddedTitles returns the bold headline of every bullet under a
 // "### Added" heading, in document order — which CHANGELOG.md keeps newest-first.
 //
-// It mirrors how the feed generator in scripts/whats-new reads the same file,
-// including the one
-// non-obvious part: a bullet's bold headline may wrap across lines, so the bullet's
-// first paragraph is joined before the headline is cut out of it. Headlines are
-// matched by text rather than by the generator's slug so that this test does not
-// have to keep a second copy of the slug rule in step with it.
+// It handles the one non-obvious part of reading the file: a bullet's bold headline
+// may wrap across lines, so the bullet's first paragraph is joined before the
+// headline is cut out of it. Headlines are matched by their text as written.
 func changelogAddedTitles(t *testing.T, path string) []string {
 	t.Helper()
 	raw, err := os.ReadFile(path)

@@ -120,6 +120,13 @@ const (
 	// out who owes what, and that is all. Sending is not in it either: sending is a
 	// mail task, not a route.
 	apiScopeReminders = "reminders"
+
+	// apiScopeEvents reaches the event feed and nothing else (ADR-0429 §5): what a CMDB
+	// or a billing system holds to follow how actions ended and what rights were
+	// granted and revoked. Its token carries the feedreader role and no other
+	// (scopeRoles), so the role the route asks for and the reach the scope allows name
+	// the same single door.
+	apiScopeEvents = "events"
 )
 
 // apiScopeAllowed is the complete reach of each confined scope. A scope absent
@@ -169,6 +176,11 @@ var apiScopeAllowed = map[string][]string{
 	// what makes it able to cover this at all.
 	apiScopeMetrics: {
 		"GET /metrics",
+	},
+	// One read. The feed is paged by a cursor its reader keeps, so there is nothing
+	// else a follower of it needs to ask.
+	apiScopeEvents: {
+		"GET /api/v1/events",
 	},
 	// Read-only, and deliberately not the PUT on the same path: a peer reads an
 	// identity, it never sets one.
@@ -239,7 +251,7 @@ const mcpTransportHeader = "X-Atlas-Via-MCP"
 // apiMintableScopes lists the scopes an API token may be minted with. It is not
 // every scope: apiScopeDeploy belongs to a credential with its own store, so
 // nothing here can ask for it.
-var apiMintableScopes = []string{apiScopeFull, apiScopeWorker, apiScopeMetrics, apiScopeStatus, apiScopeDirectory, apiScopeInventory, apiScopeLandscape}
+var apiMintableScopes = []string{apiScopeFull, apiScopeWorker, apiScopeMetrics, apiScopeStatus, apiScopeDirectory, apiScopeInventory, apiScopeLandscape, apiScopeEvents}
 
 // apiScopes returns the mintable scopes, sorted, for the error message that names
 // them when a request asks for something else.

@@ -12,6 +12,7 @@
 
   Start (Formular ba-antrag: vorname, nachname, email, abteilung, begruendung)
    -> Script-Task "Zugangsdaten vorschlagen"  (FEEL schlaegt benutzername vor)
+   -> Signal     "Aufnahme beantragt"         (atlas.user.requested, siehe unten)
    -> User-Task  "Antrag freigeben"           (Formular ba-konto; Admin entscheidet,
                                                vergibt die Rolle, setzt Initialpasswort)
 
@@ -26,6 +27,16 @@
    -> (X) Join
    -> Ende "Aufnahme abgeschlossen"
 
+  Das Signal "atlas.user.requested" (ADR-0431)
+  meldet jeden eingegangenen Antrag, bevor die Freigabe wartet. Der Prozess kennt
+  seine Empfaenger nicht: eine Installation, die davon erfahren will (Discord, Mail,
+  Ticket), deployt einen eigenen Prozess mit einem Signal-Start "atlas.user.requested".
+  Ohne Empfaenger bleibt der Wurf folgenlos. Das Signal traegt alle Variablen der
+  Instanz an dieser Stelle: vorname, nachname, email, abteilung, begruendung und
+  benutzername. Es steht bewusst VOR der Freigabe, denn erst dort entsteht
+  initialpasswort, und das darf nie in einer Meldung landen. Name und Stelle sind
+  eine Schnittstelle: wer sie aendert, bricht die Empfaenger jeder Installation.
+
   BPMN-DI von Hand gesetzt: gerade Hauptachse bei y=120, Ablehnungs-Zweig bei y=260.
 -->
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
@@ -35,6 +46,8 @@
              xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
              xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
              id="defs_benutzer_aufnahme" targetNamespace="http://atlas/examples">
+  <signal id="sig_user_requested" name="atlas.user.requested"/>
+
   <process id="proc_benutzer_aufnahme" name="Benutzerverwaltung: Benutzer aufnehmen" isExecutable="true">
 
     <startEvent id="start" name="Aufnahme beantragt">
@@ -48,17 +61,31 @@
       <extensionElements>
         <zeebe:script resultVariable="benutzername"
           expression="= lower case(vorname) + &quot;.&quot; + lower case(nachname)"/>
+        <!-- With an output mapping present the result stays local, so the user name
+             is mapped out as well. atlasInstance is the event catalogue's pointer back
+             at this request (ADR-0435): every domain event carries the instance that
+             emitted it, and the signal below sends the variables the instance holds. -->
+        <zeebe:ioMapping>
+          <zeebe:output source="=benutzername" target="benutzername"/>
+          <zeebe:output source="=processInstanceKey" target="atlasInstance"/>
+        </zeebe:ioMapping>
       </extensionElements>
       <incoming>f_start_vorschlag</incoming>
-      <outgoing>f_vorschlag_freigabe</outgoing>
+      <outgoing>f_vorschlag_melden</outgoing>
     </scriptTask>
+
+    <intermediateThrowEvent id="beantragt_melden" name="Aufnahme beantragt">
+      <incoming>f_vorschlag_melden</incoming>
+      <outgoing>f_melden_freigabe</outgoing>
+      <signalEventDefinition signalRef="sig_user_requested"/>
+    </intermediateThrowEvent>
 
     <userTask id="freigabe" name="Antrag freigeben">
       <extensionElements>
         <zeebe:assignmentDefinition candidateGroups="benutzerverwaltung"/>
         <zeebe:formDefinition formId="ba-konto"/>
       </extensionElements>
-      <incoming>f_vorschlag_freigabe</incoming>
+      <incoming>f_melden_freigabe</incoming>
       <outgoing>f_freigabe_gw</outgoing>
     </userTask>
 
@@ -114,7 +141,8 @@
     </endEvent>
 
     <sequenceFlow id="f_start_vorschlag" sourceRef="start" targetRef="vorschlag"/>
-    <sequenceFlow id="f_vorschlag_freigabe" sourceRef="vorschlag" targetRef="freigabe"/>
+    <sequenceFlow id="f_vorschlag_melden" sourceRef="vorschlag" targetRef="beantragt_melden"/>
+    <sequenceFlow id="f_melden_freigabe" sourceRef="beantragt_melden" targetRef="freigabe"/>
     <sequenceFlow id="f_freigabe_gw" sourceRef="freigabe" targetRef="entscheidung"/>
     <sequenceFlow id="f_anlegen" name="anlegen" sourceRef="entscheidung" targetRef="konto_anlegen"/>
     <sequenceFlow id="f_ablehnen" name="ablehnen" sourceRef="entscheidung" targetRef="ablehnung_mail">
@@ -135,62 +163,69 @@
       <bpmndi:BPMNShape id="vorschlag_di" bpmnElement="vorschlag">
         <omgdc:Bounds x="240" y="80" width="100" height="80"/>
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="beantragt_melden_di" bpmnElement="beantragt_melden">
+        <omgdc:Bounds x="390" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="366" y="145" width="84" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="freigabe_di" bpmnElement="freigabe">
-        <omgdc:Bounds x="390" y="80" width="100" height="80"/>
+        <omgdc:Bounds x="476" y="80" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="entscheidung_di" bpmnElement="entscheidung" isMarkerVisible="true">
-        <omgdc:Bounds x="560" y="95" width="50" height="50"/>
-        <bpmndi:BPMNLabel><omgdc:Bounds x="548" y="62" width="74" height="14"/></bpmndi:BPMNLabel>
+        <omgdc:Bounds x="646" y="95" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="634" y="62" width="74" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="konto_anlegen_di" bpmnElement="konto_anlegen">
-        <omgdc:Bounds x="680" y="80" width="100" height="80"/>
+        <omgdc:Bounds x="766" y="80" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="zugang_mail_di" bpmnElement="zugang_mail">
-        <omgdc:Bounds x="830" y="80" width="100" height="80"/>
+        <omgdc:Bounds x="916" y="80" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="ablehnung_mail_di" bpmnElement="ablehnung_mail">
-        <omgdc:Bounds x="680" y="220" width="100" height="80"/>
+        <omgdc:Bounds x="766" y="220" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="join_di" bpmnElement="join" isMarkerVisible="true">
-        <omgdc:Bounds x="990" y="95" width="50" height="50"/>
+        <omgdc:Bounds x="1076" y="95" width="50" height="50"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="ende_di" bpmnElement="ende">
-        <omgdc:Bounds x="1090" y="102" width="36" height="36"/>
-        <bpmndi:BPMNLabel><omgdc:Bounds x="1066" y="145" width="86" height="14"/></bpmndi:BPMNLabel>
+        <omgdc:Bounds x="1176" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1152" y="145" width="86" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
 
       <bpmndi:BPMNEdge id="f_start_vorschlag_di" bpmnElement="f_start_vorschlag">
         <omgdi:waypoint x="188" y="120"/><omgdi:waypoint x="240" y="120"/>
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_vorschlag_freigabe_di" bpmnElement="f_vorschlag_freigabe">
+      <bpmndi:BPMNEdge id="f_vorschlag_melden_di" bpmnElement="f_vorschlag_melden">
         <omgdi:waypoint x="340" y="120"/><omgdi:waypoint x="390" y="120"/>
       </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_melden_freigabe_di" bpmnElement="f_melden_freigabe">
+        <omgdi:waypoint x="426" y="120"/><omgdi:waypoint x="476" y="120"/>
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_freigabe_gw_di" bpmnElement="f_freigabe_gw">
-        <omgdi:waypoint x="490" y="120"/><omgdi:waypoint x="560" y="120"/>
+        <omgdi:waypoint x="576" y="120"/><omgdi:waypoint x="646" y="120"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_anlegen_di" bpmnElement="f_anlegen">
-        <omgdi:waypoint x="610" y="120"/><omgdi:waypoint x="680" y="120"/>
-        <bpmndi:BPMNLabel><omgdc:Bounds x="618" y="96" width="46" height="14"/></bpmndi:BPMNLabel>
+        <omgdi:waypoint x="696" y="120"/><omgdi:waypoint x="766" y="120"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="704" y="96" width="46" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_anlegen_mail_di" bpmnElement="f_anlegen_mail">
-        <omgdi:waypoint x="780" y="120"/><omgdi:waypoint x="830" y="120"/>
+        <omgdi:waypoint x="866" y="120"/><omgdi:waypoint x="916" y="120"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_zugang_join_di" bpmnElement="f_zugang_join">
-        <omgdi:waypoint x="930" y="120"/><omgdi:waypoint x="990" y="120"/>
+        <omgdi:waypoint x="1016" y="120"/><omgdi:waypoint x="1076" y="120"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_ablehnen_di" bpmnElement="f_ablehnen">
-        <omgdi:waypoint x="585" y="145"/>
-        <omgdi:waypoint x="585" y="260"/>
-        <omgdi:waypoint x="680" y="260"/>
-        <bpmndi:BPMNLabel><omgdc:Bounds x="592" y="200" width="46" height="14"/></bpmndi:BPMNLabel>
+        <omgdi:waypoint x="671" y="145"/>
+        <omgdi:waypoint x="671" y="260"/>
+        <omgdi:waypoint x="766" y="260"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="678" y="200" width="46" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_ablehnung_join_di" bpmnElement="f_ablehnung_join">
-        <omgdi:waypoint x="780" y="260"/>
-        <omgdi:waypoint x="1015" y="260"/>
-        <omgdi:waypoint x="1015" y="145"/>
+        <omgdi:waypoint x="866" y="260"/>
+        <omgdi:waypoint x="1101" y="260"/>
+        <omgdi:waypoint x="1101" y="145"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_join_ende_di" bpmnElement="f_join_ende">
-        <omgdi:waypoint x="1040" y="120"/><omgdi:waypoint x="1090" y="120"/>
+        <omgdi:waypoint x="1126" y="120"/><omgdi:waypoint x="1176" y="120"/>
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

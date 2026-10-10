@@ -1,18 +1,551 @@
 # Changelog
 
-All notable changes to Atlas are documented here.
+All notable changes to atlas are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-While Atlas is pre-1.0 (`0.y.z`), the public API — the HTTP surface, the MCP
+While atlas is pre-1.0 (`0.y.z`), the public API — the HTTP surface, the MCP
 tools, the on-disk WAL/state format, and the Go package layout — is **unstable
 and may change in any release**. Breaking changes are called out under
 _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.9.1] — 2026-10-09
+
+**A patch release for how atlas presents itself.** `atlas.exe` shows its version in
+Explorer's Properties, and the name is written lowercase wherever a person reads it — the
+changelog, the README and the installation and deployment guides included. Nothing about
+how atlas runs changes, and 0.9.1 reads and writes the same data directory as 0.9.0.
+
 ### Added
+
+- **`atlas.exe` carries its version.** The Windows binary of a release has a version
+  resource, so Properties → Details in Explorer shows the product version, the file
+  version, the product name and a description instead of empty fields. The release
+  workflow writes it from the tag, the same version `atlas version` reports.
+
+### Changed
+
+- **The name is written lowercase wherever a person reads it.** The changelog the
+  Console shows as release notes, the README, the installation guide and the deployment
+  docs now write `atlas` in running text and `Atlas` only where it opens a sentence, as
+  the Console, the server's messages and the examples already did. So do the texts added
+  since: the S3 Worker Type's hints and setup steps, the FEEL assistant's introduction, two
+  OpenAPI summaries and an MCP tool description. The version resource of `atlas.exe` names
+  the product `atlas`. Identifiers, paths and values a program reads keep their spelling
+  (`docs/brand/README.md`).
+
+## [0.9.0] — 2026-10-08
+
+**What happens in atlas can now leave it.** A system beyond atlas — a CMDB, a billing
+system, a chat — no longer has to ask atlas what changed. Every right granted or revoked,
+every action asked of a held position that ended, and every incident raised or resolved is
+an event of a CloudEvents feed, read from `GET /api/v1/events` from a cursor the reader
+keeps or pushed to a receiver by the new CloudEvents endpoint Worker Type, at least once and
+in the order atlas recorded it
+([ADR-0429](docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)). It is
+read with a credential that reads nothing else — the `feedreader` role and the `events`
+token scope — which can be confined to the catalogues it is for. A new account request and
+an approval about to wait are thrown as signals a model of the installation can listen to.
+A Console page *Events* lists every signal, message and feed event atlas emits, what it
+carries and who may receive it, and only an administrator deploys a model that listens to
+an event carrying personal data
+([ADR-0435](docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)).
+
+**A held service can be asked for more than its return.** A product declares its actions —
+changes such as more storage, services such as a password reset — and who may ask for each.
+The shop shows them as buttons under a held position, a process asks for one in the name of
+an application the product trusts, and how each ended is an engine record, which the
+product's process can report with a Shop send task instead of a REST call. The answers given
+on a product's order form reach the approver and the product's processes, and the person a
+service was ordered for may give it back and change it. A whole shop is imported as one
+document, and `atlas import DIR` installs an application with its shop from the command
+line. The shop has a handbook of its own with an example to install. And the shop, the
+catalogue, the orders and the inventory can be switched off with `--catalogue=false`, for an
+installation that runs atlas as a workflow engine only
+([ADR-0434](docs/adr/0434-the-catalogue-can-be-switched-off.md)).
+
+**Workers reach further, and the server runs better behind a load balancer.** An S3 object
+storage Worker Type puts documents in a bucket and mints time-limited links to them
+([ADR-0442](docs/adr/0442-s3-object-store-worker.md)), a mail Worker reads its mailbox and
+starts processes from mail ([ADR-0438](docs/adr/0438-mailbox-worker.md)), a worker runs the
+jobs of one type concurrently ([ADR-0440](docs/adr/0440-worker-runs-jobs-concurrently.md)),
+and a FEEL assistant writes expressions in a conversation, checked by the engine before they
+are shown ([ADR-0445](docs/adr/0445-feel-assistant.md)). Behind a load balancer,
+`--trusted-proxies` gives the login throttle and the audit log the client's address instead
+of the balancer's ([ADR-0448](docs/adr/0448-trusted-proxies.md)), its health checks are
+DEBUG lines, and `--log-level` sets a floor. Among the fixes, listing one instance's jobs no
+longer walks every job on the server while holding the run loop, a deploy refused for its job
+types no longer reappears after a restart, and on Windows a crashed server no longer leaves
+its supervised workers running. The handbook gains chapters on TLS and certificates and a
+guiding case that runs one process through all six modules, and the Console's landing page
+shows these release notes, read from the changelog the binary carries
+([ADR-0444](docs/adr/0444-release-notes-from-the-changelog.md)).
+
+**Read this before upgrading from 0.8.0.** These act on an existing installation:
+
+- Each worker the server supervises for a built-in Worker Type now runs up to 16 jobs of one
+  type at once, where 0.8.0 ran one at a time, so a target system can see up to 16 parallel
+  calls per type. For a target that takes fewer, set `atlas serve --worker-max-jobs` lower;
+  `1` restores one at a time. On a worker you start yourself, `--max-jobs` now means how many
+  jobs run at once rather than how many one poll leases, and its default stays 1.
+- A deploy refuses a process whose start event carries a condition (rule
+  `start.conditional`), which 0.8.0 accepted and then never started on its own. A definition
+  deployed before keeps loading and running as it did, is named at start by a WARN
+  `event=deployment.reloaded_with_problems`, and its next deploy is refused.
+- The first start deploys a new version of the shop's three approval processes and of the
+  account-request intake, which now throw the signals of the event catalogue; instances
+  already running stay on their version. With `--catalogue=false` only the intake gets one.
+- Publishing a catalogue refuses an order form with a field named like a variable the order
+  sets itself: `orderId`, `itemId`, `positionId`, `variantId`, `recipient`, `orderer`,
+  `provisionProcess`, `approvalRef`, `atlasApiBase`, `portalBaseUrl`, `commandId`, `reason`.
+  It also refuses an action, or an operation of a product that still carries the operation
+  map, whose message an enabled inbound watch publishes. Releases already made stay.
+- A product saved in the Console's catalogue editor is saved with actions instead of the
+  operation map, and from then on its publish requires a Shop send task that reports each of
+  its changes and services completed. A 0.8.0 product with a `change` operation that is left
+  as it is, or saved over the API with its `operations`, publishes as before.
+- `POST /api/v1/messages` answers **409** for every message a catalogue product's action owns,
+  so a client that started a per-operation product's lifecycle process by publishing its
+  message by name has to go through the order. Creating, renaming or enabling an inbound watch
+  under such a message is refused with 409 too.
+- The person a service was ordered for may now return it and ask it for a change, as its
+  orderer and an operator could; a product whose return names only operators is returned by
+  an operator. A change now refuses a variable the order sets itself, such as `orderId` or
+  `recipient`, which before it passed on.
+- Atlas's own approval processes and the order fulfilment no longer receive the answers of a
+  product's order form; the processes the product binds receive each answer as a variable of
+  its own.
+- The application import now checks a message name an enabled inbound watch claims
+  (ADR-0205), as a single deploy already did: a model that can receive such a message is
+  refused with 409 unless the importing identity may view that watch's Worker.
+- Resolving a `VariableTooLarge` incident still neither writes the value again nor resumes
+  the element (issue #1123): raise `ATLAS_LIMIT_VARIABLE` or `ATLAS_LIMIT_COLLECTION`
+  before the work runs.
+- Treat the upgrade as one-way. 0.9.0 writes records 0.8.x has no replay rule for — how an
+  action asked of a position ended, and how far the event feed was pruned — so take a backup
+  before upgrading and restore it, rather than starting 0.8.x on a data directory 0.9.0 has
+  written.
+
+### Added
+
+- **The client's address survives a load balancer.** `--trusted-proxies` (or
+  `ATLAS_TRUSTED_PROXIES`) lists the balancers in front of the server, as addresses or
+  CIDR prefixes ([ADR-0448](docs/adr/0448-trusted-proxies.md)). On a
+  connection from one of them the client's address is taken from a PROXY protocol header
+  — v1 or v2, for a balancer that forwards TCP and leaves TLS to atlas — or from
+  `X-Forwarded-For`, for one that speaks HTTP, read from the right so that what a client
+  wrote into the header itself is never believed. From any other address neither is read,
+  and a PROXY header is only the first bytes of a stream the TLS handshake refuses.
+  - The login throttle charges each person instead of the balancer's one address, and
+    every audit line's `client_ip` names the client, with the balancer beside it as `via`.
+  - A list entry that does not parse, or a prefix covering every address, refuses the
+    start; `event=server.trusted_proxies` records the list at startup.
+  - Only the public listener reads proxies, never the loopback one for this server's own
+    children. Unset, nothing changes.
+- **Logs have a level floor.** `--log-level` takes `debug`, `info` (the default), `warn` or
+  `error` and writes nothing below it — the setting ADR-0142 left out while nothing logged
+  below INFO.
+
+- **A FEEL assistant writes expressions in a conversation, and the engine checks them first.**
+  Ctrl/⌘+Shift+E opens it from any screen of the console, as do the spark in the top bar, a mini
+  spark on every FEEL field of the Modeler, and a spark beside a focused output cell, literal
+  expression or input expression in the DMN editor
+  ([ADR-0445](docs/adr/0445-feel-assistant.md)). An author says what an
+  expression should compute; the AI Worker an operator configured writes one, with an explanation
+  and an example. Before it is shown, atlas compiles it, refuses calls a deploy would refuse, and
+  evaluates it against the example; an answer that fails or disagrees with the result it claimed
+  goes back to the model with the engine's own words, at most twice. Beside the chat are a FEEL
+  editor, a test pane, Copy, and Apply, which writes into the field the assistant was opened from.
+  - The last thirty expressions and the author's favourites are kept in the browser, the
+    conversation for the browser session; nothing is stored on the server.
+  - A decision table's input cell is recognised and not written to: it takes a unary test, not an
+    expression.
+  - Routes `GET /api/v1/feel/generate/workers` and `POST /api/v1/feel/generate` (modeler role).
+    Like form generation they are not MCP tools: an agent writes the FEEL itself.
+  - The prompt's function list is the engine's own registry, and every rule it teaches the model
+    is an expression a test evaluates.
+  - Every request that reached a model is measured, so the prompt can be improved from data: a
+    log line `event=feel_assistant.answered` names the Worker and model, how the request ended,
+    and per round the form of the answer, what the engine's check found and which foreign
+    functions were refused. With metrics on, `atlas_feel_assistant_requests_total{outcome}`,
+    `atlas_feel_assistant_attempts_total{format}`, `atlas_feel_assistant_attempt_faults_total{fault}`
+    and `atlas_feel_assistant_request_seconds` count the same by closed labels. Neither carries
+    the conversation or an expression.
+  - Each answer, log line and metric names the prompt version that produced it (`prompt`), so the
+    measurements of two prompts stay apart. A test holds the version to a fingerprint of the
+    prompt and fails when the prompt changes without it.
+
+- **Incidents leave atlas on the event feed.** Every incident raised and every incident resolved
+  is now an event of the CloudEvents feed, `atlas.incident.raised` and
+  `atlas.incident.resolved`, pulled from `GET /api/v1/events` or pushed to a subscribed
+  endpoint like the catalogue's events
+  ([ADR-0435](docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)).
+  - An event names the parked element instance (the key the resolve route takes), its process
+    instance, and its cause: definition, element and incident type, the triple a flood is
+    grouped by (ADR-0337). A receiver can therefore tell a new cause from the thousandth
+    incident of a known one.
+  - It never carries the incident's message, which may hold anything a worker reported.
+  - Its source is the installation's address + `/engine`, beside `/catalog`.
+  - A reader or subscription narrowed to catalogues does not receive it: an incident belongs to
+    no catalogue.
+
+- **An approval announces itself before it waits.** Each of the shop's three built-in
+  approvals — a fixed person, a role, the orderer's line manager — now throws the signal
+  `atlas.approval.requested` before its approval task waits
+  ([ADR-0435](docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)). A model of the
+  installation listens with a signal start, for instance to tell the approver in a chat,
+  without changing the approval.
+  - The signal carries the rule (`approvalKind`), who decides (`approver`), the order, position,
+    product and variant, orderer and recipient by principal id, and `atlasInstance`, the
+    approval instance.
+  - It carries nothing decided and none of the order form's answers.
+  - No field is personal data, so any modeler may deploy a listener.
+  - The event catalogue lists it, so the Console page *Events* and the Modeler's signal
+    picker offer it, and the handbook's chapter describes it.
+  - A catalogue entry now names every place that throws it, rather than one.
+  - The shop handbook said the `superior` approval asks the recipient's line manager; it asks
+    the orderer's, as the process always did, and now says so.
+
+- **Atlas says in one place which events it emits, and who listens.** A Console page
+  *Events* lists every signal, message and feed event atlas emits: what has happened when it
+  comes, what it carries with personal data marked, since which version, how stable, and who
+  may receive it ([ADR-0435](docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)). An
+  administrator also sees which deployed models and feed subscriptions listen to each event,
+  and which models wait for an `atlas.*` name atlas never emits. A modeler's page has no such
+  column, because that view is a map of where personal data flows across every project. The
+  Modeler's signal picker offers the events a model may listen to and says what the listener
+  receives; it warns on an `atlas.*` name that is no event and on a model that throws one.
+  - The catalogue is the Go package `eventcatalog`, held by tests in both directions to what
+    the system processes and the feed emit.
+  - The handbook chapter *Ereignisse* and the runtime contract's feed table are generated
+    from it (`go test ./eventcatalog -update`).
+  - It is served by `GET /api/v1/event-catalog` and, for an administrator,
+    `GET /api/v1/event-catalog/listeners`; the MCP tools `atlas_event_catalog` and
+    `atlas_event_listeners` follow the same split. Neither goes away when the service
+    catalogue is switched off.
+  - The `atlas.user.requested` signal now carries `atlasInstance`, the key of the intake
+    instance that threw it.
+
+- **Publishing says which answers would reach a process in the clear.** When an answer of a
+  product's order form reaches one of its processes — provisioning, lifecycle, return or an
+  approval model of the installation's own — and that process does not declare it personal data,
+  publishing the catalogue warns and names the answer and the process. The release is still made:
+  the warning is shown in the Console's publish report, returned as `warnings` by
+  `POST /api/v1/catalogs/{id}/releases` and by the document import, and printed by `atlas import`.
+  A field that names nobody, such as a cost centre, is marked with the custom property
+  `personal = false` in the form editor and is not warned about again. The administration-services
+  example marks its vehicle type so and declares the licence plate personal.
+
+- **An administrator sees on the dashboard what the switched-off catalogue strands.** The
+  start's warning is a log line, and a log line is lost wherever nobody reads the start.
+  The Console's dashboard now shows an administrator the same thing while it is true:
+  with `--catalogue=false` and processes still working orders, a notice at the top names
+  how many instances will fail at the order routes, which processes they are, and links
+  to the incidents and the instances. It is read live, so it goes away once those
+  instances are finished or ended. Behind it is `GET /api/v1/catalogue-switch`
+  (admin-only, tag System): it is not switched off with the catalogue, because it is the
+  route with something to say precisely then. ADR-0434.
+
+- **What the orderer answered reaches the approver and the processes.** The answers given on
+  a product's configuration form — the licence plate a parking space is for, the cost centre
+  a laptop is booked to — are shown to the approver in the inbox, labelled as the form labels
+  them and marked when they were corrected after ordering. The processes the product binds
+  (its provisioning, lifecycle, return or action process, or an approval model of the
+  installation's own) receive each answer as a variable of its own under the field's key, so a
+  task form shows it and a model can declare it personal data with `atlas:personal` and
+  `atlas:dataSubject="recipient"`, which seals it under the recipient's key and makes it
+  erasable. Only the form's own fields are passed, and never in place of a variable the order
+  sets itself; publishing refuses a form with a field named like one (`recipient`,
+  `orderId`, …). Atlas's own approval processes and the fulfilment orchestration no longer
+  receive the answers, so they are not kept in their history in the clear. The
+  administration-services example now shows the plate to whoever assigns and frees the
+  parking space, and declares it personal.
+
+- **A mail Worker can read its mailbox, and the mailbox stays its owner's.** An inbound
+  watch on a mail Worker publishes the new mail of one folder as an atlas message, so a mail
+  starts a process — over IMAP for an SMTP Worker (a new, optional `mailboxEndpoint`), and
+  through the Gmail and Microsoft Graph APIs for those providers. A mail task gains an
+  `operation`: `list`, `get`, `move`, `mark-read`, `mark-unread`, `delete` (to the trash) and
+  `reply`, each addressing the `messageId` a watch or a list answered; a task with no operation
+  sends, exactly as before. A process receives the envelope — sender, recipients, subject,
+  receive time, attachment names and sizes, and the receiving server's SPF/DKIM/DMARC verdict —
+  and the text only when the watch or the task asks for it, cut at 64 KiB; attachment content
+  never. A watch never changes the mailbox. It can admit only `allowedSenders` and only mail
+  with a DMARC pass; refused mail is consumed without starting anything. Who may use a mailbox
+  is checked at deploy: a task that reads a mail Worker's mailbox needs viewer on it, one that
+  changes it or answers from it needs editor, and one naming a mail Worker that does not exist
+  is refused. Sending is not checked. The application import now runs that check and
+  ADR-0205's message-name claim, which it had skipped. What a process receives is still
+  readable by every operator of a shared installation; that gap, ADR-0275's follow-up, is
+  stated and not closed here. ADR-0438.
+
+- **A package installs from the command line.** `atlas import DIR` installs what the shop
+  handbook's installer installs, without a browser — from a terminal, or from a pipeline
+  that equips a test and a production installation alike. A package is a directory: the
+  application's `atlas.json` in the source layout *Download source…* produces, the processes
+  and forms it names, and optionally the shop as `katalog.json` with the questions its
+  placeholders ask in `fragen.json`. The command imports the application, publishes it and
+  then imports the catalogue. Answers come from `--answers FILE` or `--set name=value`; a
+  group or a person may be named rather than given by id, since ids differ from server to
+  server, and an answer the server's directory does not have, a name two people share or a
+  question left open is refused, all at once, before anything is written. Running it again
+  updates. The handbook's installer now reads the same questions from the package.
+
+- **A process can put a document in a bucket, find it again, and hand somebody a link
+  to open it.** A process produces and consumes documents — a generated letter, a scan,
+  an export, an invoice — and until now there was nowhere to put one. A process variable
+  holds a mebibyte and keeps whatever it holds in the event log for as long as the
+  installation keeps history, so the honest options were a script task shelling out to
+  `aws s3 cp` with the installation's credentials in its environment, or nothing.
+
+  There is now an **S3 object storage** Worker Type, against AWS S3 and equally against
+  MinIO, Ceph, Garage, Cloudflare R2 or Wasabi — the Worker's endpoint decides which, and
+  an empty one means AWS. Eight operations, each a step a process takes: put an object,
+  read a small one back, check whether one is there, list what is under a prefix, copy
+  one, delete one, and mint a time-limited link to download or to upload.
+
+  The two link operations are what makes this reach documents at their real size. They
+  compute a signature and make **no call at all**, so a 40 MB signed PDF reaches an
+  approver, and a scan reaches the bucket from the browser that has it, without a byte
+  passing through atlas. Read and put still carry content through a variable for the
+  cases that suit it — a manifest, a CSV, a letter — bounded at one mebibyte, and the
+  bound refuses rather than truncates, because half a PDF passes every format check and
+  is still broken.
+
+  Three things are worth knowing. A listing is a **prefix scan**, because that is what
+  searching an object store means — there is no query language, and a truncated page
+  answers with the key to resume after, so the paging loop is visible in the diagram
+  rather than hidden in an opaque token. A **check** answers whether the object is
+  there instead of raising an incident, so a gateway can branch on it. And a minted
+  link is a **key to that one object for anybody holding it**, stored in the instance's
+  variables like any other value — the default lifetime is an hour, seven days is the
+  most a signature allows, and short is the right answer.
+
+  The access key, the region and an optional session token live in the vault under the
+  Worker's credential reference; a model names the Worker and never carries a key.
+  Object-store tasks run on a worker by default, like every other integration.
+
+- **The shop has a handbook of its own, with an example to install.** `/shop-handbuch.html`
+  (German and English, in the Console's "?" menu, and the help for the Catalogue app)
+  answers how to build a catalogue, how several catalogues work together, how to model
+  products and services and how to design their processes — the two process forms, the
+  actions, what a product process receives and how it reports. It walks through one example
+  throughout, *Dienstleistungen der Verwaltung*: two catalogues, an access badge with one
+  lifecycle process and the actions block and replace, a parking space and a geoportal access
+  with separate processes, line-manager, fixed and group approvals, time limits and an order
+  form, all bilingual. Its installer asks for the audiences and the approvers, creates the
+  processes and forms, and imports and publishes the shop as one document. The example ships
+  in `examples/verwaltung-dienstleistungen/`, and a test proves without a server that its
+  catalogue document publishes.
+
+- **A whole shop can be imported as one document.** `POST /api/v1/catalogs/import` — and the
+  MCP tool `atlas_import_catalog` — takes `{catalogs, products, publish}`: the catalogues
+  with their texts, rank, languages, audience, members and the edges between their
+  products, and every product with its home catalogue, approval, process bindings, variants
+  and limits. It is all or nothing: every id, every catalogue you must maintain and, with
+  `publish`, everything a publish would refuse is checked before the first record is written,
+  and a refused document changes nothing and lists every problem by the catalogue or product
+  it is about. The ids are the document's own, so importing the same document again updates
+  what the first import created. A theme, a logo and pictures are set as before.
+
+- **Switching the catalogue off says at start what it strands.** A server started with
+  `--catalogue=false` while the shop's fulfilment or approval processes, or a product's
+  provisioning process, are still running writes one WARN,
+  `event=server.catalogue_disabled_in_flight`, with how many instances will fail at their
+  next call to the order routes and which processes they are
+  (`processes="atlas-auftrag-erfuellung=1,…"`). The start is never refused: the switch must
+  always work. It counts running processes from the engine's per-definition counters,
+  never the orders themselves, so the check costs the same whether a hundred orders were
+  placed or a million. Nothing is written when nothing is running. ADR-0434.
+
+- **The shop, the catalogue, the orders and the inventory can be switched off.** Start the
+  server with `--catalogue=false` (or `ATLAS_CATALOGUE=false`, or
+  `atlas.catalogue.enabled: false` in the Helm chart) to run atlas as a workflow engine
+  without them. Every route tagged *Catalogue* or *Order* then answers 404 like an endpoint
+  that never existed, and the API explorer no longer describes them. `/shop.html` is not
+  served. The Console leaves Shop, Catalogue, Reconciliation and Access review out of its
+  menus, because `/api/v1/info` now says `catalogue: false`. The MCP adapter no longer offers
+  the area's tools, and the stdio adapter asks the server at start. The event feed is
+  neither served nor pushed to its subscriptions, which keep their cursors. The starmap
+  draws no catalogue, the Modeler's message picker lists no product action, and the shop's
+  fulfilment and approval processes are not filed into the system project. Nothing stored
+  is removed, and deployed processes run unchanged, shop tasks included. Turning the area
+  back on is a restart. The default is on, so an upgrade changes nothing. A malformed
+  `ATLAS_CATALOGUE` stops the start rather than leaving the shop on. Tests hold the switch
+  to the whole area as it grows: a route of the area under another tag fails them, and so
+  does a catalogue tool that does not say it is one.
+  [ADR-0434](docs/adr/0434-the-catalogue-can-be-switched-off.md).
+
+- **The event feed can be pushed to a system that cannot poll it.** A new Worker Type,
+  **CloudEvents endpoint**, holds a receiver's https address and the vault key sent as its
+  bearer token. Subscribing it to the feed — in the worker's **Feed…** panel or with
+  `POST /api/v1/feed-subscriptions` — has atlas POST the feed's events to it as CloudEvents
+  batches (`application/cloudevents-batch+json`), the same events with the same ids that
+  `GET /api/v1/events` answers, optionally narrowed to some catalogues and starting from the
+  oldest event held or from now. The cursor is kept by atlas and moves only when the receiver
+  answers 2xx, so delivery is at least once. A receiver that refuses or does not answer is
+  held and tried again after 10 s, doubling to 5 min, and nothing is skipped; the panel, the
+  listing and the new MCP tool `atlas_feed_subscriptions` show why. A subscription whose
+  unsent events the feed's retention dropped is switched off with the reason, to be resumed
+  from the oldest event held or from now. Subscriptions are an administrator's to manage.
+
+- **An event-feed token can be confined to the catalogues it is for.** An `events` token
+  minted with `"reach":["<catalogue id>"]` reads only the events about the products those
+  catalogues maintain — their action outcomes, and the rights to them granted and revoked —
+  so a billing system for one catalogue no longer holds who holds what in every other.
+  Every event now names the catalogue that maintains its product as `homeCatalog`, so a
+  reader of the whole feed can sort it the same way. Whoever mints the token must maintain
+  each catalogue it names; a token without a reach still reads the whole feed. A product
+  offered by several catalogues belongs to the one that maintains it. A narrowed reader's
+  cursor moves past the events it is not given, and a page that read 10 000 rows without
+  filling up answers what it found with `more` set.
+
+- **A new account request announces itself, so an installation can be told.** The intake
+  process (`proc_benutzer_aufnahme`), the one behind the login screen's "Registrieren" link,
+  now throws the signal `atlas.user.requested` just before the request waits at "Antrag
+  freigeben". The process stays protected and names no target. An installation that wants to
+  hear about requests deploys a process of its own with a signal start on that name, for
+  example one that posts to Discord. Where nobody listens, the signal does nothing. The
+  listener receives what the requester entered (`vorname`, `nachname`, `email`, `abteilung`,
+  `begruendung`) and the proposed `benutzername`. It never receives the role or the initial
+  password, because those come into being only at the approval, after the throw. A failing
+  notice is an incident in the listener and does not hold up the request.
+  `examples/benutzerverwaltung/README.md` carries a Discord recipe that silences
+  `@everyone` from form input.
+  ADR-0431.
+
+- **A system that follows the event feed can hold a credential that reads it and nothing
+  else.** There is a new role, `feedreader`, and a new API-token scope, `events`. A token
+  minted with `{"scope":"events"}` reaches `GET /api/v1/events` and no other route, and it
+  carries `feedreader` and no other role, whoever mints it — so a CMDB's or a billing
+  system's token can neither deploy, nor start or read instances, nor act on orders, even
+  if its scope were ever wrong. The feed itself now requires `feedreader` instead of
+  `operator`: it lists who holds what across every catalogue, which starting and repairing
+  instances does not imply. An administrator still reaches it, and a person who integrates
+  such a system can be given the role in **Organization → Users** or through the sign-on
+  mapping; the upgrade never grants it. A `full` token does not read the feed. The token
+  listing now shows each token's roles beside its scope.
+
+- **What happens to a right leaves atlas as a feed of CloudEvents.** Every action asked of a
+  held position that ends, every right granted and every right revoked is now an event a
+  system beyond atlas — a CMDB, a billing system — reads from `GET /api/v1/events`, in the
+  order atlas recorded it, a page at a time from a cursor the consumer keeps. Each event is
+  a CloudEvents 1.0 envelope naming the order position (or, for a right a commissioning load
+  adopted, the person and the product), the event type the product declares for the action
+  or `atlas.entitlement.granted`/`.revoked`, and the fact itself, with people named by id
+  only. Delivery is at least once and deduplicated by the event's id. The feed keeps 30
+  days, set with `--event-feed-ttl`; a consumer that falls further behind is answered 410
+  with the cursor to resume from, rather than silently missing what was dropped. The feed is
+  state the engine rebuilds from its log, so it survives a restart and a recovery
+  unchanged; it begins with this version. The route requires the operator role; the
+  envelope is version 1 of the runtime contract. The last slice of ADR-0429.
+
+- **The modeler offers a message name from where it comes from.** The message picker now
+  groups the names it knows by source: a step that waits for a message is offered the
+  events Workers publish and the messages of products' actions; a step that sends one is
+  offered the processes already waiting for it, at a start or a catch, and never a product's
+  action, whose message only the order sends. In a process a product binds, an event from a
+  Worker is marked as not usable for an action — publishing the catalogue would refuse it.
+  The hint under the name says every source at once. A Shop task suggests the action keys
+  the catalogue declares, and a shop task, or a receive task waiting for a product's message,
+  carries a small shop badge beside its envelope in the Implement view and in the runtime
+  views. Behind it, `GET /api/v1/message-sources` tags each row with `sourceKind`:
+  `inbound-watch`, `product-action` (shown to whoever maintains the catalogue) or
+  `process`. The fourth slice of ADR-0429.
+
+- **A process can ask somebody's held service for an action — in the name of an application
+  the product trusts.** The Shop send task has a second mode, *command*: name the product and
+  the action, and say where the order and the position come from, and the task asks that
+  position for it the way the order's own act does — an HR leaver process returns the
+  mailbox, a maintenance process resets a password. A process has no person behind it, so
+  the product says which applications may do this: the new list *commanded by*, of
+  application keys, in the Console, over HTTP (`commandedBy`) and in the MCP product tool.
+  Only actions an operator or a system may ask for can be commanded, never the provision and
+  never one only the customer may ask for. The list is read from the product's newest
+  release each time, so taking an application off it and publishing stops it for every
+  right already held. A command retried after a failure asks under the same id and is not
+  carried out twice; a return already under way is left as it is. The last part of
+  ADR-0429's third slice.
+
+- **A product's process states how an action ended without calling atlas over REST.** The
+  send task has a new kind in the modeler, **Shop**: pick the action and the outcome —
+  completed, rejected or failed — and the task records that ending for the command its
+  instance carries out. It needs no token and no URL: the order, the position and the
+  command id come from the instance, where every order act puts them, and the task runs
+  inside the server. A task whose instance carries no command, or whose path does not match
+  the action it names, stops with an incident that says so instead of reporting the wrong
+  thing. Publishing a catalogue now checks the processes behind products that declare
+  actions: every change and service action must have a task that reports it completed, and
+  no task may report an action the product does not declare or the provision and return,
+  which the order reports itself. The second part of ADR-0429's third slice.
+
+- **How an action ended is a fact.** Whatever is asked of a held position — its
+  provision, its return, a change, a service — now ends in an engine record: completed,
+  rejected or failed, under the event type the product declares for it (by default the
+  action's message and the outcome, `mailbox.storage.extend.completed`). A provision or a
+  return that succeeds writes its outcome in the same command as the grant or the
+  revocation, so the log holds both or neither; a failure, a failed return and an
+  approver's refusal are recorded too. The record is idempotent per command: a process that
+  reports twice writes once, and a second, different ending is refused. Every act now
+  hands its process a `commandId`, and a process that reports over REST uses
+  `POST /api/v1/orders/{id}/lines/{item}/actions/{commandId}/outcome` with an optional
+  result of at most 4 KiB of scalars. `GET …/outcomes` and the MCP tool
+  `atlas_order_line_outcomes` read how a position's commands ended. The outcome outlives
+  the order, as the right does. The first part of ADR-0429's third slice; the shop's own
+  send task that reports without REST follows.
+
+- **A held service can be asked for its actions in the shop.** Under a position somebody
+  holds, the shop now shows a button for each change or service its product declares for
+  the customer — more storage, a password reset — labelled in the reader's language. A
+  button is greyed out, with the reason as its tooltip, while the position cannot take that
+  action: for a product that runs one instance per position, that is the process's answer,
+  read from where its instance stands, so the model decides when an upgrade is possible and
+  the catalogue holds no second copy of the rule. An action with a form opens it under the
+  position; one without asks first. Behind it are two routes:
+  `POST /api/v1/orders/{id}/lines/{item}/actions/{action}` asks for one, with a required
+  `commandId` so a retry is answered with the first outcome, delivering it to the instance
+  that holds the right or starting it at the action's start event for a per-operation
+  product; `GET …/actions` says which actions the caller may ask for and whether each is
+  possible now. Whoever placed the order, the person it was ordered for and an operator
+  may ask for a customer action; an operator asks for the operator's and the system's, and
+  a caller may name which trigger it asks as. An agent reads the availability with the MCP
+  tool `atlas_order_line_actions` and asks with `atlas_ask_order_line_action` — for an
+  operator's or a system's action only: the server refuses any action that does not declare
+  the trigger the tool names, so what a person asks of what they hold stays theirs. The
+  second slice of ADR-0429.
+
+- **A product declares its actions.** A lifecycle product used to name three start
+  events — provision, deprovision and an optional change. It now lists its actions: the
+  provision the order starts and the return, then any number of changes (more storage)
+  and services (a password reset, an inactivation), each with the message the lifecycle
+  process starts or waits at, who may ask for it — the customer, an operator or the
+  system — and what its button says in each language. Publishing checks the list against
+  the process: every action is a message start in the per-operation form, and every change
+  or service a correlated catch in the per-position form; a missing button label is a
+  reported translation gap, never a refusal. The catalogue editor shows the actions as a
+  grid with the order's two rows fixed and pre-fills `<product>.provision` and
+  `<product>.deprovision` when a lifecycle process is chosen; the MCP save tool and the
+  OpenAPI schema declare them. A product that still carries the operation map is read as
+  the actions it means and saved as actions; order lines keep what they froze. This is the
+  first slice of ADR-0429 — asking for an action from the portal and recording its outcome
+  follow.
+
+- **The Modeler offers the events your Workers publish when you pick a message.** A
+  message start, an intermediate catch, a boundary event or a receive task now lists, under
+  «Events from Workers» in its message picker, every name an inbound event watch on this
+  server publishes — a Jira, clio, Google Sheets or Discord watch — with the workers that
+  publish it and a mark where the watch is off. Picking one declares a message of that name
+  and links it; the name field suggests the same names and stays free text, because a
+  process may be modelled before its watch exists. Until now the name had to be typed
+  exactly as it was configured under Workers → Events, and a name typed one character
+  differently was two working halves that never met, with only a hint under the field to
+  say so. An element that throws a message is offered none, since a Worker already sends
+  that name. The listing names every watch on the server, as the hint did: a name claimed
+  by a watch the deployer may not reach is still refused at deploy (ADR-0205). One render
+  reads the listing once, for the picker, the suggestions and the hint alike (ADR-0429).
 
 - **The handbook teaches TLS and certificates.** A new chapter «TLS & Zertifikate» /
   «TLS & certificates», in German and English, gathers what ADR-0191 built and
@@ -20,14 +553,14 @@ _Changed_ / _Removed_ for each version.
   (PEM, server certificate first, an unencrypted key, one certificate for every name),
   renewal without a restart and the two log events that report it, that expiry is
   checked nowhere and has to be watched from outside, the internal loopback listener,
-  `--tls-ca` for the three connections where Atlas is the client, and the Helm switch.
+  `--tls-ca` for the three connections where atlas is the client, and the Helm switch.
   A section on Windows Server behind a load balancer compares re-encryption, TCP
   passthrough and IIS as a local proxy — Server 2019's SChannel has no TLS 1.3, which
   rules out anything that connects through it — and walks the first step by step: PFX
   to PEM, a directory only the service account can read, the WinSW environment, the
   firewall rule, and the load balancer's health check and timeouts. It also names what
   a load balancer changes besides the transport: every user shares the per-address
-  limits, and it does not make Atlas highly available. The server side was run against
+  limits, and it does not make atlas highly available. The server side was run against
   a live instance (TLS 1.2 refused, the chain served, a renewal picked up, PEM converted
   from a PFX file accepted with its bag attributes and CRLF line endings); the Windows
   commands were not run on Windows. The chapter's flag table is held to the flags
@@ -43,7 +576,218 @@ _Changed_ / _Removed_ for each version.
   an incident. It installs from its card in the Beispiele chapter, and every call was run
   against a live instance first.
 
+### Changed
+
+- **A load balancer's TCP health check is a DEBUG line.** A connection that closes before its
+  TLS handshake begins — `http: TLS handshake error from …: EOF`, once per check interval — is
+  now written as `event=server.tls_handshake_aborted` at DEBUG, with the peer as `remote`,
+  instead of an INFO line without an event name: 8640 a day at a ten-second check. Every
+  other complaint from the HTTP server keeps its wording and its INFO level, so a client that
+  cannot speak TLS 1.3 stands out again. `--log-level=debug` shows the health checks
+  ([ADR-0448](docs/adr/0448-trusted-proxies.md)).
+
+- **The event feed no longer goes away with the shop.** A server started with
+  `--catalogue=false` now serves `GET /api/v1/events` and its feed subscriptions, and pushes
+  the feed, without the service catalogue's events. Before, it served and pushed nothing.
+  - Their rows are passed over, a subscription's cursor with them, so they are not delivered
+    later when the catalogue is switched back on.
+  - The Console's *Feed…* panel and the MCP tool `atlas_feed_subscriptions` stay with the shop
+    off.
+  - The routes moved from the *Catalogue* tag to *Events*
+    ([ADR-0435](docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md) §6).
+
+- **The Console's landing page shows the release notes instead of What's New.** The
+  section lists the releases of the changelog this server was built from, newest first:
+  the newest opens with its introduction, what to read before upgrading and its changes,
+  and an older one loads when it is opened. `GET /api/v1/release-notes` and
+  `GET /api/v1/release-notes/{version}` answer the same to anybody signed in. The notes
+  are English, as the changelog is; the old feed's curated German and English summaries,
+  tutorials and "Try it" links are gone, and so is everything that kept the feed in step
+  with the changelog — `make whats-new`, `make whats-new-resolve`, the committed
+  `api/web/whats-new.json` and the workflow that repaired it on main. A changelog entry now
+  reaches the Console with nothing else to do. ADR-0444.
+
+- **Only an administrator deploys a model that listens to somebody's data.** A signal start,
+  catch, boundary or event subprocess on an event atlas emits whose payload carries personal
+  data is now deployed by an administrator
+  ([ADR-0435](docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md) §6). Today that is
+  `atlas.user.requested`, which carries a requester's name and address.
+  - Every door a caller deploys through refuses it otherwise with 403: the deploy, the project
+    and application deploy and publish, and the application import. The refusal names the
+    element, the event, the personal data, the role needed and the caller's roles.
+  - The Problems panel reports the same finding as an error while modelling, from the same
+    check, and the Modeler says it where the event is chosen.
+  - An event without personal data, a signal atlas does not catalogue, and a throw stay open.
+    A server without authentication applies no rule.
+  - API tokens and deploy tokens never carry the administrator role, so an application import
+    that carries such a listener is refused: the target server's administrator deploys it there.
+  - Listeners deployed before keep running; their next version needs an administrator.
+
+- **A worker runs the jobs of one type concurrently.** A worker used to work the jobs of
+  one type one after another, so twenty REST calls of two seconds each took forty
+  seconds. `--max-jobs` now means how many jobs of one type a worker runs at once. A poll
+  asks only for as many jobs as there are free places, so every leased job starts the
+  moment it arrives, and none waits on a lease while the job before it finishes. A
+  worker atlas supervises for a built-in Worker Type now runs up to 16 at once, the same
+  bound the engine puts on its own in-process handlers. Set it with
+  `atlas serve --worker-max-jobs`, and `1` restores one at a time. A `--supervise`
+  command and a worker you start yourself without `--max-jobs` still run one job at a
+  time. [ADR-0440](docs/adr/0440-worker-runs-jobs-concurrently.md).
+
+- **The person a service was ordered for may now give it back and change it.** Returning
+  a position, and asking it for a change, was the orderer's or an operator's to do; the
+  person who holds the right got a give-back button in the shop and a refusal from the
+  server. Both now follow the product's actions (ADR-0429): a customer action — the return
+  of every product that still carries the operation map is one — is the orderer's, the
+  recipient's and an operator's, and a product whose return names only operators is given
+  back by an operator, in the shop as on the server. `POST …/change` is now the action act
+  for the action keyed `change`: the same trigger id, the same answer, and on a
+  per-operation product it starts the change rather than refusing it. A change, like any
+  action, now refuses a variable the order sets itself — `orderId`, `positionId`, `itemId`,
+  `recipient`, `reason` — which before could file the instance on another order's position.
+
+- **An inbound watch may no longer publish a catalogue product's message.** A Worker's
+  event under a name one of a product's actions starts or waits at — its provisioning,
+  its return, a change — would have driven the product's lifecycle around the order, and
+  the inventory would have gone on saying what the process had already changed. Nothing
+  checked it: a watch could be created under a product's deprovision message. Creating a
+  watch, renaming one onto such a name or enabling one is now refused with **409** naming
+  the product and the action, and publishing a catalogue refuses an action whose message
+  an enabled watch already publishes (ADR-0425 §8, ADR-0429 §1).
+
+- **A conditional start event in front of a process is refused at deploy instead of never
+  firing.** A process-level start event carrying a condition — "Mailbox storage > 100 GB"
+  drawn before the first task — compiled as a plain start with its condition dropped: the
+  model deployed, never started on its own, and ran without regard to the condition when
+  somebody started it by hand. Nothing said so, in the Modeler or at deploy. Atlas runs a
+  conditional event only inside an instance — an intermediate catch, a boundary event or an
+  event subprocess — because a condition reads variables, and before an instance exists
+  there are none. A deploy and the Modeler's validation now refuse such a start under the
+  rule `start.conditional`, anchored to the start event, and the Modeler puts its
+  unsupported badge on it while it is being drawn. A definition already deployed with one
+  keeps running exactly as before and is named in the log when the server loads it; its
+  next deploy is refused. An event subprocess's conditional start, which is its trigger, is
+  unchanged (ADR-0429).
+
 ### Fixed
+
+- **The examples open as readable diagrams too.** In twenty-three of the example models
+  a caption sat on an edge, a shape, a default-flow marker or another caption, or had no
+  position of its own, and two models carried no diagram at all. Three were worse than
+  untidy: in *account-bestellung* the flow into *Bestellung freigeben* ended a hand's width
+  before the task, in *identitaet-lebenszyklus* two data associations ran through
+  *Übersicht nachführen*, and *umzug* sent three branches out of one gateway along a single
+  line. The diagrams are corrected and the two missing ones drawn; how the examples run is
+  unchanged. The Modeler's example gallery and the handbook carry the redrawn versions, and
+  `go test ./api/layout` now holds every example to the same layout checks as the system
+  processes.
+
+- **The shop's approval models open as a readable diagram.** The three approval processes
+  the shop ships — fixed approver, group and superior — printed both deadlines' captions
+  over each other, two of them drew their parallel gateway on top of the approval task,
+  and the superior variant drew its deadlines away from the task they are attached to.
+  The diagrams are redrawn: the notification on a row above, the decision on one axis with
+  its two outcomes rejoining at an exclusive gateway before *Entschieden*, and reminder and
+  escalation each on a row of their own. The joining gateway changes no behaviour, since
+  only one of the two outcomes ever arrives. A server deploys the redrawn models as a new
+  version of each; instances already running stay on theirs. The diagrams the binary ships
+  are now held to the generator's layout invariants (`go test ./api/layout`), so a model
+  drawn like that no longer passes.
+
+- **The Postman collection works against today's server again.** It had not been
+  revised since login became the default
+  ([ADR-0195](docs/adr/0195-auth-on-by-default.md)), and it showed.
+  - Its README still told a local user to skip the login, so every request answered 401.
+  - *Log out* ran directly after *Log in*, so a Collection Runner pass was refused from
+    the second folder on.
+  - Even with the session kept, nine reference requests answered 400 or 404 when run in
+    order, unnoticed because they asserted nothing.
+  - The Modeler folder taught the deprecated `/api/v1/projects` alias
+    ([ADR-0128](docs/adr/0128-process-applications.md)), and the MCP folder called `/mcp`
+    unauthenticated.
+
+  The collection now runs green top to bottom with a password, with an API token
+  (`apiToken`, sent as a Bearer header), and against a server started with
+  `--auth=false`.
+  - Every request documents the role it needs, its body and its answers, asserts its
+    status and shape, and carries saved example responses, the common errors included.
+  - The Messages folder shows correlation end to end with a new `payment-wait` model.
+  - Both sample models ship with a diagram layout and their documentation.
+  - `make postman-smoke` runs the whole collection against a throwaway server.
+  - `go test ./api` now fails when a request names a route the server does not serve
+    or a deprecated alias, lacks a description, an assertion or an example, or deploys
+    a model that differs from its file under `postman/`.
+
+- **On Windows, a crashed server no longer leaves its workers running.** Stopping atlas
+  stopped the workers it supervises, but a server that crashed, was ended in the Task
+  Manager, or was killed by its service wrapper left them running. They retried the dead
+  address forever, and the restarted server started a second set beside them. Every
+  supervised worker now goes into a Windows job object that ends its processes when
+  the server's process ends, however it ends, including the script interpreters a
+  worker started.
+  [ADR-0439](docs/adr/0439-supervised-workers-end-with-the-server.md).
+
+- **A task the server works itself no longer trips a worker breaker.** The breaker that
+  holds a worker's jobs back while its target is down (ADR-0340) also counted the failures
+  of tasks with no target at all: the user provisioning task and the shop task. Three
+  instances refused for their data — a user task naming nobody, a shop task whose instance
+  carries no command — held every other instance's task of that kind back until a probe
+  happened to succeed. Their failures now stay what they are, an incident on the instance
+  they belong to.
+
+- **A reconciliation no longer reports a right as unmanaged when two products claim its
+  reference.** A reconciliation run that read a reference two products both target said
+  «nothing read under it can be attributed», and then attributed what it read under that
+  reference to the first product anyway. A person who held that product, recorded in the
+  inventory, was reported as holding it unmanaged — a finding the journal kept and that
+  could be adopted or deprovisioned. An observation under a contested reference is now
+  attributed to nobody: in reference scope it is reported once against the reference, in a
+  run that read one person's estate it is noted against that person, and either way nothing
+  is compared, so no finding about it can be acted on.
+
+- **An AI task's prompt sees the plaintext of a personal value.** The prompt of an AI task
+  is evaluated by the engine over the task's variables, and it was the one worker
+  expression evaluated over the stored envelope of a declared personal value rather than
+  its plaintext: `="Hallo " + vorname` reached the model as an empty prompt. It is now read
+  through the same deciphering reader as every other worker's expressions (ADR-0314).
+
+- **A deploy refused for its job types no longer reappears after a restart.** The
+  deployment record was written before the process's job types were registered, so a
+  deploy that failed at that step answered 500 and still left its record behind: after a
+  restart the process was listed as deployed, and the version counter had already moved.
+  The job types are now registered first, and a failure there writes nothing.
+
+- **On Windows, a broken DMN model folder is no longer listed as empty.** A file where the
+  local model folder should be made Windows answer "not found" when the folder was read,
+  and the model list took that for a store nothing had been uploaded to: it answered an
+  empty list and hid every model. It now tells an absent folder from a file in its place
+  and answers 500 for the second, as Linux always did.
+
+- **Some refusals now say whose fault they are.** Escalating or reassigning an approval
+  while the order store could not be read answered 404 «no open approval» instead of the
+  500 it was; naming a product an order holds in two shapes answered 500 instead of 409
+  naming both positions; an API token whose reach could not be checked because the project
+  store could not be read was refused with 400; and a few recertification and pending-work
+  routes answered 500 rather than 503 while the server was stopping. Each now answers what
+  happened.
+
+- **A directed delivery no longer reports a message delivered that nothing received.** When
+  a per-position instance had taken one branch of an event-based gateway, the catch events
+  of the other branches stayed subscribed until a later message cleared them. Delivering
+  one of their messages to the instance — a return or a change while another change was
+  being worked — wrote its payload into the instance, recorded a receipt and answered
+  «delivered», while no step moved; a retry then replayed that answer. Only a catch that
+  still waits now counts, so the caller is told the instance does not wait for the message
+  and nothing is written.
+
+- **A catalogue product's lifecycle can no longer be started by publishing its message by
+  name.** `POST /api/v1/messages` refused only the messages a per-position product delivers
+  to its running instances. A per-operation product's messages — its provisioning, its
+  return, any action — are start events, and published by name they started the lifecycle
+  process outside the order: a provisioning no order line knew of, or a return the inventory
+  never heard about. The route now refuses every message a product's action owns, with
+  **409** naming the product and the action, and starts nothing; the order sends those
+  messages through its start act, a return or the action (ADR-0425 §8, ADR-0429).
 
 - **`docs/install.md` no longer calls `/metrics` unauthenticated.** The opening rules
   and § 8 still said so after ADR-0198 moved the exposition behind `--auth` and a
@@ -63,7 +807,7 @@ _Changed_ / _Removed_ for each version.
 
 ## [0.8.0] — 2026-09-30
 
-**This release is about running Atlas on Windows.** 0.7.0 shipped a Windows binary that no
+**This release is about running atlas on Windows.** 0.7.0 shipped a Windows binary that no
 test had ever run on Windows, and it could not start twice: every start that found a log
 stopped with `Access is denied`, because the log reopened its newest segment in a mode
 Windows will not let it truncate. That is fixed, and so is what the first test runs on
@@ -82,7 +826,7 @@ entered at a message start event per operation — provision, change, deprovisio
 changed or returned
 ([ADR-0428](docs/adr/0428-a-product-lifecycle-may-run-as-one-instance-per-position.md)).
 The order starts its own positions, a held right is changed through its order line, and a
-system outside Atlas starts a process at one of its message start events with
+system outside atlas starts a process at one of its message start events with
 `POST /api/v1/processes/{processId}/triggers/{message}`, which a retry with the same
 trigger id answers without starting a second instance. Converting a product no longer lets
 the processes its older order lines still need be deleted.
@@ -177,12 +921,12 @@ process, delivering it to another server, and process tests that fail a build.
   dialog asks for a target rather than proposing an older one, and the button always
   means the whole version — a single instance still moves from its replay (ADR-0162).
 
-- **The handbook teaches monitoring an Atlas installation.** Metrics, alerting, event
+- **The handbook teaches monitoring an atlas installation.** Metrics, alerting, event
   export, retention and backup were all in the product (ADR-0142, ADR-0114, ADR-0115,
   ADR-0107/0109) and the operations chapter stopped at the single incident. A new
   subsection «Überwachen» / «Monitoring» carries the mechanics in German and English:
   the `/metrics` Prometheus exposition and its load-bearing series
-  (`atlas_open_incidents` and the rest); that Atlas raises no alert on its own, so you
+  (`atlas_open_incidents` and the rest); that atlas raises no alert on its own, so you
   alert externally on those metrics and the logs; the OpenSearch event exporter;
   export-gated history retention; and design-time backup versus the full-instance
   snapshot. It also corrects a stale line: since ADR-0198 `/metrics` sits behind
@@ -230,7 +974,7 @@ process, delivering it to another server, and process tests that fail a build.
   `approvedBy`, which records who agreed. Returns, recertification and reconciliation enter a
   lifecycle process at its deprovision start event.
 
-  For systems outside Atlas, `POST /api/v1/processes/{processId}/triggers/{message}` (MCP:
+  For systems outside atlas, `POST /api/v1/processes/{processId}/triggers/{message}` (MCP:
   `atlas_trigger_start`) starts a process at one of its message start events and answers with
   the instance: 201 when it started one, 200 with the first instance when the same `triggerId`
   was delivered before, 404 for an unknown process or start event, and 409 for a singleton
@@ -304,7 +1048,7 @@ process, delivering it to another server, and process tests that fail a build.
   model deployed with this process*. A chosen version is written as `atlas:version` and
   resolved when the process is deployed; a version that is not deployed refuses the
   deploy and names the ones that are, and the task never runs another version. A decision
-  deployment a task is bound to cannot be deleted. `atlas:version` is Atlas's own
+  deployment a task is bound to cannot be deleted. `atlas:version` is atlas's own
   attribute: a Camunda engine ignores it and runs the newest version, and the panel says
   so.
 
@@ -367,7 +1111,7 @@ process, delivering it to another server, and process tests that fail a build.
   exited. The wait for output is now bounded by the script's own timeout, and such a
   task fails instead of waiting.
 
-- **On Windows, a store Atlas cannot read is reported, not read as empty.** When a
+- **On Windows, a store atlas cannot read is reported, not read as empty.** When a
   design-time store's directory had been replaced by a regular file — a restore unpacked
   wrongly, a volume mounted one level too deep — Linux failed every read with "not a
   directory", but Windows answered as if the store were empty: a catalogue, an order or
@@ -544,7 +1288,7 @@ row answer.
 **The architecture around the processes has a model of its own.** Business capabilities and
 value streams are drawn and kept in one register, with service levels that are measured
 rather than only declared. The information model can be read off the processes instead of
-typed in beside them, and Atlas reports the difference between what the processes build and
+typed in beside them, and atlas reports the difference between what the processes build and
 what the model plans. The Starmap sizes the estate by load, by incidents or by how long they
 have stood, draws a Product Map beside it, and a new estate view takes in every configured
 deployment target.
@@ -571,7 +1315,7 @@ credentials.
 - A user task the model addressed is completed, claimed or released only by whoever holds
   it, an operator or an administrator; anybody else gets **403**.
 - The shipped user-management processes named their mail worker after a person; every
-  process Atlas ships now names **`mail`**. Configure a mail worker under that name. The
+  process atlas ships now names **`mail`**. Configure a mail worker under that name. The
   shipped processes deploy as new versions on the first start, and instances already running
   stay on the version — and the worker name — they started with.
 - A business rule task whose input contradicts the type its decision declares now stops with
@@ -808,7 +1552,7 @@ credentials.
   German-only catalogue, now gets a German page rather than English navigation beside
   German products.
 
-- **A credential minted for reading another Atlas can now actually read it.** Two installations
+- **A credential minted for reading another atlas can now actually read it.** Two installations
   pointed at each other found two defects in the credential reach released with the estate, both
   of which every test passed over.
 
@@ -952,7 +1696,7 @@ credentials.
   it: that one asks whether the rule reaches a person, this one whether the work reaches
   a worker.
 
-- **A credential handed to another Atlas can be told which projects it may see.** An API token minted with the new `landscape` scope reaches exactly two reads — the derived starmap and its ArchiMate projection — and nothing else: it can neither deploy, read an instance, nor list a person. On top of that it carries a **reach**: the projects whose content it may see. Everything outside is drawn as the restricted placeholder a person with no access already sees, so the picture stays honest about what it is not showing.
+- **A credential handed to another atlas can be told which projects it may see.** An API token minted with the new `landscape` scope reaches exactly two reads — the derived starmap and its ArchiMate projection — and nothing else: it can neither deploy, read an instance, nor list a person. On top of that it carries a **reach**: the projects whose content it may see. Everything outside is drawn as the restricted placeholder a person with no access already sees, so the picture stays honest about what it is not showing.
 
   This closes a gap that was accepted in writing and is easy to miss. A machine credential has
   no account, so it cannot be a member of anything, and the sharing scopes therefore gave it
@@ -1122,7 +1866,7 @@ credentials.
   The honest cost, paid in the one real example. Encipherment needs a subject and a deletion
   request needs an id it can name, so `account-bestellung`'s start form grew a
   Personalnummer no business requirement asked for — and for a new joiner that id comes from
-  outside Atlas, because the account being ordered is the reason they have no account yet.
+  outside atlas, because the account being ordered is the reason they have no account yet.
   And erasing a subject with a running instance leaves that instance unable to provision:
   its job is withheld and the reason is logged, which is correct and is not yet the clear
   message it should be.
@@ -1205,7 +1949,7 @@ credentials.
   what it is assembled from, prices — saved as a **draft**, then a **verification**
   showing every field again and still editable, and only then active, with the
   question whether to publish the catalogue. Every service task writes back through
-  Atlas's own HTTP API with the `rest` connector and a connection named `atlas`, the
+  atlas's own HTTP API with the `rest` connector and a connection named `atlas`, the
   route the shipped order fulfilment already takes.
 
   Three things in it are decisions. The product is saved **before** it is assembled,
@@ -1282,7 +2026,7 @@ credentials.
   register its own approval process under any name, so listing the kinds would grow this
   control with somebody's own vocabulary and answer a question this picture is not
   about: which *route* an approval takes is a catalogue matter, and whether an order
-  stops for a human at all is an estate one. A kind Atlas has never heard of counts as
+  stops for a human at all is an estate one. A kind atlas has never heard of counts as
   stopping for a human, which is the safe reading.
 
   **It only ever removes products.** A catalogue has no state and a process has no
@@ -1444,7 +2188,7 @@ credentials.
   ruled each one out. The Decisions tab's cards carry the same door, for a reader
   scrolling the list rather than looking at the diagram.
 
-  It is drawn to be turned towards somebody who does not use Atlas, so nothing on it is
+  It is drawn to be turned towards somebody who does not use atlas, so nothing on it is
   inferred. The graph is the model the evaluation *ran* against, not the model as it
   reads today. A value appears on a node only where the record ties it there by name; a
   node nothing can speak for is drawn back and says "not part of this case" rather than
@@ -1686,7 +2430,7 @@ credentials.
   decide them together under one reason, which is what `POST /api/v1/approvals/decide`
   exists for.
 
-  For the approval Atlas ships there is now exactly **one** way to answer in that
+  For the approval atlas ships there is now exactly **one** way to answer in that
   screen. The generic Complete button and the form's own "Genehmigen" checkbox
   answered the same question by accident: a task completed with no variables reads as
   `genehmigt = null`, which is not `true`, which is a rejection — recorded with no
@@ -1695,7 +2439,7 @@ credentials.
 
   An installation whose products name **its own** approval model keeps its form and its
   Complete button untouched: `genehmigt` and `begruendung` are the shipped form's
-  contract and not a general one, and two buttons answering for a model Atlas cannot
+  contract and not a general one, and two buttons answering for a model atlas cannot
   read would complete somebody's task with variables their process never sees. The
   block still says what is being decided, because that half is true of any approval.
 
@@ -1831,7 +2575,7 @@ credentials.
   `atlas_runloop_turn_held_seconds` and `atlas_runloop_turn_wait_seconds`, pushed from
   the run loop itself.
 
-  The run loop is the one duration in Atlas that is about the whole server rather than
+  The run loop is the one duration in atlas that is about the whole server rather than
   one request: it is the single writer, and it is the gate every request passes
   through — a read-only one included, since opening a consistent view takes a turn
   (ADR-0239). A turn that runs long does not slow one caller down, it stops everything,
@@ -1882,7 +2626,7 @@ credentials.
   task**: each failure spent a retry, each exhausted budget parked a token behind its own
   incident, and every one of those calls went into a host that was already struggling. An
   hour of SMTP being down, on a process starting a few thousand instances in that hour, was
-  a few thousand incidents for somebody to clear — and the only thing Atlas could say about
+  a few thousand incidents for somebody to clear — and the only thing atlas could say about
   a failing integration was a backoff one worker asked for on one job, which cannot express
   "stop asking, the other end is down".
 
@@ -2004,7 +2748,7 @@ credentials.
   what it read, and nothing in the server calls Graph.
 
   The worker gained one operation, **`get-user-photo`**, and with it the ability to
-  read bytes at all: every Graph call Atlas had returned JSON, and a photo does not.
+  read bytes at all: every Graph call atlas had returned JSON, and a photo does not.
   The change is one field on the request rather than a second method on the client,
   because what differs is a property of *the request*. The result reaches a process
   as `{contentType, data}` with the data base64 — a process variable is FEEL, and
@@ -2084,7 +2828,7 @@ credentials.
   somebody looking at a wrong picture needs: whether to change it here or in the
   directory. The directory half is not in this change: the photo will arrive the
   way every other directory fact arrives, read through the Entra worker by a
-  process and reported here, because Atlas holds no tenant credential and must not
+  process and reported here, because atlas holds no tenant credential and must not
   start holding one for a picture.
 
 
@@ -2174,7 +2918,7 @@ credentials.
   stale finding is closer to the truth than a clean bill of health nobody checked.
 
 - **An approver decides a request once, instead of deciding it twelve times.** An
-  approval in Atlas is one user task per order line — the approval process is
+  approval in atlas is one user task per order line — the approval process is
   started multi-instance from the order's ready lines, so a workplace ordered as
   twelve products is twelve process instances and twelve tasks. That shape is
   right and is unchanged: a line is what gets provisioned, refused, escalated,
@@ -2238,7 +2982,7 @@ credentials.
   one that never said anything.
 
   **A heading, not an entity, and the three costs are stated rather than hidden.**
-  Nothing in Atlas branches on a category — no rule, no approval, no eligibility,
+  Nothing in atlas branches on a category — no rule, no approval, no eligibility,
   no process binding reads it; it is a way of *looking* at a release. Every property
   that would justify an entity is a property something else would need, and no such
   something exists. So: the headings have **no ordering of their own** (a rank on a
@@ -2249,7 +2993,7 @@ credentials.
   the day it becomes intolerable, the reason it was tolerable is on file.
 
 - **A product can say what it costs, and the approver sees it.** There was **no price
-  field anywhere in Atlas** — not on a product, not on an order line, not on the
+  field anywhere in atlas** — not on a product, not on an order line, not on the
   approval surface — so an approver was asked to approve a laptop without being told
   what it cost.
 
@@ -2314,7 +3058,7 @@ credentials.
     The amendments are a list and not a slot, because details having been wrong twice
     is a different fact from their having been wrong once.
   - A position **being provisioned now** is refused, and the refusal says to wait. A
-    process has the line, which is a conversation with a system Atlas does not control.
+    process has the line, which is a conversation with a system atlas does not control.
   - A **rejected, cancelled or abandoned** position is refused: a closed record of a
     request that produced nothing.
 
@@ -2337,11 +3081,11 @@ credentials.
   Variants do not solve it: a variant is a fixed shape chosen in advance, and a cost
   centre is not one of a list.
 
-  A product now names **one Atlas form**. The basket renders it — the last screen before
+  A product now names **one atlas form**. The basket renders it — the last screen before
   an order exists, and the one that already shows what will actually be provisioned —
   and the answers travel with the order line, beside the id of the form they answered.
 
-  **A form id and not a field list of its own**, because Atlas already has forms: a
+  **A form id and not a field list of its own**, because atlas already has forms: a
   definition, an editor, a generator, a renderer, and two surfaces rendering them. A
   second way to declare "these are the fields somebody fills in" would be a second thing
   to author, a second thing to render, and a second set of types, validation rules and
@@ -2416,7 +3160,7 @@ credentials.
   already full.
 
   **The scope is the role and not an "area of responsibility"**, and that is settled
-  rather than left open: an area of responsibility means a reporting line, and Atlas
+  rather than left open: an area of responsibility means a reporting line, and atlas
   has no reporting line. The `superior` approval kind has the caller name the superior
   precisely because a directory lookup belongs to a modelled process and not to the
   engine. Scoping a person search to a hierarchy would mean inventing the hierarchy
@@ -2594,7 +3338,7 @@ credentials.
 
   **The reason it ended changes what the row means.** A `returned` hold is evidence the person
   *had* the access; a `corrected` one — reconciliation found the target system did not have it
-  — is evidence only that Atlas *claimed* they did, which is all `handleRevokeDiscrepancy`
+  — is evidence only that atlas *claimed* they did, which is all `handleRevokeDiscrepancy`
   ever decided. Writing the second as the first would assert, in a record kept for years, that
   somebody had access nobody can show they had. Every row carries the word and the flag.
 
@@ -2646,7 +3390,7 @@ credentials.
 
 - **A reminder can now ask what is waiting for somebody else.** The portal asks people for
   three different things — decide an order line, answer a recertification row, do a task —
-  and none of it happens while nobody opens Atlas and looks. A campaign of five hundred rows
+  and none of it happens while nobody opens atlas and looks. A campaign of five hundred rows
   across forty managers, with nobody told, closes with four hundred and eighty undecided:
   each correctly recorded as *not certified*, and useless.
 
@@ -2682,9 +3426,9 @@ credentials.
   open-ended rights, which is every product until somebody sets a ceiling.
 
   **An expiry is not a removal.** The day after the end the target system still has the
-  membership and nothing has run; all that is true is that Atlas said the access should have
+  membership and nothing has run; all that is true is that atlas said the access should have
   ended. So an expired right stays **held** and is reported overdue — dropping the record
-  when a clock ticks would make Atlas assert that somebody does not have access they
+  when a clock ticks would make atlas assert that somebody does not have access they
   demonstrably do, which is the direction of wrongness that corrupts the evidence.
 
   `GET /api/v1/entitlements/expiring` answers what is due within a window and what is past
@@ -2776,7 +3520,7 @@ credentials.
 
   `POST /api/v1/recertification` turns what the inventory records into questions, each
   addressed to the person who can judge it. **Who reviews is named by the caller**, because
-  Atlas does not resolve line managers — a directory lookup belongs to a modelled process,
+  atlas does not resolve line managers — a directory lookup belongs to a modelled process,
   exactly as it does for the `superior` approval rule. A holder nobody names gives an
   *unassigned* row, which lands with the campaign's owner rather than stopping the campaign.
 
@@ -2827,7 +3571,7 @@ credentials.
   tool count is now 107. ([issue #919](https://github.com/pblumer/atlas/issues/919))
 
 - **The inventory can now be checked rather than trusted.** An entitlement asserts that a
-  right exists in another system — an assertion Atlas cannot guarantee, because target
+  right exists in another system — an assertion atlas cannot guarantee, because target
   systems are changed from outside it. So it decays silently, and an inventory nobody
   checks is a list of things that were once true.
 
@@ -2867,7 +3611,7 @@ credentials.
 
 - **The inventory is taken before it is enforced.** `model.OriginLegacy` has existed since
   the portal's three models were decided and has had no writer, which meant the inventory
-  could only ever contain what Atlas itself had granted. On the day an installation goes
+  could only ever contain what atlas itself had granted. On the day an installation goes
   live that is nothing, while reality is full — so the reconciliation that comes next would
   report every privilege in the estate as a discrepancy, each carrying an executable
   "remove it in the target system".
@@ -3022,7 +3766,7 @@ credentials.
 
 - **The decision editor draws decision services.** A decision service — DMN's interface
   over part of a decision graph, naming what it returns and what it works out internally
-  — could sit in a model Atlas deployed, but the editor had no shape for one: a model
+  — could sit in a model atlas deployed, but the editor had no shape for one: a model
   carrying one came from the temis Modeler, from Camunda or from hand-written XML. The
   vendored editor is now built from a fork of dmn-js that draws it, as a box with a
   divider line: what the service returns above, what it works out internally below.
@@ -3035,7 +3779,7 @@ credentials.
 - **A write arrow can set several members of a data object at once.** A step that
   captures a form's worth of fields writes them from one arrow with a row per field,
   rather than one arrow per field. BPMN always allowed this — a data association carries
-  `assignment [0..*]` — and Atlas read one and silently dropped the rest, so a model
+  `assignment [0..*]` — and atlas read one and silently dropped the rest, so a model
   another tool wrote deployed and quietly did something other than what it said.
 
   The writes are applied in the order they are listed and recorded as **one** change to
@@ -3077,7 +3821,7 @@ credentials.
   The last two things a diagram had and a decision did not.
 
   **Documentation.** A decision table is the business rule — the thing a compliance
-  officer signs off and an auditor asks about — and it was readable only inside Atlas.
+  officer signs off and an auditor asks about — and it was readable only inside atlas.
   The editor's `⋯` menu now publishes it as a structured PDF: the requirements graph,
   then every decision with its prose, the input data it reads with declared types, and
   its rule table set as a real table (hit policy, columns, one row per rule, each rule's
@@ -3119,7 +3863,7 @@ credentials.
   up, and a decision that is stored nowhere yet can be tried like any other.
   `atlas_try_decision` exposes the same act over MCP.
 
-  **A diagram for models that have none.** Almost every DMN model that reaches Atlas
+  **A diagram for models that have none.** Almost every DMN model that reaches atlas
   carries no `DMNDI` — an agent writing a decision table over MCP writes logic, not a
   picture, and so does temis, and so does a hand. dmn-js needs one to draw anything, so
   such a model opened in the editor showed a single box: the input data and the arrows
@@ -3195,7 +3939,7 @@ credentials.
 
 - **A data object's state is on the diagram, and says whether anything acts on it.** A
   `<dataObjectReference>` carries a data state — the `[ARCHIVIERT]` BPMN writes under
-  the box — and Atlas has read it end to end since ADR-0053: the compiler interns it, the
+  the box — and atlas has read it end to end since ADR-0053: the compiler interns it, the
   engine advances the object into it, and the Operations replay shows every transition.
   The one place it was missing is the place a model is read. bpmn-js parses `<dataState>`
   and draws nothing with it, and the properties panel has been able to *edit* the state
@@ -3217,7 +3961,7 @@ credentials.
   no check can reach it, not even the typo check that exists for exactly this mistake.
   Drawing both the same way would have the diagram claim something the model does not do,
   so the second is set back and its hover title says why. Same notation, same place, one
-  of them quieter — which is the honest rendering of what Atlas will actually do with it.
+  of them quieter — which is the honest rendering of what atlas will actually do with it.
 
 - **The decision editor is a page of the Modeler, not a window over one.** A decision
   used to be edited in a modal overlay. That fitted what a decision was when the editor
@@ -3337,7 +4081,7 @@ credentials.
 
 - **Atlas now reads the difference between what your processes build and what your model
   plans.** [ADR-0301](docs/adr/0301-derive-the-model-from-the-processes.md) settled that
-  Atlas holds two statements about the same subject and must not merge them: the derived
+  atlas holds two statements about the same subject and must not merge them: the derived
   model is what is *built*, the authored one is what is *wanted*, and their difference is
   the work not yet done. It then stopped, because it could not settle the shape and
   because it named a blocker — a comparison "needs a stable identity for a derived class
@@ -3475,9 +4219,9 @@ credentials.
   stale silently and in the direction of accepting something.
 
 - **A capability record now says when somebody last read it and meant it.** The gap
-  report checks a realisation against what is deployed, because that is a fact Atlas can
+  report checks a realisation against what is deployed, because that is a fact atlas can
   see. The rest of a capability — who owns it, what it is and is not responsible for,
-  what it has promised — is prose about people and promises, and Atlas took all of it on
+  what it has promised — is prose about people and promises, and atlas took all of it on
   trust. A map whose realisations are green and whose owners left two years ago is worse
   than no map: it is confidently wrong in exactly the fields somebody escalates against.
 
@@ -3493,7 +4237,7 @@ credentials.
   reason there is no bulk confirm.
 
   The confirmation also records **who was asked**. The confirmer is almost never the
-  owner, because the owner is free text precisely to accommodate people with no Atlas
+  owner, because the owner is free text precisely to accommodate people with no atlas
   account — so without that field the map confirms itself and a reader cannot tell that
   from a review the owner sat in. Leaving it empty is a legitimate confirmation and a
   weaker one, and the record says which. A self-confirmation is shown beside it and
@@ -3515,7 +4259,7 @@ credentials.
   descriptions say in as many words that only what was actually re-read may be
   confirmed.
 
-  Nine of the report's ten findings are facts Atlas checked. These two are not, and the
+  Nine of the report's ten findings are facts atlas checked. These two are not, and the
   report does not pretend otherwise: the only honest thing it can say about prose is
   that nobody has stood behind it lately.
 
@@ -3534,7 +4278,7 @@ credentials.
 
   A capability says how it is currently done in one of four ways: an executable process
   here, a Worker, a purchased system, or a person. The last two are the point. A map
-  that could only record what Atlas already runs would tell you nothing the deployment
+  that could only record what atlas already runs would tell you nothing the deployment
   list does not, and `GET /api/v1/capabilities?realized=false` — everything nothing
   currently automates — is the adoption backlog the whole thing exists to shrink.
 
@@ -3552,7 +4296,7 @@ credentials.
   capability's process into another's that the caller never declared. It is a comparison
   and never a merge: the method's black box is normally a service task, so a declared
   dependency with no call activity is the ordinary case and raises nothing. Two things it
-  refuses to report: a purchased system or a person, which Atlas cannot see and will not
+  refuses to report: a purchased system or a person, which atlas cannot see and will not
   call a defect, and anything outside your sharing scope, which reads as restricted
   rather than missing — with a count, so a clean report can be told from a blind one.
 
@@ -3576,7 +4320,7 @@ credentials.
 
   The method and how to work it are in `docs/architecture/business-architecture.md`,
   including two things checking it against the tree turned up: a **none intermediate
-  throw event** — the method's milestone marker — does not compile, and Atlas's
+  throw event** — the method's milestone marker — does not compile, and atlas's
   Prometheus surface is operational rather than business-level, so a KPI dashboard
   planned against `/metrics` will not find what it needs.
 
@@ -3626,8 +4370,8 @@ credentials.
   group, so a spawned child cannot survive its timed-out parent.
   ([ADR-0303](docs/adr/0303-script-sandbox-isolation.md))
 
-- **The Console landing page says what Atlas is, in both languages**: the dashboard
-  opened on "Welcome to Atlas" and three steps — it told a newcomer what to click, not
+- **The Console landing page says what atlas is, in both languages**: the dashboard
+  opened on "Welcome to atlas" and three steps — it told a newcomer what to click, not
   what they are running. A **Key features / Kernmerkmale** tile now sits below the
   dashboard's own tiles: sixteen short entries (one binary, durability, the compiler,
   throughput, the Modeler, token visibility, Panorama, human work, DMN, the information
@@ -3642,7 +4386,7 @@ credentials.
   mentioned is simply absent. So the file carries a `reviewedThrough` marker naming the
   newest `### Added` bullet it has been held against, and `go test ./api` fails while
   bullets sit above it. The question a feature has to answer is one line long — does
-  this change what Atlas is? — and the usual answer is no, which moves the marker and
+  this change what atlas is? — and the usual answer is no, which moves the marker and
   writes nothing. What the marker buys is that it is asked by the person who knows the
   feature rather than by nobody.
 
@@ -3734,7 +4478,7 @@ credentials.
   not.
 
   What the document cannot decide stays empty: headers, authentication and the
-  credential reference. Security schemes are deliberately not mapped onto Atlas's auth
+  credential reference. Security schemes are deliberately not mapped onto atlas's auth
   types, because the useful ones need a token endpoint and a client id that live on the
   server, and a guess there is a wrong answer wearing a filled-in field.
 
@@ -3926,7 +4670,7 @@ credentials.
   checking a value the same process had built two steps earlier; where a derived value
   arrives from outside the process, it would not be.
 
-- **Every process Atlas ships names one mail worker, and it is called `mail`.** The
+- **Every process atlas ships names one mail worker, and it is called `mail`.** The
   platform processes (ADR-0122) addressed their mail tasks to two different workers,
   and neither name said what the worker was. The three user management processes —
   intake, access review, offboarding — named an individual, and the access review sent
@@ -4256,7 +5000,7 @@ credentials.
   toolchain for that one step**: the main `build · vet · fmt · race · cover` job, the
   docs job, the ADR-numbering workflow and the feed-sync workflow. ADR-0012's own
   driver says a front-end toolchain must not become a prerequisite for building or
-  testing Atlas in CI; the feed generator was exactly that, in the job that decides
+  testing atlas in CI; the feed generator was exactly that, in the job that decides
   whether a change is good.
 
   It is now `go run ./scripts/whats-new`, with the rules in a package beside it so the
@@ -4337,7 +5081,7 @@ credentials.
   reading both shapes in use, and skips a finding it cannot parse rather than losing the
   whole refusal to one odd entry.
 
-- **The Console landing page carries the brand mark.** "Welcome to Atlas" opened on a
+- **The Console landing page carries the brand mark.** "Welcome to atlas" opened on a
   bare heading, so the one page a newcomer lands on was the one page that showed no
   mark at all — the glyph sat in the top bar above it and nowhere in the card itself.
   The heading now leads with the same `.mark` box the bar uses, at 48px. It is the
@@ -4899,7 +5643,7 @@ credentials.
 
   Its nine calls are `<atlas:restConnector>` tasks now, on the reserved job type the
   engine serves itself. Nothing to configure for them. Two things the example does
-  need, and both are real: a start form asks for this Atlas's address once, because a
+  need, and both are real: a start form asks for this atlas's address once, because a
   hand-started model has nobody to hand it one — the shipped fulfilment process gets
   the same variable from the server, which starts it — and the operator's API token
   under `ATLAS_CONNECTOR_ATLAS_TOKEN`, without which the first call answers 401 and
@@ -4949,7 +5693,7 @@ credentials.
   shipped editor to what it loses and what it complains about now records neither.
 
 - **The shipped fulfilment and approval processes could never run.** They do all their
-  work by calling Atlas's own API, and for four releases those calls were authored as
+  work by calling atlas's own API, and for four releases those calls were authored as
   plain service tasks of a job type named `rest`, carrying their target and method in
   task headers. Three things were wrong with that at once, and none of them is visible
   from the model: `rest` is not a reserved job type (the REST one is
@@ -4968,7 +5712,7 @@ credentials.
   The calls are now real `<atlas:restConnector>` tasks, which compile to the reserved
   REST job type the engine serves itself — and which the shipped `rest` worker serves
   where an operator has offloaded the kind. Nothing to configure either way. They are
-  told where Atlas is through a new `atlasApiBase` start variable, set from the same
+  told where atlas is through a new `atlasApiBase` start variable, set from the same
   address the server hands its supervised workers and passed on to every process the
   orchestration starts. `portalBaseUrl` is deliberately not reused for it: that one is
   the operator's external origin *or empty*, and a request built on an empty base is
@@ -4982,7 +5726,7 @@ credentials.
 
   `examples/produkt-erfassung` still carries the old shape — it is started by hand
   rather than by the portal, so it has no `atlasApiBase` and needs its own answer for
-  where Atlas is. Its README says so now instead of instructing the setup step that
+  where atlas is. Its README says so now instead of instructing the setup step that
   cannot be carried out.
 - **Saving a product said "apiBytes is not defined" and quietly left the product
   offered by nothing.** The catalogue screen hands its event handlers a bag of what
@@ -5119,7 +5863,7 @@ credentials.
   by hand. All three are fixed, and the eleven connections the specification permits
   between DRD elements are now each covered by a test.
 
-  The notation itself is held to the specification as well, in both pictures Atlas
+  The notation itself is held to the specification as well, in both pictures atlas
   draws. Input data is a stadium at any size rather than only at the default one; a
   decision service carries the heavy border the specification asks for; and an element
   is drawn under the text its diagram gives it rather than its own name, where the two
@@ -5136,7 +5880,7 @@ credentials.
   knowledge models with rounded corners, which made a decision read as an input
   datum or a service, and drew a decision service square-cornered with its name
   centred over whatever it contains. Both pictures now follow the notation, so a
-  model opened in Atlas looks like the same model opened anywhere else.
+  model opened in atlas looks like the same model opened anywhere else.
 
   The modeler follows too: the vendored dmn-js carries the same correction, and a
   decision service that declares itself collapsed is now drawn as one — name over a
@@ -5189,7 +5933,7 @@ credentials.
   The rule now lists it, the tool has its own icon instead of borrowing the decision's,
   and a service created this way comes with the divider line that separates what it
   returns from what it works out internally. The vendored modeler is rebuilt from the
-  fork that carries all of it. What Atlas ships is held to it by a test of its own: the
+  fork that carries all of it. What atlas ships is held to it by a test of its own: the
   palette offers the tool, the rule allows the drop, and the result survives to the
   document — asking the rule the interactive path asks, which is the thing that was
   false.
@@ -5214,7 +5958,7 @@ credentials.
   error line with an HTTP status in it, no catalogue, nothing saying a sign-in was
   needed and nowhere to give one. The way in was to know that `/index.html` is a
   different page, that it has a login, and that coming back afterwards would work —
-  knowledge about Atlas' internals, held by exactly the readers this page is not for.
+  knowledge about atlas' internals, held by exactly the readers this page is not for.
 
   Every route the portal reads needs a session, and the server answers an anonymous
   caller 401 before any of them runs. That is right, and it is unchanged. What the
@@ -5243,7 +5987,7 @@ credentials.
   Where a login is federated, the provider is offered above the password form — an
   installation that has one has no password to type — and the callback now **lands
   where the login started** instead of always on the Console. Which page that may be
-  is an allowlist of the two Atlas serves before anybody is signed in: the value
+  is an allowlist of the two atlas serves before anybody is signed in: the value
   travels through the browser, and anything that could express an arbitrary
   destination would be an open redirect carrying a login's authority.
 
@@ -5432,7 +6176,7 @@ credentials.
 
 - **An expression calling a function that does not exist no longer deploys clean and answers
   null.** The FEEL engine compiles a call to a name it does not know into a constant null,
-  deliberately: DMN requires a decision to stay executable, and Atlas evaluates decisions
+  deliberately: DMN requires a decision to stay executable, and atlas evaluates decisions
   through that same engine. For a BPMN model it produced a defect with no visible surface
   anywhere. `= is defined(kunde.geburtsdatum)` deployed without a word, evaluated to null —
   without even reading `kunde`, so the null carried no trace of where it came from — and a
@@ -5473,16 +6217,16 @@ credentials.
 - **A decision whose name is not a FEEL identifier is deployable again.** Per DMN a
   decision has two names: the label on the diagram (`name`) and the FEEL identifier its
   result is bound to (`<variable name>`), and they need not be the same string. The DMN
-  engine Atlas pinned bound a required decision under its *label*, so a model valid per
+  engine atlas pinned bound a required decision under its *label*, so a model valid per
   the specification — `Decision A` declaring `<variable name="alpha"/>`, `Decision B`
   reading `alpha * 10` — was refused at deploy time with `unknown variable "alpha"`: a
   message naming the symptom and not the cause. The only way through was to name every
   decision in a chain like a FEEL identifier, which rules out `Kunden-Risiko` and
   `Decision A` alike. A model authored in the temis Modeler, in Camunda or by hand was
   rejected on arrival, and trying it before deploying reproduced the same refusal, so
-  nothing distinguished an Atlas limitation from a modelling error.
+  nothing distinguished an atlas limitation from a modelling error.
 
-  The engine now binds by the identifier, as DMN says, and **Atlas accepts both names
+  The engine now binds by the identifier, as DMN says, and **atlas accepts both names
   everywhere a decision is addressed** — the registry's version pointers, the model a
   business rule task resolves to, the try-a-decision membership check and the deploy
   gate's coverage report. A task deployed under the label keeps evaluating; one naming
@@ -5496,7 +6240,7 @@ credentials.
 
 - **A decision that returns a number wrote its result as a string.** The decision engine
   hands a FEEL number back as its exact decimal string — deliberately, so an amount is
-  not rounded on the way out — and Atlas stored it as what it saw: text. A sequence-flow
+  not rounded on the way out — and atlas stored it as what it saw: text. A sequence-flow
   condition comparing that variable to a number is then a FEEL type mismatch, which
   evaluates to `null`, which is not `true`, so the token took the **default flow** with
   no incident, no diagnostic and no trace entry. The process simply routed the wrong way,
@@ -5552,7 +6296,7 @@ credentials.
 
 - **One position in the portal carried two different level names.** The catalogue
   screen and the basket both label a position Bundle, Marktleistung or Service, and
-  Atlas has no such typing — the level is derived from the containment graph. It was
+  atlas has no such typing — the level is derived from the containment graph. It was
   derived twice, differently: the cascade used depth, the basket used whether a part
   came with the whole. The direct part of a package was a Marktleistung in one half
   of the screen and a Service in the other. Underneath that, every product nothing
@@ -5862,10 +6606,10 @@ credentials.
   write — deployed, evaluated and rendered in the read-only view, and the decision editor
   refused it with "failed to parse document as <dmn:Definitions>", because it read every
   model as DMN 1.3. It now takes the version from the document's own namespace, and the
-  diagram Atlas generates for a model — when it is opened, and on Auto-layout — is written
+  diagram atlas generates for a model — when it is opened, and on Auto-layout — is written
   in that version's DMNDI namespace too, so the model opens with its layout. A model
   opened as 1.5 is saved as 1.5, a 1.3 model stays 1.3, and a new decision still starts
-  as 1.3. A tool that reads diagrams Atlas generated can no longer assume the 1.3 DMNDI
+  as 1.3. A tool that reads diagrams atlas generated can no longer assume the 1.3 DMNDI
   namespace ([ADR-0379](docs/adr/0379-dmn-version-follows-the-document.md)).
 
 - **A knowledge model's expression opened unstyled.** dmn-js does not show a business
@@ -5956,7 +6700,7 @@ credentials.
   came back the same way, and in both directions: an order for a misspelled recipient
   answered **500**, and the approval inbox turned an unreadable user store into a **404**
   saying the person does not exist. An operator was told their colleague has no account
-  when what happened is that Atlas could not look.
+  when what happened is that atlas could not look.
 
   `httpapi.ErrNoSuchPrincipal` now says which. An order for a name nobody holds is
   **400**, with the sentence naming the four spellings that resolve; an unreadable store
@@ -5979,7 +6723,7 @@ credentials.
   Naming somebody else as recipient now needs the **operator** role. Naming yourself is
   unchanged, so a self-service portal stays self-service.
 
-  **A role and not a manager relationship, because Atlas cannot evaluate one** — and that is
+  **A role and not a manager relationship, because atlas cannot evaluate one** — and that is
   settled rather than open: the escalation path has the *caller* name the superior precisely
   because a directory lookup belongs to a modelled process and not to the engine. An engine
   that gated on a hierarchy it had to invent would decide who may act in whose name from a
@@ -6209,7 +6953,7 @@ credentials.
 - **A decision that is only deployed no longer blocks the deploy of a process that
   names it.** The deploy preflight demanded a stored DMN model behind a reference for
   every decision a business rule task called, and refused otherwise with "no DMN model
-  provides it — create the decision (or add its reference) in Atlas". Since a decision
+  provides it — create the decision (or add its reference) in atlas". Since a decision
   became deployable on its own ([ADR-0322](docs/adr/0322-deploying-one-decision.md)) an
   author could deploy exactly such a decision, see it offered by the task's picker, and
   then be told to create the thing they had just deployed.
@@ -6225,7 +6969,7 @@ credentials.
 
 - **A decision whose logic is a literal expression no longer covers the editor's own
   bar.** dmn-js uses `editor` as a state class inside its own components — its literal
-  expression view is `<div class="literal-expression textarea editor">` — and Atlas's
+  expression view is `<div class="literal-expression textarea editor">` — and atlas's
   `.editor` is the full-bleed page shell, pinned to the viewport. Since the decision
   editor became a page ([ADR-0320](docs/adr/0320-the-decision-editor-is-a-page.md)) that
   collision drew the expression editor across the whole window, so the view tabs, Save,
@@ -6292,7 +7036,7 @@ credentials.
   ([ADR-0303](docs/adr/0303-script-sandbox-isolation.md),
   [issue #892](https://github.com/pblumer/atlas/issues/892))
 - **The Starmap's ArchiMate view now draws ArchiMate's relationships too.** The nodes
-  were already ArchiMate's own symbols; the lines between them were still Atlas's — one
+  were already ArchiMate's own symbols; the lines between them were still atlas's — one
   solid, one dashed, one dotted. For a reader who works in the notation that is half
   the alphabet: ArchiMate tells **Assignment**, **Triggering** and **Serving** apart by
   what sits at the ends of an otherwise identical solid line.
@@ -6300,7 +7044,7 @@ credentials.
   Each is now drawn that way — a ball at the source and a filled arrowhead at the
   target for Assignment, a filled arrowhead for Triggering, an open one for Serving —
   and the lines are solid, because in ArchiMate a dashed line with an open arrowhead is
-  a Flow and a dotted one a Realization. Keeping Atlas's dash would not have been a
+  a Flow and a dotted one a Realization. Keeping atlas's dash would not have been a
   missing statement but a wrong one.
 
   A Serving relationship points the other way from the fact it comes from: ArchiMate
@@ -6316,7 +7060,7 @@ credentials.
   question, and nothing on either surface would say which was true. Three relationships
   is also all there can be: Atlas knows that an application holds a process, that a
   process calls another, and that a process uses a worker or a decision. Nothing here
-  is a Flow or a Realization, and an absent relationship type means Atlas cannot see
+  is a Flow or a Realization, and an absent relationship type means atlas cannot see
   one — never that there is none.
 
   A served notation is also a copy now. The element table, the relationship table and
@@ -6325,7 +7069,7 @@ credentials.
 
 - **The Starmap's ArchiMate view now draws ArchiMate's own symbols and layer colours.**
   Picking **ArchiMate 3.2** under Notation mapped each node to an ArchiMate element type
-  and wrote that type under its name — and then drew Atlas's own circles and squares.
+  and wrote that type under its name — and then drew atlas's own circles and squares.
   For the one reader that view exists for, that is the vocabulary without the script:
   ArchiMate is recognised by its silhouettes.
 
@@ -6342,7 +7086,7 @@ credentials.
   defines no colours at all**, and these are the convention its own figures and the
   Archi tool use. They are pale by design, so a red or amber finding still stands out
   above them. A draft, a restricted placeholder and an unresolved dependency keep
-  Atlas's own shape and colour: ArchiMate has no element for them, and dressing them as
+  atlas's own shape and colour: ArchiMate has no element for them, and dressing them as
   one would claim something the notation does not.
 
 - **The Starmap opens using the whole window, whatever the size of the estate.** A
@@ -6405,7 +7149,7 @@ credentials.
   cannot distinguish the two states that matter. The same signal that kills the
   descendant orphans it onto PID 1, and until PID 1 reaps it, it keeps an entry in the
   process table that `kill(2)` goes on addressing. Whether that reap is prompt belongs
-  to the environment's init, not to Atlas: under an init that reaps (a CI runner) the
+  to the environment's init, not to atlas: under an init that reaps (a CI runner) the
   test passes, and under one that does not (a container started from a plain process,
   a devbox) it fails on a kill that worked perfectly. `processExists` now reads the
   process state from `/proc` after the probe and reports a zombie as gone, which is
@@ -6539,7 +7283,7 @@ credentials.
   holding only the `user` role now gets 403. Give that account the `operator` role, or
   let the addressed person act.
 
-- **Model-authored scripts no longer inherit Atlas credentials.** The supervised script
+- **Model-authored scripts no longer inherit atlas credentials.** The supervised script
   worker starts from an explicit runtime allowlist, and each interpreter receives only
   that small runtime environment plus its source and process variables — never the
   worker token or arbitrary deployment secrets. The internal credential handed to a
@@ -6581,7 +7325,7 @@ routed at right angles by the same router a sequence flow gets, and the palette 
 diagram-js's own — the one the process modeler already puts down its left edge.
 
 **One thing to read before upgrading.** A parallel or inclusive join now counts tokens
-**per incoming sequence flow**, as BPMN 2.0.2 §13.4 requires and as Atlas did not. The
+**per incoming sequence flow**, as BPMN 2.0.2 §13.4 requires and as atlas did not. The
 change moves in the direction of *less* progress: a model that relied on a join firing on
 two tokens arriving over one branch now parks there instead — a deadlock you can see and
 terminate, where the old behaviour continued silently and swallowed the surplus. No API,
@@ -6674,7 +7418,7 @@ no stored format and no default changes; this one is worth checking your models 
   anything and answers `409` with the impact; the Console shows it and asks.
 
   The impact is not just "an id is taken". When the id is also a deployed
-  process, Atlas migrates a running instance by matching element ids
+  process, atlas migrates a running instance by matching element ids
   ([ADR-0162](docs/adr/0162-instance-migration.md)) — so the report names the
   deployed version, how many instances are running on it, which of its elements
   the imported model still has, which it does not, and which of its data objects
@@ -7077,7 +7821,7 @@ ADR-0285.
   is on what `create-thread` returns, so a reply is `send-message` addressing that id.
 
 - **A Discord channel can start a process.** The other direction: a watch polls a channel
-  and publishes each new message as an Atlas message, so somebody reporting a fault in
+  and publishes each new message as an atlas message, so somebody reporting a fault in
   chat opens a case without leaving the channel. Configure it under Workers › *Events…*
   with the channel id and the message name your model starts on (ADR-0262).
 
@@ -7092,11 +7836,11 @@ ADR-0285.
   messages come back through the watch, and without that gate each one starts another
   round — a loop in which every instance looks correct on its own.
 
-- **A deploy now says when a model's `atlas:` namespace is not Atlas'.** The compiler
+- **A deploy now says when a model's `atlas:` namespace is not atlas'.** The compiler
   matches an extension element on its local name alone, so a model that binds the `atlas`
   prefix to the wrong URI compiles, deploys and runs exactly like a correct one. The
   Modeler is not lenient in the same way: it resolves `atlas:*` against the single URI in
-  its moddle, and an element outside it is not an Atlas element at all — importing appears
+  its moddle, and an element outside it is not an atlas element at all — importing appears
   to work, and then every Save fails with `no namespace uri given for prefix <ns0>`
   (ADR-0269).
 
@@ -7220,7 +7964,7 @@ ADR-0285.
   ([ADR-0263](docs/adr/0263-form-runtime-brand-theming.md)).
 
 - **The public start form and the sign-in consent screen carry your branding.** Both
-  are shown before anyone has a session, and both used to display the built-in Atlas
+  are shown before anyone has a session, and both used to display the built-in atlas
   mark and the default blue no matter what an admin had configured. They now ask the
   server for the organisation's colour and logo like every other page — which matters
   most for the start form, since that is the page an organisation's own customers
@@ -7310,7 +8054,7 @@ ADR-0285.
   The reader finds out months later, by looking for a button where the picture put it.
 
   The **Nugget screenshots** workflow runs `capture.mjs --check` every Monday: it starts
-  a throwaway Atlas exactly as the capture does, measures where every highlighted element
+  a throwaway atlas exactly as the capture does, measures where every highlighted element
   actually is, and compares that against the committed block. It writes nothing — no
   images, no commits. A difference opens an issue labelled `nuggets-stale` naming the
   targets that moved, with the measurements; a difference still there the following week
@@ -7412,7 +8156,7 @@ ADR-0285.
 
 - **The handbook plays.** Reading how to claim a task is not the same as being shown
   where to press, and the gap costs the most for exactly the people who have the least
-  patience for a manual: somebody handed an Atlas login who wants to be useful this
+  patience for a manual: somebody handed an atlas login who wants to be useful this
   morning. The handbook gains **training nuggets** — short animated click-throughs that
   play in the page.
 
@@ -7423,7 +8167,7 @@ ADR-0285.
   the six apps, the Playground, the landscape, and a single binary with no database and
   no broker behind all of it.
 
-  Then one path per role Atlas actually has ([ADR-0209](docs/adr/0209-roles-per-endpoint-group.md)),
+  Then one path per role atlas actually has ([ADR-0209](docs/adr/0209-roles-per-endpoint-group.md)),
   each under seventy seconds, because the fastest way to be useful is to be shown your
   own job and not everyone else's: `user` claims a task and completes it, `modeler` goes
   from diagram to deploy through the Playground, `operator` finds an instance and
@@ -7474,7 +8218,7 @@ ADR-0285.
   The renderer escapes the whole source before it parses any of it and builds every tag
   itself, so a documentation text can give the block it is shown in structure but can
   never script the console; a link's destination has to pass an allowlist (http, https,
-  mailto, or a route inside Atlas) or the link renders as its words. Nothing about the
+  mailto, or a route inside atlas) or the link renders as its words. Nothing about the
   model changes: the file, the compiler's interned copy and the API all still carry the
   source text, and the engine still never reads it.
 
@@ -7524,7 +8268,7 @@ ADR-0285.
 
   The **contextual help** knows about all of it: the "?" menu's *On this page* entry had
   no rule for Panorama, Data, AI access or the audit log, so all four fell through to
-  "Welcome to Atlas" — help that lands a reader at the top of a page reads as help that
+  "Welcome to atlas" — help that lands a reader at the top of a page reads as help that
   does not work. Two tests now hold the join the two files cannot see between them:
   every anchor `handbookHelp()` hands out must be a section the handbook has, and every
   app the shell offers must be a card in the welcome chapter. Both were written by
@@ -7640,7 +8384,7 @@ ADR-0285.
 
 - **Finding one instance among a few hundred thousand.** An operator's most common
   question is about a single instance — "where is MT-1998?", "what happened to the
-  instance this ticket names?" — and Atlas answered every version of it by reading
+  instance this ticket names?" — and atlas answered every version of it by reading
   through every instance in the engine.
   [ADR-0239](docs/adr/0239-off-loop-queries.md) took the first half of that away:
   those queries no longer hold the engine's single writer while they run. They still
@@ -7737,11 +8481,11 @@ ADR-0285.
 
   **Inbound** ([ADR-0234](docs/adr/0234-google-inbound-watch.md))
   is the two intake channels people already have. A **row watch** publishes each new row
-  of a spreadsheet as an Atlas message — the "a Google Form writes its responses into a
+  of a spreadsheet as an atlas message — the "a Google Form writes its responses into a
   sheet" case — and a **folder watch** publishes each file put into a Drive folder,
   because the folder is a queue people already use. Both ride the existing inbound
   bridge, so an event starts or wakes a process through ordinary message correlation,
-  and Atlas polls rather than exposing anything to the internet. A row's sequence is its
+  and atlas polls rather than exposing anything to the internet. A row's sequence is its
   own row number, which is monotonic for appends; a file has none, so its mark is scoped
   per file id exactly as a Jira issue's is (ADR-0214).
 
@@ -7759,7 +8503,7 @@ ADR-0285.
 
 - **Importing a UML class diagram: reading what somebody else drew.** A data model is
   normally drawn in a UML tool — Enterprise Architect, Papyrus, Visual Paradigm — long
-  before anybody opens Atlas, and until now the only way to get it in was to retype it
+  before anybody opens atlas, and until now the only way to get it in was to retype it
   class by class. What that loses is never the class names: it is the **business key**,
   the one fact BPMN has no equivalent for and the one every cross-process capability
   rests on. **Data › Information model** now has an **Import** button, and
@@ -8119,8 +8863,8 @@ ADR-0285.
   lookup find nobody".
 
 - **An example where a Jira ticket starts the process.** `examples/jira-ticket-eingang/`
-  is the Zugangsantrag's other direction: instead of Atlas writing to Jira, Jira starts
-  Atlas. A message start event waits on `jira.ticket.created`, an event watch under
+  is the Zugangsantrag's other direction: instead of atlas writing to Jira, Jira starts
+  atlas. A message start event waits on `jira.ticket.created`, an event watch under
   Console → Connectors → Events publishes every issue its JQL finds under that name, and
   the instance begins with no form at all — `issueKey`, `projectKey`, `summary`,
   `reporter` and the whole issue arrive from the event. It then walks the chain the
@@ -8142,7 +8886,7 @@ ADR-0285.
   no record at all are **different states**: without one, whatever the server was started
   with keeps deciding, so an existing install works exactly as it did until somebody
   touches the switch. The answers are **content, not a path** — the Console is org-wide and
-  a path typed there belongs to whichever host runs the worker, so Atlas stores the JSON
+  a path typed there belongs to whichever host runs the worker, so atlas stores the JSON
   and writes the file itself, named by a digest of its own content so that replacing a seed
   actually reaches the worker. And the seed is **parsed on save**, so a typo is refused at
   the form with its own complaint rather than discovered as a mockup that quietly answers
@@ -8256,7 +9000,7 @@ ADR-0285.
   watches beside its outbound operations
   ([ADR-0214](docs/adr/0214-jira-inbound-issue-watch.md)): Console → Connectors →
   Events takes a JQL and a message name, and every issue the query matches is
-  published as an Atlas message, so a message-start process runs per new ticket and a
+  published as an atlas message, so a message-start process runs per new ticket and a
   waiting instance is woken. Atlas polls, so nothing has to reach the server from the
   internet. A new watch is forward-only — pointing one at a project with a long
   history does not start a process per old ticket — and the correlation key and the
@@ -8270,7 +9014,7 @@ ADR-0285.
 - **The jira kind can be supervised.** `atlas --supervise-connector jira` refused to
   start the *server* — `KnownConnectorKinds` is a hand-written list beside the switch
   that is the real implementation, and the jira case was added without it, so the kind
-  could be served by a worker started by hand and never by one Atlas supervises. Which
+  could be served by a worker started by hand and never by one atlas supervises. Which
   is the path the Workers view shows, so it looked like a worker that does not exist.
   A test now holds the list to the switch in both directions.
 
@@ -8326,10 +9070,10 @@ ADR-0285.
   the page says which of the two is which.
 
   Nothing else changes. The report is an observation of work that already happened: a
-  worker that cannot reach its Atlas logs `ad_mock.report_failed` and completes its job
+  worker that cannot reach its atlas logs `ad_mock.report_failed` and completes its job
   exactly as before, and no password travels, because the mock stores none. Both halves
-  stay memory — restarting the worker empties its forests, restarting Atlas empties the
-  view. A worker Atlas supervises is pointed at the endpoint automatically while the
+  stay memory — restarting the worker empties its forests, restarting atlas empties the
+  view. A worker atlas supervises is pointed at the endpoint automatically while the
   mockup is on; one you run yourself takes `ATLAS_AD_MOCK_VIEW_URL`.
 
 - **Atlas can terminate TLS itself.** `--tls-cert` and `--tls-key` turn `--addr`
@@ -8353,15 +9097,15 @@ ADR-0285.
   ephemeral port for its own children — the MCP adapter's loopback calls and any
   worker it supervises. A certificate issued for a host name carries no name for
   `127.0.0.1`, and the alternative would be a switch to skip verification, which
-  Atlas does not have and will not get.
+  atlas does not have and will not get.
 
-- **`--tls-ca`, so two Atlas servers with an internal CA can talk.** A deployment
+- **`--tls-ca`, so two atlas servers with an internal CA can talk.** A deployment
   target must be `https://` ([ADR-0129](docs/adr/0129-remote-deployment-targets.md)),
   and on-prem that certificate usually comes from a CA the sending host has never
   heard of. Point `--tls-ca` at its PEM bundle on the publishing server, and at the
   same bundle on an `atlas worker --server https://…` running on another host or an
   `atlas mcp --server https://…` an agent drives it through. It is *added* to the
-  host's roots, never a replacement, and it reaches only Atlas calling Atlas — a
+  host's roots, never a replacement, and it reaches only atlas calling atlas — a
   Worker Type calling a third party keeps the host's trust store, because that
   endpoint is somebody else's. There is no switch to skip verification anywhere,
   and a bundle that cannot be read stops the process at startup rather than
@@ -8415,7 +9159,7 @@ ADR-0285.
 
 - **Let the provider's groups decide roles.** Under **Organization → Single
   sign-on** an administrator names one claim in the token and a list of exact
-  values it may carry, and each value names the Atlas roles it grants and the
+  values it may carry, and each value names the atlas roles it grants and the
   groups it puts a person in. Onboarding and offboarding become a group membership
   somebody already maintains: the role and the shared projects arrive at the next
   sign-in and go away at the sign-in after the membership does.
@@ -8428,7 +9172,7 @@ ADR-0285.
 
   Nothing is granted by absence: somebody the provider says nothing about matches
   no rule and holds `user`, which everybody who can sign in has either way. A rule
-  that could never work — a role Atlas does not enforce, a group that has been
+  that could never work — a role atlas does not enforce, a group that has been
   deleted — is refused when you save it rather than ignored on every login.
 
 - **The Jira Worker Type runs on a worker.** Jira was in `offloadableKinds` while
@@ -8445,7 +9189,7 @@ ADR-0285.
   ([ADR-0168](docs/adr/0168-connector-work-on-a-worker.md),
   [ADR-0201](docs/adr/0201-jira-connector.md)).
 
-- **Panorama models can say which Atlas resource an element means.** An ArchiMate
+- **Panorama models can say which atlas resource an element means.** An ArchiMate
   element in a Panorama model now carries **Atlas bindings**
   ([ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md)):
   an Application Component names a process application, a Business Process names a
@@ -8463,19 +9207,19 @@ ADR-0285.
   **The document stores an opaque id and nothing else.** Names come from the server
   at read time, filtered by what you may see, so a model can never hold a stale copy
   of one. A binding that no longer resolves stays visible and says which of three
-  things it is: outside your access, no longer on this server, or a kind this Atlas
+  things it is: outside your access, no longer on this server, or a kind this atlas
   version cannot resolve yet. Removing it would make a broken binding look like an
   absent one, and the model would then look correct.
 
   **Editing a binding does not reformat your document.** The writer splices the
   bytes it needs to change and leaves everything else exactly as it was — comments,
-  indentation, attribute order, and any standard content Atlas does not model.
+  indentation, attribute order, and any standard content atlas does not model.
 
 - **Panorama shows the landscape you already have.** Panorama's landing view is now
   a derived mesh of the whole instance
   ([ADR-0211](docs/adr/0211-panorama-derived-landscape-mesh.md)): applications, the
   processes deployed under them, and the call activities between them, computed from
-  what Atlas already holds rather than from anything anybody drew. It therefore says
+  what atlas already holds rather than from anything anybody drew. It therefore says
   something on a server with no architecture model in it at all, and its edges are
   facts the server can point at — a call activity *is* a dependency — resolved
   through the same overrides the engine would follow, so the picture matches what
@@ -8601,7 +9345,7 @@ ADR-0285.
 
   `atlas worker --connector remedy` serves the kind from its own environment
   (`ATLAS_REMEDY_CONNECTORS`, plus `ATLAS_REMEDY_<NAME>_ENDPOINT`, `_USERNAME` and
-  `_PASSWORD`), and a worker Atlas supervises is handed that configuration at spawn out of
+  `_PASSWORD`), and a worker atlas supervises is handed that configuration at spawn out of
   the connector store and the vault — so a Helix instance added in the Console is served
   without anything set by hand. A connector with no endpoint, or whose credential bundle is
   missing or half-filled, is left out rather than handed over incomplete: a named instance
@@ -8628,7 +9372,7 @@ ADR-0285.
   keys are always there — so a later step addresses `=schlagzeilen[1].link` instead of
   zipping four unrelated arrays back together. A field the source omits is empty; a
   publication date is passed through as the publisher wrote it, because reformatting it
-  would turn a source value into an Atlas interpretation.
+  would turn a source value into an atlas interpretation.
 
   **The format is model intent, and it is decided at deployment.** Atlas does not
   inspect the response to pick a parser. Feeds are routinely served as
@@ -8647,7 +9391,7 @@ ADR-0285.
   the default, so a web-scrape task authored before this returns the same `[]string` it
   returned before. The trade-off worth knowing when you write a new one: the element
   type of the result variable now depends on the authored format — strings for HTML,
-  objects for a feed — and Atlas has no static variable schema to check that against, so
+  objects for a feed — and atlas has no static variable schema to check that against, so
   the Modeler says which you get and this note says it too.
 
   Nothing moved onto the engine to make this work: the fetch and the XML decoding happen
@@ -8704,7 +9448,7 @@ ADR-0285.
   (ADR-0280, audit F04).
 
   The start now establishes which prefix the state on disk actually stands for. If it is
-  missing, Atlas installs a verified checkpoint and replays the gapless suffix — the same
+  missing, atlas installs a verified checkpoint and replays the gapless suffix — the same
   code the snapshot restore path uses, shared rather than copied — or it refuses to start
   and says what to restore. A missing prefix is never again read as a successful replay from
   genesis. ADR-0131 asked for this; this is where the contract is paid.
@@ -8820,12 +9564,12 @@ ADR-0285.
   twelve-thousand-line view file. The bundle grew 4,476 bytes for the whole notation
   — one copy of diagram-js is the expensive part, and it was already paid for.
 
-- **The training nuggets show the real Atlas, not a drawing of it.** The stages
+- **The training nuggets show the real atlas, not a drawing of it.** The stages
   shipped as markup built from the handbook's own theme tokens, and the reasoning
   for that was sound as far as it went: no binary weight, both colour schemes, both
   languages in one file. What it missed is what a nugget is *for*. Somebody watching
   one is trying to recognise the screen later, and a drawing has to guess the layout
-  — this one guessed a sidebar where Atlas runs its navigation across the top, and
+  — this one guessed a sidebar where atlas runs its navigation across the top, and
   drew the app switcher as a grid popup where the product opens a drawer. A learner
   who trusted it would look in the wrong place twice before finding anything.
 
@@ -8858,13 +9602,13 @@ ADR-0285.
   fails against exactly that mistake.
 
   The caption moved out of the picture and under it. Overlaying it looked tidier and
-  ate the bottom of every shot — which is where Atlas prints the legend explaining
+  ate the bottom of every shot — which is where atlas prints the legend explaining
   the token markers, so the one scene that most needed its whole picture was the one
   losing it.
 
 - **Every shipped model now carries its own diagram.** Four of them did not:
   `order-fulfillment`, `galsync`, `entra-create-account` and `pruefe-datensaetze` shipped
-  with no `<bpmndi:BPMNDiagram>`, and Atlas generated one on deploy. That is enough to run
+  with no `<bpmndi:BPMNDiagram>`, and atlas generated one on deploy. That is enough to run
   a model and not enough to read one — which stopped being a detail the moment the
   handbook began rendering every example on its card, because a generated layout is what
   the reader then sees first.
@@ -8921,7 +9665,7 @@ ADR-0285.
   as JSON and comes back a string (so the date has to be parsed again), and a zone id
   where the timer needs an offset.
 
-- **The handbook now shows every example Atlas ships, and what it takes to run one.**
+- **The handbook now shows every example atlas ships, and what it takes to run one.**
   Thirty scenarios live under `examples/` — a shopping cart that computes a total in
   FEEL, an exam with a hard deadline, a CSV checked row by row, a directory recertified
   against the HR system, a Google Form whose every new row becomes a case. The handbook
@@ -8940,7 +9684,7 @@ ADR-0285.
   worker configured at all.
 
   Alongside it, **Worker in Betrieb nehmen**: a runbook per worker type for the half that
-  happens outside Atlas and is where commissioning actually fails. The Google service
+  happens outside atlas and is where commissioning actually fails. The Google service
   account and the sharing step without which a document you have open in front of you
   answers 403; the Entra app registration with the two application permissions that cover
   a joiner/mover/leaver flow and the one to remove if it is there; the Atlassian API token
@@ -9139,7 +9883,7 @@ ADR-0285.
   panel the BPMN Modeler does: a header naming what is selected — its kind in small
   type, its own name in bold, a type chip beside it — and collapsible property groups
   below, each with a chevron and a filled dot when it carries content. Fields look like
-  fields do everywhere else in Atlas.
+  fields do everywhere else in atlas.
 
   It is the same panel because it is the **same code**, not a lookalike. The Modeler had
   grown the shape first, as a function inside `editor.js` that turns a rendered panel's
@@ -9158,7 +9902,7 @@ ADR-0285.
 - **Central decisions run on a worker now — and the last in-process kind is gone**
   ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 7).
   A call to a decision service somebody else operates no longer happens on the loop
-  that owns the partition's state. `temis` joins the kinds Atlas offloads and
+  that owns the partition's state. `temis` joins the kinds atlas offloads and
   supervises by itself, which empties the record's "owed a worker half" table: every
   kind that reaches another system now has one.
 
@@ -9189,7 +9933,7 @@ ADR-0285.
 - **SCIM tasks run on a worker now**
   ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 6).
   Creating, reading or searching a user at an identity provider no longer happens on
-  the loop that owns the partition's state. `scim` joins the kinds Atlas offloads and
+  the loop that owns the partition's state. `scim` joins the kinds atlas offloads and
   supervises by itself.
 
   It is REST's slice a third time, and the collector says so: `scimWorkerEnv` is the
@@ -9211,7 +9955,7 @@ ADR-0285.
   ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 5).
   Creating a list item — a token fetch and an HTTP round trip to Microsoft Graph — no
   longer happens on the loop that owns the partition's state. `sharepoint` joins the
-  kinds Atlas offloads and supervises by itself.
+  kinds atlas offloads and supervises by itself.
 
   It is Jira's handover with a document library in place of an issue tracker
   ([ADR-0141](docs/adr/0141-sharepoint-connector.md)): the task names its instance and
@@ -9234,7 +9978,7 @@ ADR-0285.
 - **SOAP tasks run on a worker now**
   ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 4).
   A call to somebody else's web service no longer happens on the loop that owns the
-  partition's state. `soap` joins the kinds Atlas offloads and supervises by itself.
+  partition's state. `soap` joins the kinds atlas offloads and supervises by itself.
 
   It is REST's slice with an envelope around it, and that is the whole argument: the
   endpoint, the SOAPAction and the body are model data and travel resolved with the
@@ -9252,7 +9996,7 @@ ADR-0285.
 - **LDAP tasks run on a worker now**
   ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 3).
   A bind, a search or a modify against a directory somebody else operates no longer
-  happens on the loop that owns the partition's state. `ldap` joins the kinds Atlas
+  happens on the loop that owns the partition's state. `ldap` joins the kinds atlas
   offloads and supervises by itself, so a fresh install gets it without configuring
   anything.
 
@@ -9307,7 +10051,7 @@ ADR-0285.
   ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 2).
   Writing an event, folding a subject's state, reading its history: three round trips
   to an event store somebody else operates, all of them on the loop that owns the
-  partition's state. clio joins the kinds Atlas offloads and supervises by itself.
+  partition's state. clio joins the kinds atlas offloads and supervises by itself.
 
   It is Remedy's handover with an event store in place of an ITSM instance — the
   endpoint is a connector record, the token a vault reference behind it, and
@@ -9332,7 +10076,7 @@ ADR-0285.
   deprecation over a ban for one stated reason: a connector task could not run on a
   worker yet. ADR-0168 closed that, and the worker halves have landed kind by kind
   since — but the *default* never moved, so a fresh install still made outbound HTTP
-  calls from the processor's own process. `rest` and `ldif` now join the kinds Atlas
+  calls from the processor's own process. `rest` and `ldif` now join the kinds atlas
   offloads and supervises by itself.
 
   REST needed what Active Directory needed: its endpoint travels with the job, but its
@@ -9346,7 +10090,7 @@ ADR-0285.
   `sharepoint`, `scim`, `ldap`, `soap` and `temis` each need a worker half, one slice
   each, and the record names them. Beside them stands the closed list of what stays
   in-engine on purpose: FEEL, local DMN, the mockup task, timers, user tasks, and user
-  provisioning (which mutates Atlas's own store and has no endpoint to reach).
+  provisioning (which mutates atlas's own store and has no endpoint to reach).
   `--in-process-connectors` keeps working and now says at startup that it puts every
   integration back on the run loop.
 
@@ -9432,7 +10176,7 @@ ADR-0285.
   author does with them they are the same kind. The engine, the compiler and the worker
   already served all three from one code path, but the two Console surfaces and the
   environment vocabulary did not, and both had drifted. The Worker catalog card told
-  only SQL Server's reader that Atlas supervises the worker for it, only PostgreSQL's
+  only SQL Server's reader that atlas supervises the worker for it, only PostgreSQL's
   about the row cap, and none of the three that a database task can now be tried without
   a database at all — so which facts an operator learned depended on which of the three
   they clicked. The Modeler's properties panel repeated the same nine fields three
@@ -9474,7 +10218,7 @@ ADR-0285.
   reachable from the worker. `--in-process-connectors jira` is the way back, and the
   in-process handler stays for it.
 
-- **New Atlas mark.** The logo and the favicon are now a white peak carrying a
+- **New atlas mark.** The logo and the favicon are now a white peak carrying a
   cross on a black tile, replacing the blue hexagon-and-flow mark and the `A`
   letter tile the Console showed in its top bar, drawer, login screen, handbook,
   public forms and consent page. Nothing about branding *behaviour* changed: an
@@ -9487,7 +10231,7 @@ ADR-0285.
   renamed *Connectors* to *Workers* with the first slice of
   [ADR-0203](docs/adr/0203-worker-execution-model.md); the documentation still
   called the same thing three different things. It now uses one vocabulary
-  throughout: a **Worker Type** is a capability Atlas has (Jira, Mail, Active
+  throughout: a **Worker Type** is a capability atlas has (Jira, Mail, Active
   Directory), a **Worker** is one configured target and identity of that type —
   the name a task states — and a **Worker Instance** is a running process that
   leases jobs. *Forms & connectors* is now *Forms & workers* and explains the
@@ -9538,7 +10282,7 @@ ADR-0285.
   [ADR-0181](docs/adr/0181-ad-connector-mock-mode.md) gave the AD connector a mockup mode and put
   the switch in the worker's environment. The reasoning — the operator owns this decision, not the
   model — still holds; the ceremony did not. Since [ADR-0182](docs/adr/0182-ad-default-offload.md)
-  the AD worker is a child Atlas starts itself, so "set the variable" meant **restart the server**,
+  the AD worker is a child atlas starts itself, so "set the variable" meant **restart the server**,
   and restarting the worker from the Workers view did not help: it re-inherits the environment of
   the running parent, where the variable is still absent. The switch that exists to make drafting
   cheap cost an engine restart, and the person who most wants to flip it is the least placed to
@@ -9546,7 +10290,7 @@ ADR-0285.
 
   It now sits in **Console › Connectors**, on an Active Directory card beside the managed connectors
   and the vault: a checkbox, an optional seed file, Save. The AD worker restarts holding the new
-  setting and Atlas keeps running — through exactly the rendering ADR-0182 already built to hand
+  setting and atlas keeps running — through exactly the rendering ADR-0182 already built to hand
   that worker its bind passwords. The card also says which state it is in, which is a better answer
   to "did that account really get created?" than reading a log.
 
@@ -9568,7 +10312,7 @@ ADR-0285.
   pointer-drag, which is a diagram library with everything hard left out: no selection
   model, no undo, no zoom, no keyboard. Writing those is not the interesting part of a
   class diagram — how a class, a data store and the four association kinds are drawn is,
-  and Atlas still owns exactly that, plus which of them the subset permits between which.
+  and atlas still owns exactly that, plus which of them the subset permits between which.
 
   The drawing is now **reconciled rather than redrawn**. The editor re-renders on every
   keystroke, and a redraw would have thrown away the zoom, the selection and the undo
@@ -9744,7 +10488,7 @@ ADR-0285.
   see.** The recipes in _Rezepte_ ship their models without BPMN-DI, so the coordinates
   come from `POST /api/v1/layout` — an endpoint that carries the `modeler` role, on a
   page that is public. A reader who was not signed in therefore got no picture on any
-  of the 28 cards, and the note under each one said Atlas *"cannot lay this pattern out
+  of the 28 cards, and the note under each one said atlas *"cannot lay this pattern out
   completely yet"*. That was never true: Atlas lays them out fine, the request was
   refused. The note now separates the three answers — sign in (with a link that takes
   you there), a session that lacks the `modeler` role, and an actual layout limit, which
@@ -9968,7 +10712,7 @@ ADR-0285.
   about it.
 
   Writing an attribute at its default and leaving it out are the same statement in the
-  schema, and Atlas's compiler already reads them as the same statement. So the check now
+  schema, and atlas's compiler already reads them as the same statement. So the check now
   reads them that way too, for the nineteen attributes BPMN gives a default. Two things
   deliberately unchanged: it applies to BPMN's own attributes only — a `zeebe:` or
   `atlas:` attribute that happens to share a name is a different attribute — and only to
@@ -10134,7 +10878,7 @@ ADR-0285.
   A data object is two elements: the `<dataObject>` that declares it and carries its
   type, and the `<dataObjectReference>` that puts it on the canvas with its name, its
   data state and its shape. Only the second is drawn, so only the second is visibly
-  there — and a model can reach Atlas having lost the first. The box still reads
+  there — and a model can reach atlas having lost the first. The box still reads
   `Kunde [received]` to everybody looking at it, and it names nothing the engine can
   find.
 
@@ -10271,7 +11015,7 @@ ADR-0285.
   to say about them — and then hid the sentence it got, because the paragraph that
   renders it carried the mail-only class. So the one line saying that a database's
   *whole connection string* is the credential, that it is sealed into the vault, and
-  that Atlas supervises the worker for it was produced for every SQL kind and shown for
+  that atlas supervises the worker for it was produced for every SQL kind and shown for
   none; the same was true of Active Directory's. The edit dialog had always shown it,
   which is the disagreement between two forms that ADR-0160 exists to prevent. The hint
   now appears for any kind that has one.
@@ -10445,7 +11189,7 @@ ADR-0285.
   Workers view showing **failed**, several hundred starts, and one log line every thirty
   seconds. An optional field made every AD task in the instance unservable, indefinitely.
 
-  Now **Atlas holds the entries**. Pick an LDIF or DSML file or paste the content; the
+  Now **atlas holds the entries**. Pick an LDIF or DSML file or paste the content; the
   Console parses it while you watch, refuses one it cannot read, and tells you how many
   entries it found. Atlas writes the file the worker reads and names it after a digest of
   its own content — which is what makes *replacing* a seed actually reach a running
@@ -10462,7 +11206,7 @@ ADR-0285.
   through a truncating reader, so any real directory export came back as "invalid JSON
   body".
 
-  `ATLAS_AD_MOCK_SEED` still takes a path for a worker you start yourself, which Atlas
+  `ATLAS_AD_MOCK_SEED` still takes a path for a worker you start yourself, which atlas
   has nowhere to write to.
 
 - **An Active Directory `create-user` with an empty entry object no longer crashes the
@@ -10559,7 +11303,7 @@ ADR-0285.
   it locks out exactly the people the route exists for — so the role stays `any` and the
   handler asks the object question instead.
 
-  Answering it needed a rule Atlas had never written down: what a BPMN candidate group,
+  Answering it needed a rule atlas had never written down: what a BPMN candidate group,
   free text in the model, has to do with an identity group. **An unclaimed task matches a
   caller's group by name (case-insensitively) or by group id; a claimed task belongs to its
   owner alone.** That is the one place this work decides new product behaviour rather than
@@ -10725,7 +11469,7 @@ ADR-0285.
   question an operator actually has is *what do I paste into those three fields*,
   and this answers exactly that.
 
-  It also **checks the address Atlas publishes** against the one you are looking at,
+  It also **checks the address atlas publishes** against the one you are looking at,
   and says so when they differ — the `--external-url` mistake otherwise surfaces
   much later, as a connector that simply does not work, with nothing on screen to
   suggest why.
@@ -10744,7 +11488,7 @@ ADR-0285.
   ([ADR-0200](docs/adr/0200-mcp-oauth-resource-server.md)).
 
   **It is off by default and stays off unless you say otherwise**, because it is
-  the one unauthenticated endpoint in Atlas that writes durable state. Off means
+  the one unauthenticated endpoint in atlas that writes durable state. Off means
   absent: the route is not mounted and `registration_endpoint` is not in the
   authorization-server metadata, so a client discovers the truth rather than being
   told to try and then refused.
@@ -10784,7 +11528,7 @@ ADR-0285.
   It closes a failure with no visible cause. A hosted MCP client — a connector
   running on somebody else's infrastructure, driven by a person in a browser — has
   nowhere to put an API token, so when it is refused it goes looking for an
-  authorization flow. With nothing to go on it guesses `/authorize`, which Atlas
+  authorization flow. With nothing to go on it guesses `/authorize`, which atlas
   does not serve, and the operator sees a `404` that explains nothing. Now it finds
   a document naming the resource that refused it.
 
@@ -10910,7 +11654,7 @@ ADR-0285.
   `--docs` ([ADR-0044](docs/adr/0044-user-management-and-authentication-boundary.md)) —
   a reasonable call when authentication first landed and turning it on broke MCP, the
   explorer and the tests at once. Those reasons are worked through, and what was left
-  was a default that every document about Atlas told you to change: the install guide,
+  was a default that every document about atlas told you to change: the install guide,
   the Helm chart and the compliance concept all opened with "turn on `--auth`". A
   default everything tells you to change is not a default, it is a trap with
   documentation around it.
@@ -10994,7 +11738,7 @@ ADR-0285.
 ## [0.4.0] — 2026-08-26
 
 This release is about connectors you can actually run. `--supervise-connector` gives
-any connector kind the pairing the four Atlas offloads had by default — its own worker,
+any connector kind the pairing the four atlas offloads had by default — its own worker,
 started by the server, handed the server's token at spawn — so a kind that was reachable
 only by running `atlas worker` yourself now takes one flag, on an authenticated server
 included. **Active Directory runs on a worker by default**, with the engine rendering the
@@ -11038,11 +11782,11 @@ rules run at deploy.
   the engine hands the worker, so `reset-password` resolved an empty secret — both now
   cross the wire and are covered by a worker round-trip test.
 
-- **`--supervise-connector` — a connector kind served by a worker Atlas starts itself**
+- **`--supervise-connector` — a connector kind served by a worker atlas starts itself**
   ([ADR-0164](docs/adr/0164-no-in-process-service-tasks.md),
   [ADR-0168](docs/adr/0168-connector-work-on-a-worker.md),
   [ADR-0181](docs/adr/0181-ad-connector-mock-mode.md)). Offloading a kind and running a
-  worker for it were only ever paired for the four Atlas offloads by default:
+  worker for it were only ever paired for the four atlas offloads by default:
   `--offload-connectors` takes a kind off the engine and leaves its jobs parked for a
   worker somebody else runs, and `--supervise` names a *job type* with an external
   command, so neither can ask for a built-in connector. Every other kind was therefore
@@ -11337,7 +12081,7 @@ rules run at deploy.
 
 - **The handbook's recipes are compiled by a test now — and one of them did not deploy.**
   The recipe chapter ships 28 models as XML inside the page, each with a button that
-  deploys and starts exactly that XML. They are the most-copied models Atlas has and the
+  deploys and starts exactly that XML. They are the most-copied models atlas has and the
   only ones no test ever parsed: `go test ./examples` walks `.bpmn` files on disk, and a
   recipe is not a file. `variable.dotted-target` above therefore turned the ioMapping
   recipe into a model the deploy gate refuses, and the page went on teaching
@@ -11445,7 +12189,7 @@ rules run at deploy.
   Validation is a gate on *deploying* a model, not a condition for running one — the
   compiled process is identical either way — so the reload no longer applies it. A
   definition that passed the gate of the day it was deployed comes back and keeps
-  running, its instances advance unchanged, and Atlas warns once per record
+  running, its instances advance unchanged, and atlas warns once per record
   (`event=deployment.reloaded_with_problems`) naming the deployment and the rules it
   would fail today, so the drift is visible rather than silent. Deploying that model
   still fails, with the rule named, where the author can act on it. A record that yields
@@ -11477,11 +12221,11 @@ rules run at deploy.
 - **A BPMN file with no layout renders when you import it, not only when you deploy it**
   ([ADR-0124](docs/adr/0124-server-side-auto-layout.md)): BPMN-DI is optional in the
   standard, so a model from a generator, an export from another tool, or a hand-written
-  file routinely carries none. Deployed, Atlas already lays such a model out as the
+  file routinely carries none. Deployed, atlas already lays such a model out as the
   editor fetches it — imported as a draft it did not, so the *same file* opened onto an
   empty canvas depending on which way it came in. A draft that arrives without diagram
   interchange is now laid out on the way in, and the import says so, because the
-  arrangement the author is about to edit is Atlas's rather than the one their file
+  arrangement the author is about to edit is atlas's rather than the one their file
   described. Reading a draft lays out too, for the ones stored before this. A model that
   brings its own layout is stored byte for byte — generating over an author's
   arrangement would throw it away.
@@ -11558,7 +12302,7 @@ rules run at deploy.
 This release moves the work that can be slow out of the engine. `atlas worker` makes
 the same binary a worker process, `atlas serve --supervise` runs one for you, and the
 **Workers view** says what is queued, what is in flight and who is doing it. The rule
-behind it ([ADR-0164](docs/adr/0164-no-in-process-service-tasks.md)) is that Atlas's
+behind it ([ADR-0164](docs/adr/0164-no-in-process-service-tasks.md)) is that atlas's
 own process runs the engine and not somebody else's integrations: with no flags at
 all, `atlas serve` now offloads the csv, mail, script and webscrape connectors to a
 worker it starts and supervises itself, and every remaining in-process kind is
@@ -11628,7 +12372,7 @@ version, with a dry run that shows what the move would do before anything is wri
   restart button on something nobody can see the state of is a worse product than a view with
   no buttons at all. `GET /api/v1/workers` answers in two halves and Operations draws both.
   Every **job type** carries its queue depth, how much of it is leased right now, its
-  incidents, and whether Atlas serves it in-process (in which case no external worker can
+  incidents, and whether atlas serves it in-process (in which case no external worker can
   lease it). Every **worker** seen this run carries the types it pulls, what it holds in
   flight, and its pulled/completed/failed counts. The state worth catching is the join of the
   two — a type with a growing queue, nothing in flight and no worker against it. Opening a
@@ -11653,7 +12397,7 @@ version, with a dry run that shows what the move would do before anything is wri
   names it is configured for when it announces itself, so the Workers view still says which
   names are served, by whom, and which are configured nowhere. A **supervised** worker is the
   exception that keeps the single-node install simple: it is this process's own child, on
-  this host, under this user, so Atlas writes the connector's configuration into the child's
+  this host, under this user, so atlas writes the connector's configuration into the child's
   environment at spawn — the same variables an external worker's operator would set by hand,
   never a private channel — which is what lets a kind whose credentials live in the server's
   connector store be offloaded by default at all.
@@ -11879,7 +12623,7 @@ version, with a dry run that shows what the move would do before anything is wri
   works today.
 
 - **Distributed traces, opt-in** (v0.2.0 programme E,
-  [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 9): point Atlas at an OTLP/HTTP
+  [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 9): point atlas at an OTLP/HTTP
   collector — `--trace-endpoint http://collector:4318`, or the standard
   `OTEL_EXPORTER_OTLP_ENDPOINT` — and every `/api/v1` request is exported as an
   OpenTelemetry server span. Off unless configured. Metrics say *that* a request was
@@ -11903,7 +12647,7 @@ version, with a dry run that shows what the move would do before anything is wri
   The exporter is written here rather than taken off the shelf, and that is the
   dependency decision: the official OTLP exporter pulls in protobuf and — even in its
   HTTP form — gRPC, 66 gRPC packages and about 13MB of binary, for a service that speaks
-  no gRPC anywhere else. OTLP over HTTP has a documented JSON encoding, so Atlas takes
+  no gRPC anywhere else. OTLP over HTTP has a documented JSON encoding, so atlas takes
   the OpenTelemetry API and SDK for the parts that are spec-bound and subtle (span model,
   sampling, batching, W3C propagation) and writes the serializer. Measured: **+1.7MB and
   five modules, no protobuf, no gRPC.**
@@ -12042,7 +12786,7 @@ version, with a dry run that shows what the move would do before anything is wri
   instead, where one is created. Connector configuration is operator-managed runtime
   state, so the change takes effect at once, with no redeploy; what the *model* says
   stays immutable by design, and moving a running instance to a new version is instance
-  migration, which Atlas does not have yet.
+  migration, which atlas does not have yet.
 
 - **A stored connector has a real edit form** (ADR-0160): editing one used to be two
   `window.prompt` boxes offering `endpoint` and `credentialsRef` to every kind,
@@ -12176,7 +12920,7 @@ version, with a dry run that shows what the move would do before anything is wri
   than running them on the engine's goroutine. `--offload-connectors kind,…` adds more kinds,
   and **`--in-process-connectors` returns to the previous arrangement wholesale**. The
   boundary of the default set is a design, not a shortlist: a kind is defaulted only when
-  Atlas can hand its configuration to the child at spawn, so no task is ever routed to a
+  atlas can hand its configuration to the child at spawn, so no task is ever routed to a
   worker that lacks what the call needs — a test walks the default set against the managed
   kinds so nobody can quietly add one that isn't. Every other kind keeps its in-process
   handler and is **deprecated**: supported, documented as transitional, and not the shape a
@@ -12304,7 +13048,7 @@ version, with a dry run that shows what the move would do before anything is wri
 
 - **The SMTP client speaks over one transport that a check can share** (ADR-0150,
   ADR-0149): the send no longer goes through `net/smtp.SendMail` but through a session
-  Atlas opens itself — the shared connector call budget as its ceiling, TLS from the
+  atlas opens itself — the shared connector call budget as its ceiling, TLS from the
   first byte on the submissions port (465), STARTTLS wherever a server offers it,
   authentication after the upgrade, then the envelope. Each step names itself, so a
   rejection points at the address it was about ("recipient x@y refused") instead of at
@@ -12335,7 +13079,7 @@ another server, with versions that can be deprecated to drain. The engine gained
 **recovery checkpoints and WAL compaction**, so a restart no longer replays from
 genesis and the log's disk is bounded. **Retention** became a property of the
 process (`atlas:historyTtl`) and runs off a due-date index rather than a scan.
-And Atlas became **observable**: Prometheus metrics, named log lines you can
+And atlas became **observable**: Prometheus metrics, named log lines you can
 alert on, and a readiness probe that means something.
 
 For the people who read processes rather than run them, documentation now lives
@@ -12422,7 +13166,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   instances costs no request) and refreshable; a process that has never run simply says so.
 
 - **Logs with names you can alert on** (v0.2.0 programme E,
-  [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 8): every operational line Atlas
+  [ADR-0142](docs/adr/0142-prometheus-metrics.md), slice 8): every operational line atlas
   writes now carries a stable `event=` name beside the sentence, and the values that used
   to be interpolated into English arrive as typed fields. `event=checkpoint.published
   position=48213` is something an alert can match and a chart can read;
@@ -12431,7 +13175,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
 
   The sentence is kept, not replaced — "will retry next tick" is guidance a bare event
   name loses — and **text remains the default format**, because an operator watching
-  `atlas serve` in a terminal is the audience Atlas has always had. New `--log-format=json`
+  `atlas serve` in a terminal is the audience atlas has always had. New `--log-format=json`
   emits the same records as one JSON object per line for a log shipper. A typo in the
   value fails the boot rather than silently picking a format nobody asked for.
 
@@ -12529,7 +13273,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   which is a change to state and so its own change.
 
 - **Export a process as a document** ([ADR-0143](docs/adr/0143-process-documentation-export.md)):
-  a BPMN model used to be readable only inside Atlas, which left out exactly the people who most
+  a BPMN model used to be readable only inside atlas, which left out exactly the people who most
   need to read a process — auditors, a compliance officer, a new employee, the business owner
   signing it off — none of whom have a Modeler open, and often no account at all. The Modeler's
   toolbar now has a **Documentation** panel that collects the process's prose (the element
@@ -12633,7 +13377,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   and be silently wrong. A **portable application key** in the manifest survives a clone.
 
 - **Remote deployment targets** ([ADR-0129](docs/adr/0129-remote-deployment-targets.md)): an
-  application can be **published to another Atlas server** — promoting what is deployed from one
+  application can be **published to another atlas server** — promoting what is deployed from one
   environment to the next, rather than re-uploading artifacts by hand.
 
 - **Deprecating a process version** ([ADR-0130](docs/adr/0130-deprecating-a-process-version.md)):
@@ -12650,7 +13394,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
 
 - **A protected system project and bootstrap-deployed platform processes**
   ([ADR-0122](docs/adr/0122-protected-system-project-and-bootstrap-deployment.md)): Atlas models its
-  own operations — user intake, access review, offboarding — as Atlas processes, bootstrap-deployed
+  own operations — user intake, access review, offboarding — as atlas processes, bootstrap-deployed
   into a protected project that ordinary project management cannot delete or corrupt.
 
 - **A sanctioned user-provisioning path for system processes**
@@ -12780,7 +13524,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   and writes the very `loopCharacteristics` element bpmn-js draws the marker from, so
   the property and the icon on the shape can no longer disagree — a marker set from the
   context pad reads back as its mode, and choosing a mode redraws the shape. An element
-  carrying a loop marker Atlas does not execute now says so in the panel instead of
+  carrying a loop marker atlas does not execute now says so in the panel instead of
   leaving the icon to imply behaviour. The Design-view token simulation counts a
   standard loop like a sequential multi-instance, badged ↻ and bounded by the modelled
   `loopMaximum`, and the Operations call-activity list labels a looping call activity
@@ -12818,7 +13562,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   everything observable was a JSON read of the present moment or a line in the log, so
   "was the engine slow at 03:00 last night?" had no answer. The server now serves a
   Prometheus exposition beside `/healthz`, on its **own registry** rather than the
-  process-wide default, so what an operator scrapes is what Atlas registered and not
+  process-wide default, so what an operator scrapes is what atlas registered and not
   whatever else in the binary happened to publish.
 
   This first slice exports the **durability** metrics: the applied log position, the
@@ -13050,7 +13794,7 @@ Operations replay, and **exportable as a PDF** for anyone without an account.
   untouched; the `-bench=.` CI smoke step covers them.
 
 - **Published benchmark baseline** (v0.2.0 programme B): the first committed,
-  reproducible Atlas performance baseline lives in [`benchmarks/results/`](benchmarks/results/)
+  reproducible atlas performance baseline lives in [`benchmarks/results/`](benchmarks/results/)
   — a machine-labelled raw `go test -bench` capture (`baseline-<commit>.txt`, with an
   environment-metadata header) plus a `benchstat`-reduced Markdown summary
   (`baseline-<commit>.md`, median ± 95% CI over 10 repetitions across all four
@@ -13263,7 +14007,9 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/pblumer/atlas/compare/v0.9.0...v0.9.1
+[0.9.0]: https://github.com/pblumer/atlas/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/pblumer/atlas/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/pblumer/atlas/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/pblumer/atlas/compare/v0.5.0...v0.6.0

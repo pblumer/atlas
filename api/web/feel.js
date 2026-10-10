@@ -13,6 +13,7 @@
 // tested — on their own.
 
 import { attachCodeEditor } from "./code-editor.js";
+import { t } from "./i18n.js";
 
 // ---------- Language ----------
 
@@ -336,6 +337,51 @@ export const feel = {
 
 // ---------- Widget ----------
 
+// assistantOffered says whether FEEL fields carry the FEEL assistant's mini button
+// (feel-assistant.js, ADR-0445). It is the console's to switch on when it
+// installs the assistant: a page that never installed it — a test harness, a screen
+// outside the console — would otherwise show a button that opens nothing.
+let assistantOffered = false;
+
+// offerFeelAssistant turns the mini button on (or off) for every FEEL field attached
+// from now on.
+export function offerFeelAssistant(on = true) {
+  assistantOffered = !!on;
+}
+
+// FEEL_ASSISTANT_EVENT is what the mini button dispatches from its field. The
+// assistant listens for it on the document, which keeps this module free of the
+// assistant and the assistant free of every place a FEEL field is built.
+export const FEEL_ASSISTANT_EVENT = "feel-assistant-open";
+
+// The mini button's glyph: a four-point spark, the console's mark for "written by the AI
+// Worker" (form generation uses the same idea). Not "fx" — that is the Modeler's toggle
+// between a literal value and an expression, and two different "fx" on one field would
+// be one too many.
+export const SPARK_SVG = '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">' +
+  '<path fill="currentColor" d="M8 1.5l1.3 4.2L13.5 7 9.3 8.3 8 12.5 6.7 8.3 2.5 7l4.2-1.3z"/>' +
+  '<path fill="currentColor" d="M13 10.5l.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5-1.5-.5 1.5-.5z"/></svg>';
+
+// addAssistantButton puts the mini button into an upgraded field's chrome.
+function addAssistantButton(textarea) {
+  const wrap = textarea.closest(".code-editor");
+  if (!wrap || wrap.querySelector(".feel-ai-open")) return;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "feel-ai-open";
+  btn.title = t("feel.open");
+  btn.setAttribute("aria-label", t("feel.open"));
+  btn.innerHTML = SPARK_SVG;
+  // mousedown, not click: the field keeps the caret, and the assistant reads the field
+  // the author was in.
+  btn.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    textarea.dispatchEvent(new CustomEvent(FEEL_ASSISTANT_EVENT, { bubbles: true }));
+  });
+  wrap.classList.add("has-feel-ai");
+  wrap.appendChild(btn);
+}
+
 // attachFeelEditor upgrades an existing <textarea> into a FEEL editor in place by
 // delegating to the shared code editor with the FEEL language module. It returns
 // the code-editor handle (destroy / setVariables / setMarkers / focusLine).
@@ -343,9 +389,11 @@ export const feel = {
 //   opts.validate(expr) -> Promise<{ok, error}> compiles against the real engine.
 //   opts.lockPrefix(value) -> length of a dimmed, read-only leading run (the fx
 //     toggle's '=' marker); stripped before validate. Omit for a plain expression.
+//   opts.assistant false leaves out the FEEL assistant's mini button — the
+//     assistant's own editor has no use for a button that opens the assistant.
 // FEEL expressions are short, so the field wraps and shows no line-number gutter.
 export function attachFeelEditor(textarea, opts = {}) {
-  return attachCodeEditor(textarea, {
+  const handle = attachCodeEditor(textarea, {
     lang: feel,
     variables: opts.variables,
     validate: opts.validate,
@@ -353,4 +401,6 @@ export function attachFeelEditor(textarea, opts = {}) {
     wrap: true,
     gutter: false,
   });
+  if (assistantOffered && opts.assistant !== false) addAssistantButton(textarea);
+  return handle;
 }

@@ -70,17 +70,7 @@ func (s *Server) readOffLoop(fn func(v *state.ReadView, defs defIndex) error) er
 	)
 	s.do(func() {
 		view = s.store.ReadView()
-		defs = make(defIndex, len(s.deployments))
-		for key, d := range s.deployments {
-			defs[key] = defMeta{
-				ProcessID:  d.ProcessID,
-				Name:       d.Name,
-				Version:    d.Version,
-				DeployedAt: d.DeployedAt,
-				Inactive:   d.inactive,
-				cp:         d.cp,
-			}
-		}
+		defs = s.defIndexOnLoop()
 	})
 	if view == nil {
 		// Do returned without running fn: the loop is closing. No view was taken,
@@ -89,4 +79,22 @@ func (s *Server) readOffLoop(fn func(v *state.ReadView, defs defIndex) error) er
 	}
 	defer view.Close()
 	return fn(view, defs)
+}
+
+// defIndexOnLoop copies the deployment metadata out of the loop-owned map.
+//
+// Must be called on the run-loop goroutine.
+func (s *Server) defIndexOnLoop() defIndex {
+	defs := make(defIndex, len(s.deployments))
+	for key, d := range s.deployments {
+		defs[key] = defMeta{
+			ProcessID:  d.ProcessID,
+			Name:       d.Name,
+			Version:    d.Version,
+			DeployedAt: d.DeployedAt,
+			Inactive:   d.inactive,
+			cp:         d.cp,
+		}
+	}
+	return defs
 }

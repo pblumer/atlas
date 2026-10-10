@@ -249,8 +249,18 @@ var productFieldControls = map[string]string{
 	"configForm":         `name="configForm"`,
 	"price":              `name="price"`,
 	"lifecycleProcess":   `procSelect("lifecycleProcess", v.lifecycleProcess)`,
-	"operations":         `name="opProvision"`,
-	"lifecycleForm":      `name="lifecycleForm"`,
+	// The legacy operation map and the actions are one grid: a product that still
+	// carries the map opens as the actions it means and is saved as actions
+	// (ADR-0429), so both fields are proved by the grid being given the product.
+	"operations":    `actionRows(v, langs)`,
+	"actions":       `actionRows(v, langs)`,
+	"lifecycleForm": `name="lifecycleForm"`,
+	// Which process applications may command the product (ADR-0429 §10): boxes
+	// over the applications, keyed by their portable key, degrading to typed keys.
+	// The helper builds the controls, so what proves the field is maintainable is
+	// the helper being given it. Named here ahead of the record field, which lands
+	// on its own; this entry is what keeps the guard green when it does.
+	"commandedBy": `commandedByField(apps, v.commandedBy)`,
 	// The two headings are one row of per-language boxes each, and that row
 	// maintains the key and the wordings together — the first box that has
 	// anything in it is the key. So both the key and its wordings are proved by

@@ -66,6 +66,16 @@ type Service struct {
 	// skips that check, for the reason Processes may be nil.
 	EntryPoints EntryPointLookup
 
+	// Forms answers which fields a configuration form has, so publishing can refuse
+	// one that names a field after a variable the order sets itself
+	// (ADR-0441). Nil skips that check.
+	Forms FormFieldLookup
+
+	// Personal answers which variables a deployed process declares personal data,
+	// so publishing can warn about an answer that would reach it in the clear
+	// (AnswerWarnings). Nil skips the warning.
+	Personal PersonalLookup
+
 	// Remainders counts the order lines a converted product left on its old
 	// processes, for the fulfilment report (ADR-0427). Nil leaves the report's
 	// remainder empty.
@@ -675,7 +685,7 @@ func (s *Service) HandlePublish(w http.ResponseWriter, r *http.Request) {
 	// saved is the one computed above: a catalogue edited in between is published by
 	// its next publish, not folded into this one.
 	if opErr == nil && found && allowed && len(problems) == 0 {
-		problems = LifecycleProblems(rel.Items, s.EntryPoints)
+		problems = append(LifecycleProblems(rel.Items, s.EntryPoints), OrderFormProblems(rel.Items, s.Forms)...)
 	}
 	if opErr == nil && found && allowed && len(problems) == 0 {
 		rel.ID, rel.CatalogID, rel.CreatedAt = relID, id, s.now()
@@ -692,8 +702,16 @@ func (s *Service) HandlePublish(w http.ResponseWriter, r *http.Request) {
 	case len(problems) > 0:
 		httpapi.JSON(w, http.StatusUnprocessableEntity, map[string]any{"problems": problems})
 	default:
-		httpapi.JSON(w, http.StatusCreated, rel)
+		// Published, and said what the release leaves exposed: a warning is not a
+		// refusal, so it rides on the answer rather than standing in its way.
+		httpapi.JSON(w, http.StatusCreated, publishedRelease{Release: rel, Warnings: AnswerWarnings(rel.Items, s.Forms, s.Personal)})
 	}
+}
+
+// publishedRelease is a publish's answer: the release, and what it warns about.
+type publishedRelease struct {
+	Release
+	Warnings []Problem `json:"warnings,omitempty"`
 }
 
 // HandleListReleases lists a catalogue's releases, newest first.

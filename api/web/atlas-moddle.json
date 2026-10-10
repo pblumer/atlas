@@ -285,7 +285,15 @@
         { "name": "subject", "type": "String", "isAttr": true },
         { "name": "body", "type": "String", "isAttr": true },
         { "name": "bodyHtml", "type": "String", "isAttr": true },
-        { "name": "retries", "type": "String", "isAttr": true }
+        { "name": "retries", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "folder", "type": "String", "isAttr": true },
+        { "name": "messageId", "type": "String", "isAttr": true },
+        { "name": "destination", "type": "String", "isAttr": true },
+        { "name": "maxResults", "type": "String", "isAttr": true },
+        { "name": "includeBody", "type": "String", "isAttr": true },
+        { "name": "unreadOnly", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true }
       ]
     },
     {
@@ -422,6 +430,38 @@
       ]
     },
     {
+      "name": "S3Connector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "bucket", "type": "String", "isAttr": true },
+        { "name": "key", "type": "String", "isAttr": true },
+        { "name": "content", "type": "String", "isAttr": true },
+        { "name": "contentType", "type": "String", "isAttr": true },
+        { "name": "encoding", "type": "String", "isAttr": true },
+        { "name": "prefix", "type": "String", "isAttr": true },
+        { "name": "delimiter", "type": "String", "isAttr": true },
+        { "name": "startAfter", "type": "String", "isAttr": true },
+        { "name": "maxKeys", "type": "String", "isAttr": true },
+        { "name": "sourceBucket", "type": "String", "isAttr": true },
+        { "name": "sourceKey", "type": "String", "isAttr": true },
+        { "name": "expiresIn", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true },
+        { "name": "meta", "type": "S3Meta", "isMany": true }
+      ]
+    },
+    {
+      "name": "S3Meta",
+      "superClass": ["Element"],
+      "properties": [
+        { "name": "name", "type": "String", "isAttr": true },
+        { "name": "value", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "WebscrapeConnector",
       "superClass": ["Element"],
       "meta": { "allowedIn": ["bpmn:ServiceTask"] },
@@ -458,6 +498,21 @@
         { "name": "displayName", "type": "String", "isAttr": true },
         { "name": "roles", "type": "String", "isAttr": true },
         { "name": "password", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
+      ]
+    },
+    {
+      "name": "ShopTask",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:SendTask"] },
+      "properties": [
+        { "name": "mode", "type": "String", "isAttr": true },
+        { "name": "action", "type": "String", "isAttr": true },
+        { "name": "outcome", "type": "String", "isAttr": true },
+        { "name": "product", "type": "String", "isAttr": true },
+        { "name": "order", "type": "String", "isAttr": true },
+        { "name": "position", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true }
       ]
     },

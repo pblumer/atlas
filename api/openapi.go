@@ -35,7 +35,12 @@ type apiRoute struct {
 // permissive object otherwise (ADR-0043).
 type apiOp struct {
 	summary string
-	tag     string
+	// tag groups the route in the API explorer, and two of its values carry more
+	// than that: "Catalogue" and "Order" are the area --catalogue=false switches off
+	// (catalogueRouteTags). A route of the shop, the catalogue, the orders or the
+	// inventory takes one of the two, or it stays served on a server that said it
+	// offers none of them — TestTheCatalogueSwitchCoversTheWholeArea holds that.
+	tag string
 
 	// role is what a signed-in identity must hold to reach this route, one of
 	// routeRoles (ADR-0209). It sits here, beside the
@@ -115,12 +120,27 @@ func eventStreamBody(desc string) *bodySpec {
 // iterates it to register handlers; openapiDoc iterates it to describe them.
 // Adding an endpoint means adding one entry here — nothing is registered off to
 // the side, so the spec cannot fall out of sync (ADR-0043).
+//
+// What it returns is what this server *offers*: the table less any area the
+// operator switched off (offeredRoutes). Filtering here rather than at the mount
+// keeps the mux, the OpenAPI document and the node descriptor reading one answer.
 func (s *Server) apiRoutes() []apiRoute {
-	return []apiRoute{
+	return s.offeredRoutes([]apiRoute{
 		{"GET", "/api/v1/info", s.handleInfo, apiOp{
-			summary: "Product and version metadata", tag: "System", role: roleAny,
+			summary: "Product and version metadata, and which optional parts this server serves: the API explorer (docs) and the shop, catalogue, orders and inventory (catalogue, off with --catalogue=false)", tag: "System", role: roleAny,
 			resp: jsonBody("Product metadata", schemaObj(map[string]any{
 				"product": tString(), "version": tString(),
+				"docs": tBool(), "catalogue": tBool(),
+			}))}},
+		// What switching the catalogue off strands, for the Console's dashboard
+		// (ADR-0434). System, not Catalogue: it is the route that has something to say
+		// precisely when the catalogue is off, so the switch must leave it served.
+		{"GET", "/api/v1/catalogue-switch", s.handleCatalogueSwitch, apiOp{
+			summary: "Whether the shop, catalogue, orders and inventory are served, and — when they are switched off (--catalogue=false) — how many instances of processes that call the order routes are still running, by process id: the shop's fulfilment and approval processes and the provision and deprovision processes products bind. Each fails at its next call to the order routes. Read live from the per-definition counters (ADR-0434, ADR-0080). Admin-only",
+			tag:     "System", role: RoleAdmin,
+			resp: jsonBody("The switch and what it strands", schemaObj(map[string]any{
+				"catalogue": tBool(), "shopProcessInstances": tInteger(),
+				"productProcessInstances": tInteger(), "processes": tArray(),
 			}))}},
 		// The node descriptor (ADR-0189 §6): which *runtime* is answering, as opposed
 		// to /api/v1/info's account of which binary. It is what makes cross-server
@@ -141,6 +161,21 @@ func (s *Server) apiRoutes() []apiRoute {
 			req: jsonBody("Node identity", schemaObj(map[string]any{
 				"name": tString(), "environment": tString(), "labels": tObject(),
 			})), resp: jsonBody("Node descriptor", tObject())}},
+		// The release notes the Console's landing page shows: CHANGELOG.md as this
+		// binary was built from it (ADR-0444). Behind
+		// the login like the page that reads them; /api/v1/info already tells a visitor
+		// which version this is, and the notes are the Console's, not the login screen's.
+		{"GET", "/api/v1/release-notes", s.releaseNotes.HandleList, apiOp{
+			summary: "The releases in this server's release notes, newest first, with the number of changes each carries",
+			tag:     "System", role: roleAny,
+			resp: jsonBody("Releases", schemaObj(map[string]any{"releases": tArray()}, "releases"))}},
+		{"GET", "/api/v1/release-notes/{version}", s.releaseNotes.HandleGet, apiOp{
+			summary: "One release's notes — its introduction and its changes — by version, Unreleased included",
+			tag:     "System", role: roleAny,
+			resp: jsonBody("Release", schemaObj(map[string]any{
+				"version": tString(), "date": tString(),
+				"intro": tArray(), "changes": tArray(), "link": tObject(),
+			}, "version", "intro", "changes"))}},
 		{"GET", "/api/v1/stats", s.handleStats, apiOp{
 			summary: "Live active-instance counts, plus how many tokens are parked behind an unresolved incident", tag: "System", role: roleAny,
 			resp: jsonBody("Instance counts", schemaObj(map[string]any{
@@ -201,6 +236,26 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "expression")),
 			resp: jsonBody("Evaluation result", schemaObj(map[string]any{
 				"ok": tBool(), "result": tObject(), "kind": tString(), "error": tString(),
+			}))}},
+		// The FEEL assistant (ADR-0445): a conversation that writes an
+		// expression, asked of the agent Worker an operator configured (ADR-0255), and
+		// checked by this engine before the author sees it. Nothing is stored — the
+		// expression goes to the assistant's editor, and from there to whatever field
+		// the author copies or applies it to.
+		{"GET", "/api/v1/feel/generate/workers", s.feelGen.HandleCapability, apiOp{
+			summary: "Report whether an AI Worker is configured to write FEEL expressions, and which ones may be named — what the FEEL assistant asks before it offers its chat",
+			tag:     "FEEL", role: RoleModeler, resp: jsonBody("Assistant capability", tObject())}},
+		{"POST", "/api/v1/feel/generate", s.feelGen.HandleGenerate, apiOp{
+			summary: "Answer the author's last message in a conversation with a FEEL expression, an explanation and an example, after compiling and evaluating it with this engine and letting the model correct what failed. Nothing is stored",
+			tag:     "FEEL", role: RoleModeler,
+			req: jsonBody("The conversation and the assistant's editor", schemaObj(map[string]any{
+				"messages": tArray(), "expression": tString(), "variables": tObject(), "target": tString(),
+				"worker": tString(), "model": tString(),
+			}, "messages")),
+			resp: jsonBody("A checked proposal", schemaObj(map[string]any{
+				"expression": tString(), "explanation": tString(), "variables": tObject(),
+				"check": tObject(), "reply": tString(), "attempts": tInteger(), "warning": tString(),
+				"worker": tString(), "model": tString(),
 			}))}},
 		{"POST", "/api/v1/scripts/run", s.handleRunScript, apiOp{
 			summary: "Run a script task against sample variables (admin-only when auth is on)", tag: "Scripts", role: RoleAdmin,
@@ -411,7 +466,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Termination result", tObject())}},
 
 		{"POST", "/api/v1/messages", s.handlePublishMessage, apiOp{
-			summary: "Publish a message for correlation", tag: "Messages", role: RoleOperator,
+			summary: "Publish a message for correlation. A message a catalogue product's action starts or waits at is refused with 409 naming the product and the action: the order sends it, through its start act, a return or the action (ADR-0429)", tag: "Messages", role: RoleOperator,
 			req: jsonBody("Message", schemaObj(map[string]any{
 				"name": tString(), "correlationKey": tString(), "variables": tObject(),
 			}, "name")),
@@ -952,6 +1007,12 @@ func (s *Server) apiRoutes() []apiRoute {
 				"items": tArray(), "groups": tArray(),
 			})),
 			resp: jsonBody("The created catalogue", tObject())}},
+		{"POST", "/api/v1/catalogs/import", s.catalogs.HandleImportDocument, apiOp{
+			summary: "Import a whole shop as one document (ADR-0436): catalogues, the products they maintain and offer, and the edges between them, with optional `publish`. All or nothing — every id, authority and, when publishing, every publish problem is checked before the first write, and a refused document writes nothing and answers every problem at once (400 for the document itself, 403 for a catalogue you do not maintain, 422 for what publishing would refuse, 409 if the store moved during the import). IDs are the document's own, so importing it again updates what the first import created. A theme, a logo and pictures are not part of a document", tag: "Catalogue", role: RoleProductManager,
+			req: jsonBody("Catalogue document: {catalogs, products, publish}", schemaObj(map[string]any{
+				"catalogs": tArray(), "products": tArray(), "publish": tBool(),
+			})),
+			resp: jsonBody("What was created and updated, as catalog:<id> and product:<id>, and the releases published", tObject())}},
 		{"GET", "/api/v1/catalogs/{id}", s.catalogs.HandleGetCatalog, apiOp{
 			summary: "One product catalogue", tag: "Catalogue", role: roleAny,
 			resp: jsonBody("The catalogue", tObject())}},
@@ -1018,7 +1079,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/catalog-products/{id}/picture", s.catalogs.HandleDeletePicture, apiOp{
 			summary: "Remove a product's picture, so the shop falls back to showing none. Same gate as setting one", tag: "Catalogue", role: RoleProductManager, status: http.StatusNoContent}},
 		{"POST", "/api/v1/catalog-products", s.catalogs.HandleSaveItem, apiOp{
-			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule, the processes that provision and deprovision it, the groups eligible to receive it, and the `keywords` somebody might search for that are not its name — synonyms, the vendor's term, the abbreviation everybody uses. Keywords are one flat list rather than one per language, because a synonym list is for finding and a searcher's language is not the catalogue's. `configForm` names an atlas form the orderer fills in for this product — a cost centre, a site — whose answers travel with the order line. `price` is what it costs, written as the catalogue wants it read and never computed: it is displayed, frozen into the release and copied onto the order line, so an approver's figure stays the figure they decided on. `category` is the heading the shop groups it under and `productGroup` the group one level below it — headings and nothing else, with no ordering and no entity behind them. Both are **keys**: the shop groups by them and renders `categoryTexts` and `productGroupTexts`, each a heading per language tag, where the catalogue has them. Leave the texts out and the key renders in every language. They are optional as a whole and all-or-nothing once present: publishing refuses a heading translated into one declared language and not another. The write is a full **replace**, so a field left out is a field cleared: read the product first, change what you mean to change, and send the whole record back. Optionally state the `revision` you read — the write is then refused with 409 unless the stored product is still on it, which is what makes a read-modify-write safe against a second maintainer. Omitting it replaces unconditionally", tag: "Catalogue", role: RoleProductManager,
+			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule, the processes that provision and deprovision it — or `lifecycleProcess` with its `actions` (ADR-0429), each {key, message, effect, triggers, labels, form, outcomes}, in place of the two and of the legacy `operations` map — the groups eligible to receive it, and the `keywords` somebody might search for that are not its name — synonyms, the vendor's term, the abbreviation everybody uses. `commandedBy` lists the keys of the applications whose processes may issue the product's operator and system actions with a shop command task (ADR-0429 §10); it is read from the newest release when a task commands, so taking an application off it stops it for every right already held. Keywords are one flat list rather than one per language, because a synonym list is for finding and a searcher's language is not the catalogue's. `configForm` names an atlas form the orderer fills in for this product — a cost centre, a site — whose answers travel with the order line. `price` is what it costs, written as the catalogue wants it read and never computed: it is displayed, frozen into the release and copied onto the order line, so an approver's figure stays the figure they decided on. `category` is the heading the shop groups it under and `productGroup` the group one level below it — headings and nothing else, with no ordering and no entity behind them. Both are **keys**: the shop groups by them and renders `categoryTexts` and `productGroupTexts`, each a heading per language tag, where the catalogue has them. Leave the texts out and the key renders in every language. They are optional as a whole and all-or-nothing once present: publishing refuses a heading translated into one declared language and not another. The write is a full **replace**, so a field left out is a field cleared: read the product first, change what you mean to change, and send the whole record back. Optionally state the `revision` you read — the write is then refused with 409 unless the stored product is still on it, which is what makes a read-modify-write safe against a second maintainer. Omitting it replaces unconditionally", tag: "Catalogue", role: RoleProductManager,
 			req: jsonBody("Product", schemaObj(map[string]any{
 				"id": tString(), "homeCatalog": tString(), "state": tString(),
 				"texts": tObject(), "lifecycle": tObject(), "variants": tArray(),
@@ -1029,6 +1090,8 @@ func (s *Server) apiRoutes() []apiRoute {
 				"categoryTexts": tObject(), "productGroup": tString(),
 				"productGroupTexts": tObject(), "descriptions": tObject(),
 				"maxDays": tInteger(), "revision": tInteger(),
+				"lifecycleProcess": tString(), "lifecycleForm": tString(),
+				"operations": tObject(), "actions": tArray(), "commandedBy": tArray(),
 			}, "id")),
 			resp: jsonBody("The saved product", tObject())}},
 
@@ -1076,6 +1139,24 @@ func (s *Server) apiRoutes() []apiRoute {
 				"changeId": tString(), "reason": tString(), "variables": tObject(),
 			}, "changeId")),
 			resp: jsonBody("The instance that took the change", tObject())}},
+		{"POST", "/api/v1/orders/{id}/lines/{item}/actions/{action}", s.handleLineAction, apiOp{
+			summary: "Ask one held position for one of the actions its product declares (ADR-0429): a change or a service. Delivered to the instance that carries the right for a per-position product, started at the action's start event for a per-operation one. commandId is required and makes a retry answer with the first outcome. Whoever placed the order, the recipient who holds it, or an operator may ask for a customer action; an operator for any other. trigger, when given, names which of the action's triggers the caller asks as — the action must declare it, and operator and system are an operator's (the MCP tool always sends one of those two). 403 when the caller is not one of the action's triggers; 409 when the line does not declare the action, is not held, or its instance does not wait for it now; the provision and the return are refused with the route that does them", tag: "Order", role: RoleUser,
+			req: jsonBody("The action: an idempotency id, why, what the process needs, and optionally which trigger the caller asks as", schemaObj(map[string]any{
+				"commandId": tString(), "reason": tString(), "variables": tObject(), "trigger": tString(),
+			}, "commandId")),
+			resp: jsonBody("The action and the instance that took it", tObject())}},
+		{"GET", "/api/v1/orders/{id}/lines/{item}/actions", s.handleLineActions, apiOp{
+			summary: "The actions the caller may ask of one position, each with whether the position takes it now — for a per-position product, whether its instance waits for the action's message at this moment, so the model decides when an action is possible (ADR-0429 §2). Read off the run loop", tag: "Order", role: RoleUser,
+			resp: jsonBody("The position and its actions", tObject())}},
+		{"POST", "/api/v1/orders/{id}/lines/{item}/actions/{commandId}/outcome", s.handleReportOutcome, apiOp{
+			summary: "Record how one action asked of a position ended (ADR-0429 §3): completed, rejected or failed, with an optional result — a JSON object of scalars, at most 4 KiB. The ending becomes an engine fact published under the event type the action declares (default <message>.<outcome>). For a process that reports over REST; idempotent per command: the same outcome again answers with the first (replayed), a different one is 409. The provision and the return are reported through the line's own report route, which records the right they change", tag: "Order", role: RoleOperator,
+			req: jsonBody("The ending and what it carries", schemaObj(map[string]any{
+				"outcome": tString(), "result": tObject(),
+			}, "outcome")),
+			resp: jsonBody("The outcome as recorded", tObject())}},
+		{"GET", "/api/v1/orders/{id}/lines/{item}/outcomes", s.handleLineOutcomes, apiOp{
+			summary: "How the commands of one position ended — the provision, the return and every action asked of it — each with its command id, action, outcome, event type, source and moment (ADR-0429 §3). Whoever may act on the order may read it. Read off the run loop", tag: "Order", role: RoleUser,
+			resp: jsonBody("The position and its outcomes", tObject())}},
 		{"POST", "/api/v1/orders/{id}/lines/{item}/escalate", s.handleEscalateApproval, apiOp{
 			summary: "Move one line's approval to the superior the caller names, or stall it when there is none — one hop per call, because each call is one deadline that elapsed. Never decides: silence is not a refusal", tag: "Order", role: RoleOperator,
 			req: jsonBody("Whom the caller's directory says the current approver reports to; empty means nobody does", schemaObj(map[string]any{
@@ -1332,8 +1413,8 @@ func (s *Server) apiRoutes() []apiRoute {
 
 		{"POST", "/api/v1/api-tokens", s.handleCreateAPIToken, apiOp{
 			summary: "Mint an API token for a machine — a worker on another host, a stdio MCP adapter, a CI job. The secret is returned once and never again; the scope bounds what it may reach and the lifetime when it stops working (admin-only, ADR-0194)", tag: "API tokens", role: RoleAdmin,
-			req: jsonBody("Token name, scope (full|worker) and lifetime in days (0 = never expires)", schemaObj(map[string]any{
-				"name": tString(), "scope": tString(), "expiresInDays": tInteger(),
+			req: jsonBody("Token name, scope (full, worker, metrics, status, directory, inventory, landscape or events), as reach the projects a landscape token may see (required) or the catalogues whose products an events token reads (optional; none reads the whole feed), and lifetime in days (0 = never expires). A token carries its minter's non-admin roles, except an events token, which carries feedreader and nothing else", schemaObj(map[string]any{
+				"name": tString(), "scope": tString(), "reach": tArray(), "expiresInDays": tInteger(),
 			}, "name", "scope")),
 			resp: jsonBody("Minted token, including its one-time secret", tObject())}},
 		{"GET", "/api/v1/api-tokens", s.handleListAPITokens, apiOp{
@@ -1578,15 +1659,41 @@ func (s *Server) apiRoutes() []apiRoute {
 			req: jsonBody("Mock journal", tObject()), status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/connectors/{id}/inbound-subscriptions", s.handleListInboundSubscriptions, apiOp{
-			summary: "List a clio worker's inbound event subscriptions", tag: "Workers", role: RoleModeler, resp: jsonBody("Subscriptions", tArray())}},
+			summary: "List a worker's inbound event watches — clio, Jira, Google, Discord and mail Workers carry them", tag: "Workers", role: RoleModeler, resp: jsonBody("Subscriptions", tArray())}},
 		{"POST", "/api/v1/connectors/{id}/inbound-subscriptions", s.handleCreateInboundSubscription, apiOp{
-			summary: "Create an inbound event subscription for a clio worker", tag: "Workers", role: RoleModeler, req: jsonBody("Subscription", tObject()), resp: jsonBody("Created subscription", tObject())}},
+			summary: "Create an inbound event watch on a worker; what it names follows the worker's kind (a clio subject, a JQL, a sheet or Drive folder, a Discord channel, a mail folder with its allowedSenders, requireDmarcPass and includeBody)", tag: "Workers", role: RoleModeler, req: jsonBody("Subscription", tObject()), resp: jsonBody("Created subscription", tObject())}},
 		{"PATCH", "/api/v1/inbound-subscriptions/{id}", s.handleUpdateInboundSubscription, apiOp{
 			summary: "Update an inbound event subscription", tag: "Workers", role: RoleModeler, req: jsonBody("Subscription update", tObject()), resp: jsonBody("Updated subscription", tObject())}},
 		{"DELETE", "/api/v1/inbound-subscriptions/{id}", s.handleDeleteInboundSubscription, apiOp{
 			summary: "Delete an inbound event subscription", tag: "Workers", role: RoleModeler, status: http.StatusNoContent}},
+		{"GET", "/api/v1/events", s.handleListEvents, apiOp{
+			summary: "The event feed (ADR-0429 §5, ADR-0435): every action outcome, grant and revocation, and every incident raised and resolved, as CloudEvents 1.0 structured JSON in log order. `after` is the cursor of the last event the caller holds (a decimal position, the `next` of the previous page); leave it out to read from the oldest held. `limit` is 1–1000, default 100. Delivery is at least once: deduplicate by `id`. The feed keeps its rows for `--event-feed-ttl` (30 days); a cursor older than the oldest held is answered 410 with `oldest`, the cursor to resume from. Every catalogue event's data names the catalogue that maintains its product as `homeCatalog`; an `events` token minted with a reach of catalogues is answered only the events whose `homeCatalog` it names, never an incident, which belongs to no catalogue, its cursor moving past the rest, and a page reads at most 10000 rows, so a narrowed page can be short or empty with `more` set. On a server whose service catalogue is switched off the feed is still served, without the catalogue's events. It requires the `feedreader` role, which a token minted with the `events` scope carries and nothing else", tag: "Events", role: RoleFeedReader,
+			resp: jsonBody("A page of events: {events, next, more}", tObject())}},
+		{"GET", "/api/v1/feed-subscriptions", s.handleListFeedSubscriptions, apiOp{
+			summary: "List the event feed's push subscriptions (ADR-0433): each names the cloudevents Worker it is delivered to, the catalogues it is narrowed to, its cursor, whether it is enabled and why delivery switched it off, when its endpoint last accepted a batch, and — while the endpoint is failing — its hold: failures in a row, since when, the next attempt and the last error (admin-only)", tag: "Events", role: RoleAdmin,
+			resp: jsonBody("Feed subscriptions", tArray())}},
+		{"POST", "/api/v1/feed-subscriptions", s.handleCreateFeedSubscription, apiOp{
+			summary: "Push the event feed to a cloudevents Worker's endpoint: the server POSTs the feed's events after the subscription's cursor as CloudEvents batches (application/cloudevents-batch+json), with the Worker's credential as a bearer token, and moves the cursor when the endpoint answers 2xx — at least once, deduplicated by id. A failing endpoint is held on a backoff ladder, never skipped (admin-only)", tag: "Events", role: RoleAdmin,
+			req: jsonBody("The cloudevents Worker, the catalogues it is narrowed to as reach (none delivers the whole feed), the batch size (1–1000, default 100), whether it starts enabled, and from: oldest (the default) or now", schemaObj(map[string]any{
+				"workerId": tString(), "reach": tArray(), "batchSize": tInteger(), "enabled": tBool(), "from": tString(),
+			}, "workerId")),
+			resp: jsonBody("Created subscription", tObject()), status: http.StatusCreated}},
+		{"PATCH", "/api/v1/feed-subscriptions/{id}", s.handleUpdateFeedSubscription, apiOp{
+			summary: "Change a feed subscription: its reach, its batch size, whether it is enabled (enabling clears why delivery switched it off), or with from (oldest or now) where its cursor stands. Moving the cursor or enabling lifts a hold (admin-only)", tag: "Events", role: RoleAdmin,
+			req: jsonBody("Subscription update", schemaObj(map[string]any{
+				"reach": tArray(), "batchSize": tInteger(), "enabled": tBool(), "from": tString(),
+			})),
+			resp: jsonBody("Updated subscription", tObject())}},
+		{"DELETE", "/api/v1/feed-subscriptions/{id}", s.handleDeleteFeedSubscription, apiOp{
+			summary: "End a feed subscription (admin-only)", tag: "Events", role: RoleAdmin, status: http.StatusNoContent}},
+		{"GET", "/api/v1/event-catalog", s.handleEventCatalog, apiOp{
+			summary: "The catalogue of the events atlas emits (ADR-0435): for each, its name, kind (domain or platform), meaning in English and German, the moment it is emitted, its channels (signal, message, feed, log), its payload with every field marked as personal data or not, the test that holds it free of secrets, the version it arrived in, its stability and who may receive it. Readable by modelers, because choosing an event to listen to is modelling", tag: "Events", role: RoleModeler,
+			resp: jsonBody("Event catalogue", schemaObj(map[string]any{"entries": tArray()}))}},
+		{"GET", "/api/v1/event-catalog/listeners", s.handleEventListeners, apiOp{
+			summary: "Who listens to atlas's events in this installation (ADR-0435 §7): every deployed definition with a signal start, catch, boundary or event subprocess, or a message receiver, on an atlas.* name — with process, version, project, element and the personal-data fields it receives — and every feed subscription. A map of where personal data flows across every project, so administrator-only", tag: "Events", role: RoleAdmin,
+			resp: jsonBody("Event listeners", schemaObj(map[string]any{"processes": tArray(), "feed": tArray(), "feedTypes": tArray(), "catalogueWithheld": map[string]any{"type": "boolean"}}))}},
 		{"GET", "/api/v1/message-sources", s.handleListMessageSources, apiOp{
-			summary: "List every inbound event watch by the message name it publishes, so a model can be told whether its message start event has a source", tag: "Workers", role: RoleModeler, resp: jsonBody("Message sources", tArray())}},
+			summary: "List every message name with where it comes from (ADR-0429 §6), each row tagged by `sourceKind`: `inbound-watch` — a Worker's event, with the worker and, for a viewer of it, the watch; `product-action` — a product's action, with the product, the action's key, effect and triggers and the process the product binds it to, for the catalogues the caller maintains; `process` — where the newest deployed version of a process waits for it, at a message `start` or a `catch`. The Modeler groups its message picker by these and tells a model whether its message has a source", tag: "Workers", role: RoleModeler, resp: jsonBody("Message sources", tArray())}},
 
 		{"PUT", "/api/v1/connectors/{id}/members/{principalId}", s.handleSetConnectorMember, apiOp{
 			summary: "Share a worker with a user or a group, or change their role (ADR-0205); owner only", tag: "Workers", role: RoleModeler, req: jsonBody("Member role", tObject()), resp: jsonBody("Updated worker", tObject())}},
@@ -1873,7 +1980,7 @@ func (s *Server) apiRoutes() []apiRoute {
 
 		{"GET", "/api/v1/audit", s.handleListAudit, apiOp{
 			summary: "The access-control history across every application, newest first — the global admin audit view (ADR-0184). Admin-only. Optional filters: applicationId, action (share|unshare|visibility|transfer); limit caps the window (default 200, max 1000). Answers {items, total, totalExact, truncated}: total is how many events matched the filters, which this read counts in full, so a capped page still says how many there are", tag: "Audit", role: RoleAdmin, resp: jsonBody("Grant audit events", tPage())}},
-	}
+	})
 }
 
 // pathParamRe matches an http.ServeMux path wildcard, e.g. {key} in

@@ -39,4 +39,7 @@ type Grant struct {
 	// ApprovedBy is who approved the line, copied from it (Line.ApprovedBy), so the
 	// right keeps its approver after retention has deleted the order.
 	ApprovedBy string
+	// Outcome is the provision's ending, written in the same batch as the grant
+	// (ADR-0429 §3).
+	Outcome Outcome
 }

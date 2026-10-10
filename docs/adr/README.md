@@ -460,7 +460,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0372](0372-peer-message-delivery-worker.md) | Delivering a message to another node is a worker's job | Accepted | Not started |
 | [0373](0373-published-process-interface.md) | A process publishes an interface, not its model | Accepted | Not started |
 | [0374](0374-white-box-participant.md) | The white box is a cached contract, not a live look inside | Proposed | Not started |
-| [0375](0375-whats-new-in-go.md) | The feed generator is Go, so the Go checks stop needing Node | Accepted | Landed |
+| [0375](0375-whats-new-in-go.md) | The feed generator is Go, so the Go checks stop needing Node | Superseded by ADR-0444 | Superseded |
 | [0376](0376-catalogue-maintenance-over-mcp.md) | A product manager maintains the catalogue over MCP | Accepted | Landed |
 | [0377](0377-portal-without-identity.md) | With nobody to be, the portal shows a catalogue and refuses an order | Accepted | Landed |
 | [0378](0378-a-capped-listing-answers-with-a-page.md) | A capped listing answers with a page, not with an array | Accepted | Landed |
@@ -514,6 +514,26 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0426](0426-an-untriggered-create-never-seeds-several-start-events.md) | An untriggered create never seeds several start events | Accepted | Landed |
 | [0427](0427-converting-a-product-to-a-lifecycle-process.md) | Converting a product to a lifecycle process keeps the old processes alive until nothing needs them | Accepted | Landed |
 | [0428](0428-a-product-lifecycle-may-run-as-one-instance-per-position.md) | A product lifecycle may run as one instance per position, and its later operations are delivered to that instance | Accepted | Landed |
+| [0429](0429-product-actions-are-commands-with-published-outcomes.md) | A product declares its actions, each a command whose outcome is a fact published beyond Atlas | Accepted | Partial |
+| [0430](0430-the-event-feed-has-its-own-role-and-token-scope.md) | The event feed has its own role and its own token scope | Accepted | Landed |
+| [0431](0431-system-processes-announce-their-facts-as-signals.md) | A system process announces its facts as signals | Accepted | Landed |
+| [0432](0432-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md) | The event feed is narrowed by the catalogue that maintains the product | Accepted | Landed |
+| [0433](0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md) | The event feed is pushed to a CloudEvents endpoint | Accepted | Landed |
+| [0434](0434-the-catalogue-can-be-switched-off.md) | The catalogue can be switched off, and switching it off removes a surface, not a semantics | Accepted | Landed |
+| [0435](0435-one-catalogue-of-the-events-atlas-emits.md) | Atlas keeps one catalogue of the events it emits | Accepted | Partial |
+| [0436](0436-a-catalogue-is-imported-as-one-document.md) | A catalogue is imported as one document | Accepted | Landed |
+| [0437](0437-a-package-is-imported-from-the-command-line.md) | A package is imported from the command line | Accepted | Landed |
+| [0438](0438-mailbox-worker.md) | The mail Worker reads its mailbox — an inbound watch, mailbox operations, and who may use them | Accepted | Landed |
+| [0439](0439-supervised-workers-end-with-the-server.md) | On Windows, a supervised worker ends with the server, however the server ends | Accepted | Landed |
+| [0440](0440-worker-runs-jobs-concurrently.md) | A worker runs the jobs of one type concurrently, up to the places it has free | Accepted (amended) | Landed |
+| [0441](0441-a-position-s-answers-reach-its-processes.md) | A position's answers reach its processes | Accepted | Landed |
+| [0442](0442-s3-object-store-worker.md) | An S3 Worker Type — a process puts a file down, finds it again, and hands it out | Accepted | Landed |
+| [0443](0443-publishing-warns-about-answers-in-the-clear.md) | Publishing warns about answers in the clear | Accepted | Landed |
+| [0444](0444-release-notes-from-the-changelog.md) | The Console shows the CHANGELOG as release notes, read while the server runs | Accepted | Landed |
+| [0445](0445-feel-assistant.md) | A FEEL expression is written in a conversation, and checked by the engine before anybody reads it | Accepted | Landed |
+| [0446](0446-the-messages-deployed-models-send-and-receive.md) | Atlas shows the messages its deployed models send and receive | Proposed | Not started |
+| [0447](0447-the-signals-deployed-models-throw-and-receive.md) | Atlas shows the signals its deployed models throw and receive | Proposed | Not started |
+| [0448](0448-trusted-proxies.md) | Trusted proxies — the client's address behind a load balancer, and the health check that is not news | Accepted | Landed |
 
 ## The two states of a record
 

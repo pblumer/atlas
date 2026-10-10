@@ -110,9 +110,9 @@ jobs:
           go-version: '1.26'
           check-latest: true
 
-      # Not for the What's New generator — that moved to Go in e128d590 and needs no
-      # Node at all. This step stays because it decides *which* node is on PATH, and
-      # connector/script's sandbox test starts whichever one it finds.
+      # Nothing in the Go build needs Node. This step is here because it decides
+      # *which* node is on PATH, and connector/script's sandbox test starts whichever
+      # one it finds.
       #
       # With this step that is the toolcache node, which sits outside the sandbox
       # runtime roots, so the JavaScript case skips (documented in the test as "does
@@ -145,21 +145,6 @@ jobs:
           if [ -n "$out" ]; then
             echo "These files are not gofmt-formatted:"
             echo "$out"
-            exit 1
-          fi
-
-      # The Console "What's New" feed is generated from CHANGELOG.md and committed
-      # (ADR-0012 keeps the web UI buildless, so nothing regenerates it at build or
-      # runtime). Nothing else notices when a CHANGELOG entry lands without the
-      # generator having been re-run — the feed just silently stops at the last time
-      # someone remembered. Re-run it here and fail on any diff.
-      - name: What's New feed is up to date
-        run: |
-          go run ./scripts/whats-new
-          if ! git diff --quiet -- api/web/whats-new.json; then
-            echo "api/web/whats-new.json is stale. Run 'make whats-new' and commit the result."
-            echo "(Add curated DE/EN prose in scripts/whats-new/overrides/<id>.json — see scripts/whats-new/README.md.)"
-            git --no-pager diff -- api/web/whats-new.json
             exit 1
           fi
 
@@ -258,7 +243,7 @@ jobs:
           node-version: '20'
 
       - name: Coverage floor (>= 95%, ADR-0018)
-        run: ./scripts/check-coverage.sh 94
+        run: ./scripts/check-coverage.sh 95
 
   # The storage packages on the one platform the release ships a binary for and no
   # job here ran on.
@@ -370,8 +355,8 @@ jobs:
   # record *and* every ADR-NNNN citation in the repository, so a renamed record or a
   # mistyped citation fails here exactly as it would in the full job. The guards that
   # live elsewhere and read this tree are covered too — api/releasedkinds_internal_test.go
-  # parses each record's Status line, and the generator in scripts/whats-new builds the feed's
-  # links from the file names in docs/adr.
+  # parses each record's Status line, and api/releasenotes reads the CHANGELOG.md the
+  # binary embeds.
   #
   # So this runs the whole test suite rather than a list of test names: an enumeration
   # would be correct on the day it was written and quietly wrong the day somebody adds
@@ -417,15 +402,6 @@ jobs:
 
       - name: Vet
         run: go vet ./docs/...
-
-      - name: What's New feed is up to date
-        run: |
-          go run ./scripts/whats-new
-          if ! git diff --quiet -- api/web/whats-new.json; then
-            echo "api/web/whats-new.json is stale. Run 'make whats-new' and commit the result."
-            git --no-pager diff -- api/web/whats-new.json
-            exit 1
-          fi
 
       # A per-package limit and a job cap, the same pairing as the race step above: the
       # limit names the package, the cap only stops a hang.

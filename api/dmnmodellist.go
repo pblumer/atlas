@@ -114,6 +114,13 @@ func (s *Server) handleListDmnModels(w http.ResponseWriter, r *http.Request) {
 func storedModelHandles(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
+		// Windows answers "not found" for a directory read of a path that is a file,
+		// where Linux says it is not a directory. Only a path that is really absent is
+		// a store nothing was uploaded to yet; a file in its place is a broken data
+		// directory, and listing it as empty would hide every model an author uploaded.
+		if fi, statErr := os.Stat(dir); statErr == nil && !fi.IsDir() {
+			return nil, fmt.Errorf("%s is a file, not the model folder", dir)
+		}
 		return nil, nil // nothing uploaded yet is an empty store, not a failure
 	}
 	if err != nil {

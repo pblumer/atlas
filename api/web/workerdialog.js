@@ -48,6 +48,14 @@ export function workerCreateBody(form) {
     credentialsRef: get("credentialsRef"),
   };
   if (body.kind === "mail") body.provider = get("provider") || "smtp";
+  // An SMTP mail Worker reads its mailbox over IMAP when it names an endpoint for it
+  // (ADR-0438); the native providers read through their own API, so
+  // the field belongs to SMTP alone and a value left in it for another provider stays
+  // behind rather than being refused by the server.
+  if (workerShape(body.kind, body.provider).mailbox) {
+    const mailbox = get("mailboxEndpoint");
+    if (mailbox) body.mailboxEndpoint = mailbox;
+  }
   // An agent's provider is its wire format, and its model is the one piece of a
   // Worker's configuration that is neither endpoint nor credential
   // (ADR-0255).
@@ -107,6 +115,11 @@ export function workerShape(kind, provider) {
   // Discord is Google Sheets' shape: one API base for everyone, so the credential is
   // the whole configuration and there is no endpoint to author.
   const discord = kind === "discord";
+  // S3 is the one bundle kind whose endpoint is still worth authoring, and it carries
+  // two meanings at once: empty is AWS at the region the bundle names, and anything else
+  // is the store the installation runs — which is also what decides that its buckets are
+  // addressed in the path rather than in the hostname.
+  const s3 = kind === "s3";
   // Active Directory is Remedy's shape: an LDAP URL to dial and a bind account to dial
   // it with, neither derivable from the other. It is the newest kind to stop carrying
   // its directory in the model (ADR-0206).
@@ -117,6 +130,10 @@ export function workerShape(kind, provider) {
   // temis's: each protocol has a public default, and an operator names one only for a
   // gateway, a proxy or a self-hosted deployment.
   const agent = kind === "agent";
+  // A CloudEvents endpoint is where push delivery sends the event feed: an https URL
+  // and, optionally, the vault key sent as its bearer token. No task names it; the
+  // Worker's Feed… panel subscribes it to the feed.
+  const cloudevents = kind === "cloudevents";
   // The three SQL products. Their whole configuration is one secret — a connection
   // string has no public half — so there is no endpoint to author: what the Console
   // shows is a redacted label the server derived from the string itself.
@@ -127,6 +144,10 @@ export function workerShape(kind, provider) {
   return {
     mail,
     sql,
+    // An SMTP mail Worker can name an IMAP endpoint, which is what lets it read the
+    // mailbox it sends from (ADR-0438). Gmail and Graph read through the
+    // API they send with; preview has no mailbox at all.
+    mailbox: mail && !native && !preview,
     // The example for this product's connection string, empty for a kind that has
     // none. Both the create form and the edit dialog read it from here, so the two
     // cannot disagree about what a SQL Server DSN looks like.
@@ -158,22 +179,30 @@ export function workerShape(kind, provider) {
     // An agent's key is required *unless* an endpoint is named — a self-hosted endpoint
     // may legitimately need none — so the form asks for it without insisting, and the
     // server refuses a record with neither.
-    credRef: preview ? "none" : (sql ? "optional" : (bundle || remedy || jira || ad ? "required" : "optional")),
+    credRef: preview ? "none" : (sql ? "optional" : (bundle || remedy || jira || ad || s3 ? "required" : "optional")),
     modelPlaceholder: provider === "chat-completions" ? "gpt-4o" : "claude-opus-5",
     endpointPlaceholder: agent
       ? (provider === "chat-completions"
         ? "https://api.openai.com/v1/chat/completions (optional)"
         : "https://api.anthropic.com/v1/messages (optional)")
+      : cloudevents
+      ? "https://billing.example.com/atlas/events"
       : mail
       ? "smtp.office365.com:587"
+      : s3
+      ? "https://minio.example:9000 (empty = AWS)"
       : (ad ? "ldaps://dc.example.com:636"
         : (remedy ? "https://helix.example.com:8008" : (jira ? "https://acme.atlassian.net" : "https://temis.internal"))),
     credRefLabel: agent
       ? "API key reference (a vault key holding the key)"
+      : cloudevents
+      ? "Bearer token reference (optional; a vault key holding the token)"
       : ad
       ? "Credential reference (vault {bindDN, password})"
       : discord
       ? "Credential reference (vault {botToken})"
+      : s3
+      ? "Credential reference (vault {accessKeyId, secretAccessKey, region})"
       : googlesheets
       ? "Credential reference (vault Google auth bundle)"
       : jira
@@ -185,10 +214,14 @@ export function workerShape(kind, provider) {
           : (bundle ? "Credential reference (vault auth bundle)" : "Token reference (optional)"))),
     credRefPlaceholder: agent
       ? "anthropic_api_key (a vault key holding the key)"
+      : cloudevents
+      ? "billing_feed_token (a vault key holding the token)"
       : ad
       ? "ad_prod_bind (vault {bindDN, password})"
       : discord
       ? "discord_team (vault {botToken})"
+      : s3
+      ? "s3_archiv (vault {accessKeyId, secretAccessKey, region})"
       : googlesheets
       ? "google_sheets_auth (vault JSON bundle)"
       : jira
@@ -200,8 +233,12 @@ export function workerShape(kind, provider) {
           : (sharepoint ? "sharepoint_auth (vault JSON bundle)" : (native ? "gmail_auth (vault JSON bundle)" : "risk_token")))),
     hint: agent
       ? "The model an <b>agent-driven ad-hoc subprocess</b> asks which of its tools to run next. Its <b>API key</b> is a vault key named here \u2014 never a value \u2014 and the endpoint is optional: each wire format has a public default, so name one only for a gateway, a proxy or a self-hosted deployment. A round is one model call, minutes long and able to hang, so atlas never runs it itself: it supervises a worker for this kind and picks the model up as soon as you save, with no restart. <b>Messages</b> is Anthropic's format (also OpenRouter's <code>/api/v1/messages</code>); <b>Chat Completions</b> is OpenAI's, and anything calling itself OpenAI-compatible \u2014 that one has no default model, so name it."
+      : cloudevents
+      ? "Where the <b>event feed</b> is pushed: atlas POSTs the outcomes of product actions, every right granted and revoked, and every incident raised and resolved to this <b>https</b> address as CloudEvents batches (<code>application/cloudevents-batch+json</code>), and sends the token behind the reference as <code>Authorization: Bearer</code>. Nothing is sent until you subscribe the worker to the feed: <b>Feed…</b> in its menu, where you can narrow it to some catalogues. A refused batch is held and retried, never skipped; the receiver deduplicates by each event's <code>id</code>."
       : discord
       ? "The credential reference names a vault bundle holding the bot token \u2014 never a value: <code>{\"botToken\": \"\u2026\"}</code>, from <b>Discord Developer Portal &rsaquo; your application &rsaquo; Bot &rsaquo; Reset Token</b>. Store the token alone; atlas composes the <code>Bot </code> scheme itself. There is no endpoint to name \u2014 Discord\u0027s API base is the same for everyone \u2014 so the field stays empty unless you sit behind a proxy. The bot must be <b>invited to the server</b> and hold <b>View Channel</b> and <b>Send Messages</b> in every channel a process writes to: a missing grant comes back as code 50001, <i>Missing Access</i>, not as a bad token."
+      : s3
+      ? "The credential reference names a vault bundle holding the access key \u2014 never a value: <code>{\"accessKeyId\": \"\u2026\", \"secretAccessKey\": \"\u2026\", \"region\": \"eu-central-1\"}</code>, plus <code>\"sessionToken\"</code> for a key issued by STS. The <b>region belongs in the bundle</b> because the request signature is computed with it. Leave the <b>endpoint empty for AWS</b>; for MinIO, Ceph, Garage, R2 or Wasabi enter the store\u0027s base URL \u2014 which is also what tells atlas to address buckets in the path. The <b>bucket is not part of this record</b>: a task names it, so one key can serve several."
       : googlesheets
       ? "The credential reference names a JSON auth bundle in the vault \u2014 never a secret value. A <b>service account</b> is the normal shape: <code>{\"method\": \"serviceAccount\", \"clientEmail\": \"\u2026@\u2026.iam.gserviceaccount.com\", \"privateKey\": \"-----BEGIN PRIVATE KEY-----\u2026\"}</code>, copied out of the JSON key file Google hands out. A service account owns nothing by itself: <b>share each spreadsheet or folder with its address</b>, exactly as you would with a colleague, or it will read a 403 where you see a document."
       : ad
@@ -213,8 +250,8 @@ export function workerShape(kind, provider) {
       : (preview
         ? "Needs nothing else: messages are framed exactly as they would be sent and land in <b>Operations &rsaquo; Outbox</b> instead of going out. The way to try a mail task before you own a mail server."
         : (native
-          ? "The credential reference names a JSON auth bundle in the vault — never a secret value. A Google OAuth client still in <i>Testing</i> expires its refresh token after 7 days."
-          : "Host and port of the submission server. Without a port, 587 is assumed (465 for <code>smtps://</code>)."))),
+          ? "The credential reference names a JSON auth bundle in the vault — never a secret value. A Google OAuth client still in <i>Testing</i> expires its refresh token after 7 days. To <b>read</b> the mailbox — a watch, or a task that lists, files or answers mail — the same credential also needs read access: <code>Mail.Read</code> (or <code>Mail.ReadWrite</code> to change it) for Microsoft, <code>gmail.readonly</code> (and <code>gmail.modify</code>) for Gmail."
+          : "Host and port of the submission server. Without a port, 587 is assumed (465 for <code>smtps://</code>). Name an <b>IMAP endpoint</b> too and the same mailbox can be read — by a watch, or a task that lists, files or answers mail; it logs in as the sender with the same credential, and always over TLS."))),
   };
 }
 
@@ -306,6 +343,7 @@ function askWorker({ api, worker, intro, extraLabel, create = false }) {
             <label class="field conn-f-provider"><span class="conn-provider-label">Provider</span><select id="conn-provider"></select></label>
             <label class="field conn-f-endpoint" style="flex:1 1 220px"><span class="conn-endpoint-label">Endpoint</span><input id="conn-endpoint" value="${esc(c.endpoint || "")}"/></label>
             <label class="field conn-f-sender" style="flex:1 1 200px"><span>Sender</span><input id="conn-sender" value="${esc(c.sender || "")}" placeholder="bot@example.com"/></label>
+            <label class="field conn-f-mailbox" style="flex:1 1 220px"><span>IMAP endpoint (optional)</span><input id="conn-mailbox" value="${esc(c.mailboxEndpoint || "")}" placeholder="imaps://imap.example.com:993"/></label>
             <label class="field conn-f-model" style="flex:1 1 200px"><span>Default model</span><input id="conn-model" value="${esc(c.model || "")}" title="What a task that names no model of its own asks. A task or an agent container may name one, and then that one runs."/></label>
             <label class="field conn-f-credref" style="flex:1 1 200px"><span class="conn-credref-label">Token reference</span><input id="conn-credref" value="${esc(c.credentialsRef || "")}"/></label>
             <label class="field conn-f-connstr" style="flex:1 1 100%"><span>Connection string</span><input id="conn-connstr" type="password" autocomplete="new-password"/></label>
@@ -327,6 +365,7 @@ function askWorker({ api, worker, intro, extraLabel, create = false }) {
     const providerSel = ov.querySelector("#conn-provider");
     const endpointIn = ov.querySelector("#conn-endpoint");
     const senderIn = ov.querySelector("#conn-sender");
+    const mailboxIn = ov.querySelector("#conn-mailbox");
     const modelIn = ov.querySelector("#conn-model");
     const credRefIn = ov.querySelector("#conn-credref");
     const connStrIn = ov.querySelector("#conn-connstr");
@@ -353,6 +392,7 @@ function askWorker({ api, worker, intro, extraLabel, create = false }) {
       if (modelIn) modelIn.placeholder = sh.modelPlaceholder || "";
       show(".conn-f-endpoint", sh.endpoint);
       show(".conn-f-sender", sh.sender);
+      show(".conn-f-mailbox", sh.mailbox);
       show(".conn-f-credref", sh.credRef !== "none");
       // Two fields the edit dialog has no business showing. The name is the heading
       // when it is fixed and already stored; on a create it is what the operator is
@@ -415,6 +455,7 @@ function askWorker({ api, worker, intro, extraLabel, create = false }) {
       if (sh.provider) f.set("provider", providerSel.value);
       if (sh.endpoint) f.set("endpoint", endpointIn.value.trim());
       if (sh.sender) f.set("sender", senderIn.value.trim());
+      if (sh.mailbox) f.set("mailboxEndpoint", mailboxIn.value.trim());
       if (sh.model) f.set("model", modelIn.value.trim());
       if (sh.credRef !== "none") f.set("credentialsRef", credRefIn.value.trim());
       if (sh.sql) f.set("connectionString", connStrIn.value.trim());
@@ -441,6 +482,9 @@ function askWorker({ api, worker, intro, extraLabel, create = false }) {
       if (sh.mail) {
         patch.provider = providerSel.value;
         patch.sender = senderIn.value.trim();
+        // The IMAP endpoint is SMTP's alone. Hidden for any other provider, it is left
+        // out like every hidden field; the server clears it when the provider changes.
+        if (sh.mailbox) patch.mailboxEndpoint = mailboxIn.value.trim();
       }
       if (sh.model) {
         patch.provider = providerSel.value;

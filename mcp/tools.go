@@ -17,6 +17,13 @@ type Tool struct {
 	Description string
 	InputSchema map[string]any
 	Handler     func(c *Client, args map[string]any) (string, error)
+	// Catalogue marks a tool of the shop, the catalogue, the orders or the
+	// inventory: one an adapter built WithoutCatalogue does not offer, because the
+	// server it fronts does not serve the route behind it
+	// (ADR-0434).
+	// TestWithoutCatalogueOffersNoToolOfTheArea fails for a tool of the area that
+	// does not say so.
+	Catalogue bool
 }
 
 // noArgs is the JSON Schema for a tool that takes no arguments.
@@ -98,7 +105,8 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
-			Name: "atlas_product_usage",
+			Name:      "atlas_product_usage",
+			Catalogue: true,
 			Description: "Where one catalogue product is used, read out of the release backwards: " +
 				"which catalogues offer it, which wholes carry it and whether integrally " +
 				"(composition) or optionally (aggregation), what it needs, what needs it, what " +
@@ -587,7 +595,8 @@ func runtimeTools() []Tool {
 				"whose correlation key matches is delivered the message and advances. Provide the message " +
 				"'name' and, when the catch event correlates on a key, the 'correlationKey' value to match. " +
 				"A message that matches no waiting instance is a legal no-op. Optional 'variables' are merged " +
-				"into a correlated instance's scope. Returns {name, correlationKey, stats}.",
+				"into a correlated instance's scope. Returns {name, correlationKey, stats}. A message a catalogue " +
+				"product's action starts or waits at is refused (409): the order sends it, never a publish by name.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -775,6 +784,54 @@ func runtimeTools() []Tool {
 					return "", err
 				}
 				return asText(c.post("/api/v1/workers/breakers/close", "application/json", body))
+			},
+		},
+		{
+			Name: "atlas_feed_subscriptions",
+			Description: "The event feed's push subscriptions — which systems beyond atlas (a CMDB, a billing " +
+				"system) are sent the feed of action outcomes, granted and revoked rights and incidents, and whether that " +
+				"delivery is moving. Admin-only. Each row names its cloudevents Worker ('workerId', " +
+				"'workerName'), the catalogues it is narrowed to ('reach'; empty is the whole feed), its " +
+				"'cursor' (the feed position delivered through), 'enabled' and 'disabledReason' (set when the " +
+				"feed's retention dropped rows it had not delivered — it stays off until an administrator " +
+				"re-enables it), and 'deliveredAt'. A row with a 'hold' is FAILING: its endpoint refused or did " +
+				"not answer, and delivery waits on a backoff ladder with the cursor where it was — nothing is " +
+				"skipped — showing 'failures', 'failingSince', 'retryAt' and 'lastError'. Fix the endpoint or " +
+				"its credential; delivery resumes by itself. Read-only: creating, changing and ending " +
+				"subscriptions is administrator configuration and has no tool.",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return asText(c.get("/api/v1/feed-subscriptions"))
+			},
+		},
+		{
+			Name: "atlas_event_catalog",
+			Description: "The catalogue of the events atlas emits (ADR-0435) — the answer to \"what can I listen to?\". " +
+				"Each entry has its 'type' (the name used verbatim as the signal, the message or the CloudEvents " +
+				"type, atlas.<subject>.<fact>; an entry with 'shaped' describes a shape, such as a product " +
+				"action's outcome named by its product), 'kind' (domain: a system process's fact; platform: the " +
+				"engine's or the server's), 'meaning' in English and German, 'moment' (the system process and " +
+				"element, or the record it is derived from), 'channels' (signal, message, feed, log), 'payload' " +
+				"(each field with its type, whether it is always there, and whether it is personal data), " +
+				"'neverSecret' (the test holding it free of secrets), 'since', 'stability' and 'access' per " +
+				"channel. 'listenable' marks what a model may listen to with a signal start or catch.",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return asText(c.get("/api/v1/event-catalog"))
+			},
+		},
+		{
+			Name: "atlas_event_listeners",
+			Description: "Who listens to atlas's events in this installation (ADR-0435 §7), admin-only: every " +
+				"deployed definition with a signal start, catch, boundary or event subprocess, or a message " +
+				"receiver, on an atlas.* name — 'type', 'channel', 'processId', 'version', 'definitionKey', " +
+				"'projectId', 'element', 'role', and 'personal' (the personal-data fields it receives) — with " +
+				"'catalogued' false for a name atlas never emits and 'system' for atlas's own processes; and " +
+				"every feed subscription ('feed'), which receives every type in 'feedTypes' narrowed by its " +
+				"reach. 'feedDelivered' is false where the service catalogue is switched off.",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return asText(c.get("/api/v1/event-catalog/listeners"))
 			},
 		},
 		{

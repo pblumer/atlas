@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -61,7 +60,7 @@ func runPlaygroundScenario(args []string, out io.Writer) error {
 		return errors.New("--keep-baseline writes back to a saved scenario, so it needs --scenario rather than --file")
 	}
 
-	c := &playgroundClient{base: strings.TrimRight(*server, "/"), bearer: strings.TrimSpace(*token)}
+	c := &playgroundClient{apiClient: newAPIClient(*server, *token)}
 
 	spec, baseline, err := c.scenario(*id, *file)
 	if err != nil {
@@ -232,9 +231,7 @@ func renderMeasure(unit string, v int64) string {
 // --- the client ---------------------------------------------------------------
 
 type playgroundClient struct {
-	base   string
-	bearer string
-	http   http.Client
+	apiClient
 }
 
 type scenarioSpec struct {
@@ -380,50 +377,4 @@ func (c *playgroundClient) discard(id string) {
 
 func (c *playgroundClient) sessionPath(id, suffix string) string {
 	return "/api/v1/playground/sessions/" + url.PathEscape(id) + suffix
-}
-
-// do makes one request and decodes the answer into out, which may be nil when the
-// answer is not wanted. A non-2xx carries the server's own message, because a CI
-// log that says only "400" costs somebody an afternoon.
-func (c *playgroundClient) do(method, path string, body json.RawMessage, out any) error {
-	var rdr io.Reader
-	if len(body) > 0 {
-		rdr = bytes.NewReader(body)
-	}
-	req, err := http.NewRequest(method, c.base+path, rdr)
-	if err != nil {
-		return err
-	}
-	if len(body) > 0 {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	if c.bearer != "" {
-		req.Header.Set("Authorization", "Bearer "+c.bearer)
-	}
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return fmt.Errorf("%s %s: %w", method, path, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
-	if err != nil {
-		return fmt.Errorf("%s %s: read response: %w", method, path, err)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		var e struct {
-			Error string `json:"error"`
-		}
-		msg := strings.TrimSpace(string(raw))
-		if json.Unmarshal(raw, &e) == nil && e.Error != "" {
-			msg = e.Error
-		}
-		return fmt.Errorf("%s %s: %s: %s", method, path, resp.Status, msg)
-	}
-	if out == nil || len(raw) == 0 {
-		return nil
-	}
-	if err := json.Unmarshal(raw, out); err != nil {
-		return fmt.Errorf("%s %s: decode response: %w", method, path, err)
-	}
-	return nil
 }

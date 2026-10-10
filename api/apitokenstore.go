@@ -117,7 +117,11 @@ type apiTokenView struct {
 	Scope string `json:"scope"`
 	// Reach is shown for the same reason Scope is: a credential whose reach nobody
 	// can read afterwards is a grant nobody can audit.
-	Reach     []string `json:"reach,omitempty"`
+	Reach []string `json:"reach,omitempty"`
+	// Roles are shown for the same reason: what kinds of operation a credential may
+	// perform is half of what it may do, and an events token that holds feedreader
+	// and nothing else should be seen to (ADR-0209).
+	Roles     []string `json:"roles"`
 	ExpiresAt int64    `json:"expiresAt,omitempty"`
 	CreatedAt int64    `json:"createdAt"`
 	CreatedBy string   `json:"createdBy,omitempty"`
@@ -125,7 +129,7 @@ type apiTokenView struct {
 
 func (t apiToken) view() apiTokenView {
 	return apiTokenView{
-		ID: t.ID, Name: t.Name, Scope: t.scope(), Reach: t.Reach,
+		ID: t.ID, Name: t.Name, Scope: t.scope(), Reach: t.Reach, Roles: t.roles(),
 		ExpiresAt: t.ExpiresAt, CreatedAt: t.CreatedAt, CreatedBy: t.CreatedBy,
 	}
 }

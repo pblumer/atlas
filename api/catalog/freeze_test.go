@@ -29,18 +29,40 @@ func everything(id string) Item {
 	it.Targets = []TargetRef{{System: "ad", Ref: "CN=X"}}
 	it.Eligible = []string{"grp-a"}
 	it.Keywords = []string{"Fernzugriff"}
+	it.CommandedBy = []string{"hr-leavers"}
 	it.Descriptions = map[string]string{"de": "Verschlüsselter Zugang ins Firmennetz."}
 	it.Category = "Arbeitsplatz"
 	it.CategoryTexts = map[string]string{"de": "Arbeitsplatz"}
 	it.ProductGroup = "Netzzugang"
 	it.ProductGroupTexts = map[string]string{"de": "Netzzugang"}
-	// The lifecycle form, because that is the one with a map: the two process ids
-	// give way to one process and its operations (ADR-0425).
+	// The lifecycle form, because that is the one with a list of maps: the two
+	// process ids give way to one process and its actions (ADR-0425, ADR-0429). The
+	// legacy operation map cannot sit beside them — publishing refuses the pair —
+	// so legacyEverything covers it.
 	it.ProvisionProcess, it.DeprovisionProcess = "", ""
 	it.LifecycleProcess = "vpn-lifecycle"
+	it.Actions = []Action{
+		{Key: ActionProvision, Message: "vpn.provision", Effect: EffectProvision},
+		{Key: ActionDeprovision, Message: "vpn.deprovision", Effect: EffectDeprovision,
+			Triggers: []string{TriggerCustomer}},
+		{Key: "reset", Message: "vpn.reset", Effect: EffectService, Triggers: []string{TriggerOperator},
+			Labels: map[string]string{"de": "Zurücksetzen"}, Outcomes: map[string]string{OutcomeCompleted: "vpn.reset.done"}},
+	}
+	return it
+}
+
+// legacyEverything is everything with ADR-0425's operation map in place of the
+// actions, the one field the first fixture cannot fill.
+func legacyEverything(id string) Item {
+	it := everything(id)
+	it.Actions = nil
 	it.Operations = map[string]string{OpProvision: "vpn.provision", OpDeprovision: "vpn.deprovision"}
 	return it
 }
+
+// alternatives are the fields one fixture cannot fill because publishing refuses
+// them beside another, each with the fixture that fills it instead.
+var alternatives = map[string]func(string) Item{"Operations": legacyEverything}
 
 // TestTheFixtureFillsEveryFieldOfAnItem is the half of this that catches the field
 // nobody thought about: a new slice or map on Item fails here, in a test whose name
@@ -52,6 +74,12 @@ func TestTheFixtureFillsEveryFieldOfAnItem(t *testing.T) {
 		f := v.Type().Field(i)
 		switch v.Field(i).Kind() {
 		case reflect.Slice, reflect.Map:
+			if alt, ok := alternatives[f.Name]; ok {
+				if reflect.ValueOf(alt("vpn")).Field(i).Len() == 0 {
+					t.Errorf("Item.%s is filled by neither fixture", f.Name)
+				}
+				continue
+			}
 			if v.Field(i).Len() == 0 {
 				t.Errorf("Item.%s is a %s and the fixture leaves it empty, so nothing "+
 					"proves the release stops sharing it — fill it in everything()",
@@ -64,18 +92,20 @@ func TestTheFixtureFillsEveryFieldOfAnItem(t *testing.T) {
 // TestAReleaseSharesNothingWithTheCatalogue: after publishing, no slice and no map
 // reachable from a released item may be the same memory as the catalogue's.
 func TestAReleaseSharesNothingWithTheCatalogue(t *testing.T) {
-	in := everything("vpn")
-	rel, problems := Publish(Input{
-		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de"}, Items: []string{"vpn"}}},
-		Items:    []Item{in},
-	})
-	if len(problems) != 0 {
-		t.Fatalf("publish refused the fixture: %+v", problems)
+	for _, fixture := range []func(string) Item{everything, legacyEverything} {
+		in := fixture("vpn")
+		rel, problems := Publish(Input{
+			Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de"}, Items: []string{"vpn"}}},
+			Items:    []Item{in},
+		})
+		if len(problems) != 0 {
+			t.Fatalf("publish refused the fixture: %+v", problems)
+		}
+		if len(rel.Items) != 1 {
+			t.Fatalf("the release carries %d items, want 1", len(rel.Items))
+		}
+		shares(t, "Item", reflect.ValueOf(in), reflect.ValueOf(rel.Items[0]))
 	}
-	if len(rel.Items) != 1 {
-		t.Fatalf("the release carries %d items, want 1", len(rel.Items))
-	}
-	shares(t, "Item", reflect.ValueOf(in), reflect.ValueOf(rel.Items[0]))
 }
 
 // shares reports every slice or map the two values hold in common.

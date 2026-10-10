@@ -37,20 +37,31 @@ var mcpToolRoutes = map[string]string{
 	// the model and not an omission: a catalogue has none, and a product is
 	// withdrawn through the ordinary save because an order placed years ago still
 	// resolves through it.
-	"atlas_list_catalogs":              "GET /api/v1/catalogs",
-	"atlas_get_catalog":                "GET /api/v1/catalogs/{id}",
-	"atlas_create_catalog":             "POST /api/v1/catalogs",
-	"atlas_update_catalog":             "PATCH /api/v1/catalogs/{id}",
-	"atlas_list_catalog_products":      "GET /api/v1/catalog-products",
-	"atlas_catalog_approver_report":    "GET /api/v1/catalog-products/approver-report",
-	"atlas_catalog_fulfilment_report":  "GET /api/v1/catalog-products/fulfilment-report",
-	"atlas_catalog_translation_gaps":   "GET /api/v1/catalog-products/translation-gaps",
-	"atlas_save_catalog_product":       "POST /api/v1/catalog-products",
-	"atlas_publish_catalog":            "POST /api/v1/catalogs/{id}/releases",
-	"atlas_rebind_catalog_product":     "POST /api/v1/catalog-products/{id}/rebind",
-	"atlas_catalog_releases":           "GET /api/v1/catalogs/{id}/releases",
-	"atlas_catalog_unpublished":        "GET /api/v1/catalogs/{id}/unpublished",
-	"atlas_import_catalog_archimate":   "POST /api/v1/catalogs/{id}/import",
+	"atlas_list_catalogs":             "GET /api/v1/catalogs",
+	"atlas_get_catalog":               "GET /api/v1/catalogs/{id}",
+	"atlas_create_catalog":            "POST /api/v1/catalogs",
+	"atlas_update_catalog":            "PATCH /api/v1/catalogs/{id}",
+	"atlas_list_catalog_products":     "GET /api/v1/catalog-products",
+	"atlas_catalog_approver_report":   "GET /api/v1/catalog-products/approver-report",
+	"atlas_catalog_fulfilment_report": "GET /api/v1/catalog-products/fulfilment-report",
+	"atlas_catalog_translation_gaps":  "GET /api/v1/catalog-products/translation-gaps",
+	"atlas_save_catalog_product":      "POST /api/v1/catalog-products",
+	"atlas_publish_catalog":           "POST /api/v1/catalogs/{id}/releases",
+	"atlas_rebind_catalog_product":    "POST /api/v1/catalog-products/{id}/rebind",
+	"atlas_catalog_releases":          "GET /api/v1/catalogs/{id}/releases",
+	"atlas_catalog_unpublished":       "GET /api/v1/catalogs/{id}/unpublished",
+	"atlas_import_catalog":            "POST /api/v1/catalogs/import",
+	"atlas_import_catalog_archimate":  "POST /api/v1/catalogs/{id}/import",
+	// What a held position offers and whether it takes it now (ADR-0429). Reading it
+	// changes nothing; asking for an action is omitted below.
+	"atlas_order_line_actions": "GET /api/v1/orders/{id}/lines/{item}/actions",
+	// Asking for one, as an operator or the system only: the tool sends the trigger and
+	// the server refuses an action that does not declare it (maintainers' decision of
+	// 2026-10-01). A customer's action stays the person's, in the shop.
+	"atlas_ask_order_line_action": "POST /api/v1/orders/{id}/lines/{item}/actions/{action}",
+	// How what was asked ended (ADR-0429 §3). Reading changes nothing; reporting it
+	// is omitted below.
+	"atlas_order_line_outcomes":        "GET /api/v1/orders/{id}/lines/{item}/outcomes",
 	"atlas_get_process_xml":            "GET /api/v1/processes/{key}/xml",
 	"atlas_save_process_diagram":       "PUT /api/v1/processes/{key}/diagram",
 	"atlas_delete_process":             "DELETE /api/v1/processes/{key}",
@@ -109,6 +120,9 @@ var mcpToolRoutes = map[string]string{
 	"atlas_list_incidents":               "GET /api/v1/incidents",
 	"atlas_workers":                      "GET /api/v1/workers",
 	"atlas_close_breaker":                "POST /api/v1/workers/breakers/close",
+	"atlas_feed_subscriptions":           "GET /api/v1/feed-subscriptions",
+	"atlas_event_catalog":                "GET /api/v1/event-catalog",
+	"atlas_event_listeners":              "GET /api/v1/event-catalog/listeners",
 	"atlas_resolve_incident":             "POST /api/v1/incidents/{key}/resolve",
 	"atlas_incident_summary":             "GET /api/v1/incidents/summary",
 	"atlas_resolve_incidents":            "POST /api/v1/incidents/resolve",
@@ -183,30 +197,31 @@ var mcpOmittedRoutes = map[string]string{
 	// see mcpToolRoutes and ADR-0376. What stays
 	// out of the tool surface is what a product manager does not do: the instance's
 	// appearance, and the ordering side, which is somebody's own.
-	"PUT /api/v1/catalogs/{id}/theme":                        "an instance's appearance is an operator's choice, not an agent's",
-	"POST /api/v1/instances":                                 "atlas_create_instance starts one by definition key, which is what an agent holding a process listing has; the by-id route exists for a model that knows an id and must not pin a version",
-	"GET /api/v1/approvals/stalled":                          "an operations list still settling with the portal around it; a tool is a public contract",
-	"POST /api/v1/orders/{id}/cancel":                        "withdrawing an order records the person who did it, and an agent is not one; it is also the one order act whose author a reader will care about years later",
-	"POST /api/v1/orders/{id}/lines/{item}/cancel":           "the same act as withdrawing the whole order, aimed at one position: it records the person who did it, and an agent is not one",
-	"POST /api/v1/orders/{id}/lines/{item}/details":          "correcting what somebody said when they ordered is theirs to correct; on a position already held it is kept as an amendment naming who made it, and an agent is not a who",
-	"POST /api/v1/orders/{id}/lines/{item}/change":           "changing a right somebody holds reaches the target system like a return does; it is the orderer's to ask for, not an agent's",
-	"POST /api/v1/orders/{id}/lines/{item}/return":           "revoking an access somebody is using is the one order act with a blast radius outside Atlas; it is the orderer's to ask for, not an agent's",
-	"POST /api/v1/orders/fulfilment/repair":                  "a repair that ends running processes and starts others; it is an operator looking at their own installation and deciding, and the dry run exists so that a person reads the list first",
-	"GET /api/v1/shop/orders/{id}/lines/{position}/progress": "gated on owning the order and on nothing else, so the answer depends on who is asking; an agent is nobody's orderer, and the instance surface it would otherwise need is already a tool",
-	"POST /api/v1/orders/{id}/lines/{item}/escalate":         "moving an approval is a deadline's act or a person's, and an agent is neither; the decision it leads to is one nobody should be able to nudge from a tool",
-	"POST /api/v1/orders/{id}/lines/{item}/reassign":         "same: an intervention records the person who made it, and an agent is not one",
-	"POST /api/v1/approvals/decide":                          "a decision is a person's, and this one is several at once: the surface exists to let one person say once what they would otherwise have typed twelve times. An agent deciding twelve approvals in one call is the failure this route's shape is built to make legible, not a use for it",
-	"GET /api/v1/approvals":                                  "answers one signed-in person's own approvals from their session; an agent holds no tasks, so the tool would always be empty",
-	"GET /api/v1/approvals/{key}/logo":                       "a brand mark is bytes for a browser; an agent has no use for the image",
-	"GET /api/v1/users/{id}/avatar":                          "a picture of a person is bytes for a browser; an agent has no use for the image",
-	"PUT /api/v1/users/{id}/avatar":                          "how a colleague appears to everybody else is a person's to choose, and an agent is not one; the bytes it would upload came from somewhere no record would name",
-	"DELETE /api/v1/users/{id}/avatar":                       "same: taking a face away changes how somebody appears as much as putting one there",
-	"GET /api/v1/catalogs/{id}/logo":                         "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
-	"PUT /api/v1/catalogs/{id}/logo":                         "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
-	"DELETE /api/v1/catalogs/{id}/logo":                      "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
-	"GET /api/v1/catalog-products/{id}/picture":              "a product's picture is bytes for a browser, same as a brand mark; an agent reads the product record instead",
-	"PUT /api/v1/catalog-products/{id}/picture":              "a product's picture is bytes for a browser, same as a brand mark; an agent has no image to upload",
-	"DELETE /api/v1/catalog-products/{id}/picture":           "a product's picture is bytes for a browser, same as a brand mark; removing one is a maintainer's decision about how the catalogue looks",
+	"PUT /api/v1/catalogs/{id}/theme":                                   "an instance's appearance is an operator's choice, not an agent's",
+	"POST /api/v1/instances":                                            "atlas_create_instance starts one by definition key, which is what an agent holding a process listing has; the by-id route exists for a model that knows an id and must not pin a version",
+	"GET /api/v1/approvals/stalled":                                     "an operations list still settling with the portal around it; a tool is a public contract",
+	"POST /api/v1/orders/{id}/cancel":                                   "withdrawing an order records the person who did it, and an agent is not one; it is also the one order act whose author a reader will care about years later",
+	"POST /api/v1/orders/{id}/lines/{item}/cancel":                      "the same act as withdrawing the whole order, aimed at one position: it records the person who did it, and an agent is not one",
+	"POST /api/v1/orders/{id}/lines/{item}/details":                     "correcting what somebody said when they ordered is theirs to correct; on a position already held it is kept as an amendment naming who made it, and an agent is not a who",
+	"POST /api/v1/orders/{id}/lines/{item}/change":                      "changing a right somebody holds reaches the target system like a return does; it is the orderer's to ask for, not an agent's",
+	"POST /api/v1/orders/{id}/lines/{item}/actions/{commandId}/outcome": "states how an action ended in a target system, which the process that carried it out reports, as a provisioning outcome is; an agent must not be able to assert it on that system's behalf",
+	"POST /api/v1/orders/{id}/lines/{item}/return":                      "revoking an access somebody is using is the one order act with a blast radius outside Atlas; it is the orderer's to ask for, not an agent's",
+	"POST /api/v1/orders/fulfilment/repair":                             "a repair that ends running processes and starts others; it is an operator looking at their own installation and deciding, and the dry run exists so that a person reads the list first",
+	"GET /api/v1/shop/orders/{id}/lines/{position}/progress":            "gated on owning the order and on nothing else, so the answer depends on who is asking; an agent is nobody's orderer, and the instance surface it would otherwise need is already a tool",
+	"POST /api/v1/orders/{id}/lines/{item}/escalate":                    "moving an approval is a deadline's act or a person's, and an agent is neither; the decision it leads to is one nobody should be able to nudge from a tool",
+	"POST /api/v1/orders/{id}/lines/{item}/reassign":                    "same: an intervention records the person who made it, and an agent is not one",
+	"POST /api/v1/approvals/decide":                                     "a decision is a person's, and this one is several at once: the surface exists to let one person say once what they would otherwise have typed twelve times. An agent deciding twelve approvals in one call is the failure this route's shape is built to make legible, not a use for it",
+	"GET /api/v1/approvals":                                             "answers one signed-in person's own approvals from their session; an agent holds no tasks, so the tool would always be empty",
+	"GET /api/v1/approvals/{key}/logo":                                  "a brand mark is bytes for a browser; an agent has no use for the image",
+	"GET /api/v1/users/{id}/avatar":                                     "a picture of a person is bytes for a browser; an agent has no use for the image",
+	"PUT /api/v1/users/{id}/avatar":                                     "how a colleague appears to everybody else is a person's to choose, and an agent is not one; the bytes it would upload came from somewhere no record would name",
+	"DELETE /api/v1/users/{id}/avatar":                                  "same: taking a face away changes how somebody appears as much as putting one there",
+	"GET /api/v1/catalogs/{id}/logo":                                    "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
+	"PUT /api/v1/catalogs/{id}/logo":                                    "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
+	"DELETE /api/v1/catalogs/{id}/logo":                                 "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
+	"GET /api/v1/catalog-products/{id}/picture":                         "a product's picture is bytes for a browser, same as a brand mark; an agent reads the product record instead",
+	"PUT /api/v1/catalog-products/{id}/picture":                         "a product's picture is bytes for a browser, same as a brand mark; an agent has no image to upload",
+	"DELETE /api/v1/catalog-products/{id}/picture":                      "a product's picture is bytes for a browser, same as a brand mark; removing one is a maintainer's decision about how the catalogue looks",
 	// Ordering, for the same reason. An order is also somebody's own: the handler
 	// confines reads to the orders you placed or are the recipient of, and a tool
 	// acting as a server identity would have no such person to be.
@@ -234,6 +249,13 @@ var mcpOmittedRoutes = map[string]string{
 	// the one it was pointed at, and the write half is an operator naming the
 	// instance for other operators to recognise.
 	"GET /api/v1/node": "runtime identity for cross-server correlation, not an agent action",
+	// The Console's release notes: prose for a person opening the landing page,
+	// read from the CHANGELOG the binary embeds. atlas_info already says which
+	// version an agent is talking to, and the same text is CHANGELOG.md in the
+	// repository; a tool would put several hundred kilobytes of prose one call
+	// away from every agent's context for no action it could take on it.
+	"GET /api/v1/release-notes":           "the Console's release notes, prose for a person; atlas_info names the version and CHANGELOG.md holds the text",
+	"GET /api/v1/release-notes/{version}": "the Console's release notes, prose for a person; atlas_info names the version and CHANGELOG.md holds the text",
 	// The observation projection (ADR-0189 §6). The facts in it are ones an agent
 	// already reaches directly — instances, incidents, deployments, releases — and
 	// what this route adds is the *correlation onto an architecture model*, which
@@ -304,6 +326,14 @@ var mcpOmittedRoutes = map[string]string{
 	// configured rather than one the author has to bring.
 	"POST /api/v1/forms/generate":        "an agent writes the form-js schema itself and saves it with atlas_save_form; asking Atlas to ask a second model is a detour",
 	"GET /api/v1/forms/generate/workers": "the form editor's own probe for whether to show its Generate button",
+
+	// The FEEL assistant (ADR-0445) is omitted for the reason form
+	// generation is: the caller of an MCP tool is already a language model, and
+	// asking Atlas to ask a second one to write an expression is a detour through a
+	// second provider and a second bill. An agent writes the FEEL itself and checks it
+	// with the FEEL validation and evaluation the Modeler uses.
+	"POST /api/v1/feel/generate":        "an agent writes the FEEL expression itself; asking Atlas to ask a second model is a detour",
+	"GET /api/v1/feel/generate/workers": "the FEEL assistant's own probe for whether to show its chat",
 
 	// Backup/restore: an admin file-transfer of the data directory (ADR-0107 design-
 	// time, ADR-0109 whole-instance snapshot), not an agent authoring/runtime action.
@@ -387,6 +417,7 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/sql/mock-journal":      "an operator's view of a mockup run; an agent reads what a job did from the job",
 	"POST /api/v1/workers/{id}/restart": "restarts an operating-system process; an operator action, deliberately not an agent one",
 	"GET /api/v1/checkpoints":           "admin recovery-checkpoint status, not an agent action",
+	"GET /api/v1/catalogue-switch":      "admin diagnosis of what switching the catalogue off strands, shown on the Console's dashboard; not an agent action",
 	"POST /api/v1/checkpoints":          "admin on-demand checkpoint/compaction, not an agent action",
 
 	// Per-server call-activity target overrides (ADR-0105): admin operator config,
@@ -690,7 +721,11 @@ var mcpOmittedRoutes = map[string]string{
 	// Console-configured watch feeds the name they typed, while an agent that wants a
 	// process to run publishes the message itself with atlas_publish_message and never
 	// depends on a watch existing at all.
-	"GET /api/v1/message-sources": "the Modeler's authoring aid over watch configuration; an agent publishes a message itself rather than needing one to exist",
+	"POST /api/v1/feed-subscriptions":        "where the event feed is pushed is administrator configuration, like the worker it names",
+	"PATCH /api/v1/feed-subscriptions/{id}":  "where the event feed is pushed is administrator configuration, like the worker it names",
+	"DELETE /api/v1/feed-subscriptions/{id}": "where the event feed is pushed is administrator configuration, like the worker it names",
+	"GET /api/v1/events":                     "a machine-to-machine pull feed for systems beyond Atlas (a CMDB, a billing system), paged by a cursor the consumer keeps; an agent reads how a position's actions ended with atlas_order_line_outcomes",
+	"GET /api/v1/message-sources":            "the Modeler's authoring aid for picking a message name — watch configuration, product actions and deployed catches; an agent reads products with atlas_list_catalog_products and processes with atlas_get_process_xml, and publishes a message itself rather than needing one to exist",
 
 	// Repository: package management, an admin/UI concern.
 	"GET /api/v1/repository/packages":               "repository management is a UI concern",

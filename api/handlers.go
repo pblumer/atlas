@@ -31,6 +31,7 @@ import (
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
+	"github.com/pblumer/atlas/connector/s3"
 	"github.com/pblumer/atlas/connector/scim"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/connector/sharepoint"
@@ -201,6 +202,11 @@ type infoResp struct {
 	// (the --docs gate, ADR-0043), so the web UI can show or hide its
 	// "API Explorer" entry without probing /api/docs.
 	Docs bool `json:"docs"`
+	// Catalogue reports whether the shop, the catalogue, the orders and the
+	// inventory are served (the --catalogue gate,
+	// ADR-0434), so the Console can leave them out
+	// of its menus rather than lead somebody to a view whose every call is a 404.
+	Catalogue bool `json:"catalogue"`
 	// Revision/BuildTime/Modified/Go are the binary's embedded VCS build metadata,
 	// so the web UI can show exactly which commit the running server was built from.
 	Revision  string `json:"revision,omitempty"`
@@ -680,6 +686,7 @@ func (s *Server) handleInfo(w http.ResponseWriter, _ *http.Request) {
 		Product:   "Atlas",
 		Version:   Version,
 		Docs:      s.docsEnabled,
+		Catalogue: !s.catalogueOff,
 		Revision:  b.Revision,
 		BuildTime: b.Time,
 		Modified:  b.Modified,
@@ -787,7 +794,7 @@ func (s *Server) handleEvaluateFeel(w http.ResponseWriter, r *http.Request) {
 	case expr.KindNull:
 		result = "null"
 	}
-	httpapi.JSON(w, http.StatusOK, evalFeelResp{OK: true, Result: result, Kind: feelKindName(kind)})
+	httpapi.JSON(w, http.StatusOK, evalFeelResp{OK: true, Result: result, Kind: kind.Label()})
 }
 
 // feelBindings converts the JSON sample variables into FEEL values. Numbers keep
@@ -813,22 +820,6 @@ func feelBindings(in map[string]any) (map[string]expr.Value, error) {
 		}
 	}
 	return out, nil
-}
-
-// feelKindName maps a classified value kind to the label the UI shows.
-func feelKindName(k expr.ValueKind) string {
-	switch k {
-	case expr.KindBool:
-		return "boolean"
-	case expr.KindNumber:
-		return "number"
-	case expr.KindString:
-		return "string"
-	case expr.KindJSON:
-		return "json"
-	default:
-		return "null"
-	}
 }
 
 // handleDeploy parses a BPMN XML body, compiles and deploys every executable
@@ -935,14 +926,31 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Who may listen to the personal data atlas emits (ADR-0435 §6), before anything
+	// is persisted. It reads only the bytes and the caller, so it runs here rather
+	// than on the loop.
+	if found := s.personalListenersBlocking(r, body); len(found) > 0 {
+		personalListenerRefusal(w, r, found)
+		return
+	}
 	var (
 		resp       deployResp
 		compErr    error
 		persistErr error
 		claimed    string
+		refused    *mailboxRefusal
 		e          error
 	)
 	s.do(func() {
+		// Who may use a mailbox, checked before anything is persisted
+		// (ADR-0438): a definition that reads somebody else's mailbox
+		// must not exist even briefly.
+		if refused, e = s.mailboxUseBlockingModel(r, body); e != nil {
+			persistErr = e
+			return
+		} else if refused != nil {
+			return
+		}
 		// The claim on a message name, checked before anything is persisted (ADR-0205):
 		// a definition that would be delivered somebody else's inbound events must not
 		// exist even briefly.
@@ -973,6 +981,8 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, compErr.Error())
 	case persistErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "persist deployment: "+persistErr.Error())
+	case refused != nil:
+		mailboxRefusalResponse(w, refused)
 	case claimed != "":
 		claimRefusal(w, claimed, "An inbound worker you cannot reach publishes under this "+
 			"message name. Rename the message in your model, or ask whoever owns that worker to share it.")
@@ -1072,6 +1082,21 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 		// (ADR-0423).
 		cp.ResolveLatestAtRuntime(versionPins[i])
 
+		// Translate the process's model-authored job types into the engine-wide index
+		// space before it can create any job, so the type a job carries means the same
+		// thing in every definition (ADR-0007/0157). Resolution is idempotent, so a
+		// redeploy of the same model lands on the same indices.
+		//
+		// It comes before the record is written and before the version is counted,
+		// because interning a new type is itself a durable write that can fail. Done
+		// after the save, a failure answered the deploy with an error while leaving its
+		// record on disk — so the definition the caller was told had failed came back
+		// on the next restart — and with its version already spent, so a retry deployed
+		// as the next one.
+		if err := cp.ResolveJobTypes(s.jobTypes.Intern); err != nil {
+			return deployed, nil, err
+		}
+
 		if err := s.deploys.Save(persistedDeployment{
 			Key:              key,
 			ProcessID:        pid,
@@ -1089,13 +1114,6 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 		}
 
 		s.versions[pid] = version
-		// Translate the process's model-authored job types into the engine-wide index
-		// space before it can create any job, so the type a job carries means the same
-		// thing in every definition (ADR-0007/0157). Resolution is idempotent, so a
-		// redeploy of the same model lands on the same indices.
-		if err := cp.ResolveJobTypes(s.jobTypes.Intern); err != nil {
-			return deployed, nil, err
-		}
 		s.proc.Deploy(cp)
 		// Arm this fresh version's timer start events and supersede any the prior
 		// version left running, so the process starts on its schedule (ADR-0051).
@@ -4045,14 +4063,19 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 	var (
 		driveNeeded bool
 		owner       string
+		action      string
 		ownerErr    error
 	)
 	s.do(func() {
-		// A message a per-position product delivers to its running instances is the
-		// catalogue's to send, addressed to one instance and reported. By name it
-		// would reach whatever waits under the key it carries, and say "published"
-		// if nothing did (ADR-0428).
-		if owner, ownerErr = s.catalogOwnerOfDelivered(payload.Name); ownerErr != nil || owner != "" {
+		// A message a catalogue product's action starts or waits at is the order's to
+		// send. A per-position product's later actions are delivered to the one
+		// instance that carries a position, and reported; by name they would reach
+		// whatever waits under the key they carry (ADR-0428). A per-operation
+		// product's actions are start events the order enters through its start act,
+		// a return or an action; by name they would start the lifecycle process
+		// outside the order — a provisioning no line knows of, a return the inventory
+		// never hears about (ADR-0425 §8, ADR-0429 §1).
+		if owner, action, ownerErr = s.catalogOwnerOfName(payload.Name); ownerErr != nil || owner != "" {
 			return
 		}
 		s.proc.PublishMessage(payload.Name, payload.CorrelationKey, vars...)
@@ -4064,8 +4087,8 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	case owner != "":
 		httpapi.Error(w, http.StatusConflict, "message "+payload.Name+" is product "+owner+
-			"'s operation, delivered by the catalogue to the one instance that carries a "+
-			"position; it is never published by name")
+			"'s action "+action+"; the order sends it — through its start act, a return or "+
+			"the action — and it is never published by name")
 		return
 	}
 	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
@@ -6409,6 +6432,12 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		return &connectorPayload{Kind: "mail", Fields: map[string]any{
 			"connector": j.Connector, "from": j.From, "to": j.To, "cc": j.Cc, "bcc": j.Bcc,
 			"subject": j.Subject, "body": j.Body, "html": j.HTML, "messageId": j.MessageID,
+			// The mailbox half (ADR-0438): what to do and to which
+			// message — never how to reach the mailbox, which the worker holds.
+			"operation": j.Operation, "folder": j.Folder, "target": j.Target,
+			"destination": j.Destination, "maxResults": j.MaxResults,
+			"includeBody": j.IncludeBody, "unreadOnly": j.UnreadOnly,
+			"resultVariable": j.ResultVariable,
 		}}
 	case compiler.RemedyJobTypeIndex:
 		// The form and its field values travel; the AR System base URL and the service
@@ -6454,7 +6483,11 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// round's completion carries tool calls the engine turns into activations
 		// (ADR-0253/0254). Two arms rather than one payload nobody can read without
 		// knowing which it is.
-		j, err := agent.ResolveTask(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		//
+		// Through rd like every other arm: the prompt is one of the worker-evaluated
+		// expressions compiler/personal.go exempts, and that exemption only holds while
+		// it is evaluated over the plaintext of a declared personal value (ADR-0314).
+		j, err := agent.ResolveTask(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}
@@ -6488,6 +6521,26 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"message": j.Message, "content": j.Content, "name": j.Name,
 			"after": j.After, "maxResults": j.MaxResults, "fields": j.Fields,
 			"nonce": j.Nonce, "resultVariable": j.ResultVariable,
+		}}
+	case compiler.S3JobTypeIndex:
+		// The bucket, the key and — for a put — the document travel; the access key does
+		// not exist here to travel. Same split as Jira's above
+		// (ADR-0442), and with one consequence this kind has that
+		// the others do not: on an offloaded installation the *bytes* of a put go from
+		// the worker to the store, so the engine only ever held the variable they were
+		// composed from.
+		j, err := s3.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "s3", Fields: map[string]any{
+			"connector": j.Connector, "operation": j.Operation, "bucket": j.Bucket,
+			"key": j.Key, "content": j.Content, "contentType": j.ContentType,
+			"encoding": j.Encoding, "prefix": j.Prefix, "delimiter": j.Delimiter,
+			"startAfter": j.StartAfter, "maxKeys": j.MaxKeys,
+			"sourceBucket": j.SourceBucket, "sourceKey": j.SourceKey,
+			"expiresIn": j.ExpiresIn, "metadata": j.Metadata,
+			"resultVariable": j.ResultVariable,
 		}}
 	case compiler.MsSqlJobTypeIndex, compiler.MariaDBJobTypeIndex, compiler.PostgresJobTypeIndex:
 		// The statement and its bound parameters travel; the DSN does not exist here

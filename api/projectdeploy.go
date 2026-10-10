@@ -220,12 +220,26 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 		}
 		dmnForDraft[i] = xmls
 	}
+	// Who may listen to the personal data atlas emits (ADR-0435 §6), under the same
+	// "validate all, then deploy all" rule: one refused draft deploys none of the
+	// bundle.
+	for _, d := range drafts {
+		if found := s.personalListenersBlocking(r, []byte(d.XML)); len(found) > 0 {
+			auditPersonalListenerRefusal(r, found)
+			return bundleOutcome{status: http.StatusForbidden, proj: proj, resp: projectDeployResp{
+				ID: proj.ID, Name: proj.Name, Deployed: false,
+				Reason:      fmt.Sprintf("draft %q listens to personal data atlas emits — %s", d.ProcessID, personalListenerReason(r, found)),
+				Definitions: []deployedProcess{}, Decisions: []deployedDecisionResp{}, References: refReports,
+			}}
+		}
+	}
 
 	// Phase 3 (on-loop): deploy the application's decisions, then each draft with
 	// its matched DMN model.
 	var (
 		persistErr error
 		claimed    string
+		refused    *mailboxRefusal
 		deployed   []deployedProcess
 		decisions  []persistedDecision
 		warnings   []string
@@ -236,6 +250,14 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 		// two registered (ADR-0205) — nor, now, its decisions deployed.
 		for _, d := range drafts {
 			var e error
+			// Who may use a mailbox, under the same "validate all, then deploy all"
+			// rule (ADR-0438).
+			if refused, e = s.mailboxUseBlockingModel(r, []byte(d.XML)); e != nil {
+				persistErr = e
+				return
+			} else if refused != nil {
+				return
+			}
 			if claimed, e = s.claimBlockingModel(r, []byte(d.XML)); e != nil {
 				persistErr = e
 				return
@@ -269,6 +291,13 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 	})
 	if persistErr != nil {
 		return bundleOutcome{status: http.StatusInternalServerError, errMsg: "persist deployment: " + persistErr.Error(), proj: proj}
+	}
+	if refused != nil {
+		return bundleOutcome{status: http.StatusForbidden, proj: proj, resp: projectDeployResp{
+			ID: proj.ID, Name: proj.Name, Deployed: false,
+			Reason:      "a draft uses a mailbox you may not use — " + mailboxRefusalReason(refused),
+			Definitions: []deployedProcess{}, Decisions: []deployedDecisionResp{}, References: refReports,
+		}}
 	}
 	if claimed != "" {
 		return bundleOutcome{status: http.StatusConflict, proj: proj, resp: projectDeployResp{

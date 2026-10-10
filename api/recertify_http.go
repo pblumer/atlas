@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -175,6 +176,9 @@ func (s *Server) handleReadRecertification(w http.ResponseWriter, r *http.Reques
 	id := r.PathValue("id")
 	cmp, found, err := s.loadCampaign(id)
 	switch {
+	case errors.Is(err, errLoopClosing):
+		httpapi.Error(w, http.StatusServiceUnavailable, "recertification: "+err.Error())
+		return
 	case err != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "recertification: "+err.Error())
 		return
@@ -206,6 +210,9 @@ func (s *Server) handleCloseRecertification(w http.ResponseWriter, r *http.Reque
 	id := r.PathValue("id")
 	cmp, found, err := s.loadCampaign(id)
 	switch {
+	case errors.Is(err, errLoopClosing):
+		httpapi.Error(w, http.StatusServiceUnavailable, "recertification: "+err.Error())
+		return
 	case err != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "recertification: "+err.Error())
 		return
@@ -245,7 +252,7 @@ func (s *Server) loadCampaign(id string) (recertifyCampaign, bool, error) {
 		cmp, found, err = s.recertifications.campaign(id)
 	})
 	if !ran {
-		return recertifyCampaign{}, false, fmt.Errorf("this server is shutting down")
+		return recertifyCampaign{}, false, errLoopClosing
 	}
 	return cmp, found, err
 }

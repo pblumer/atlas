@@ -446,9 +446,21 @@ const jiraPullBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 // "a connector task belongs on a worker" quietly acquires an exception nobody decided
 // on. That is not visible in a diff — it is visible only as a badge in a properties
 // panel, which is where it was found.
+//
+// A kind no task names is outside the property: with no job type there is no handler
+// to keep in the engine or to move. The CloudEvents endpoint is the one such kind — the
+// event feed's subscriptions name it, and delivery reads the feed off the run loop as the
+// inbound bridge reads a watch
+// (ADR-0433).
 func TestEveryManagedKindIsProvisioned(t *testing.T) {
 	provisioned := (&Server{}).provisionedConnectorKinds()
 	for _, k := range managedConnectorKinds {
+		if len(k.jobTypes) == 0 {
+			if k.name != connectorKindCloudEvents {
+				t.Errorf("managed kind %q names no job type: only the cloudevents endpoint is a Worker no task uses", k.name)
+			}
+			continue
+		}
 		if _, handed := provisioned[k.name]; !handed {
 			t.Errorf("managed kind %q is not handed to a supervised worker: add a %sWorkerEnv "+
 				"to provisionedConnectorKinds, or it can never leave the engine's run loop", k.name, k.name)

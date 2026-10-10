@@ -1,16 +1,8 @@
 # ADR-0375: The feed generator is Go, so the Go checks stop needing Node
 
-- **Status:** Accepted
-- **Implementation:** Landed
+- **Status:** Superseded by ADR-0444 (2026-10-02: the feed is retired, and the open question this record carried — whether to derive the feed at runtime from an embedded CHANGELOG instead of committing it — is answered there: with the overrides gone, it is)
+- **Implementation:** Superseded
 - **Date:** 2026-09-16
-- **Open question:** Whether the feed should stop being a committed file at all —
-  derived at runtime from an embedded CHANGELOG instead. It was measured and
-  refused: deriving it would mean embedding **1.9 MB** of source (a 640 KB
-  CHANGELOG and 1.2 MB of overrides) to produce **23 KB** of feed, and the
-  CHANGELOG would go on conflicting anyway, because it is the source. The
-  arithmetic would change if the overrides ever shrank or the cap ever grew to the
-  point where most of what is embedded is actually served.
-- **Question checked:** 2026-09
 
 ## Context and problem statement
 

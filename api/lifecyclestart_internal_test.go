@@ -229,21 +229,21 @@ func TestDeliverOrStartAnswersEveryCase(t *testing.T) {
 		t.Fatalf("provision: %d (%v)", strand, err)
 	}
 
-	_, err = srv.deliverOrStart(strand, catalog.Binding{Process: "waiting-strand", Message: "s.change"}, "o1/x", "c-1", nil)
+	_, err = srv.deliverOrStart(strand, catalog.Binding{Process: "waiting-strand", Message: "s.change"}, "o1/x", "c-1", nil, nil)
 	var refused errTriggerRefused
 	if !errors.As(err, &refused) || !strings.Contains(refused.msg, "does not wait for s.change") {
 		t.Fatalf("change the strand does not wait for: %v, want a refusal", err)
 	}
 
 	ret := catalog.Binding{Process: "waiting-strand", Message: "s.deprovision"}
-	if key, err := srv.deliverOrStart(strand, ret, "o1/x", "d-1", nil); err != nil || key != strand {
+	if key, err := srv.deliverOrStart(strand, ret, "o1/x", "d-1", nil, nil); err != nil || key != strand {
 		t.Fatalf("return to the strand = %d (%v), want %d", key, err, strand)
 	}
-	key, err := srv.deliverOrStart(strand, ret, "o1/x", "d-2", nil)
+	key, err := srv.deliverOrStart(strand, ret, "o1/x", "d-2", nil, nil)
 	if err != nil || key == 0 || key == strand {
 		t.Fatalf("return after the strand ended = %d (%v), want a new instance", key, err)
 	}
-	if _, err := srv.deliverOrStart(strand, catalog.Binding{Process: "nowhere"}, "o1/x", "", nil); err == nil {
+	if _, err := srv.deliverOrStart(strand, catalog.Binding{Process: "nowhere"}, "o1/x", "", nil, nil); err == nil {
 		t.Fatal("a hand-started binding to nothing succeeded")
 	}
 }

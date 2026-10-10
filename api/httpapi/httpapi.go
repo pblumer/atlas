@@ -20,6 +20,8 @@ import (
 	"errors"
 	"net"
 	"net/http"
+
+	"github.com/pblumer/atlas/internal/trustedproxy"
 )
 
 // JSON writes v as the response body with the given status. Encoding errors are
@@ -40,16 +42,31 @@ func Error(w http.ResponseWriter, status int, msg string) {
 	JSON(w, status, map[string]string{"error": msg})
 }
 
-// ClientIP is the host part of a request's remote address, without the source
-// port. Rate limiting buckets on it, so it must be stable across the many
-// connections one caller opens. An address that carries no port is used as-is.
+// ClientIP is the address a request came from, without the source port. Rate
+// limiting buckets on it, so it must be stable across the many connections one
+// caller opens, and every audit line records it.
+//
+// Behind a proxy listed in --trusted-proxies it is the client that proxy named, in
+// X-Forwarded-For or a PROXY protocol header. From anywhere else it is the host
+// part of the connection's own address, and a forwarded header is never read: a
+// client-supplied value would let one caller spread its login attempts across as
+// many throttle buckets as it cares to invent (ADR-0197, ADR-0448).
+// An address that carries no port is used as-is.
 func ClientIP(r *http.Request) string {
+	if ip, ok := trustedproxy.Client(r); ok {
+		return ip
+	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr
 	}
 	return host
 }
+
+// Via is the trusted proxy that named ClientIP, or empty where none did. An audit
+// line keeps it beside the client, so a request that came through the balancer can
+// be told from one that came round it.
+func Via(r *http.Request) string { return trustedproxy.Via(r) }
 
 // Principal is an authenticated caller: a person with a session, the service
 // identity of a process the server started itself, or a peer authenticated by a

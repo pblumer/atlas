@@ -882,7 +882,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   identity.ownId = () => identity.draftId || (identity.fromDeployment ? openedProcessId : "") || "";
 
   const rerender = wireProperties(root, modeler, api, projectId, toast, identity);
-  const refreshBadges = makeImplementBadges(root, modeler);
+  const refreshBadges = makeImplementBadges(root, modeler, api);
   refreshBadges(); // reflect the initial tab for the diagram just imported
   const refreshPoolCaptions = makePoolProcessCaptions(modeler);
   refreshPoolCaptions(); // name the process each pool runs, on the diagram just imported
@@ -955,7 +955,19 @@ function unsupportedReason(bo) {
   for (const d of (bo.eventDefinitions || [])) {
     if (UNSUPPORTED_EVENT_DEFS[d.$type]) return UNSUPPORTED_EVENT_DEFS[d.$type];
   }
-  return null;
+  return conditionalStartReason(bo);
+}
+
+// conditionalStartReason flags the one event definition whose support depends on where
+// it stands. An event subprocess's conditional start is its trigger and runs while the
+// parent scope does (ADR-0137); any other conditional start has no instance whose
+// variables the condition could read. At process level the compiler refuses it at deploy
+// (start.conditional); the badge says so while the author is still drawing.
+function conditionalStartReason(bo) {
+  if (bo.$type !== "bpmn:StartEvent") return null;
+  if (!(bo.eventDefinitions || []).some((d) => d.$type === "bpmn:ConditionalEventDefinition")) return null;
+  if (bo.$parent && bo.$parent.triggeredByEvent) return null;
+  return "A conditional start event runs only inside an event subprocess: before an instance exists there are no variables for its condition to read. Use a conditional catch, boundary event or event subprocess, or start with the message or timer that observes the condition";
 }
 
 // A data object's declared type is BPMN's itemSubjectRef, and it is a *reference*
@@ -1577,6 +1589,10 @@ function implMarker(bo) {
   if (bo.$type === "bpmn:SendTask") {
     // The send task's kind badge (ADR-0112): a message throw, a Worker Type, or (plain job
     // worker) nothing — the filled send-task arrow bpmn-js draws is that kind's own symbol.
+    // A shop task has none here: its badge is the shop badge, which sits beside the
+    // envelope rather than over it (shopBadgeOf), and it is asked first, as sendTaskKind
+    // asks it, so a leftover messageRef cannot cover the envelope with the Message badge.
+    if (findExt(bo, SEND_SHOP_KIND.ext)) return null;
     if (bo.messageRef) return { label: SEND_MESSAGE_KIND.name, icon: SEND_MESSAGE_KIND.glyph };
     const kind = serviceTaskKind(bo);
     if (!kind.glyph) return null;
@@ -1615,7 +1631,106 @@ function drawImplBadges(modeler) {
       }));
     } catch { /* shape without graphics (e.g. mid-import) — skip */ }
   });
+  return ids.concat(drawShopBadges(modeler));
+}
+
+// shopOwners holds, per diagram instance, which message names product actions own: a Map
+// from name to [{ product, action }], set when the listing arrives. Present but null means
+// it was asked for and has not answered — or failed, which leaves it so: no receive task is
+// then the shop's, and nothing else changes. Kept per instance rather than per call because
+// a runtime view redraws its badges on every poll and must not ask again each time.
+const shopOwners = new WeakMap();
+
+// productActionOwners reads the listing's product actions into that Map.
+function productActionOwners(list) {
+  const out = new Map();
+  for (const s of messageSourcesOf(list, "product-action")) {
+    const name = (s.messageName || "").trim();
+    if (!name) continue;
+    const owners = out.get(name) || [];
+    const product = s.productName || s.productId || "?";
+    const action = s.action || "?";
+    if (!owners.some((o) => o.product === product && o.action === action)) owners.push({ product, action });
+    out.set(name, owners);
+  }
+  return out;
+}
+
+// loadShopOwners asks the server once per diagram instance which names product actions
+// own, and calls redraw when it knows. Without an api (a harness, a static render) it asks
+// nothing, and only the send task's declaration marks anything.
+function loadShopOwners(modeler, api, redraw) {
+  if (!api || !modeler || shopOwners.has(modeler)) return;
+  shopOwners.set(modeler, null);
+  let req;
+  try { req = Promise.resolve(api("GET", "/api/v1/message-sources")); } catch { return; }
+  req.then((list) => {
+    shopOwners.set(modeler, productActionOwners(list));
+    redraw();
+  }).catch(() => { /* no listing: no receive task is marked */ });
+}
+
+// shopBadgeOf says whether a task is the shop's, and in which way, as the badge's tooltip —
+// or null. It is derived and never stored (ADR-0429 §6): a send task from its declared
+// <atlas:shopTask>, in any mode; a receive task from a product action owning its message,
+// which is all that makes a receive the shop's (§4). Events are not marked: the
+// implementation badges mark tasks only, and an event's envelope is its whole symbol.
+function shopBadgeOf(bo, owners) {
+  if (!bo) return null;
+  if (bo.$type === "bpmn:SendTask") {
+    const shop = findExt(bo, SEND_SHOP_KIND.ext);
+    if (!shop) return null;
+    return shop.mode === "command" ? "Shop: commands a product action" : "Shop: states how a product action ended";
+  }
+  if (bo.$type === "bpmn:ReceiveTask") {
+    const name = ((bo.messageRef && bo.messageRef.name) || "").trim();
+    const own = name && owners ? owners.get(name) : null;
+    if (!own || !own.length) return null;
+    return `Shop: waits for product action ${own.map((o) => `${o.action} of ${o.product}`).join(", ")}`;
+  }
+  return null;
+}
+
+// SHOP_BADGE_SPOT is where the shop badge sits on a task: beside the envelope bpmn-js draws
+// in the top-left corner (x 6–27, y 5–19 for a send task; an instantiating receive task's
+// ring reaches x 24), on the same band and clear of it. The implementation badge covers
+// that corner on purpose; on a send or receive task the envelope there says which way the
+// message goes, so the shop badge must leave it showing — a reader with any other BPMN
+// tool sees the same send or receive task.
+const SHOP_BADGE_SPOT = { top: 3, left: 31 };
+
+// drawShopBadges marks the shop's tasks (shopBadgeOf) and returns the overlay ids it added.
+// drawImplBadges calls it, so the shop badge is drawn exactly where the implementation
+// badges are — the Implement tab and the runtime views, never the Design view.
+function drawShopBadges(modeler) {
+  const ids = [];
+  let overlays, registry;
+  try { overlays = modeler.get("overlays"); registry = modeler.get("elementRegistry"); }
+  catch { return ids; } // modeler torn down mid-flight
+  const owners = shopOwners.get(modeler) || null;
+  registry.forEach((el) => {
+    const title = shopBadgeOf(el.businessObject, owners);
+    if (!title) return;
+    try {
+      ids.push(overlays.add(el.id, "shop-badge", {
+        position: SHOP_BADGE_SPOT,
+        html: `<span class="shop-badge" title="${esc(title)}">${SEND_SHOP_KIND.glyph}</span>`,
+      }));
+    } catch { /* shape without graphics (e.g. mid-import) — skip */ }
+  });
   return ids;
+}
+
+// watchShopBadges is a read-only view's half of the receive task's shop badge: it asks for
+// the listing once for this viewer and, when it answers, redraws the shop badges in place.
+// The view's own drawImplBadges calls draw them from then on, the poll's included.
+function watchShopBadges(viewer, api) {
+  loadShopOwners(viewer, api, () => {
+    let overlays;
+    try { overlays = viewer.get("overlays"); } catch { return; } // view torn down meanwhile
+    try { overlays.remove({ type: "shop-badge" }); } catch { /* none drawn */ }
+    drawShopBadges(viewer);
+  });
 }
 
 // makeImplementBadges gates drawImplBadges on the Modeler's Implement tab: the Design
@@ -1624,7 +1739,12 @@ function drawImplBadges(modeler) {
 // Worker Type and a plain worker, is exactly what the author is working with. Returns a
 // refresh function the tab toggle and diagram-change events call; it is a no-op off the
 // Implement tab, where it clears any badges the author left behind.
-function makeImplementBadges(root, modeler) {
+//
+// The shop badge on a receive task needs the server's listing of who owns which message
+// (ADR-0429 §6). It is asked for the first time the Implement tab shows, not before — the
+// Design view draws no badge, so it has no question to ask — and once for the diagram;
+// its answer redraws through this same refresh, so it too is gated on the tab.
+function makeImplementBadges(root, modeler, api) {
   let ids = []; // overlay ids currently on the canvas, so we can remove ours only
 
   const clear = () => {
@@ -1637,6 +1757,7 @@ function makeImplementBadges(root, modeler) {
   const refresh = () => {
     clear();
     if (activeTab(root) !== "implement") return;
+    loadShopOwners(modeler, api, refresh);
     ids = drawImplBadges(modeler);
   };
 
@@ -3589,24 +3710,78 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "mail", name: "E-Mail Outbound", group: "Messaging & events", desc: "Send an e-mail via a mail provider", icon: "M",
-    // An envelope on a warm amber tile reads "outbound mail" at a glance — the mail
-    // Worker Type's counterpart to REST's globe and clio's event stream. The
+    id: "mail", name: "E-Mail", group: "Messaging & events", desc: "Send an e-mail, or read and manage the Worker's mailbox", icon: "M",
+    // An envelope on a warm amber tile reads "mail" at a glance — the mail Worker
+    // Type's counterpart to REST's globe and clio's event stream. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
     // fill and the white envelope strokes.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#e5484d"/><rect x="3" y="4.6" width="10" height="6.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 5.2L8 8.6l4.6-3.4" fill="none" stroke="#fff" stroke-width="1.1"/></svg>`,
     ext: "atlas:MailConnector",
     fields: [
       { group: "Mail worker" },
-      { key: "connector", label: "Worker", datalist: "mail", placeholder: "office365", hint: "The configured mail Worker this task sends through, by the name it has under Workers in the Console. Its host, credentials and default sender live on the server, never in the model." },
-      { group: "Message" },
-      { key: "to", label: "To", placeholder: "ops@example.com, =customer.email", fx: true, hint: "Comma-separated recipients. A value may be a FEEL expression (fx)." },
-      { key: "cc", label: "Cc", placeholder: "team@example.com", fx: true },
-      { key: "bcc", label: "Bcc", placeholder: "audit@example.com", fx: true, hint: "Delivered but never shown in the message headers." },
-      { key: "from", label: "From", placeholder: "leave empty for the Worker's default sender", fx: true },
-      { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true },
-      { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, rows: 8, hint: "Plain-text body, or a FEEL expression (fx) composed from the instance's variables — switch on fx, then press Ctrl+Space for variable completion." },
-      { key: "bodyHtml", label: "HTML body", type: "html", rows: 10, placeholder: "<p>Your order is <b>on its way</b>.</p>", hint: "Optional. With both bodies the mail goes out as multipart/alternative — this markup for clients that render HTML, the plain text above for those that don't. A leading '=' makes it a FEEL expression composing the markup from variables. Press F2 for the developer view." },
+      { key: "connector", label: "Worker", datalist: "mail", placeholder: "office365", hint: "The configured mail Worker this task sends through or whose mailbox it works with, by the name it has under Workers in the Console. Its host, credentials and default sender live on the server, never in the model. Reading or changing a mailbox needs access to that Worker: a deploy by somebody it is not shared with is refused." },
+      {
+        // Empty is send, which is every mail task authored before mailboxes existed
+        // (ADR-0438) — so an untouched task keeps meaning what it meant.
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "", l: "Send message" },
+          { v: "list", l: "List messages" },
+          { v: "get", l: "Read message" },
+          { v: "move", l: "Move message" },
+          { v: "mark-read", l: "Mark as read" },
+          { v: "mark-unread", l: "Mark as unread" },
+          { v: "delete", l: "Delete message (to the trash)" },
+          { v: "reply", l: "Reply to message" },
+        ],
+      },
+      { group: "Message", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" },
+      { key: "to", label: "To", placeholder: "ops@example.com, =customer.email", fx: true, showIf: (v) => !v.operation || v.operation === "send", hint: "Comma-separated recipients. A value may be a FEEL expression (fx)." },
+      { key: "cc", label: "Cc", placeholder: "team@example.com", fx: true, showIf: (v) => !v.operation || v.operation === "send" },
+      { key: "bcc", label: "Bcc", placeholder: "audit@example.com", fx: true, showIf: (v) => !v.operation || v.operation === "send", hint: "Delivered but never shown in the message headers." },
+      { key: "from", label: "From", placeholder: "leave empty for the Worker's default sender", fx: true, showIf: (v) => !v.operation || v.operation === "send" },
+      { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true, showIf: (v) => !v.operation || v.operation === "send" },
+      { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, rows: 8, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply", hint: (v) => (v.operation === "reply"
+        ? "The reply's text. It goes to the original's Reply-To, or its From, under \"Re: \" and its subject, threaded beneath it."
+        : "Plain-text body, or a FEEL expression (fx) composed from the instance's variables — switch on fx, then press Ctrl+Space for variable completion.") },
+      { key: "bodyHtml", label: "HTML body", type: "html", rows: 10, placeholder: "<p>Your order is <b>on its way</b>.</p>", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply", hint: "Optional. With both bodies the mail goes out as multipart/alternative — this markup for clients that render HTML, the plain text above for those that don't. A leading '=' makes it a FEEL expression composing the markup from variables. Press F2 for the developer view." },
+      { group: "Mailbox", showIf: (v) => !!v.operation && v.operation !== "send" && v.operation !== "reply" },
+      {
+        key: "folder", label: "Folder", placeholder: "INBOX", fx: true, showIf: (v) => v.operation === "list",
+        hint: "The folder to list — an IMAP folder name, a Gmail label id (INBOX, Label_…) or a Microsoft folder id or well-known name (inbox, archive). Empty is the inbox.",
+      },
+      {
+        key: "messageId", label: "Message", placeholder: "=mail.messageId", fx: true,
+        showIf: (v) => !!v.operation && v.operation !== "send" && v.operation !== "list",
+        hint: "The message this operation acts on: the messageId a mail watch published, or one a List messages answered. Usually a FEEL expression (fx), e.g. =messageId.",
+      },
+      {
+        key: "destination", label: "Move to", placeholder: "Archiv", fx: true, showIf: (v) => v.operation === "move",
+        hint: "The folder the message is filed into — an IMAP folder name, a Gmail label id, a Microsoft folder id or well-known name. In Gmail a move adds this label and takes the message out of the inbox.",
+      },
+      {
+        key: "maxResults", label: "Maximum messages", placeholder: "25", showIf: (v) => v.operation === "list",
+        hint: "Caps what lands in the result variable, newest first. Empty uses 25; at most 100.",
+      },
+      {
+        key: "unreadOnly", label: "Which", type: "select", showIf: (v) => v.operation === "list",
+        options: [{ v: "", l: "All messages" }, { v: "true", l: "Unread messages only" }],
+      },
+      {
+        key: "includeBody", label: "Text", type: "select", showIf: (v) => v.operation === "list" || v.operation === "get",
+        options: [{ v: "", l: "Envelope only" }, { v: "true", l: "Include the text" }],
+        hint: "The envelope is sender, recipients, subject, date, attachment names and sizes and the receiving server's SPF/DKIM/DMARC verdict. The text is cut at 64 KiB; attachment content is never read. What a process receives, every operator of a shared server can read — include the text only where the process needs it.",
+      },
+      { group: "Output", showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move" },
+      {
+        key: "resultVariable", label: "Result variable",
+        resultType: (v) => (v.operation === "list" ? "array" : v.operation === "move" ? "string" : "object"),
+        placeholder: "mail",
+        showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move",
+        hint: (v) => (v.operation === "move"
+          ? "Optional. Receives the message's id in its new folder — the same id for Gmail and Microsoft, a new one for IMAP."
+          : "Receives what the mailbox answered: " + (v.operation === "list" ? "a list of messages, newest first." : "the message.")),
+      },
     ],
   },
   {
@@ -3998,6 +4173,129 @@ const SERVICE_TASK_KINDS = [
               return "The created message is written into this process variable, so a later Edit message can address it as =nachricht.id. Leave empty to discard it.";
             default:
               return "What Discord returned is written into this process variable (leave empty to discard it).";
+          }
+        },
+      },
+    ],
+  },
+  {
+    id: "s3", name: "S3 Object Storage", group: "Files",
+    desc: "Put a document in a bucket, find it again by prefix, and hand somebody a link that opens it",
+    icon: "S",
+    // A bucket on storage grey: the thing an object goes into, which is what this Worker
+    // Type is about — its counterpart to Jira's ticked issue and Sheets' grid. The
+    // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the fill
+    // and the white marks.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#3f7f6e"/><path d="M3.6 4.6h8.8l-.9 7a1.2 1.2 0 0 1-1.2 1H5.7a1.2 1.2 0 0 1-1.2-1z" fill="#fff"/><ellipse cx="8" cy="4.6" rx="4.4" ry="1.3" fill="#fff"/><ellipse cx="8" cy="4.6" rx="2.6" ry=".7" fill="#3f7f6e"/></svg>`,
+    ext: "atlas:S3Connector",
+    fields: [
+      { group: "S3 worker" },
+      { key: "connector", label: "Worker", datalist: "s3", placeholder: "archiv", hint: "The configured S3 Worker this task acts as, by the name it has under Workers in the Console. Its access key and region live on the server, never in the model." },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "put-object", l: "Put object" },
+          { v: "get-object", l: "Read object" },
+          { v: "head-object", l: "Check object" },
+          { v: "list-objects", l: "List objects" },
+          { v: "copy-object", l: "Copy object" },
+          { v: "delete-object", l: "Delete object" },
+          { v: "presign-get", l: "Link to download" },
+          { v: "presign-put", l: "Link to upload" },
+        ],
+      },
+      {
+        key: "bucket", label: "Bucket", placeholder: "rechnungen", fx: true,
+        hint: "The bucket this task acts in — one name, never a path. May be a FEEL expression (fx).",
+      },
+      {
+        key: "key", label: "Key", placeholder: "=\"faelle/\" + vorgang.nummer + \"/antrag.pdf\"", fx: true,
+        showIf: (v) => v.operation && v.operation !== "list-objects",
+        hint: "The object's whole path inside the bucket, without a leading slash. Usually a FEEL expression (fx) built from the case it belongs to. Note that a retry re-runs this task with the same variables, so a key built from a timestamp or a random value writes a second object instead of overwriting the first.",
+      },
+      {
+        key: "content", label: "Content", placeholder: "=antwort", fx: true,
+        showIf: (v) => v.operation === "put-object",
+        hint: "What to store. It travels through a process variable, so it is capped at that variable's own budget — 1 MiB unless this installation raised it. For anything larger use Link to upload and let the browser that has the document send it straight to the store.",
+      },
+      {
+        key: "encoding", label: "Content is", type: "select",
+        options: [{ v: "", l: "Text — the characters as they are" }, { v: "base64", l: "Base64 — decode it before storing" }],
+        showIf: (v) => v.operation === "put-object" || v.operation === "get-object",
+        hint: "Text is right for JSON, CSV, XML and a letter. Base64 is what a binary needs to survive a process variable at all, and what a form's uploaded file already is. On a read it decides the same thing in reverse.",
+      },
+      {
+        key: "contentType", label: "Content type", placeholder: "application/pdf", fx: true,
+        showIf: (v) => v.operation === "put-object" || v.operation === "presign-put",
+        hint: (v) => (v.operation === "presign-put"
+          ? "Optional, and stronger than it looks: a type set here is bound into the URL, so whoever uploads must send exactly this one. That is what stops a link minted for a PDF being used to store something else."
+          : "What the bytes are, e.g. application/pdf or text/csv. Without it the store guesses, and a browser opening the object later downloads it instead of showing it."),
+      },
+      {
+        key: "prefix", label: "Prefix", placeholder: "=\"faelle/\" + vorgang.nummer + \"/\"", fx: true,
+        showIf: (v) => v.operation === "list-objects",
+        hint: "Only keys that start with this are listed — which is what searching an object store means, because S3 has no query language. May be a FEEL expression (fx).",
+      },
+      {
+        key: "delimiter", label: "Delimiter", placeholder: "/",
+        showIf: (v) => v.operation === "list-objects",
+        hint: "Optional. Keys sharing a segment are rolled up into common prefixes instead of listed one by one, so \"/\" makes a listing read like a folder. They come back in the result's prefixes.",
+      },
+      {
+        key: "startAfter", label: "Start after", placeholder: "=seite.nextStartAfter", fx: true,
+        showIf: (v) => v.operation === "list-objects",
+        hint: "Optional. Resumes after this key, exclusive. A truncated page answers with nextStartAfter, so passing it back here is how a loop pages a prefix forward without re-reading what it already has.",
+      },
+      {
+        key: "maxKeys", label: "Maximum keys", placeholder: "1000",
+        showIf: (v) => v.operation === "list-objects",
+        hint: "Caps what may land in the result variable. Empty uses 1000, which is also the most the store returns in one call; a larger value is refused at deploy rather than silently answered with 1000.",
+      },
+      {
+        key: "sourceBucket", label: "From bucket", placeholder: "eingang", fx: true,
+        showIf: (v) => v.operation === "copy-object",
+        hint: "The bucket the object is copied from. The copy happens inside the store, so the bytes never pass through atlas — which is what makes archiving a large document a step a process can take.",
+      },
+      {
+        key: "sourceKey", label: "From key", placeholder: "=eingang.key", fx: true,
+        showIf: (v) => v.operation === "copy-object",
+        hint: "The key the object is copied from. May be a FEEL expression (fx), e.g. the key an earlier List objects found.",
+      },
+      {
+        key: "expiresIn", label: "Valid for (seconds)", placeholder: "3600",
+        showIf: (v) => v.operation === "presign-get" || v.operation === "presign-put",
+        hint: "How long the link works. Empty uses one hour; seven days is the most the signature allows. Keep it short: the URL is a key to that one object for anyone who has it, and it lands in a process variable like any other value.",
+      },
+      {
+        key: "meta", label: "Metadata & headers", type: "map", childType: "atlas:S3Meta", fx: true,
+        showIf: (v) => v.operation === "put-object" || v.operation === "copy-object",
+        hint: "Extra request headers. A plain name becomes user metadata on the object (x-amz-meta-<name>), which is where a case number belongs; a name starting with x-amz- is sent as itself, which is how you reach server-side encryption or a storage class. On a copy these replace the source's metadata rather than adding to it — the store offers no third option.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable",
+        resultType: () => "object",
+        placeholder: "datei",
+        // Delete is the one operation the store answers with 204 No Content, so a result
+        // variable there would name a value that is never written — the panel hides it
+        // rather than letting an author expect one (the compiler refuses it too).
+        showIf: (v) => v.operation && v.operation !== "delete-object",
+        hint: (v) => {
+          switch (v.operation) {
+            case "list-objects":
+              return "The page lands here: =seite.objects is the list (1-based, so the first is =seite.objects[1].key), =seite.prefixes the rolled-up folders, =seite.truncated whether there is more, and =seite.nextStartAfter where to carry on.";
+            case "get-object":
+              return "The document lands in =datei.content, with =datei.contentType and =datei.size beside it. An object larger than a process variable's budget (1 MiB by default) fails the task rather than arriving cut short — use Link to download for those.";
+            case "head-object":
+              return "Whether the object is there is =datei.exists, and when it is, =datei.size, =datei.contentType and =datei.lastModified come with it. A missing object is an answer here, not an incident.";
+            case "presign-get":
+            case "presign-put":
+              return "The link lands in =datei.url, with =datei.expiresAt beside it. Put it in a user task, a mail or a message — whoever opens it reaches the store directly, so the document never passes through atlas.";
+            case "copy-object":
+              return "The copy's identity lands here: =datei.key, =datei.etag and the source it came from. Leave empty to discard it.";
+            default:
+              return "The stored object's identity lands here — =datei.etag, and =datei.versionId on a versioned bucket. Leave empty to discard it.";
           }
         },
       },
@@ -4614,14 +4912,199 @@ const SEND_MESSAGE_KIND = {
   glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#4666ff"/><rect x="3" y="4.6" width="10" height="6.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 5.2L8 8.6l4.6-3.4" fill="none" stroke="#fff" stroke-width="1.1"/></svg>`,
 };
 
+// SEND_SHOP_KIND is the send task's Shop kind (ADR-0429 §4): the point where a product's
+// process states how the action it is carrying out ended, or where a process asks a held
+// position of a product for an action of its own. Like the Message kind it is not a Worker
+// Type — the server serves its job itself, so there is no Worker to name and no credential to
+// hold — and a service task cannot carry it, so it too lives outside SERVICE_TASK_KINDS and
+// has its own fields (shopTaskFieldsHTML). Unlike the Message kind it is declared rather than
+// inferred: the <atlas:shopTask> extension is the whole of it, and exactly what the compiler
+// parses.
+const SEND_SHOP_KIND = {
+  id: "shop", name: "Shop", icon: "S", group: "Messaging & events",
+  desc: "Reports how a product action ended, or asks a held position for one (ADR-0429).",
+  glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#c2298a"/><path d="M4.2 6.2h7.6l-.6 6.3H4.8z" fill="#fff"/><path d="M6.3 6.2V5a1.7 1.7 0 0 1 3.4 0v1.2" fill="none" stroke="#fff" stroke-width="1.1"/></svg>`,
+  ext: "atlas:ShopTask",
+};
+
+// SEND_TASK_KINDS is everything a send task's picker offers: its two kinds of its own, then
+// the service task's catalog. The picker's first render and its refresh once the configured
+// Workers are known both read it, so the two cannot offer different lists.
+const SEND_TASK_KINDS = [SEND_MESSAGE_KIND, SEND_SHOP_KIND, ...SERVICE_TASK_KINDS];
+
+// SHOP_ACTION_KEY is the shape of a product action's key (ADR-0429 §1, after ADR-0305). The
+// field stays free text, because a process may be modelled before its product declares the
+// action; the shape is the one thing that can be checked without the catalogue, and a key
+// outside it can never match one.
+const SHOP_ACTION_KEY = /^[a-z0-9-]{1,64}$/;
+
+// SHOP_OUTCOMES is the closed list of how an action ends (ADR-0429 §3). Closed for the same
+// reason the effects are: a consumer of the published fact can rely on it.
+const SHOP_OUTCOMES = [
+  { v: "completed", l: "Completed — the action did what was asked" },
+  { v: "rejected", l: "Rejected — it was refused, e.g. by an approver" },
+  { v: "failed", l: "Failed — it was attempted and did not succeed" },
+];
+
+// SHOP_TASK_MODES are the modes a shop send task can be in (ADR-0429 §4), each with the
+// fields it carries beside `mode` itself, in the order the panel shows them. The select, the
+// fields and the save all read this list, and a save clears every field the chosen mode does
+// not carry: the compiler refuses a command that states an outcome, and the other mode's
+// leftovers would only look like configuration.
+//
+// A field marked fx holds a literal or an '=' expression, like the Worker Types' fx fields.
+// A command's order and position are such values because the instance computes them — a
+// leaver process finds them in the inventory — while its product and action are literals, so
+// the task names exactly one thing it may ask for (§10, decision 1).
+const SHOP_TASK_MODES = [
+  {
+    v: "outcome", l: "Outcome — report how the action ended",
+    hint: "On reaching this send task the server records how the action this instance is carrying out ended, for the order, position and command the instance holds (orderId, positionId, commandId), and the token continues. It names no Worker and carries no credential.",
+    fields: [
+      {
+        key: "action", label: "Action", placeholder: "password-reset",
+        hint: "The key of the product action this branch answers, as the catalogue declares it on the product whose process this is.",
+      },
+      {
+        key: "outcome", label: "Outcome", type: "select", options: SHOP_OUTCOMES,
+        hint: "Model one shop send task for each way the action can end, on the branch that ends it that way.",
+      },
+    ],
+  },
+  {
+    v: "command", l: "Command — ask a held position for an action",
+    hint: "On reaching this send task the process asks a held position of the product for an operator or system action, or its return, in the name of this process's application. The product must name that application among those it is commanded by; the provision, and an action only a customer may ask for, are refused when the task runs. It names no Worker and carries no credential.",
+    fields: [
+      {
+        key: "product", label: "Product", placeholder: "mailbox",
+        hint: "The catalogue product whose held position is asked, by its id.",
+      },
+      {
+        key: "action", label: "Action", placeholder: "deprovision",
+        hint: "The key of the action to ask for, as the product declares it.",
+      },
+      {
+        key: "order", label: "Order", fx: true, placeholder: "= leaver.orderId",
+        hint: "The order that holds the position: a literal id, or a FEEL expression (fx) over the instance's variables.",
+      },
+      {
+        key: "position", label: "Position", fx: true, placeholder: "mailbox",
+        hint: "The position on that order, likewise a literal or a FEEL expression (fx).",
+      },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "commandId",
+        hint: "Receives the id of the command the action runs under. Leave empty to discard it.",
+      },
+    ],
+  },
+];
+
+// shopTaskMode returns the mode entry a stored mode names, or the first one: an element
+// imported without a mode is read as an outcome, as the compiler reads it, rather than shown
+// blank.
+function shopTaskMode(v) {
+  return SHOP_TASK_MODES.find((m) => m.v === v) || SHOP_TASK_MODES[0];
+}
+
+// shopActionKeyProblem says what is wrong with a typed action key, or "" when nothing is.
+// An empty key is not flagged here: a freshly chosen Shop kind starts without one, and the
+// field's own hint already says what belongs there.
+function shopActionKeyProblem(v) {
+  const key = (v || "").trim();
+  if (key === "" || SHOP_ACTION_KEY.test(key)) return "";
+  return "Not an action key: a key is lower-case letters, digits and dashes, 1 to 64 characters (password-reset), so no product can declare this one.";
+}
+
+// shopTaskFieldsHTML renders the Shop kind's fields over the task's <atlas:shopTask>: the
+// mode, then the fields that mode carries. The action key's problem is rendered from the
+// stored value too, so a key saved as typed is still flagged when the task is opened again.
+function shopTaskFieldsHTML(bo) {
+  const shop = findExt(bo, SEND_SHOP_KIND.ext) || {};
+  const mode = shopTaskMode(shop.mode);
+  const modes = SHOP_TASK_MODES.map((m) =>
+    `<option value="${esc(m.v)}" ${m === mode ? "selected" : ""}>${esc(m.l)}</option>`).join("");
+  let fields = "";
+  for (const f of mode.fields) {
+    const value = shop[f.key] || "";
+    if (f.type === "select") {
+      const opts = f.options.map((o) => {
+        const { v, l } = selectOption(o);
+        return `<option value="${esc(v)}" ${v === value ? "selected" : ""}>${esc(l)}</option>`;
+      }).join("");
+      fields += `<label class="field"><span>${esc(f.label)}</span><select id="f-shop-${f.key}">${opts}</select></label>`;
+    } else if (f.fx) {
+      // A one-row textarea, as the Worker Types' fx fields are, so the fx toggle wired
+      // after render can host the FEEL editor in place.
+      fields += `<label class="field"><span>${esc(f.label)}</span>
+        <textarea id="f-shop-${f.key}" rows="1" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(value)}</textarea></label>`;
+    } else {
+      // The action and the product suggest what the catalogue declares (ADR-0429 §6); the
+      // lists are filled once the message sources arrive, and the fields stay free text.
+      const suggest = f.key === "action" || f.key === "product" ? ` list="f-shop-${f.key}-keys"` : "";
+      fields += `<label class="field"><span>${esc(f.label)}</span>
+        <input type="text" id="f-shop-${f.key}" value="${esc(value)}" placeholder="${esc(f.placeholder || "")}" autocomplete="off" spellcheck="false"${suggest}/></label>`;
+      if (suggest) fields += `<datalist id="f-shop-${f.key}-keys"></datalist>`;
+    }
+    if (f.key === "action") {
+      const problem = shopActionKeyProblem(value);
+      fields += `<p class="muted" id="f-shop-action-err" style="font-size:12px;color:var(--danger)" ${problem ? "" : "hidden"}>${esc(problem)}</p>`;
+    }
+    if (f.hint) fields += `<p class="muted" style="font-size:12px">${esc(f.hint)}</p>`;
+  }
+  return `<h3>Shop</h3>
+    <label class="field"><span>Mode</span><select id="f-shop-mode">${modes}</select></label>
+    ${fields}
+    <p class="muted" style="font-size:12px">${esc(mode.hint)}</p>`;
+}
+
+// shopActionSuggestions are the action keys and products a shop task may name, from the
+// product-action rows of the message sources. A task stating an outcome answers an action
+// of the product that binds its own process, so it is offered those; a command names its
+// product, so it is offered that product's actions, or every product's while none is named.
+// The provision is left out of a command's: the order starts it and a process cannot.
+function shopActionSuggestions(sources, mode, processId, product) {
+  const all = messageSourcesOf(sources, "product-action");
+  const commandable = all.filter((r) => r.effect !== "provision");
+  const rows = mode === "command"
+    ? commandable.filter((r) => !product || r.productId === product)
+    : all.filter((r) => r.processId === processId && r.effect !== "provision" && r.effect !== "deprovision");
+  const actions = new Map();
+  for (const r of rows) {
+    if (r.action && !actions.has(r.action)) actions.set(r.action, `${r.productName || r.productId || ""} · ${r.effect || ""}`);
+  }
+  // A command picks its product from every product it could command, whichever is named.
+  const products = new Map();
+  for (const r of mode === "command" ? commandable : []) {
+    if (r.productId && !products.has(r.productId)) products.set(r.productId, r.productName || r.productId);
+  }
+  const sorted = (m) => [...m.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  return { actions: sorted(actions), products: sorted(products) };
+}
+
+// fillShopSuggestions fills the shop task's action and product datalists.
+function fillShopSuggestions(body, suggestions) {
+  const fill = (id, entries) => {
+    const dl = body.querySelector("#" + id);
+    if (dl) dl.innerHTML = entries.map(([v, l]) => `<option value="${esc(v)}" label="${esc(l)}"></option>`).join("");
+  };
+  fill("f-shop-action-keys", suggestions.actions);
+  fill("f-shop-product-keys", suggestions.products);
+}
+
 // sendTaskKind returns the kind a send task currently represents (ADR-0112). It is detected by
-// what the task carries: a messageRef → Message; a Worker Type extension → that type; a
-// taskDefinition → Job worker. With none of those, the send task is the Message kind by default —
-// so selecting Message (which clears the other kinds' extensions) keeps the message picker visible
-// until a message is chosen, and a fresh send task starts as a plain message send. Without this
-// default, the Message kind would be undetectable while messageRef is still empty.
+// what the task carries: a messageRef → Message; an <atlas:shopTask> → Shop (ADR-0429); a
+// Worker Type extension → that type; a taskDefinition → Job worker. With none of those, the send
+// task is the Message kind by default — so selecting Message (which clears the other kinds'
+// extensions) keeps the message picker visible until a message is chosen, and a fresh send task
+// starts as a plain message send. Without this default, the Message kind would be undetectable
+// while messageRef is still empty.
+//
+// The order is the compiler's: a send task carrying both a messageRef and a shop task compiles
+// as a message send, so it is shown as one. The panel never writes both — choosing Shop clears
+// the messageRef — so only a hand-edited model can carry them together.
 function sendTaskKind(bo) {
   if (bo && bo.messageRef) return SEND_MESSAGE_KIND;
+  if (findExt(bo, SEND_SHOP_KIND.ext)) return SEND_SHOP_KIND;
   for (const k of SERVICE_TASK_KINDS) {
     if (k.id !== "worker" && findExt(bo, k.ext)) return k;
   }
@@ -4629,19 +5112,21 @@ function sendTaskKind(bo) {
   return SEND_MESSAGE_KIND;
 }
 
-// sendTaskKindHTML renders the send task's kind picker: the Message kind plus the service
-// task's Worker Type / job-worker catalog, then either the shared message picker (Message
-// kind) or the chosen type's field form (ADR-0112). The picker reuses the .stkind-row markup,
-// so the existing filter/click wiring drives it.
+// sendTaskKindHTML renders the send task's kind picker: the Message and Shop kinds plus the
+// service task's Worker Type / job-worker catalog, then the shared message picker (Message
+// kind), the shop task's fields (Shop kind, ADR-0429) or the chosen type's field form
+// (ADR-0112). The picker reuses the .stkind-row markup, so the existing filter/click wiring
+// drives it.
 function sendTaskKindHTML(modeler, bo) {
   const cur = sendTaskKind(bo);
   const picker = `<h3>Type</h3>
-    <input type="text" id="f-stkind-filter" placeholder="Search type… (e.g. message, mail)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
-    <div id="f-stkind-list">${stKindRowsHTML([SEND_MESSAGE_KIND, ...SERVICE_TASK_KINDS], cur.id)}</div>`;
+    <input type="text" id="f-stkind-filter" placeholder="Search type… (e.g. message, shop, mail)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
+    <div id="f-stkind-list">${stKindRowsHTML(SEND_TASK_KINDS, cur.id)}</div>`;
   if (cur.id === "message") {
     return picker + messageFieldsHTML(modeler, bo,
       "On reaching this send task the message is published; any instance waiting on it (a receive task or message catch) with a matching correlation key continues. The token then flows straight on.");
   }
+  if (cur.id === SEND_SHOP_KIND.id) return picker + shopTaskFieldsHTML(bo);
   const ext = findExt(bo, cur.ext) || {};
   return picker + stKindHeadingHTML(cur) + workerTypeInfoHTML(cur.id, kindNamesAWorker(cur)) +
     stKindFieldsHTML(cur, ext);
@@ -4671,17 +5156,40 @@ function applyServiceTaskKind(modeler, element, kindId) {
   upsertExt(modeler, element, kind.ext, defaults);
 }
 
-// applySendTaskKind switches a send task between its Message kind and the Worker Type / job-worker
-// kinds (ADR-0112). The three kinds are mutually exclusive at compile time, so switching to
-// Message drops every Worker Type / taskDefinition extension (the message picker then sets
-// the messageRef), and switching to a Worker Type / worker clears any messageRef first.
+// applySendTaskKind switches a send task between its Message kind, its Shop kind (ADR-0429) and
+// the Worker Type / job-worker kinds (ADR-0112). The kinds are mutually exclusive at compile
+// time, so switching to Message drops every Worker Type / taskDefinition / shop extension (the
+// message picker then sets the messageRef), and switching to a Worker Type / worker clears any
+// messageRef and shop task first.
+//
+// Switching to Shop leaves the element carrying the shop task and nothing else that says what
+// it does: no messageRef, no operationRef — a send task with one compiles as a message send
+// (ADR-0112) — no task definition and no Worker extension. The mode and the outcome start on
+// their first choices, written rather than implied, so the model says what the panel shows.
 function applySendTaskKind(modeler, element, kindId) {
   if (kindId === "message") {
     for (const k of SERVICE_TASK_KINDS) removeExt(modeler, element, k.ext);
+    removeExt(modeler, element, SEND_SHOP_KIND.ext);
     return;
   }
   const bo = element.businessObject;
   if (bo && bo.messageRef) linkMessage(modeler, element, bo, null);
+  if (kindId === SEND_SHOP_KIND.id) {
+    if (bo && bo.operationRef) {
+      try { modeler.get("modeling").updateProperties(element, { operationRef: undefined }); } catch { /* stale */ }
+    }
+    for (const k of SERVICE_TASK_KINDS) removeExt(modeler, element, k.ext);
+    // Picking Shop again on a shop task keeps what it already states.
+    if (findExt(bo, SEND_SHOP_KIND.ext)) return;
+    const mode = SHOP_TASK_MODES[0];
+    const defaults = { mode: mode.v };
+    for (const f of mode.fields) {
+      if (f.type === "select") defaults[f.key] = selectOption(f.options[0]).v;
+    }
+    upsertExt(modeler, element, SEND_SHOP_KIND.ext, defaults);
+    return;
+  }
+  removeExt(modeler, element, SEND_SHOP_KIND.ext);
   applyServiceTaskKind(modeler, element, kindId);
 }
 
@@ -5234,7 +5742,8 @@ function messageFieldsHTML(modeler, med, hint) {
   ).join("");
   const fields = current ? `
     <label class="field"><span>Message name</span>
-      <input type="text" id="f-msgname" value="${esc(current.name || "")}" placeholder="payment-received"/></label>
+      <input type="text" id="f-msgname" value="${esc(current.name || "")}" placeholder="payment-received" autocomplete="off"/></label>
+    <datalist id="f-msgname-sources"></datalist>
     <p class="muted" style="font-size:12px" id="f-msgsources"></p>
     <label class="field"><span>Correlation key (FEEL)</span>
       <textarea id="f-corrkey" rows="1" placeholder="orderId">${esc(messageCorrelationKey(current))}</textarea></label>
@@ -5270,26 +5779,266 @@ function messageFieldsHTML(modeler, med, hint) {
 //
 // A failed fetch leaves the line empty, like every other server-fed hint in this panel:
 // an author who cannot reach the server is not helped by being told so twice.
-function fillMessageSources(api, el, name) {
+//
+// The listing names two more sources than watches (ADR-0429 §6), and the line names them
+// too, so the author sees every source of the name in one place: the product action that
+// owns it, and the deployed processes waiting for it. Only watches are counted as
+// publishing it, which is what the line has always meant.
+function fillMessageSources(api, el, name, sources) {
   if (!api || !el) return;
   const want = (name || "").trim();
   if (!want) return;
-  api("GET", "/api/v1/message-sources").then((list) => {
-    const mine = (list || []).filter((s) => s && s.messageName === want);
-    if (!mine.length) {
-      el.innerHTML = `<span class="muted">No inbound event watch on this server publishes <b>${esc(want)}</b>. `
-        + `That is fine when the message is thrown inside a model or posted to <code>/api/v1/messages</code> — `
-        + `for a Jira or clio event, add a watch under <b>Workers → Events</b> in the Console.</span>`;
-      return;
-    }
-    const parts = mine.map((s) => {
-      const what = s.description ? ` — ${esc(s.description)}` : "";
-      const off = s.enabled ? "" : ' <span class="pill warn">off</span>';
-      return `<li>${esc(s.kind)} <b>${esc(s.connectorName)}</b>${what}${off}</li>`;
-    }).join("");
-    el.innerHTML = `Published by ${mine.length} inbound event watch${mine.length > 1 ? "es" : ""}:`
-      + `<ul style="margin:4px 0 0 16px;padding:0">${parts}</ul>`;
+  (sources || api("GET", "/api/v1/message-sources")).then((list) => {
+    if (!Array.isArray(list)) return; // not a listing: no hint, as for a failed fetch
+    const named = (s) => (s.messageName || "").trim() === want;
+    const watches = messageSourcesOf(list, "inbound-watch").filter(named);
+    const actions = messageSourcesOf(list, "product-action").filter(named);
+    const waiting = messageSourcesOf(list, "process").filter(named);
+    el.innerHTML = watchSourcesHTML(want, watches, actions.length > 0)
+      + productOwnersHTML(actions, watches.some((s) => s.enabled))
+      + waitingProcessesHTML(waiting);
   }).catch(() => { /* no hint; the field works the same */ });
+}
+
+// watchSourcesHTML is the hint's account of the inbound watches publishing a name. With
+// none, it says where watches are configured — unless a product action owns the name: no
+// watch may publish an action's message (ADR-0429 §1), so that advice would send the author
+// to a door that refuses them.
+function watchSourcesHTML(want, watches, ownedByProduct) {
+  if (!watches.length) {
+    if (ownedByProduct) return "";
+    return `<span class="muted">No inbound event watch on this server publishes <b>${esc(want)}</b>. `
+      + `That is fine when the message is thrown inside a model or posted to <code>/api/v1/messages</code> — `
+      + `for a Jira or clio event, add a watch under <b>Workers → Events</b> in the Console.</span>`;
+  }
+  const parts = watches.map((s) => {
+    const what = s.description ? ` — ${esc(s.description)}` : "";
+    const off = s.enabled ? "" : ' <span class="pill warn">off</span>';
+    return `<li>${esc(s.kind)} <b>${esc(s.connectorName)}</b>${what}${off}</li>`;
+  }).join("");
+  return `Published by ${watches.length} inbound event watch${watches.length > 1 ? "es" : ""}:`
+    + `<ul style="margin:4px 0 0 16px;padding:0">${parts}</ul>`;
+}
+
+// productOwnersHTML names the product action that owns a message name: the order sends it
+// when somebody asks for the action (ADR-0429 §2). Products that share a lifecycle process
+// share its names, so there may be more than one. A watch that also publishes the name is
+// the trap the record's context describes, and the catalogue's publish check refuses it, so
+// the line says so where the name is set.
+function productOwnersHTML(actions, alsoWatched) {
+  if (!actions.length) return "";
+  const owners = [...new Set(actions.map((s) =>
+    `<b>${esc(s.action || "?")}</b> of <b>${esc(s.productName || s.productId || "?")}</b>`
+      + (s.effect ? ` (${esc(s.effect)})` : "")))];
+  const clash = alsoWatched
+    ? ' <span class="pill warn">watched</span> Publishing the catalogue refuses an action whose message an inbound watch publishes.'
+    : "";
+  return `<div style="margin-top:4px">Owned by product action${owners.length > 1 ? "s" : ""} ${owners.join(", ")}`
+    + ` — the order sends it.${clash}</div>`;
+}
+
+// waitingProcessesHTML names the deployed processes whose newest version waits for a
+// message name, and where: at a message start or at a catch.
+function waitingProcessesHTML(waiting) {
+  if (!waiting.length) return "";
+  const where = new Map(); // "process element" → its HTML, so a place is named once
+  for (const s of waiting) {
+    const pid = s.processId || "?";
+    const at = s.element || "";
+    where.set(`${pid} ${at}`, `<code>${esc(pid)}</code>${at ? ` (${esc(at)})` : ""}`);
+  }
+  const named = [...where.keys()].sort().map((k) => where.get(k));
+  const n = new Set(waiting.map((s) => s.processId)).size;
+  return `<div style="margin-top:4px">Waited for by deployed process${n > 1 ? "es" : ""} ${named.join(", ")}.</div>`;
+}
+
+// messageSourceKind says which kind of source a GET /api/v1/message-sources row is
+// (ADR-0429 §6): an inbound watch, a product action, or a deployed process waiting for the
+// message. A server older than the field sends inbound watches and nothing else, so a row
+// without one is a watch — which is what it meant there.
+function messageSourceKind(s) {
+  return (s && s.sourceKind) || "inbound-watch";
+}
+
+// messageSourcesOf returns the listing's rows of one kind. A row of a kind this Modeler does
+// not know belongs to none, so what a newer server adds is left out rather than read as a
+// watch; an answer that is not a list holds no rows.
+function messageSourcesOf(list, kind) {
+  if (!Array.isArray(list)) return [];
+  return list.filter((s) => s && typeof s === "object" && messageSourceKind(s) === kind);
+}
+
+// MESSAGE_SOURCE_PREFIX marks a #f-msgref option that names a message a source knows — a
+// Worker event, a product action, a waiting process — rather than a message the diagram
+// already declares. Choosing one declares it (ADR-0429 §6).
+const MESSAGE_SOURCE_PREFIX = "__source__:";
+
+// NOT_FOR_AN_ACTION marks a Worker event offered in a process a catalogue product binds.
+// The catalogue's publish check refuses an action whose message an inbound watch publishes
+// (ADR-0429 §1), so a watch's name is the wrong pick for the receive an action is waiting
+// at — the trap of the record's context, made visible where the name is set. It is a
+// warning and not a lock: such a process may wait for a watch's event for a reason of its
+// own, beside its actions.
+const NOT_FOR_AN_ACTION = {
+  text: " — not for a product action",
+  title: "A catalogue product binds this process, and publishing the catalogue refuses an action whose message an inbound watch publishes.",
+};
+
+// receivesMessages reports whether a message-bearing element waits for its message rather
+// than throwing it: a start event (process-level or event subprocess), an intermediate
+// catch, a boundary event, a receive task. Only these are offered the Worker events and
+// the product actions. A watch's name is one the engine receives; offered to a throw it
+// would make the model a second sender of a name a Worker already sends, which is rarely
+// what the author means. An action's message is the order's to send (ADR-0429 §2), so a
+// throw is never offered one either.
+function receivesMessages(bo) {
+  const t = bo && bo.$type;
+  return t === "bpmn:StartEvent" || t === "bpmn:IntermediateCatchEvent" ||
+    t === "bpmn:BoundaryEvent" || t === "bpmn:ReceiveTask";
+}
+
+// throwsMessages reports whether a message-bearing element publishes its message: an
+// intermediate throw, an end event, a send task of the Message kind (the only kind whose
+// panel holds the message picker). These are offered the deployed processes waiting for a
+// name, which is the question a sender has: who is listening.
+function throwsMessages(bo) {
+  const t = bo && bo.$type;
+  return t === "bpmn:IntermediateThrowEvent" || t === "bpmn:EndEvent" || t === "bpmn:SendTask";
+}
+
+// workerEventChoices folds the server's inbound watches into one choice per message name,
+// naming every worker that publishes it, sorted by name. Two watches on two workers may
+// publish one name, and the author picks the name, not the watch. A name the diagram
+// already declares as a message is left out (declared): it is in the list above already,
+// and offering it twice would invite a second message of the same name. A name only
+// disabled watches publish is kept and marked, because "it exists but is off" is what
+// the author needs to know, not a reason to hide it. Only the listing's inbound watches
+// are read; its product actions and processes are other sources with groups of their own.
+function workerEventChoices(sources, declared) {
+  const byName = new Map();
+  for (const s of messageSourcesOf(sources, "inbound-watch")) {
+    const name = (s.messageName || "").trim();
+    if (!name || (declared && declared.has(name))) continue;
+    const c = byName.get(name) || { name, workers: [], enabled: false };
+    const who = s.connectorName || s.connectorId || "";
+    const what = who && s.kind ? `${who} (${s.kind})` : who || s.kind || "";
+    if (what && !c.workers.includes(what)) c.workers.push(what);
+    c.enabled = c.enabled || !!s.enabled;
+    byName.set(name, c);
+  }
+  return [...byName.values()]
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+    .map((c) => ({ name: c.name, workers: c.workers.join(", ") + (c.enabled ? "" : " — off") }));
+}
+
+// sourceChoices folds one kind of the listing's rows into one choice per message name,
+// sorted by name, labelled with what describe(row) says of every row naming it — products
+// that share a lifecycle process share its names, and two processes may wait for one. As
+// with the Worker events, a name the diagram declares is left out (declared), and a name
+// every row of which is off is kept and marked.
+function sourceChoices(rows, declared, describe) {
+  const byName = new Map();
+  for (const s of rows) {
+    const name = (s.messageName || "").trim();
+    if (!name || (declared && declared.has(name))) continue;
+    const c = byName.get(name) || { name, parts: [], enabled: false };
+    const what = describe(s);
+    if (what && !c.parts.includes(what)) c.parts.push(what);
+    c.enabled = c.enabled || s.enabled !== false;
+    byName.set(name, c);
+  }
+  return [...byName.values()]
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+    .map((c) => ({ name: c.name, label: c.parts.sort().join(", ") + (c.enabled ? "" : " — off") }));
+}
+
+// productActionChoices offers each product action's message, labelled with the product,
+// the action's key and its effect: "Mailbox · storage-extend (change)".
+function productActionChoices(sources, declared) {
+  return sourceChoices(messageSourcesOf(sources, "product-action"), declared, (s) =>
+    `${s.productName || s.productId || "?"} · ${s.action || "?"}${s.effect ? ` (${s.effect})` : ""}`);
+}
+
+// waitingProcessChoices offers each name a deployed process waits for, labelled with the
+// process and where its newest version waits: "billing · catch".
+function waitingProcessChoices(sources, declared) {
+  return sourceChoices(messageSourcesOf(sources, "process"), declared, (s) =>
+    [s.processId, s.element].filter(Boolean).join(" · "));
+}
+
+// productBindsProcess reports whether a catalogue product binds the process with this id:
+// one of the listing's product actions names it as the process it runs in. The listing
+// holds the actions of the catalogues the caller maintains only, so a product somebody
+// else maintains is not seen; the publish check stays the last word.
+function productBindsProcess(sources, processId) {
+  return !!processId && messageSourcesOf(sources, "product-action").some((s) => s.processId === processId);
+}
+
+// addSourceGroup puts one group of a source's names into the message picker, before
+// "New message", once per render. Every option declares its name when picked
+// (MESSAGE_SOURCE_PREFIX); mark, when given, is appended to each and explains itself in
+// the option's title.
+function addSourceGroup(select, data, label, choices, mark) {
+  if (!select || !choices.length || select.querySelector(`optgroup[data-${data}]`)) return;
+  const group = document.createElement("optgroup");
+  group.label = label;
+  group.setAttribute(`data-${data}`, "");
+  for (const c of choices) {
+    const opt = document.createElement("option");
+    opt.value = MESSAGE_SOURCE_PREFIX + c.name;
+    opt.textContent = (c.label ? `${c.name} — ${c.label}` : c.name) + (mark ? mark.text : "");
+    if (mark) opt.title = mark.title;
+    group.appendChild(opt);
+  }
+  select.insertBefore(group, select.querySelector('option[value="__new__"]'));
+}
+
+// offerWorkerEvents adds the "Events from Workers" group: the names the server's inbound
+// watches publish. In a process a catalogue product binds, each is marked as not for a
+// product action (NOT_FOR_AN_ACTION).
+function offerWorkerEvents(select, sources, declared, productBound) {
+  const choices = workerEventChoices(sources, declared).map((c) => ({ name: c.name, label: c.workers }));
+  addSourceGroup(select, "worker-events", "Events from Workers", choices, productBound ? NOT_FOR_AN_ACTION : null);
+}
+
+// offerMessageSources puts the names the server knows in front of the author who would
+// otherwise have to type them, grouped by where they come from (ADR-0429 §6). An element
+// that waits for a message is offered the Worker events and the product actions; one that
+// throws is offered the deployed processes waiting for a name, and never a product action,
+// whose message is the order's to send. The name field suggests the same names, declared
+// ones included. Picking one declares a message of that name; the field stays free text,
+// because a message may be modelled before its source exists, and the publish checks
+// remain the last word. It runs once the listing arrives, so the picker is usable at once
+// and gains the groups a moment later; a failed listing leaves it as it was.
+function offerMessageSources(select, fname, datalist, sources, modeler, bo) {
+  const declared = new Set(listMessages(modeler).map((m) => (m.name || "").trim()).filter(Boolean));
+  let suggested;
+  if (receivesMessages(bo)) {
+    offerWorkerEvents(select, sources, declared, productBindsProcess(sources, owningProcessId(bo)));
+    addSourceGroup(select, "product-actions", "Product actions", productActionChoices(sources, declared));
+    suggested = [
+      ...workerEventChoices(sources, null).map((c) => ({ name: c.name, label: c.workers })),
+      ...productActionChoices(sources, null),
+    ];
+  } else if (throwsMessages(bo)) {
+    addSourceGroup(select, "waiting-processes", "Processes waiting for it", waitingProcessChoices(sources, declared));
+    suggested = waitingProcessChoices(sources, null);
+  } else {
+    return;
+  }
+  if (!datalist) return;
+  // A name two sources know is suggested once, under the first.
+  const seen = new Set();
+  const unique = suggested.filter((c) => {
+    if (seen.has(c.name)) return false;
+    seen.add(c.name);
+    return true;
+  });
+  datalist.innerHTML = unique
+    .map((c) => `<option value="${esc(c.name)}" label="${esc(c.label)}"></option>`).join("");
+  // A receiver's field points at the list from the start; a throw's only once there is
+  // something to suggest, so a server with no waiting process leaves it plain.
+  if (fname && datalist.id && unique.length) fname.setAttribute("list", datalist.id);
 }
 
 // messagesManagerHTML lists the model's messages for central management (add,
@@ -5554,7 +6303,7 @@ function deleteSignal(modeler, sigId) {
 // name, shared so every event using the signal stays in sync. Unlike a message there is
 // no correlation key: a signal broadcasts by name alone. sed is the
 // bpmn:SignalEventDefinition.
-function signalFieldsHTML(modeler, sed, hint) {
+function signalFieldsHTML(modeler, sed, hint, listens) {
   const current = sed.signalRef;
   const options = listSignals(modeler).map((s) =>
     `<option value="${esc(s.id)}"${current && current.id === s.id ? " selected" : ""}>${esc(s.name || s.id)}</option>`
@@ -5563,15 +6312,52 @@ function signalFieldsHTML(modeler, sed, hint) {
     <label class="field"><span>Signal name</span>
       <input type="text" id="f-signame" value="${esc(current.name || "")}" placeholder="order-cancelled"/></label>
     <p class="muted" style="font-size:12px">Shared with every event that uses this signal — a broadcast reaches every catch, boundary, event subprocess, and start event of the same name.</p>` : "";
+  // A receiving element is offered the events atlas emits as signals (ADR-0435); the
+  // group is filled from the event catalogue once it answers, and #f-sigevent says
+  // what the chosen atlas.* name means and what it carries.
   return `<h3>Signal</h3>
     <label class="field"><span>Signal</span>
-      <select id="f-sigref">
+      <select id="f-sigref" data-listens="${listens ? "1" : ""}">
         <option value="">— none —</option>
         ${options}
+        ${listens ? `<optgroup label="Events atlas emits" id="f-sig-events"></optgroup>` : ""}
         <option value="__new__">＋ New signal…</option>
       </select></label>
     ${fields}
+    <div id="f-sigevent"></div>
     <p class="muted" style="font-size:12px">${hint}</p>`;
+}
+
+// SIGNAL_EVENT_PREFIX marks a picker option that names a catalogued event rather than
+// a signal of this model; choosing it reuses or creates the model's signal of that name.
+const SIGNAL_EVENT_PREFIX = "__event__:";
+
+// eventCatalog is the event catalogue, asked for once per page (ADR-0435). A modeler
+// may read it; a refusal or a server without it leaves the picker as it was.
+let eventCatalogReq = null;
+function eventCatalog(api) {
+  if (!eventCatalogReq) {
+    try { eventCatalogReq = Promise.resolve(api("GET", "/api/v1/event-catalog")).then((c) => (c && c.entries) || [], () => []); }
+    catch { eventCatalogReq = Promise.resolve([]); }
+  }
+  return eventCatalogReq;
+}
+
+// signalEventNote says what a catalogued atlas.* signal means and what a listener
+// receives, personal data named; and on a throw, that the name is atlas's own.
+function signalEventNote(entries, name, listens) {
+  const n = String(name || "").trim();
+  if (!n.startsWith("atlas.")) return "";
+  const e = entries.find((x) => !x.shaped && x.type === n);
+  if (!listens) {
+    return `<p class="hint warn">${esc(n)} is a name atlas emits${e ? "" : " (or reserves)"}: a model that throws it speaks for atlas. Use a name of your own.</p>`;
+  }
+  if (!e) return `<p class="hint warn">atlas emits no event named ${esc(n)}; this element would wait for something that never comes.</p>`;
+  const personal = (e.payload || []).filter((f) => f.data === "personal").map((f) => f.name);
+  return `<p class="hint" data-event="${esc(e.type)}">${esc((e.meaning || {}).en || "")}${
+    personal.length ? ` The listener receives personal data: ${personal.map(esc).join(", ")}. ` +
+      "Only an administrator may deploy a model that listens to it." : ""
+  } <a href="/#/console/events" target="_blank" rel="noopener">Events ↗</a></p>`;
 }
 
 // signalsManagerHTML lists the model's signals for central management (add, rename,
@@ -6938,8 +7724,15 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         html += sendTaskKindHTML(modeler, bo);
         // A message-kind send task is a throw, not an activity the engine can loop
         // (the compiler skips it), so the loop section is offered only for the
-        // job-backed kinds — matching what actually runs.
-        if (sendTaskKind(bo).id !== "message") html += multiInstanceHTML(bo);
+        // job-backed kinds — matching what actually runs. A shop task is job-backed, and its
+        // mode decides the rest: an outcome is the one report of the one command its
+        // instance carries out (ADR-0429 §3), so a second report changes nothing and there
+        // is nothing to loop, while a command may well be asked once per position — a
+        // leaver process returning each right the leaver holds.
+        const sendKind = sendTaskKind(bo);
+        const reportsOutcome = sendKind === SEND_SHOP_KIND &&
+          shopTaskMode((findExt(bo, SEND_SHOP_KIND.ext) || {}).mode).v === "outcome";
+        if (sendKind.id !== "message" && !reportsOutcome) html += multiInstanceHTML(bo);
       } else if (isActivity(bo)) {
         const t = bo.$type;
         html += `
@@ -7242,7 +8035,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "The event waits until this message is published with a matching correlation key.");
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "The event waits until a signal with this name is broadcast (by a throw or signal end event, in this or any other instance).");
+          html += signalFieldsHTML(modeler, sig, "The event waits until a signal with this name is broadcast (by a throw or signal end event, in this or any other instance).", true);
         } else if (link) {
           html += linkFieldsHTML(link, "This is the landing point of a <b>link throw</b> with the same name in the same scope (an off-page connector). It does not wait — a token arriving via the link flows straight on. Draw it with no incoming sequence flow.");
         } else if (cond) {
@@ -7258,7 +8051,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "On reaching this event the message is published; any instance waiting on it with a matching correlation key continues.");
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "On reaching this event the signal is broadcast to every event waiting on that signal name, across all instances. The token then continues.");
+          html += signalFieldsHTML(modeler, sig, "On reaching this event the signal is broadcast to every event waiting on that signal name, across all instances. The token then continues.", false);
         } else if (escl) {
           html += escalationFieldsHTML(modeler, escl, "On reaching this event the escalation is raised, propagating up to the nearest matching escalation boundary or event subprocess, and the token then continues on its outgoing flow (unless an interrupting catch aborts it). Uncaught, it is harmless.");
         } else if (link) {
@@ -7308,7 +8101,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           } else if (msg) {
             html += messageFieldsHTML(modeler, msg, "The event fires when this message is published with a matching correlation key.");
           } else if (sig) {
-            html += signalFieldsHTML(modeler, sig, "The event fires when a signal with this name is broadcast (in this or any other instance) while the activity runs.");
+            html += signalFieldsHTML(modeler, sig, "The event fires when a signal with this name is broadcast (in this or any other instance) while the activity runs.", true);
           } else if (escl) {
             html += escalationFieldsHTML(modeler, escl, "The event fires when the attached activity raises a matching escalation — an escalation throw/end event inside it, or one propagating up from a called process. Interrupting cancels the activity and routes out this event; non-interrupting runs the handler while the activity keeps going.");
           } else if (cond) {
@@ -7353,7 +8146,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           } else if (msg) {
             html += messageFieldsHTML(modeler, msg, "The event subprocess fires when this message is published with a matching correlation key, while its scope runs.");
           } else if (sig) {
-            html += signalFieldsHTML(modeler, sig, "The event subprocess fires when a signal with this name is broadcast while its scope runs. A non-interrupting trigger re-arms and can fire again.");
+            html += signalFieldsHTML(modeler, sig, "The event subprocess fires when a signal with this name is broadcast while its scope runs. A non-interrupting trigger re-arms and can fire again.", true);
           } else if (escl) {
             html += escalationFieldsHTML(modeler, escl, "The event subprocess fires when its enclosing scope raises a matching escalation. Interrupting terminates the scope's other work first; non-interrupting runs this handler alongside the still-running scope.");
           } else if (cond) {
@@ -7374,7 +8167,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         } else if (msg) {
           html += messageFieldsHTML(modeler, msg, "A message start event: publishing this message starts a new instance of this process, matched by message name (the correlation key is shared with the throwing event but is not yet evaluated for starts).");
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "A signal start event: broadcasting this signal starts a new instance of this process, matched by signal name. One broadcast starts every deployed process with a matching signal start.");
+          html += signalFieldsHTML(modeler, sig, "A signal start event: broadcasting this signal starts a new instance of this process, matched by signal name. One broadcast starts every deployed process with a matching signal start.", true);
         } else {
           const fd = findExt(bo, "zeebe:FormDefinition") || {};
           const curForm = fd.formId || "";
@@ -7401,7 +8194,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (msg) {
           html += messageFieldsHTML(modeler, msg, "On reaching this end event the message is published; any instance waiting on it with a matching correlation key continues. The instance then ends.");
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "On reaching this end event the signal is broadcast to every event waiting on that signal name, across all instances. The instance then ends.");
+          html += signalFieldsHTML(modeler, sig, "On reaching this end event the signal is broadcast to every event waiting on that signal name, across all instances. The instance then ends.", false);
         } else if (err) {
           html += errorFieldsHTML(modeler, err, "On reaching this end event the error is thrown, aborting its scope and propagating up to the nearest matching error boundary or error event subprocess. Uncaught, it raises an incident.");
         } else if (escl) {
@@ -7842,20 +8635,85 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       const curKindId = (sendPicker ? sendTaskKind(bo) : serviceTaskKind(bo)).id;
       loadConfiguredKinds(api, () => {
         if (!stlist.isConnected) return; // the panel moved on while the request was out
-        stlist.innerHTML = stKindRowsHTML(
-          sendPicker ? [SEND_MESSAGE_KIND, ...SERVICE_TASK_KINDS] : SERVICE_TASK_KINDS, curKindId);
+        stlist.innerHTML = stKindRowsHTML(sendPicker ? SEND_TASK_KINDS : SERVICE_TASK_KINDS, curKindId);
       });
       stlist.addEventListener("click", (e) => {
         const row = e.target.closest(".stkind-row");
         if (!row) return;
         try {
-          // A send task's picker includes the Message kind (ADR-0112); a service task's does not.
+          // A send task's picker includes the Message and Shop kinds (ADR-0112, ADR-0429); a
+          // service task's does not.
           if (bo.$type === "bpmn:SendTask") applySendTaskKind(modeler, element, row.dataset.kind);
           else applyServiceTaskKind(modeler, element, row.dataset.kind);
           show(element);
         } catch { /* stale */ }
       });
     }
+
+    // Shop send task (ADR-0429 §4): the mode and the fields that mode carries, rendered by
+    // shopTaskFieldsHTML. The kind is not in SERVICE_TASK_KINDS, so the catalog's generic
+    // wiring below never sees these fields. Every save writes the whole <atlas:shopTask> from
+    // the panel — the mode, its fields, and every other mode's fields cleared — so the element
+    // states one mode's contract and nothing left over from another.
+    const fshopmode = body.querySelector("#f-shop-mode");
+    if (fshopmode) {
+      const saveShopTask = () => savePreservingPanel(() => {
+        const mode = shopTaskMode(fshopmode.value);
+        const props = { mode: mode.v };
+        for (const m of SHOP_TASK_MODES) for (const f of m.fields) props[f.key] = undefined;
+        for (const f of mode.fields) {
+          const el = body.querySelector("#f-shop-" + f.key);
+          // An empty field is written as no attribute rather than an empty one, so a
+          // missing action reads as missing to the compiler and not as the key "".
+          if (el) props[f.key] = (el.value || "").trim() || undefined;
+          // A select the newly chosen mode brings is not on screen yet. It starts on its
+          // first choice, as it does when the kind is chosen, so the model says what the
+          // re-rendered panel will show.
+          else if (f.type === "select") props[f.key] = selectOption(f.options[0]).v;
+        }
+        upsertExt(modeler, element, SEND_SHOP_KIND.ext, props);
+      });
+      // A mode decides which fields there are, so choosing one re-renders them.
+      fshopmode.addEventListener("change", () => { saveShopTask(); show(element); });
+      // An fx field gets the same value-or-expression toggle as a Worker Type's: the
+      // textarea stays the value the save reads, '=' prefixed when it is an expression,
+      // which is what the compiler keys on.
+      const shopFields = shopTaskMode(fshopmode.value).fields;
+      const shopFx = shopFields.some((f) => f.fx) ? {
+        variables: variablesForCompletion(modeler, element),
+        validate: api ? (expression) => api("POST", "/api/v1/feel/validate", { expression }) : null,
+      } : null;
+      for (const f of shopFields) {
+        const el = body.querySelector("#f-shop-" + f.key);
+        if (!el) continue;
+        el.addEventListener("change", saveShopTask);
+        if (f.fx) attachExpressionToggle(el, shopFx);
+      }
+      // The key's shape is said while it is typed rather than first at deploy. What was
+      // typed is still saved on change: the text is the author's to correct, and a hint
+      // beside it says more than a field that quietly reverts.
+      const faction = body.querySelector("#f-shop-action");
+      const factionErr = body.querySelector("#f-shop-action-err");
+      if (faction && factionErr) {
+        faction.addEventListener("input", () => {
+          const problem = shopActionKeyProblem(faction.value);
+          factionErr.textContent = problem;
+          factionErr.hidden = !problem;
+        });
+      }
+      // The keys the catalogue declares, offered beside the free text. A listing that
+      // fails leaves the fields as they were.
+      if (api) {
+        const fproduct = body.querySelector("#f-shop-product");
+        api("GET", "/api/v1/message-sources").then((list) => {
+          const offer = () => fillShopSuggestions(body, shopActionSuggestions(list, shopTaskMode(fshopmode.value).v,
+            owningProcessId(bo), fproduct ? fproduct.value.trim() : ""));
+          offer();
+          if (fproduct) fproduct.addEventListener("change", offer);
+        }).catch(() => { /* no suggestions; the fields work the same */ });
+      }
+    }
+
     const stKind = serviceTaskKind(bo);
     const stModdle = modeler.get("moddle");
     // readMapField rebuilds a map field's moddle children (headers/query params)
@@ -8714,6 +9572,18 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     }
 
     const fmsgref = body.querySelector("#f-msgref");
+    // One listing of the server's message sources — inbound watches, product actions, the
+    // processes waiting for a name — serves the picker's groups, the name field's
+    // suggestions and the line under it, so a render asks once.
+    const msgSources = fmsgref && api ? api("GET", "/api/v1/message-sources") : null;
+    const msgBo = element.businessObject;
+    if (fmsgref && msgSources && (receivesMessages(msgBo) || throwsMessages(msgBo))) {
+      const fname = body.querySelector("#f-msgname");
+      if (fname && receivesMessages(msgBo)) fname.setAttribute("list", "f-msgname-sources");
+      msgSources
+        .then((list) => offerMessageSources(fmsgref, fname, body.querySelector("#f-msgname-sources"), list, modeler, msgBo))
+        .catch(() => { /* no sources offered; the picker works the same */ });
+    }
     if (fmsgref) {
       fmsgref.addEventListener("change", () => {
         const med = messageRefHolder(element.businessObject);
@@ -8722,6 +9592,13 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         savePreservingPanel(() => {
           if (v === "__new__") {
             linkMessage(modeler, element, med, createMessage(modeler, ""));
+          } else if (v.startsWith(MESSAGE_SOURCE_PREFIX)) {
+            // A Worker event becomes a message of this diagram under the same name —
+            // the one already declared when there is one, so a name is never split into
+            // two messages with two correlation keys.
+            const name = v.slice(MESSAGE_SOURCE_PREFIX.length);
+            const declared = listMessages(modeler).find((m) => (m.name || "").trim() === name);
+            linkMessage(modeler, element, med, declared || createMessage(modeler, name));
           } else if (v === "") {
             linkMessage(modeler, element, med, null);
           } else {
@@ -8733,13 +9610,13 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     }
     const fmsgname = body.querySelector("#f-msgname");
     if (fmsgname) {
-      fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value);
+      fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value, msgSources);
       fmsgname.addEventListener("change", () => {
         const med = messageRefHolder(element.businessObject);
         if (med && med.messageRef) med.messageRef.name = (fmsgname.value || "").trim();
-        // Renaming the message changes which watches feed it, so the line is re-read
-        // rather than left describing the name that was there a moment ago.
-        fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value);
+        // Renaming the message changes which watches feed it, so the line is redrawn for
+        // the new name from the same listing, rather than left describing the old one.
+        fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value, msgSources);
       });
     }
     const fcorrkey = body.querySelector("#f-corrkey");
@@ -8751,6 +9628,21 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     }
     const fsigref = body.querySelector("#f-sigref");
     if (fsigref) {
+      const listens = fsigref.dataset.listens === "1";
+      const sigNote = body.querySelector("#f-sigevent");
+      eventCatalog(api).then((entries) => {
+        if (!fsigref.isConnected) return;
+        const group = fsigref.querySelector("#f-sig-events");
+        if (group) {
+          const mine = new Set(listSignals(modeler).map((x) => x.name));
+          group.innerHTML = entries.filter((e) => e.listenable && (e.channels || []).includes("signal"))
+            .map((e) => `<option value="${esc(SIGNAL_EVENT_PREFIX + e.type)}" title="${esc((e.meaning || {}).en || "")}">${
+              esc(e.type)}${mine.has(e.type) ? "" : " — new"}</option>`).join("");
+          if (!group.children.length) group.remove();
+        }
+        const sed = signalDefOf(element.businessObject);
+        if (sigNote && sed && sed.signalRef) sigNote.innerHTML = signalEventNote(entries, sed.signalRef.name, listens);
+      });
       fsigref.addEventListener("change", () => {
         const sed = signalDefOf(element.businessObject);
         if (!sed) return;
@@ -8760,6 +9652,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             linkSignal(modeler, element, sed, createSignal(modeler, ""));
           } else if (v === "") {
             linkSignal(modeler, element, sed, null);
+          } else if (v.startsWith(SIGNAL_EVENT_PREFIX)) {
+            // A catalogued event: the model's signal of that name, made once.
+            const name = v.slice(SIGNAL_EVENT_PREFIX.length);
+            linkSignal(modeler, element, sed, listSignals(modeler).find((x) => x.name === name) || createSignal(modeler, name));
           } else {
             linkSignal(modeler, element, sed, listSignals(modeler).find((s) => s.id === v));
           }
@@ -8772,6 +9668,14 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       fsigname.addEventListener("change", () => {
         const sed = signalDefOf(element.businessObject);
         if (sed && sed.signalRef) sed.signalRef.name = (fsigname.value || "").trim();
+        // A renamed signal may now be, or no longer be, a name atlas emits.
+        const note = body.querySelector("#f-sigevent");
+        const sel = body.querySelector("#f-sigref");
+        if (note && sel) {
+          eventCatalog(api).then((entries) => {
+            if (note.isConnected) note.innerHTML = signalEventNote(entries, fsigname.value, sel.dataset.listens === "1");
+          });
+        }
       });
     }
     const ferrref = body.querySelector("#f-errref");
@@ -10120,6 +11024,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   const registry = viewer.get("elementRegistry");
   drawImplBadges(viewer); // show type icons at once, before the first poll lands
   drawDataStateLabels(viewer); // [state] captions: model content, so every view shows them
+  watchShopBadges(viewer, api); // a receive task is the shop's once the listing says so
   const countEl = root.querySelector("#inst-count");
   const tokenEl = root.querySelector("#token-count");
   const incidentPill = root.querySelector("#incident-pill");
@@ -11500,6 +12405,7 @@ export async function mountCollaboration(root, { api, toast, key }) {
   const registry = viewer.get("elementRegistry");
   drawImplBadges(viewer); // static type icons; this view never clears overlays
   drawDataStateLabels(viewer); // [state] captions, static for the same reason
+  watchShopBadges(viewer, api); // a receive task is the shop's once the listing says so
   // A pool's call activity drills in like everywhere else (ADR-0076). This view has no
   // single instance to mean — it replays the exchange between pools, not one caller —
   // so the "+" opens the called process's own live view.
@@ -11817,6 +12723,7 @@ export async function mountTaskProcess(container, { api, instanceKey, activeElem
     const registry = v.get("elementRegistry");
     try { drawImplBadges(v); } catch { /* best-effort type icons */ }
     try { drawDataStateLabels(v); } catch { /* best-effort [state] captions */ }
+    watchShopBadges(v, api); // a receive task is the shop's once the listing says so
 
     const frames = tl.frames || [];
     const steps = tl.steps || [];
@@ -12024,6 +12931,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const overlays = viewer.get("overlays");
   drawImplBadges(viewer); // static type icons; only the count badges are re-drawn
   drawDataStateLabels(viewer); // static [state] captions, drawn once with them
+  watchShopBadges(viewer, api); // a receive task is the shop's once the listing says so
   const eventBus = viewer.get("eventBus");
   const layer = canvas.getLayer("atlas-replay", 900); // moving token dot rides above the diagram
   const dotLayer = canvas.getLayer("atlas-tokens", 899); // static per-frame token dots

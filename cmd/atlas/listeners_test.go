@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/pblumer/atlas/internal/trustedproxy"
 )
 
 // TestReachableOrigin covers what the startup log prints. Before TLS the answer was
@@ -213,5 +215,35 @@ func TestHTTPServerCarriesItsAddressAndTLS(t *testing.T) {
 	}
 	if srv.TLSConfig != cfg {
 		t.Error("TLSConfig was dropped")
+	}
+}
+
+// TestHTTPServerErrorLog: both servers write net/http's own complaints through the
+// logging package, which is what demotes a load balancer's TCP health check to DEBUG
+// instead of an INFO line every ten seconds (ADR-0448).
+func TestHTTPServerErrorLog(t *testing.T) {
+	for name, srv := range map[string]*http.Server{
+		"public":   newPublicServer(":8080", http.NewServeMux(), nil, trustedproxy.Set{}),
+		"loopback": newHTTPServer("", http.NewServeMux(), nil),
+	} {
+		if srv.ErrorLog == nil {
+			t.Errorf("%s: ErrorLog is nil, so net/http logs every health check at INFO", name)
+		}
+	}
+}
+
+// TestOnlyThePublicServerHearsProxies: the loopback listener's peers are this process's
+// own children and the MCP adapter. Nothing on it is a load balancer, so nothing on it is
+// read as one — however the operator's list is written.
+func TestOnlyThePublicServerHearsProxies(t *testing.T) {
+	proxies, err := trustedproxy.Parse("127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if srv := newPublicServer(":8080", http.NewServeMux(), nil, proxies); srv.ConnContext == nil {
+		t.Error("the public server has no ConnContext, so a PROXY header's balancer is lost")
+	}
+	if srv := newHTTPServer("", http.NewServeMux(), nil); srv.ConnContext != nil {
+		t.Error("the loopback server reads connections as if a balancer were in front of it")
 	}
 }

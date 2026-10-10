@@ -2286,6 +2286,10 @@ type xmlServiceTask struct {
 	// User, when present, marks this service task a user-provisioning task
 	// (ADR-0123). The pointer is nil when the <atlas:userConnector> extension is absent.
 	User *xmlUserConnector `xml:"extensionElements>userConnector"`
+	// Shop is a send task's <atlas:shopTask> (ADR-0429 §4): the point where a
+	// product's process states how an action ended. Send tasks only; on a service task
+	// it is refused at compile.
+	Shop *xmlShopTask `xml:"extensionElements>shopTask"`
 	// Csv, when present, marks this service task a CSV-to-JSON task
 	// (ADR-0139). The pointer is nil when the <atlas:csvConnector> extension is absent.
 	Csv *xmlCsvConnector `xml:"extensionElements>csvConnector"`
@@ -2354,6 +2358,11 @@ type xmlServiceTask struct {
 	// (ADR-0258): one chat operation — send, edit, delete, read, list
 	// or open a thread — against a Worker an operator configured.
 	Discord *xmlDiscordConnector `xml:"extensionElements>discordConnector"`
+	// S3, when present, marks this service task an object-store task
+	// (ADR-0442): one operation against an S3-compatible bucket
+	// — put an object down, read a small one back, ask whether it is there, list what is
+	// under a prefix, copy one, delete one, or mint a link somebody can open it with.
+	S3 *xmlS3Connector `xml:"extensionElements>s3Connector"`
 	// Agent, when present, marks this service task an AI task: one call to a language
 	// model, one answer into one variable (ADR-0256). It is the same extension element an
 	// ad-hoc container carries, read for its other half — prompt and resultVariable rather
@@ -2672,11 +2681,41 @@ type xmlMailConnector struct {
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
+	// Operation is what the task does with the Worker's mailbox
+	// (ADR-0438); blank is send, which is every mail task authored
+	// before mailboxes existed. The attributes below belong to the other operations,
+	// and the compiler refuses one an operation does not use.
+	Operation      string `xml:"operation,attr"`
+	Folder         string `xml:"folder,attr"`
+	MessageID      string `xml:"messageId,attr"`
+	Destination    string `xml:"destination,attr"`
+	MaxResults     string `xml:"maxResults,attr"`
+	IncludeBody    string `xml:"includeBody,attr"`
+	UnreadOnly     string `xml:"unreadOnly,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
 }
 
 // xmlUserConnector is the <atlas:userConnector> extension of a user-provisioning
 // task (ADR-0123). Operation selects the action; the remaining
 // attributes are literal-or-FEEL values, like the mail worker's fields.
+// xmlShopTask is <atlas:shopTask mode="outcome" action="…" outcome="…"/> on a send
+// task (ADR-0429 §4).
+type xmlShopTask struct {
+	Mode    string `xml:"mode,attr"`
+	Action  string `xml:"action,attr"`
+	Outcome string `xml:"outcome,attr"`
+	// Product, Order, Position and ResultVariable belong to mode `command`: the
+	// product whose action is issued, the order and the position it is issued on
+	// (each a literal or an =expression), and the variable that receives the
+	// command id.
+	Product        string `xml:"product,attr"`
+	Order          string `xml:"order,attr"`
+	Position       string `xml:"position,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
+	// Retries is the task's own retry budget (ADR-0135); blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
 type xmlUserConnector struct {
 	Operation   string `xml:"operation,attr"`
 	Username    string `xml:"username,attr"`
@@ -2943,6 +2982,44 @@ type xmlGoogleSheetsConnector struct {
 	Header         string `xml:"header,attr"`
 	ResultVariable string `xml:"resultVariable,attr"`
 	// Retries is the connector task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// An object-store task's parameters, carried on a service task as an
+// <atlas:s3Connector connector="..." operation="..." .../> extension element
+// (ADR-0442). The connector attribute names the Worker (whose
+// access key lives on the server, never in the model) and operation is the object
+// operation the task performs. Element and attribute keep the pre-ADR-0203 spelling
+// their siblings carry: both are authored in deployed models.
+//
+// Which of the remaining attributes apply is decided by the operation, and only by it:
+// bucket addresses the bucket (every operation) and key the one object seven of them act
+// on; content is what a put writes and contentType what those bytes are; encoding says
+// whether content is text or base64; prefix, delimiter, startAfter and maxKeys are a
+// listing's shape; sourceBucket and sourceKey are what a copy copies from; expiresIn is a
+// presigned URL's lifetime in seconds; resultVariable receives what the store returned.
+// s3Meta children are extra request headers — user metadata, or an x-amz-* header sent as
+// itself. The compiler refuses any attribute the operation does not use, so a model can
+// never carry a value the Worker silently drops.
+type xmlS3Connector struct {
+	Connector      string      `xml:"connector,attr"`
+	Operation      string      `xml:"operation,attr"`
+	Bucket         string      `xml:"bucket,attr"`
+	Key            string      `xml:"key,attr"`
+	Content        string      `xml:"content,attr"`
+	ContentType    string      `xml:"contentType,attr"`
+	Encoding       string      `xml:"encoding,attr"`
+	Prefix         string      `xml:"prefix,attr"`
+	Delimiter      string      `xml:"delimiter,attr"`
+	StartAfter     string      `xml:"startAfter,attr"`
+	MaxKeys        string      `xml:"maxKeys,attr"`
+	SourceBucket   string      `xml:"sourceBucket,attr"`
+	SourceKey      string      `xml:"sourceKey,attr"`
+	ExpiresIn      string      `xml:"expiresIn,attr"`
+	ResultVariable string      `xml:"resultVariable,attr"`
+	Meta           []xmlHTTPKV `xml:"s3Meta"`
+	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
 }

@@ -29,7 +29,7 @@ var ceilingCalls = map[string]int{
 var classified = map[string]string{
 	"mcp/http.go:maxLine": "JSON-RPC framing, shared with the stdio transport where there is no HTTP body at " +
 		"all; it belongs to the protocol's own constants rather than to an operator's memory policy",
-	"cmd/atlas/playgroundrun.go:64 << 20": "the CLI reading an answer from a server it was pointed at — a " +
+	"cmd/atlas/apiclient.go:64 << 20": "the CLI reading an answer from a server it was pointed at — a " +
 		"client's own ceiling, not this installation's",
 	"connector/rest/openapimock/server.go:maxRecordedBody": "a mock server that exists for tests",
 	"connector/remedy/mock/server.go:1 << 20":              "a mock server that exists for tests",

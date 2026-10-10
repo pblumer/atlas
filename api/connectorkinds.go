@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
+	"github.com/pblumer/atlas/connector/s3"
 	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/connector/temis"
 	"github.com/pblumer/atlas/job"
@@ -79,7 +81,10 @@ type createConnectorParams struct {
 	CredentialsRef string `json:"credentialsRef"`
 	Provider       string `json:"provider"`
 	Sender         string `json:"sender"`
-	Enabled        *bool  `json:"enabled"`
+	// MailboxEndpoint is an SMTP mail Worker's IMAP endpoint
+	// (ADR-0438); cleared for every other kind.
+	MailboxEndpoint string `json:"mailboxEndpoint"`
+	Enabled         *bool  `json:"enabled"`
 	// ConnectionString is a SQL worker's whole configuration, sealed into the vault
 	// by the create handler which then stores only the reference — so the record still
 	// holds no secret (I6). It exists because for these kinds the credential *is* the
@@ -174,7 +179,7 @@ var managedConnectorKinds = append([]managedConnectorKind{
 			s.mailOutbox = mail.NewOutbox(0)
 		},
 		registerHandlers: func(s *Server, store *state.Store) {
-			s.jobRunner.Handle(compiler.MailJobTypeIndex, func(rd state.Reader) job.Handler {
+			s.jobRunner.HandleWithOutput(compiler.MailJobTypeIndex, func(rd state.Reader) job.OutputHandler {
 				return mail.Handler(rd, s.processLookup, s.mailRegistry, mailDirectory{s})
 			})
 		},
@@ -347,6 +352,36 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		jobTypes: []int32{compiler.DiscordJobTypeIndex},
 	},
 	{
+		// An S3 task performs one object operation against a Worker an operator
+		// configured (ADR-0442) and writes what the store
+		// returned into the task's result variable. Unlike Discord and Google Sheets the
+		// endpoint is meaningful and optional at once: blank is AWS at the credential
+		// bundle's region, and anything else is the store the installation runs.
+		name:           connectorKindS3,
+		validateCreate: validateS3Connector,
+		newRegistry:    func(s *Server) { s.s3Registry = s3.NewRegistry() },
+		registerHandlers: func(s *Server, store *state.Store) {
+			s.jobRunner.HandleWithOutput(compiler.S3JobTypeIndex, func(rd state.Reader) job.OutputHandler {
+				return s3.Handler(rd, s.processLookup, s.s3Registry)
+			})
+		},
+		rebuild: func(s *Server) error {
+			clients, problems, err := s.buildS3Clients()
+			if err != nil {
+				return err
+			}
+			s.s3Registry.ReplaceWith(clients, problems)
+			return nil
+		},
+		problem: func(s *Server, name string) (string, bool) {
+			if s.s3Registry == nil {
+				return "", false
+			}
+			return s.s3Registry.Problem(name)
+		},
+		jobTypes: []int32{compiler.S3JobTypeIndex},
+	},
+	{
 		// A Microsoft Entra ID task manages the cloud directory over Graph
 		// (ADR-0172). It is worker-only: the engine builds no client and holds no tenant
 		// credential — the store entry exists only so an operator can add a tenant in the
@@ -397,6 +432,20 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		// configuring "the model" configures both — and two job types because their
 		// completions are different shapes, which is clio's arrangement exactly.
 		jobTypes: []int32{compiler.AgentJobTypeIndex, compiler.AiTaskJobTypeIndex},
+	},
+	{
+		// A CloudEvents endpoint is where push delivery sends the event feed
+		// (ADR-0433). No task names
+		// it, so it has no job type, no client registry and no in-process handler: the
+		// record is the endpoint and the credential, and the feed's subscriptions
+		// (feedsubs.go) name it. The engine delivers to it itself, off the run loop
+		// (feedpush.go), from the feed it already holds.
+		name:             connectorKindCloudEvents,
+		validateCreate:   validateCloudEventsConnector,
+		newRegistry:      func(*Server) {},
+		registerHandlers: func(*Server, *state.Store) {},
+		rebuild:          func(*Server) error { return nil },
+		problem:          func(*Server, string) (string, bool) { return "", false },
 	},
 }, sqlManagedConnectorKinds()...)
 
@@ -486,6 +535,7 @@ var offloadableKinds = map[string][]int32{
 	connectorKindJira:         {compiler.JiraJobTypeIndex},
 	connectorKindGoogleSheets: {compiler.GoogleSheetsJobTypeIndex},
 	connectorKindDiscord:      {compiler.DiscordJobTypeIndex},
+	connectorKindS3:           {compiler.S3JobTypeIndex},
 	"csv":                     {compiler.CsvImportJobTypeIndex},
 	"ldif":                    {compiler.LdifJobTypeIndex},
 	"rest":                    {compiler.RestJobTypeIndex},
@@ -595,7 +645,7 @@ var offloadableKinds = map[string][]int32{
 //
 // With it the record's "owed a worker half" table is empty.
 func DefaultOffloadedKinds() []string {
-	return []string{"ad", connectorKindClio, "csv", connectorKindDiscord, connectorKindGoogleSheets, connectorKindJira, "ldap", "ldif", connectorKindMail, connectorKindRemedy, "rest", "scim", "script", connectorKindSharePoint, "soap", connectorKindTemis, "webscrape"}
+	return []string{"ad", connectorKindClio, "csv", connectorKindDiscord, connectorKindGoogleSheets, connectorKindJira, "ldap", "ldif", connectorKindMail, connectorKindRemedy, "rest", connectorKindS3, "scim", "script", connectorKindSharePoint, "soap", connectorKindTemis, "webscrape"}
 }
 
 // DefaultSupervisedWorkerOnlyKinds are the worker-only Worker Types Atlas supervises
@@ -690,6 +740,29 @@ func validateEndpointOnlyConnector(p *createConnectorParams) string {
 	return ""
 }
 
+// validateCloudEventsConnector validates a CloudEvents endpoint: the absolute URL push
+// delivery POSTs the feed to, and an optional credentialsRef naming the vault key sent
+// as its bearer token. It must be https, as a deployment target's must (targetstore.go):
+// the feed names who holds what across the catalogue, and the credential travels with
+// it. Plain http is accepted for a loopback host only, where nothing crosses a network.
+func validateCloudEventsConnector(p *createConnectorParams) string {
+	p.Provider, p.Sender, p.Model = "", "", ""
+	if p.Endpoint == "" {
+		return "a cloudevents worker requires the endpoint the event feed is delivered to"
+	}
+	u, err := url.Parse(p.Endpoint)
+	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
+		return "a cloudevents endpoint must be an absolute https URL"
+	}
+	if u.Scheme == "http" && !isLoopbackHost(u.Hostname()) {
+		return "a cloudevents endpoint must use https (plain http is accepted for a loopback host only)"
+	}
+	if u.User != nil {
+		return "a cloudevents endpoint carries no credentials in its URL; name a vault key as credentialsRef"
+	}
+	return ""
+}
+
 // validateRemedyConnector validates a Remedy create request: like temis/clio it needs
 // an endpoint, and it also needs a credentialsRef naming a vault {username,password}
 // bundle to authenticate against the AR System (ADR-0106); the secret itself never
@@ -773,6 +846,24 @@ func validateDiscordConnector(p *createConnectorParams) string {
 	p.Provider, p.Sender = "", ""
 	if p.CredentialsRef == "" {
 		return "a Discord Worker requires a credentialsRef naming a vault bundle: {botToken}"
+	}
+	return ""
+}
+
+// validateS3Connector validates an S3 Worker an operator is adding. The credential is
+// required — an unsigned request to an object store is refused by every store worth
+// using — and the endpoint is not: blank means AWS at the region the bundle names, which
+// is the only configuration an AWS installation needs.
+//
+// It deliberately does not check that the endpoint is reachable or that the key works.
+// A Worker is a durable record an operator may create before the bucket exists, and a
+// create that failed on a store that happens to be down is a create an operator cannot
+// make at all; a key that does not work shows up as a problem on the Worker
+// (ADR-0158), which is where it belongs.
+func validateS3Connector(p *createConnectorParams) string {
+	p.Provider, p.Sender, p.Model = "", "", ""
+	if strings.TrimSpace(p.CredentialsRef) == "" {
+		return "an S3 Worker requires a credentialsRef naming a vault bundle: {accessKeyId, secretAccessKey, region} — and optionally sessionToken"
 	}
 	return ""
 }
@@ -864,23 +955,27 @@ func normalizeConnectorUpdate(rec *connector) string {
 		validate = validateMailConnector
 	case connectorKindAgent:
 		validate = validateAgentConnector
+	case connectorKindCloudEvents:
+		validate = validateCloudEventsConnector
 	default:
 		return ""
 	}
 	p := createConnectorParams{
-		Name:           rec.Name,
-		Kind:           rec.Kind,
-		Endpoint:       strings.TrimSpace(rec.Endpoint),
-		CredentialsRef: strings.TrimSpace(rec.CredentialsRef),
-		Provider:       strings.TrimSpace(rec.Provider),
-		Sender:         strings.TrimSpace(rec.Sender),
-		Model:          strings.TrimSpace(rec.Model),
+		Name:            rec.Name,
+		Kind:            rec.Kind,
+		Endpoint:        strings.TrimSpace(rec.Endpoint),
+		CredentialsRef:  strings.TrimSpace(rec.CredentialsRef),
+		Provider:        strings.TrimSpace(rec.Provider),
+		Sender:          strings.TrimSpace(rec.Sender),
+		Model:           strings.TrimSpace(rec.Model),
+		MailboxEndpoint: strings.TrimSpace(rec.MailboxEndpoint),
 	}
 	if msg := validate(&p); msg != "" {
 		return msg
 	}
 	rec.Endpoint, rec.CredentialsRef = p.Endpoint, p.CredentialsRef
 	rec.Provider, rec.Sender, rec.Model = p.Provider, p.Sender, p.Model
+	rec.MailboxEndpoint = p.MailboxEndpoint
 	return ""
 }
 
@@ -910,6 +1005,24 @@ func validateMailConnector(p *createConnectorParams) string {
 			return err.Error()
 		}
 		p.Endpoint = endpoint
+		// The IMAP side is optional — a Worker that only sends names none — and is
+		// normalized here for the same reason the SMTP endpoint is: a typo found while
+		// typing, not at the first poll.
+		if p.MailboxEndpoint != "" {
+			imap, err := mail.NormalizeIMAPEndpoint(p.MailboxEndpoint)
+			if err != nil {
+				return err.Error()
+			}
+			p.MailboxEndpoint = imap
+		}
+		return ""
+	}
+	// Gmail and Microsoft read through the API they send with, and preview has no
+	// mailbox; an IMAP endpoint there would be dead configuration that reads as live.
+	// Cleared rather than refused, as preview's endpoint is below: it is a rule about
+	// the provider, and switching a Worker away from SMTP must not need a second edit.
+	p.MailboxEndpoint = ""
+	switch p.Provider {
 	case mail.ProviderPreview:
 		// A preview worker dials nothing and authenticates against nothing, so an
 		// endpoint or credential written into the form would be dead configuration

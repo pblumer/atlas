@@ -46,6 +46,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pblumer/atlas"
 	"github.com/pblumer/atlas/api/capability"
 	"github.com/pblumer/atlas/api/collab"
 	"github.com/pblumer/atlas/api/httpapi"
@@ -67,6 +68,7 @@ import (
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/remedy"
 	"github.com/pblumer/atlas/connector/rest"
+	"github.com/pblumer/atlas/connector/s3"
 	"github.com/pblumer/atlas/connector/scim"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/connector/sharepoint"
@@ -90,10 +92,12 @@ import (
 
 	"github.com/pblumer/atlas/api/catalog"
 	"github.com/pblumer/atlas/api/decisiondoc"
+	"github.com/pblumer/atlas/api/feelgen"
 	"github.com/pblumer/atlas/api/formgen"
 	"github.com/pblumer/atlas/api/order"
 	playgroundapi "github.com/pblumer/atlas/api/playground"
 	"github.com/pblumer/atlas/api/processdoc"
+	"github.com/pblumer/atlas/api/releasenotes"
 	"github.com/pblumer/atlas/api/token"
 	"github.com/pblumer/atlas/api/vault"
 )
@@ -141,11 +145,11 @@ var webFS embed.FS
 //
 // It is a var, not a const, so a release build can stamp the tag into it with
 //
-//	go build -ldflags "-X github.com/pblumer/atlas/api.Version=0.8.0"
+//	go build -ldflags "-X github.com/pblumer/atlas/api.Version=0.9.1"
 //
 // A plain checkout build keeps the "-dev" suffix; the exact commit is always
 // available from the embedded VCS metadata (see buildInfo).
-var Version = "0.8.0-dev"
+var Version = "0.9.1-dev"
 
 // deployment is the server-side record of a deployed definition. The compiled
 // process itself lives in the processor; here we keep the metadata the UI needs
@@ -352,6 +356,17 @@ type Server struct {
 	// loop, because it owns no state: it stores nothing, and the three closures in
 	// formgeneration.go are its whole reach into this server.
 	formGen *formgen.Service
+	// feelGen writes a FEEL expression from a conversation with the author
+	// (ADR-0445). Like formGen it owns no state and holds no run
+	// loop; feelgeneration.go is its whole reach into this server.
+	feelGen *feelgen.Service
+	// feelMetrics counts what the FEEL assistant's requests came to; nil when this
+	// server exports no metrics (feelgeneration.go).
+	feelMetrics *feelAssistantMetrics
+	// releaseNotes serves the Console's release notes, read from the CHANGELOG this
+	// binary embeds (ADR-0444). Like formGen it
+	// owns no state and holds no run loop.
+	releaseNotes *releasenotes.Service
 	// playground serves the Modeler's Playground area, and playgroundSessions
 	// holds its live sandboxes. Each sandbox owns its own single-writer goroutine,
 	// so neither field is guarded by this server's run loop (ADR-0215).
@@ -554,12 +569,27 @@ type Server struct {
 	// every change to it, with each Worker's bot token resolved from the vault
 	// (ADR-0041). Read only while driving jobs on the run loop, so it needs no lock.
 	discordRegistry *discord.Registry
+	// s3Registry resolves a Worker name to an S3 API client for object-store tasks
+	// (ADR-0442). Built from the Worker store at startup and
+	// rebuilt on every change; a task naming a Worker that is not in it parks with the
+	// reason (ADR-0158). The access key lives here and in the vault, never in a model.
+	s3Registry *s3.Registry
 
 	// inboundSubs holds the operator-configured clio inbound subscriptions the
 	// inbound bridge polls (ADR-0075). Owned by the run-loop goroutine. inboundPoll
 	// is that bridge's poll cadence (WithInboundPollInterval; 0 disables the bridge).
 	inboundSubs *inboundSubStore
 	inboundPoll time.Duration
+	// feedSubs holds the event feed's push subscriptions and feedPush the cadence they
+	// are delivered at (WithFeedPushInterval; 0 disables delivery). feedPushes is each
+	// subscription's runtime hold after a failed delivery, feedPushClient and
+	// feedPushClock the HTTP client and clock delivery uses, injectable for tests
+	// (ADR-0433).
+	feedSubs       *feedSubStore
+	feedPush       time.Duration
+	feedPushes     *feedPushState
+	feedPushClient *http.Client
+	feedPushClock  func() time.Time
 	// inboundClock is the clock the bridge paces per-watch cadences by, injectable so a
 	// test does not have to wait one out. nil means time.Now.
 	inboundClock func() time.Time
@@ -616,8 +646,12 @@ type Server struct {
 	// a tick.
 	triggerReceiptTTL time.Duration
 	lastReceiptPrune  int64
-	retentionBatch    int
-	retentionCursor   uint64
+	// eventFeedTTL is how long a row of the event feed is kept (ADR-0429 §5); zero
+	// keeps the default of 30 days. lastFeedPrune paces its prune like the receipts'.
+	eventFeedTTL    time.Duration
+	lastFeedPrune   int64
+	retentionBatch  int
+	retentionCursor uint64
 
 	// now reads wall-clock time (unix nanoseconds) for the retention sweep's
 	// eligibility cutoff. It is injected so a test can drive the cutoff
@@ -732,6 +766,17 @@ type Server struct {
 	// it with --docs=false / WithoutDocs (ADR-0043). Set once before Handler is
 	// mounted; read-only thereafter.
 	docsEnabled bool
+
+	// catalogueOff is the shop, the catalogue, the orders and the inventory switched
+	// off with --catalogue=false / WithoutCatalogue
+	// (ADR-0434). Spelled as "off" rather than
+	// "enabled" on purpose: the zero value is the shipped default, and seventy-odd
+	// tests build a Server as a literal and expect the whole surface. Set once before
+	// Handler is mounted; read-only thereafter.
+	catalogueOff bool
+	// catalogueReporting is every process id that calls the order routes, read once
+	// at start when the catalogue is off (processesReportingToOrders); nil otherwise.
+	catalogueReporting map[string]bool
 
 	// logs is the recent-process-log tail exposed at GET /api/v1/logs, so an
 	// operator can read server logs from the web UI without shell access. Nil when
@@ -922,6 +967,12 @@ func WithInboundPollInterval(d time.Duration) Option {
 	return func(s *Server) { s.inboundPoll = d }
 }
 
+// WithFeedPushInterval sets how often push delivery of the event feed runs. A
+// non-positive interval disables it (tests drive it directly). The default is 2s.
+func WithFeedPushInterval(d time.Duration) Option {
+	return func(s *Server) { s.feedPush = d }
+}
+
 // WithCollabKeepaliveInterval sets how often an idle collaboration SSE stream
 // writes a keepalive comment, the mechanism that detects a half-open browser
 // connection so its session participant is reaped (ADR-0140). A non-positive
@@ -1042,6 +1093,16 @@ func WithTriggerReceiptRetention(d time.Duration) Option {
 	return func(s *Server) {
 		if d > 0 {
 			s.triggerReceiptTTL = d
+		}
+	}
+}
+
+// WithEventFeedRetention sets how long a row of the event feed is kept (ADR-0429 §5);
+// the default is 30 days. A consumer whose cursor is older than that is answered 410.
+func WithEventFeedRetention(d time.Duration) Option {
+	return func(s *Server) {
+		if d > 0 {
+			s.eventFeedTTL = d
 		}
 	}
 }
@@ -1408,6 +1469,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	feedSubs, err := newFeedSubStore(filepath.Join(dataDir, "feed-subscriptions"))
+	if err != nil {
+		return nil, err
+	}
 	settings, err := newSettingsStore(filepath.Join(dataDir, "settings"))
 	if err != nil {
 		return nil, err
@@ -1494,10 +1559,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		repository:        repositoryCatalog,
 		repositoryStore:   repositoryStore,
 		inboundSubs:       inboundSubs,
+		feedSubs:          feedSubs,
+		feedPushes:        newFeedPushState(),
 		settings:          settings,
 		playgroundTTL:     playgroundSessionTTL, // WithPlaygroundSessions overrides both of these
 		playgroundSweep:   playgroundReapInterval,
 		inboundPoll:       2 * time.Second,          // default tick; WithInboundPollInterval overrides, 0 disables
+		feedPush:          2 * time.Second,          // default tick; WithFeedPushInterval overrides, 0 disables
 		inboundBatch:      defaultInboundBatch,      // per-poll ReadEvents cap; WithInboundBatchLimit overrides
 		exporterPoll:      5 * time.Second,          // OpenSearch export cadence; WithOpenSearchExportInterval overrides (ADR-0114)
 		retentionInterval: DefaultRetentionInterval, // history-retention sweep cadence; WithRetentionInterval overrides (ADR-0115)
@@ -1544,6 +1612,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		s.dialAgentWorker,
 		s.processSourceForGeneration,
 	)
+	// The FEEL assistant asks the same AI Workers through the same dial: what a model
+	// writes there is checked by the engine before the author sees it, which is the
+	// one thing it adds to form generation's pattern.
+	s.feelGen = feelgen.New(s.agentWorkersForFeel, s.dialAgentWorker)
+	s.feelGen.Observe = s.observeFeelAssistant
+	s.releaseNotes = releasenotes.New(atlas.Changelog, atlas.ADRIndex)
 	s.processDocs = processdoc.New(
 		s.runLoop,
 		processDocStore,
@@ -1634,7 +1708,15 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		// right, and a package that cannot name another origin cannot mislabel one.
 		func(g order.Grant) error {
 			s.do(func() {
-				s.proc.GrantEntitlement(model.EntitlementValue{
+				grant := s.proc.GrantEntitlement
+				if g.Outcome.Set() {
+					// The provision's outcome rides the same command as its grant,
+					// so one fsync commits both (ADR-0429 §3, I2).
+					grant = func(v model.EntitlementValue) {
+						s.proc.GrantEntitlementWithOutcome(v, outcomeValue(g.Outcome, orderTriggerSource))
+					}
+				}
+				grant(model.EntitlementValue{
 					Principal: g.Principal, ItemID: g.ItemID, VariantID: g.VariantID,
 					OrderID: g.OrderID, Since: g.At, Origin: model.OriginOrdered,
 					// The end travels with the grant, computed from the ceiling the
@@ -1655,8 +1737,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		// reconciliation found the target system does not have — goes through
 		// handleRevokeDiscrepancy and says so there, because the two rows assert
 		// different things (ADR-0346).
-		func(principal, itemID string, at int64, by string) error {
+		func(principal, itemID string, at int64, by string, outcome order.Outcome) error {
 			s.do(func() {
+				if outcome.Set() {
+					s.proc.RevokeEntitlementWithOutcome(principal, itemID, at, model.EndReturned, by,
+						outcomeValue(outcome, orderTriggerSource))
+					return
+				}
 				s.proc.RevokeEntitlement(principal, itemID, at, model.EndReturned, by)
 			})
 			return s.drive()
@@ -1764,6 +1851,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// A service added without a line here keeps the defaults — the completeness test
 	// in the limits package is what notices.
 	s.formGen.Limits = s.budgets()
+	s.feelGen.Limits = s.budgets()
 	s.processDocs.Limits = s.budgets()
 	s.decisionDocs.Limits = s.budgets()
 	s.taskFolders.Limits = s.budgets()
@@ -1775,8 +1863,17 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.catalogs.Approvers = approverLookup{s: s}
 	s.catalogs.Processes = processLookup{s: s}
 	s.catalogs.EntryPoints = processLookup{s: s}
+	s.catalogs.Forms = processLookup{s: s}
+	s.catalogs.Personal = processLookup{s: s}
 	s.catalogs.Remainders = remainderLookup{s: s}
 	s.orders.Limits = s.budgets()
+	// An outcome that comes without a right changing hands — a provision that
+	// failed or was refused, a return that failed — is written on its own
+	// (ADR-0429 §3).
+	s.orders.ReportOutcomesTo(func(o order.Outcome) error {
+		_, err := s.recordOutcome(o, orderTriggerSource)
+		return err
+	})
 	s.capabilities.Limits = s.budgets()
 	s.playground.Limits = s.budgets()
 	// The encrypted secret vault (ADR-0069) is on by default (ADR-0070) unless
@@ -1917,6 +2014,19 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// the worker resolves at call time (resolveConnectorSecret, ADR-0041). One worker
 	// serves every process under the reserved AD job type; each job dials, binds,
 	// operates, and closes.
+	// A shop send task states how a product action ended (ADR-0429 §4). It is the
+	// server's own: it reads the order and hands the outcome back on the completion,
+	// which the engine appends in the batch that completes the job.
+	s.jobRunner.HandleCompleting(compiler.ShopJobTypeIndex, func(rd state.Reader) job.CompletingHandler {
+		return s.shopTaskHandler(rd)
+	})
+	// A shop command task asks a held position for one of its product's actions in
+	// the name of its process's application (ADR-0429 §4, §10 decision 1). It acts
+	// through the order act, which waits on the run loop, so only a round that works
+	// its jobs off the loop takes it.
+	s.jobRunner.HandleOffLoop(compiler.ShopCommandJobTypeIndex, func(rd state.Reader) job.CompletingHandler {
+		return s.shopCommandHandler(rd)
+	})
 	s.jobRunner.HandleWithOutput(compiler.AdJobTypeIndex, func(rd state.Reader) job.OutputHandler {
 		// No directory registry in-process: a task naming a Console-configured
 		// directory is served by the worker that holds it (ADR-0164/0168), and this
@@ -2018,6 +2128,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 			return nil, err
 		}
 	}
+	// Switching the catalogue off is never refused, but it is not silent about the
+	// orders it strands: after recovery and the deployments, before the loop serves,
+	// so the counters and the stores are read directly (ADR-0434).
+	if s.catalogueOff {
+		s.warnCatalogueWorkInFlight()
+	}
 	// Build the OpenSearch exporter when configured (ADR-0114). It tails the durable
 	// WAL under dataDir and is bounded by the state store's applied-position
 	// watermark (LastAppliedPosition), so it only ever indexes records that are on
@@ -2085,6 +2201,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if s.inboundPoll > 0 {
 		s.wg.Add(1)
 		go s.inboundBridge(s.inboundPoll)
+	}
+	// Push delivery POSTs the event feed to the cloudevents Workers its subscriptions
+	// name (ADR-0433): a goroutine
+	// like the inbound bridge, its network I/O off the run loop and only the cursor's
+	// write on it. A non-positive interval disables it.
+	if s.feedPush > 0 {
+		s.wg.Add(1)
+		go s.feedPusher(s.feedPush)
 	}
 	// The OpenSearch exporter tails the durable log and bulk-indexes new records
 	// (ADR-0114). Like the timer scheduler and inbound bridge it is a separate
@@ -2241,6 +2365,7 @@ type purgeTarget struct {
 // Errors are logged and retried next tick.
 func (s *Server) sweepRetention(now int64) {
 	s.pruneTriggerReceipts(now)
+	s.pruneEventFeed(now)
 	// A transient read error just skips this tick (retried on the next), matching the
 	// silent, best-effort style of the other run-loop pollers (timerScheduler).
 	safePos, err := s.retentionSafePosition()
@@ -3293,13 +3418,23 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// rename reaches, so the old one keeps leading to the new one rather than to a
 	// 404 that reads as the service having been switched off. The query is kept:
 	// it is where a returning sign-in says how it went.
-	mountFunc(accessPublic, roleAny, "GET /portal.html", func(w http.ResponseWriter, r *http.Request) {
-		to := "/shop.html"
-		if r.URL.RawQuery != "" {
-			to += "?" + r.URL.RawQuery
-		}
-		http.Redirect(w, r, to, http.StatusMovedPermanently)
-	})
+	//
+	// Unless the shop *was* switched off (--catalogue=false), and then both addresses
+	// say so: the page is a static file the catch-all below would otherwise serve, and
+	// it would render and then fail every call it makes
+	// (ADR-0434).
+	if s.catalogueOff {
+		mountFunc(accessPublic, roleAny, "GET /shop.html", s.handleSwitchedOffPage)
+		mountFunc(accessPublic, roleAny, "GET /portal.html", s.handleSwitchedOffPage)
+	} else {
+		mountFunc(accessPublic, roleAny, "GET /portal.html", func(w http.ResponseWriter, r *http.Request) {
+			to := "/shop.html"
+			if r.URL.RawQuery != "" {
+				to += "?" + r.URL.RawQuery
+			}
+			http.Redirect(w, r, to, http.StatusMovedPermanently)
+		})
+	}
 
 	// The embedded UI is the catch-all; the more specific patterns above win under
 	// net/http's precedence rules. Static assets, and the login screen has to load.

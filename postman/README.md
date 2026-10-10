@@ -1,220 +1,317 @@
 # Atlas + Postman — onboarding kit
 
 Everything a person with **Postman** and access to a running **Atlas** server needs
-to go from zero to driving real workflows in about five minutes.
-
-This folder contains:
+to go from zero to driving real workflows in about five minutes — and a documented,
+runnable reference for the endpoints you use most.
 
 | File | What it is |
 |------|-----------|
-| [`Atlas.postman_collection.json`](Atlas.postman_collection.json) | The full API collection (52 requests, every `/api/v1` endpoint + `/healthz` + `/mcp`, plus session login/logout), organized by resource, with auto-chaining variables and test assertions. |
-| [`Atlas.postman_environment.json`](Atlas.postman_environment.json) | The `Atlas (local)` environment. One variable: `baseUrl` → `http://localhost:8080`. |
-| [`order-approval.bpmn`](order-approval.bpmn) | The sample model the Golden Path deploys — a two-step human approval that parks on user tasks, so you can watch the whole lifecycle. |
+| [`Atlas.postman_collection.json`](Atlas.postman_collection.json) | The collection: twelve folders, organised by resource and ordered so that the whole collection runs top to bottom. Every request documents the role it needs, its body and its answers, asserts the status and shape of the response, and carries saved example responses — including the common errors. |
+| [`Atlas.postman_environment.json`](Atlas.postman_environment.json) | The `Atlas (local)` environment: `baseUrl`, `username`, and the secrets `password` and `apiToken` (empty). |
+| [`order-approval.bpmn`](order-approval.bpmn) | The model the Golden Path deploys — a two-step human approval that parks on user tasks, so you can watch the whole lifecycle. |
+| [`payment-wait.bpmn`](payment-wait.bpmn) | The model the Messages folder deploys — an instance that waits for a `payment-received` message correlated by its `orderId`. |
 
-Every request in the collection was verified against a live Atlas server, so what
-you import matches what the server actually returns.
+The whole collection runs green, top to bottom, against a fresh server —
+`make postman-smoke` does exactly that — and its saved example responses were
+recorded from such a run.
 
-> **Atlas also ships a built-in API explorer** (Scalar) at **`/api/docs`**, backed
-> by an **OpenAPI** spec at **`/api/v1/openapi.json`** (enable with `--docs`). It
-> and this collection are complementary — see
-> [_OpenAPI / API explorer_](#relationship-to-swagger-ui--openapi) below.
+> **This collection is curated, not exhaustive.** It covers the endpoints a newcomer
+> and an integrator need first. The complete `/api/v1` surface is described by the
+> **OpenAPI** document at `/api/v1/openapi.json` and browsable in the built-in
+> explorer at `/api/docs` — see [_OpenAPI and the API explorer_](#openapi-and-the-api-explorer).
 
 ---
 
 ## 1. Start a server
 
-Atlas is a single self-contained binary. From the repo root:
+Atlas is a single self-contained binary. From the repository root:
 
 ```bash
-go run ./cmd/atlas serve --addr :8080 --data-dir ./atlas-data
+ATLAS_ADMIN_PASSWORD='choose-a-password' \
+  go run ./cmd/atlas serve --addr :8080 --data-dir ./atlas-data
 ```
 
-- REST API: `http://localhost:8080/api/v1`
-- Web UI (bpmn.io viewer/editor): `http://localhost:8080/`
-- MCP (for AI agents): `http://localhost:8080/mcp`
-- Health: `http://localhost:8080/healthz`
+- **A login is required by default** ([ADR-0195](../docs/adr/0195-auth-on-by-default.md)).
+  On the first start with an empty data directory Atlas seeds one administrator:
+  username `ATLAS_ADMIN_USERNAME` (default `admin`) and password
+  `ATLAS_ADMIN_PASSWORD`. Leave the password unset and Atlas generates one and
+  writes it to the startup log **once** (event `auth.admin_seeded`).
+- `--auth=false` runs the server open, with a warning at startup. That is for
+  laptops and demos only; the collection works against it too.
 
-Deployments and instances are durable (an on-disk sidecar under `--data-dir`), so
-they survive a restart.
+| URL | What |
+|---|---|
+| `http://localhost:8080/api/v1` | REST API |
+| `http://localhost:8080/` | Web UI (Console, Modeler) |
+| `http://localhost:8080/mcp` | MCP transport for AI agents |
+| `http://localhost:8080/healthz`, `/readyz` | Liveness and readiness probes |
+| `http://localhost:8080/api/docs` | API explorer (after login) |
+
+Deployments and instances are durable, so they survive a restart.
 
 ## 2. Import into Postman
 
 1. **Import** both JSON files (drag them onto Postman, or **Import → Files**).
-2. Top-right environment selector → choose **`Atlas (local)`**.
-3. If your server isn't on `localhost:8080`, edit the environment's `baseUrl`.
-4. **Instance with login enforced?** Set the `username` variable, add the
-   `password` secret to the Postman Vault, and run **Authentication → Log in** once
-   — see [_Authentication_](#authentication). For a local server, skip this.
+2. Select the **`Atlas (local)`** environment (top right).
+3. Set the environment's variables:
+   - `baseUrl` — if your server is not on `http://localhost:8080`;
+   - `username` — `admin` unless you chose another name;
+   - `password` — as the **current value** only. It is typed *secret*, and a
+     current value is neither synced to Postman's cloud nor exported with the
+     environment.
 
-## 3. Take the tour
+## 3. Sign in
 
-Open the **🚀 Golden Path (run top-to-bottom)** folder and hit **Send** on each
-request in order — or select the folder and use the **Collection Runner**. It walks:
+Run **Authentication → Check whether a login is required**, then **Log in**. The
+server answers with an `atlas_session` cookie (HttpOnly, 12 hours); Postman's
+cookie jar attaches it to every later request to the same host, so nothing else
+needs configuring.
+
+For machines — Newman, CI, scripts — use an **API token** instead: mint one with
+**Authentication → Mint an API token** (admin) or in the Console, and put the secret
+into the `apiToken` environment variable. The collection's pre-request script then
+sends `Authorization: Bearer <token>` on every request, and *Log in* skips itself.
+See [_Authentication_](#authentication) for the details.
+
+## 4. Take the tour
+
+Open **🚀 Golden Path (run top-to-bottom)** and send each request in order — or select
+the folder and use the **Collection Runner**:
 
 ```
-Deploy model → List processes → Start instance → List tasks
-   → Complete task → List instances → Engine stats
+Deploy model → List processes → Start instance → List the instance's tasks
+  → Complete the task → List instances → Read variables → Engine stats
 ```
 
-You don't copy any ids around: each step's **Tests** tab captures the ids it
-produced (`defKey`, `taskKey`, …) into collection variables, and the next request
-references them as `{{defKey}}`, `{{taskKey}}`. The requests also assert status
-codes and shapes, so a green run means the server behaved.
+You never copy an id: each step's **Tests** tab stores what it produced (`defKey`,
+`instanceKey`, `taskKey`) in collection variables, and the next request uses them.
+The same scripts assert the status and the shape of every answer, so a green run
+means the server behaved.
 
-### What you'll see
+What you will see:
 
-- **Deploy** returns the assigned definition `key` (e.g. `1`), `processId`
-  (`order-approval`), and `version`.
-- **Start instance** runs the engine to idle; the model parks on the first user
-  task, so `activeProcessInstances` becomes `1`.
-- **List tasks** shows the open *Review order* task with its `candidateGroups`.
-- **Complete task** submits `{"variables": {...}}`; the instance advances to
+- **Deploy** returns the definition `key`, `processId` (`order-approval`) and
+  `version`. On a fresh server the key is not `1`: Atlas' own system processes are
+  deployed first.
+- **Start instance** runs the engine until idle; the model parks on *Review order*.
+- **List the instance's tasks** uses `?processInstance=` so it finds exactly that
+  instance's task, however busy the server is.
+- **Complete the task** submits `{"variables": {...}}`; the instance moves on to
   *Approve order*.
-- **List instances** shows the instance still active on the second task, carrying
-  both the start variables and the ones you submitted — proof the data landed.
+- **Read variables** shows the start variables and the submitted form data, merged
+  into one object — proof the data landed.
 
-## 4. Beyond the tour
+## 5. Beyond the tour
 
-The reference folders cover the complete surface, grouped by resource:
+The folders are ordered so that the **whole collection runs in the Collection
+Runner** without editing anything. Each folder's description says what it needs.
 
-- **Authentication** — `Log in` / `Who am I` / `Log out` for instances that enforce
-  login (session cookie); skip on a local server
-- **Health & Info** — `/healthz`, `/api/v1/info`, `/api/v1/stats`
-- **FEEL Playground** — validate/evaluate FEEL expressions with the same engine
-  deployment uses (great for authoring gateway conditions before deploying)
-- **Deployments & Processes** — deploy, list, fetch XML, live runtime overlay,
-  collaboration runtime, delete
-- **Instances** — start, list (with variables), cancel
-- **User Tasks** — list, claim, unclaim, complete
-- **Messages** — correlate a message into waiting instances
-- **Projects, Drafts, Forms & DMN** — the Modeler's artifacts, exposed for
-  automation
-- **MCP** — poke the JSON-RPC transport (`initialize`, `tools/list`,
-  `tools/call`) the AI-agent connector uses
+| Folder | What it shows |
+|---|---|
+| **Authentication** | Whether a login is required, *Log in* (cookie), *Who am I*, and minting, listing and revoking an API token. |
+| **🚀 Golden Path** | The lifecycle tour above. |
+| **Health & Info** | `/healthz`, `/readyz`, server info, engine stats, the OpenAPI document. |
+| **FEEL Playground** | Validate and evaluate FEEL expressions with the engine's own FEEL — for authoring conditions before you deploy. |
+| **User Tasks** | List, get, claim, release and complete — it finishes the Golden Path instance's second task. |
+| **Messages** | Message correlation end to end: deploy `payment-wait`, start an instance that waits, publish the message, confirm the instance finished. |
+| **Instances** | Start, list with filters, read and correct variables (admin), cancel. |
+| **Incidents** | The unresolved-incident listing and its filters. |
+| **Deployments & Processes** | Deploy, list, fetch XML, runtime overlays, delete. |
+| **Applications, Drafts, Forms & DMN** | The Modeler's artifacts: create an application, save and file a draft, a form and a DMN reference, validate and deploy the application, and clean everything up again. |
+| **MCP (AI agents)** | The JSON-RPC transport: `initialize`, `tools/list`, `tools/call`. |
+| **Sign out (run last)** | *Log out*, last so a full run keeps its session. |
 
-## Relationship to Swagger UI / OpenAPI
+A full run deliberately **leaves two things behind** so you can look at them in the
+Console afterwards: the Golden Path's `order-approval` deployment with its finished
+and cancelled instances, and the `payment-wait` deployment with its finished
+instance. Everything else it creates — a second `order-approval` version, the
+sample application, its draft, form, DMN reference and deployed definition, and the
+API token — it deletes again. Its sample ids (`postman-draft-sample`,
+`postman-review-form`, a fresh `PM-<timestamp>` order id for the message) are
+chosen so that a run cannot overwrite or correlate into somebody else's work. Still:
+point it at a development or test server, not at production.
 
-Atlas ships a built-in **API explorer** (Scalar) at **`/api/docs`**, backed by an
-**OpenAPI** document at **`/api/v1/openapi.json`** (both served when the server runs
-with `--docs`; ADR-0043). It and this collection serve different moments — Postman
-works well with both:
+## 6. Run it from the command line
 
-| | Built-in API explorer / OpenAPI | This Postman collection |
+[Newman](https://www.npmjs.com/package/newman) runs the collection without Postman:
+
+```bash
+npx newman run postman/Atlas.postman_collection.json \
+  -e postman/Atlas.postman_environment.json \
+  --env-var baseUrl=http://localhost:8080 \
+  --env-var username=admin \
+  --env-var password="$ATLAS_ADMIN_PASSWORD"
+```
+
+or, with an API token instead of a password (the admin-only token requests then
+skip themselves, and *Set instance variables* skips its assertions):
+
+```bash
+npx newman run postman/Atlas.postman_collection.json \
+  -e postman/Atlas.postman_environment.json \
+  --env-var baseUrl=http://localhost:8080 \
+  --env-var apiToken="$ATLAS_API_TOKEN"
+```
+
+From a checkout, **`make postman-smoke`** ([`scripts/postman-smoke.sh`](../scripts/postman-smoke.sh))
+builds Atlas from the tree, starts it on an empty data directory with a generated
+admin password, runs the whole collection with Newman and stops the server again.
+It needs Go and Node.js; Newman is fetched by `npx`.
+
+## OpenAPI and the API explorer
+
+Atlas serves an **OpenAPI 3.1** document at **`/api/v1/openapi.json`** and the
+**Scalar** API explorer at **`/api/docs`** ([ADR-0043](../docs/adr/0043-openapi-spec-and-embedded-api-explorer.md)).
+Both are generated from the same route table the server mounts, so they cannot
+drift from what is served. Both require a login (ADR-0195), and both are off when
+the server runs with `--docs=false`.
+
+| | OpenAPI / API explorer | This collection |
 |---|---|---|
-| **Best for** | Browsing the surface, exact per-endpoint schemas, try-it-in-the-page | A guided, runnable lifecycle you step through and reuse |
-| **Golden Path** | — | Auto-chains ids across steps (`{{defKey}}` → `{{taskKey}}`), so a whole workflow runs top-to-bottom |
-| **Assertions** | — | Each request tests status/shape, so a green run means the server behaved |
-| **Automation** | Generate clients from the spec | Collection Runner / Newman in CI |
+| **Scope** | Every `/api/v1` endpoint | The endpoints you need first |
+| **Best for** | Exact per-endpoint schemas, generating clients | A guided, runnable lifecycle you step through and reuse |
+| **Chaining** | — | Ids flow from step to step (`{{defKey}}` → `{{instanceKey}}` → `{{taskKey}}`) |
+| **Assertions** | — | Every request tests status and shape |
+| **Examples** | — | Saved responses, including errors |
+| **Automation** | Client generators | Collection Runner, Newman, `make postman-smoke` |
 
-You can also **import the OpenAPI spec straight into Postman** — *Import → Link* →
-`{{baseUrl}}/api/v1/openapi.json` — to get an always-in-sync, generated collection.
-Use that as the exhaustive schema reference, and keep this hand-curated one as the
-opinionated onboarding path: the golden-path chaining, the session login, and the
-test assertions are the parts a raw spec-to-Postman import can't give you.
-
-> The OpenAPI doc, `/api/v1/info`, and `/api/v1/auth/login` are reachable **before**
-> login; the rest of `/api/v1` requires a session when auth is enforced.
-
-Once the spec lands, this kit will link to it here so newcomers can pick whichever
-entry point suits them.
+To get a generated collection of **every** endpoint, save the document as a file —
+send **Health & Info → OpenAPI document** and use *Save response → Save to a file*,
+or download it with curl and your session or token — and import that file
+(*Import → Files*). Importing by link does not work, because the document is
+behind the login. Use the generated collection as the exhaustive reference, and
+this one as the onboarding path.
 
 ## Authentication
 
-Two shapes, depending on how your instance runs:
+Every request accepts either credential:
 
-### Local / single-user build — no auth
+| | Session cookie | API token |
+|---|---|---|
+| **For** | People | Machines: Newman, CI, workers, a stdio MCP adapter |
+| **Obtain** | `POST /api/v1/auth/login` with `{"username", "password"}` | `POST /api/v1/api-tokens` (admin) or the Console; the secret is shown **once** |
+| **Send** | Cookie `atlas_session` (Postman's cookie jar does it) | Header `Authorization: Bearer <token>` (the collection does it when `apiToken` is set) |
+| **Lifetime** | 12 hours | `expiresInDays`, or never (`0`) |
+| **Roles** | The user's roles | The minter's roles **without admin** |
 
-Nothing to do. Skip the **Authentication** folder and run straight against
-`localhost:8080`.
+**Reachable without a credential:** `POST /api/v1/auth/login`, `GET /api/v1/info`,
+`GET /api/v1/auth/providers`, the login screen's settings
+(`/api/v1/settings/theme`, `/logo`, `/registration`), `/healthz` and `/readyz`.
+Everything else answers `401 {"error":"authentication required"}` with a
+`WWW-Authenticate: Bearer` header that points at the server's OAuth
+protected-resource metadata ([ADR-0200](../docs/adr/0200-mcp-oauth-resource-server.md)).
+`curl -u user:pass` (HTTP Basic) is not a credential Atlas reads.
 
-### Instance with login enforced (multi-user) — cookie session
-
-Multi-user Atlas instances enforce login and authenticate with a **session
-cookie**, *not* an `Authorization` header. That's why `curl -u user:pass` (HTTP
-Basic) returns `401 {"error":"authentication required"}` with no
-`WWW-Authenticate` header — Atlas never looks at that header; it wants the cookie.
-
-To authenticate in Postman:
-
-1. Set the **`username`** variable (your console username, e.g. `patrick` — some
-   instances accept the email instead).
-2. Store the password in the **Postman Vault**: 🔑 (bottom-left) → *Add secret* →
-   key `password`. Nothing secret is written into the collection or environment.
-3. Run **Authentication → Log in** once. It calls:
-
-   ```
-   POST {{baseUrl}}/api/v1/auth/login
-   { "username": "…", "password": "…" }
-   → 200  Set-Cookie: atlas_session=…; HttpOnly; SameSite=Lax; Max-Age=43200
-   ```
-
-4. Postman's cookie jar stores `atlas_session` and **attaches it to every
-   subsequent request** to that host automatically. Now the Golden Path and every
-   other folder work — the session lasts 12 hours.
+**Roles.** The request descriptions name the role each request needs: *user*
+(task inbox), *operator* (instances, messages, incidents), *modeler* (deploy,
+drafts, forms, FEEL playground) or *admin* (API tokens, setting instance
+variables). Signed in but without the role, a request answers **403**.
 
 **Gotchas**
 
-- **Still `401` after login?** Open the **Cookies** manager (under the address bar)
-  and confirm `atlas_session` is listed for your host. If your `username`/password
-  is wrong the Log in request itself returns `401` — try your email as the
-  username, and make sure the Vault `password` secret is actually set (an unset
-  `{{vault:password}}` sends an empty password).
-- The login path here is `/api/v1/auth/login`; if your build differs, adjust the
-  request URL (find the real one in the browser's DevTools → Network on login).
+- **Still `401` after Log in?** Open the **Cookies** manager (under the address
+  bar) and check that `atlas_session` is listed for your host. If *Log in* itself
+  answered `401 {"error":"invalid credentials"}`, check `username` and the
+  *current* value of `password`.
+- **Five wrong passwords** for one account throttle further attempts for that
+  account until its budget refills (up to 15 minutes).
+- **The Postman Vault** works too: replace `{{password}}` in *Log in*'s body with
+  `{{vault:password}}`. Newman has no Vault; it treats `vault:password` as an
+  ordinary variable name, so a command-line run then needs
+  `--env-var 'vault:password=…'`.
+- **Behind an authenticating reverse proxy** that wants HTTP Basic? Set the
+  collection's **Authorization** tab to *Basic Auth*; Atlas' own login still
+  applies behind it.
 
-### Behind a Basic-Auth reverse proxy instead?
+## Conventions
 
-If you front Atlas with a proxy that does HTTP Basic, set the **collection's
-Authorization tab** to *Basic Auth* (username + Vault password) — it then applies
-to every request. The `WWW-Authenticate` header on a `401` tells you which scheme a
-proxy expects.
+- **Deploy** and **draft** bodies are raw **BPMN XML** (`Content-Type: application/xml`).
+  The body is the whole model; a collaboration deploys one definition per pool.
+- Everything else is **JSON**. Variables use `{"variables": {name: value}}` —
+  scalars, objects and arrays bind into FEEL as values, contexts and lists, and
+  numbers keep their exact decimal text.
+- **Keys** are engine-assigned `uint64` numbers. Instance and task keys are large
+  because they encode the partition in their high bits.
+- **Capped listings** — `/tasks`, `/instances`, `/incidents`, `/audit`,
+  `/approvals` — answer a page `{items, total, totalExact, truncated, nextCursor}`,
+  never a bare array. Read the rows from `items`; `total` is exact only when
+  `totalExact` is true; pass `nextCursor` as `?before=` for the next page.
+- **Errors** answer `{"error": "…"}` with a 4xx or 5xx status.
+- **Applications** replaced projects (ADR-0128). `/api/v1/projects` still answers
+  as a deprecated alias; use `/api/v1/applications`. Artifacts still name their
+  application in a field called `projectId`.
 
-## Conventions worth knowing
-
-- **Deploy** bodies are raw **BPMN XML** (`Content-Type: application/xml`). The
-  body is the whole model; a collaboration deploys one definition per pool.
-- Everything else is **JSON**. Process/task variables use the shape
-  `{"variables": {name: value}}` — scalars, objects, and arrays are all accepted
-  and bind into FEEL as values, contexts, and lists. Numbers keep their exact
-  decimal text.
-- **Keys** are engine-assigned `uint64`s returned on deploy/list. Instance and job
-  (task) keys are large numbers (they encode the partition in their high bits) —
-  that's expected.
-
-## curl equivalent (if you want the shell version)
+## curl equivalent
 
 ```bash
 BASE=http://localhost:8080
+JAR=$(mktemp)
+
+# Sign in; the cookie lands in $JAR
+curl -s -c "$JAR" -X POST $BASE/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d "{\"username\":\"admin\",\"password\":\"$ATLAS_ADMIN_PASSWORD\"}"
 
 # Deploy
-KEY=$(curl -s -X POST $BASE/api/v1/deployments \
+KEY=$(curl -s -b "$JAR" -X POST $BASE/api/v1/deployments \
   -H 'Content-Type: application/xml' \
-  --data-binary @order-approval.bpmn | python3 -c 'import sys,json;print(json.load(sys.stdin)["key"])')
+  --data-binary @postman/order-approval.bpmn | python3 -c 'import sys,json;print(json.load(sys.stdin)["key"])')
 
 # Start an instance
-curl -s -X POST $BASE/api/v1/processes/$KEY/instances \
+INSTANCE=$(curl -s -b "$JAR" -X POST $BASE/api/v1/processes/$KEY/instances \
   -H 'Content-Type: application/json' \
-  -d '{"variables":{"orderId":"A-1001","amount":4200}}'
+  -d '{"variables":{"orderId":"A-1001","amount":4200}}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["instanceKey"])')
 
 # Work the task. The listing answers {items, total, totalExact, truncated, nextCursor} —
 # the rows are under "items", because a bare array cannot say it is only a page.
-TASK=$(curl -s $BASE/api/v1/tasks | python3 -c 'import sys,json;print(json.load(sys.stdin)["items"][0]["key"])')
-curl -s -X POST $BASE/api/v1/tasks/$TASK/complete \
+TASK=$(curl -s -b "$JAR" "$BASE/api/v1/tasks?processInstance=$INSTANCE" | python3 -c 'import sys,json;print(json.load(sys.stdin)["items"][0]["key"])')
+curl -s -b "$JAR" -X POST $BASE/api/v1/tasks/$TASK/complete \
   -H 'Content-Type: application/json' \
   -d '{"variables":{"approved":true,"score":7}}'
 
 # See the result
-curl -s $BASE/api/v1/instances
+curl -s -b "$JAR" $BASE/api/v1/instances/$INSTANCE/variables
 ```
+
+With an API token, replace `-c "$JAR"` / `-b "$JAR"` by
+`-H "Authorization: Bearer $ATLAS_API_TOKEN"` and skip the login.
+
+## Maintaining the collection
+
+The collection is checked in three ways:
+
+- **`go test ./api`** (part of the mandatory sweep) reads the collection without a
+  server: every request must resolve to a route the server mounts and not to a
+  deprecated alias; every folder and request must have a description, every
+  request a `pm.test` assertion and a saved example; the models deployed inline
+  must be byte-identical to the `.bpmn` files here; and capped listings must be read
+  through `items` ([`api/postman_internal_test.go`](../api/postman_internal_test.go),
+  [`api/pagecount_internal_test.go`](../api/pagecount_internal_test.go)).
+- **`go test ./examples`** compiles both sample models and checks their extension
+  namespaces, like every model Atlas ships.
+- **`make postman-smoke`** runs the whole collection against a live server.
+
+When you add or change a request: write its description (role, body, answers),
+give it a `pm.test` for its status and shape, run it once and save the response as
+an example (*Save Response → Save as example*), and run `make postman-smoke`.
+Edit the `.bpmn` files and the deploy bodies together.
 
 ## Troubleshooting
 
-- **Connection refused** — the server isn't running, or `baseUrl` points elsewhere.
-  Start it (step 1) and check `GET /healthz` returns `ok`.
-- **404 on `{{defKey}}` requests** — run **Deploy** first (or the Golden Path) so
-  `defKey` is populated; a variable that never got set sends the literal
-  `{{defKey}}`.
-- **Empty task list** — the instance already finished, or you completed both tasks.
-  Start a fresh instance.
-- **`/mcp` returns 406** — the `Accept` header must allow both `application/json`
-  and `text/event-stream` (the MCP requests already set this).
+- **Connection refused** — the server is not running, or `baseUrl` points
+  elsewhere. `GET {{baseUrl}}/healthz` must answer `ok`.
+- **`401 authentication required`** — not signed in: run *Log in*, or set
+  `apiToken`. The Postman console prints a hint on every 401.
+- **`403`** — signed in, but without the role the request needs (see its
+  description). An API token never carries the admin role.
+- **`404` on a `{{defKey}}` / `{{instanceKey}}` request** — the variable is empty or
+  stale: run the request that sets it first (the Golden Path, or the folder's
+  first request). An empty variable leaves a gap in the path, such as
+  `/processes//instances`.
+- **Empty task list** — the instance has already finished, or the listing is
+  scoped to another instance. Start a fresh one.
+- **A published message changed nothing** — messages are not buffered: one that no
+  instance waits for at that moment is accepted with 200 and dropped. Start the
+  instance first, and check the correlation key.
+- **`/mcp` answers 406** — the `Accept` header must allow both `application/json`
+  and `text/event-stream` (the MCP requests set it).

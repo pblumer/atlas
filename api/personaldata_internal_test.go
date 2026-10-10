@@ -350,10 +350,10 @@ func (b *auditSink) String() string {
 func captureAuditLog(t *testing.T) *auditSink {
 	t.Helper()
 	sink := &auditSink{}
-	if err := logging.Setup(sink, logging.FormatJSON); err != nil {
+	if err := logging.Setup(sink, logging.FormatJSON, logging.DefaultLevel); err != nil {
 		t.Fatalf("logging.Setup: %v", err)
 	}
-	t.Cleanup(func() { _ = logging.Setup(os.Stderr, logging.DefaultFormat) })
+	t.Cleanup(func() { _ = logging.Setup(os.Stderr, logging.DefaultFormat, logging.DefaultLevel) })
 	return sink
 }
 

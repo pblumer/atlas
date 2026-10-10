@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pblumer/atlas/internal/trustedproxy"
 	"github.com/pblumer/atlas/logging"
 )
 
@@ -52,6 +53,11 @@ const (
 //
 // Endpoints that need a bound on their own body or response set it themselves,
 // where the right duration is known.
+//
+// Both also write net/http's own complaints through the logging package rather than
+// the bare standard logger, so a load balancer's TCP health check — a connection that
+// closes before its TLS handshake begins — is a DEBUG line instead of an INFO one every
+// interval (ADR-0448).
 func newHTTPServer(addr string, h http.Handler, tlsCfg *tls.Config) *http.Server {
 	return &http.Server{
 		Addr:              addr,
@@ -59,7 +65,48 @@ func newHTTPServer(addr string, h http.Handler, tlsCfg *tls.Config) *http.Server
 		TLSConfig:         tlsCfg,
 		ReadHeaderTimeout: readHeaderTimeout,
 		IdleTimeout:       idleTimeout,
+		ErrorLog:          logging.HTTPServerErrorLog(),
 	}
+}
+
+// newPublicServer is the server --addr is served by: newHTTPServer, taking the client's
+// address from the proxies --trusted-proxies names (ADR-0448). With
+// none named the handler is the handler and the hook finds nothing to record.
+//
+// The loopback server is deliberately not one. Its peers are this process's own
+// children and the MCP adapter; nothing on it is a load balancer, so nothing on it is
+// read as one, whatever the operator's list says about 127.0.0.1.
+func newPublicServer(addr string, h http.Handler, tlsCfg *tls.Config, proxies trustedproxy.Set) *http.Server {
+	srv := newHTTPServer(addr, proxies.Handler(h), tlsCfg)
+	srv.ConnContext = trustedproxy.ConnContext
+	return srv
+}
+
+// servePublic binds --addr and serves it. It binds here, when serving starts, so the
+// port stays shut until recovery has replayed the log, exactly as ListenAndServe did;
+// it binds by hand so the PROXY protocol listener can sit under the TLS one, where the
+// header arrives — in front of the ClientHello.
+func servePublic(srv *http.Server, tlsOn bool, proxies trustedproxy.Set) error {
+	addr := srv.Addr
+	if addr == "" {
+		addr = ":http"
+		if tlsOn {
+			addr = ":https"
+		}
+	}
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+	ln = proxies.Listener(ln)
+	if !tlsOn {
+		return srv.Serve(ln)
+	}
+	defer ln.Close() // ServeTLS can fail before Serve has taken the listener over
+	// The pair is served by TLSConfig's GetCertificate, which re-reads it when it
+	// changes; the filename arguments here would read it once and never again, so
+	// they are deliberately empty (ADR-0191).
+	return srv.ServeTLS(ln, "", "")
 }
 
 // httpListener is one of this process's HTTP servers together with how it starts

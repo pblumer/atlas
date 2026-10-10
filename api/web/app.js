@@ -13,6 +13,7 @@ import { enhanceTable } from "./table.js";
 import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
 import { renderDrgSvg, openDecisionGraph } from "./decision-graph.js";
 import { copyText } from "./clipboard.js";
+import { installFeelAssistant } from "./feel-assistant.js";
 import { restoreSummary } from "./restore-report.js";
 // Documentation prose is Markdown (ADR-0250). The renderer
 // is a module of its own because every surface that shows an element's documentation
@@ -168,6 +169,45 @@ const mayUse = (role) => {
   const roles = (AUTH.user && AUTH.user.roles) || [];
   return roles.includes("admin") || roles.includes(role);
 };
+
+// FEATURES is what this server serves of its optional parts, as /api/v1/info says.
+// Today that is one switch: the shop, the catalogue, the orders and the inventory,
+// which an operator turns off with --catalogue=false
+// (ADR-0434). Until the server has answered,
+// everything is offered — the stance the drawer already takes before /auth/me
+// answers — and a field an older server does not send reads as on, so a Console in
+// front of one keeps the menu it had.
+const FEATURES = { catalogue: true, loaded: false };
+
+// loadFeatures asks once — boot and the first navigation share one request — and
+// remembers only an answer: signed out, or the server mid-restart, leaves the menu as
+// it is and asks again on the next navigation rather than deciding it on a failure.
+// It resolves to the info document, or null.
+let featuresAsked = null;
+function loadFeatures() {
+  if (!featuresAsked) {
+    featuresAsked = api("GET", "/api/v1/info").then((i) => {
+      FEATURES.catalogue = !(i && i.catalogue === false);
+      FEATURES.loaded = true;
+      return i;
+    }, () => {
+      featuresAsked = null;
+      return null;
+    });
+  }
+  return featuresAsked;
+}
+
+// offered is the one predicate both menus filter by: the person holds the role, and
+// the server serves the part of Atlas the entry opens. One predicate and not a second
+// condition beside each role check, because the next menu would be the one that
+// forgot it.
+const offered = (entry) => mayUse(entry.role) && !(entry.feature && FEATURES[entry.feature] === false);
+
+// isCatalogueRoute names the Console views of the area the switch removes — the same
+// four the menus mark with feature: "catalogue".
+const isCatalogueRoute = (path) =>
+  path.startsWith("#/catalog") || path === "#/operations/reconciliation" || path === "#/tasks/recertification";
 
 const initials = (name) => {
   const s = String(name || "").trim();
@@ -621,11 +661,11 @@ const APPS = [
   // Without this line the page existed and nothing led to it: it was built, served
   // and reachable only by somebody who already knew the URL. Held by
   // TestBothPortalSurfacesAreReachableFromTheMenu.
-  { id: "portal", name: "Shop", route: "shop.html", on: true, role: "user", separate: true },
+  { id: "portal", name: "Shop", route: "shop.html", on: true, role: "user", separate: true, feature: "catalogue" },
   // Where a catalogue is filled. Gated at productmanager (ADR-0315): maintaining a
   // catalogue means choosing from processes already deployed, never deploying one,
   // so it is deliberately not the modeller's role — deploy is code execution.
-  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager" },
+  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager", feature: "catalogue" },
   { id: "operations", name: "Operations", route: "#/operations", on: true, role: "operator" },
   { id: "panorama", name: "Panorama", route: "#/panorama/starmap", on: true, role: "modeler" },
   { id: "data", name: "Data", route: "#/data", on: true, role: "modeler" },
@@ -640,6 +680,9 @@ const TOPNAV = {
     { name: "Backup", route: "#/console/backup", role: "admin" },
     { name: "Organization", route: "#/console/org", role: "admin" },
     { name: "Workers", route: "#/console/workers", role: "any" },
+    // What atlas emits (ADR-0435): a modeler chooses an event to listen to here; an
+    // administrator also sees who listens now.
+    { name: "Events", route: "#/console/events", role: "modeler" },
     { name: "AI access", route: "#/console/ai-access", role: "any" },
     { name: "Audit log", route: "#/console/audit", role: "admin" },
   ],
@@ -659,7 +702,7 @@ const TOPNAV = {
     // (ADR-0334). Operations rather than Catalogue: maintaining a
     // catalogue is authoring, and acting on a finding is repair — the three acts
     // are the operator's role on the server too.
-    { name: "Reconciliation", route: "#/operations/reconciliation", role: "operator" },
+    { name: "Reconciliation", route: "#/operations/reconciliation", role: "operator", feature: "catalogue" },
     { name: "Call activities", route: "#/operations/call-activities", role: "any" },
   ],
   tasks: [
@@ -674,7 +717,7 @@ const TOPNAV = {
     // whether somebody on their team still needs something — and a line manager has
     // never opened Operations. Not one of the two shop pages either: those carry
     // the catalogue's brand and are written for people outside the tooling.
-    { name: "Access review", route: "#/tasks/recertification", role: "user" },
+    { name: "Access review", route: "#/tasks/recertification", role: "user", feature: "catalogue" },
     { name: "Start", route: "#/tasks/start", role: "operator" },
   ],
   panorama: [
@@ -746,7 +789,7 @@ const WORKER_TYPES = [
   },
   {
     id: "mail", name: "Mail", kind: "Outbound e-mail",
-    desc: "Sends an e-mail from a service task off the processor loop via a managed provider — SMTP (any server, incl. Google/Microsoft 365 submission) or the native Gmail and Microsoft Graph APIs (OAuth2 app-only or refresh-token) — or the “preview” provider, which needs neither and delivers to the in-app Outbox so a mail task can be tried before a real provider exists. Recipients, subject, and body are model-authored (FEEL-capable); the provider, default sender, and credentials are managed below and resolved from the vault. Authored on a service task with the E-Mail Outbound Worker Type.",
+    desc: "Sends an e-mail from a service task off the processor loop via a managed provider — SMTP (any server, incl. Google/Microsoft 365 submission) or the native Gmail and Microsoft Graph APIs (OAuth2 app-only or refresh-token) — or the “preview” provider, which needs neither and delivers to the in-app Outbox so a mail task can be tried before a real provider exists. Recipients, subject, and body are model-authored (FEEL-capable); the provider, default sender, and credentials are managed below and resolved from the vault. With an IMAP endpoint (SMTP) or read access (Gmail, Graph) the same Worker reads its mailbox: an inbound watch publishes new mail as messages, and a mail task lists, reads, files, marks, deletes or answers mail. Authored on a service task with the E-Mail Worker Type.",
     refs: "ADR-0041 · ADR-0079 · ADR-0093", status: "active", statusLabel: "configurable",
   },
   {
@@ -770,6 +813,11 @@ const WORKER_TYPES = [
     refs: "ADR-0041", status: "active", statusLabel: "configurable",
   },
   {
+    id: "s3", name: "S3 object storage", kind: "Files",
+    desc: "Puts an object into an S3-compatible bucket from a service task off the processor loop, reads a small one back, says whether one is there, lists what is under a prefix, copies one, deletes one, and mints a time-limited URL somebody can open or upload with. The operation, the bucket and the key are model-authored (FEEL-capable) and what the store returned is written into a result variable; the access key \u2014 an {accessKeyId, secretAccessKey, region} bundle \u2014 is managed below and resolved from the vault. The two link operations are why this reaches documents at their real size: they compute a signature and make no call, so the bytes go straight between the store and whoever opens them, while a read into a process variable stays bounded at 1 MiB. The endpoint is empty for AWS and names the host for MinIO, Ceph, Garage, R2 or Wasabi. Authored on a service task with the S3 Worker Type.",
+    refs: "ADR-0041 \u00b7 ADR-0069", status: "active", statusLabel: "configurable",
+  },
+  {
     id: "remedy", name: "BMC Remedy", kind: "ITSM",
     desc: "Creates an entry (e.g. an incident) in a BMC Remedy / Helix ITSM form from a service task off the processor loop via the AR System REST API. The form and its field values are model-authored (FEEL-capable) and the created entry's id is written into a result variable; the base URL and the {username,password} credential bundle are managed below and resolved from the vault. Authored on a service task with the BMC Remedy Worker Type.",
     refs: "ADR-0041 · ADR-0106", status: "active", statusLabel: "configurable",
@@ -783,6 +831,11 @@ const WORKER_TYPES = [
     id: "agent", name: "AI agent model", kind: "AI",
     desc: "The model an agent-driven ad-hoc subprocess asks which of its tools to run next. What an agent may reach is the diagram: the contained activities no sequence flow leads to are its tools, named by their element ids, described by the modeller\u0027s own documentation. A round is one job and a tool call one activity, so the loop is durable and replayable \u2014 and it never runs in the engine, because one model call can take minutes and hang. Two wire formats: Messages (Anthropic, and OpenRouter\u0027s Messages-compatible endpoint) and Chat Completions (OpenAI, and anything OpenAI-compatible). Configure each model below: its API key lives in the vault and never enters a model, and the model named here is the default \u2014 a task or a container may name its own, so one Worker serves a cheap classification and a strong piece of advice. The same configuration also serves the AI Task: a service task that asks a model once and puts the answer in a variable, with no tools, because a step with tools is the container. Worker-only, and atlas supervises the worker for it.",
     refs: "ADR-0117 \u00b7 ADR-0253 \u00b7 ADR-0254 \u00b7 ADR-0256", status: "active", statusLabel: "configured below",
+  },
+  {
+    id: "cloudevents", name: "CloudEvents endpoint", kind: "Event feed",
+    desc: "Where the event feed is pushed: a system beyond atlas \u2014 billing, a CMDB \u2014 is sent how each action asked of a held position ended, every right granted and revoked, and every incident raised and resolved, as CloudEvents batches over https, instead of pulling the feed itself. No task names this Worker; its Feed\u2026 panel subscribes it to the feed, narrowed to some catalogues if you like. atlas delivers from the feed it already holds, off the processor loop, and moves its cursor only when the endpoint accepted a batch: a refusal is held and tried again, never skipped. Administrator configuration.",
+    refs: "ADR-0429 \u00b7 ADR-0430", status: "active", statusLabel: "configured below",
   },
   {
     id: "entra", name: "Entra ID", kind: "Cloud directory",
@@ -953,6 +1006,16 @@ function initShell() {
     }
   });
 
+  // The FEEL assistant (ADR-0445): Ctrl/⌘+Shift+E anywhere, the spark
+  // in the top bar, the mini spark on every FEEL field and beside a focused dmn-js
+  // cell. Its routes are the modeler's, so the role is asked at the moment it opens —
+  // the principal is known only once /auth/me has answered.
+  installFeelAssistant({
+    api, copy: copyText, toast,
+    allowed: () => mayUse("modeler"),
+    button: document.getElementById("feel-assistant-btn"),
+  });
+
   const nav = document.getElementById("drawer-apps");
   paintApps();
   nav.addEventListener("click", closeDrawer);
@@ -976,10 +1039,13 @@ function initShell() {
     });
   }
 
-  api("GET", "/api/v1/info").then((i) => {
+  // The same answer tells the drawer what this server switched off, so it is painted
+  // again once it is known.
+  loadFeatures().then((i) => {
     document.querySelectorAll(".org").forEach((e) => { e.textContent = "Atlas Org"; });
+    paintApps();
     initHelpMenu(!!(i && i.docs));
-  }).catch(() => { initHelpMenu(false); });
+  });
 }
 
 // handbookHelp maps the current route to the most relevant handbook chapter, so
@@ -990,6 +1056,11 @@ function initShell() {
 // help — the handbook page and the menu wiring are unchanged.
 function handbookHelp(path) {
   const H = (anchor, label) => ({ anchor, label });
+  // The shop has a handbook of its own (shop-handbuch.html): building catalogues,
+  // modelling products and designing their processes. shop() points into it, and the
+  // help-context spec holds its anchors to that page as it holds H()'s to the handbook.
+  const shop = (anchor, label) => ({ anchor, label, page: "shop-handbuch.html" });
+  if (path.startsWith("#/catalog")) return shop("katalog-aufbauen", "Building a catalogue");
   if (/^#\/modeler\/dmn\//.test(path)) return H("dmn", "Learn DMN");
   if (/^#\/modeler\/form\b/.test(path)) return H("formulare", "Forms & workers");
   // An application's detail view is where its artifacts are gathered and published —
@@ -1022,6 +1093,7 @@ function handbookHelp(path) {
   // where the accounts chapter puts them.
   if (path.startsWith("#/console/ai-access")) return H("konten", "Connecting an AI assistant");
   if (path.startsWith("#/console/audit")) return H("konten", "The audit log");
+  if (path.startsWith("#/console/events")) return H("ereignisse", "Events");
   if (path.startsWith("#/console/engine")) return H("konzepte", "Core concepts");
   // Organization pointed at the worker chapter only because the worker cards used to
   // sit on it; with those on their own page it points there instead, and Organization
@@ -1045,8 +1117,8 @@ function setHelpContext(path) {
   helpRoutePath = path;
   const ctx = document.getElementById("help-ctx");
   if (!ctx) return;
-  const { anchor, label } = handbookHelp(path);
-  ctx.href = `/handbuch.html#${anchor}`;
+  const { anchor, label, page } = handbookHelp(path);
+  ctx.href = `/${page || "handbuch.html"}#${anchor}`;
   ctx.innerHTML = `${esc(label)} <span class="ext" aria-hidden="true">↗</span>`;
 }
 
@@ -1066,7 +1138,11 @@ function initHelpMenu(docsEnabled) {
     ? `<a role="menuitem" href="/api/docs" target="_blank" rel="noopener">API Explorer <span class="ext" aria-hidden="true">↗</span></a>`
     : `<span class="help-note">API Explorer is disabled<br><span class="muted">start the server without <code>--docs=false</code></span></span>`;
   const gallery = `<a role="menuitem" href="/conformance-gallery.html" target="_blank" rel="noopener">Conformance Gallery <span class="ext" aria-hidden="true">↗</span></a>`;
-  const handbook = `<a role="menuitem" href="/handbuch.html" target="_blank" rel="noopener">Handbook <span class="ext" aria-hidden="true">↗</span></a>`;
+  // The shop handbook is the catalogue's, so it leaves the menu with the rest of the
+  // area when the server switched that off (ADR-0434).
+  const shopHandbook = `<a role="menuitem" href="/shop-handbuch.html" target="_blank" rel="noopener">Shop handbook <span class="ext" aria-hidden="true">↗</span></a>`;
+  const handbook = `<a role="menuitem" href="/handbuch.html" target="_blank" rel="noopener">Handbook <span class="ext" aria-hidden="true">↗</span></a>` +
+    (FEATURES.catalogue ? shopHandbook : "");
   // Not a link like its neighbours: it opens the overview dialog over the current view
   // rather than leaving it, so it carries no "opens elsewhere" mark.
   const overview = `<button type="button" role="menuitem" data-system-overview>System Overview</button>`;
@@ -1185,7 +1261,7 @@ function paintApps() {
   // a span here: it is presentation, it must not join the link's accessible name,
   // and a glyph inside the text would change what every test reading this menu
   // sees for a reason that has nothing to do with them.
-  nav.innerHTML = APPS.filter((a) => mayUse(a.role)).map((a) =>
+  nav.innerHTML = APPS.filter((a) => offered(a)).map((a) =>
     `<a href="${a.route}" data-app="${a.id}"${a.separate ? ' target="_blank" rel="noopener"' : ""}>` +
     `${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`
   ).join("");
@@ -1196,7 +1272,7 @@ function setChrome(appId, route) {
     (APPS.find((a) => a.id === appId) || {}).name || "atlas";
   paintApps();
   const topnav = document.getElementById("topnav");
-  topnav.innerHTML = (TOPNAV[appId] || []).filter((t) => mayUse(t.role)).map((t) =>
+  topnav.innerHTML = (TOPNAV[appId] || []).filter((t) => offered(t)).map((t) =>
     // A `separate` entry is a page of its own and opens in one, exactly as the
     // drawer opens it. Rendered as a plain link it would replace the console in the
     // same tab, which is the behaviour the note above APPS argues against: the only
@@ -1251,128 +1327,183 @@ function setChrome(appId, route) {
   document.body.classList.toggle("incidents-mode", route === "#/operations/incidents");
 }
 
-// ---------- What's New ----------
-// The Console landing page surfaces recent, user-facing features from
-// /whats-new.json, which the generator in scripts/whats-new builds from CHANGELOG.md and a
-// curated bilingual overrides file (see scripts/whats-new/README.md). It is DE/EN
-// with a local toggle, and every layer is collapsible so it stays compact: the whole
-// section is a <details>, only the newest few entries show at first, and each entry
-// is a <details> whose body carries the plain-language summary, an optional
-// step-by-step tutorial, a link to the PR/ADR, and an optional "Try it" deep link.
-const WN_STRINGS = {
-  en: { title: "What's New", latest: "New", tutorial: "Try it out", more: "Show older", less: "Show fewer", empty: "" },
-  de: { title: "Neu in atlas", latest: "Neu", tutorial: "Ausprobieren", more: "Ältere anzeigen", less: "Weniger anzeigen", empty: "" },
+// ---------- Release notes ----------
+// The Console landing page shows the release notes: CHANGELOG.md as this binary was
+// built from it, read by the server at /api/v1/release-notes
+// (ADR-0444). They replace the curated What's New
+// feed, whose per-entry translation and regeneration cost more on every change than
+// the feed gave back. The notes are English, as the CHANGELOG is; the section's own
+// labels follow the landing page's language.
+//
+// Every layer is collapsible so the section stays compact: the section, each release
+// (the newest is open; an older one loads its changes when opened) and each change.
+const RN_STRINGS = {
+  en: {
+    title: "Release notes", unreleased: "Unreleased",
+    changes: (n) => `${n} change${n === 1 ? "" : "s"}`,
+    all: "Show all changes", older: "Show older releases", changelog: "Read in the changelog",
+    loading: "Loading…", failed: "These notes could not be loaded.",
+    categories: {},
+  },
+  de: {
+    title: "Release Notes", unreleased: "Unveröffentlicht",
+    changes: (n) => `${n} Änderung${n === 1 ? "" : "en"}`,
+    all: "Alle Änderungen anzeigen", older: "Ältere Releases anzeigen", changelog: "Im Changelog lesen",
+    loading: "Wird geladen…", failed: "Diese Notes konnten nicht geladen werden.",
+    categories: {
+      Added: "Neu", Changed: "Geändert", Fixed: "Behoben", Removed: "Entfernt",
+      Deprecated: "Veraltet", Security: "Sicherheit", Notes: "Hinweise",
+    },
+  },
 };
-// Only these hash-route prefixes are accepted as a "Try it" target, so a bad or
-// hostile route in the data can never point the button somewhere unexpected.
-const WN_ROUTE_OK = /^#\/(console|modeler|operations|tasks)(\/|$)/;
-const WN_INITIAL = 4;
+const RN_INITIAL_RELEASES = 3;
+const RN_INITIAL_CHANGES = 8;
 
-function wnLang() {
+// The landing page carries two bilingual sections — the release notes and the
+// key-features tile — and they share one language: switching the tile's toggle
+// repaints both, so the page is never half English and half German. The storage key
+// keeps the name it had under What's New, so a reader's earlier choice still holds.
+const CONSOLE_LANG_KEY = "atlas.whatsnew.lang";
+function consoleLang() {
   try {
-    const s = localStorage.getItem("atlas.whatsnew.lang");
+    const s = localStorage.getItem(CONSOLE_LANG_KEY);
     if (s === "de" || s === "en") return s;
   } catch { /* ignore */ }
   return /^de/i.test(navigator.language || "") ? "de" : "en";
 }
-function wnSetLang(l) {
-  try { localStorage.setItem("atlas.whatsnew.lang", l); } catch { /* ignore */ }
-}
-
-// The landing page carries two bilingual sections — What's New and the key-features
-// tile — and they share one language: switching either toggle repaints both, so the
-// page is never half English and half German. wnEntries caches what renderWhatsNew
-// fetched, so the repaint costs nothing.
-let wnEntries = [];
 function setConsoleLang(l) {
-  wnSetLang(l);
-  const wn = document.getElementById("whats-new-slot");
-  if (wn && wnEntries.length) paintWhatsNew(wn, wnEntries, l);
+  try { localStorage.setItem(CONSOLE_LANG_KEY, l); } catch { /* ignore */ }
+  paintReleaseNotes(document.getElementById("release-notes-slot"), l);
   paintKeyFeatures(document.getElementById("key-features-slot"), l, setConsoleLang);
 }
 
-// wnText resolves a {en, de} field for the active language, falling back to English.
-const wnText = (b, lang) => (b && (b[lang] != null ? b[lang] : b.en)) || "";
+// rn caches what the section has fetched, and what the reader opened, so a language
+// switch or a return to the landing page repaints without going back to the network.
+// releases maps a version to its notes: null while loading, false when that failed.
+const rn = { index: null, releases: new Map(), open: new Set(), all: new Set(), older: false };
 
-async function renderWhatsNew(slot) {
+// rnInline renders the inline markdown the notes keep — `code`, **bold** and *emphasis*.
+// It escapes first, so the tags it adds are the only markup in the result.
+function rnInline(s) {
+  return esc(s)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+    .replace(/(^|[\s(])\*([^*\s](?:[^*]*[^*\s])?)\*(?=[\s.,;:!?)]|$)/g, "$1<i>$2</i>");
+}
+
+const rnLink = (link, label) => link && /^https?:\/\//.test(link.url)
+  ? `<a class="rn-link" href="${esc(link.url)}" target="_blank" rel="noopener">${esc(label)} <span class="ext" aria-hidden="true">↗</span></a>`
+  : "";
+
+async function renderReleaseNotes(slot) {
   if (!slot) return;
   let doc;
-  try {
-    const res = await fetch("/whats-new.json", { headers: { Accept: "application/json" } });
-    if (!res.ok) return; // no What's New shipped; leave the slot empty and silent
-    doc = await res.json();
-  } catch { return; } // offline or malformed — the landing page works without it
-  const entries = (doc && Array.isArray(doc.entries)) ? doc.entries : [];
-  wnEntries = entries;
-  if (entries.length) paintWhatsNew(slot, entries, wnLang());
+  try { doc = await api("GET", "/api/v1/release-notes"); } catch { return; } // the landing page works without it
+  const releases = doc && Array.isArray(doc.releases) ? doc.releases : [];
+  if (!releases.length) return;
+  rn.index = releases;
+  if (!rn.open.size) rn.open.add(releases[0].version);
+  paintReleaseNotes(slot, consoleLang());
 }
 
-function wnEntryHTML(e, lang, t) {
-  const title = esc(wnText(e.title, lang));
-  const when = e.date
-    ? `<span class="wn-date">${esc(e.date)}</span>`
-    : `<span class="wn-date wn-new">${esc(t.latest)}</span>`;
-  const tags = (e.tags || []).map((tag) => `<span class="chip">${esc(tag)}</span>`).join("");
-  const summary = esc(wnText(e.summary, lang));
-
-  let tutorial = "";
-  const steps = e.tutorial && wnText(e.tutorial, lang);
-  if (Array.isArray(steps) && steps.length) {
-    tutorial = `<div class="wn-tutorial"><div class="wn-tut-label">${esc(t.tutorial)}</div>` +
-      `<ol>${steps.map((s) => `<li>${esc(s)}</li>`).join("")}</ol></div>`;
-  }
-
-  const links = [];
-  if (e.link && /^https?:\/\//.test(e.link.url)) {
-    links.push(`<a class="wn-link" href="${esc(e.link.url)}" target="_blank" rel="noopener">${esc(e.link.label)} <span class="ext" aria-hidden="true">↗</span></a>`);
-  }
-  if (e.try && WN_ROUTE_OK.test(e.try.route || "")) {
-    links.push(`<a class="btn neutral wn-try" href="${esc(e.try.route)}">${esc(wnText(e.try.label, lang))} →</a>`);
-  }
-  const linksHTML = links.length ? `<div class="wn-links">${links.join("")}</div>` : "";
-
-  return `<details class="wn-item">` +
-    `<summary>${when}<span class="wn-item-title">${title}</span>${tags}</summary>` +
-    `<div class="wn-body"><p>${summary}</p>${tutorial}${linksHTML}</div>` +
-    `</details>`;
+// rnLoad fetches one release's notes once, and again only after a failure.
+function rnLoad(slot, version) {
+  const have = rn.releases.get(version);
+  if (have || have === null) return;
+  rn.releases.set(version, null);
+  api("GET", "/api/v1/release-notes/" + encodeURIComponent(version))
+    .then((r) => rn.releases.set(version, r))
+    .catch(() => rn.releases.set(version, false))
+    .finally(() => rnFill(slot, version, consoleLang()));
 }
 
-function paintWhatsNew(slot, entries, lang) {
-  const t = WN_STRINGS[lang] || WN_STRINGS.en;
-  const head = entries.slice(0, WN_INITIAL).map((e) => wnEntryHTML(e, lang, t)).join("");
-  const rest = entries.slice(WN_INITIAL);
-  const restHTML = rest.length
-    ? `<div class="wn-rest" hidden>${rest.map((e) => wnEntryHTML(e, lang, t)).join("")}</div>` +
-      `<button type="button" class="wn-more" title="Show older What’s-new entries">${esc(t.more)} (${rest.length})</button>`
+// rnFill repaints one release's body in place, leaving the rest of the section — and
+// whatever the reader has opened in it — alone.
+function rnFill(slot, version, lang) {
+  if (!slot) return;
+  const t = RN_STRINGS[lang] || RN_STRINGS.en;
+  for (const d of slot.querySelectorAll(".rn-release")) {
+    if (d.dataset.version === version) d.querySelector(".rn-body").innerHTML = rnBodyHTML(version, t);
+  }
+}
+
+function rnChangeHTML(c, t) {
+  const cat = t.categories[c.category] || c.category || "";
+  return `<details class="rn-change"><summary>` +
+    (cat ? `<span class="chip rn-cat">${esc(cat)}</span>` : "") +
+    `<span class="rn-change-title">${rnInline(c.title || "")}</span></summary>` +
+    `<div class="rn-change-body">${c.text ? `<p>${rnInline(c.text)}</p>` : ""}` +
+    `${c.link ? rnLink(c.link, c.link.label) : ""}</div></details>`;
+}
+
+function rnBodyHTML(version, t) {
+  const r = rn.releases.get(version);
+  if (r === false) return `<p class="muted">${esc(t.failed)}</p>`;
+  if (!r) return `<p class="muted">${esc(t.loading)}</p>`;
+  const intro = (r.intro || []).map((b) => b.kind === "list"
+    ? `<ul class="rn-intro">${(b.items || []).map((i) => `<li>${rnInline(i)}</li>`).join("")}</ul>`
+    : `<p class="rn-intro">${rnInline(b.text || "")}</p>`).join("");
+  const changes = r.changes || [];
+  const shown = rn.all.has(version) ? changes : changes.slice(0, RN_INITIAL_CHANGES);
+  const list = shown.length ? `<div class="rn-changes">${shown.map((c) => rnChangeHTML(c, t)).join("")}</div>` : "";
+  const more = shown.length < changes.length
+    ? `<button type="button" class="rn-more" data-all="${esc(version)}">${esc(t.all)} (${changes.length})</button>`
     : "";
+  return intro + list + `<div class="rn-foot">${more}${rnLink(r.link, t.changelog)}</div>`;
+}
+
+function rnReleaseHTML(s, t) {
+  const name = s.version === "Unreleased" ? t.unreleased : s.version;
+  return `<details class="rn-release" data-version="${esc(s.version)}"${rn.open.has(s.version) ? " open" : ""}>` +
+    `<summary><span class="rn-version">${esc(name)}</span>` +
+    (s.date ? `<span class="rn-date">${esc(s.date)}</span>` : "") +
+    `<span class="rn-count">${esc(t.changes(s.changeCount || 0))}</span></summary>` +
+    `<div class="rn-body">${rnBodyHTML(s.version, t)}</div></details>`;
+}
+
+function paintReleaseNotes(slot, lang) {
+  if (!slot || !rn.index) return;
+  const t = RN_STRINGS[lang] || RN_STRINGS.en;
+  const shown = rn.older ? rn.index : rn.index.slice(0, RN_INITIAL_RELEASES);
+  const hidden = rn.index.length - shown.length;
   slot.innerHTML =
-    `<div class="card whats-new"><details class="wn-root" open>` +
-    `<summary class="wn-head"><span class="wn-title">${esc(t.title)}</span>` +
-    `<span class="wn-lang">` +
-    `<button type="button" data-lang="en" class="${lang === "en" ? "active" : ""}" title="Show these notes in English">EN</button>` +
-    `<button type="button" data-lang="de" class="${lang === "de" ? "active" : ""}" title="Show these notes in German">DE</button>` +
-    `</span></summary>` +
-    `<div class="wn-list">${head}${restHTML}</div>` +
+    `<div class="card release-notes"><details class="rn-root" open>` +
+    `<summary class="rn-head"><span class="rn-title">${esc(t.title)}</span></summary>` +
+    `<div class="rn-list">${shown.map((s) => rnReleaseHTML(s, t)).join("")}</div>` +
+    (hidden > 0 ? `<button type="button" class="rn-more" data-older>${esc(t.older)} (${hidden})</button>` : "") +
     `</details></div>`;
 
-  // The language toggle lives inside the <summary>; stop the click from also toggling
-  // the section open/closed, and switch the whole landing page's language.
-  slot.querySelectorAll(".wn-lang button").forEach((b) => b.addEventListener("click", (ev) => {
-    ev.preventDefault();
-    ev.stopPropagation();
-    setConsoleLang(b.dataset.lang);
+  // A release loads its changes the first time it is opened.
+  slot.querySelectorAll(".rn-release").forEach((d) => d.addEventListener("toggle", () => {
+    const v = d.dataset.version;
+    if (d.open) { rn.open.add(v); rnLoad(slot, v); } else rn.open.delete(v);
   }));
-  const more = slot.querySelector(".wn-more");
-  if (more) more.addEventListener("click", () => {
-    const r = slot.querySelector(".wn-rest");
-    if (r) r.hidden = false;
-    more.remove();
-  });
+  // Assigned rather than added: the slot outlives every repaint, and a listener per
+  // repaint would answer one click several times.
+  slot.onclick = (e) => {
+    const btn = e.target instanceof Element && e.target.closest(".rn-more");
+    if (!btn) return;
+    if (btn.dataset.all) {
+      // Appended rather than repainted, so a change the reader has open stays open.
+      const v = btn.dataset.all, r = rn.releases.get(v);
+      const list = btn.closest(".rn-body")?.querySelector(".rn-changes");
+      rn.all.add(v);
+      if (!r || !list) { rnFill(slot, v, consoleLang()); return; }
+      const t = RN_STRINGS[consoleLang()] || RN_STRINGS.en;
+      list.insertAdjacentHTML("beforeend", r.changes.slice(RN_INITIAL_CHANGES).map((c) => rnChangeHTML(c, t)).join(""));
+      btn.remove();
+    } else {
+      rn.older = true;
+      paintReleaseNotes(slot, consoleLang());
+    }
+  };
+  for (const v of rn.open) rnLoad(slot, v);
 }
 
 // ---------- Views ----------
 async function viewConsoleDashboard() {
   view.innerHTML = `
+    <div id="catalogue-stranded-slot"></div>
     <div class="card">
       <div class="welcome-head">
         <span class="mark welcome-mark${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
@@ -1396,7 +1527,7 @@ async function viewConsoleDashboard() {
         <button type="button" class="btn ghost" data-system-overview title="Show how atlas is built, from the apps down to its persistence">System Overview</button>
       </div>
     </div>
-    <div id="whats-new-slot"></div>
+    <div id="release-notes-slot"></div>
     <div class="grid2" style="margin-top:18px">
       <div class="card">
         <div class="between"><h2>Deployments</h2><a href="#/modeler">View all</a></div>
@@ -1413,11 +1544,15 @@ async function viewConsoleDashboard() {
     </div>
     <div id="key-features-slot"></div>`;
   view.querySelector("[data-system-overview]").addEventListener("click", () => openSystemOverview());
-  renderWhatsNew(document.getElementById("whats-new-slot")); // fills its own slot; safe if it fails
+  // What switching the catalogue off strands (ADR-0434): asked only where it can have
+  // an answer — the catalogue off, and an administrator looking — so nobody else pays a
+  // request for it. Fills its own slot, and is silent when nothing is stranded.
+  if (!FEATURES.catalogue && mayUse("admin")) renderCatalogueStranded(document.getElementById("catalogue-stranded-slot"));
+  renderReleaseNotes(document.getElementById("release-notes-slot")); // fills its own slot; safe if it fails
   // The key-features tile sits below the dashboard's own tiles: what Atlas is, for
   // someone who arrived here without having read the README. Fills its own slot,
   // and is silent if the asset is missing.
-  renderKeyFeatures(document.getElementById("key-features-slot"), wnLang(), setConsoleLang);
+  renderKeyFeatures(document.getElementById("key-features-slot"), consoleLang(), setConsoleLang);
   // The running version next to the heading, so "which build is this?" is answered
   // on the first screen rather than only on the admin-only Engine view. Loaded on
   // its own and silent on failure: a missing badge must not cost the dashboard.
@@ -1436,6 +1571,36 @@ async function viewConsoleDashboard() {
     document.getElementById("s-pi").textContent = stats.activeProcessInstances;
     document.getElementById("s-ei").textContent = stats.activeElementInstances;
   } catch (e) { toast(e.message, "err"); }
+}
+
+// renderCatalogueStranded tells an administrator, on the dashboard, which processes
+// are still working orders on a server that switched the catalogue off. The start
+// writes the same as a log line, and a log line is lost wherever nobody reads the
+// start. Read live, so the notice goes away once those instances are finished or
+// ended. Silent on failure and when nothing is stranded: it is an addition to a page
+// that works without it.
+async function renderCatalogueStranded(slot) {
+  if (!slot) return;
+  let s;
+  try { s = await api("GET", "/api/v1/catalogue-switch"); } catch { return; }
+  const total = s ? (s.shopProcessInstances || 0) + (s.productProcessInstances || 0) : 0;
+  if (!s || s.catalogue !== false || total === 0) return;
+  const rows = (s.processes || []).map((p) =>
+    `<li><code>${esc(p.processId)}</code> — ${esc(String(p.instances))} running</li>`).join("");
+  slot.innerHTML = `
+    <div class="card catalogue-stranded" role="status">
+      <h2>Orders left mid-way by the switched-off catalogue</h2>
+      <p>The shop, the catalogue, the orders and the inventory are switched off on this server
+      (<code>--catalogue=false</code>), but ${total} process instance${total === 1 ? " is" : "s are"} still working orders.
+      Each fails at its next call to the order routes and, its retries spent, raises an incident.</p>
+      <ul>${rows}</ul>
+      <p class="muted">Switch the catalogue back on and retry those incidents to finish the orders,
+      or end the instances deliberately.</p>
+      <div class="row">
+        <a class="btn ghost" href="#/operations/incidents">Open incidents</a>
+        <a class="btn ghost" href="#/operations">Instances</a>
+      </div>
+    </div>`;
 }
 
 async function viewConsoleEngine() {
@@ -1824,7 +1989,7 @@ async function viewConsoleBackup() {
 // userForm renders the create or edit form for a user. In edit mode the username
 // is immutable (it identifies existing sessions and references) and the password
 // has its own action, so neither appears here.
-// GRANTABLE_ROLES is the four roles an account can be given, in the order the form
+// GRANTABLE_ROLES is the roles an account can be given, in the order the form
 // offers them, each with what it lets the person do. The wording matters more than
 // it looks: an administrator picking roles is deciding who may deploy a model,
 // which is code execution, and "modeler" alone does not say that.
@@ -1834,6 +1999,7 @@ const GRANTABLE_ROLES = [
   { id: "operator", name: "Operator", what: "start, cancel and repair instances; read runtime data" },
   { id: "user", name: "User", what: "work on tasks and read what they are given" },
   { id: "productmanager", name: "Product manager", what: "maintain the shop's catalogues and products, and publish releases" },
+  { id: "feedreader", name: "Feed reader", what: "read the event feed of action outcomes, granted and revoked rights and incidents, and nothing else" },
 ];
 
 function userForm(u) {
@@ -2118,7 +2284,12 @@ async function viewConsoleWorkers() {
     // Kind-specific first: these are the reasons an operator came to this row rather
     // than to any other, and they exist on no other kind.
     if (c.kind === "clio") items.push({ label: "Provision access…", icon: "🔑", act: "provision" });
-    if (c.kind === "clio" || c.kind === "jira" || c.kind === "googlesheets" || c.kind === "discord") items.push({ label: "Events…", icon: "⇄", act: "subs" });
+    if (c.kind === "clio" || c.kind === "jira" || c.kind === "googlesheets" || c.kind === "discord" || c.kind === "mail") items.push({ label: "Events…", icon: "⇄", act: "subs" });
+    // A CloudEvents endpoint is subscribed to the event feed, which is administrator
+    // configuration: the panel lists what the worker is sent and how delivery stands.
+    // The feed carries the engine's facts too, so it stays when the service catalogue
+    // is switched off (ADR-0435 §6).
+    if (c.kind === "cloudevents" && mayUse("admin")) items.push({ label: "Feed…", icon: "⇉", act: "feed" });
     // Every Worker Type the check covers: mail connects and authenticates (or sends a
     // test message), a SQL worker dials its connection string. workerShape is the one
     // place that knows, so the menu does not go stale the next type that gains one.
@@ -2478,7 +2649,9 @@ async function viewConsoleOrg() {
           rest of the instance's configuration, <span class="chip">modeler</span> to deploy and to author,
           <span class="chip">operator</span> to run what is deployed, <span class="chip">user</span> for a
           person's own task list, <span class="chip">productmanager</span> to maintain the shop's
-          catalogues without administering the instance.${showPresence ? ` <b>Presence</b> is who is signed in this minute, and only
+          catalogues without administering the instance, <span class="chip">feedreader</span> to read
+          the event feed a CMDB or a billing system follows — what an <code>events</code> API token
+          carries, and nothing more.${showPresence ? ` <b>Presence</b> is who is signed in this minute, and only
           administrators see it: <b>online</b> means somebody did something in the last five minutes,
           <b>idle</b> that a session is open but untouched, <b>offline</b> that no browser is reporting.
           It is read from the live sessions and never stored — a restart shows nobody.` : ""}</p>
@@ -2673,7 +2846,7 @@ function wireOrgPresence(showPresence, presencePill) {
 // installation whose accounts come from the provider — which is the installation
 // this mapping exists for — a role the form offers and this list does not is a role
 // that cannot be held for longer than one login, however carefully it was granted.
-const SSO_ROLES = ["admin", "modeler", "operator", "productmanager"];
+const SSO_ROLES = ["admin", "modeler", "operator", "productmanager", "feedreader"];
 
 function ssoRuleRow(rule, groups) {
   const roles = new Set(rule.roles || []);
@@ -4328,11 +4501,12 @@ function wireWorkerManagement(workers) {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="worker-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
+        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="s3">S3 object storage</option><option value="entra">entra</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="cloudevents">CloudEvents endpoint</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
         <label class="field provider-field" style="margin:0"><span class="provider-label">Provider</span><select name="provider"></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
         <label class="field mail-only" style="margin:0;flex:1 1 180px"><span>Sender</span><input name="sender" placeholder="bot@example.com"/></label>
+        <label class="field mailbox-field" style="margin:0;flex:1 1 200px" title="Lets this Worker read the mailbox it sends from: a watch, or a task that lists, files or answers mail. Logs in as the sender, always over TLS."><span>IMAP endpoint (optional)</span><input name="mailboxEndpoint" placeholder="imaps://imap.example.com:993"/></label>
         <label class="field model-field" style="margin:0;flex:1 1 180px"><span>Default model</span><input name="model" title="What a step that names no model of its own asks. A task or an agent container may name one, and then that one runs (ADR-0256)."/></label>
         <label class="field sql-only" style="margin:0;flex:1 1 100%"><span>Connection string</span><input name="connectionString" type="password" autocomplete="new-password"/></label>
         <label class="field credref-field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
@@ -4374,6 +4548,7 @@ function wireWorkerManagement(workers) {
       const sync = () => {
         const sh = workerShape(kindSel.value, providerSel.value);
         form.querySelectorAll(".mail-only").forEach((el) => { el.style.display = sh.mail ? "" : "none"; });
+        form.querySelector(".mailbox-field").style.display = sh.mailbox ? "" : "none";
         form.querySelector(".provider-field").style.display = sh.provider ? "" : "none";
         form.querySelector(".provider-label").textContent = sh.model ? "Wire format" : "Provider";
         const modelField = form.querySelector(".model-field");
@@ -4502,6 +4677,9 @@ function wireWorkerManagement(workers) {
       try {
         if (act === "subs") {
           await toggleInboundSubs(row, id, c.kind);
+          return;
+        } else if (act === "feed") {
+          await toggleFeedSubs(row, id);
           return;
         } else if (act === "share") {
           await toggleWorkerShare(c, viewConsoleWorkers);
@@ -4677,7 +4855,7 @@ async function toggleInboundSubs(row, workerId, kind) {
   }
   const subs = (await api("GET", "/api/v1/connectors/" + encodeURIComponent(workerId) + "/inbound-subscriptions")) || [];
   const list = subs.map((s) => `<tr data-sid="${esc(s.id)}">
-      <td><code>${esc(s.jql || s.spreadsheetId || s.folderId || s.channelId || s.watchedSubject)}</code>${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}${s.jql ? ` <span class="muted">(on ${esc(s.cursorField || "created")})</span>` : ""}${s.spreadsheetId ? ` <span class="muted">(rows in ${esc(s.watchRange || "A:Z")})</span>` : ""}${s.folderId ? ` <span class="muted">(files ${esc(s.cursorField || "created")})</span>` : ""}${s.channelId ? ' <span class="muted">(new messages)</span>' : ""}</td>
+      <td><code>${esc(s.jql || s.spreadsheetId || s.folderId || s.channelId || s.mailFolder || s.watchedSubject)}</code>${s.mailFolder ? ` <span class="muted">(new mail${(s.allowedSenders || []).length ? " from " + esc(s.allowedSenders.join(", ")) : " from anyone"}${s.requireDmarcPass ? ", DMARC pass" : ""}${s.includeBody ? ", with body" : ", metadata only"})</span>` : ""}${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}${s.jql ? ` <span class="muted">(on ${esc(s.cursorField || "created")})</span>` : ""}${s.spreadsheetId ? ` <span class="muted">(rows in ${esc(s.watchRange || "A:Z")})</span>` : ""}${s.folderId ? ` <span class="muted">(files ${esc(s.cursorField || "created")})</span>` : ""}${s.channelId ? ' <span class="muted">(new messages)</span>' : ""}</td>
       <td>→ message <span class="chip">${esc(s.messageName)}</span>${s.correlationKey ? ` on <code>${esc(s.correlationKey)}</code>` : ""}</td>
       <td>${s.enabled
         ? '<span class="pill ok"><span class="dot"></span>on</span>'
@@ -4688,14 +4866,19 @@ async function toggleInboundSubs(row, workerId, kind) {
   const isJira = kind === "jira";
   const isGoogle = kind === "googlesheets";
   const isDiscord = kind === "discord";
-  const what = isDiscord
+  const isMail = kind === "mail";
+  const what = isMail
+    ? `<div class="muted" style="margin-bottom:8px">Inbound mail watches — the mail arriving in one folder of this Worker's mailbox is published as atlas messages, so a mail starts a process (ADR-0438). Atlas polls once a minute by default and <b>never changes the mailbox</b>: model a task to file or mark a message. <b>Who may start a process</b> is anyone who can write to the address — restrict it with <i>Allowed senders</i>, and since a sender address is a claim anybody can make, require a <b>DMARC pass</b> too. <b>What a process receives</b> is the envelope — sender, recipients, subject, attachment names and sizes — and the text only when you include it; on a shared server every operator can read what a process receives. <b>Max events/hour</b> is the loop guard; an auto-reply ping-pong is exactly the loop it stops. Empty uses 60.</div>`
+    : isDiscord
     ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the messages posted in a Discord channel are published as atlas messages, so a message starts a process. Atlas polls every 15 seconds by default; nothing has to reach this server from the internet. <b>The bot needs the Message Content intent</b> — without it Discord returns every message with an empty <code>content</code>, no error and no warning, and a correlation key over it quietly matches nothing. Enable it under <i>Developer Portal &rsaquo; your application &rsaquo; Bot &rsaquo; Privileged Gateway Intents</i>. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a channel the Worker also posts into has no natural end. Empty uses 60.</div>`
     : isGoogle
     ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — a spreadsheet's new rows, or the files put into a Drive folder, are published as atlas messages so each one starts a process. Atlas polls once a minute by default; nothing has to reach this server from the internet. <b>A row watch follows the sheet's own row numbers</b>, so it sees rows appended at the end — which is what a form response sheet does. Deleting rows from the watched range renumbers the tail, and a later row landing on a number already delivered is not delivered again. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a watch fed by what its own processes write has no natural end. Empty uses 60.</div>`
     : isJira
     ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the issues a JQL matches are published as atlas messages, so a new ticket starts a process (ADR-0214). Atlas polls; nothing has to reach this server from the internet. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`
     : `<div class="muted" style="margin-bottom:8px">Inbound event subscriptions — a watched clio subject's events are published as atlas messages (ADR-0075). <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`;
-  const source = isDiscord
+  const source = isMail
+    ? `<label class="field" style="margin:0"><span>Folder</span><input name="mailFolder" placeholder="INBOX"/></label>`
+    : isDiscord
     ? `<label class="field" style="margin:0"><span>Channel</span><input name="channelId" placeholder="123456789012345678" required/></label>`
     : isGoogle
     ? `<label class="field" style="margin:0"><span>Watch</span><select name="googleTarget" class="input">
@@ -4706,7 +4889,12 @@ async function toggleInboundSubs(row, workerId, kind) {
     : isJira
     ? `<label class="field" style="margin:0"><span>JQL</span><input name="jql" placeholder="project = OPS AND issuetype = Bug" required/></label>`
     : `<label class="field" style="margin:0"><span>Watched subject</span><input name="watchedSubject" placeholder="/employees" required/></label>`;
-  const extra = isDiscord
+  const extra = isMail
+    ? `<label class="field" style="grid-column:1 / span 2;margin:0"><span>Allowed senders (optional, comma-separated)</span><input name="allowedSenders" placeholder="kunde@example.com, @lieferant.ch"/></label>
+      <label class="check" style="margin:0 0 8px;display:flex;gap:8px;align-items:center"><input type="checkbox" name="requireDmarcPass"/><span>Require a DMARC pass</span></label>
+      <label class="check" style="margin:0 0 8px;display:flex;gap:8px;align-items:center"><input type="checkbox" name="includeBody"/><span>Include the text</span></label>
+      <div class="muted" style="grid-column:1 / -1">The folder is an IMAP folder name, a Gmail label id (<code>INBOX</code>, <code>Label_…</code>) or a Microsoft folder id or well-known name (<code>inbox</code>, <code>archive</code>); empty is the inbox. The correlation key (FEEL) sees <code>messageId</code>, <code>internetMessageId</code>, <code>from</code>, <code>fromName</code>, <code>replyTo</code>, <code>to</code>, <code>cc</code>, <code>subject</code>, <code>receivedAt</code>, <code>unread</code>, <code>hasAttachments</code>, <code>attachments</code>, <code>auth</code> (<code>spf</code>, <code>dkim</code>, <code>dmarc</code>), <code>folder</code>, <code>eventType</code> — and <code>body</code> when the text is included. These are also seeded as process variables; <code>messageId</code> is what a mail task's operation addresses. A new watch is forward-only, so the mail already in the folder is skipped.</div>`
+    : isDiscord
     ? `<div class="muted" style="grid-column:1 / -1">In Discord, enable <b>Developer Mode</b> (User Settings &rsaquo; Advanced) and use the channel's <b>Copy Channel ID</b>. A thread is itself a channel, so a thread's id works here too. The correlation key (FEEL) sees <code>messageId</code>, <code>channelId</code>, <code>content</code>, <code>authorId</code>, <code>authorName</code>, <code>authorBot</code>, <code>timestamp</code>, <code>eventType</code>, and <code>message</code> — the whole message, for anything not named here. These are also seeded as process variables on the started instance. <b>Guard against your own bot</b>: if this Worker also posts into this channel, key or condition on <code>authorBot</code>, or the watch will react to what it wrote. A new watch is forward-only, so the messages already in the channel are skipped.</div>`
     : isGoogle
     ? `<div class="google-rows" style="grid-column:1 / -1;display:flex;gap:12px;align-items:end;flex-wrap:wrap">
@@ -4747,8 +4935,8 @@ async function toggleInboundSubs(row, workerId, kind) {
     <table style="width:100%"><tbody id="subs-body">${list}</tbody></table>
     <form id="subs-form" style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr auto;align-items:end;margin-top:10px">
       ${source}
-      <label class="field" style="margin:0"><span>Message name</span><input name="messageName" placeholder="${isGoogle ? "antrag.eingegangen" : isJira ? "jira.ticket.created" : "employee.created"}" required/></label>
-      <label class="field" style="margin:0"><span>Correlation key (FEEL, optional)</span><input name="correlationKey" placeholder="${isGoogle ? "= Antragsnummer" : isJira ? "= issueKey" : "= subjectTail"}"/></label>
+      <label class="field" style="margin:0"><span>Message name</span><input name="messageName" placeholder="${isMail ? "mail.eingegangen" : isGoogle ? "antrag.eingegangen" : isJira ? "jira.ticket.created" : "employee.created"}" required/></label>
+      <label class="field" style="margin:0"><span>Correlation key (FEEL, optional)</span><input name="correlationKey" placeholder="${isMail ? "= internetMessageId" : isGoogle ? "= Antragsnummer" : isJira ? "= issueKey" : "= subjectTail"}"/></label>
       <label class="field" style="margin:0"><span>Max events/hour</span><input name="maxPerHour" type="number" min="0" placeholder="60"/></label>
       <button class="btn" type="submit" title="Add this inbound event watch">Add</button>
       ${extra}
@@ -4780,7 +4968,12 @@ async function toggleInboundSubs(row, workerId, kind) {
         correlationKey: (f.get("correlationKey") || "").trim(),
         maxPerHour: Number(f.get("maxPerHour") || 0) || 0,
       };
-      if (isDiscord) {
+      if (isMail) {
+        body.mailFolder = (f.get("mailFolder") || "").trim();
+        body.allowedSenders = String(f.get("allowedSenders") || "").split(",").map((x) => x.trim()).filter(Boolean);
+        body.requireDmarcPass = f.get("requireDmarcPass") === "on";
+        body.includeBody = f.get("includeBody") === "on";
+      } else if (isDiscord) {
         body.channelId = (f.get("channelId") || "").trim();
       } else if (isGoogle) {
         const id = (f.get("googleId") || "").trim();
@@ -4814,6 +5007,104 @@ async function toggleInboundSubs(row, workerId, kind) {
       panel.remove();
       await toggleInboundSubs(row, workerId, kind);
     } catch (err) { toast("Could not delete subscription: " + err.message, "err"); }
+  });
+}
+
+// toggleFeedSubs opens, under a CloudEvents endpoint Worker's row, what that worker is
+// sent of the event feed (ADR-0433):
+// each subscription with its catalogues, whether delivery is moving — and when its
+// endpoint is failing, since when, the next attempt and what it last said — with the
+// form that adds one. Administrator configuration, like the routes behind it.
+async function toggleFeedSubs(row, workerId) {
+  const existing = row.nextElementSibling;
+  if (existing && existing.classList.contains("subs-row")) {
+    existing.remove();
+    return;
+  }
+  const [all, cats] = await Promise.all([
+    api("GET", "/api/v1/feed-subscriptions"),
+    api("GET", "/api/v1/catalogs").catch(() => []),
+  ]);
+  const subs = (all || []).filter((s) => s.workerId === workerId);
+  const catName = (id) => {
+    const c = (cats || []).find((x) => x.id === id);
+    const texts = (c && c.texts) || {};
+    return Object.values(texts).find((t) => t) || id;
+  };
+  const state = (s) => {
+    if (!s.enabled) {
+      return `<span class="pill warn" title="${esc(s.disabledReason || "Switched off.")}"><span class="dot"></span>off</span>`
+        + (s.disabledReason ? ` <span class="muted">${esc(s.disabledReason)}</span>` : "");
+    }
+    if (s.hold) {
+      return `<span class="pill err" title="${esc(s.hold.lastError)}"><span class="dot"></span>held</span>`
+        + ` <span class="muted">failing since ${esc(new Date(s.hold.failingSince).toLocaleString())},`
+        + ` next attempt ${esc(new Date(s.hold.retryAt).toLocaleString())}: ${esc(s.hold.lastError)}</span>`;
+    }
+    return '<span class="pill ok"><span class="dot"></span>on</span>'
+      + ` <span class="muted">${s.deliveredAt ? "last delivered " + esc(fmtTime(s.deliveredAt)) : "nothing delivered yet"}</span>`;
+  };
+  const list = subs.map((s) => `<tr data-sid="${esc(s.id)}" data-enabled="${s.enabled ? "1" : ""}">
+      <td>${(s.reach || []).length
+        ? s.reach.map((id) => `<span class="chip" title="${esc(id)}">${esc(catName(id))}</span>`).join(" ")
+        : '<span class="muted">the whole feed</span>'}</td>
+      <td>${state(s)}</td>
+      <td class="muted">position ${esc(String(s.cursor))}</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn ghost" data-ftoggle>${s.enabled ? "Disable" : "Enable"}</button>
+        <button class="btn ghost" data-ffrom="oldest" title="Deliver again from the oldest event the feed still holds">From oldest</button>
+        <button class="btn ghost" data-ffrom="now" title="Skip to the newest event; deliver only what is recorded from now on">From now</button>
+        <button class="btn ghost danger" data-fdel title="End this subscription">Delete</button>
+      </td>
+    </tr>`).join("") || `<tr><td colspan="4" class="muted" style="padding:10px">Not subscribed. Add a subscription below to have this endpoint sent the event feed.</td></tr>`;
+  const options = (cats || []).map((c) => `<option value="${esc(c.id)}">${esc(catName(c.id))}</option>`).join("");
+  const panel = document.createElement("tr");
+  panel.className = "subs-row";
+  panel.innerHTML = `<td colspan="3" style="background:var(--surface); padding:12px 18px">
+    <div class="muted" style="margin-bottom:8px">The event feed pushed to this endpoint — how each action asked of a held position ended, every right granted and revoked, and every incident raised and resolved — as CloudEvents batches. A batch the endpoint refuses is <b>held and tried again</b>, never skipped; the receiver deduplicates by each event's <code>id</code>. Narrowed to some catalogues, it is sent only the events about the products they maintain. If the feed's retention passes a subscription that fell behind, it is switched off and says so: enable it again from the oldest event held.</div>
+    <table style="width:100%"><tbody id="feed-body">${list}</tbody></table>
+    <form id="feed-form" style="display:grid;gap:8px;grid-template-columns:2fr 1fr 1fr auto;align-items:end;margin-top:10px">
+      <label class="field" style="margin:0"><span>Catalogues (none selected: the whole feed)</span><select name="reach" multiple size="3">${options}</select></label>
+      <label class="field" style="margin:0"><span>Start</span><select name="from"><option value="oldest">from the oldest event held</option><option value="now">from now</option></select></label>
+      <label class="field" style="margin:0"><span>Events per batch</span><input name="batchSize" type="number" min="0" max="1000" placeholder="100"/></label>
+      <button class="btn" type="submit" title="Subscribe this endpoint to the event feed">Subscribe</button>
+    </form></td>`;
+  row.after(panel);
+  const reload = async () => {
+    panel.remove();
+    await toggleFeedSubs(row, workerId);
+  };
+  panel.querySelector("#feed-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    try {
+      await api("POST", "/api/v1/feed-subscriptions", {
+        workerId,
+        reach: f.getAll("reach"),
+        from: f.get("from") || "oldest",
+        batchSize: Number(f.get("batchSize") || 0) || 0,
+      });
+      toast("Subscribed to the event feed", "ok");
+      await reload();
+    } catch (err) { toast("Could not subscribe: " + err.message, "err"); }
+  });
+  panel.querySelector("#feed-body").addEventListener("click", async (e) => {
+    const btn = e.target.closest("button");
+    const tr = btn && btn.closest("tr[data-sid]");
+    if (!tr) return;
+    const path = "/api/v1/feed-subscriptions/" + encodeURIComponent(tr.dataset.sid);
+    try {
+      if (btn.hasAttribute("data-fdel")) {
+        await api("DELETE", path);
+      } else if (btn.hasAttribute("data-ftoggle")) {
+        await api("PATCH", path, { enabled: !tr.dataset.enabled });
+      } else if (btn.dataset.ffrom) {
+        await api("PATCH", path, { from: btn.dataset.ffrom });
+      } else {
+        return;
+      }
+      await reload();
+    } catch (err) { toast("Could not change the subscription: " + err.message, "err"); }
   });
 }
 
@@ -8511,6 +8802,8 @@ async function viewTasks(preselectKey) {
         ${row("Ordered by", esc(a.ordererName || a.orderer))}
         ${row("Order", `<span class="chip">${esc(a.orderId)}</span>`)}
         ${row("Catalogue", esc(approvalCatalogue(a)))}
+        ${(a.answers || []).map((x) => row(esc(x.label || x.key), esc(x.value))).join("")}
+        ${a.amended ? row("Order form", `<span class="muted">corrected after the order was placed</span>`) : ""}
       </div>
       ${decides}
     </div>`;
@@ -8818,6 +9111,8 @@ async function viewTasks(preselectKey) {
   // of it may take the inbox down. A failure leaves the map empty and every row
   // renders exactly as it did before.
   async function loadApprovalKeys() {
+    // An approval decides an order, and a server without a catalogue takes none.
+    if (!FEATURES.catalogue) { state.approvals = new Map(); return; }
     try {
       const page = await api("GET", "/api/v1/approvals");
       const next = new Map();
@@ -8841,6 +9136,10 @@ async function viewTasks(preselectKey) {
             // surface and wears nobody's brand, so it says it in words instead — an
             // approver deciding for two customers needs to know which one this is.
             catalogTexts: a.catalogTexts || {},
+            // What the orderer answered on the product's form, read from the order,
+            // and whether it was corrected since
+            // (ADR-0441).
+            answers: Array.isArray(a.answers) ? a.answers : [], amended: !!a.amended,
           });
         }
       }
@@ -9185,6 +9484,18 @@ async function viewStartProcess() {
   }
   view.querySelector("#start-refresh").addEventListener("click", load);
   await load();
+}
+
+// viewSwitchedOff is what a bookmark into the catalogue's views opens on a server that
+// switched the area off: the reason, in words, instead of a view whose every call
+// answers 404 and reads as something broken.
+function viewSwitchedOff() {
+  view.innerHTML = `
+    <div class="card empty">
+      <h1>Switched off</h1>
+      <p class="muted">The shop, the catalogue, the orders and the inventory are switched off on this server (--catalogue=false). Nothing stored was removed; an administrator turns them back on at the next start.</p>
+      <a class="btn ghost" href="#/console">Back to Console</a>
+    </div>`;
 }
 
 function viewComingSoon(appId) {
@@ -10117,6 +10428,7 @@ function routeTitle(path) {
     [/^#\/console\/backup$/, "Backup · Console"],
     [/^#\/console\/org$/, "Organization · Console"],
     [/^#\/console\/workers$/, "Workers · Console"],
+    [/^#\/console\/events$/, "Events · Console"],
     [/^#\/modeler\/new/, "New diagram · Modeler"],
     [/^#\/modeler\/form\/new/, "New form · Modeler"],
     [/^#\/modeler\/form\//, "Form · Modeler"],
@@ -10152,6 +10464,10 @@ async function route() {
   document.getElementById("scrim").hidden = true;
   if (window.__atlasCleanup) { try { window.__atlasCleanup(); } catch { /* ignore */ } }
   navGen++; // supersede any view handler still awaiting from a previous navigation
+  // The FEEL assistant's top-bar button is offered to whoever may use its routes; this
+  // is the first point after boot at which the principal is known.
+  const feelBtn = document.getElementById("feel-assistant-btn");
+  if (feelBtn) feelBtn.hidden = !mayUse("modeler");
 
   const hash = location.hash || "#/console";
   // #/console/connectors is the pre-ADR-0203 spelling of the Workers page. A
@@ -10192,12 +10508,14 @@ async function route() {
   }
 
   startPresence(); // signed in, so this tab is somebody being here (presence.go)
+  if (!FEATURES.loaded) await loadFeatures(); // before the menus are painted from it
   setChrome(appId, path);
   setTitle(routeTitle(path));
   updateAccount();
   window.scrollTo(0, 0);
 
   try {
+    if (isCatalogueRoute(path) && !FEATURES.catalogue) return viewSwitchedOff();
     if (path === "#/" || path === "#/console") return await viewConsoleDashboard();
     if (path === "#/console/engine") return await viewConsoleEngine();
     if (path === "#/console/logs") return await viewConsoleLogs();
@@ -10209,6 +10527,11 @@ async function route() {
       return await viewAIAccess({ api, toast, view, isSuperseded: () => superseded(gen) });
     }
     if (path === "#/console/audit") return await viewConsoleAudit();
+    if (path === "#/console/events") {
+      const gen = navGen;
+      const { viewEvents } = await import("./events.js");
+      return await viewEvents({ api, view, isSuperseded: () => superseded(gen) });
+    }
     if (path === "#/catalog") {
       const gen = navGen;
       const { viewCatalogs } = await import("./catalog-admin.js");

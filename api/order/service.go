@@ -14,6 +14,7 @@ import (
 	"github.com/pblumer/atlas/api/catalog"
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/runloop"
+	"github.com/pblumer/atlas/eventcatalog"
 	"github.com/pblumer/atlas/limits"
 )
 
@@ -114,7 +115,11 @@ type Service struct {
 	// service's loop closure — writing an engine fact runs the processor, which
 	// is a visit to the loop of its own, and a nested Do would deadlock.
 	grant  func(Grant) error
-	revoke func(principal, itemID string, at int64, by string) error
+	revoke func(principal, itemID string, at int64, by string, outcome Outcome) error
+	// report writes an outcome that comes without a right changing hands: a
+	// provision that failed or was refused, a return that failed (ADR-0429 §3). Nil
+	// writes nothing; it is set by [Service.ReportOutcomesTo].
+	report func(Outcome) error
 	// held answers what one principal already holds, as a set of item ids. It is
 	// what makes the basket's second resolution possible — an item the recipient
 	// already has and may not have twice is ordered as skipped rather than
@@ -131,11 +136,12 @@ type Service struct {
 // drift apart: a name nobody publishes is a process that waits forever, and it
 // fails silently.
 const (
-	// PlacedMessage starts the fulfilment process for a new order.
-	PlacedMessage = "atlas.order.placed"
+	// PlacedMessage starts the fulfilment process for a new order. Its name, like
+	// AdvancedMessage's, is the event catalogue's (ADR-0435).
+	PlacedMessage = eventcatalog.OrderPlaced
 	// AdvancedMessage says a line settled, so the process asks what may start
 	// next. A settled line publishes it; nothing polls.
-	AdvancedMessage = "atlas.order.advanced"
+	AdvancedMessage = eventcatalog.OrderAdvanced
 )
 
 // New builds the service.
@@ -148,7 +154,7 @@ func New(loop *runloop.Loop, store *Store, now func() int64,
 	portalBase func() string,
 	apiBase func() string,
 	grant func(Grant) error,
-	revoke func(principal, itemID string, at int64, by string) error,
+	revoke func(principal, itemID string, at int64, by string, outcome Outcome) error,
 	held func(principal string) (map[string]bool, error)) *Service {
 	return &Service{loop: loop, store: store, now: now,
 		release: release, mayOrderFrom: mayOrderFrom, groupsOf: groupsOf,
@@ -608,6 +614,7 @@ func linesFor(rel catalog.Release, ordered []string, held map[string]bool,
 				DeprovisionProcess: it.DeprovisionProcess,
 				LifecycleProcess:   it.LifecycleProcess,
 				Operations:         copyAnswers(it.Operations),
+				Actions:            catalog.CopyActions(it.Actions),
 				LifecycleForm:      it.LifecycleForm,
 				MaxDays:            it.MaxDays,
 				// The form's id travels with the line beside the answers, so a reader of
@@ -833,14 +840,20 @@ func (s *Service) HandleNext(w http.ResponseWriter, r *http.Request) {
 		ready := Ready(got)
 		out := make([]readyLine, 0, len(ready))
 		for _, l := range ready {
+			// Without the answers: the orchestration keeps what it reads here as
+			// variables, in its history and in the clear, and it starts processes
+			// rather than reading forms. The processes it starts are given the answers
+			// by the order (ADR-0441).
+			l.Config, l.Amendments = nil, nil
 			out = append(out, readyLine{ID: l.Key(), Line: l, ApprovalProcess: l.ApprovalProcess()})
 		}
 		httpapi.JSON(w, http.StatusOK, out)
 	}
 }
 
-// readyLine is a line as the fulfilment process reads it: everything the order
-// stored, plus the process that decides it.
+// readyLine is a line as the fulfilment process reads it: what the order stored,
+// less the orderer's answers (see [Service.HandleNext]), plus the process that
+// decides it.
 //
 // The process is added here rather than stored on the line because it is resolved
 // now — see [Line.ApprovalProcess]. Embedding flattens the JSON, so the
@@ -989,6 +1002,7 @@ func (s *Service) recordInventory(o Order, ref string, status LineStatus) error 
 		return s.grant(Grant{
 			Principal: o.Recipient, ItemID: itemID, VariantID: variant,
 			OrderID: o.ID, At: o.UpdatedAt, Until: until, ApprovedBy: line.ApprovedBy,
+			Outcome: ownOutcome(o, key, line, catalog.EffectProvision, catalog.OutcomeCompleted),
 		})
 	case StatusReturned:
 		// The moment is the order's, not a fresh clock reading: it is the same
@@ -997,9 +1011,27 @@ func (s *Service) recordInventory(o Order, ref string, status LineStatus) error 
 		// return, carried on the line since then — what completed it is a
 		// deprovisioning process, and naming that as the decider would attribute a
 		// decision to a robot.
-		return s.revoke(o.Recipient, itemID, o.UpdatedAt, line.ReturnedBy)
+		return s.revoke(o.Recipient, itemID, o.UpdatedAt, line.ReturnedBy,
+			ownOutcome(o, key, line, catalog.EffectDeprovision, catalog.OutcomeCompleted))
+	case StatusFailed:
+		// Nothing changed hands, so the outcome is the only fact (ADR-0429 §3).
+		return s.reportOutcome(ownOutcome(o, key, line, catalog.EffectProvision, catalog.OutcomeFailed))
+	case StatusReturnFailed:
+		return s.reportOutcome(ownOutcome(o, key, line, catalog.EffectDeprovision, catalog.OutcomeFailed))
 	}
 	return nil
+}
+
+// ReportOutcomesTo sets where an outcome that comes without a grant or a revocation
+// is written (ADR-0429 §3). Set once, by the server, before the service serves.
+func (s *Service) ReportOutcomesTo(report func(Outcome) error) { s.report = report }
+
+// reportOutcome writes o where the server said, or nowhere when it said nothing.
+func (s *Service) reportOutcome(o Outcome) error {
+	if s.report == nil {
+		return nil
+	}
+	return s.report(o)
 }
 
 // decideReq is an approver's refusal: who decided, and in their own words why.
@@ -1081,6 +1113,19 @@ func (s *Service) HandleDecide(w http.ResponseWriter, r *http.Request) {
 		// An approval settles nothing, so nothing waiting on the line has moved.
 		httpapi.JSON(w, http.StatusOK, got)
 	default:
+		// An approver's refusal is the rejected of the provision (ADR-0429 §3), and
+		// a fact before anything is woken, as an outcome report's inventory is.
+		if key, err := ResolveLine(got, item); err == nil {
+			for _, l := range got.Lines {
+				if l.Key() == key {
+					if err := s.reportOutcome(ownOutcome(got, key, l, catalog.EffectProvision, catalog.OutcomeRejected)); err != nil {
+						httpapi.Error(w, http.StatusInternalServerError,
+							"the decision was recorded, but its outcome could not be: "+err.Error())
+						return
+					}
+				}
+			}
+		}
 		// A refusal settles a line exactly as a provisioning outcome does, so what
 		// waited on it has to be told.
 		if err := s.wake(AdvancedMessage, id, nil); err != nil {

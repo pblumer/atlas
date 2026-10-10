@@ -292,26 +292,26 @@
       <bpmndi:BPMNShape id="di_s_ueb_archiv" bpmnElement="s_ueb_archiv"><dc:Bounds x="1550" y="140" width="100" height="80"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_end_terminate" bpmnElement="end_terminate"><dc:Bounds x="1700" y="162" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="1663" y="205" width="110" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <!-- Datenobjekt-Referenzen der Spur A, oberhalb der Achse auf y=40 -->
-      <bpmndi:BPMNShape id="di_Ref_ident_erfasst" bpmnElement="Ref_ident_erfasst"><dc:Bounds x="252" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="212" y="92" width="116" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="di_Ref_svc_init" bpmnElement="Ref_svc_init"><dc:Bounds x="308" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="296" y="92" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="di_Ref_ident_aktiv" bpmnElement="Ref_ident_aktiv"><dc:Bounds x="682" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="648" y="92" width="104" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="di_Ref_svc_lesen_austritt" bpmnElement="Ref_svc_lesen_austritt"><dc:Bounds x="912" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="900" y="92" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="di_Ref_svc_schreiben_austritt" bpmnElement="Ref_svc_schreiben_austritt"><dc:Bounds x="982" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="970" y="92" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="di_Ref_ident_austritt" bpmnElement="Ref_ident_austritt"><dc:Bounds x="1052" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1008" y="92" width="124" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="di_Ref_svc_lesen_ueb_austritt" bpmnElement="Ref_svc_lesen_ueb_austritt"><dc:Bounds x="1132" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1120" y="92" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="di_Ref_svc_lesen_archiv" bpmnElement="Ref_svc_lesen_archiv"><dc:Bounds x="1362" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1350" y="92" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="di_Ref_svc_schreiben_archiv" bpmnElement="Ref_svc_schreiben_archiv"><dc:Bounds x="1432" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1420" y="92" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="di_Ref_ident_archiviert" bpmnElement="Ref_ident_archiviert"><dc:Bounds x="1502" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1452" y="92" width="136" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="di_Ref_svc_lesen_ueb_archiv" bpmnElement="Ref_svc_lesen_ueb_archiv"><dc:Bounds x="1582" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1570" y="92" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_ident_erfasst" bpmnElement="Ref_ident_erfasst"><dc:Bounds x="252" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="248" y="21" width="45" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_svc_init" bpmnElement="Ref_svc_init"><dc:Bounds x="308" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="306" y="21" width="41" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_ident_aktiv" bpmnElement="Ref_ident_aktiv"><dc:Bounds x="682" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="678" y="21" width="45" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_svc_lesen_austritt" bpmnElement="Ref_svc_lesen_austritt"><dc:Bounds x="912" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="910" y="21" width="41" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_svc_schreiben_austritt" bpmnElement="Ref_svc_schreiben_austritt"><dc:Bounds x="982" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="980" y="21" width="41" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_ident_austritt" bpmnElement="Ref_ident_austritt"><dc:Bounds x="1052" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1048" y="21" width="45" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_svc_lesen_ueb_austritt" bpmnElement="Ref_svc_lesen_ueb_austritt"><dc:Bounds x="1132" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1130" y="21" width="41" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_svc_lesen_archiv" bpmnElement="Ref_svc_lesen_archiv"><dc:Bounds x="1362" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1360" y="21" width="41" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_svc_schreiben_archiv" bpmnElement="Ref_svc_schreiben_archiv"><dc:Bounds x="1432" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1430" y="21" width="41" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_ident_archiviert" bpmnElement="Ref_ident_archiviert"><dc:Bounds x="1502" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1498" y="21" width="45" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_svc_lesen_ueb_archiv" bpmnElement="Ref_svc_lesen_ueb_archiv"><dc:Bounds x="1582" y="40" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1580" y="21" width="41" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <!-- Spur B: Ereignis-Hub, Service-Zweig auf y=400, Mutations-Zweig auf y=520 -->
-      <bpmndi:BPMNShape id="di_gw_hub" bpmnElement="gw_hub"><dc:Bounds x="500" y="375" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="483" y="432" width="85" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw_hub" bpmnElement="gw_hub"><dc:Bounds x="500" y="375" width="50" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="430" y="356" width="87" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_c_service" bpmnElement="c_service"><dc:Bounds x="650" y="382" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="622" y="345" width="92" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_s_register" bpmnElement="s_register"><dc:Bounds x="740" y="360" width="100" height="80"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_s_uebersicht" bpmnElement="s_uebersicht"><dc:Bounds x="890" y="360" width="100" height="80"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_c_mutation" bpmnElement="c_mutation"><dc:Bounds x="650" y="502" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="614" y="541" width="109" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_s_mutation" bpmnElement="s_mutation"><dc:Bounds x="740" y="480" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="di_Ref_svc_lesen_ereignis" bpmnElement="Ref_svc_lesen_ereignis"><dc:Bounds x="1040" y="300" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1028" y="352" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="di_Ref_svc_schreiben_ereignis" bpmnElement="Ref_svc_schreiben_ereignis"><dc:Bounds x="1040" y="410" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="1028" y="462" width="60" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_svc_lesen_ereignis" bpmnElement="Ref_svc_lesen_ereignis"><dc:Bounds x="798" y="285" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="796" y="266" width="41" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_Ref_svc_schreiben_ereignis" bpmnElement="Ref_svc_schreiben_ereignis"><dc:Bounds x="748" y="285" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="746" y="266" width="41" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_Ref_ident_lesen" bpmnElement="Ref_ident_lesen"><dc:Bounds x="900" y="480" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="884" y="532" width="68" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_Ref_ident_mutiert" bpmnElement="Ref_ident_mutiert"><dc:Bounds x="900" y="580" width="36" height="50"/><bpmndi:BPMNLabel><dc:Bounds x="866" y="632" width="104" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <!-- Kanten Spur A -->
@@ -331,10 +331,10 @@
       <bpmndi:BPMNEdge id="di_f_b1" bpmnElement="f_b1"><di:waypoint x="550" y="400"/><di:waypoint x="650" y="400"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_b2" bpmnElement="f_b2"><di:waypoint x="686" y="400"/><di:waypoint x="740" y="400"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_b3" bpmnElement="f_b3"><di:waypoint x="840" y="400"/><di:waypoint x="890" y="400"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="di_f_b4" bpmnElement="f_b4"><di:waypoint x="940" y="360"/><di:waypoint x="940" y="320"/><di:waypoint x="525" y="320"/><di:waypoint x="525" y="375"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="di_f_b5" bpmnElement="f_b5"><di:waypoint x="550" y="400"/><di:waypoint x="575" y="400"/><di:waypoint x="575" y="520"/><di:waypoint x="650" y="520"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_b4" bpmnElement="f_b4"><di:waypoint x="990" y="400"/><di:waypoint x="1010" y="400"/><di:waypoint x="1010" y="250"/><di:waypoint x="525" y="250"/><di:waypoint x="525" y="375"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_b5" bpmnElement="f_b5"><di:waypoint x="525" y="425"/><di:waypoint x="525" y="520"/><di:waypoint x="650" y="520"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_b6" bpmnElement="f_b6"><di:waypoint x="686" y="520"/><di:waypoint x="740" y="520"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="di_f_b7" bpmnElement="f_b7"><di:waypoint x="790" y="560"/><di:waypoint x="790" y="610"/><di:waypoint x="525" y="610"/><di:waypoint x="525" y="425"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_b7" bpmnElement="f_b7"><di:waypoint x="790" y="560"/><di:waypoint x="790" y="610"/><di:waypoint x="470" y="610"/><di:waypoint x="470" y="400"/><di:waypoint x="500" y="400"/></bpmndi:BPMNEdge>
       <!-- Daten-Assoziationen -->
       <bpmndi:BPMNEdge id="di_doa_stamm_ident" bpmnElement="doa_stamm_ident"><di:waypoint x="280" y="140"/><di:waypoint x="280" y="90"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_doa_stamm_svc" bpmnElement="doa_stamm_svc"><di:waypoint x="326" y="140"/><di:waypoint x="326" y="90"/></bpmndi:BPMNEdge>
@@ -347,9 +347,9 @@
       <bpmndi:BPMNEdge id="di_doa_archiv_svc" bpmnElement="doa_archiv_svc"><di:waypoint x="1450" y="140"/><di:waypoint x="1450" y="90"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_doa_archiv_ident" bpmnElement="doa_archiv_ident"><di:waypoint x="1500" y="150"/><di:waypoint x="1520" y="150"/><di:waypoint x="1520" y="90"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_dia_ueb_archiv" bpmnElement="dia_ueb_archiv"><di:waypoint x="1600" y="90"/><di:waypoint x="1600" y="140"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="di_dia_reg" bpmnElement="dia_reg"><di:waypoint x="1058" y="350"/><di:waypoint x="1058" y="380"/><di:waypoint x="840" y="380"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="di_doa_reg" bpmnElement="doa_reg"><di:waypoint x="840" y="420"/><di:waypoint x="1058" y="420"/><di:waypoint x="1058" y="410"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="di_dia_uebersicht" bpmnElement="dia_uebersicht"><di:waypoint x="1058" y="350"/><di:waypoint x="1058" y="390"/><di:waypoint x="990" y="390"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_dia_reg" bpmnElement="dia_reg"><di:waypoint x="816" y="335"/><di:waypoint x="816" y="360"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_doa_reg" bpmnElement="doa_reg"><di:waypoint x="766" y="360"/><di:waypoint x="766" y="335"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_dia_uebersicht" bpmnElement="dia_uebersicht"><di:waypoint x="834" y="310"/><di:waypoint x="940" y="310"/><di:waypoint x="940" y="360"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_dia_mut" bpmnElement="dia_mut"><di:waypoint x="900" y="505"/><di:waypoint x="840" y="505"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_doa_mut" bpmnElement="doa_mut"><di:waypoint x="840" y="540"/><di:waypoint x="870" y="540"/><di:waypoint x="870" y="605"/><di:waypoint x="900" y="605"/></bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>

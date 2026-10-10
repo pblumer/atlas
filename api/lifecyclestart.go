@@ -3,9 +3,9 @@ package api
 import (
 	"errors"
 	"fmt"
-	"strconv"
 
 	"github.com/pblumer/atlas/api/catalog"
+	"github.com/pblumer/atlas/api/order"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/model"
 )
@@ -110,7 +110,7 @@ func triggerRefusal(res engine.TriggerResult, process, message string) string {
 // attempt delivered twice is one trigger, and a deliberate retry — a return asked
 // for again after it failed — is the next attempt and a new one.
 func positionTriggerID(orderID, position, op string, attempt int) string {
-	return "order:" + orderID + ":" + position + ":" + op + ":" + strconv.Itoa(attempt)
+	return order.AttemptID(orderID, position, op, attempt)
 }
 
 // Delivering a later operation of a per-position lifecycle
@@ -132,23 +132,27 @@ func positionCorrelationKey(orderID, position string) string { return orderID + 
 // deliverOrStart delivers operation b to the strand instance when there is one and
 // it is still running, and starts b's start event when there is none. It returns the
 // instance that took the operation.
-func (s *Server) deliverOrStart(strand uint64, b catalog.Binding, correlationKey, triggerID string, vars []model.VariableValue) (uint64, error) {
+//
+// startOnly are variables a start carries and a delivery does not: the position's
+// answers, which the strand has held since it started, and which a delivery could
+// not seal where its model declares them personal (ADR-0314).
+func (s *Server) deliverOrStart(strand uint64, b catalog.Binding, correlationKey, triggerID string, vars, startOnly []model.VariableValue) (uint64, error) {
 	if strand != 0 && b.Triggered() {
 		key, gone, err := s.deliverToStrand(strand, b, correlationKey, triggerID, vars)
 		if !gone {
 			return key, err
 		}
 	}
-	return s.startBinding(b, triggerID, vars)
+	return s.startBinding(b, triggerID, append(vars, startOnly...))
 }
 
-// deliverChange delivers a change to the strand and to nothing else: a change has
-// no start event to fall back to, so a strand that is gone is a refusal.
+// deliverChange delivers a change or a service to the strand and to nothing else:
+// neither has a start event to fall back to, so a strand that is gone is a refusal.
 func (s *Server) deliverChange(strand uint64, b catalog.Binding, correlationKey, triggerID string, vars []model.VariableValue) (uint64, error) {
 	key, gone, err := s.deliverToStrand(strand, b, correlationKey, triggerID, vars)
 	if gone {
 		return 0, errTriggerRefused{fmt.Sprintf("the instance %d that carried this position is "+
-			"no longer running; there is nothing to change", strand)}
+			"no longer running; there is nothing to ask", strand)}
 	}
 	return key, err
 }

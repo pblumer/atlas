@@ -122,7 +122,7 @@ func TestRunSendsThroughTheWorkersOwnConnector(t *testing.T) {
 	rc := &recordingClient{}
 	reg.Register("office365", rc)
 
-	if err := mail.Run(context.Background(), j, reg); err != nil {
+	if _, err := mail.Run(context.Background(), j, reg); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if len(rc.sent) != 1 {
@@ -145,7 +145,7 @@ func TestRunRefusesAConnectorTheWorkerDoesNotHold(t *testing.T) {
 		Retries:   3,
 	})
 	// Nothing registered: this worker was started without that worker.
-	err := mail.Run(context.Background(), j, reg)
+	_, err := mail.Run(context.Background(), j, reg)
 	if err == nil {
 		t.Fatal("sending through an unconfigured worker succeeded")
 	}
@@ -166,7 +166,7 @@ func TestRunRefusesAMessageWithNoRecipient(t *testing.T) {
 	rc := &recordingClient{}
 	reg.Register("office365", rc)
 
-	err := mail.Run(context.Background(), j, reg)
+	_, err := mail.Run(context.Background(), j, reg)
 	if err == nil {
 		t.Fatal("a message with no recipient was accepted")
 	}

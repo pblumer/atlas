@@ -157,22 +157,22 @@ aus der Aufbereitung, das Passwort ist die Laufzeit-Variable initialpasswort. An
         <dc:Bounds x="390" y="160" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_freigabe" bpmnElement="freigabe">
-        <dc:Bounds x="660" y="160" width="100" height="80"/>
+        <dc:Bounds x="540" y="160" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_gw_frei" bpmnElement="gw_frei" isMarkerVisible="true">
-        <dc:Bounds x="820" y="175" width="50" height="50"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="808" y="145" width="74" height="14"/></bpmndi:BPMNLabel>
+        <dc:Bounds x="700" y="175" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="688" y="145" width="74" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_anlegen" bpmnElement="anlegen">
-        <dc:Bounds x="930" y="160" width="100" height="80"/>
+        <dc:Bounds x="810" y="160" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_end_bereit" bpmnElement="end_bereit">
-        <dc:Bounds x="1092" y="182" width="36" height="36"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="1066" y="222" width="90" height="14"/></bpmndi:BPMNLabel>
+        <dc:Bounds x="972" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="946" y="222" width="90" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_end_abgelehnt" bpmnElement="end_abgelehnt">
-        <dc:Bounds x="827" y="320" width="36" height="36"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="809" y="360" width="72" height="14"/></bpmndi:BPMNLabel>
+        <dc:Bounds x="707" y="320" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="689" y="360" width="72" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
 
       <bpmndi:BPMNEdge id="di_f_start_profil" bpmnElement="f_start_profil">
@@ -182,21 +182,21 @@ aus der Aufbereitung, das Passwort ist die Laufzeit-Variable initialpasswort. An
         <di:waypoint x="340" y="200"/><di:waypoint x="390" y="200"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_script_test" bpmnElement="f_script_test">
-        <di:waypoint x="490" y="200"/><di:waypoint x="550" y="200"/>
+        <di:waypoint x="490" y="200"/><di:waypoint x="540" y="200"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_freigabe_gw" bpmnElement="f_freigabe_gw">
-        <di:waypoint x="760" y="200"/><di:waypoint x="820" y="200"/>
+        <di:waypoint x="640" y="200"/><di:waypoint x="700" y="200"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_frei_anlegen" bpmnElement="f_frei_anlegen">
-        <di:waypoint x="870" y="200"/><di:waypoint x="930" y="200"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="878" y="176" width="46" height="14"/></bpmndi:BPMNLabel>
+        <di:waypoint x="750" y="200"/><di:waypoint x="810" y="200"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="758" y="176" width="46" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_frei_ablehnen" bpmnElement="f_frei_ablehnen">
-        <di:waypoint x="845" y="225"/><di:waypoint x="845" y="320"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="851" y="262" width="46" height="14"/></bpmndi:BPMNLabel>
+        <di:waypoint x="725" y="225"/><di:waypoint x="725" y="320"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="731" y="262" width="46" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_anlegen_ende" bpmnElement="f_anlegen_ende">
-        <di:waypoint x="1030" y="200"/><di:waypoint x="1092" y="200"/>
+        <di:waypoint x="910" y="200"/><di:waypoint x="972" y="200"/>
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

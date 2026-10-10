@@ -387,6 +387,24 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.DiscordJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunDiscordJob(ctx, j, reg)
 			})
+		case "s3":
+			reg, names, err := s3RegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if reg == nil {
+				// Told to serve S3, holding no access key to sign with. Not an error, for
+				// the reason Google Sheets' and Discord's identical branches are not:
+				// this worker very likely serves other kinds, and a store nobody has
+				// configured yet must park its tasks rather than take down the kinds that
+				// are configured.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[compiler.S3JobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunS3Job(ctx, j, reg)
+			})
 		case "jira":
 			reg, names, err := jiraRegistryFromEnv(env)
 			if err != nil {
@@ -491,7 +509,7 @@ type Connectors struct {
 // case below was added without it. TestKnownConnectorKindsMatchesWhatIsImplemented holds
 // the two together now, in both directions.
 func KnownConnectorKinds() []string {
-	return []string{"ad", "agent", "clio", "csv", "discord", "entra", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "scim", "script", "sharepoint", "soap", "temis", "webscrape"}
+	return []string{"ad", "agent", "clio", "csv", "discord", "entra", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "s3", "scim", "script", "sharepoint", "soap", "temis", "webscrape"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.
@@ -548,6 +566,7 @@ func mailClientFromEnv(env func(string) string, name string) (mail.Client, error
 			Secret:   env(key + "SECRET"),
 			Name:     name,
 			Outbox:   previewSink(env),
+			Mailbox:  env(key + "MAILBOX"),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("worker: mail worker %q: %w", name, err)
@@ -656,8 +675,15 @@ func RunMailJob(ctx context.Context, j Job, reg *mail.Registry) (map[string]any,
 	if err := json.Unmarshal(raw, &task); err != nil {
 		return nil, fmt.Errorf("mail: cannot read the resolved detail: %w", err)
 	}
-	// A mail task writes no result variable: the send is the whole of its effect.
-	return nil, mail.Run(ctx, task, reg)
+	// A send writes no result variable: the send is the whole of its effect. A mailbox
+	// operation answers what the task's result variable receives — the same
+	// distinction the in-process handler makes, so a mark-read offloaded does not
+	// write a null where a get would write a value (ADR-0438).
+	res, err := mail.Run(ctx, task, reg)
+	if err != nil || task.ResultVariable == "" || res == nil {
+		return nil, err
+	}
+	return map[string]any{task.ResultVariable: res}, nil
 }
 
 // runCSV parses a resolved CSV-import job and returns the variables it completes

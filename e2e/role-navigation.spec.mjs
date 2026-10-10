@@ -74,7 +74,7 @@ test("with enforcement off there is nobody to have a role, so nothing is hidden"
 
 // The other half of M9 in the Console: granting the roles. Before this the account
 // dialog had one checkbox, "Administrator", and there was nothing else to give.
-test("the account dialog grants the four roles by name", async ({ page }) => {
+test("the account dialog grants every role by name", async ({ page }) => {
   let patched = null;
   page.route("**/api/v1/**", (route) => {
     const req = route.request();
@@ -102,6 +102,8 @@ test("the account dialog grants the four roles by name", async ({ page }) => {
   await expect(form.locator('input[name="role-modeler"]')).not.toBeChecked();
   await expect(form.locator('input[name="role-operator"]')).not.toBeChecked();
   await expect(form.locator('input[name="role-user"]')).toBeChecked();
+  await expect(form.locator('input[name="role-productmanager"]')).not.toBeChecked();
+  await expect(form.locator('input[name="role-feedreader"]')).not.toBeChecked();
 
   await form.locator('input[name="role-modeler"]').check();
   await form.locator('button[type=submit]').click();

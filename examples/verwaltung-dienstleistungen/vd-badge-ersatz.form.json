@@ -1,0 +1,24 @@
+{
+  "type": "default",
+  "id": "vd-badge-ersatz",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Ersatzbadge ausgeben · Issue a replacement**\n\nDen alten Badge sperren, falls noch nicht geschehen, und einen neuen ausgeben. · Block the old badge if that has not happened yet, and issue a new one."
+    },
+    {
+      "key": "recipient",
+      "type": "textfield",
+      "label": "Inhaber · Holder",
+      "disabled": true
+    },
+    {
+      "key": "badgenummer",
+      "type": "textfield",
+      "label": "Neue Badgenummer · New badge number",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

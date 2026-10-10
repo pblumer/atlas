@@ -180,7 +180,7 @@ test("the accounts chapter names every role and the cost of federating them", as
 
   const chapter = page.locator("#konten");
   const roles = chapter.locator("table").first().locator("td:first-child code");
-  for (const role of ["admin", "modeler", "operator", "user", "productmanager"]) {
+  for (const role of ["admin", "modeler", "operator", "user", "productmanager", "feedreader"]) {
     await expect(roles.filter({ hasText: new RegExp(`^${role}$`) })).toBeVisible();
   }
   // Both languages, because a chapter that exists in one is half a chapter.

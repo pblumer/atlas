@@ -41,6 +41,7 @@ import (
 	"github.com/pblumer/atlas/connector/rest/openapitemplate"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/internal/trustedproxy"
 	"github.com/pblumer/atlas/jobtype"
 	"github.com/pblumer/atlas/limits"
 	"github.com/pblumer/atlas/logging"
@@ -97,6 +98,10 @@ func main() {
 	case "import-mim":
 		if err := runImportMIM(args); err != nil {
 			fatal("atlas import-mim", err)
+		}
+	case "import":
+		if err := runImport(args, os.Stdout); err != nil {
+			fatal("atlas import", err)
 		}
 	case "check-job-types":
 		if err := runCheckJobTypes(args); err != nil {
@@ -164,6 +169,7 @@ Usage:
   atlas mcp            [flags]      Run the Model Context Protocol adapter on stdio
   atlas worker         [flags]      Work service-task jobs for a running atlas, out of process
   atlas reset-password [flags] USER Reset a local user's password from the shell
+  atlas import         [flags] DIR  Install a package (an application, and its shop) into a running atlas
   atlas import-mim     [flags] FILE Convert a MIM/FIM XOML workflow to BPMN 2.0
   atlas check-job-types [flags]     Check a data directory's job-type table for index collisions
   atlas mock-remedy    [flags]      Run a mock BMC Remedy AR System for the Remedy worker
@@ -214,6 +220,10 @@ func runServe(args []string) error {
 	// behind the boundary in ADR-0198 and no longer does.
 	tlsCert := fs.String("tls-cert", os.Getenv("ATLAS_TLS_CERT"), "PEM certificate chain to serve --addr with, e.g. /etc/atlas/tls.crt. Set it together with --tls-key to have this server terminate TLS 1.3 itself instead of a reverse proxy doing it (ADR-0191); leave both unset for plaintext. The pair is re-read when either file changes, so a renewal needs no restart. TLS 1.3 only: there is no cipher list to configure and no --tls-min-version (or ATLAS_TLS_CERT)")
 	tlsKey := fs.String("tls-key", os.Getenv("ATLAS_TLS_KEY"), "PEM private key for --tls-cert, e.g. /etc/atlas/tls.key. Both or neither (or ATLAS_TLS_KEY)")
+	// The load balancers in front of this server, whose word about a client's address
+	// is taken (ADR-0448). Empty trusts nobody, which is what every
+	// deployment had before: the connection's own address is the client.
+	trustedProxies := fs.String("trusted-proxies", os.Getenv("ATLAS_TRUSTED_PROXIES"), "comma-separated addresses or CIDR prefixes of the load balancers in front of this server, e.g. 10.179.2.139 or 10.179.2.0/28. On a connection from one of them the client's address is taken from a PROXY protocol header (v1 or v2, for a balancer that forwards TCP and leaves TLS to this server) or from X-Forwarded-For (for one that speaks HTTP), so the login throttle and the audit log see the person rather than the balancer; from any other address neither is read. Empty (default) trusts nobody (or ATLAS_TRUSTED_PROXIES)")
 	tlsCA := fs.String("tls-ca", os.Getenv("ATLAS_TLS_CA"), "PEM bundle of certificate authorities to trust *in addition to* the host's, when this server calls another atlas — publishing an application to a deployment target, and reading that target's status back (ADR-0129). Point it at your internal CA where the other server's certificate comes from one; without it the host trust store is the only answer, and an internally issued certificate is refused. It never replaces the system roots, it is never a way to skip verification, and it does not touch the REST, mail or Graph workers, whose endpoints are somebody else's (or ATLAS_TLS_CA)")
 	dataDir := fs.String("data-dir", "atlas-data", "directory for the write-ahead log and state store")
 	shutdownTimeout := fs.Duration("shutdown-timeout", 10*time.Second, "grace period for in-flight requests on shutdown")
@@ -254,6 +264,7 @@ func runServe(args []string) error {
 	// interval. The defaults suit steady state; a bulk run that leaves tens of thousands
 	// of finished instances behind is why they are reachable at all.
 	retentionInterval := fs.Duration("retention-interval", envDurationOr("ATLAS_RETENTION_INTERVAL", api.DefaultRetentionInterval), "how often the retention sweep runs (ADR-0115); with --retention-batch this bounds the drain rate of a backlog")
+	eventFeedTTL := fs.Duration("event-feed-ttl", envDuration("ATLAS_EVENT_FEED_TTL"), "how long a row of the event feed GET /api/v1/events serves is kept (ADR-0429 §5): a consumer whose cursor is older is answered 410 with the oldest cursor still held; 0 keeps the default of 720h")
 	triggerReceiptTTL := fs.Duration("trigger-receipt-ttl", envDuration("ATLAS_TRIGGER_RECEIPT_TTL"), "how long a directed trigger's receipt is kept (ADR-0425): a sender retrying the same triggerId within it gets the first instance back, one retrying after it starts a new one; 0 keeps the default of 720h")
 	retentionBatch := fs.Int("retention-batch", envIntOr("ATLAS_RETENTION_BATCH", api.DefaultRetentionBatch), "how many finished instances one retention sweep evaluates (ADR-0115); the cap keeps a sweep from blocking the run loop, so raise it with the loop's headroom in mind")
 	// Recovery checkpoints (ADR-0131): on by default, because bounded restart time is
@@ -286,6 +297,9 @@ func runServe(args []string) error {
 	// that would otherwise need a parsing rule of its own. Either way every line carries
 	// a stable event= name, so what an alert matches on does not depend on this flag.
 	logFormat := fs.String("log-format", string(logging.DefaultFormat), "how to render logs: \"text\" (logfmt-style key=value, for a terminal) or \"json\" (one object per line, for a log shipper). Every line carries a stable event= name either way (ADR-0142)")
+	// The floor below which nothing is written. ADR-0142 left it out while nothing
+	// logged below Info; a load balancer's health check is the first thing that does.
+	logLevel := fs.String("log-level", string(logging.DefaultLevel), "least severe log line written: \"debug\", \"info\" (default), \"warn\" or \"error\". Debug adds lines that are true but not news, such as a load balancer's TCP health check closing a connection before TLS began (ADR-0448)")
 	// Prometheus metrics (ADR-0142): on by default. The exposition carries only
 	// bounded-cardinality aggregates, so the cost of having it is a path an operator may
 	// not want reachable rather than data leaking.
@@ -294,8 +308,20 @@ func runServe(args []string) error {
 	historyScope := fs.String("worker-history-scope", api.HistoryScopeAll, "what --worker-history writes: \"all\" settled jobs, or \"failed\" only. All is what \"how long does a mail send take\" needs and the larger bill; failed is much less volume and still answers most of what a history is asked")
 	superviseConnectors := fs.String("supervise-connector", "", "comma-separated Worker Types this server runs a worker for itself, beyond the ones it supervises by default (e.g. ad,entra). Each named kind gets its own supervised worker — handed this server's token and environment at spawn, like the default ones — and is taken off the engine, so that worker is what leases its jobs. It is the missing half of --offload-connectors, which parks a kind's jobs for a worker somebody else runs: on a server with --auth there is no credential an outside worker could hold, so without this a kind outside the defaults cannot be served at all. An unknown kind is refused at startup rather than ignored")
 	inProcess := fs.Bool("in-process-connectors", false, "run every worker inside the engine, as before ADR-0164. Off by default: "+strings.Join(api.DefaultOffloadedKinds(), ", ")+" run in a worker this server starts and supervises itself, so the loop cannot stall behind them — behind an SMTP handshake above all — and trying atlas still needs no configuration")
+	workerMaxJobs := fs.Int("worker-max-jobs", api.DefaultSupervisedWorkerMaxJobs, "how many jobs of one type each built-in worker this server supervises runs at once, handed to it as --max-jobs. The default is the bound the engine puts on its own in-process handlers, so moving a kind onto a worker does not change how many of its jobs run together; lower it when a target system takes fewer parallel calls than that, and 1 runs every kind one job at a time. A --supervise command keeps one at a time: it is your own program, and nothing here can know it is safe to run twice at once")
 	supervise := superviseFlag{}
 	fs.Var(&supervise, "supervise", "run a worker process for these job types and keep it running, as id=type=command; repeat for more workers, and repeat the type=command part for a worker that serves several types (ADR-0157). Off unless given: under systemd or Kubernetes the platform owns process lifecycle")
+	// The shop, the catalogue, the orders and the inventory
+	// (ADR-0434): on by default, so an upgrade
+	// changes nothing, and off for an installation that runs Atlas as a workflow
+	// engine and offers no shop. The environment variable is read strictly — see
+	// envSwitch — because the fallback the other env helpers take would leave the shop
+	// served by a typo.
+	catalogueDefault, err := envSwitch("ATLAS_CATALOGUE", true)
+	if err != nil {
+		return err
+	}
+	catalogue := fs.Bool("catalogue", catalogueDefault, "serve the shop, the catalogue, the orders and the inventory — their routes, the shop page, their Console menus and MCP tools (ADR-0312); on by default (opt-out), --catalogue=false to switch the whole area off. Nothing stored is removed, deployed processes run unchanged, and turning it back on is a restart (or ATLAS_CATALOGUE=false)")
 	metricsOn := fs.Bool("metrics", true, "serve the Prometheus exposition at /metrics (ADR-0142); pass --metrics=false to disable. With --auth on (the default) it sits behind the boundary like every other route: a scraper needs an API token of scope metrics (ADR-0198)")
 	// The read side of the exposition above, and a different server: this is where
 	// somebody else keeps what they scraped. Panorama queries it for a node's recent
@@ -304,6 +330,10 @@ func runServe(args []string) error {
 	metricsInstance := fs.String("metrics-instance", os.Getenv("ATLAS_METRICS_INSTANCE"), "how this node appears in --metrics-url's `instance` label, e.g. atlas-01.internal. Atlas cannot derive it: a scrape target is your configuration, and guessing would answer about a different process while looking exactly like an answer about this one. Left empty, a Panorama element bound to this server's own runtime reports itself unidentifiable and says why")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	proxies, err := trustedproxy.Parse(*trustedProxies)
+	if err != nil {
+		return fmt.Errorf("--trusted-proxies: %w", err)
 	}
 	enabled := map[string]bool{"powershell": *powershell, "python": *python, "javascript": *javascript}
 	scriptSandbox, err := script.ParseSandboxMode(*scriptSandboxRaw)
@@ -338,7 +368,7 @@ func runServe(args []string) error {
 		Password: os.Getenv("ATLAS_METRICS_PASSWORD"),
 		Instance: strings.TrimSpace(*metricsInstance),
 	}
-	retention := retentionConfig{maxAge: *retentionAge, interval: *retentionInterval, batch: *retentionBatch, receiptTTL: *triggerReceiptTTL}
+	retention := retentionConfig{maxAge: *retentionAge, interval: *retentionInterval, batch: *retentionBatch, receiptTTL: *triggerReceiptTTL, feedTTL: *eventFeedTTL}
 	storeCfg := storeConfig{cacheMB: *stateCacheMB, memtableMB: *stateMemtableMB}
 	trace := tracing.Config{
 		Endpoint:    *traceEndpoint,
@@ -367,7 +397,7 @@ func runServe(args []string) error {
 		ClientSecret: *oidcClientSecret,
 		Scopes:       *oidcScopes,
 		Name:         *oidcName,
-	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, *vault, *userProvisioning, enabled, *scriptTimeout, scriptSandbox, osCfg, metricsCfg, retention, storeCfg, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *inProcess, *history, *historyScope, *publicFormsCORS, budgets)
+	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, proxies, *vault, *userProvisioning, enabled, *scriptTimeout, scriptSandbox, osCfg, metricsCfg, retention, storeCfg, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, *catalogue, logging.Format(*logFormat), logging.Level(*logLevel), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *workerMaxJobs, *inProcess, *history, *historyScope, *publicFormsCORS, budgets)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -404,6 +434,25 @@ func envIntOr(key string, def int) int {
 		}
 	}
 	return def
+}
+
+// envSwitch reads an on/off switch from the environment: unset or blank is def, and
+// anything strconv.ParseBool accepts is that value. Unlike envDurationOr and envIntOr,
+// a value that does not parse is refused rather than replaced by the default. Those
+// helpers back numbers, where the default is the safe reading of a typo; this one
+// backs switches that turn a part of the server off, where the default is the part
+// staying on — "ATLAS_CATALOGUE=of" must stop the start, not serve the shop to
+// everybody while its operator believes it is gone.
+func envSwitch(key string, def bool) (bool, error) {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return def, nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return def, fmt.Errorf("%s=%q is not a boolean: use true or false", key, v)
+	}
+	return b, nil
 }
 
 // oauthConfig is the OAuth-facing half of the serve flags, kept together so the
@@ -445,6 +494,9 @@ type retentionConfig struct {
 	// receiptTTL is how long a trigger receipt is kept (ADR-0425); zero keeps the
 	// server's default.
 	receiptTTL time.Duration
+	// feedTTL is how long a row of the event feed is kept (ADR-0429 §5); zero keeps
+	// the default of 30 days.
+	feedTTL time.Duration
 }
 
 // storeConfig is how much memory the state store may use, in MiB. Both are resident
@@ -464,12 +516,12 @@ func (c storeConfig) options() []state.Option {
 	}
 }
 
-func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, scriptSandbox script.SandboxMode, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, storeCfg storeConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string, budgets limits.Limits) error {
+func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, proxies trustedproxy.Set, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, scriptSandbox script.SandboxMode, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, storeCfg storeConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn, catalogue bool, logFormat logging.Format, logLevel logging.Level, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, workerMaxJobs int, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string, budgets limits.Limits) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
 	logs := api.NewLogBuffer(2000)
-	if err := logging.Setup(io.MultiWriter(os.Stderr, logs), logFormat); err != nil {
+	if err := logging.Setup(io.MultiWriter(os.Stderr, logs), logFormat, logLevel); err != nil {
 		return err
 	}
 
@@ -619,6 +671,9 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	if !metricsOn {
 		apiOpts = append(apiOpts, api.WithoutMetrics())
 	}
+	if !catalogue {
+		apiOpts = append(apiOpts, api.WithoutCatalogue())
+	}
 	// Mirror the durable event log into OpenSearch when configured (ADR-0114).
 	if osExport.Enabled() {
 		apiOpts = append(apiOpts, api.WithOpenSearchExporter(osExport))
@@ -638,6 +693,7 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	apiOpts = append(apiOpts, api.WithRetentionInterval(retention.interval), api.WithRetentionBatch(retention.batch))
 	// Trigger receipts are pruned on the same sweep (ADR-0425).
 	apiOpts = append(apiOpts, api.WithTriggerReceiptRetention(retention.receiptTTL))
+	apiOpts = append(apiOpts, api.WithEventFeedRetention(retention.feedTTL))
 	if retention.maxAge > 0 {
 		gate := "durable position"
 		if osExport.Enabled() {
@@ -804,6 +860,9 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 		handles = append(handles, nil)
 	}
 	offloadKinds = append(offloadKinds, askedOffload...)
+	if err := applyWorkerMaxJobs(specs, workerMaxJobs); err != nil {
+		return err
+	}
 	if len(offloadKinds) > 0 {
 		apiOpts = append(apiOpts, api.WithOffloadedConnectorKinds(offloadKinds))
 	}
@@ -833,7 +892,14 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	// This used to be a second mux out here, with the server's internal service
 	// token attached to every loopback call (ADR-0049). withAuth never saw those
 	// requests, so anything that could reach the port drove the whole API.
-	apiOpts = append(apiOpts, api.WithMCP(mcp.NewServer(mcp.NewClient(internal))))
+	//
+	// It offers what this server serves: with the catalogue switched off, the tools
+	// of the area are not advertised, as their routes are not mounted.
+	var mcpOpts []mcp.ServerOption
+	if !catalogue {
+		mcpOpts = append(mcpOpts, mcp.WithoutCatalogue())
+	}
+	apiOpts = append(apiOpts, api.WithMCP(mcp.NewServer(mcp.NewClient(internal), mcpOpts...)))
 
 	srv, err := api.New(proc, store, dataDir, apiOpts...)
 	if err != nil {
@@ -841,15 +907,9 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	}
 	defer srv.Close()
 
-	httpSrv := newHTTPServer(addr, srv.Handler(), serverTLS)
+	httpSrv := newPublicServer(addr, srv.Handler(), serverTLS, proxies)
 	listeners := []httpListener{{srv: httpSrv, serve: func() error {
-		if !tlsOn {
-			return httpSrv.ListenAndServe()
-		}
-		// The pair is served by TLSConfig's GetCertificate, which re-reads it when it
-		// changes; the filename arguments here would read it once and never again,
-		// so they are deliberately empty (ADR-0191).
-		return httpSrv.ListenAndServeTLS("", "")
+		return servePublic(httpSrv, tlsOn, proxies)
 	}}}
 	if loopbackLn != nil {
 		loopbackSrv := newHTTPServer("", srv.Handler(), nil)
@@ -864,9 +924,18 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	logging.Info(logging.ServerListening, "listening; recovery is complete and this instance is ready",
 		slog.String("addr", addr), slog.String("ui", base+"/"), slog.String("mcp", base+"/mcp"),
 		slog.Bool("tls", tlsOn))
+	if !proxies.Empty() {
+		logging.Info(logging.ServerTrustedProxies,
+			"client addresses are taken from a PROXY protocol header or X-Forwarded-For, on connections from these proxies only",
+			slog.String("proxies", proxies.String()))
+	}
 	if docs {
 		logging.Info(logging.ServerDocsEnabled, "API explorer enabled",
 			slog.String("docs", base+"/api/docs"), slog.String("openapi", base+"/api/v1/openapi.json"))
+	}
+	if !catalogue {
+		logging.Info(logging.ServerCatalogueDisabled,
+			"shop, catalogue, orders and inventory switched off (--catalogue=false): their routes are not served and nothing stored was removed")
 	}
 	if metricsOn {
 		logging.Info(logging.ServerMetrics,
@@ -882,7 +951,7 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 // go to stderr so they never corrupt the JSON-RPC stream.
 func runMCP(args []string) error {
 	// Protocol traffic owns stdout, so logs go to stderr and nothing else.
-	if err := logging.Setup(os.Stderr, logging.DefaultFormat); err != nil {
+	if err := logging.Setup(os.Stderr, logging.DefaultFormat, logging.DefaultLevel); err != nil {
 		return err
 	}
 	return runMCPOn(args, os.Stdin, os.Stdout)
@@ -934,7 +1003,20 @@ func runMCPOn(args []string, in io.Reader, out io.Writer) error {
 		slog.String("server", *server), slog.Bool("authenticated", bearer != ""),
 		slog.Bool("extra_ca", roots != nil))
 
-	s := mcp.NewServer(mcp.NewClient(*server, mcp.WithBearer(bearer), mcp.WithTLSRoots(roots)))
+	client := mcp.NewClient(*server, mcp.WithBearer(bearer), mcp.WithTLSRoots(roots))
+	// This process cannot read the server's flags, so it asks whether the server
+	// serves the catalogue, and leaves the area's tools out if it does not
+	// (ADR-0434). A server that cannot be asked
+	// yet — an agent's host often starts the adapter before the server is up — gets
+	// the whole list, and its own refusal is what answers a tool it does not serve.
+	var opts []mcp.ServerOption
+	if offered, err := client.CatalogueOffered(); err != nil {
+		logging.Warn(logging.MCPCatalogueUnknown, "could not ask the server whether it serves the catalogue; offering every tool",
+			slog.String("error", err.Error()))
+	} else if !offered {
+		opts = append(opts, mcp.WithoutCatalogue())
+	}
+	s := mcp.NewServer(client, opts...)
 	return s.Serve(in, out)
 }
 
@@ -1038,6 +1120,23 @@ func superviseConnectorSpecs(kinds []string, supervised []api.SuperviseSpec, scr
 		specs = append(specs, spec)
 	}
 	return specs, offload, nil
+}
+
+// applyWorkerMaxJobs hands --worker-max-jobs to every built-in Worker Type this
+// server supervises. A --supervise command worker is left at the worker's own
+// default of one job at a time: its command is the operator's program, and running
+// it concurrently is a promise only they can make
+// (ADR-0440).
+func applyWorkerMaxJobs(specs []api.SuperviseSpec, n int) error {
+	if n < 1 {
+		return fmt.Errorf("atlas: --worker-max-jobs must be at least 1, got %d: a worker with no place for a job never starts one", n)
+	}
+	for i := range specs {
+		if len(specs[i].Connectors) > 0 {
+			specs[i].MaxJobs = n
+		}
+	}
+	return nil
 }
 
 // superviseFlag collects repeated --supervise id=type=command entries: which worker
@@ -1156,7 +1255,7 @@ func runWorker(args []string) error {
 	tlsCA := fs.String("tls-ca", os.Getenv("ATLAS_TLS_CA"), "PEM bundle of certificate authorities to trust *in addition to* the host's, when --server is https and its certificate comes from an internal CA (ADR-0191). Without it the host trust store is the only answer. It is never a way to skip verification: there is none (or ATLAS_TLS_CA)")
 	lease := fs.Duration("lease", worker.DefaultLease, "how long the engine holds a job for this worker; must comfortably exceed how long the work takes")
 	wait := fs.Duration("wait", worker.DefaultWait, "how long a poll waits for work before asking again; the server caps it")
-	maxJobs := fs.Int("max-jobs", worker.DefaultMaxJobs, "how many jobs one poll may lease; keep it to what this worker can actually run at once")
+	maxJobs := fs.Int("max-jobs", worker.DefaultMaxJobs, "how many jobs of one type this worker runs at once; a poll leases only as many as there are free places for, so a leased job starts the moment it arrives. Keep it to what the handler and its target can take in parallel")
 	once := fs.Bool("once", false, "poll each type once and exit, instead of working until interrupted")
 	handles := handleFlag{}
 	fs.Var(handles, "handle", "a job type and the command that works it, as type=command; repeat for each type")
@@ -1205,7 +1304,7 @@ func runWorker(args []string) error {
 		return err
 	}
 
-	if err := logging.Setup(os.Stderr, logging.DefaultFormat); err != nil {
+	if err := logging.Setup(os.Stderr, logging.DefaultFormat, logging.DefaultLevel); err != nil {
 		return err
 	}
 	if len(handles) == 0 && len(builtin.Handlers) == 0 {

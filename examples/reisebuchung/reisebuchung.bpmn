@@ -141,7 +141,7 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_split" bpmnElement="split" isMarkerVisible="true">
         <dc:Bounds x="690" y="115" width="50" height="50"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="676" y="80" width="78" height="14"/></bpmndi:BPMNLabel>
+        <bpmndi:BPMNLabel><dc:Bounds x="723" y="83" width="60" height="27"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_visum" bpmnElement="visum">
         <dc:Bounds x="790" y="10" width="100" height="80"/>
@@ -151,7 +151,7 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_join" bpmnElement="join" isMarkerVisible="true">
         <dc:Bounds x="990" y="115" width="50" height="50"/>
-        <bpmndi:BPMNLabel><dc:Bounds x="972" y="170" width="86" height="14"/></bpmndi:BPMNLabel>
+        <bpmndi:BPMNLabel><dc:Bounds x="931" y="166" width="54" height="27"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_bestaetigen" bpmnElement="bestaetigen">
         <dc:Bounds x="1090" y="100" width="100" height="80"/>

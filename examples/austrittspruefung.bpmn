@@ -184,7 +184,7 @@ Hier endet der Prozess mit Absicht. Entziehen ist eine Handlung mit Folgen in ei
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_gw" bpmnElement="gw_draussen">
         <dc:Bounds x="552" y="175" width="50" height="50" />
-        <bpmndi:BPMNLabel><dc:Bounds x="545" y="232" width="65" height="14" /></bpmndi:BPMNLabel>
+        <bpmndi:BPMNLabel><dc:Bounds x="607" y="193" width="52" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="di_ende_draussen" bpmnElement="ende_draussen">
         <dc:Bounds x="662" y="102" width="36" height="36" />
@@ -205,9 +205,11 @@ Hier endet der Prozess mit Absicht. Entziehen ist eine Handlung mit Folgen in ei
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_gw_draussen" bpmnElement="f_gw_draussen">
         <di:waypoint x="577" y="175" /><di:waypoint x="577" y="120" /><di:waypoint x="662" y="120" />
+        <bpmndi:BPMNLabel><dc:Bounds x="583" y="140" width="57" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="di_f_gw_offen" bpmnElement="f_gw_offen">
         <di:waypoint x="577" y="225" /><di:waypoint x="577" y="280" /><di:waypoint x="662" y="280" />
+        <bpmndi:BPMNLabel><dc:Bounds x="583" y="254" width="25" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

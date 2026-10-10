@@ -53,7 +53,9 @@ func (p *Processor) registerHandlers() {
 		handlerKey(model.VTVariable, model.IntentVariableModify):               handleVariablesModify,
 		handlerKey(model.VTTriggerReceipt, model.IntentTriggering):             handleTriggering,
 		handlerKey(model.VTTriggerReceipt, model.IntentTriggerReceiptsPruning): handleTriggerReceiptsPruning,
+		handlerKey(model.VTFeedRetention, model.IntentFeedPruning):             handleFeedPruning,
 		handlerKey(model.VTTriggerReceipt, model.IntentDelivering):             handleDelivering,
+		handlerKey(model.VTActionOutcome, model.IntentActionReporting):         handleActionReporting,
 	}
 }
 
@@ -927,6 +929,14 @@ func handleJobCompleted(c *ProcessingContext) {
 		dv.ProcessInstanceKey = job.ProcessInstanceKey
 		dv.ElementInstanceKey = job.ElementInstanceKey
 		c.AppendDecisionEvaluationEvent(dv)
+	}
+
+	// A shop send task states how an action ended (ADR-0429 §4); the outcome rides
+	// the completion and is appended here, in the same batch, stamped with the
+	// instance that carried the action out.
+	if o := c.cmd.Value.actionOutcome; o.Valid() {
+		o.InstanceKey = job.ProcessInstanceKey
+		appendActionOutcome(c, o)
 	}
 
 	// An operator forced this completion rather than a worker reporting real work

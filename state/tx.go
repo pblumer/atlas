@@ -219,11 +219,21 @@ func (t *Tx) DeleteEntitlement(principal, itemID string) error {
 // of holds that never existed is not a smaller error than no history at all.
 func (t *Tx) EndEntitlement(principal, itemID string, endedAt int64,
 	reason model.HoldEnd, endedBy string) (bool, error) {
+	row, err := t.EndEntitlementRow(principal, itemID, endedAt, reason, endedBy)
+	return row != nil, err
+}
+
+// EndEntitlementRow is [Tx.EndEntitlement], answering the history row it wrote — the
+// hold as it was, with how it ended — or nil when nothing was held. The event feed
+// publishes that row (ADR-0429 §5): a revocation's own event names only the principal
+// and the item, and the order the right came from is in the hold it ends.
+func (t *Tx) EndEntitlementRow(principal, itemID string, endedAt int64,
+	reason model.HoldEnd, endedBy string) (*model.EntitlementHistoryValue, error) {
 
 	var held model.EntitlementValue
 	found, err := t.readInto(keyEntitlement(principal, itemID), &held)
 	if err != nil || !found {
-		return false, err
+		return nil, err
 	}
 	row := model.EntitlementHistoryValue{
 		Principal: held.Principal, ItemID: held.ItemID, VariantID: held.VariantID,
@@ -233,9 +243,9 @@ func (t *Tx) EndEntitlement(principal, itemID string, endedAt int64,
 	}
 	if err := t.b.Set(keyEntitlementHistory(principal, endedAt, itemID),
 		t.encodeValue(&row), nil); err != nil {
-		return false, err
+		return nil, err
 	}
-	return true, t.b.Delete(keyEntitlement(principal, itemID), nil)
+	return &row, t.b.Delete(keyEntitlement(principal, itemID), nil)
 }
 
 // --- Incident ---

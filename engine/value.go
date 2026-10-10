@@ -45,6 +45,13 @@ type inflightValue struct {
 	// trigger rides only on the directed-trigger command and the receipt events it
 	// and the prune command emit (ADR-0425). Never on token movement.
 	trigger model.TriggerReceiptValue
+	// actionOutcome rides on the outcome-report command and the event it emits, and
+	// beside an entitlement on a grant or revocation that ends a provision or a
+	// return, so both commit in one batch (ADR-0429 §3). Never on token movement.
+	actionOutcome model.ActionOutcomeValue
+	// feedRetention rides only on the feed's prune command and the event it emits
+	// (ADR-0429 §5). Never on token movement.
+	feedRetention model.FeedRetentionValue
 }
 
 // asValue returns a model.Value pointing at the active field, for encoding. The
@@ -92,6 +99,10 @@ func (v *inflightValue) asValue(vt model.ValueType) model.Value {
 		return &v.entitlementEnd
 	case model.VTTriggerReceipt:
 		return &v.trigger
+	case model.VTActionOutcome:
+		return &v.actionOutcome
+	case model.VTFeedRetention:
+		return &v.feedRetention
 	}
 	return nil
 }
@@ -188,6 +199,14 @@ func inflightFromRecord(rec model.Record) inflightValue {
 	case model.VTTriggerReceipt:
 		if v, ok := rec.Value.(*model.TriggerReceiptValue); ok {
 			iv.trigger = *v
+		}
+	case model.VTActionOutcome:
+		if v, ok := rec.Value.(*model.ActionOutcomeValue); ok {
+			iv.actionOutcome = *v
+		}
+	case model.VTFeedRetention:
+		if v, ok := rec.Value.(*model.FeedRetentionValue); ok {
+			iv.feedRetention = *v
 		}
 	}
 	return iv

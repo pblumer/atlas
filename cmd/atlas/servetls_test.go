@@ -15,6 +15,7 @@ import (
 
 	"github.com/pblumer/atlas/api"
 	"github.com/pblumer/atlas/connector/script"
+	"github.com/pblumer/atlas/internal/trustedproxy"
 	"github.com/pblumer/atlas/limits"
 	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/opensearch"
@@ -138,6 +139,12 @@ const draftBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 // address it listens on together with the pool that trusts it.
 func bootTLS(t *testing.T, serial int64) (addr string, pool *x509.CertPool) {
 	t.Helper()
+	return bootTLSBehind(t, serial, trustedproxy.Set{})
+}
+
+// bootTLSBehind is bootTLS behind the proxies --trusted-proxies would name.
+func bootTLSBehind(t *testing.T, serial int64, proxies trustedproxy.Set) (addr string, pool *x509.CertPool) {
+	t.Helper()
 	dir := t.TempDir()
 	certFile, keyFile, leaf := writeCertPair(t, dir, serial)
 	addr = freeAddr(t)
@@ -145,7 +152,7 @@ func bootTLS(t *testing.T, serial int64) (addr string, pool *x509.CertPool) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		done <- serveForTest(ctx, addr, filepath.Join(dir, "data"), tlsConfig{certFile: certFile, keyFile: keyFile})
+		done <- serveBehindForTest(ctx, addr, filepath.Join(dir, "data"), tlsConfig{certFile: certFile, keyFile: keyFile}, proxies)
 	}()
 	t.Cleanup(func() {
 		cancel()
@@ -195,16 +202,23 @@ func TestServeRefusesHalfATLSPair(t *testing.T) {
 // process turned off: no auth, no vault, no docs, no metrics, and workers in
 // process rather than in supervised children.
 func serveForTest(ctx context.Context, addr, dataDir string, tlsCfg tlsConfig) error {
+	return serveBehindForTest(ctx, addr, dataDir, tlsCfg, trustedproxy.Set{})
+}
+
+// serveBehindForTest is serveForTest with the proxies --trusted-proxies would name.
+func serveBehindForTest(ctx context.Context, addr, dataDir string, tlsCfg tlsConfig, proxies trustedproxy.Set) error {
 	return serve(ctx, addr, dataDir, 5*time.Second,
 		false, // docs
 		false, // auth
-		oauthConfig{}, tlsCfg,
+		oauthConfig{}, tlsCfg, proxies,
 		false, // vault
 		false, // userProvisioning
 		nil, time.Second, script.SandboxOff, opensearch.Config{}, promquery.Config{}, retentionConfig{}, storeConfig{},
 		0, 0, false,
 		false, // metrics
-		logging.FormatText, tracing.Config{}, superviseFlag{}, nil, nil,
+		true,  // catalogue
+		logging.FormatText, logging.DefaultLevel, tracing.Config{}, superviseFlag{}, nil, nil,
+		api.DefaultSupervisedWorkerMaxJobs,
 		true, // inProcessConnectors: no worker subprocesses out of a test binary
 		"", api.HistoryScopeAll, "", limits.Default())
 }

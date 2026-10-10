@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/url"
 )
 
@@ -135,11 +136,32 @@ func catalogItemProps() map[string]any {
 			"named in `operations`. Publishing checks the newest deployed version: every named start " +
 			"event must exist, and the process must have NO none start event (a start by hand would " +
 			"otherwise take it)."),
-		"operations": objectProp("For a lifecycleProcess: which message start event each operation " +
+		"operations": objectProp("LEGACY form of `actions` (ADR-0425), still read: for a lifecycleProcess, which message start event each operation " +
 			"enters, {\"provision\": \"<message name>\", \"deprovision\": \"<message name>\", " +
 			"\"change\": \"<message name>\"}. provision and deprovision are REQUIRED to publish, change " +
 			"is optional. The key is the contract an order asks for; the message name is the process's " +
 			"own business and may be renamed with the process."),
+		"actions": arrayProp("For a lifecycleProcess, IN PLACE OF `operations` (ADR-0429): the product's " +
+			"actions, each {key, message, effect, triggers, labels, form, outcomes}. effect is one of " +
+			"\"provision\" (exactly one, keyed \"provision\", no triggers — the order starts it), " +
+			"\"deprovision\" (exactly one, keyed \"deprovision\", triggers among \"customer\" and " +
+			"\"operator\"), \"change\" (changes the configuration of what is held, never the item or " +
+			"variant) or \"service\" (changes nothing that is held, e.g. a password reset or an " +
+			"inactivation). triggers says who may ask for a change or service: \"customer\" (the orderer " +
+			"or the recipient), \"operator\", \"system\". key is [a-z0-9-], unique; message is the " +
+			"message the process starts or waits at, unique within the product. labels are button texts " +
+			"per language (a missing one is reported, not refused). form is an atlas form id for what the " +
+			"action needs. outcomes maps \"completed\" / \"rejected\" / \"failed\" to the event type it " +
+			"is published under (default <message>.<outcome>). Publishing checks each message against the " +
+			"newest deployed version: a message start in the per-operation form; in the per-position form " +
+			"a correlated catch for change and service, a catch and a start for deprovision. A message an " +
+			"inbound watch publishes is refused. Send either operations or actions, never both."),
+		"commandedBy": arrayProp("The keys of the process applications whose processes may issue this " +
+			"product's actions with a shop command task (<atlas:shopTask mode=\"command\">), e.g. " +
+			"[\"hr-leavers\"]. Only an action whose triggers include \"operator\" or \"system\" can be " +
+			"issued so, never the provision. Empty (the default) means no process may command it. It is " +
+			"read from the newest release when a task commands, so removing a key and publishing stops " +
+			"that application at once for every right already held."),
 		"lifecycleForm": stringProp("For a lifecycleProcess: how it runs. \"per-operation\" (the default, " +
 			"also what empty means) starts an instance for every operation. \"per-position\" starts ONE " +
 			"instance per order position at provisioning and DELIVERS every later operation to it: the " +
@@ -235,7 +257,7 @@ func withID(id, suffix string) string {
 }
 
 func catalogTools() []Tool {
-	return []Tool{
+	return markCatalogue([]Tool{
 		{
 			Name: "atlas_list_catalogs",
 			Description: "List the product catalogues you maintain, lowest rank first. This is the " +
@@ -378,6 +400,151 @@ func catalogTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_order_line_actions",
+			Description: "Which actions one held order position offers you, and whether it takes " +
+				"each one now (ADR-0429): a product declares what can be asked of what somebody " +
+				"holds — a larger mailbox, a password reset — and for a product that runs one " +
+				"instance per position, whether the action is possible right now is the " +
+				"process's answer, read from where its instance stands. Each action carries its " +
+				"key, effect, triggers, labels, form, `available` and, when it is not, `why`. " +
+				"READ-ONLY. To ask for an operator's or a system's action use " +
+				"atlas_ask_order_line_action; a customer's action is the person's to ask for, " +
+				"in the shop.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"orderId": map[string]any{"type": "string", "description": "The order id."},
+					"item": map[string]any{
+						"type": "string",
+						"description": "The position: the product id, or itemId#variantId where " +
+							"one order carries the product in two shapes.",
+					},
+				},
+				"required": []any{"orderId", "item"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "orderId")
+				if err != nil {
+					return "", err
+				}
+				item, err := argString(args, "item")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/orders/" + url.PathEscape(id) + "/lines/" +
+					url.PathEscape(item) + "/actions"))
+			},
+		},
+		{
+			Name: "atlas_order_line_outcomes",
+			Description: "How the commands of one held order position ended (ADR-0429 §3): its " +
+				"provision, its return and every action asked of it, each with the command id, " +
+				"the action, the outcome (completed, rejected, failed), the event type it is " +
+				"published under, who reported it and when. READ-ONLY: an outcome is reported by " +
+				"the process that carried the action out, not by an agent. Use it after " +
+				"atlas_ask_order_line_action to learn whether what you asked for happened.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"orderId": map[string]any{"type": "string", "description": "The order id."},
+					"item": map[string]any{
+						"type": "string",
+						"description": "The position: the product id, or itemId#variantId where " +
+							"one order carries the product in two shapes.",
+					},
+				},
+				"required": []any{"orderId", "item"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "orderId")
+				if err != nil {
+					return "", err
+				}
+				item, err := argString(args, "item")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/orders/" + url.PathEscape(id) + "/lines/" +
+					url.PathEscape(item) + "/outcomes"))
+			},
+		},
+		{
+			Name: "atlas_ask_order_line_action",
+			Description: "Ask one held order position for an action its product declares for an " +
+				"OPERATOR or the SYSTEM (ADR-0429) — a password reset an operator runs, a " +
+				"threshold crossing an observer reports. It reaches the target system: the " +
+				"action is delivered to the process that carries the right, which acts on it. " +
+				"Customer actions are NOT available here, by the maintainers' decision: what a " +
+				"person asks of what they hold is theirs to ask in the shop. The server refuses " +
+				"(403) an action that does not declare the trigger you name, and a caller who is " +
+				"not an operator. Read atlas_order_line_actions first: it says which actions exist " +
+				"and whether the position takes each NOW — a 409 means it does not. commandId " +
+				"makes a retry answer with the first outcome instead of asking twice: reuse it " +
+				"when you retry, and choose a new one only for a new request.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"orderId": map[string]any{"type": "string", "description": "The order id."},
+					"item": map[string]any{
+						"type": "string",
+						"description": "The position: the product id, or itemId#variantId where " +
+							"one order carries the product in two shapes.",
+					},
+					"action":    map[string]any{"type": "string", "description": "The action's key, e.g. password-reset."},
+					"commandId": map[string]any{"type": "string", "description": "Idempotency id for this request."},
+					"trigger": map[string]any{
+						"type": "string", "enum": []any{"operator", "system"},
+						"description": "Which of the action's triggers you ask as: operator for a " +
+							"person running the service, system for an observed condition.",
+					},
+					"reason":    map[string]any{"type": "string", "description": "Why; it reaches the process."},
+					"variables": map[string]any{"type": "object", "description": "What the action needs."},
+				},
+				"required": []any{"orderId", "item", "action", "commandId", "trigger"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "orderId")
+				if err != nil {
+					return "", err
+				}
+				item, err := argString(args, "item")
+				if err != nil {
+					return "", err
+				}
+				action, err := argString(args, "action")
+				if err != nil {
+					return "", err
+				}
+				commandID, err := argString(args, "commandId")
+				if err != nil {
+					return "", err
+				}
+				trigger, err := argString(args, "trigger")
+				if err != nil {
+					return "", err
+				}
+				// Checked here as well as by the server, so a customer's action is refused
+				// before any request leaves the adapter.
+				if trigger != "operator" && trigger != "system" {
+					return "", fmt.Errorf("trigger must be operator or system; a customer's action " +
+						"is the person's to ask for, not an agent's")
+				}
+				body := map[string]any{"commandId": commandID, "trigger": trigger}
+				if reason, ok := args["reason"].(string); ok && reason != "" {
+					body["reason"] = reason
+				}
+				if vars, ok := args["variables"].(map[string]any); ok && len(vars) > 0 {
+					body["variables"] = vars
+				}
+				raw, err := json.Marshal(body)
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/orders/"+url.PathEscape(id)+"/lines/"+
+					url.PathEscape(item)+"/actions/"+url.PathEscape(action), "application/json", raw))
+			},
+		},
+		{
 			Name: "atlas_save_catalog_product",
 			Description: "Create or change one product or service. THIS IS A FULL REPLACE: every " +
 				"field you leave out is CLEARED, including translations, variants, keywords, " +
@@ -419,7 +586,11 @@ func catalogTools() []Tool {
 				"product still in draft, a missing text for a declared language, an unresolved or " +
 				"absent provisioning or deprovisioning binding, an approval rule needing a ref and " +
 				"having none, a cycle in the structure or precedence edges, two catalogues at the " +
-				"same rank, and the same target ref on two products.",
+				"same rank, and the same target ref on two products. A publish that goes through may " +
+				"carry `warnings`, one per product: answers of its order form that reach a process the " +
+				"product binds without that process declaring them personal data. The release is made " +
+				"regardless; settle each by declaring the answer personal in the process " +
+				"(atlas:personal) or, when it names nobody, marking the form field personal=false.",
 			InputSchema: catalogIDArg("The catalogue to publish."),
 			Handler: func(c *Client, args map[string]any) (string, error) {
 				id, err := argString(args, "id")
@@ -504,6 +675,39 @@ func catalogTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_import_catalog",
+			Description: "Import a whole shop as one document: {catalogs, products, publish}. Each " +
+				"catalogue carries its id, texts, rank, languages, items (the product ids it offers), " +
+				"groups (its audience), members and edges; each product carries the fields " +
+				"atlas_save_catalog_product takes, including its homeCatalog. IDs are the document's " +
+				"own and stable, so importing the same document again UPDATES what the first import " +
+				"created. ALL OR NOTHING: every id, every catalogue you must maintain and — with " +
+				"publish:true — every publish problem is checked before anything is written; a refusal " +
+				"writes nothing and lists every problem with its subject (catalog:<id> or product:<id>). " +
+				"Returns {created, updated, releases}. A theme, a logo and pictures are not part of a " +
+				"document.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"catalogs": map[string]any{"type": "array", "items": map[string]any{"type": "object"},
+						"description": "The catalogues, each with its id"},
+					"products": map[string]any{"type": "array", "items": map[string]any{"type": "object"},
+						"description": "The products, each with its id and homeCatalog"},
+					"publish": map[string]any{"type": "boolean",
+						"description": "Publish a release of every catalogue in the document once it is written"},
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				body, err := json.Marshal(map[string]any{
+					"catalogs": args["catalogs"], "products": args["products"], "publish": args["publish"] == true,
+				})
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/catalogs/import", "application/json", body))
+			},
+		},
+		{
 			Name: "atlas_import_catalog_archimate",
 			Description: "Derive catalogue drafts from an ArchiMate Open Exchange model: Products " +
 				"and Business Services become products, compositions become integral parts and " +
@@ -532,5 +736,15 @@ func catalogTools() []Tool {
 				return asText(c.post(withID(id, "/import"), "application/xml", []byte(model)))
 			},
 		},
+	})
+}
+
+// markCatalogue marks every tool of this file as the catalogue's, in one place, so a
+// tool added to the list above is withheld with the rest when the server switched
+// the area off (ADR-0434).
+func markCatalogue(tools []Tool) []Tool {
+	for i := range tools {
+		tools[i].Catalogue = true
 	}
+	return tools
 }

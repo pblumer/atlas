@@ -59,6 +59,10 @@ type Completion struct {
 	// the loop and completes the container, which is why the zero value is an ending
 	// rather than an error.
 	ToolCalls []model.ToolCall
+	// Outcome is how a product action ended, stated by a shop send task (ADR-0429
+	// §4). It rides the completion so the engine appends it in the batch that
+	// completes the job: the handler runs off the loop and must not write it itself.
+	Outcome *model.ActionOutcomeValue
 }
 
 // CompletingHandler does a job's work and returns its full Completion — outputs
@@ -77,6 +81,7 @@ type Engine interface {
 	CompleteJob(jobKey uint64, outputs ...model.VariableValue)
 	CompleteJobWithDecision(jobKey uint64, decision *model.DecisionEvaluationValue, outputs ...model.VariableValue)
 	CompleteJobWithToolCalls(jobKey uint64, toolCalls []model.ToolCall, outputs ...model.VariableValue)
+	CompleteJobWithOutcome(jobKey uint64, outcome model.ActionOutcomeValue, outputs ...model.VariableValue)
 	FailJob(jobKey uint64, retries int32, message string, backoff int64)
 }
 
@@ -121,6 +126,11 @@ type Runner struct {
 	// consecutive rounds rotate down through a held backlog instead of re-reading the
 	// same page forever. Touched only while a type is held, and only on the run loop.
 	resume map[int32]uint64
+	// offLoop are the job types whose handlers may wait on the run loop, so only a
+	// round that works its jobs off the loop claims them: [Runner.PollOnce] — and so
+	// [Runner.Drive], which a fork or a migration runs on the loop — leaves them for
+	// the next such round instead of deadlocking on the loop it holds.
+	offLoop map[int32]bool
 }
 
 // Gate decides whether a candidate job may be handed out, and hears how the ones that
@@ -221,6 +231,18 @@ func (r *Runner) HandleCompleting(jobType int32, build func(state.Reader) Comple
 	r.factories[jobType] = build
 }
 
+// HandleOffLoop registers a completing worker whose handler waits on the run loop —
+// the shop's command task, which acts through the order act (ADR-0429 §4). Only
+// [Runner.Claim], whose caller works the round off the loop, hands its jobs out;
+// [Runner.PollOnce] and [Runner.Drive] leave them activatable.
+func (r *Runner) HandleOffLoop(jobType int32, build func(state.Reader) CompletingHandler) {
+	r.factories[jobType] = build
+	if r.offLoop == nil {
+		r.offLoop = map[int32]bool{}
+	}
+	r.offLoop[jobType] = true
+}
+
 // Unhandle removes the in-process worker for a job type, so its jobs park for an
 // external one instead (ADR-0168).
 //
@@ -229,7 +251,10 @@ func (r *Runner) HandleCompleting(jobType int32, build func(state.Reader) Comple
 // registers through its own descriptor, the script languages through their loop,
 // the rest inline — and a switch that has to be remembered at ten places is a switch
 // that will be missed at one.
-func (r *Runner) Unhandle(jobType int32) { delete(r.factories, jobType) }
+func (r *Runner) Unhandle(jobType int32) {
+	delete(r.factories, jobType)
+	delete(r.offLoop, jobType)
+}
 
 // Handles reports whether an in-process worker is registered for a job type.
 //
@@ -299,13 +324,20 @@ func (r *Runner) claimBatchSize() int {
 // after the types before it. Ranging a map is randomly ordered, so leaving it to
 // chance would work *on average*, and "on average" is not what a job type flooded
 // by its neighbour needs.
-func (r *Runner) Claim() ([]Job, error) {
+func (r *Runner) Claim() ([]Job, error) { return r.claim(false) }
+
+// claim is [Runner.Claim]; onLoop leaves out the job types whose handlers wait on
+// the loop, for a caller that works the round on it.
+func (r *Runner) claim(onLoop bool) ([]Job, error) {
 	share := r.claimBatchSize() / max(1, len(r.factories))
 	if share < 1 {
 		share = 1
 	}
 	var keys []uint64
 	for jobType := range r.factories {
+		if onLoop && r.offLoop[jobType] {
+			continue
+		}
 		if r.gate != nil && r.gate.Holding(jobType) {
 			if err := r.claimHeld(jobType, share, &keys); err != nil {
 				return nil, err
@@ -516,6 +548,12 @@ func (r *Runner) Submit(outcomes []Outcome) {
 			r.engine.CompleteJobWithToolCalls(o.Job.Key, o.Completion.ToolCalls, o.Completion.Outputs...)
 			continue
 		}
+		if o.Completion.Outcome != nil {
+			// A shop send task's statement of how an action ended (ADR-0429 §4): the
+			// engine appends it with the completion, in one batch.
+			r.engine.CompleteJobWithOutcome(o.Job.Key, *o.Completion.Outcome, o.Completion.Outputs...)
+			continue
+		}
 		r.engine.CompleteJobWithDecision(o.Job.Key, o.Completion.Decision, o.Completion.Outputs...)
 	}
 }
@@ -523,8 +561,10 @@ func (r *Runner) Submit(outcomes []Outcome) {
 // PollOnce claims, works and submits one round on the calling goroutine. It is the
 // simple synchronous form — used by [Runner.Drive] and by callers that own the loop
 // themselves; a server that must keep the loop free drives the three steps itself.
+// Because its caller may hold the loop, it leaves the job types registered with
+// [Runner.HandleOffLoop] to a round that does not.
 func (r *Runner) PollOnce() (int, error) {
-	jobs, err := r.Claim()
+	jobs, err := r.claim(true)
 	if err != nil {
 		return 0, err
 	}

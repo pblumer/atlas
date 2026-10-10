@@ -145,6 +145,17 @@ func (s *Server) handleStartLine(w http.ResponseWriter, r *http.Request) {
 				Started: "approval", Process: prev.ProcessID, Already: true})
 			return
 		}
+		// An approval model of the installation's own is bound by the product, like
+		// its provisioning, and receives the answers; Atlas's own do not, and their
+		// approver reads them on the approval instead.
+		if !line.AtlasApproval() {
+			answers, err := s.orderAnswerVars(line, vars)
+			if err != nil {
+				s.startLineFailed(w, err)
+				return
+			}
+			vars = append(vars, answers...)
+		}
 		b := catalog.Binding{Process: approval}
 		key, err := s.startBinding(b, "", vars)
 		if err != nil {
@@ -157,7 +168,17 @@ func (s *Server) handleStartLine(w http.ResponseWriter, r *http.Request) {
 	}
 
 	b := line.BindingFor(catalog.OpProvision)
-	key, err := s.startBinding(b, positionTriggerID(id, position, catalog.OpProvision, 1), vars)
+	provisionID := positionTriggerID(id, position, catalog.OpProvision, 1)
+	// The provision is a command like any other (ADR-0429 §4): the process reads its
+	// id from its scope to report the outcome against.
+	vars = append(vars, model.VariableValue{Name: commandIDVar, Kind: model.VarString, Text: provisionID})
+	answers, err := s.orderAnswerVars(line, vars)
+	if err != nil {
+		s.startLineFailed(w, err)
+		return
+	}
+	vars = append(vars, answers...)
+	key, err := s.startBinding(b, provisionID, vars)
 	if err != nil {
 		s.startLineFailed(w, err)
 		return

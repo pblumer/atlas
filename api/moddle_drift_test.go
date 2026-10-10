@@ -30,9 +30,14 @@ import (
 // as an unconfigured job worker, because the extension was gone before the panel
 // ever looked.
 
+// A digit is admitted after the first letter, and that is not cosmetic: <atlas:s3Connector>
+// was the first such tag, and a pattern of [a-zA-Z]+ did not see it — so both guards below
+// would have passed while saying nothing about the kind at all, which is the failure they
+// exist to catch arriving by the back door.
+//
 // connectorExtRe matches the worker extension elements compiler/parse.go reads,
 // e.g. `xml:"extensionElements>userConnector"`.
-var connectorExtRe = regexp.MustCompile(`xml:"extensionElements>([a-zA-Z]+Connector)"`)
+var connectorExtRe = regexp.MustCompile(`xml:"extensionElements>([a-zA-Z][a-zA-Z0-9]*Connector)"`)
 
 // nonServiceTaskConnectors are worker extensions that are deliberately absent
 // from the Modeler's service-task catalog, with the reason. They are still required
@@ -364,6 +369,88 @@ func TestModdleKnowsEveryConnectorAttribute(t *testing.T) {
 					tc.moddleType, len(missing), strings.Join(missing, ", "))
 			}
 		})
+	}
+}
+
+// shopTaskAttrs is the whole of <atlas:shopTask>, the shop send task's declaration
+// (ADR-0429 §4), in the order the Modeler writes them. Each mode uses its own share:
+//
+//	<atlas:shopTask mode="outcome" action="password-reset" outcome="completed" />
+//	<atlas:shopTask mode="command" action="deprovision" product="mailbox" order="= leaver.orderId" position="mailbox" resultVariable="commandId" />
+//
+// It is a contract with the compiler, which parses exactly this element. `retries` is the
+// task's own retry budget (ADR-0135) in either mode; the panel does not offer it, and it
+// is declared so a budget written by hand survives a Modeler round trip.
+var shopTaskAttrs = []string{"mode", "action", "outcome", "product", "order", "position", "resultVariable", "retries"}
+
+// TestModdleDeclaresTheShopTaskContract pins the Modeler's half of that contract. Every
+// guard above finds an extension by the Connector suffix of the compiler's tag, and the
+// shop task is not a Worker, so it escapes all of them — and a drift here loses data in
+// both directions without a sound. An attribute the moddle lacks is dropped from the
+// model on the first Save; one it has beyond them is written into models the
+// compiler never reads, which looks configured and is not. Without the panel naming the
+// type, nothing writes the element at all.
+//
+// The type is send-only: the moddle allows it in a send task, and the service-task
+// catalog must not offer it, because a service task cannot carry it.
+func TestModdleDeclaresTheShopTaskContract(t *testing.T) {
+	raw, err := os.ReadFile("web/atlas-moddle.json")
+	if err != nil {
+		t.Fatalf("read atlas-moddle.json: %v", err)
+	}
+	var moddle struct {
+		Types []struct {
+			Name string `json:"name"`
+			Meta struct {
+				AllowedIn []string `json:"allowedIn"`
+			} `json:"meta"`
+			Properties []struct {
+				Name   string `json:"name"`
+				Type   string `json:"type"`
+				IsAttr bool   `json:"isAttr"`
+			} `json:"properties"`
+		} `json:"types"`
+	}
+	if err := json.Unmarshal(raw, &moddle); err != nil {
+		t.Fatalf("decode atlas-moddle.json: %v", err)
+	}
+
+	found := false
+	for _, ty := range moddle.Types {
+		if ty.Name != "ShopTask" {
+			continue
+		}
+		found = true
+		if strings.Join(ty.Meta.AllowedIn, ",") != "bpmn:SendTask" {
+			t.Errorf("ShopTask is allowed in %v; it belongs on a send task and nowhere else", ty.Meta.AllowedIn)
+		}
+		var got []string
+		for _, p := range ty.Properties {
+			got = append(got, p.Name)
+			if p.Type != "String" || !p.IsAttr {
+				t.Errorf("ShopTask's %q is declared as type %q, isAttr %v; the contract has it as a string attribute",
+					p.Name, p.Type, p.IsAttr)
+			}
+		}
+		if strings.Join(got, ",") != strings.Join(shopTaskAttrs, ",") {
+			t.Errorf("ShopTask declares the attributes %v; the contract is exactly %v\n\n"+
+				"bpmn-js drops an attribute the moddle does not declare, and writes one the compiler does not read.",
+				got, shopTaskAttrs)
+		}
+	}
+	if !found {
+		t.Fatal("atlas-moddle.json declares no ShopTask type, so <atlas:shopTask> cannot round-trip through the Modeler")
+	}
+
+	editor, err := os.ReadFile("web/editor.js")
+	if err != nil {
+		t.Fatalf("read editor.js: %v", err)
+	}
+	if !strings.Contains(string(editor), `"atlas:ShopTask"`) {
+		t.Error("api/web/editor.js never names atlas:ShopTask, so no send task can be given the Shop kind")
+	}
+	if strings.Contains(serviceTaskKindsSource(t), `"atlas:ShopTask"`) {
+		t.Error("SERVICE_TASK_KINDS offers atlas:ShopTask; the shop kind is a send task's alone (ADR-0429 §4)")
 	}
 }
 

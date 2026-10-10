@@ -33,6 +33,14 @@ test("every chapter the contextual help points at exists in the handbook", () =>
   const handbook = read("../api/web/handbuch.html");
   const sections = new Set([...handbook.matchAll(/<section id="([^"]+)"/g)].map((m) => m[1]));
   expect([...new Set(anchors)].filter((a) => !sections.has(a))).toEqual([]);
+
+  // shop("anchor", "label") points into the shop handbook instead, and is held to it
+  // the same way.
+  const shopAnchors = [...fn.matchAll(/shop\("([^"]+)",/g)].map((m) => m[1]);
+  expect(shopAnchors.length).toBeGreaterThan(0);
+  const shopPage = read("../api/web/shop-handbuch.html");
+  const shopSections = new Set([...shopPage.matchAll(/<section id="([^"]+)"/g)].map((m) => m[1]));
+  expect([...new Set(shopAnchors)].filter((a) => !shopSections.has(a))).toEqual([]);
 });
 
 test("the apps the shell offers are the apps the handbook teaches", () => {

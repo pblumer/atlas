@@ -20,6 +20,7 @@ import (
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/nettimeout"
 	"github.com/pblumer/atlas/connector/remedy"
+	"github.com/pblumer/atlas/connector/s3"
 	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/connector/temis"
@@ -237,6 +238,7 @@ func (s *Server) buildMailClients() (map[string]mail.Client, map[string]string, 
 			Secret:   s.resolveConnectorSecret(c.CredentialsRef),
 			Name:     c.Name,
 			Outbox:   s.mailOutbox,
+			Mailbox:  strings.TrimSpace(c.MailboxEndpoint),
 		})
 		if err != nil {
 			// Misconfigured provider: its tasks park until it is fixed (ADR-0093) — and
@@ -399,6 +401,58 @@ func (s *Server) buildDiscordClients() (map[string]discord.Client, map[string]st
 	}
 	noteForeignKinds(problems, recs, connectorKindDiscord, clients)
 	return clients, problems, nil
+}
+
+// buildS3Clients builds the live S3 client for every enabled S3 Worker, resolving each
+// one's access key from the vault (ADR-0041) — so a model names a Worker and never a
+// key. A Worker whose bundle is missing, malformed or short of a region is skipped with
+// the reason recorded, which is what lets the list say "configured but not working"
+// instead of leaving it to be discovered by a token parking on it (ADR-0158).
+//
+// The endpoint is optional and does two things at once: blank points the client at AWS
+// at the bundle's region, and set points it at the store the installation runs — which
+// is also what makes its buckets addressed path-style, since that is what every
+// self-hosted store serves (ADR-0442).
+func (s *Server) buildS3Clients() (map[string]s3.Client, map[string]string, error) {
+	clients := map[string]s3.Client{}
+	problems := map[string]string{}
+	recs, err := s.connectors.LoadAll()
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, c := range recs {
+		if c.Kind != connectorKindS3 {
+			continue
+		}
+		if !c.Enabled {
+			problems[c.Name] = problemDisabled
+			continue
+		}
+		client, err := s3.NewProviderClient(s3.ProviderConfig{
+			Endpoint: strings.TrimSpace(c.Endpoint),
+			Secret:   s.resolveConnectorSecret(c.CredentialsRef),
+		})
+		if err != nil {
+			problems[c.Name] = err.Error() // its tasks park until it is fixed
+			continue
+		}
+		clients[c.Name] = client
+	}
+	noteForeignKinds(problems, recs, connectorKindS3, clients)
+	return clients, problems, nil
+}
+
+// s3Credentials is the shape of an S3 Worker's credential bundle held in the vault under
+// its credentialsRef (ADR-0442): an access key, the region SigV4
+// signs with, and — for a key STS issued — the session token that goes with it. Only a
+// *reference* to this bundle is stored in the Worker record; the values live in the
+// vault, never in a model or the record (I6). It mirrors connector/s3's own unexported
+// bundle type, which is what the shape test holds it to.
+type s3Credentials struct {
+	AccessKeyID     string `json:"accessKeyId,omitempty"`
+	SecretAccessKey string `json:"secretAccessKey,omitempty"`
+	Region          string `json:"region,omitempty"`
+	SessionToken    string `json:"sessionToken,omitempty"`
 }
 
 // discordCredentials is the shape of a Discord Worker's credential bundle held in the
@@ -624,6 +678,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	p.Provider = strings.TrimSpace(p.Provider)
 	p.Sender = strings.TrimSpace(p.Sender)
 	p.Model = strings.TrimSpace(p.Model)
+	p.MailboxEndpoint = strings.TrimSpace(p.MailboxEndpoint)
 	p.CredentialsRef = strings.TrimSpace(p.CredentialsRef)
 	if p.Name == "" {
 		httpapi.Error(w, http.StatusBadRequest, "worker name is required")
@@ -667,6 +722,9 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, msg)
 		return
 	}
+	if p.Kind != connectorKindMail {
+		p.MailboxEndpoint = "" // a mail-only field, cleared like Provider and Sender are
+	}
 	// And the one rule a pure validator cannot state, because it depends on a stored
 	// setting: whether a database needs a connection string at all. The read rides the
 	// run loop, which owns the settings store (I3).
@@ -686,7 +744,8 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		ID: id, Name: p.Name, Kind: p.Kind, Endpoint: p.Endpoint,
 		CredentialsRef: p.CredentialsRef, Enabled: enabled,
 		Provider: p.Provider, Sender: p.Sender, Model: p.Model,
-		CreatedAt: time.Now().Unix(),
+		MailboxEndpoint: p.MailboxEndpoint,
+		CreatedAt:       time.Now().Unix(),
 		// Whoever made it owns it, and it starts private (ADR-0205). Private is the
 		// only defensible default for a thing that may hold a personal mailbox; what
 		// it costs — a colleague not seeing the endpoint until it is shared — is
@@ -760,8 +819,11 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		// Model is an agent Worker's model name — the setting an operator changes
 		// most often, and the reason this kind is a Console record at all
 		// (ADR-0255).
-		Model   *string `json:"model"`
-		Enabled *bool   `json:"enabled"`
+		Model *string `json:"model"`
+		// MailboxEndpoint is an SMTP mail Worker's IMAP endpoint; "" removes it, which
+		// makes the Worker a sender only again (ADR-0438).
+		MailboxEndpoint *string `json:"mailboxEndpoint"`
+		Enabled         *bool   `json:"enabled"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -806,6 +868,9 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		}
 		if p.Model != nil {
 			rec.Model = strings.TrimSpace(*p.Model)
+		}
+		if p.MailboxEndpoint != nil {
+			rec.MailboxEndpoint = strings.TrimSpace(*p.MailboxEndpoint)
 		}
 		if p.Enabled != nil {
 			rec.Enabled = *p.Enabled
@@ -878,6 +943,11 @@ func (s *Server) handleDeleteConnector(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if delErr = s.connectors.Delete(id); delErr != nil {
+			return
+		}
+		// A cloudevents Worker's feed subscriptions go with it: they are its
+		// configuration, and one naming a Worker that no longer exists delivers nowhere.
+		if delErr = s.deleteFeedSubscriptionsOf(id); delErr != nil {
 			return
 		}
 		delErr = s.rebuildConnectorRegistries()

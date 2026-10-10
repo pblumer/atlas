@@ -577,6 +577,20 @@ The control-flow basics most real models use.
   in, and the in-process handler remains as the fallback `--in-process-connectors` returns
   to. Attachments and inbound events are follow-ups — for the inbound half see
   [the Jira issue-watch draft](docs/adr/0214-jira-inbound-issue-watch.md).
+  **The mail Worker reads its mailbox** ([ADR-0438](docs/adr/0438-mailbox-worker.md)):
+  an inbound watch on a mail Worker publishes the new mail of one folder as an Atlas
+  message — over IMAP for an SMTP Worker that names a `mailboxEndpoint`, through the Gmail
+  history and the Microsoft Graph messages API for those providers — and a mail task's
+  `operation` lists, reads, moves, marks, deletes (to the trash) or answers mail by the
+  `messageId` a watch or a list answered. A process receives the envelope by default and
+  the text only on request; attachment content never. A watch admits `allowedSenders` and,
+  optionally, only a DMARC pass, and never changes the mailbox. A task that reads a mail
+  Worker's mailbox deploys only for a viewer of it and one that changes it for an editor,
+  at every deploy door — the application import included, which also gained ADR-0205's
+  message-name claim it had skipped. Still open: instance reads by relationship rather
+  than by role (ADR-0275), so what a process receives is not yet hidden from the
+  installation's other operators; IMAP `XOAUTH2`; push instead of polling (IMAP `IDLE`,
+  Graph change notifications).
   The same reader also runs the other way: `atlas openapi-template --spec x.yaml --out
   dir` writes one element-template package per operation, in the repository catalog's
   own shape ([ADR-0300](docs/adr/0300-openapi-element-templates.md)) —
@@ -747,6 +761,18 @@ Making processes wait, react, and time out.
   one root type, a curated component vocabulary (an `iframe` is refused **by name**, not dropped),
   a unique key on every input, and a bound on the document — and an answer that is not a form is a
   422 with the reason rather than a broken editor.
+- ✅ **The FEEL assistant** ([ADR-0445](docs/adr/0445-feel-assistant.md)): a
+  conversation with the same AI Worker that writes a **FEEL expression**, opened from anywhere with
+  **Ctrl/⌘+Shift+E**, the spark in the top bar, a **mini spark on every FEEL field** of the Modeler,
+  or a spark beside a focused output cell, literal expression or input expression in the DMN editor.
+  **Every answer is run before anybody reads it**: compiled, its calls refused as a deploy refuses
+  them (ADR-0388), evaluated against the example the model gave and held against the result it
+  claimed — and an answer that fails goes back to the model with the engine's own words, at most
+  twice, so a small free model behind OpenRouter is usable. The prompt's function list is the
+  engine's registry and every rule it teaches is a tested expression. Beside the chat: a FEEL editor,
+  a test pane, Copy, and **Apply to the field it was opened from** (an fx field keeps its `=`; a
+  decision table's input cell, which takes a unary test, is not written to), a **history** of the
+  last thirty expressions and **favourites**, kept in the browser. Nothing is stored on the server.
 - ✅ Boundary events: timer and message, interrupting and non-interrupting,
   attached to waiting activities. An interrupting boundary cancels the host (and
   its job) and routes out its flow; a non-interrupting one spawns a parallel
@@ -923,6 +949,13 @@ What it takes to run this for real.
 - 🔲 Public API surface (deploy, create instance, publish message, complete job, queries)
 - 🔲 gRPC job-worker protocol (streaming pull, leases, fencing) — ADR-0007
 - 🔲 Worker SDK (Go first)
+- ✅ A worker runs the jobs of one type concurrently: `--max-jobs` places, a poll asking only
+  for the free ones, and supervised built-in workers at the engine's in-process bound
+  (`--worker-max-jobs`, default 16)
+  ([ADR-0440](docs/adr/0440-worker-runs-jobs-concurrently.md)).
+  On Windows a kill-on-close job object ends every supervised worker, and what it started,
+  with the server however the server ends
+  ([ADR-0439](docs/adr/0439-supervised-workers-end-with-the-server.md)).
 - 🚧 Metrics (throughput, batch size, fsync latency, queue depth), structured logs, OTel traces
   ([ADR-0142](docs/adr/0142-prometheus-metrics.md), v0.2.0 programme E): a Prometheus
   exposition at `/metrics` on Atlas's own registry. The **durability** metrics landed —
@@ -943,6 +976,14 @@ What it takes to run this for real.
   an explicit resolution event for the path where an incident is dropped with an element;
   the lease/timeout counters, which wait on ADR-0007; readiness distinct from liveness;
   then structured log event names and OTel traces.
+- ✅ **Running behind a load balancer**
+  ([ADR-0448](docs/adr/0448-trusted-proxies.md)): `--trusted-proxies`
+  names the balancers whose word about a client's address is taken — a PROXY protocol
+  header (v1/v2) from one that forwards TCP to a TLS-terminating Atlas, `X-Forwarded-For`
+  read from the right from one that speaks HTTP, and neither from anybody else — so the
+  login throttle and the audit trail see the person rather than the balancer, with the
+  balancer kept as `via`. A balancer's TCP health check is a DEBUG line, and
+  `--log-level` sets the floor.
 - ✅ Log compaction / snapshotting so recovery doesn't replay from genesis
   ([ADR-0131](docs/adr/0131-engine-recovery-checkpoints-and-wal-compaction.md), v0.2.0
   programme D): the mechanism is complete. A checkpoint is a Pebble snapshot of the state
@@ -1904,6 +1945,252 @@ an industry reference model (BIAN, ACORD, eTOM) maps its levels onto tags and is
 later slice; doing it inside B1 would drag the hierarchy question into the record that
 exists to settle it. No approval workflow: `state` is a field somebody sets, and Atlas
 is the engine an organisation would model such a workflow *in*.
+
+---
+
+## Milestone K — Service catalogue, orders & the portal 🚧
+
+A parallel track: what a person may order, and a record of what they already hold. Three
+models, not one ([ADR-0312](docs/adr/0312-portal-catalogue-order-inventory.md)): a
+design-time catalogue published as frozen releases, an order that is an ordinary process
+instance, and an inventory of held rights in engine state — its own column family, folded
+by the one `applyToState` and exempt from retention. People order in the **shop**
+(`/shop.html`, formerly the portal). The code is `api/catalog` and `api/order`, and the
+shipped approval and fulfilment models are in `api/systemprocesses/`.
+
+- ✅ **The whole area is optional.** `--catalogue=false` switches off its routes, the shop
+  page, its Console menus, its MCP tools, its starmap picture and its system processes,
+  keeps every store and leaves the engine untouched; on is the default, tests hold the
+  switch to routes added later, and a start with orders still in fulfilment warns rather
+  than refuses ([ADR-0434](docs/adr/0434-the-catalogue-can-be-switched-off.md)).
+
+**Catalogue & releases**
+- ✅ **Products, structure and releases.** Products nest by composition and aggregation,
+  `requires` orders fulfilment and `excludes` marks a conflicting pair; an ArchiMate model
+  imports as drafts. Publishing freezes a release an order then names, checks both graphs
+  for cycles, resolves precedence into fulfilment **waves** and resolves every process
+  binding; nothing is deleted, only withdrawn
+  ([ADR-0312](docs/adr/0312-portal-catalogue-order-inventory.md)).
+- ✅ **What a product carries.** Eligible groups, a configuration form whose answers ride
+  on the order line, a category, a price, keywords and a picture; its structure is
+  assembled per product in one form ([ADR-0347](docs/adr/0347-product-eligibility.md),
+  [ADR-0358](docs/adr/0358-order-line-configuration.md), [ADR-0360](docs/adr/0360-product-category.md),
+  [ADR-0361](docs/adr/0361-product-price.md), [ADR-0391](docs/adr/0391-product-picture.md),
+  [ADR-0395](docs/adr/0395-product-construction-kit.md)).
+- ✅ **The answers reach the approver and the processes.** The approver reads a position's
+  configuration answers on the approval, labelled as the form labels them; the processes the
+  product binds receive each answer as a variable of its own, sealed where the model declares
+  it personal, never in place of a variable the order sets; Atlas's own approval models and
+  the orchestration no longer receive them
+  ([ADR-0441](docs/adr/0441-a-position-s-answers-reach-its-processes.md)).
+- ✅ **Publishing warns about answers in the clear.** A publish names each order-form answer that
+  reaches a process without being declared personal data there, and still makes the release; a
+  field marked `personal = false` in the form is not warned about
+  ([ADR-0443](docs/adr/0443-publishing-warns-about-answers-in-the-clear.md)).
+- ✅ **Maintaining a catalogue.** A grantable `productmanager` role creates catalogues, and
+  each catalogue is the scope its members work in
+  ([ADR-0315](docs/adr/0315-portal-roles-and-responsibilities.md)). The Console screen and
+  the MCP tools edit, publish and report on approvers, fulfilment, translations and what is
+  unpublished ([ADR-0376](docs/adr/0376-catalogue-maintenance-over-mcp.md)); a product's
+  usage is answered across catalogues ([ADR-0353](docs/adr/0353-product-usage.md)), and the
+  starmap draws catalogues and products ([ADR-0396](docs/adr/0396-catalogue-on-the-starmap.md)).
+- ✅ **A shop as one document.** `POST /api/v1/catalogs/import` (MCP `atlas_import_catalog`)
+  writes catalogues, their products and edges, and optionally their releases, all or nothing,
+  under the authority the single writes need; ids are the document's own, so importing again
+  updates
+  ([ADR-0436](docs/adr/0436-a-catalogue-is-imported-as-one-document.md)).
+  Export is a follow-up.
+- ✅ **A shop handbook with an example to install.** `shop-handbuch.html` (DE/EN) on building
+  catalogues, several catalogues, products and services and their processes, with the
+  administration-services example (`examples/verwaltung-dienstleistungen/`, both process
+  forms, bilingual) and an installer that asks for audiences and approvers and imports the
+  shop as one document.
+- ✅ **A package installs from the command line.** `atlas import DIR` installs a package — an
+  application in the source layout (`atlas.json`), and optionally its shop (`katalog.json`)
+  with the questions its placeholders ask (`fragen.json`) — through the source import, a
+  publish and the catalogue import; answers come from a file or `--set`, groups and people by
+  id or by name, and every open answer is refused before the first write
+  ([ADR-0437](docs/adr/0437-a-package-is-imported-from-the-command-line.md)).
+  An `atlas.json` for the other examples is a follow-up.
+
+**The shop & ordering**
+- ✅ **Browsing.** A person sees the one catalogue their groups reach, by rank, narrowed per
+  product by eligibility: levels read from the graph once ([ADR-0383](docs/adr/0383-portal-level-names.md)),
+  keyword search ([ADR-0355](docs/adr/0355-catalogue-search.md)), favourites
+  ([ADR-0348](docs/adr/0348-favourites.md)), the catalogue's own theme and mark
+  ([ADR-0316](docs/adr/0316-portal-theme-per-catalogue.md)), one column below 860px
+  ([ADR-0417](docs/adr/0417-the-shop-and-tasks-are-one-column-wide-on-a-narrow-screen.md)).
+  It carries its own sign-in ([ADR-0399](docs/adr/0399-portal-carries-its-own-sign-in.md)),
+  and with nobody to be it shows a catalogue and refuses an order ([ADR-0377](docs/adr/0377-portal-without-identity.md)).
+- ✅ **Ordering.** A position is a product and its variant, in its own key
+  ([ADR-0384](docs/adr/0384-order-position-key.md)); an item already held becomes a skipped
+  line. Placement refuses a closed orderable window ([ADR-0397](docs/adr/0397-enforce-the-orderable-window.md))
+  and a conflicting pair, which is also reported across the estate ([ADR-0342](docs/adr/0342-conflicting-rights.md)).
+  Ordering for somebody else needs the operator role and picks the recipient from the
+  directory ([ADR-0349](docs/adr/0349-ordering-for-others.md), [ADR-0356](docs/adr/0356-person-picker.md)).
+- ✅ **After placing.** An order or one position is withdrawn and a position's details are
+  corrected, never what is held ([ADR-0359](docs/adr/0359-amending-an-order-line.md)); each
+  position says where it stands ([ADR-0390](docs/adr/0390-position-progress.md)), and an
+  order lists its open tasks ([ADR-0416](docs/adr/0416-the-shop-shows-an-orders-open-tasks.md))
+  with one link into a process per row ([ADR-0408](docs/adr/0408-portal-shows-no-process-links-per-position.md)).
+
+**Approvals & escalation**
+- ✅ **Approvals in the inbox.** The shipped fixed, role and line-manager approvals reach
+  their approver by assignment expression ([ADR-0318](docs/adr/0318-user-task-assignment-expressions.md))
+  and are decided in Tasks ([ADR-0394](docs/adr/0394-approval-in-the-inbox.md)), one
+  decision covering an order's open approvals ([ADR-0362](docs/adr/0362-collective-approval.md));
+  the separate page and its list ordering are withdrawn ([ADR-0311](docs/adr/0311-portal-approval-page.md),
+  [ADR-0354](docs/adr/0354-approval-list-order.md)). A group's task is listed to that group
+  ([ADR-0421](docs/adr/0421-a-task-is-listed-to-whoever-it-was-addressed-to.md)), and who
+  decided is recorded on the task, the order and the right ([ADR-0422](docs/adr/0422-who-decided-is-recorded.md)).
+- ✅ **An approval nobody answers.** Non-interrupting deadlines remind, move a line
+  manager's approval one hop up, and otherwise stall it visibly at
+  `GET /api/v1/approvals/stalled` for a person to reassign
+  ([ADR-0312](docs/adr/0312-portal-catalogue-order-inventory.md)); reminder processes read
+  `GET /api/v1/pending-work` ([ADR-0343](docs/adr/0343-pending-work.md)).
+
+**Fulfilment & product lifecycle**
+- ✅ **Fulfilment.** The shipped orchestrator starts lines wave by wave, calling Atlas as
+  REST connector tasks told the server's own address
+  ([ADR-0411](docs/adr/0411-system-processes-call-atlas-directly.md)).
+- ✅ **A lifecycle is one process.** A product may bind one process with a message start per
+  operation, reached by a directed, idempotent trigger, and a start act decides between
+  approval and provisioning ([ADR-0425](docs/adr/0425-a-product-lifecycle-is-one-process-with-message-triggers.md)).
+  An ambiguous untriggered create is refused ([ADR-0426](docs/adr/0426-an-untriggered-create-never-seeds-several-start-events.md));
+  converting keeps the old processes alive until an explicit rebind
+  ([ADR-0427](docs/adr/0427-converting-a-product-to-a-lifecycle-process.md)); a lifecycle may
+  run as one instance per position, its later operations delivered to it by key
+  ([ADR-0428](docs/adr/0428-a-product-lifecycle-may-run-as-one-instance-per-position.md)).
+
+**The inventory of held rights**
+- ✅ **Grants, returns and history.** A line reaching `done` grants to the recipient, a
+  confirmed return revokes, and `GET /api/v1/inventory` reads it off the loop; a return runs
+  the deprovisioning process the order froze and is refused while something held requires
+  it ([ADR-0312](docs/adr/0312-portal-catalogue-order-inventory.md)). An ended hold leaves a
+  history row ([ADR-0346](docs/adr/0346-entitlement-history.md)), the commissioning load
+  reports before it writes ([ADR-0333](docs/adr/0333-inventory-commissioning-load.md)), and a
+  recertification revoke goes back through its order ([ADR-0418](docs/adr/0418-a-withdrawn-ordered-right-goes-back-through-its-order.md)).
+- ✅ **Reconciliation, recertification, expiry.** Absence is a finding only inside a scope
+  somebody promised was complete, acted on one finding at a time
+  ([ADR-0334](docs/adr/0334-reconciliation.md)); recertification never lets silence answer
+  ([ADR-0341](docs/adr/0341-access-recertification.md)); a right may carry an end, and a
+  daily model returns what is overdue ([ADR-0344](docs/adr/0344-time-bounded-entitlements.md)).
+
+**Languages & personal data**
+- ✅ **Translations.** A heading is a key plus a wording per language
+  ([ADR-0412](docs/adr/0412-translatable-catalogue-headings.md)), a language tag is checked
+  where it is written ([ADR-0413](docs/adr/0413-a-language-tag-is-checked-where-it-is-written.md)),
+  and a missing translation is reported, not refused ([ADR-0414](docs/adr/0414-a-missing-translation-is-reported-not-refused.md)).
+  The shop follows the browser and offers the catalogue's languages it can render — German,
+  English, French, Italian ([ADR-0415](docs/adr/0415-the-portal-offers-the-catalogues-languages.md)).
+- 🚧 **The chosen language belongs to the account**, and the shop keeps it in the browser
+  until that endpoint exists ([ADR-0313](docs/adr/0313-portal-language-follows-the-browser.md)).
+- 🚧 **Personal data.** A reference by default, and a per-subject key in the vault for the
+  rest, so erasure destroys one key; whether erasure waits for running instances and held
+  rights is still open ([ADR-0314](docs/adr/0314-portal-personal-data.md)).
+
+**Not built yet**
+- 🔲 The aggregate figures a product manager may see and the integration-manager relation
+  ([ADR-0315](docs/adr/0315-portal-roles-and-responsibilities.md)); a screen for a
+  catalogue's theme and mark, set over the API today ([ADR-0316](docs/adr/0316-portal-theme-per-catalogue.md)).
+- 🔲 The TMF620 boundary, still Proposed
+  ([ADR-0387](docs/adr/0387-the-catalogue-against-the-standards-boundary.md)). A
+  per-operation product's `change`, which
+  [ADR-0425](docs/adr/0425-a-product-lifecycle-is-one-process-with-message-triggers.md) bound
+  but nothing started, is started by the action act of slice B below.
+
+**Product actions** ([ADR-0429](docs/adr/0429-product-actions-are-commands-with-published-outcomes.md),
+[plan](docs/planning/0429-product-actions-plan.md)) — a product declares an open list of
+actions with closed effects, each a command whose outcome is a fact published beyond Atlas:
+- ✅ **§9 — a process-level conditional start is refused at deploy** (stage-5 rule
+  `start.conditional`); it used to compile to a plain start and drop its condition.
+- ✅ **§6 — Worker events in the Modeler's message picker**, read from
+  `GET /api/v1/message-sources` for every element that waits for a message.
+- ✅ **Slice A — actions on the product.** `catalog.Action`, frozen on order lines; legacy
+  `operations` are read as the actions they mean; publishing checks each action against
+  the process, and an inbound watch may not claim a product's message.
+- ✅ **Follow-up — the name-correlated publish refuses a product's message**:
+  `POST /api/v1/messages` no longer starts a lifecycle process around its order.
+- ✅ **Slice B — the action act, availability and portal buttons.**
+  `POST /api/v1/orders/{id}/lines/{item}/actions/{action}` with a required `commandId`,
+  delivered to the strand or started at the action's start event; `GET …/actions` reads from
+  the strand's live elements whether each action is possible now; MCP reads it
+  (`atlas_order_line_actions`) and asks operator and system actions
+  (`atlas_ask_order_line_action`), never a customer's; a shop button per offered customer action, with its form or a
+  confirmation. `/change` is the act for the key `change`; the recipient may return and act
+  (§10, decision 4); a directed delivery to a catch that lost an event-based gateway's race
+  is now refused instead of reported delivered.
+- 🔲 **The Console's surface for operator actions** — waits for an order view the Console
+  does not have; operators use the route until then.
+- ✅ **Slice C — the outcome fact and the shop send task.**
+  - ✅ C1: `VTActionOutcome`, idempotent per command and written in one command with the
+    grant or revocation it accompanies; every act seeds `commandId`; the outcome route
+    (`POST …/actions/{commandId}/outcome`) and the read route (`GET …/outcomes`, MCP
+    `atlas_order_line_outcomes`).
+  - ✅ C2: the `shop` send task in mode `outcome` (`<atlas:shopTask>`, the in-process job
+    type `io.atlas.shop`), which states how the command its instance carries ended in the
+    command that completes its job; the publish check that every change and service action
+    is answered `completed`; the **Shop** kind in the modeler's send-task picker.
+  - ✅ C3: mode `command` (`io.atlas.shop.command`): a process asks a held position for an
+    operator or system action, or its return, in the name of an application the product's
+    `commandedBy` lists — read from the newest release, so removing one stops it for every
+    right already held; the list on the product in the Console, HTTP and MCP; the command
+    mode in the modeler's Shop kind.
+- ✅ **Slice D — product actions and shop badges in the modeler.** `GET /api/v1/message-sources`
+  tags each row `inbound-watch`, `product-action` (for the catalogues the caller maintains)
+  or `process` (where a deployed process waits); the message picker groups by source —
+  Worker events and product actions for an element that receives, waiting processes for one
+  that throws — and marks a Worker event in a product-bound process; a Shop task suggests the
+  declared action keys; the shop badge sits beside the envelope in the Implement and runtime
+  views.
+- ✅ **Slice E — the CloudEvents feed.** Every action outcome, grant and revocation is a
+  row of the feed, folded by `applyToState` and keyed by its log position, pruned by a fact
+  of its own (`--event-feed-ttl`, 30 days); `GET /api/v1/events?after=&limit=` (operator)
+  serves CloudEvents 1.0 in log order, 410 with the oldest cursor for one that fell behind;
+  the envelope is version 1 of the runtime contract. Push delivery is built below.
+- ✅ **The feed's own role and token scope**
+  ([ADR-0430](docs/adr/0430-the-event-feed-has-its-own-role-and-token-scope.md)).
+  The route requires `feedreader`; an API token minted with the `events` scope reaches that
+  route only and carries that role only, so a CMDB's credential reads the feed and nothing
+  else.
+- ✅ **The feed narrowed by catalogue**
+  ([ADR-0432](docs/adr/0432-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md)).
+  An `events` token's reach names catalogues, and it reads only the events about the
+  products they maintain; every event names that catalogue as `homeCatalog`. Narrowing by
+  the shop an order was placed in is a possible second dimension, not built.
+- ✅ **Push delivery of the feed**
+  ([ADR-0433](docs/adr/0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md)).
+  A `cloudevents` Worker holds a receiver's https address and bearer token; a feed
+  subscription on it (admin, HTTP and the Worker's Feed… panel, read over MCP) is sent the
+  feed after its server-held cursor as CloudEvents batches, narrowed by catalogue like a
+  token. A refusal holds the subscription on the breaker's ladder and skips nothing; one the
+  retention passed is switched off with the reason. Signatures and `Retry-After` are
+  follow-ups.
+- 🚧 **One catalogue of the events atlas emits**
+  ([ADR-0435](docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)).
+  - ✅ The catalogue and its two views. The Go package `eventcatalog` holds every signal,
+    message and feed event atlas emits, with its meaning, moment, payload (personal data
+    marked, never by default), version, stability and access. Tests hold it to the system
+    processes and the feed in both directions, and a stable entry never loses a field. The
+    handbook chapter *Ereignisse* and the runtime contract's feed table are generated from it.
+    The Console page *Events* reads it (`modeler`); who listens now is a route of its own
+    (`admin`). The Modeler's signal picker offers the events a model may listen to.
+    `atlas.user.requested` carries `atlasInstance`.
+  - ✅ A signal start or catch on a catalogued event whose payload carries personal data
+    requires `admin`. It is refused at the deploy, the bundle deploy and the application import,
+    and the same finding, from the same check, is in the Problems panel.
+  - ✅ `atlas.approval.requested` from the three shop approval processes, thrown before the
+    approval task waits, with the rule, who decides and the approval instance.
+  - ✅ Incidents in the feed. The feed leaves the service-catalogue area: it is served and
+    pushed with the shop off, without the catalogue's events. `atlas.incident.raised` and
+    `atlas.incident.resolved` carry the cause (definition, element, type) and never the
+    message.
+  - 🔲 The remaining entries: user created and rejected, offboarding, access review,
+    deployments.
+- 🔲 **Not in any slice yet:** an operator action for every held position of a product.
+- 🔲 **Not in any slice yet:** a suspended entitlement state.
+- 🔲 **Not in any slice yet:** measuring the run loop before a per-position product goes
+  beyond a pilot.
 
 ---
 

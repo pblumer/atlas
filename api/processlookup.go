@@ -135,6 +135,26 @@ func (l processLookup) EntryPoints(processID string) (messages []string, hasNone
 	return messages, hasNone, deployed
 }
 
+// WatchedMessages names every message an enabled inbound watch on this server
+// publishes, so publishing a catalogue can refuse an action whose message a Worker's
+// event would reach (ADR-0429 §1). A disabled watch publishes nothing, and enabling
+// it again is refused from the watch's side while a product owns the name.
+func (l processLookup) WatchedMessages() map[string]bool {
+	out := map[string]bool{}
+	l.s.do(func() {
+		subs, err := l.s.inboundSubs.LoadAll()
+		if err != nil {
+			return
+		}
+		for _, sub := range subs {
+			if name := strings.TrimSpace(sub.MessageName); sub.Enabled && name != "" {
+				out[name] = true
+			}
+		}
+	})
+	return out
+}
+
 // CatchPoints lists the message catch points of the newest deployed version of a
 // process id: what a per-position lifecycle delivers its later operations to
 // (ADR-0428).
@@ -147,6 +167,22 @@ func (l processLookup) CatchPoints(processID string) []catalog.CatchPoint {
 		}
 		for _, c := range d.cp.MessageCatchPoints() {
 			out = append(out, catalog.CatchPoint{Element: c.Element, Message: c.MessageName, Correlated: c.Correlated})
+		}
+	})
+	return out
+}
+
+// ShopOutcomes lists the shop send tasks of the newest deployed version of a process
+// id and what each states (ADR-0429 §4).
+func (l processLookup) ShopOutcomes(processID string) []catalog.ShopOutcome {
+	var out []catalog.ShopOutcome
+	l.s.do(func() {
+		d := l.s.latestDeploymentOf(strings.TrimSpace(processID))
+		if d == nil || d.cp == nil {
+			return
+		}
+		for _, p := range d.cp.ShopOutcomePoints() {
+			out = append(out, catalog.ShopOutcome{Element: p.Element, Action: p.Action, Outcome: p.Outcome})
 		}
 	})
 	return out

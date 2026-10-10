@@ -3,8 +3,7 @@
 // A short, bilingual (EN/DE) statement of what Atlas *is*, for someone who opened
 // the Console without having read the README. The copy lives in the static asset
 // web/key-features.json (guarded by api/keyfeatures_test.go) rather than in code,
-// so it can be edited without touching the app shell — the same split the What's
-// New feed uses (renderWhatsNew in app.js).
+// so it can be edited without touching the app shell.
 //
 // The language is owned by app.js, which shares one preference across the landing
 // page: this module renders the language it is handed and reports a click on its

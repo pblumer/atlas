@@ -184,6 +184,11 @@ type Line struct {
 	// converted keeps the two ids (ADR-0427).
 	LifecycleProcess string            `json:"lifecycleProcess,omitempty"`
 	Operations       map[string]string `json:"operations,omitempty"`
+	// Actions are the product's actions as the release declared them (ADR-0429),
+	// frozen for the same reason: what may later be asked of this position is what
+	// was offered when it was ordered. A line carries Operations or Actions, as its
+	// product did.
+	Actions []catalog.Action `json:"actions,omitempty"`
 	// LifecycleForm is how the lifecycle process runs for this line, frozen with the
 	// binding: a per-position line's later operations are delivered to the instance
 	// its provisioning started
@@ -335,17 +340,55 @@ type LineInstance struct {
 	// deprovision — where the starter knew it (ADR-0425). A lifecycle process is one
 	// process id for all of them, so the id alone no longer says which.
 	Operation string `json:"operation,omitempty"`
+	// CommandID is the command the instance took for the position (ADR-0429): the
+	// caller's command id for an action, the attempt id for the order's own
+	// provision and return. It is what an outcome report names, so the order can say
+	// which action it ends.
+	CommandID string `json:"commandId,omitempty"`
+}
+
+// Command is the instance that took command id for this line, and the action it
+// asked for (its Operation).
+func (l Line) Command(id string) (LineInstance, bool) {
+	for i := len(l.Instances) - 1; i >= 0; i-- {
+		if id != "" && l.Instances[i].CommandID == id {
+			return l.Instances[i], true
+		}
+	}
+	return LineInstance{}, false
 }
 
 // BindingFor is where an operation of this line starts: its frozen binding, in
-// whichever form the product had when the line was placed (ADR-0425).
+// whichever form the product had when the line was placed (ADR-0425). On a lifecycle
+// process, provision and deprovision are the actions of those effects and any other
+// name is an action's key (ADR-0429).
 func (l Line) BindingFor(op string) catalog.Binding {
+	return l.frozenItem().BindingFor(op)
+}
+
+// ActionList is the actions this line froze, in either shape its product said them
+// in (ADR-0429).
+func (l Line) ActionList() []catalog.Action {
+	return l.frozenItem().ActionList()
+}
+
+// ActionNamed is the action this line froze under key, in either shape its product
+// said it in.
+func (l Line) ActionNamed(key string) (catalog.Action, bool) {
+	return l.frozenItem().ActionNamed(key)
+}
+
+// frozenItem is the line's frozen binding as the catalogue item it was taken from,
+// so the line answers every binding question the way the catalogue does.
+func (l Line) frozenItem() catalog.Item {
 	return catalog.Item{
 		ProvisionProcess:   l.ProvisionProcess,
 		DeprovisionProcess: l.DeprovisionProcess,
 		LifecycleProcess:   l.LifecycleProcess,
 		Operations:         l.Operations,
-	}.BindingFor(op)
+		Actions:            l.Actions,
+		LifecycleForm:      l.LifecycleForm,
+	}
 }
 
 // PerPosition reports whether this line's lifecycle runs as one instance per
@@ -401,7 +444,7 @@ func RecordInstance(o Order, ref string, inst LineInstance) (Order, error) {
 			continue
 		}
 		for _, have := range next.Lines[i].Instances {
-			if have.Key == inst.Key && have.Operation == inst.Operation {
+			if have.Key == inst.Key && have.Operation == inst.Operation && have.CommandID == inst.CommandID {
 				return o, nil
 			}
 		}
@@ -552,6 +595,14 @@ func (l Line) ApprovalProcess() string {
 		return p
 	}
 	return l.Approval.Kind
+}
+
+// AtlasApproval reports whether one of Atlas's own approval processes decides this
+// line, rather than a model the installation binds by name. Atlas's own are not
+// given the line's answers (ADR-0441).
+func (l Line) AtlasApproval() bool {
+	_, ok := approvalProcesses[l.Approval.Kind]
+	return ok && l.NeedsApproval()
 }
 
 // Status is where a whole order stands. It is derived from the lines rather than

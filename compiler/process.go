@@ -559,6 +559,20 @@ type ConnectorTaskDetail struct {
 	MailSubject RestExpr
 	Body        RestExpr
 	BodyHTML    RestExpr
+	// Mailbox fields (JobType == MailJobType, ADR-0438). MailOp is the
+	// operation, "" being send — every mail task authored before mailboxes existed.
+	// MailFolder is the folder a list reads, MailMessage the message an operation
+	// addresses and MailDestination where a move files it, each literal-or-FEEL.
+	// MailMaxResults is a list's effective cap, written here by the compiler so the
+	// runtime interprets nothing (I5); MailIncludeBody and MailUnreadOnly are literal
+	// flags. ResultVar (above) receives what list, get and move answer.
+	MailOp          string
+	MailFolder      RestExpr
+	MailMessage     RestExpr
+	MailDestination RestExpr
+	MailMaxResults  int32
+	MailIncludeBody bool
+	MailUnreadOnly  bool
 	// CSV worker fields (JobType == CsvImportJobType, ADR-0139). CsvSource is the
 	// interned name of the process variable holding the raw CSV text (-1 → the
 	// default "csvText"); CsvResult the variable the parsed rows are written to
@@ -627,7 +641,23 @@ type ConnectorTaskDetail struct {
 	// is read only by the in-process user-provisioning worker, which the runner
 	// dispatches by the user job type alone. There is no Worker and no credential:
 	// the worker mutates the internal user store directly, gated to the system project.
-	UserOp          int32
+	UserOp int32
+	// Shop send task fields (JobType == ShopJobType, ADR-0429 §4). ShopMode is what the
+	// task does ("outcome": state how the command this instance carries ended);
+	// ShopAction the product action's key and ShopOutcome the ending it states. All
+	// three are literals fixed at deploy (I5): the publish check reads them to know
+	// that every action is answered, which a value computed at runtime would hide.
+	ShopMode    string
+	ShopAction  string
+	ShopOutcome string
+	// ShopProduct, ShopOrder and ShopPosition say which position a `command` task
+	// acts on: the product is a literal fixed at deploy, the order and the position
+	// literal-or-FEEL values evaluated over the instance's variables when the task
+	// runs. ShopResultVar, when set, receives the command id the act was asked under.
+	ShopProduct     string
+	ShopOrder       RestExpr
+	ShopPosition    RestExpr
+	ShopResultVar   string
 	UserName        RestExpr
 	UserEmail       RestExpr
 	UserDisplayName RestExpr
@@ -957,6 +987,52 @@ type ConnectorTaskDetail struct {
 	// (ADR-0253), not this.
 	AgentModel  int32
 	AgentPrompt RestExpr
+	// Object-store fields (JobType == S3JobType, ADR-0442).
+	// Connector (above) names the configured S3 Worker — the field keeps that name
+	// because the BPMN attribute it is read from does; its access key lives in the
+	// Worker store and the vault, never in a model. S3Op is the interned operation
+	// ("put-object"|"get-object"|"head-object"|"list-objects"|"copy-object"|
+	// "delete-object"|"presign-get"|"presign-put"), and it decides which of the rest are
+	// populated; the compiler refuses a value on an operation that does not use it, so a
+	// field can never be quietly ignored at call time.
+	//
+	// S3Bucket addresses the bucket every operation acts in and S3Key the one object the
+	// seven object-level operations address — a listing has no key, because it addresses
+	// S3Prefix instead. S3Content is the document a put writes and S3ContentType what
+	// those bytes are, which a presigned upload also *binds*: a client using that URL
+	// must send the same type.
+	//
+	// S3Prefix, S3Delimiter, S3StartAfter and S3MaxKeys are a listing's shape — what to
+	// match, how to roll it up at a separator, where to resume from, and how much to
+	// answer with. S3SourceBucket and S3SourceKey are what a copy copies from, which is
+	// how a document moves between prefixes without its bytes entering this process.
+	// S3ExpiresIn is a presigned URL's lifetime in seconds.
+	//
+	// S3Encoding, S3MaxKeys and S3ExpiresIn are compiled structure rather than authored
+	// values, because each decides the shape of a call rather than its content and a
+	// shape that differed per token would not be one; the compiler has already applied
+	// their defaults, so the runtime interprets nothing (I5). S3Metadata are extra
+	// request headers as name/literal-or-FEEL pairs — user metadata under
+	// x-amz-meta-<name>, or an x-amz-* header sent as itself, which is how a model
+	// reaches server-side encryption or a storage class.
+	//
+	// Each RestExpr is a literal-or-FEEL value evaluated over the variables the task
+	// sees at call time; all are the zero value for a non-S3 task. ResultVar (above)
+	// receives what the store returned, for the operations that return anything.
+	S3Op           int32
+	S3Bucket       RestExpr
+	S3Key          RestExpr
+	S3Content      RestExpr
+	S3ContentType  RestExpr
+	S3Encoding     int32
+	S3Prefix       RestExpr
+	S3Delimiter    RestExpr
+	S3StartAfter   RestExpr
+	S3MaxKeys      int32
+	S3SourceBucket RestExpr
+	S3SourceKey    RestExpr
+	S3ExpiresIn    int32
+	S3Metadata     []RestKV
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a
@@ -1381,6 +1457,7 @@ type CompiledProcess struct {
 	ioOutputs          []IOMapping             // shared: zeebe:ioMapping outputs grouped by activity node
 	startEvents        []int32
 	startFormId        int32               // interned start-form id (ADR-0028), -1 if none
+	conditionalStarts  []int32             // process-level start nodes that carried a conditional event definition; read by stage 5 only
 	versionTag         int32               // interned atlas:versionTag revision label, -1 if none
 	instanceTtlNanos   int64               // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
 	historyTtlNanos    int64               // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
@@ -1972,6 +2049,33 @@ func (p *CompiledProcess) ReceivableMessageNames() []string {
 		out = append(out, name)
 	}
 	sort.Strings(out)
+	return out
+}
+
+// MailboxUse is one mail task that reads or changes its Worker's mailbox rather than
+// sending through it: the Worker it names and the operation.
+type MailboxUse struct {
+	ElementID string
+	Worker    string
+	Operation string
+}
+
+// MailboxUses lists the mail tasks whose operation is not send, in node order. It is
+// what the deploy check reads to decide whether the deployer may use each mailbox
+// (ADR-0438); a send is not listed, because who may use a sender is
+// not what that check governs.
+func (p *CompiledProcess) MailboxUses() []MailboxUse {
+	var out []MailboxUse
+	for i := range p.nodes {
+		if p.nodes[i].Type != TypeConnectorTask {
+			continue
+		}
+		d := p.ConnectorTask(p.nodes[i].Detail)
+		if d.JobType != MailJobTypeIndex || d.MailOp == "" {
+			continue
+		}
+		out = append(out, MailboxUse{ElementID: p.ElementBpmnId(int32(i)), Worker: p.Intern(d.Connector), Operation: d.MailOp})
+	}
 	return out
 }
 

@@ -80,6 +80,7 @@ func TranslationGaps(in Input) []Problem {
 			// once per language, because one of the two things this reports is not
 			// a per-language statement at all — see unnamedShapes.
 			out = append(out, unnamedShapes(c.ID, it)...)
+			out = append(out, unlabelledActions(c.ID, it)...)
 		}
 	}
 	return out
@@ -122,6 +123,49 @@ func gapsOf(catalog string, it Item, lang string) []Problem {
 		if missing(v.Texts) {
 			say("name for the shape " + v.ID)
 		}
+	}
+	// The buttons a person presses: a change or a service somebody asks for. A gap,
+	// not a refusal, like every other missing translation (ADR-0429 §10, decision 7).
+	for _, a := range pressedActions(it) {
+		if missing(a.Labels) {
+			say("label for the action " + a.Key)
+		}
+	}
+	return out
+}
+
+// pressedActions are the declared actions a person asks for by pressing something —
+// a change or a service a customer or an operator triggers. The provision and the
+// return are the order's own and carry the portal's own words, and an action only the
+// system triggers has no button at all.
+func pressedActions(it Item) []Action {
+	var out []Action
+	for _, a := range it.Actions {
+		if !deliveredToStrand(a.Effect) {
+			continue
+		}
+		for _, tr := range a.Triggers {
+			if tr == TriggerCustomer || tr == TriggerOperator {
+				out = append(out, a)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// unlabelledActions is the pressed action with a label in no language, once per
+// product for the reason unnamedShapes is: it needs wording, not translating, and the
+// portal falling back to its key is a key nobody chose for a reader.
+func unlabelledActions(catalog string, it Item) []Problem {
+	var out []Problem
+	for _, a := range pressedActions(it) {
+		if described(a.Labels) {
+			continue
+		}
+		out = append(out, Problem{Catalog: catalog, Item: it.ID,
+			Message: "action " + a.Key + " has no label in any language; a button would " +
+				"show its key"})
 	}
 	return out
 }

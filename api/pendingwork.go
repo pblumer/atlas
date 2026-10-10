@@ -120,6 +120,10 @@ func (s *Server) handlePendingWork(w http.ResponseWriter, r *http.Request) {
 	}
 
 	approvals, err := s.approvalsWaitingFor(subject)
+	if errors.Is(err, errLoopClosing) {
+		httpapi.Error(w, http.StatusServiceUnavailable, "pending work: "+err.Error())
+		return
+	}
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "pending work: "+err.Error())
 		return
@@ -184,6 +188,9 @@ func principalRefusal(err error) (int, string) {
 	if errors.Is(err, httpapi.ErrNoSuchPrincipal) {
 		return http.StatusNotFound, err.Error()
 	}
+	if errors.Is(err, errLoopClosing) {
+		return http.StatusServiceUnavailable, "resolve principal: " + err.Error()
+	}
 	return http.StatusInternalServerError, "resolve principal: " + err.Error()
 }
 
@@ -233,7 +240,7 @@ func (s *Server) principalOf(who string) (*httpapi.Principal, error) {
 		out = p
 	})
 	if !ran {
-		return nil, fmt.Errorf("this server is shutting down")
+		return nil, errLoopClosing
 	}
 	return out, opErr
 }

@@ -124,6 +124,24 @@ const (
 	KindJSON
 )
 
+// Label is the word a kind is shown under wherever a result reaches a person: the
+// FEEL evaluate route sends it, and the FEEL assistant reports its own checks with
+// it, so the two cannot come to describe one result differently.
+func (k ValueKind) Label() string {
+	switch k {
+	case KindBool:
+		return "boolean"
+	case KindNumber:
+		return "number"
+	case KindString:
+		return "string"
+	case KindJSON:
+		return "json"
+	default:
+		return "null"
+	}
+}
+
 // Classify reduces a FEEL value to a storable (kind, bool, text) triple: text is
 // the number's canonical decimal string or the string's contents. Lists and
 // contexts are stored under KindJSON as canonical JSON so they round-trip; other

@@ -242,11 +242,15 @@ func decideReconcile(msg reconcileMessage, in reconcileInput) reconcilePlan {
 	}
 	// SystemItems is built from the same index the comparison uses, and not from the
 	// catalogue directly. That is the whole point of taking it from here: a draft
-	// product is not indexed, and neither is the loser of a reference two products
-	// claim — so neither can enter a subject scope. Reading the catalogue again
-	// would put both back, and a recorded right on either would then be reported
-	// missing by a leaver run for no better reason than that nothing observed it.
-	for _, it := range itemByRef {
+	// product is not indexed, and a reference two products claim is attributed to
+	// neither — so none of them can enter a subject scope through it. Reading the
+	// catalogue again would put them back, and a recorded right on any would then be
+	// reported missing by a leaver run for no better reason than that nothing
+	// observed it.
+	for ref, it := range itemByRef {
+		if _, clash := ambiguous[ref]; clash {
+			continue
+		}
 		plan.SystemItems[it.ID] = true
 	}
 	add := func(d discrepancy) { plan.Found = append(plan.Found, d) }
@@ -326,6 +330,21 @@ func decideReconcile(msg reconcileMessage, in reconcileInput) reconcilePlan {
 					"this subject holds, so what it carries about the pair says nothing either " +
 					"way. Name the reference in refs, or the subject in subjects"})
 			continue
+		}
+		// A reference two products claim is attributed to neither. The index still
+		// holds the first claimant, so asking it would credit the observation to
+		// whichever product sorts first — and report a right the inventory records as
+		// held and not recorded.
+		if others, clash := ambiguous[ref]; clash {
+			if !scopeRefs[ref] {
+				// In scope only through the subject: said against the holder, as an
+				// unmodelled reference is, because the reference itself was never named.
+				plan.Counts.Ambiguous++
+				note(discrepancy{Kind: recAmbiguous, System: system, Ref: ref, Principal: subject,
+					Why: "products " + strings.Join(others, ", ") + " all claim this reference, so " +
+						"what this subject holds under it cannot be attributed. Nothing was compared for it"})
+			}
+			continue // in ref scope it is already reported once, against the reference
 		}
 		it, known := itemByRef[ref]
 		if !known {
