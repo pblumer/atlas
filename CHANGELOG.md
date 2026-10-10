@@ -14,6 +14,15 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A step of a public wizard belongs to the visitor who started it.** A public wizard's
+  steps name nobody, and by the rule that an unaddressed task is anybody's to pick up they
+  would have sat in every signed-in inbox, every customer's half-filled screens included
+  (ADR-0449, refining ADR-0421). They are now listed, read by key, completed, claimed and
+  released only by operators and administrators; anyone else is told the step belongs to
+  the visitor who started the form. Nobody signed in is carried into a public sitting, and
+  nothing in it is claimed. Until the visitor can continue through the public link, which
+  is the next step, an operator is the only one who can move a public wizard on.
+
 - **A wizard carries the signed-in person from screen to screen.** Completing a step of a
   wizard (ADR-0449), and starting a process that runs into one, now answers with where the
   sitting stands: its next screen, already claimed for the person so it leaves every
