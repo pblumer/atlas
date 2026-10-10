@@ -927,6 +927,12 @@ const publicFormPersonalBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN
 // form would put personal data from the open internet into the log in the clear.
 func TestThePublicFormDoorSealsAndFailsClosed(t *testing.T) {
 	srv := newServerForErrors(t)
+	// The link's form asks for both values the submissions below carry; a public start
+	// takes no field its form does not.
+	if err := srv.forms.Save(form{ID: "bestellformular", Schema: `{"type":"default","components":[` +
+		`{"type":"textfield","key":"personalnummer"},{"type":"textfield","key":"vorname"}]}`}); err != nil {
+		t.Fatalf("save form: %v", err)
+	}
 	code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", publicFormPersonalBPMN, "application/xml")
 	if code != http.StatusOK {
 		t.Fatalf("deploy: status=%d body=%s", code, body)
