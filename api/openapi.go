@@ -533,7 +533,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Element instance key and stats", tObject())}},
 
 		{"GET", "/api/v1/tasks", s.handleListTasks, apiOp{
-			summary: "List active user tasks, newest first — capped per call (?limit=, default 500, max 5000). Answers {items, total, totalExact, truncated, nextCursor}; pass nextCursor as ?before= to page to older tasks. On a capped page total is a floor — counting every open task is a walk, and GET /api/v1/task-folders/counts is what pays for it. ?processInstance=<key> scopes the list to one instance (flood-proof, for embedded clients). ?folder=<id> scopes it to a saved folder's rule, paged the same way", tag: "Tasks", role: RoleUser, resp: jsonBody("Tasks", tPage())}},
+			summary: "List active user tasks, newest first — capped per call (?limit=, default 500, max 5000). Answers {items, total, totalExact, truncated, nextCursor}; pass nextCursor as ?before= to page to older tasks. On a capped page total is a floor — counting every open task is a walk, and GET /api/v1/task-folders/counts is what pays for it. ?processInstance=<key> scopes the list to one instance (flood-proof, for embedded clients). ?folder=<id> scopes it to a saved folder's rule, paged the same way. ?content=1 adds to each row the short text and number values of the fields its form asks for — none for a task without a form", tag: "Tasks", role: RoleUser, resp: jsonBody("Tasks", tPage())}},
 		{"GET", "/api/v1/tasks/{key}", s.handleGetTask, apiOp{
 			summary: "Fetch one open user task by key — the deep-link primitive so a task stays reachable outside a capped list page", tag: "Tasks", role: RoleUser, resp: jsonBody("Task", tObject())}},
 		{"POST", "/api/v1/tasks/{key}/complete", s.handleCompleteTask, apiOp{

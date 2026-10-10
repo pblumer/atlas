@@ -92,7 +92,9 @@ je Kontotyp** und **Live-UPN-Vorschau**. Zwei Einbett-Wege:
    Ohne Token läuft das Widget im **Demo-Modus** und zeigt nur, was gesendet würde.
 
 Beide Wege posten an `POST /public/forms/{token}/start` (ADR-0029) —
-token-basiert, rate-limited, ohne Login, ohne Cookie.
+token-basiert, rate-limited, ohne Login, ohne Cookie. atlas nimmt dort nur die
+Felder des Startformulars `account-order` an; ein eigenes Widget, das weitere
+Variablen sendet, erhält **400** und startet nichts.
 
 ## Deployen (über die atlas-MCP-Tools)
 

@@ -64,6 +64,19 @@ _Changed_ / _Removed_ for each version.
   process whose public wizard has no such timer. The engine runs a wizard like any other
   subprocess.
 
+### Changed
+
+- **A deploy refuses an event-based gateway atlas does not run.** atlas runs an
+  event-based gateway as the exclusive deferred choice inside a running instance
+  (ADR-0110). A gateway marked `instantiate="true"`, which starts the instance, or
+  `eventGatewayType="Parallel"`, which waits for every event, deployed without a word
+  and ran as that exclusive choice — something other than its diagram says (#804). A
+  deploy now refuses it with the stage-5 rule `event-gateway.kind`, anchored to the
+  gateway, and the Modeler flags it while it is drawn. A definition already deployed
+  with one still loads on restart and keeps the behaviour it had, with the finding
+  logged beside it (ADR-0177, ADR-0393). An explicit `instantiate="false"` or
+  `eventGatewayType="Exclusive"` is the default and still deploys.
+
 ### Fixed
 
 - **A task holder reads the fields of a grouped form.** What a person holding a task may
@@ -85,6 +98,25 @@ _Changed_ / _Removed_ for each version.
   left out, as the form never submits one. The check covers names and structure; a
   field's type, whether it is required and its pattern stay the form's validation in the
   browser.
+- **A REST task's OAuth2 settings survive the Modeler, and the Modeler can write them.**
+  The compiler reads `authTokenUrl`, `authClientId` and `authScope` for the
+  client-credentials grant (ADR-0152), but the Modeler's moddle did not declare them, so
+  opening such a task and pressing Save stripped all three; the task then failed to
+  deploy with "uses oauth2 auth but names no tokenUrl" (#468). They are declared now,
+  and the REST worker's panel offers *OAuth2 client credentials* with a field for each.
+  The guard that compares the compiler's worker attributes with the moddle covers every
+  Worker Type, read from `compiler/parse.go`, instead of a hand-kept list of two.
+
+### Security
+
+- **A task row's content carries only what the task's form asks for.** `GET
+  /api/v1/tasks?content=1` — what the inbox's search reads — filled each row with up to
+  40 short values from the task's whole scope. An open task, which every signed-in
+  account sees, so handed an unrelated account values the instance's variables endpoint
+  refuses it (ADR-0275, audit F11). A row now carries the values of the fields its form
+  asks for, under the same allowlist the variables endpoint gives a task holder, and a
+  task without a form carries none. The rule is the same for every viewer, operators
+  included; a page asked for its content is now read off the run loop.
 
 ## [0.9.1] — 2026-10-09
 
