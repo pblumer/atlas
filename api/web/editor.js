@@ -955,7 +955,21 @@ function unsupportedReason(bo) {
   for (const d of (bo.eventDefinitions || [])) {
     if (UNSUPPORTED_EVENT_DEFS[d.$type]) return UNSUPPORTED_EVENT_DEFS[d.$type];
   }
-  return conditionalStartReason(bo);
+  return conditionalStartReason(bo) || eventGatewayReason(bo);
+}
+
+// eventGatewayReason flags the two kinds of event-based gateway atlas does not run. It
+// runs the exclusive deferred choice inside a running instance (ADR-0110); a gateway that
+// starts the instance (instantiate) or waits for every event (a Parallel
+// eventGatewayType) the compiler refuses at deploy (event-gateway.kind, #804), and the
+// badge says so while the author is still drawing. The moddle reads instantiate as a
+// boolean; a model written by hand may still carry it as text.
+function eventGatewayReason(bo) {
+  if (bo.$type !== "bpmn:EventBasedGateway") return null;
+  const instantiate = String(bo.instantiate).toLowerCase() === "true";
+  const parallel = String(bo.eventGatewayType || "").toLowerCase() === "parallel";
+  if (!instantiate && !parallel) return null;
+  return "atlas runs an event-based gateway only as the exclusive deferred choice inside a running instance: the first event wins and the others are withdrawn. An instantiating or parallel event gateway is refused at deploy; to start the process on any of several events, use message, timer or signal start events";
 }
 
 // conditionalStartReason flags the one event definition whose support depends on where

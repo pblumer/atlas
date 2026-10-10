@@ -1458,6 +1458,7 @@ type CompiledProcess struct {
 	startEvents        []int32
 	startFormId        int32               // interned start-form id (ADR-0028), -1 if none
 	conditionalStarts  []int32             // process-level start nodes that carried a conditional event definition; read by stage 5 only
+	eventGatewayKinds  []eventGatewayKind  // event-based gateways of a kind atlas does not run; read by stage 5 only
 	versionTag         int32               // interned atlas:versionTag revision label, -1 if none
 	instanceTtlNanos   int64               // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
 	historyTtlNanos    int64               // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)

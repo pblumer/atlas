@@ -132,7 +132,25 @@ const (
 	// reload and keeps the behaviour it had (ADR-0177, ADR-0393,
 	// ADR-0429).
 	RuleConditionalStart = "start.conditional"
+
+	// RuleEventGatewayKind marks an event-based gateway of a kind atlas does not run:
+	// instantiate="true", which makes the gateway start the instance, or
+	// eventGatewayType="Parallel", which makes it wait for every event rather than the
+	// first. atlas runs the exclusive deferred choice inside a running instance
+	// (ADR-0110) and used to run these as that, so the model deployed and did something
+	// other than its diagram says. A deploy refuses it; a definition already deployed
+	// with one is brought back on reload and keeps the behaviour it had (ADR-0177,
+	// ADR-0393, #804).
+	RuleEventGatewayKind = "event-gateway.kind"
 )
+
+// eventGatewayKind is one event-based gateway marked as a kind atlas does not run,
+// recorded at compile time for stage 5 (RuleEventGatewayKind).
+type eventGatewayKind struct {
+	Node        int32
+	Instantiate bool // instantiate="true": the gateway starts the instance
+	Parallel    bool // eventGatewayType="Parallel": it waits for every event
+}
 
 // Rule slugs for whole-model dry-run findings that [ValidateModel] raises outside
 // the per-node graph checks — a fault that stops the compile before a linearized
@@ -187,6 +205,7 @@ func Validate(cp *CompiledProcess) []Problem {
 	ps = append(ps, checkTransactions(cp)...)
 	ps = append(ps, checkTimerStartSchedules(cp)...)
 	ps = append(ps, checkConditionalStarts(cp)...)
+	ps = append(ps, checkEventGatewayKinds(cp)...)
 	ps = append(ps, checkLoopBounds(cp)...)
 	ps = append(ps, checkLoopCounterMappings(cp)...)
 	ps = append(ps, checkDottedTargets(cp)...)
@@ -712,6 +731,27 @@ func checkConditionalStarts(cp *CompiledProcess) []Problem {
 		ps = append(ps, problem(cp, id, SeverityError, RuleConditionalStart,
 			fmt.Sprintf("%s is a conditional start event, which atlas does not run: a condition reads variables, and before an instance exists there are none, so it would deploy as a plain start and never start on its own; put the condition inside a running instance (a conditional intermediate catch, boundary event or event subprocess), or start the process with the message or timer that observes it",
 				describeNode(cp, id))))
+	}
+	return ps
+}
+
+// checkEventGatewayKinds refuses an event-based gateway of a kind atlas does not run
+// (RuleEventGatewayKind). The compile keeps it as the exclusive choice it has always
+// run as, and records what it was marked as, so this check can say so at deploy while
+// a reload still brings the definition back unchanged.
+func checkEventGatewayKinds(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	for _, k := range cp.eventGatewayKinds {
+		var marked []string
+		if k.Instantiate {
+			marked = append(marked, `instantiate="true", which would start the instance`)
+		}
+		if k.Parallel {
+			marked = append(marked, `eventGatewayType="Parallel", which would wait for every event`)
+		}
+		ps = append(ps, problem(cp, k.Node, SeverityError, RuleEventGatewayKind,
+			fmt.Sprintf("%s is marked %s; atlas runs an event-based gateway only as the exclusive deferred choice inside a running instance, where the first event wins and the others are withdrawn. Remove the attribute, or to start the process on any of several events use message, timer or signal start events",
+				describeNode(cp, k.Node), strings.Join(marked, " and "))))
 	}
 	return ps
 }

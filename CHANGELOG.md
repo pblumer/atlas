@@ -32,6 +32,19 @@ _Changed_ / _Removed_ for each version.
   more than its form: the public page and the example widget send only their form's
   fields. Only the names are checked, not the values.
 
+### Changed
+
+- **A deploy refuses an event-based gateway atlas does not run.** atlas runs an
+  event-based gateway as the exclusive deferred choice inside a running instance
+  (ADR-0110). A gateway marked `instantiate="true"`, which starts the instance, or
+  `eventGatewayType="Parallel"`, which waits for every event, deployed without a word
+  and ran as that exclusive choice — something other than its diagram says (#804). A
+  deploy now refuses it with the stage-5 rule `event-gateway.kind`, anchored to the
+  gateway, and the Modeler flags it while it is drawn. A definition already deployed
+  with one still loads on restart and keeps the behaviour it had, with the finding
+  logged beside it (ADR-0177, ADR-0393). An explicit `instantiate="false"` or
+  `eventGatewayType="Exclusive"` is the default and still deploys.
+
 ### Fixed
 
 - **A REST task's OAuth2 settings survive the Modeler, and the Modeler can write them.**

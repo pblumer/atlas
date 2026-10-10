@@ -818,7 +818,11 @@ Making processes wait, react, and time out.
   losers (their subscriptions/timers self-retire). The compiler validates every target is a
   catch event; recovery rebuilds the armed race and its group from the log, so the first fire
   after a restart still wins — no new recovery path. Authored in the Modeler (bpmn-js draws
-  it natively) ([ADR-0110](docs/adr/0110-event-based-gateways.md)).
+  it natively) ([ADR-0110](docs/adr/0110-event-based-gateways.md)). Only this exclusive kind
+  runs: a gateway marked `instantiate="true"` or `eventGatewayType="Parallel"` is refused at
+  deploy (stage-5 rule `event-gateway.kind`, #804) instead of running as the exclusive choice,
+  and the Modeler flags it while it is drawn; a definition already deployed with one still
+  loads. The parallel semantics themselves are not built.
 - ✅ **Terminate end events** ([ADR-0116](docs/adr/0116-terminate-end-events.md)): an
   `<endEvent><terminateEventDefinition/>` — the "abort" end — ends its **enclosing flow scope** at
   once, terminating every other live token in the scope (cancelling their jobs). At the process
