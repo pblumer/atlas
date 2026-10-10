@@ -34,6 +34,14 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A REST task's OAuth2 settings survive the Modeler, and the Modeler can write them.**
+  The compiler reads `authTokenUrl`, `authClientId` and `authScope` for the
+  client-credentials grant (ADR-0152), but the Modeler's moddle did not declare them, so
+  opening such a task and pressing Save stripped all three; the task then failed to
+  deploy with "uses oauth2 auth but names no tokenUrl" (#468). They are declared now,
+  and the REST worker's panel offers *OAuth2 client credentials* with a field for each.
+  The guard that compares the compiler's worker attributes with the moddle covers every
+  Worker Type, read from `compiler/parse.go`, instead of a hand-kept list of two.
 - **A form-js group or dynamic list with a path is read at that path.** The allowlist
   of fields a task holder may read took the keys inside such a container as variables
   of their own, so a task's form could not prefill `address` from a group whose path is
