@@ -264,7 +264,8 @@ func (s *Server) handlePublicFormSchema(w http.ResponseWriter, r *http.Request) 
 // the submitted form data as start variables, through the same single-writer path
 // every other start uses (ADR-0029/ADR-0002). It reads nothing back and touches
 // no other process. Rate-limited and payload-capped. 404 if the token is unknown
-// or its process is no longer deployed.
+// or its process is no longer deployed; 400 if the submission carries a value the
+// link's form has no field for (publicstartfields.go).
 func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 	s.setPublicCORS(w, r)
 	if !s.publicRate.allow(httpapi.ClientIP(r)) {
@@ -288,15 +289,35 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 	// start: sealing reads the vault and must not happen on the loop, and the command
 	// must already hold ciphertext. A token that resolves to nothing seals nothing and
 	// falls through to the 404 the start below reports.
-	var sealDefKey uint64
+	//
+	// The same visit reads the form the link renders, so that a value the form has no
+	// field for is refused before anything is sealed or started. It is the form the
+	// schema route serves, link.FormID, because that is what the visitor was shown. A
+	// form that is gone has no fields, so it accepts an empty submission and nothing
+	// else.
+	var (
+		sealDefKey uint64
+		schema     string
+		formErr    error
+	)
 	s.do(func() {
 		if link, ok, e := s.publicLinks.Get(token); e == nil && ok {
 			if d := s.latestDeploymentByProcessID(link.ProcessID); d != nil {
 				sealDefKey = d.Key
+				f, _, e := s.forms.Get(link.FormID)
+				schema, formErr = f.Schema, e
 			}
 		}
 	})
+	if formErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read form: "+formErr.Error())
+		return
+	}
 	if sealDefKey != 0 {
+		if bad := formShapeOf([]byte(schema)).notOnForm(vars); len(bad) > 0 {
+			httpapi.Error(w, http.StatusBadRequest, "not fields of this form: "+strings.Join(bad, ", "))
+			return
+		}
 		if err := s.encipherStartVars(sealDefKey, vars); err != nil {
 			httpapi.Error(w, http.StatusBadRequest, err.Error())
 			return
