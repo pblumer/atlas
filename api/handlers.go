@@ -4601,10 +4601,11 @@ type taskResp struct {
 	// creation stamp, or for a job written before it carried one, the activation of the
 	// element it waits on. Omitted when neither is known.
 	CreatedAt int64 `json:"createdAt,omitempty"`
-	// Content is what the task is about, as the short text values visible at its scope
-	// (a recipient's id, an order, an address), so the inbox can find a task by what is
-	// in it and not only by what it is called. Only filled when the caller asks for it
-	// with ?content=1, because it costs a variable read per row (see taskContent).
+	// Content is what the task is about, as the short text values of the fields its
+	// form asks for (a recipient's id, an order, an address), so the inbox can find a
+	// task by what is in it and not only by what it is called. A task without a form
+	// has none. Only filled when the caller asks for it with ?content=1, because it
+	// costs a variable and a form read per row (see taskContent).
 	Content []string `json:"content,omitempty"`
 }
 
@@ -4671,9 +4672,12 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 
 	// A viewer who does not see every task gets the same page with what is not
 	// theirs skipped (see [Server.taskVisibleTo]). That walk grows with the tasks it
-	// skips, so it runs off the loop like a folder does; operators and
-	// administrators keep the loop-bound page below.
-	if viewer := taskfolder.Viewer(r); s.authEnabled && !viewer.SeesAll {
+	// skips, so it runs off the loop like a folder does. A page asked for its content
+	// goes the same way whoever asks: each row's content reads the variables at its
+	// scope and the form that allows them, which is disk work the writer must not
+	// wait on. Operators and administrators keep the loop-bound page below for the
+	// plain rows.
+	if viewer := taskfolder.Viewer(r); wantsTaskContent(r) || (s.authEnabled && !viewer.SeesAll) {
 		s.listVisibleTasks(w, viewer, limit, before, wantsTaskContent(r))
 		return
 	}
@@ -4682,7 +4686,6 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 	truncated := false
 	var nextCursor uint64
 	var scanErr error
-	content := wantsTaskContent(r)
 	s.do(func() {
 		// Newest-first so a capped page shows the most recently created tasks — the
 		// ones a just-started instance is parked on — instead of the oldest backlog
@@ -4697,9 +4700,6 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			tr := s.enrichTask(jobKey, jv)
-			if content {
-				tr.Content = taskContent(s.store, tr)
-			}
 			tasks = append(tasks, tr)
 			nextCursor = jobKey // desc scan: the last kept key is the smallest on the page
 			return nil
