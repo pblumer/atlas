@@ -66,6 +66,7 @@ func (s *Server) handleCreatePublicLink(w http.ResponseWriter, r *http.Request) 
 		notDeployed bool
 		notExec     bool
 		noForm      bool
+		untimed     string
 		opErr       error
 	)
 	s.do(func() {
@@ -77,6 +78,11 @@ func (s *Server) handleCreatePublicLink(w http.ResponseWriter, r *http.Request) 
 		// A non-executable process must not be published for public starting.
 		if d.cp != nil && !d.cp.IsExecutable() {
 			notExec = true
+			return
+		}
+		// A public wizard with no timeout would keep every sitting an anonymous visitor
+		// abandons as a live instance for good (ADR-0449).
+		if untimed = d.cp.UntimedPublicWizard(); untimed != "" {
 			return
 		}
 		formID := d.cp.StartFormId()
@@ -111,6 +117,9 @@ func (s *Server) handleCreatePublicLink(w http.ResponseWriter, r *http.Request) 
 		httpapi.Error(w, http.StatusNotFound, "no deployed process with that id")
 	case notExec:
 		httpapi.Error(w, http.StatusConflict, "process is not executable and cannot be published")
+	case untimed != "":
+		httpapi.Error(w, http.StatusConflict, "the public wizard \""+untimed+"\" has no interrupting timer boundary event, "+
+			"so a sitting a visitor abandons would stay open for good; attach one before publishing")
 	case noForm:
 		httpapi.Error(w, http.StatusBadRequest, "the process has no start form to publish")
 	default:
@@ -349,6 +358,12 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 		if ambiguous = untriggeredStartRefusal(d.cp); ambiguous != "" {
 			return
 		}
+		// A redeploy may have added a public wizard with no timeout since the link was
+		// minted; the link refuses it as publishing would have (ADR-0449).
+		if d.cp != nil && d.cp.UntimedPublicWizard() != "" {
+			notExec = true
+			return
+		}
 		found = true
 		s.proc.CreateInstance(d.Key, vars...)
 	})
@@ -361,8 +376,9 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "start: "+runErr.Error())
 	case notExec, ambiguous != "":
-		// The same answer for both: a person filling a public form cannot act on
-		// the model's shape, and the operator reads the reason off the link's process.
+		// The same answer for all three, an untimed public wizard included: a person
+		// filling a public form cannot act on the model's shape, and the operator reads
+		// the reason off the link's process.
 		httpapi.Error(w, http.StatusConflict, "process is not executable and cannot be started")
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "unknown or revoked link")

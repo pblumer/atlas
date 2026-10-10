@@ -132,6 +132,35 @@ const (
 	// reload and keeps the behaviour it had (ADR-0177, ADR-0393,
 	// ADR-0429).
 	RuleConditionalStart = "start.conditional"
+
+	// The wizard rules (ADR-0449). A wizard is an embedded subprocess marked
+	// atlas:wizard: one sitting of one filler, walked user task by user task.
+	//
+	// RuleWizardValue marks an atlas:wizard value that names no kind. An error: the
+	// author meant something by it, and whatever it was would silently not happen.
+	RuleWizardValue = "wizard.value"
+	// RuleWizardNested marks a wizard inside a wizard. An error: a filler sees one
+	// sitting at a time, so a sitting within a sitting has no meaning they could see.
+	RuleWizardNested = "wizard.nested"
+	// RuleWizardEventSubProcess marks an event subprocess marked as a wizard. An
+	// error: nobody enters an event subprocess, so there is no filler to carry.
+	RuleWizardEventSubProcess = "wizard.event-subprocess"
+	// RuleWizardPublicAssignment marks a user task inside a public wizard that names an
+	// assignee or candidate groups. An error: the holder of a public wizard's step is
+	// whoever holds the sitting's pass, and a second answer to "who holds this" is one
+	// too many.
+	RuleWizardPublicAssignment = "wizard.public-assignment"
+	// RuleWizardWait marks an element inside a wizard that waits on something other
+	// than the filler: a message, a signal, a timer, a condition, an event-based race,
+	// or a called process, whose steps live in another instance the continuation does
+	// not follow. A warning: it runs, but the filler is left looking at a screen that
+	// says to wait.
+	RuleWizardWait = "wizard.wait"
+	// RuleWizardNoTimeout marks a wizard with no interrupting timer boundary event. A
+	// warning: a sitting nobody finishes then stays open for good. For a public wizard
+	// the publication of a start link refuses it (UntimedPublicWizard), because there
+	// every abandoned attempt of an anonymous visitor would stay a live instance.
+	RuleWizardNoTimeout = "wizard.no-timeout"
 )
 
 // Rule slugs for whole-model dry-run findings that [ValidateModel] raises outside
@@ -193,7 +222,64 @@ func Validate(cp *CompiledProcess) []Problem {
 	ps = append(ps, checkVariableShadowsDataObject(cp)...)
 	ps = append(ps, checkAgentTools(cp)...)
 	ps = append(ps, checkDecisionBindings(cp)...)
+	ps = append(ps, checkWizards(cp)...)
 	return ps
+}
+
+// checkWizards holds a wizard subprocess to the shape ADR-0449 gives it: a known kind,
+// not nested, not event-triggered, bounded by a timer, steps in a public wizard
+// addressed to nobody, and nothing inside it that waits on anyone but the filler.
+func checkWizards(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	for _, id := range cp.invalidWizards {
+		ps = append(ps, problem(cp, id, SeverityError, RuleWizardValue,
+			fmt.Sprintf(`%s has an atlas:wizard value atlas does not know: it is "internal" for signed-in fillers or "public" for the anonymous filler of a public start link`,
+				describeNode(cp, id))))
+	}
+	for i := range cp.nodes {
+		id := int32(i)
+		n := &cp.nodes[i]
+		if n.Wizard != WizardNone {
+			if n.EventSub >= 0 {
+				// The refusal is the whole answer: a timer on it or a wizard around it
+				// cannot make an event subprocess something a filler walks.
+				ps = append(ps, problem(cp, id, SeverityError, RuleWizardEventSubProcess,
+					fmt.Sprintf("%s is an event subprocess marked as a wizard: nobody enters an event subprocess, so there is no filler to carry from step to step", describeNode(cp, id))))
+				continue
+			}
+			if outer := cp.EnclosingWizard(id); outer >= 0 {
+				ps = append(ps, problem(cp, id, SeverityError, RuleWizardNested,
+					fmt.Sprintf("%s is a wizard inside the wizard %q: a filler walks one sitting at a time, so remove the mark from one of them", describeNode(cp, id), cp.ElementBpmnId(outer))))
+			}
+			if !cp.timedOut(id) {
+				ps = append(ps, problem(cp, id, SeverityWarning, RuleWizardNoTimeout,
+					fmt.Sprintf("%s is a wizard with no interrupting timer boundary event, so a sitting nobody finishes stays open for good; attach one to say when it is abandoned", describeNode(cp, id))))
+			}
+			continue
+		}
+		w := cp.EnclosingWizard(id)
+		if w < 0 {
+			continue
+		}
+		switch n.Type {
+		case TypeUserTask:
+			if d := cp.UserTask(n.Detail); cp.nodes[w].Wizard == WizardPublic && addressed(d) {
+				ps = append(ps, problem(cp, id, SeverityError, RuleWizardPublicAssignment,
+					fmt.Sprintf("%s is a step of the public wizard %q and names an assignee or candidate groups: a public wizard's steps belong to the anonymous filler who started it, so leave the assignment empty", describeNode(cp, id), cp.ElementBpmnId(w))))
+			}
+		case TypeReceiveTask, TypeMessageCatchEvent, TypeSignalCatchEvent, TypeTimerCatchEvent,
+			TypeConditionalCatchEvent, TypeEventBasedGateway, TypeCallActivity:
+			ps = append(ps, problem(cp, id, SeverityWarning, RuleWizardWait,
+				fmt.Sprintf("%s inside the wizard %q waits on something other than the filler, who is left on a screen that says to wait; a called process's steps are not followed at all. Move it after the wizard", describeNode(cp, id), cp.ElementBpmnId(w))))
+		}
+	}
+	return ps
+}
+
+// addressed reports whether a user task names anybody: an assignee or candidate
+// groups, written as a literal or as an expression.
+func addressed(d *UserTaskDetail) bool {
+	return d.Assignee >= 0 || d.CandidateGroups >= 0 || d.AssigneeExpr != nil || d.CandidateGroupsExpr != nil
 }
 
 // checkDecisionBindings refuses a local business rule task bound with `versionTag`

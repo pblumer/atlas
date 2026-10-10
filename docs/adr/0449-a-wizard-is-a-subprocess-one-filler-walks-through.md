@@ -1,7 +1,7 @@
 # ADR-0449: A wizard is a subprocess one filler walks through
 
 - **Status:** Proposed
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-10-10
 - **Deciders:** Atlas maintainers
 - **Open question:** How often anonymous fillers abandon a public wizard, and how many

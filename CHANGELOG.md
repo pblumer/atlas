@@ -12,6 +12,21 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **A subprocess can be marked as a wizard.** `atlas:wizard="internal"` or `"public"` on an
+  embedded subprocess marks it as one sitting of one person: its user tasks are the
+  screens of a multi-step form, and the gateways between them decide which screen
+  follows which answer (ADR-0449). This is the first step of that record. The Modeler
+  offers the mark in the subprocess's Implement panel and draws a badge on a wizard, and
+  the deploy checks the rules: a value atlas does not know, a wizard inside a wizard, an
+  event subprocess marked as one, and an assignee or candidate groups on a step of a
+  public wizard are refused; an element inside a wizard that waits on something other
+  than the person, and a wizard with no interrupting timer boundary event, are warned
+  about. A start link is not published, and an existing link does not start, for a
+  process whose public wizard has no such timer. The engine runs a wizard like any other
+  subprocess; carrying the person from one screen to the next follows in a later step.
+
 ### Fixed
 
 - **A public start link accepts only what its form can submit.** `POST

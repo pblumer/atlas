@@ -210,7 +210,34 @@ type CompiledNode struct {
 	EventSubStart   int32 // offset into eventSubs (the event-subprocess handler nodes nested directly in this scope)
 	EventSubCount   int32 // number of event subprocesses in this scope (0 for a node that hosts none)
 	Transaction     bool  // this subprocess is a <transaction>: it may hold a cancel end event and host a cancel boundary (ADR-0108)
-	Lane            int32 // index into lanes, -1 if this node is in no lane; organizational metadata with no execution effect (ADR-0121)
+	// Wizard is atlas:wizard on an embedded subprocess, WizardNone on every other node
+	// (ADR-0449). It sits in the padding after Transaction, so the node does not grow.
+	Wizard WizardKind
+	Lane   int32 // index into lanes, -1 if this node is in no lane; organizational metadata with no execution effect (ADR-0121)
+}
+
+// WizardKind says whether, and for whom, an embedded subprocess is a wizard: one
+// sitting of one filler, walked user task by user task (ADR-0449). The engine runs a
+// wizard exactly like any other subprocess. What the mark changes is how the API
+// carries a filler from one step to the next, and who may fill the steps.
+type WizardKind uint8
+
+const (
+	WizardNone     WizardKind = iota // an ordinary subprocess, or not a subprocess at all
+	WizardInternal                   // atlas:wizard="internal": signed-in fillers
+	WizardPublic                     // atlas:wizard="public": the anonymous filler of a public start link
+)
+
+// String names the kind as the model writes it.
+func (k WizardKind) String() string {
+	switch k {
+	case WizardInternal:
+		return "internal"
+	case WizardPublic:
+		return "public"
+	default:
+		return ""
+	}
 }
 
 // LaneDetail is one BPMN lane: an organizational partition of the process's flow nodes with no
@@ -1458,6 +1485,7 @@ type CompiledProcess struct {
 	startEvents        []int32
 	startFormId        int32               // interned start-form id (ADR-0028), -1 if none
 	conditionalStarts  []int32             // process-level start nodes that carried a conditional event definition; read by stage 5 only
+	invalidWizards     []int32             // subprocess nodes whose atlas:wizard named no kind; read by stage 5 only (ADR-0449)
 	versionTag         int32               // interned atlas:versionTag revision label, -1 if none
 	instanceTtlNanos   int64               // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
 	historyTtlNanos    int64               // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
@@ -1552,6 +1580,57 @@ func (p *CompiledProcess) BoundaryEvent(detail int32) *BoundaryEventDetail {
 // `<subProcess triggeredByEvent="true">` armed by its start event's event definition
 // rather than entered by a flow (ADR-0082).
 func (p *CompiledProcess) IsEventSubProcess(id int32) bool { return p.nodes[id].EventSub >= 0 }
+
+// Wizard reports the wizard kind of node id (ADR-0449): WizardNone for every node but
+// an embedded subprocess marked atlas:wizard.
+func (p *CompiledProcess) Wizard(id int32) WizardKind { return p.nodes[id].Wizard }
+
+// EnclosingWizard returns the nearest wizard subprocess enclosing node id, and -1 when
+// none does (ADR-0449). It walks the compiled FlowScope chain, so the answer is the
+// deploy-time graph's and costs the nesting depth; nothing on the processor's path
+// asks it.
+//
+// The walk ends at an index the graph does not hold, and after as many steps as the
+// graph has nodes. Validate also runs on processes a Builder assembled by hand, and a
+// malformed chain has to end in "none" rather than in a panic or a loop.
+func (p *CompiledProcess) EnclosingWizard(id int32) int32 {
+	s := p.nodes[id].FlowScope
+	for range p.nodes {
+		if s < 0 || int(s) >= len(p.nodes) {
+			return -1
+		}
+		if p.nodes[s].Wizard != WizardNone {
+			return s
+		}
+		s = p.nodes[s].FlowScope
+	}
+	return -1
+}
+
+// UntimedPublicWizard returns the BPMN id of a public wizard that no interrupting timer
+// boundary event bounds, and "" when the process has none (ADR-0449). A public start link
+// is refused for such a process: every sitting an anonymous filler abandons would stay a
+// live instance, holding what they typed, for as long as the server runs.
+func (p *CompiledProcess) UntimedPublicWizard() string {
+	for id := range p.nodes {
+		if p.nodes[id].Wizard == WizardPublic && !p.timedOut(int32(id)) {
+			return p.ElementBpmnId(int32(id))
+		}
+	}
+	return ""
+}
+
+// timedOut reports whether an interrupting timer boundary event is attached to node id:
+// the bound ADR-0449 asks every wizard to state, because it is what ends a sitting
+// nobody finishes.
+func (p *CompiledProcess) timedOut(id int32) bool {
+	for _, be := range p.BoundaryEvents(id) {
+		if d := p.BoundaryEvent(p.nodes[be].Detail); d.Kind == BoundaryTimer && d.Interrupting {
+			return true
+		}
+	}
+	return false
+}
 
 // EventSubProcess returns the event-subprocess detail at the given table index — the
 // trigger the runtime arms while the parent scope runs (ADR-0082).

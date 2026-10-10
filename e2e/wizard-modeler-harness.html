@@ -1,0 +1,83 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas wizard modeler e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountEditor against a mock `api`, to verify the
+         subprocess's Wizard section and badge (atlas:wizard, ADR-0449). The diagram holds an
+         internal wizard bounded by a timer, a public wizard, an ordinary subprocess, one
+         carrying a value atlas does not know, and an event subprocess, which is never
+         offered the mark. Mounted in deployment mode (key set, draftId null) so no live
+         collaboration SSE is attached. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountEditor } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+
+      // sub writes one expanded subprocess at (x, y) with a start, a user task and an end
+      // inside, and attrs on the subprocess element.
+      const sub = (id, attrs) => `
+    <bpmn:subProcess id="${id}"${attrs}>
+      <bpmn:startEvent id="${id}_s"/>
+      <bpmn:userTask id="${id}_task" name="Screen"/>
+      <bpmn:endEvent id="${id}_e"/>
+      <bpmn:sequenceFlow id="${id}_f1" sourceRef="${id}_s" targetRef="${id}_task"/>
+      <bpmn:sequenceFlow id="${id}_f2" sourceRef="${id}_task" targetRef="${id}_e"/>
+    </bpmn:subProcess>`;
+      const subDI = (id, x, y) => `
+    <bpmndi:BPMNShape id="${id}_di" bpmnElement="${id}" isExpanded="true"><dc:Bounds x="${x}" y="${y}" width="300" height="160"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="${id}_s_di" bpmnElement="${id}_s"><dc:Bounds x="${x + 30}" y="${y + 62}" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="${id}_task_di" bpmnElement="${id}_task"><dc:Bounds x="${x + 100}" y="${y + 40}" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="${id}_e_di" bpmnElement="${id}_e"><dc:Bounds x="${x + 234}" y="${y + 62}" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="${id}_f1_di" bpmnElement="${id}_f1"><di:waypoint x="${x + 66}" y="${y + 80}"/><di:waypoint x="${x + 100}" y="${y + 80}"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="${id}_f2_di" bpmnElement="${id}_f2"><di:waypoint x="${x + 200}" y="${y + 80}"/><di:waypoint x="${x + 234}" y="${y + 80}"/></bpmndi:BPMNEdge>`;
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_wizard" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="antrag" name="Antrag" isExecutable="true">
+    ${sub("Sub_wizard", ' atlas:wizard="internal"')}
+    <bpmn:boundaryEvent id="Abandoned" attachedToRef="Sub_wizard"><bpmn:timerEventDefinition><bpmn:timeDuration>PT30M</bpmn:timeDuration></bpmn:timerEventDefinition></bpmn:boundaryEvent>
+    ${sub("Sub_public", ' atlas:wizard="public"')}
+    ${sub("Sub_plain", "")}
+    ${sub("Sub_odd", ' atlas:wizard="yes"')}
+    <bpmn:subProcess id="Sub_event" triggeredByEvent="true">
+      <bpmn:startEvent id="Sub_event_s"><bpmn:timerEventDefinition><bpmn:timeDuration>PT1H</bpmn:timeDuration></bpmn:timerEventDefinition></bpmn:startEvent>
+    </bpmn:subProcess>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="antrag">
+    ${subDI("Sub_wizard", 40, 40)}
+    <bpmndi:BPMNShape id="Abandoned_di" bpmnElement="Abandoned"><dc:Bounds x="300" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+    ${subDI("Sub_public", 400, 40)}
+    ${subDI("Sub_plain", 40, 260)}
+    ${subDI("Sub_odd", 400, 260)}
+    <bpmndi:BPMNShape id="Sub_event_di" bpmnElement="Sub_event" isExpanded="true"><dc:Bounds x="760" y="40" width="200" height="120"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Sub_event_s_di" bpmnElement="Sub_event_s"><dc:Bounds x="790" y="82" width="36" height="36"/></bpmndi:BPMNShape>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      const api = async (method, url) => {
+        if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (method === "GET" && /\/processes$/.test(url)) return [];
+        if (method === "GET" && /\/drafts$/.test(url)) return [];
+        if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
+        return {};
+      };
+
+      window.__mount = () => mountEditor(view, { api, toast: noop, key: 42 });
+      window.__select = (id) =>
+        window.__atlasModeler.get("selection").select(window.__atlasModeler.get("elementRegistry").get(id));
+      // The exported XML is what the deploy sends, so the tests assert against it.
+      window.__xml = async () => (await window.__atlasModeler.saveXML({ format: true })).xml;
+      window.__ready = true;
+    </script>
+  </body>
+</html>
