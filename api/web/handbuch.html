@@ -4959,13 +4959,17 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <p data-l="de">Ein öffentliches Startformular ist ohne Anmeldung erreichbar – das ist sein Zweck und sein
             Risiko. Drei Dinge gehören dazu, bevor so etwas ins Netz geht: das <b>Gatter</b> (was darf dieser Prozess
             überhaupt anlegen), die <b>menschliche Freigabe</b> (niemand bestellt sich selbst ein Konto), und die
-            Frage, <b>wer die Startadresse kennt</b>. Wie öffentliche Formulare in atlas funktionieren, steht unter
+            Frage, <b>wer die Startadresse kennt</b>. atlas nimmt beim öffentlichen Start nur die Felder an, die das
+            Formular selbst sendet; eine Einsendung mit weiteren Variablen lehnt es ganz ab, damit niemand von aussen
+            die Variable setzt, nach der ein Gateway entscheidet. Wie öffentliche Formulare in atlas funktionieren, steht unter
             <a href="#formulare">Formulare &amp; Worker</a>; wer welche Rolle braucht, unter
             <a href="#konten">Konten, Rollen &amp; Anmeldung</a>.</p>
           <p data-l="en">A public start form is reachable without signing in – that is its purpose and its risk. Three
             things belong with it before it goes onto a network: the <b>guard</b> (what may this process create at
             all), the <b>human approval</b> (nobody orders themselves an account), and the question of <b>who knows
-            the start URL</b>. How public forms work in atlas is under <a href="#formulare">Forms &amp; workers</a>;
+            the start URL</b>. atlas accepts on a public start only the fields the form itself sends; a submission
+            carrying any other variable is refused whole, so nobody outside sets the variable a gateway decides on. How
+            public forms work in atlas is under <a href="#formulare">Forms &amp; workers</a>;
             who needs which role, under <a href="#konten">Accounts, roles &amp; sign-in</a>.</p>
         </details>
       </div>

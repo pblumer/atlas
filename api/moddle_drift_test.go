@@ -280,7 +280,31 @@ func serviceTaskKindsSource(t *testing.T) string {
 
 // connectorAttrRe matches the attributes one xml*Worker struct parses, e.g.
 // `xml:"baseDN,attr"`.
-var connectorAttrRe = regexp.MustCompile(`xml:"([a-zA-Z]+),attr"`)
+var connectorAttrRe = regexp.MustCompile(`xml:"([a-zA-Z][a-zA-Z0-9]*),attr"`)
+
+// connectorFieldRe matches the field that parses one worker extension into its struct,
+// e.g. the field Rest *xmlRestConnector tagged xml:"extensionElements>restConnector".
+var connectorFieldRe = regexp.MustCompile(`\*(xml[A-Za-z0-9]+)\s+` + "`" + `xml:"extensionElements>([a-zA-Z][a-zA-Z0-9]*Connector)"` + "`")
+
+// connectorStruct is one worker extension and the struct the compiler parses it into.
+type connectorStruct struct{ tag, structName, moddleType string }
+
+// connectorStructs reads from compiler/parse.go which struct each worker extension tag
+// parses into. One struct may serve several tags (the SQL workers share one), and each
+// tag is its own moddle type, so each is checked.
+func connectorStructs(parseGo string) []connectorStruct {
+	seen := map[string]bool{}
+	var out []connectorStruct
+	for _, m := range connectorFieldRe.FindAllStringSubmatch(parseGo, -1) {
+		if seen[m[2]] {
+			continue
+		}
+		seen[m[2]] = true
+		out = append(out, connectorStruct{tag: m[2], structName: m[1], moddleType: moddleTypeFor(m[2])})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].tag < out[j].tag })
+	return out
+}
 
 // TestModdleKnowsEveryConnectorAttribute guards the same round trip one level down: a
 // worker *type* the moddle declares but an *attribute* it does not is the same
@@ -292,11 +316,11 @@ var connectorAttrRe = regexp.MustCompile(`xml:"([a-zA-Z]+),attr"`)
 // Console-configured directory (ADR-0206), was parsed by the compiler and declared
 // nowhere in the moddle.
 //
-// The list is the extensions whose attributes have since changed under this check
-// rather than every worker — widening it the rest of the way is worth doing on its
-// own. Jira joined it with the account search (ADR-0223), which
-// added the `query` attribute: an operation that adds an attribute is exactly the change
-// this guards, so covering it is the guard for that change and not a drive-by.
+// It held a hand-kept list — AD, then Jira with the account search (ADR-0223) — and the
+// REST worker's OAuth2 attributes (ADR-0152), which no list named, were stripped on every
+// Save of a task that used them (#468). So the extensions come from compiler/parse.go
+// itself: every struct a worker tag parses into is checked, and a worker added tomorrow
+// is checked without anybody remembering to add it.
 func TestModdleKnowsEveryConnectorAttribute(t *testing.T) {
 	src, err := os.ReadFile("../compiler/parse.go")
 	if err != nil {
@@ -320,11 +344,12 @@ func TestModdleKnowsEveryConnectorAttribute(t *testing.T) {
 		t.Fatalf("decode atlas-moddle.json: %v", err)
 	}
 
-	for _, tc := range []struct{ structName, moddleType string }{
-		{"xmlAdConnector", "AdConnector"},
-		{"xmlJiraConnector", "JiraConnector"},
-	} {
-		t.Run(tc.moddleType, func(t *testing.T) {
+	extensions := connectorStructs(body)
+	if len(extensions) == 0 {
+		t.Fatal("found no worker extensions in compiler/parse.go; the pattern must have changed")
+	}
+	for _, tc := range extensions {
+		t.Run(tc.tag, func(t *testing.T) {
 			// The struct's own body, so the pattern reads this extension's attributes only.
 			start := strings.Index(body, "type "+tc.structName+" struct {")
 			if start < 0 {
@@ -342,10 +367,12 @@ func TestModdleKnowsEveryConnectorAttribute(t *testing.T) {
 				t.Fatalf("found no attributes on %s; the pattern must have changed", tc.structName)
 			}
 
+			// Case-insensitively, as TestModdleDeclaresEveryCompilerConnector matches: the
+			// exact spelling of the tag is TestCompilerReadsWhatTheModelerWrites's concern.
 			declared := map[string]bool{}
 			var found bool
 			for _, ty := range moddle.Types {
-				if ty.Name != tc.moddleType {
+				if !strings.EqualFold(ty.Name, tc.moddleType) {
 					continue
 				}
 				found = true
@@ -369,6 +396,27 @@ func TestModdleKnowsEveryConnectorAttribute(t *testing.T) {
 					tc.moddleType, len(missing), strings.Join(missing, ", "))
 			}
 		})
+	}
+}
+
+// TestModelerOffersRestOAuth2 is #468's other half. Declaring the attributes keeps a
+// hand-written OAuth2 task intact through a Save, but a person could still only write
+// one by hand: the panel offered no oauth2 scheme and no field for its token endpoint,
+// client id or scope. The REST kind must offer the scheme and a field for each.
+func TestModelerOffersRestOAuth2(t *testing.T) {
+	catalog := serviceTaskKindsSource(t)
+	i := strings.Index(catalog, `id: "rest"`)
+	if i < 0 {
+		t.Fatal(`SERVICE_TASK_KINDS has no id: "rest" kind`)
+	}
+	rest := catalog[i:]
+	if j := strings.Index(rest[1:], "\n    id: \""); j >= 0 {
+		rest = rest[:j+1]
+	}
+	for _, want := range []string{`v: "oauth2"`, `key: "authTokenUrl"`, `key: "authClientId"`, `key: "authScope"`} {
+		if !strings.Contains(rest, want) {
+			t.Errorf("the REST kind in SERVICE_TASK_KINDS has no %s", want)
+		}
 	}
 }
 
