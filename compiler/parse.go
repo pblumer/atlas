@@ -1726,9 +1726,13 @@ type xmlSubProcess struct {
 	// TriggeredByEvent marks an event subprocess (ADR-0082): it is not entered by a
 	// sequence flow but armed by its start event's event definition while the parent
 	// scope runs. "true" makes it an event subprocess; empty/absent is an ordinary one.
-	TriggeredByEvent string            `xml:"triggeredByEvent,attr"`
-	MultiInstance    *xmlMultiInstance `xml:"multiInstanceLoopCharacteristics"`
-	StandardLoop     *xmlStandardLoop  `xml:"standardLoopCharacteristics"`
+	TriggeredByEvent string `xml:"triggeredByEvent,attr"`
+	// Wizard is atlas:wizard (ADR-0449): "internal" or "public" makes the subprocess
+	// one sitting of one filler, walked user task by user task. Empty is an ordinary
+	// subprocess; any other value is refused at deploy by stage 5.
+	Wizard        string            `xml:"wizard,attr"`
+	MultiInstance *xmlMultiInstance `xml:"multiInstanceLoopCharacteristics"`
+	StandardLoop  *xmlStandardLoop  `xml:"standardLoopCharacteristics"`
 	// IsTransaction marks a subprocess that was parsed from a <transaction> element (never from
 	// XML — set by foldTransactions). The compiler marks its compiled node so the runtime and
 	// validation know it may host a cancel boundary and hold a cancel end event (ADR-0108).

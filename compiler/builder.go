@@ -577,6 +577,7 @@ type Builder struct {
 	documentation      int32                       // interned <bpmn:documentation> of the process itself, -1 if none
 	startFormId        int32                       // interned start-form id (ADR-0028), -1 if the process has none
 	conditionalStarts  []int32                     // process-level start nodes that carried a conditional event definition (RuleConditionalStart)
+	invalidWizards     []int32                     // subprocess nodes whose atlas:wizard named no kind (RuleWizardValue, ADR-0449)
 	versionTag         int32                       // interned atlas:versionTag revision label, -1 if none
 	instanceTtlNanos   int64                       // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
 	historyTtlNanos    int64                       // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
@@ -2827,6 +2828,23 @@ func (b *Builder) SetTransaction(nodeID int32) {
 	}
 }
 
+// SetWizard marks an already-added subprocess node as a wizard of kind k (ADR-0449). It
+// is applied before the subprocess's scope is pushed, so the mark is there when its
+// children are added.
+func (b *Builder) SetWizard(nodeID int32, k WizardKind) {
+	if b.validNode(nodeID) {
+		b.nodes[nodeID].Wizard = k
+	}
+}
+
+// markInvalidWizard records that the subprocess node id carried an atlas:wizard value
+// naming no kind. The node stays an ordinary subprocess; the mark is what lets stage 5
+// refuse it at deploy while a reload brings a stored definition back unchanged
+// (RuleWizardValue, ADR-0177).
+func (b *Builder) markInvalidWizard(id int32) {
+	b.invalidWizards = append(b.invalidWizards, id)
+}
+
 // AddLane adds an organizational lane and returns its index (ADR-0121). parent is the index of
 // the enclosing lane in a nested laneSet, or -1 for a top-level lane. A lane is pure metadata — it
 // affects no token flow.
@@ -3198,6 +3216,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		documentation:      b.documentation,
 		startFormId:        b.startFormId,
 		conditionalStarts:  b.conditionalStarts,
+		invalidWizards:     b.invalidWizards,
 		versionTag:         b.versionTag,
 		instanceTtlNanos:   b.instanceTtlNanos,
 		historyTtlNanos:    b.historyTtlNanos,

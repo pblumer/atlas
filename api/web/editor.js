@@ -1631,7 +1631,66 @@ function drawImplBadges(modeler) {
       }));
     } catch { /* shape without graphics (e.g. mid-import) — skip */ }
   });
-  return ids.concat(drawShopBadges(modeler));
+  return ids.concat(drawShopBadges(modeler), drawWizardBadges(modeler));
+}
+
+// WIZARD_KINDS are the two values of atlas:wizard (ADR-0449), with what the panel and
+// the badge call them. Anything else is not a wizard to the engine, and the Problems
+// panel says so.
+const WIZARD_KINDS = {
+  internal: {
+    option: "Yes — for signed-in people",
+    title: "Wizard: one sitting of one signed-in person (ADR-0449)",
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#2a7f8f"/><path d="M4 8h8" stroke="#fff" stroke-width="1.2"/><circle cx="4" cy="8" r="1.8" fill="#fff"/><circle cx="8" cy="8" r="1.8" fill="#fff"/><circle cx="12" cy="8" r="1.8" fill="#fff"/></svg>`,
+  },
+  public: {
+    option: "Yes — for the anonymous visitor of a public start link",
+    title: "Public wizard: one sitting of the anonymous visitor who started it (ADR-0449)",
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#b8641e"/><path d="M4 8h8" stroke="#fff" stroke-width="1.2"/><circle cx="4" cy="8" r="1.8" fill="#fff"/><circle cx="8" cy="8" r="1.8" fill="#fff"/><circle cx="12" cy="8" r="1.8" fill="#fff"/></svg>`,
+  },
+};
+
+// WIZARD_BADGE_SPOT is the top-right corner of the subprocess: an expanded subprocess
+// writes its name from the top-left, and a collapsed one draws its marker at the bottom.
+const WIZARD_BADGE_SPOT = { top: 4, right: 26 };
+
+// drawWizardBadges marks the wizard subprocesses (ADR-0449) and returns the overlay ids it
+// added. drawImplBadges calls it, so the badge shows where the implementation badges do.
+function drawWizardBadges(modeler) {
+  const ids = [];
+  let overlays, registry;
+  try { overlays = modeler.get("overlays"); registry = modeler.get("elementRegistry"); }
+  catch { return ids; } // modeler torn down mid-flight
+  registry.forEach((el) => {
+    const bo = el.businessObject;
+    const kind = bo && bo.$type === "bpmn:SubProcess" && !bo.triggeredByEvent && WIZARD_KINDS[bo.wizard];
+    if (!kind) return;
+    try {
+      ids.push(overlays.add(el.id, "wizard-badge", {
+        position: WIZARD_BADGE_SPOT,
+        html: `<span class="wizard-badge" title="${esc(kind.title)}">${kind.glyph}</span>`,
+      }));
+    } catch { /* shape without graphics (e.g. mid-import) — skip */ }
+  });
+  return ids;
+}
+
+// wizardHTML is a subprocess's Wizard section (ADR-0449): whether it is one sitting of one
+// person, walked screen by screen, and for whom. A value the panel does not know is shown
+// as it stands rather than silently replaced; the Problems panel says why it is refused.
+function wizardHTML(bo) {
+  const v = bo.wizard || "";
+  const opt = (value, label) => `<option value="${value}" ${v === value ? "selected" : ""}>${label}</option>`;
+  const unknown = v && !WIZARD_KINDS[v] ? `<option value="${esc(v)}" selected>${esc(v)} — not a kind atlas knows</option>` : "";
+  return `<h3>Wizard</h3>
+    <label class="field"><span>One sitting of one person</span>
+      <select id="f-wizard">
+        ${opt("", "No — an ordinary subprocess")}
+        ${opt("internal", WIZARD_KINDS.internal.option)}
+        ${opt("public", WIZARD_KINDS.public.option)}
+        ${unknown}
+      </select></label>
+    <p class="muted" style="font-size:12px">A wizard's user tasks are the screens of one multi-step form, and the gateways between them decide which screen follows which answer. Attach an interrupting <b>timer boundary event</b> to say when an unfinished sitting is abandoned; a public wizard cannot be published without one. Leave the steps of a public wizard unassigned: they belong to whoever started it. The Problems panel checks these rules now; carrying the person from one screen to the next follows in a later release.</p>`;
 }
 
 // shopOwners holds, per diagram instance, which message names product actions own: a Map
@@ -7920,6 +7979,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         // the marker, so the panel and the icon agree on every activity.
         html += multiInstanceHTML(bo);
       } else if (bo.$type === "bpmn:SubProcess") {
+        // Whether it is a wizard comes first: it says what the subprocess is to the
+        // person filling it in, where the mappings below say what crosses its edge
+        // (ADR-0449). An event subprocess is never offered it.
+        if (!bo.triggeredByEvent) html += wizardHTML(bo);
         // An embedded subprocess is a scope, so it takes the same generic
         // zeebe:ioMapping editor as a task (ADR-0074) — but no task-type selector, a
         // subprocess is not a task. Input mappings write a variable into the
@@ -9924,6 +9987,13 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         const cexpr = moddle.create("bpmn:FormalExpression", { body: raw.startsWith("=") ? raw : "= " + raw });
         cexpr.$parent = element.businessObject;
         try { modeling.updateProperties(element, { completionCondition: cexpr }); } catch { /* stale */ }
+      }));
+    }
+    const fwizard = body.querySelector("#f-wizard");
+    if (fwizard) {
+      fwizard.addEventListener("change", () => savePreservingPanel(() => {
+        // Only a kind is written, so an ordinary subprocess stays attribute-free.
+        try { modeling.updateProperties(element, { wizard: fwizard.value || undefined }); } catch { /* stale */ }
       }));
     }
     const fadhoccancel = body.querySelector("#f-adhoccancel");

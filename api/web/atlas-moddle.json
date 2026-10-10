@@ -582,6 +582,13 @@
         { "name": "personal", "type": "String", "isAttr": true },
         { "name": "dataSubject", "type": "String", "isAttr": true }
       ]
+    },
+    {
+      "name": "SubProcessMeta",
+      "extends": ["bpmn:SubProcess"],
+      "properties": [
+        { "name": "wizard", "type": "String", "isAttr": true }
+      ]
     }
   ]
 }

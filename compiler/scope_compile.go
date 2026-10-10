@@ -729,6 +729,18 @@ func registerScope(
 		if sub.IsTransaction {
 			b.SetTransaction(subID)
 		}
+		// atlas:wizard makes the subprocess one sitting of one filler (ADR-0449). A value
+		// naming no kind compiles as an ordinary subprocess and is refused by stage 5, so
+		// the refusal is a deploy's and never a reload's.
+		switch strings.TrimSpace(sub.Wizard) {
+		case "":
+		case "internal":
+			b.SetWizard(subID, WizardInternal)
+		case "public":
+			b.SetWizard(subID, WizardPublic)
+		default:
+			b.markInvalidWizard(subID)
+		}
 		b.PushScope(subID)
 		if err := registerScope(b, reg, resolveMessage, resolveSignal, resolveError, resolveEscalation, &sub.xmlFlowContent); err != nil {
 			return err
