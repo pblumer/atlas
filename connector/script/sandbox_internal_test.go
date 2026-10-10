@@ -355,8 +355,11 @@ func TestTimeoutKillsTheInterpretersWholeProcessGroup(t *testing.T) {
 			t.Fatalf("child pid %q: %v", b, err)
 		}
 
-		// Past the moment a surviving descendant would have finished its second.
-		time.Sleep(time.Until(start.Add(work + 400*time.Millisecond)))
+		// Past the moment a surviving descendant would have finished its work. It was
+		// forked before the deadline, so that moment is up to deadline+work after
+		// start, not work: on the 600ms rung a descendant forked after 400ms would
+		// otherwise write its file after the test had looked, and an escape would pass.
+		time.Sleep(time.Until(start.Add(deadline + work + 400*time.Millisecond)))
 		if _, err := os.Stat(outlived); err == nil {
 			t.Errorf("descendant process %d ran to completion after its script timed out", pid)
 		}
