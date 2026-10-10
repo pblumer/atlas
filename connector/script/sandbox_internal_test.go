@@ -341,7 +341,7 @@ func TestTimeoutKillsTheInterpretersWholeProcessGroup(t *testing.T) {
 
 		// The pid file proves the descendant was forked before the deadline, which is
 		// what makes the rest of this a test of the kill rather than of the timing.
-		b, err := os.ReadFile(pidFile)
+		b, err := readKilledScriptFile(pidFile)
 		if errors.Is(err, os.ErrNotExist) {
 			t.Logf("the %s deadline fell before the shell recorded its descendant; "+
 				"repeating with a longer one", deadline)
@@ -372,6 +372,26 @@ func TestTimeoutKillsTheInterpretersWholeProcessGroup(t *testing.T) {
 	}
 	t.Fatal("no deadline landed after the shell had recorded its descendant, so the kill " +
 		"was never tested")
+}
+
+// readKilledScriptFile reads a file that a script killed at its deadline may still
+// hold. On Windows the deadline ends the script's job with TerminateJobObject, which
+// only starts the termination of its processes: execCommand returns once the
+// interpreter is gone, and a process the kill caught in the middle of `mv` can hold
+// the renamed file a moment longer. Its handle was opened for the rename with DELETE
+// access, and os.ReadFile, which leaves FILE_SHARE_DELETE out of its share mode, is
+// refused with "being used by another process" until that handle closes. So a read
+// that fails for any reason but absence is tried again for a while; absence is the
+// answer at once, because it is how the test learns the deadline fell too early.
+func readKilledScriptFile(name string) ([]byte, error) {
+	until := time.Now().Add(2 * time.Second)
+	for {
+		b, err := os.ReadFile(name)
+		if err == nil || errors.Is(err, os.ErrNotExist) || time.Now().After(until) {
+			return b, err
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 // timeoutScript forks a descendant that works for two seconds and then writes $2,
