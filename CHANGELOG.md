@@ -12,16 +12,20 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
-### Security
+### Added
 
-- **A task row's content carries only what the task's form asks for.** `GET
-  /api/v1/tasks?content=1` — what the inbox's search reads — filled each row with up to
-  40 short values from the task's whole scope. An open task, which every signed-in
-  account sees, so handed an unrelated account values the instance's variables endpoint
-  refuses it (ADR-0275, audit F11). A row now carries the values of the fields its form
-  asks for, under the same allowlist the variables endpoint gives a task holder, and a
-  task without a form carries none. The rule is the same for every viewer, operators
-  included; a page asked for its content is now read off the run loop.
+- **A subprocess can be marked as a wizard.** `atlas:wizard="internal"` or `"public"` on an
+  embedded subprocess marks it as one sitting of one person: its user tasks are the
+  screens of a multi-step form, and the gateways between them decide which screen
+  follows which answer (ADR-0449). This is the first step of that record. The Modeler
+  offers the mark in the subprocess's Implement panel and draws a badge on a wizard, and
+  the deploy checks the rules: a value atlas does not know, a wizard inside a wizard, an
+  event subprocess marked as one, and an assignee or candidate groups on a step of a
+  public wizard are refused; an element inside a wizard that waits on something other
+  than the person, and a wizard with no interrupting timer boundary event, are warned
+  about. A start link is not published, and an existing link does not start, for a
+  process whose public wizard has no such timer. The engine runs a wizard like any other
+  subprocess; carrying the person from one screen to the next follows in a later step.
 
 ### Changed
 
@@ -62,6 +66,17 @@ _Changed_ / _Removed_ for each version.
   of their own, so a task's form could not prefill `address` from a group whose path is
   `address`, and a variable named like one of its fields was handed out instead. The
   container's path now names the variable, as it does in the form.
+
+### Security
+
+- **A task row's content carries only what the task's form asks for.** `GET
+  /api/v1/tasks?content=1` — what the inbox's search reads — filled each row with up to
+  40 short values from the task's whole scope. An open task, which every signed-in
+  account sees, so handed an unrelated account values the instance's variables endpoint
+  refuses it (ADR-0275, audit F11). A row now carries the values of the fields its form
+  asks for, under the same allowlist the variables endpoint gives a task holder, and a
+  task without a form carries none. The rule is the same for every viewer, operators
+  included; a page asked for its content is now read off the run loop.
 
 ## [0.9.1] — 2026-10-09
 
