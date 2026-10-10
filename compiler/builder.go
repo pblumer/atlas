@@ -577,6 +577,7 @@ type Builder struct {
 	documentation      int32                       // interned <bpmn:documentation> of the process itself, -1 if none
 	startFormId        int32                       // interned start-form id (ADR-0028), -1 if the process has none
 	conditionalStarts  []int32                     // process-level start nodes that carried a conditional event definition (RuleConditionalStart)
+	eventGatewayKinds  []eventGatewayKind          // event-based gateways of a kind atlas does not run (RuleEventGatewayKind)
 	versionTag         int32                       // interned atlas:versionTag revision label, -1 if none
 	instanceTtlNanos   int64                       // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
 	historyTtlNanos    int64                       // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
@@ -904,6 +905,15 @@ func (b *Builder) SetStartFormId(id string) { b.startFormId = b.intern(id) }
 // brings a stored definition back unchanged (RuleConditionalStart, ADR-0177).
 func (b *Builder) markConditionalStart(id int32) {
 	b.conditionalStarts = append(b.conditionalStarts, id)
+}
+
+// markEventGatewayKind records that the event-based gateway node id was marked as a
+// kind atlas does not run — instantiating, parallel, or both. The node stays the
+// exclusive deferred choice it has always compiled to; the mark is what lets stage 5
+// refuse it at deploy while a reload brings a stored definition back unchanged
+// (RuleEventGatewayKind, ADR-0177, #804).
+func (b *Builder) markEventGatewayKind(id int32, instantiate, parallel bool) {
+	b.eventGatewayKinds = append(b.eventGatewayKinds, eventGatewayKind{Node: id, Instantiate: instantiate, Parallel: parallel})
 }
 
 // SetExecutable records the process's bpmn:isExecutable flag. A non-executable
@@ -3198,6 +3208,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		documentation:      b.documentation,
 		startFormId:        b.startFormId,
 		conditionalStarts:  b.conditionalStarts,
+		eventGatewayKinds:  b.eventGatewayKinds,
 		versionTag:         b.versionTag,
 		instanceTtlNanos:   b.instanceTtlNanos,
 		historyTtlNanos:    b.historyTtlNanos,

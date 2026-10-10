@@ -1468,11 +1468,11 @@ type xmlFlowContent struct {
 
 	Flows []xmlSequenceFlow `xml:"sequenceFlow"`
 
-	Tasks              []xmlPlainTask        `xml:"task"`
-	ManualTasks        []xmlPlainTask        `xml:"manualTask"`
-	ParallelGateways   []xmlNode             `xml:"parallelGateway"`
-	InclusiveGateways  []xmlInclusiveGateway `xml:"inclusiveGateway"`
-	EventBasedGateways []xmlNode             `xml:"eventBasedGateway"` // deferred choice; only its id matters (ADR-0110)
+	Tasks              []xmlPlainTask         `xml:"task"`
+	ManualTasks        []xmlPlainTask         `xml:"manualTask"`
+	ParallelGateways   []xmlNode              `xml:"parallelGateway"`
+	InclusiveGateways  []xmlInclusiveGateway  `xml:"inclusiveGateway"`
+	EventBasedGateways []xmlEventBasedGateway `xml:"eventBasedGateway"` // deferred choice (ADR-0110)
 
 	UserTasks []xmlUserTask `xml:"userTask"`
 
@@ -2195,6 +2195,17 @@ type xmlNode struct {
 	Id      string                     `xml:"id,attr"`
 	DataOut []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
 	DataIn  []xmlDataInputAssociation  `xml:"dataInputAssociation"`
+}
+
+// xmlEventBasedGateway is an <eventBasedGateway>. atlas runs one kind of it, the
+// exclusive deferred choice inside a running instance (ADR-0110), and the two
+// attributes are read only so that the kinds it does not run are refused rather than
+// run as that one (#804): instantiate="true" makes the gateway start the instance, and
+// eventGatewayType="Parallel" makes it wait for every event instead of the first.
+type xmlEventBasedGateway struct {
+	xmlNode
+	Instantiate      string `xml:"instantiate,attr"`
+	EventGatewayType string `xml:"eventGatewayType,attr"`
 }
 
 // xmlPlainTask is an undefined <task> or a <manualTask>: an activity with no

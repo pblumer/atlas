@@ -432,7 +432,15 @@ func registerScope(
 		reg.node(g.Id, b.AddInclusiveGateway())
 	}
 	for _, g := range c.EventBasedGateways {
-		reg.node(g.Id, b.AddEventBasedGateway())
+		id := b.AddEventBasedGateway()
+		reg.node(g.Id, id)
+		// A kind atlas does not run compiles as the exclusive choice it has always run
+		// as, and is marked so stage 5 refuses it at deploy (RuleEventGatewayKind).
+		instantiate := strings.EqualFold(strings.TrimSpace(g.Instantiate), "true")
+		parallel := strings.EqualFold(strings.TrimSpace(g.EventGatewayType), "Parallel")
+		if instantiate || parallel {
+			b.markEventGatewayKind(id, instantiate, parallel)
+		}
 	}
 	for _, ev := range c.IntermediateCatchEvents {
 		switch {
