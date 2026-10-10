@@ -74,14 +74,116 @@
     syncFromServer();
     syncLogoFromServer();
 
+    // A public wizard (ADR-0449). When the process holds one, the start hands this
+    // visitor a pass: kept for this tab, so a reload resumes the sitting, and sent with
+    // every later screen in an Authorization header. Nothing else about the instance
+    // reaches this page.
+    const passKey = "atlas.pass." + token;
+    const readPass = () => { try { return sessionStorage.getItem(passKey) || ""; } catch { return ""; } };
+    const keepPass = (p) => {
+      try { if (p) sessionStorage.setItem(passKey, p); else sessionStorage.removeItem(passKey); } catch { /* no storage: no resume */ }
+    };
+    // How long to wait before each look for the next screen while a worker or a timer
+    // stands between two: soon at first, then less often, for about two minutes.
+    const WAIT = [1000, 2000, 4000, 8000, 15000, 30000, 60000];
+
+    function thankYou() {
+      keepPass("");
+      card.innerHTML = `<div class="done"><div class="check">&#10003;</div>
+        <h1 style="margin:0 0 6px">Thank you</h1>
+        <p class="muted">Your submission has been received.</p></div>`;
+    }
+
+    function unavailable(message) {
+      card.innerHTML = `<h1>Unavailable</h1><p class="muted err">${esc(message)}</p>`;
+    }
+
+    function showError(message) {
+      let el = card.querySelector(".submit-err");
+      if (!el) { el = document.createElement("p"); el.className = "muted err submit-err"; card.querySelector(".actions").appendChild(el); }
+      el.textContent = message;
+    }
+
+    // wizardCall asks the public wizard routes with the pass. A 404 means the pass opens
+    // nothing any more — the sitting ended, or was abandoned — and is forgotten.
+    async function wizardCall(method, path, body) {
+      const headers = { Authorization: "Bearer " + readPass() };
+      if (body) headers["Content-Type"] = "application/json";
+      const res = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+      if (res.status === 404) {
+        keepPass("");
+        const err = new Error("This form is finished or no longer available.");
+        err.gone = true;
+        throw err;
+      }
+      if (!res.ok) {
+        if (res.status === 429) throw new Error("Too many requests — please try again shortly.");
+        const msg = res.status === 400 ? ((await res.json().catch(() => ({}))).error || "") : "";
+        throw new Error(msg ? "Please check your answers: " + msg : "Could not submit. Please try again.");
+      }
+      return res.json();
+    }
+
+    // showWizard renders where the sitting stands: the next screen, a wait while it is
+    // being prepared, or the end.
+    async function showWizard(w, attempt = 0) {
+      if (w.state === "step" && w.step) return showStep(w.step);
+      if (w.state === "pending") {
+        if (attempt >= WAIT.length) {
+          card.innerHTML = `<h1>Still preparing</h1>
+            <p class="muted">Your answers are saved. The next step is taking longer than usual.</p>
+            <div class="actions"><button class="submit" id="again">Check again</button></div>`;
+          document.getElementById("again").addEventListener("click", () => resume(0));
+          return;
+        }
+        card.innerHTML = `<h1>One moment</h1><p class="muted">Your answers are saved. Preparing the next step&hellip;</p>`;
+        setTimeout(() => resume(attempt + 1), WAIT[attempt]);
+        return;
+      }
+      thankYou();
+    }
+
+    async function resume(attempt) {
+      try { await showWizard(await wizardCall("GET", "/public/wizard/step"), attempt); }
+      catch (e) { unavailable(e.message); }
+    }
+
+    async function showStep(step) {
+      card.innerHTML = `<h1>${esc(step.title || "Next step")}</h1>
+        ${step.documentation ? `<p class="muted">${esc(step.documentation)}</p>` : ""}
+        <div id="form"></div>
+        <div class="actions"><button class="submit" id="submit" title="Submit this step and continue">Continue</button></div>`;
+      const form = new Form({ container: document.getElementById("form") });
+      await form.importSchema(step.schema || { type: "default", components: [] }, step.data || {});
+      document.getElementById("submit").addEventListener("click", async (e) => {
+        const btn = e.currentTarget;
+        const { data, errors } = form.submit();
+        if (errors && Object.keys(errors).length) return; // form-js highlights the fields
+        btn.disabled = true;
+        try {
+          await showWizard(await wizardCall("POST", `/public/wizard/steps/${step.taskKey}/complete`, { variables: data }));
+        } catch (err) {
+          if (err.gone) { unavailable(err.message); return; }
+          btn.disabled = false;
+          showError(err.message);
+        }
+      });
+    }
+
     async function main() {
+      // A pass kept by this tab resumes its sitting. One that opens nothing any more is
+      // forgotten, and the page offers the start form again.
+      if (readPass()) {
+        try { await showWizard(await wizardCall("GET", "/public/wizard/step")); return; }
+        catch (e) { if (!e.gone) { unavailable(e.message); return; } }
+      }
       let def;
       try {
         const res = await fetch(`/public/forms/${encodeURIComponent(token)}/schema`);
         if (!res.ok) throw new Error(res.status === 404 ? "This link is no longer valid." : "HTTP " + res.status);
         def = await res.json();
       } catch (e) {
-        card.innerHTML = `<h1>Unavailable</h1><p class="muted err">${e.message}</p>`;
+        unavailable(e.message);
         return;
       }
       card.innerHTML = `<h1>${esc(def.processName || "Start a process")}</h1>
@@ -101,14 +203,17 @@
             body: JSON.stringify({ variables: data }),
           });
           if (!res.ok) throw new Error(res.status === 429 ? "Too many requests — please try again shortly." : "Could not submit. Please try again.");
-          card.innerHTML = `<div class="done"><div class="check">&#10003;</div>
-            <h1 style="margin:0 0 6px">Thank you</h1>
-            <p class="muted">Your submission has been received.</p></div>`;
+          const out = await res.json().catch(() => ({}));
+          // A start into a public wizard carries on to its first screen.
+          if (out.wizard && out.wizard.pass) {
+            keepPass(out.wizard.pass);
+            await showWizard(out.wizard);
+            return;
+          }
+          thankYou();
         } catch (err) {
           btn.disabled = false;
-          let e2 = card.querySelector(".submit-err");
-          if (!e2) { e2 = document.createElement("p"); e2.className = "muted err submit-err"; card.querySelector(".actions").appendChild(e2); }
-          e2.textContent = err.message;
+          showError(err.message);
         }
       });
     }

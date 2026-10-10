@@ -1607,6 +1607,17 @@ func (p *CompiledProcess) EnclosingWizard(id int32) int32 {
 	return -1
 }
 
+// HasPublicWizard reports whether the process holds a public wizard (ADR-0449): whether
+// a public start of it hands its visitor a pass.
+func (p *CompiledProcess) HasPublicWizard() bool {
+	for i := range p.nodes {
+		if p.nodes[i].Wizard == WizardPublic {
+			return true
+		}
+	}
+	return false
+}
+
 // UntimedPublicWizard returns the BPMN id of a public wizard that no interrupting timer
 // boundary event bounds, and "" when the process has none (ADR-0449). A public start link
 // is refused for such a process: every sitting an anonymous filler abandons would stay a

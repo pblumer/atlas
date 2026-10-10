@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -201,7 +202,9 @@ func (s *Server) setPublicCORS(w http.ResponseWriter, r *http.Request) {
 	h.Set("Access-Control-Allow-Origin", origin)
 	h.Add("Vary", "Origin")
 	h.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	h.Set("Access-Control-Allow-Headers", "Content-Type")
+	// Authorization carries a public wizard's pass (ADR-0449). It is a header the page
+	// sets, not a credential the browser attaches, so it needs no Allow-Credentials.
+	h.Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 	h.Set("Access-Control-Max-Age", "600")
 }
 
@@ -304,15 +307,21 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 	// schema route serves, link.FormID, because that is what the visitor was shown. A
 	// form that is gone has no fields, so it accepts an empty submission and nothing
 	// else.
+	//
+	// It also says whether the process holds a public wizard, in which case the start
+	// hands its visitor a pass (publicwizard.go, ADR-0449). The pass is drawn off the
+	// loop, here, and only its hash rides on the creation command.
 	var (
 		sealDefKey uint64
 		schema     string
 		formErr    error
+		wantsPass  bool
 	)
 	s.do(func() {
 		if link, ok, e := s.publicLinks.Get(token); e == nil && ok {
 			if d := s.latestDeploymentByProcessID(link.ProcessID); d != nil {
 				sealDefKey = d.Key
+				wantsPass = d.cp != nil && d.cp.HasPublicWizard()
 				f, _, e := s.forms.Get(link.FormID)
 				schema, formErr = f.Schema, e
 			}
@@ -321,6 +330,13 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 	if formErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "read form: "+formErr.Error())
 		return
+	}
+	var passSecret, passHashed string
+	if wantsPass {
+		if passSecret, passHashed, err = mintPass(); err != nil {
+			httpapi.Error(w, http.StatusInternalServerError, "mint pass: "+err.Error())
+			return
+		}
 	}
 	if sealDefKey != 0 {
 		if bad := formShapeOf([]byte(schema)).notOnForm(vars); len(bad) > 0 {
@@ -335,6 +351,7 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 	var (
 		found   bool
 		notExec bool
+		instKey uint64
 		runErr  error
 		// ambiguous is ADR-0426's refusal: a process only its triggers can start.
 		ambiguous string
@@ -365,6 +382,12 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
+		if passHashed != "" {
+			// The instance keeps the pass's hash, frozen on its activation event, and
+			// the start learns which instance it made so the pass can name it.
+			s.proc.CreateInstanceWithPass(d.Key, &instKey, passHashed, vars...)
+			return
+		}
 		s.proc.CreateInstance(d.Key, vars...)
 	})
 	// Off the loop: a started instance may run straight into a task, and
@@ -382,6 +405,18 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusConflict, "process is not executable and cannot be started")
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "unknown or revoked link")
+	case instKey != 0:
+		// A start into a process with a public wizard hands the visitor its pass and
+		// where the sitting stands. Every other start stays as silent as ADR-0029 made
+		// it. A sitting that cannot be read yet is answered as pending: the pass is
+		// what matters, and the page asks again with it.
+		ans, err := s.publicWizardAnswer(instKey)
+		if err != nil {
+			logWizardFailure(r, instKey, err)
+			ans = &publicWizardResp{State: wizardPending}
+		}
+		ans.Pass = strconv.FormatUint(instKey, 10) + "." + passSecret
+		httpapi.JSON(w, http.StatusOK, map[string]any{"started": true, "wizard": ans})
 	default:
 		httpapi.JSON(w, http.StatusOK, map[string]any{"started": true})
 	}

@@ -450,6 +450,22 @@ func (p *Processor) CreateInstanceReporting(defKey uint64, created *uint64, star
 	})
 }
 
+// CreateInstanceWithPass is [Processor.CreateInstanceReporting] for the public start of a
+// process that holds a public wizard (ADR-0449). passHash is the SHA-256, hex, of the
+// pass the start hands its visitor. It rides on the creation command's own instance
+// value, which the activation event copies whole, so the hash is durable in the same
+// fsync as the instance and read back on replay rather than recomputed (I2, I6), and
+// applyToState stores it with the rest of the record unchanged (I4).
+func (p *Processor) CreateInstanceWithPass(defKey uint64, created *uint64, passHash string, startVars ...model.VariableValue) {
+	p.queue = append(p.queue, Command{
+		ValueType: model.VTProcessInstance,
+		Intent:    model.IntentActivating,
+		Value:     inflightValue{process: model.ProcessInstanceValue{ProcessDefKey: defKey, PublicPassHash: passHash}},
+		StartVars: startVars,
+		Created:   created,
+	})
+}
+
 // CompleteJob enqueues completion of a job by a worker, optionally carrying the
 // output variables the worker produced (e.g. a business rule task's decision
 // result). The outputs are written into the job's process instance scope when the
