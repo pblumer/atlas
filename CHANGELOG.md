@@ -24,8 +24,10 @@ _Changed_ / _Removed_ for each version.
   beside it. It opens the open screens of that instance's public wizards and nothing
   else, through two new public routes that take it in an `Authorization: Bearer` header:
   `GET /public/wizard/step` and `POST /public/wizard/steps/{taskKey}/complete`. A screen
-  accepts only the fields its form has, seals personal values as every in-edge does, and
-  is prefilled only with the variables its form binds. A wrong, forged or foreign pass
+  accepts only the fields its form submits, seals personal values as every in-edge does,
+  and is prefilled only with the variables its form binds; a value it shows in a disabled
+  field, such as a price a worker computed, is not the visitor's to change, while a
+  read-only field is submitted and stays writable. A wrong, forged or foreign pass
   answers 404 alike, and the routes share the public links' rate limit and CORS
   allow-list, which now lets an embedding page send the header. Every other public start
   answers `{"started": true}` as before.
@@ -79,9 +81,10 @@ _Changed_ / _Removed_ for each version.
   form has no field for, a member beside a dotted key or inside a group's or dynamic
   list's path, or a plain value where the form nests fields. A refused submission starts
   nothing. A link whose form is gone accepts only an empty submission. A widget that
-  sends values its form does not declare has to add fields for them. The check covers
-  names and structure; a field's type, whether it is required and its pattern stay the
-  form's validation in the browser.
+  sends values its form does not declare has to add fields for them. A disabled field is
+  left out, as the form never submits one. The check covers names and structure; a
+  field's type, whether it is required and its pattern stay the form's validation in the
+  browser.
 
 ## [0.9.1] — 2026-10-09
 

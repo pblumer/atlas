@@ -109,6 +109,35 @@ func TestPublicStartRefusesWhatTheFormCannotSubmit(t *testing.T) {
 	}
 }
 
+// TestADisabledFieldIsNotTheCallersToSet: the viewer never submits a disabled field, so
+// a value for one was not typed into the form. A public screen that shows, in a disabled
+// field, a price a worker computed must not take a cheaper one from the visitor. The
+// field still binds its variable, so the screen is prefilled with it.
+func TestADisabledFieldIsNotTheCallersToSet(t *testing.T) {
+	form := `{"components":[
+		{"type":"textfield","key":"ziel"},
+		{"type":"number","key":"premium","disabled":true},
+		{"type":"number","key":"discount","disabled":false},
+		{"type":"textfield","key":"tarif","readonly":true},
+		{"type":"group","path":"quote","components":[
+			{"type":"number","key":"total","disabled":true},
+			{"type":"checkbox","key":"accepted"}]}]}`
+	if bad := shapeCheck(t, form, `{"ziel":"Rom","discount":5,"tarif":"basic","quote":{"accepted":true}}`); len(bad) > 0 {
+		t.Errorf("refused %v of what the form submits", bad)
+	}
+	want := []string{"premium", "quote.total"}
+	if bad := shapeCheck(t, form, `{"ziel":"Rom","premium":0.01,"quote":{"total":1,"accepted":true}}`); !slices.Equal(bad, want) {
+		t.Errorf("refused %v, want %v", bad, want)
+	}
+	read := map[string]bool{}
+	collectFormFieldKeys([]byte(form), read)
+	for _, k := range []string{"ziel", "premium", "discount", "tarif", "quote"} {
+		if !read[k] {
+			t.Errorf("the form no longer reads %q", k)
+		}
+	}
+}
+
 // TestAFormThatCannotRenderAcceptsNoField: the schema route serves the form a visitor
 // fills in, so a form that is missing or does not parse is one nobody was shown. Its
 // link accepts nothing but an empty submission.
