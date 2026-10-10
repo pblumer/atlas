@@ -1704,7 +1704,7 @@ function wizardHTML(bo) {
         ${opt("public", WIZARD_KINDS.public.option)}
         ${unknown}
       </select></label>
-    <p class="muted" style="font-size:12px">A wizard's user tasks are the screens of one multi-step form, and the gateways between them decide which screen follows which answer. Attach an interrupting <b>timer boundary event</b> to say when an unfinished sitting is abandoned; a public wizard cannot be published without one. Leave the steps of a public wizard unassigned: they belong to whoever started it. The Problems panel checks these rules now; carrying the person from one screen to the next follows in a later release.</p>`;
+    <p class="muted" style="font-size:12px">A wizard's user tasks are the screens of one multi-step form, and the gateways between them decide which screen follows which answer. Attach an interrupting <b>timer boundary event</b> to say when an unfinished sitting is abandoned; a public wizard cannot be published without one. Leave the steps of a public wizard unassigned: they belong to whoever started it. In the Tasks app, a signed-in person who submits one screen lands on the next; carrying the anonymous visitor of a public link follows in a later release.</p>`;
 }
 
 // shopOwners holds, per diagram instance, which message names product actions own: a Map

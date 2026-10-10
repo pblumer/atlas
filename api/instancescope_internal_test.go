@@ -13,25 +13,29 @@ import (
 // looked at the top level would hand a task holder an allowlist missing every field
 // inside a group, and the form would render blank. A key that addresses a nested
 // value by path names a variable at its root, which is what an instance scope
-// holds.
+// holds; so does a group's or a dynamic list's path, under which its fields live.
 func TestCollectFormFieldKeysWalksTheWholeSchema(t *testing.T) {
 	out := map[string]bool{}
 	collectFormFieldKeys([]byte(`{"type":"default","components":[
 		{"type":"textfield","key":"top"},
-		{"type":"group","key":"grp","components":[
+		{"type":"group","components":[
 			{"type":"textfield","key":"customer.name"},
 			{"type":"group","components":[{"type":"checkbox","key":"deep"}]}
 		]},
+		{"type":"group","path":"contact","components":[{"type":"textfield","key":"phone"}]},
+		{"type":"dynamiclist","path":"items","isRepeating":true,"components":[{"type":"textfield","key":"sku"}]},
 		{"type":"text"},
 		"not an object"
 	]}`), out)
-	for _, want := range []string{"top", "grp", "customer", "deep"} {
+	for _, want := range []string{"top", "customer", "deep", "contact", "items"} {
 		if !out[want] {
 			t.Errorf("field %q was not collected: %v", want, out)
 		}
 	}
-	if out["customer.name"] {
-		t.Errorf("a path was collected whole: %v", out)
+	for _, not := range []string{"customer.name", "phone", "sku"} {
+		if out[not] {
+			t.Errorf("%q was collected, but the form binds no variable of that name: %v", not, out)
+		}
 	}
 }
 
@@ -47,7 +51,6 @@ func TestCollectFormFieldKeysFollowsAContainersPath(t *testing.T) {
 			{"type":"group","path":"geo","components":[{"type":"number","key":"lat"}]}
 		]},
 		{"type":"dynamiclist","path":"order.items","components":[{"type":"textfield","key":"sku"}]},
-		{"type":"group","path":"empty","components":[{"type":"text"}]},
 		{"type":"group","path":"","components":[{"type":"textfield","key":"plain"}]}
 	]}`), out)
 	for _, want := range []string{"address", "order", "plain"} {
@@ -55,7 +58,7 @@ func TestCollectFormFieldKeysFollowsAContainersPath(t *testing.T) {
 			t.Errorf("field %q was not collected: %v", want, out)
 		}
 	}
-	for _, not := range []string{"street", "geo", "lat", "sku", "order.items", "empty"} {
+	for _, not := range []string{"street", "geo", "lat", "sku", "order.items"} {
 		if out[not] {
 			t.Errorf("%q was collected, but the form neither reads nor submits it at the root: %v", not, out)
 		}

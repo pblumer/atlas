@@ -5452,6 +5452,45 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         The browser never sees the key, and <b>no case data from running instances</b> goes to a model this way: what
         is read is the process's model, not its operation.</p>
 
+      <h4 data-l="de">Mehrstufige Formulare (Wizards)</h4><h4 data-l="en">Multi-step forms (wizards)</h4>
+      <p data-l="de">Läuft ein Formular über mehrere Masken, und hängt die nächste Maske von der Antwort auf die
+        vorige ab, dann gehört diese Abfolge in den Prozess: jede Maske ist ein <b>User-Task</b>, und die Gateways
+        dazwischen entscheiden, welche Maske folgt. Damit eine Person die Masken in einem Zug durchläuft, statt
+        nach jeder in den Posteingang zurückzukehren, legst du sie in einen eingebetteten <b>Subprozess</b> und
+        markierst ihn im Modeler unter <i>Implement &rsaquo; Wizard</i> als Wizard (<code>atlas:wizard</code>,
+        ADR-0449).</p>
+      <p data-l="en">When a form runs over several screens, and which screen comes next depends on the answer to the
+        one before, that sequence belongs in the process: each screen is a <b>user task</b>, and the gateways between
+        them decide which screen follows. So that a person walks the screens in one go rather than returning to the
+        inbox after each, put them in an embedded <b>subprocess</b> and mark it as a wizard in the Modeler under
+        <i>Implement &rsaquo; Wizard</i> (<code>atlas:wizard</code>, ADR-0449).</p>
+      <ul>
+        <li data-l="de"><b>In der Tasks-App</b> öffnet sich nach dem Abschliessen einer Maske gleich die nächste, als
+          „Step n“ mit den bisherigen Masken darüber, und sie ist dir bereits zugewiesen. Steht ein Worker oder ein
+          Timer zwischen zwei Masken, wartet die Ansicht bis zu zwei Minuten darauf. Ist die nächste Maske einer
+          Gruppe zugewiesen, zu der du nicht gehörst, geht sie dorthin, und du kehrst in den Posteingang zurück.</li>
+        <li data-l="en"><b>In the Tasks app</b>, completing a screen opens the next one straight away, as "Step n"
+          with the screens before it above, already assigned to you. If a worker or a timer stands between two
+          screens, the view waits for up to two minutes. If the next screen is assigned to a group you are not in,
+          it goes there, and you are back in the inbox.</li>
+        <li data-l="de"><b>Einen unterbrechenden Timer</b> an den Subprozess hängen: Er sagt, wann eine nicht beendete
+          Sitzung als abgebrochen gilt. Ohne ihn warnt das Problems-Panel, und ein öffentlicher Wizard lässt sich gar
+          nicht veröffentlichen.</li>
+        <li data-l="en"><b>Attach an interrupting timer</b> to the subprocess: it says when an unfinished sitting
+          counts as abandoned. Without one the Problems panel warns, and a public wizard cannot be published at
+          all.</li>
+        <li data-l="de"><b>Die Antworten bleiben im Wizard.</b> Was die Masken abschicken, liegt im Scope des
+          Subprozesses; was der Prozess danach braucht, gibst du über die <i>Output-Mappings</i> des Subprozesses
+          nach aussen.</li>
+        <li data-l="en"><b>The answers stay in the wizard.</b> What the screens submit lives in the subprocess's
+          scope; what the process needs afterwards, you pass out through the subprocess's <i>output
+          mappings</i>.</li>
+        <li data-l="de"><b>Zurück</b> gibt es nur als Sequenzfluss, den du zur früheren Maske zurück zeichnest; die
+          früheren Antworten sind dann vorbelegt.</li>
+        <li data-l="en"><b>Back</b> exists only as a sequence flow you draw back to the earlier screen; the earlier
+          answers are then filled in.</li>
+      </ul>
+
       <h3 data-l="de">Worker – atlas mit der Aussenwelt verbinden</h3><h3 data-l="en">Workers – wiring atlas to the outside</h3>
       <p data-l="de">Ein <b>Service-Task</b> erledigt die Arbeit nicht selbst. Er erzeugt ein <b>Job</b>-Arbeitspaket,
         atlas schreibt es dauerhaft weg – und erst danach darf ein <b>Worker</b> es holen und das Fremdsystem

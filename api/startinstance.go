@@ -76,13 +76,13 @@ func (s *Server) handleCreateInstanceByProcessID(w http.ResponseWriter, r *http.
 		httpapi.Error(w, http.StatusNotFound, "no deployed process with id "+req.ProcessID)
 		return
 	}
-	s.startInstance(w, key, startVars)
+	s.startInstance(w, r, key, startVars)
 }
 
 // startInstance is the half both entry points share: create, drive, read back.
 // Split out when the by-id route arrived, so the two cannot answer differently
 // about a process that is deployed but not executable.
-func (s *Server) startInstance(w http.ResponseWriter, key uint64, startVars []model.VariableValue) {
+func (s *Server) startInstance(w http.ResponseWriter, r *http.Request, key uint64, startVars []model.VariableValue) {
 	// A start form is where personal data most often enters, so it is sealed here —
 	// before the CreateInstance command, which therefore already holds ciphertext
 	// (ADR-0314). This is the funnel for the JSON start body and the API start; the CSV
@@ -161,7 +161,18 @@ func (s *Server) startInstance(w http.ResponseWriter, key uint64, startVars []mo
 		httpapi.Error(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
 	default:
 		s.notePositionInstance(startVars, instKey, processID)
-		httpapi.JSON(w, http.StatusOK, createInstanceResp{DefinitionKey: key, InstanceKey: instKey, Stats: stats})
+		resp := createInstanceResp{DefinitionKey: key, InstanceKey: instKey, Stats: stats}
+		// A start that ran into a wizard carries the starter to its first screen
+		// (ADR-0449). Failing to say where it stands does not fail the start: the
+		// instance runs, and a failed start would be retried and run twice.
+		if instKey != 0 {
+			if wz, err := s.wizardAfterStart(r, instKey); err != nil {
+				logWizardFailure(r, instKey, err)
+			} else {
+				resp.Wizard = wz
+			}
+		}
+		httpapi.JSON(w, http.StatusOK, resp)
 	}
 }
 

@@ -14,6 +14,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A wizard carries the signed-in person from screen to screen.** Completing a step of a
+  wizard (ADR-0449), and starting a process that runs into one, now answers with where the
+  sitting stands: its next screen, already claimed for the person so it leaves every
+  other inbox; `handedOver` when the next screen is addressed to a group they are not in;
+  `pending` while a worker or a timer stands between two screens; `done` when the sitting
+  has ended. The Tasks app follows that answer instead of moving to the next task in the
+  queue: it opens the next screen, marks it "Step n" with the screens submitted before it,
+  waits for up to two minutes while the sitting is pending, and says when the form is
+  done. Starting a process from the Tasks app opens its first screen. Task rows name the
+  sitting they belong to (`wizardScopeKey`, `wizard`). The anonymous visitor of a public
+  start link is not carried yet.
+
 - **A subprocess can be marked as a wizard.** `atlas:wizard="internal"` or `"public"` on an
   embedded subprocess marks it as one sitting of one person: its user tasks are the
   screens of a multi-step form, and the gateways between them decide which screen
@@ -25,7 +37,7 @@ _Changed_ / _Removed_ for each version.
   than the person, and a wizard with no interrupting timer boundary event, are warned
   about. A start link is not published, and an existing link does not start, for a
   process whose public wizard has no such timer. The engine runs a wizard like any other
-  subprocess; carrying the person from one screen to the next follows in a later step.
+  subprocess.
 
 ### Changed
 
@@ -41,6 +53,13 @@ _Changed_ / _Removed_ for each version.
   `eventGatewayType="Exclusive"` is the default and still deploys.
 
 ### Fixed
+
+- **A task holder reads the fields of a grouped form.** What a person holding a task may
+  read of its instance is the set of variables its form binds. A field inside a group or a
+  dynamic list that has a path was counted under its own key rather than under the path,
+  so the form came up without the values it should have shown, and a variable of the
+  field's bare name, which the form does not bind, was readable instead. The variables are
+  now the roots of the paths the form submits, as the public start link already checks.
 
 - **A public start link accepts only what its form can submit.** `POST
   /public/forms/{token}/start` took any variable name and value, so an anonymous caller
@@ -61,11 +80,6 @@ _Changed_ / _Removed_ for each version.
   and the REST worker's panel offers *OAuth2 client credentials* with a field for each.
   The guard that compares the compiler's worker attributes with the moddle covers every
   Worker Type, read from `compiler/parse.go`, instead of a hand-kept list of two.
-- **A form-js group or dynamic list with a path is read at that path.** The allowlist
-  of fields a task holder may read took the keys inside such a container as variables
-  of their own, so a task's form could not prefill `address` from a group whose path is
-  `address`, and a variable named like one of its fields was handed out instead. The
-  container's path now names the variable, as it does in the form.
 
 ### Security
 
