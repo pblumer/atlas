@@ -508,3 +508,30 @@ func TestPublicRateLimited(t *testing.T) {
 		t.Errorf("POST start under a saturated limiter: %d, want 429", rec.Code)
 	}
 }
+
+// TestPublicStartWithoutItsForm: a link whose form is gone renders nothing, so its
+// start accepts an empty submission and no field, and a form that cannot be read is
+// the 500 the schema route answers too.
+func TestPublicStartWithoutItsForm(t *testing.T) {
+	srv := newServerForErrors(t)
+	if code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", startFormBPMNInternal, "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy: %d %s", code, body)
+	}
+	if err := srv.publicLinks.Save(publicLink{Token: "abab", ProcessID: "onboard", FormID: "onboarding-form", CreatedAt: 1}); err != nil {
+		t.Fatalf("save link: %v", err)
+	}
+	start := "/public/forms/abab/start"
+	if code, body := serveInternal(t, srv, http.MethodPost, start, `{"variables":{"customer":"Acme"}}`, "application/json"); code != http.StatusBadRequest {
+		t.Errorf("a field with no form to have it: %d %s, want 400", code, body)
+	}
+	if code, body := serveInternal(t, srv, http.MethodPost, start, `{}`, "application/json"); code != http.StatusOK {
+		t.Errorf("an empty submission: %d %s, want 200", code, body)
+	}
+
+	if err := os.WriteFile(srv.forms.FileFor("onboarding-form"), []byte("{not json"), 0o644); err != nil {
+		t.Fatalf("corrupt form: %v", err)
+	}
+	if code, body := serveInternal(t, srv, http.MethodPost, start, `{}`, "application/json"); code != http.StatusInternalServerError {
+		t.Errorf("start over a corrupt form: %d %s, want 500", code, body)
+	}
+}
