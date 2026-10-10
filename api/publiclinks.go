@@ -4,13 +4,10 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
-	"github.com/pblumer/atlas/model"
 
 	"github.com/pblumer/atlas/api/token"
 )
@@ -267,7 +264,8 @@ func (s *Server) handlePublicFormSchema(w http.ResponseWriter, r *http.Request) 
 // the submitted form data as start variables, through the same single-writer path
 // every other start uses (ADR-0029/ADR-0002). It reads nothing back and touches
 // no other process. Rate-limited and payload-capped. 404 if the token is unknown
-// or its process is no longer deployed.
+// or its process is no longer deployed; 400 if the submission carries a value the
+// link's form has no field for (publicstartfields.go).
 func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 	s.setPublicCORS(w, r)
 	if !s.publicRate.allow(httpapi.ClientIP(r)) {
@@ -289,24 +287,35 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 	// has to seal (ADR-0314) — and its definition is only known once the token is
 	// resolved, which the loop owns. Hence a resolution visit of its own before the
 	// start: sealing reads the vault and must not happen on the loop, and the command
-	// must already hold ciphertext. The same visit names the form the link publishes,
-	// which the submission is held to before anything is sealed. A token that
-	// resolves to nothing, or to a process no longer deployed, checks and seals
-	// nothing and falls through to the 404 the start below reports.
+	// must already hold ciphertext. A token that resolves to nothing seals nothing and
+	// falls through to the 404 the start below reports.
+	//
+	// The same visit reads the form the link renders, so that a value the form has no
+	// field for is refused before anything is sealed or started. It is the form the
+	// schema route serves, link.FormID, because that is what the visitor was shown. A
+	// form that is gone has no fields, so it accepts an empty submission and nothing
+	// else.
 	var (
 		sealDefKey uint64
-		formID     string
+		schema     string
+		formErr    error
 	)
 	s.do(func() {
 		if link, ok, e := s.publicLinks.Get(token); e == nil && ok {
 			if d := s.latestDeploymentByProcessID(link.ProcessID); d != nil {
-				sealDefKey, formID = d.Key, link.FormID
+				sealDefKey = d.Key
+				f, _, e := s.forms.Get(link.FormID)
+				schema, formErr = f.Schema, e
 			}
 		}
 	})
+	if formErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read form: "+formErr.Error())
+		return
+	}
 	if sealDefKey != 0 {
-		if status, msg := s.publicStartFieldsRefusal(formID, vars); status != 0 {
-			httpapi.Error(w, status, msg)
+		if bad := formShapeOf([]byte(schema)).notOnForm(vars); len(bad) > 0 {
+			httpapi.Error(w, http.StatusBadRequest, "not fields of this form: "+strings.Join(bad, ", "))
 			return
 		}
 		if err := s.encipherStartVars(sealDefKey, vars); err != nil {
@@ -360,46 +369,6 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 	default:
 		httpapi.JSON(w, http.StatusOK, map[string]any{"started": true})
 	}
-}
-
-// publicStartFieldsRefusal holds an anonymous submission to the form its link
-// publishes, as ADR-0029 decided: every variable it carries must be one that form
-// submits ([collectFormFieldKeys]). It is the one anonymous write into an instance,
-// and a name the form does not ask for is exactly what a stranger would use to set
-// the variable a gateway decides on, so the whole submission is refused rather than
-// trimmed — a page that sends more than its form is a page to fix, and silently
-// dropping a field would start an instance its sender believes holds it. Only the
-// names are checked; what a field's value may be is still the form's to enforce.
-//
-// An empty submission sets nothing, so there is nothing to hold to the form and the
-// form is not read. A submission to a link whose form is gone cannot be checked, so
-// it is reported as the schema endpoint reports that link, and the door fails
-// closed. It returns status 0 when the submission may proceed. It reads the form
-// store from disk, so it runs off the loop.
-func (s *Server) publicStartFieldsRefusal(formID string, vars []model.VariableValue) (int, string) {
-	if len(vars) == 0 {
-		return 0, ""
-	}
-	f, ok, err := s.forms.Get(formID)
-	switch {
-	case err != nil:
-		return http.StatusInternalServerError, "read form: " + err.Error()
-	case !ok:
-		return http.StatusNotFound, "unknown or revoked link"
-	}
-	fields := map[string]bool{}
-	collectFormFieldKeys([]byte(f.Schema), fields)
-	var unknown []string
-	for _, v := range vars {
-		if !fields[v.Name] {
-			unknown = append(unknown, strconv.Quote(v.Name))
-		}
-	}
-	if len(unknown) == 0 {
-		return 0, ""
-	}
-	sort.Strings(unknown)
-	return http.StatusBadRequest, "the form does not ask for " + strings.Join(unknown, ", ")
 }
 
 // handlePublicFormPage serves the standalone public form page (no app shell) for
