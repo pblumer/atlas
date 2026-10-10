@@ -149,3 +149,27 @@ func TestPublicUnknownToken(t *testing.T) {
 		t.Errorf("unknown token start: %d, want 404", code)
 	}
 }
+
+// TestPublicStartRefusesAFieldTheFormLacks is ADR-0029's promise, end to end: the
+// anonymous start accepts only what the link's form has fields for, and a refused
+// submission starts nothing.
+func TestPublicStartRefusesAFieldTheFormLacks(t *testing.T) {
+	ts := newTestServer(t)
+	token := publish(t, ts)
+
+	code, body := doReq(t, ts, http.MethodPost, "/public/forms/"+token+"/start",
+		`{"variables":{"customer":"Acme","approved":true}}`, "application/json")
+	if code != http.StatusBadRequest {
+		t.Fatalf("a variable the form has no field for: %d %s, want 400", code, body)
+	}
+	if !bytes.Contains(body, []byte("approved")) || bytes.Contains(body, []byte("customer")) {
+		t.Errorf("the refusal should name the extra field and only it: %s", body)
+	}
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/instances", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("list instances: %d %s", code, body)
+	}
+	if bytes.Contains(body, []byte("Acme")) {
+		t.Fatalf("a refused submission started an instance: %s", body)
+	}
+}

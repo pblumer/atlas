@@ -12,6 +12,20 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A public start link accepts only what its form can submit.** `POST
+  /public/forms/{token}/start` took any variable name and value, so an anonymous caller
+  could set a variable the form never shows, such as one a gateway routes on before any
+  task has set it. ADR-0029 promised the check, and the route now makes it. A submission
+  is refused with 400, naming each offending path, when it carries a variable the link's
+  form has no field for, a member beside a dotted key or inside a group's or dynamic
+  list's path, or a plain value where the form nests fields. A refused submission starts
+  nothing. A link whose form is gone accepts only an empty submission. A widget that
+  sends values its form does not declare has to add fields for them. The check covers
+  names and structure; a field's type, whether it is required and its pattern stay the
+  form's validation in the browser.
+
 ## [0.9.1] — 2026-10-09
 
 **A patch release for how atlas presents itself.** `atlas.exe` shows its version in

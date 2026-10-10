@@ -931,6 +931,11 @@ func TestThePublicFormDoorSealsAndFailsClosed(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("deploy: status=%d body=%s", code, body)
 	}
+	// The link accepts only what its form has fields for (ADR-0029), so the form exists.
+	if err := srv.forms.Save(form{ID: "bestellformular", Schema: `{"type":"default","components":[` +
+		`{"type":"textfield","key":"personalnummer"},{"type":"textfield","key":"vorname"}]}`}); err != nil {
+		t.Fatalf("save form: %v", err)
+	}
 	code, body = serveInternal(t, srv, http.MethodPost, "/api/v1/public-links", `{"processId":"bestellung"}`, "application/json")
 	if code != http.StatusOK {
 		t.Fatalf("create public link: status=%d body=%s", code, body)
