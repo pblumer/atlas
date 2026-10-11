@@ -1,9 +1,15 @@
 # ADR-0303: Isolate general-purpose script tasks inside a restrictive OS sandbox
 
 - **Status:** Accepted
-- **Implementation:** Partial
+- **Implementation:** Landed
 - **Date:** 2026-09-09
 - **Deciders:** Atlas maintainers
+
+> **Implementation status (2026-10-11).** Landed. The strict profile is built in
+> `connector/script/sandbox.go`, `sandbox_linux.go` and `process_unix.go`, wired through
+> `cmd/atlas/main.go` and `api/supervisor.go`, and covered by `sandbox_internal_test.go` and
+> `sandbox_policy_linux_test.go`. What remains are the follow-ups #895–#898, which this record
+> defers. Evidence: [the reconciliation of 2026-10-11](../audits/adr-status-reconciliation-2026-10-11.md).
 
 ## Context and problem statement
 

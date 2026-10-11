@@ -96,8 +96,8 @@ derived on read from state that already exists; nothing is written back into the
 record (I6). `connectorId` is empty when the model references a name nobody has
 configured, which is a different situation and renders differently.
 
-**One connector dialog, shared.** [`api/web/connectordialog.js`](../../api/web/connectordialog.js)
-holds the dialog and, more importantly, `connectorShape(kind, provider)` — the single
+**One connector dialog, shared.** [`api/web/workerdialog.js`](../../api/web/workerdialog.js) (then `connectordialog.js`)
+holds the dialog and, more importantly, `workerShape(kind, provider)` (then `connectorShape`) — the single
 description of which fields a kind and provider actually use, what to call them, and
 what to say about them. The Console's create form now derives its field visibility from
 the same function instead of its own copy of the rules, and the row's **Edit** opens

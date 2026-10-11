@@ -88,6 +88,10 @@ non-human caller should make that failure a refusal rather than a silence.
 
 ### The nine tools
 
+> **As built (2026-10-11).** The table lists ten tools, and all ten exist
+> (`mcp/tools_catalog.go`): the ArchiMate import is the tenth. The text of this record
+> still counts nine.
+
 One HTTP operation each, per [ADR-0016](0016-mcp-server-over-http-api.md). The
 adapter interprets no catalogue, resolves no edge and decides no publish.
 

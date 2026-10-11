@@ -1,13 +1,18 @@
 # ADR-0409: The archive substrate waits, its schema does not
 
-- **Status:** Proposed
-- **Implementation:** Partial
+- **Status:** Accepted (2026-10-11: the schema guards it decided run in go test; see the implementation status)
+- **Implementation:** Landed
 - **Date:** 2026-09-22
 - **Deciders:** Atlas maintainers
 - **Open question:** whether anybody will walk a year-old run graph. The answer decides
   whether the substrate refused below is ever owed, and it is a demand question rather than
   a technical one — nothing in this repository can settle it.
 - **Question checked:** 2026-09
+
+> **Implementation status (2026-10-11).** Landed. The export's column names are guarded
+> (`model/testdata/archive-columns.txt`, `model/archiveschema_test.go`,
+> `api/archiveschema_test.go`), and the substrate it refuses is not built, which is the
+> decision. Evidence: [the reconciliation of 2026-10-11](../audits/adr-status-reconciliation-2026-10-11.md).
 
 ## Context and problem statement
 

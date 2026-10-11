@@ -1,9 +1,16 @@
 # ADR-0207: Package Worker Types as signed external runtime artifacts
 
 - **Status:** Accepted
-- **Implementation:** Landed
+- **Implementation:** Partial
 - **Date:** 2026-08-28
 - **Deciders:** Atlas maintainers
+
+> **Implementation status (2026-10-11).** Partial — this record says itself that it defines
+> a target contract. Built: step 1, the manifest parser and validator in `workertype/`
+> (`manifest.go` and its tests), which checks a digest's *format*. Nothing outside the package
+> imports it. Not built: steps 2–6 — manifests in the Worker Catalog, Repository install and
+> removal, launching an OCI image verified by digest, the signature and trust policy, and the
+> cloud-native integration. Evidence: [the reconciliation of 2026-10-11](../audits/adr-status-reconciliation-2026-10-11.md).
 
 ## Context and problem statement
 

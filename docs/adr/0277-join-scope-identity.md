@@ -5,6 +5,11 @@
 - **Date:** 2026-09-07
 - **Deciders:** Atlas engine maintainers
 
+> **As built (2026-10-11).** `ElementInstancesOnNode`, named below, no longer exists: since
+> [ADR-0290](0290-per-flow-join-counting.md) a join counts arrivals per incoming flow through
+> `ProcessingContext.ArrivalsOnNode` (`engine/context.go`). `TokenCanStillReach` is still
+> there.
+
 ## Context and problem statement
 
 [ADR-0024](0024-parallel-gateway-join.md) settled how a parallel join

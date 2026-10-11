@@ -1,7 +1,7 @@
 # ADR-0333: The inventory is taken before it is enforced, and what it records says Atlas did not grant it
 
 - **Status:** Accepted
-- **Implementation:** Partial
+- **Implementation:** Landed
 - **Date:** 2026-09-15
 - **Deciders:** Atlas maintainers
 - **Open question:** Whether a mapping per product scales to an estate whose rights are
@@ -10,6 +10,12 @@
   record introduces is the instrument for finding out — but nobody has run it against a
   real tenant yet.
 - **Question checked:** 2026-09
+
+> **Implementation status (2026-10-11).** Landed. The commissioning load is built
+> (`api/inventoryload.go`, `inventoryloadapply.go`, `examples/bestandsaufnahme.bpmn`, with its
+> tests). Reconciliation and adoption, which this record listed among its follow-ups, are built
+> under [ADR-0334](0334-reconciliation.md). Evidence:
+> [the reconciliation of 2026-10-11](../audits/adr-status-reconciliation-2026-10-11.md).
 
 ## Context and problem statement
 

@@ -382,6 +382,10 @@ This ADR is **not implemented in one change**. The slices:
    **Not done here: OpenTelemetry traces.** They landed separately, below. A
    `--log-level` flag is also absent: nothing emits below Info yet, so it would be a knob
    over an empty set.
+
+   *As built (2026-10-11): `--log-level` exists now (`cmd/atlas/main.go`,
+   [ADR-0448](0448-trusted-proxies.md)), with a debug level for lines
+   that are true but not news.*
 9. **Landed** — **distributed traces**, opt-in behind `--trace-endpoint`. Metrics say
    *that* a request was slow; a trace says *where* the time went, and — once a caller
    propagates its context — across which services.
@@ -437,4 +441,5 @@ This ADR is **not implemented in one change**. The slices:
   safe position as the exporter-lag inputs
 - respects ADR-0080/ADR-0085 (maintained counters, no full scans) — a metric with no
   O(1) source waits for one
-- ADR-0007 (job worker protocol) supplies the job counters in a later slice
+- ADR-0007 (job worker protocol) supplies the job counters — landed as
+  `jobs_activated_total` and `jobs_lease_timeouts_total`

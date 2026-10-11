@@ -1,8 +1,8 @@
 # ADR-0205: Who owns a connector, and who may use the events it brings in
 
 - **Status:** Accepted (2026-08-28: both halves implemented — the configuration
-- **Implementation:** Landed
   scope and the message-name claim)
+- **Implementation:** Landed
 - **Date:** 2026-08-27
 - **Deciders:** Atlas maintainers
 

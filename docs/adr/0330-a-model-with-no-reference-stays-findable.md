@@ -114,6 +114,9 @@ deployment's provenance points at a handle — is the same question
 [ADR-0329](0329-a-decision-deployment-is-not-deletable.md)
 asks one rung above, and it deserves its own answer rather than a checkbox here.
 
+> **As built (2026-10-11).** That answer was given in [ADR-0336](0336-cleaning-up-the-decision-store.md): a stored model can
+> be deleted (`DELETE /api/v1/dmn-models/{ref}`), as can a decision deployment.
+
 ### Consequences
 
 - **Positive:** A model can no longer become unreachable. The one action that used

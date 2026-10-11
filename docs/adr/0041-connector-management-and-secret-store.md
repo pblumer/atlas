@@ -1,9 +1,16 @@
 # ADR-0041: Connector management and the secret store
 
 - **Status:** Accepted
-- **Implementation:** Landed
+- **Implementation:** Partial
 - **Date:** 2026-07-23
 - **Deciders:** Atlas maintainers
+
+> **Implementation status (2026-10-11).** Partial. Built: the reference indirection — a
+> `credentialsRef` resolved from the encrypted vault ([ADR-0069](0069-engine-internal-encrypted-secret-vault.md)), then
+> from `ATLAS_CONNECTOR_<REF>_TOKEN` (`api/connectors.go`) — with managed connector records
+> and their Console page. Not built: the mounted-secret-file backend of A2, the inline config
+> file (A1) and an external secret manager (A4). The note below predates the vault, which it
+> still lists as deferred. Evidence: [the reconciliation of 2026-10-11](../audits/adr-status-reconciliation-2026-10-11.md).
 
 > **Implementation status.** The base decision is now implemented for the temis
 > decision connector (ADR-0050): durable managed connector *instances* in an

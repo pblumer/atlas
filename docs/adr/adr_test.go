@@ -156,6 +156,36 @@ func TestADRIndexMatchesDirectory(t *testing.T) {
 	}
 }
 
+// TestTheIndexSaysWhichRecordsWereAmended holds the index's "(amended)" to the records.
+// The match above compares only the base status, which strips the parenthetical, so the
+// marker drifted unseen: in October 2026 twenty-three amended records showed a plain
+// "Accepted" in the index. A reader scanning the table for decisions that moved after
+// they were taken was shown fewer than half of them.
+func TestTheIndexSaysWhichRecordsWereAmended(t *testing.T) {
+	readme, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	rows := map[int]indexRow{}
+	for _, r := range indexRows(t, string(readme)) {
+		rows[r.num] = r
+	}
+	for _, a := range numberedADRs(t) {
+		r, ok := rows[a.Num]
+		if !ok {
+			continue // TestADRIndexMatchesDirectory names a missing row
+		}
+		amended := strings.Contains(strings.ToLower(a.Status), "amended")
+		marked := strings.Contains(r.status, "(amended)")
+		switch {
+		case amended && !marked:
+			t.Errorf("ADR-%04d is amended (%q), but its index row says %q — write %q", a.Num, a.Status, r.status, BaseStatus(a.Status)+" (amended)")
+		case marked && !amended:
+			t.Errorf("ADR-%04d's index row says %q, but the record's status does not mention an amendment (%q)", a.Num, r.status, a.Status)
+		}
+	}
+}
+
 // TestADRIndexTableRenders guards the shape of the table rather than its contents.
 // A Markdown table ends at the first line that is not a row, so a single blank line
 // slipped between two rows does not fail any of the checks above — it silently cuts

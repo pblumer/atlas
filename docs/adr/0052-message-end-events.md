@@ -94,6 +94,11 @@ recovery story.
   Send/receive **tasks** remain unimplemented (ROADMAP) and still reject at
   deploy — this ADR is about the end-event send point only.
 
+> **As built (2026-10-11).** Send tasks ([ADR-0112](0112-send-tasks.md)) and receive tasks
+> ([ADR-0102](0102-receive-tasks.md)) are built. Subprocesses landed
+> ([ADR-0074](0074-embedded-subprocesses.md)); a message end event inside one is still not
+> exercised by a test.
+
 ## Pros and cons of the options
 
 ### Option 1 — Execute it

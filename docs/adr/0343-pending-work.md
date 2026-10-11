@@ -133,7 +133,7 @@ task, not a route.
 ## Implementation
 
 `api/pendingwork.go` is the route and the gathering. `apiScopeReminders` is in
-`api/apitokenscope.go` with its one pattern. `examples/erinnerung.bpmn` is the
+`api/apitokenscope.go` with its one pattern. `examples/erinnerung/erinnerung.bpmn` is the
 modelled process: it reads the campaign, asks per reviewer what is waiting, and
 sends one mail each through the existing mail task.
 

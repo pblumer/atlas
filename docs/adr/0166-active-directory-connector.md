@@ -1,10 +1,10 @@
 # ADR-0166: Active Directory connector
 
 - **Status:** Accepted (amended 2026-08-21 four times and 2026-08-31 once — the
-- **Implementation:** Landed
   operation set covers the whole lifecycle, the connector runs on a worker, it can read
   a DirSync delta, it can create a contact, and it can search; see the amendment notes
   below)
+- **Implementation:** Landed
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
 

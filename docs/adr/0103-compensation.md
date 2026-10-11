@@ -26,6 +26,10 @@
 > strict sequential chaining and `waitForCompletion` are deferred. Follow-ups still open:
 > per-activity compensation **data** (a handler that needs the compensated activity's inputs),
 > compensation **across a call activity**, and BPMN **transactions** (which build on this).
+>
+> **As built (2026-10-11).** BPMN transactions have landed ([ADR-0108](0108-bpmn-transactions.md)). Compensation
+> data, compensation across a call activity and `waitForCompletion` (parsed but not honoured,
+> `compiler/parse.go`) are still open.
 
 ## Context and problem statement
 

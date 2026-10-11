@@ -1,7 +1,7 @@
 # ADR-0425: A product's lifecycle is one process, and each operation is a message start it is triggered at
 
 - **Status:** Accepted
-- **Implementation:** Partial
+- **Implementation:** Landed
 - **Date:** 2026-09-29
 - **Deciders:** Atlas maintainers
 - **Open question:** what a **change** of something already held means on the order.
@@ -12,6 +12,12 @@
   inventory records afterwards. The change entry point is therefore optional and is
   never triggered by the order itself until a record settles that.
 - **Question checked:** 2026-09
+
+> **Implementation status (2026-10-11).** Landed. `change`, the operation this record named
+> as missing, is started by the order's action (`api/orderaction.go`,
+> [ADR-0429](0429-product-actions-are-commands-with-published-outcomes.md)) and delivered to a per-position instance by
+> `POST …/change` (`api/orderchange.go`, [ADR-0428](0428-a-product-lifecycle-may-run-as-one-instance-per-position.md)).
+> Evidence: [the reconciliation of 2026-10-11](../audits/adr-status-reconciliation-2026-10-11.md).
 
 ## Context and problem statement
 

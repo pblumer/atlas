@@ -1,9 +1,16 @@
 # ADR-0216: Mockups are one view, not one per kind
 
 - **Status:** Accepted
-- **Implementation:** Landed
+- **Implementation:** Not started
 - **Date:** 2026-09-01
 - **Deciders:** Atlas maintainers
+
+> **Implementation status (2026-10-11).** Not started. There is no `MockReport` store, no
+> `/api/v1/mocks`, no Operations › Mockups view and no Jira mock; the Console still has one
+> page per kind (Mock directory, Mock database), the option this record rejected. The only
+> related code is the OpenAPI mock's `GET /__mock/report`
+> ([ADR-0217](0217-openapi-mock-server.md)), which produces the envelope's shape with
+> nowhere in Atlas to post it. Evidence: [the reconciliation of 2026-10-11](../audits/adr-status-reconciliation-2026-10-11.md).
 
 ## Context and problem statement
 

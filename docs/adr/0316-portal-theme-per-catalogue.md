@@ -1,7 +1,7 @@
 # ADR-0316: A theme belongs to a catalogue, the sign-in screen belongs to the operator
 
 - **Status:** Accepted
-- **Implementation:** Partial
+- **Implementation:** Landed
 - **Date:** 2026-09-11
 - **Deciders:** Atlas maintainers
 - **Open question:** Whether the brand change at sign-in reads as a transition or as a
@@ -10,6 +10,11 @@
   customer do that. If it reads as a fault, the answer is a catalogue-specific entry
   URL, which this record deliberately does not build yet.
 - **Question checked:** 2026-09
+
+> **Implementation status (2026-10-11).** Landed. The theme and logo belong to the catalogue
+> (`api/catalog/theme.go`, `logo.go`) and the upload screen this record named as missing is
+> built in the catalogue administration (`api/web/catalog-admin.js`, tested in
+> `api/catalogappearance_internal_test.go`). Evidence: [the reconciliation of 2026-10-11](../audits/adr-status-reconciliation-2026-10-11.md).
 
 ## Context and problem statement
 

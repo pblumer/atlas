@@ -5092,13 +5092,12 @@ func (s *Server) handleThrowJobError(w http.ResponseWriter, r *http.Request) {
 // worker's CompleteJob takes, so it works for any job type. 404 if the job
 // doesn't exist or is already completed.
 //
-// This is deliberately NOT the gRPC job-worker protocol (ADR-0007): there is no
-// lease, fencing token, or at-least-once streaming — it is a synchronous
-// operator affordance, the completion mirror of POST /jobs/{key}/fail from the
-// incident model (ADR-0061), for finishing a parked service-task job by hand
-// (e.g. when the external work was carried out out-of-band) until a real worker
-// transport lands. Discovering the job key is out of scope here — that comes
-// from runtime inspection.
+// It has two doors. A worker completes a job it holds by presenting its id and
+// the lease token its activation returned, fenced by holdsLease (ADR-0007). An
+// operator completes a parked job by hand — when the external work was carried out
+// out of band — and has to give a reason, which is recorded for audit (ADR-0159).
+// Discovering the job key is out of scope here — that comes from runtime
+// inspection.
 //
 // Because a person is forcing a step the engine would not have taken on its own, the
 // body must carry a "reason" and the completion is recorded as an operator action —

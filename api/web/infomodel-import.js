@@ -11,7 +11,7 @@
 // makes both — the second one only drops the dryRun flag — so what the report
 // promises is exactly what gets stored.
 //
-// It lives in its own module for the reason pickmodal.js and connectordialog.js do:
+// It lives in its own module for the reason pickmodal.js and workerdialog.js do:
 // app.js boots the whole console on import, so anything left inside it is only ever
 // exercised by hand. This flow earned the move the hard way — its first cut called a
 // helper that a later change to the Console had removed, so the button did nothing at
