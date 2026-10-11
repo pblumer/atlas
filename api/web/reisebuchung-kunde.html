@@ -8,37 +8,32 @@
 </head>
 <body>
 <!--
-  Reisebuchung — ein KUNDEN-Assistent (Wizard) über durable User-Tasks.
+  Reisebuchung — ein KUNDEN-Assistent über einen öffentlichen Wizard (ADR-0449).
 
-  Serviert von Atlas selbst (api/web/), also ist fetch("/api/v1/…") same-origin —
-  kein CORS, kein SDK, kein Build. Der Zweck dieser Seite: zeigen, dass ein
-  Mehrschritt-Formular für Endkunden KEIN ruckeliger "wechsle zum nächsten Task"
-  sein muss.
+  Serviert von atlas selbst (api/web/), aber er braucht nichts, was nur auf dem
+  atlas-Origin geht: Er spricht ausschliesslich die öffentlichen Routen an, ohne
+  Konto und ohne Cookie. Dasselbe Muster funktioniert auf jeder Website, deren
+  Origin der Betreiber in --public-forms-cors nennt (ADR-0186), wenn sie dieselben
+  Aufrufe an die Adresse von atlas richtet.
 
-  Unter der Haube ist jeder Schritt ein eigener <userTask> im Prozess
-  proc_reisebuchung (examples/reisebuchung) — der durable Checkpoint. Diese App
-  macht daraus einen nahtlosen Assistenten, indem sie nach jedem Absenden sofort
-  den nächsten Task derselben Instanz lädt und dessen Formular an DERSELBEN
-  Stelle rendert. Der Nutzer "navigiert" nie in eine Aufgabenliste.
+  Der Prozess proc_reisebuchung (examples/reisebuchung) hat ein Startformular und
+  danach einen Subprozess mit atlas:wizard="public". Wer startet, bekommt einen
+  PASS; mit ihm öffnet die Seite genau die Masken dieser einen Sitzung, eine nach
+  der anderen, an DERSELBEN Stelle. Welche Maske als Nächstes kommt (Visum?
+  Einverständnis?), entscheidet die Engine (DMN + Gateways); warum, steht in der
+  Dokumentation der Maske im Modell, und die Seite zeigt sie nur an.
 
-  Der Vertrag zum Server sind nur vier Aufrufe:
-      1) GET  /api/v1/processes                      Prozess finden
-      2) POST /api/v1/processes/{key}/instances      Instanz starten
-      3) GET  /api/v1/tasks?processInstance={key}     nächsten Task holen
-         GET  /api/v1/forms/{formId}                  sein Formular holen
-      4) POST /api/v1/tasks/{key}/complete            Schritt abschließen → weiter
+  Der Vertrag zum Server sind vier Aufrufe:
+      1) GET  /public/forms/{token}/schema              Startformular holen
+      2) POST /public/forms/{token}/start               starten → Pass + erste Maske
+      3) POST /public/wizard/steps/{taskKey}/complete   Maske abschliessen → nächste
+      4) GET  /public/wizard/step                       nachfragen (warten, Neuladen)
+  Der Pass geht nur im Header Authorization: Bearer mit, nie in einer URL. Er liegt
+  im sessionStorage dieses Tabs, damit ein Neuladen die Sitzung fortsetzt.
 
-  Die kaskadierende Zielauswahl und das bedingte Reisepass-Feld im ersten
-  Formular laufen komplett IM Browser (form-js) — die Engine sieht davon nichts.
-  WELCHE Folgeformulare erscheinen (Visum? Einverständnis?), entscheidet dagegen
-  die Engine (DMN + Gateways). Beide "Abhängigkeiten" an einem Stück erlebbar.
-
-  Hinweis zur Grenze: /api/v1/tasks liegt hinter der (optionalen) Auth des
-  Servers — dieser Assistent ist also das Muster für einen ANGEMELDETEN
-  Kundenbereich. Ein völlig unauthentifizierter Erstkontakt läuft über das
-  öffentliche Startformular (ADR-0029, /public/forms/{token}); ein rein
-  öffentlicher Mehrschritt-Flow braucht dann entweder EIN reiches Startformular
-  oder korrelierte öffentliche Schritte.
+  Den Link-Token liefert die Veröffentlichung des öffentlichen Links
+  (POST /api/v1/public-links {"processId":"proc_reisebuchung"}); die Seite liest
+  ihn aus ?link=.
 -->
 <style>
   :root{
@@ -62,12 +57,6 @@
   .lede code{font-family:var(--mono);font-size:.92em}
   .callout{margin:18px 0 0;padding:13px 16px;border-radius:12px;background:var(--accent-soft);color:var(--accent-ink);font-size:14px;font-weight:520}
   .callout b{font-weight:700}
-  .account{margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px}
-  .account input{padding:7px 10px;font:inherit;color:inherit;background:var(--panel-2);border:1px solid var(--line);border-radius:8px}
-  .account input[type="text"],.account input[type="password"]{width:150px}
-  .account .who{color:var(--muted)}.account .who b{color:var(--ink)}
-  .account .err{color:#b23a3a;font-size:13px}
-  .account .lock{font-size:12px;color:var(--faint);font-family:var(--mono)}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:22px;margin-top:18px}
   .card h2{font-size:13px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);font-weight:600;margin:0 0 14px;display:flex;justify-content:space-between;align-items:baseline;gap:10px}
   .card h2 .hint{letter-spacing:0;text-transform:none;color:var(--muted);font-weight:500;font-size:12px;font-family:var(--mono)}
@@ -96,33 +85,23 @@
   footer code{font-family:var(--mono)}
   footer input{font:inherit;color:inherit;background:var(--panel-2);border:1px solid var(--line);border-radius:8px}
 </style>
-
 <div class="wrap">
   <header>
     <p class="eyebrow">Atlas · Reisebuchung · Kunden-Assistent</p>
-    <h1>Ein Formular nach dem anderen — ohne Aufgabenliste.</h1>
-    <p class="lede">Jeder Schritt ist unter der Haube ein eigener <code>userTask</code>
-      der Instanz <code>proc_reisebuchung</code> (durable Checkpoint). Diese Seite
-      macht daraus einen <b>nahtlosen Assistenten</b>: absenden → der nächste Task
-      derselben Instanz wird sofort an dieser Stelle geladen. Welche Folgeformulare
-      erscheinen, entscheidet die <b>Engine</b> (DMN + Gateways) — die kaskadierende
-      Zielauswahl im ersten Formular dagegen der <b>Browser</b> (form-js).</p>
+    <h1>Ein Formular nach dem anderen — ohne Konto, ohne Aufgabenliste.</h1>
+    <p class="lede">Die Reisedaten starten eine echte Prozessinstanz von <code>proc_reisebuchung</code>.
+      Danach führt ein <b>öffentlicher Wizard</b> durch genau die Masken, die für <em>deine</em> Angaben
+      nötig sind: Absenden, und die nächste Maske derselben Sitzung erscheint an dieser Stelle. Welche Masken
+      kommen, entscheidet die <b>Engine</b> (DMN + Gateways), die kaskadierende Zielauswahl im Startformular
+      dagegen der <b>Browser</b> (form-js).</p>
     <div class="callout">Keine Geschäftslogik im Client. Der Assistent ruft nur:
-      <b>start instance</b> · <b>get next task + form</b> · <b>complete task</b>.
-      Die Verzweigung „welches Formular als Nächstes“ macht atlas.</div>
-    <div class="account" id="account"></div>
+      <b>Startformular</b> · <b>starten</b> · <b>Maske abschliessen</b> · <b>nachfragen</b>.
+      Was als Nächstes kommt und warum, steht im Modell.</div>
   </header>
 
   <section class="card" id="stage">
     <h2><span>Reisebuchung</span><span class="hint" id="instHint">—</span></h2>
-    <div id="body">
-      <p class="muted" id="intro">Starte eine neue Buchung — atlas legt eine echte Prozessinstanz an
-        und schickt dir Schritt für Schritt die Formulare, die für <em>deine</em> Angaben nötig sind.</p>
-      <div class="actions" style="border-top:0;padding-top:4px">
-        <button class="btn primary" id="startBtn">Reise buchen →</button>
-        <span class="muted" id="startHint"></span>
-      </div>
-    </div>
+    <div id="body"><p class="muted">Wird geladen …</p></div>
   </section>
 
   <section class="card">
@@ -131,9 +110,8 @@
   </section>
 
   <footer>
-    Wird von atlas unter <code>/reisebuchung-kunde.html</code> ausgeliefert · Prozess:
-    <code>examples/reisebuchung/reisebuchung.bpmn</code> · Basis-URL:
-    <input id="base" value="/api/v1" style="width:150px;font-family:var(--mono);font-size:11px" title="Same-origin per Default."/>
+    Wird von atlas unter <code>/reisebuchung-kunde.html?link=&lt;token&gt;</code> ausgeliefert · Prozess:
+    <code>examples/reisebuchung/reisebuchung.bpmn</code>
   </footer>
 </div>
 
@@ -141,150 +119,60 @@
 "use strict";
 import { Form } from "./vendor/form-js/form-viewer.js";
 
-const PROCESS_ID = "proc_reisebuchung";
 const $ = s => document.querySelector(s);
-const base = () => $("#base").value.replace(/\/$/,"");
+const token = new URLSearchParams(location.search).get("link") || "";
 
-// Per-step context shown above each form: what the step is, and — crucially —
-// WHY the engine is asking for it, to make the process visible behind the wizard.
-const STEP_INFO = {
-  erfassen:        { title:"Reisedaten",      why:"Startformular. Die <b>Zielliste</b> passt sich der Reiseart an und die <b>Reisepass-Nr.</b> erscheint nur bei Fernreise — beides rein im Browser (form-js), ohne Prozess-Roundtrip." },
-  visum:           { title:"Visum-Angaben",   why:"Dieser Schritt erscheint, weil die <b>DMN-Tabelle</b> aus deiner Reiseart <code>brauchtVisum = true</code> abgeleitet und ein Gateway den Zweig geöffnet hat." },
-  einverstaendnis: { title:"Einverständnis",  why:"Dieser Schritt erscheint, weil dein berechnetes Alter <code>&lt; 18</code> ist → <b>DMN</b> <code>brauchtEinverstaendnis = true</code>." },
-  bestaetigen:     { title:"Buchung bestätigen", why:"Abschluss-Schritt, immer nötig. Danach synchronisiert der Inclusive-Join die geöffneten Zweige und der Prozess endet." },
-};
+// The pass and the titles of the screens done so far, kept for this tab, so a reload
+// carries on where the visitor was.
+const passKey = "atlas.reise.pass." + token, doneKey = "atlas.reise.done." + token;
+const stored = (k, fallback) => { try { return sessionStorage.getItem(k) ?? fallback; } catch { return fallback; } };
+const store = (k, v) => { try { if (v) sessionStorage.setItem(k, v); else sessionStorage.removeItem(k); } catch { /* no storage: no resume */ } };
+let pass = stored(passKey, "");
+let doneSteps = JSON.parse(stored(doneKey, "[]"));
+const keepPass = p => { pass = p; store(passKey, p); };
+const keepDone = () => store(doneKey, doneSteps.length ? JSON.stringify(doneSteps) : "");
+
+// How long to wait before each look for the next screen while the engine works
+// between two (the decision table, for instance): soon at first, then less often.
+const WAIT = [500, 1000, 2000, 4000, 8000, 15000, 30000];
+let currentForm = null;
 
 // ————— fetch wrapper + on-screen call log —————
-async function api(method, path, body, quiet){
-  const opts = {method, credentials:"same-origin", headers:{}};
-  if (body !== undefined){ opts.headers["Content-Type"]="application/json"; opts.body=JSON.stringify(body); }
-  let res, text;
-  try { res = await fetch(base()+path, opts); text = await res.text(); }
-  catch(e){ if(!quiet) logLine(method, path, "ERR", e.message); throw e; }
-  if(!quiet) logLine(method, path, res.status);
-  if (res.status === 401){ showLogin(); throw new Error("401 — bitte anmelden"); }
-  if (!res.ok) throw new Error(method+" "+path+" → "+res.status+" "+text);
-  return text ? JSON.parse(text) : null;
+// The log shows method, path and status. The pass travels in a header and is never
+// written to it.
+async function call(method, path, body, withPass){
+  const headers = {};
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (withPass) headers.Authorization = "Bearer " + pass;
+  let res;
+  try { res = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) }); }
+  catch (e){ logLine(method, path, "ERR"); throw new Error("Keine Verbindung zu atlas."); }
+  logLine(method, path, res.status);
+  const out = await res.json().catch(() => ({}));
+  if (res.ok) return out;
+  const err = new Error(
+    res.status === 404 ? (withPass ? "Diese Buchung ist abgeschlossen oder nicht mehr verfügbar." : "Dieser Link ist nicht mehr gültig.") :
+    res.status === 429 ? "Zu viele Anfragen — bitte gleich noch einmal versuchen." :
+    res.status === 400 ? "Bitte die Angaben prüfen: " + (out.error || "") :
+    "atlas antwortet mit " + res.status + ".");
+  err.gone = res.status === 404 && withPass;
+  throw err;
 }
-function logLine(method, path, status, extra){
+function logLine(method, path, status){
   const el = document.createElement("div");
-  const cls = (typeof status === "number" && status < 400) ? "s2" : "err";
-  el.innerHTML = `<span class="m">${method}</span> ${path} <span class="${cls}">→ ${status}${extra?" "+extra:""}</span>`;
-  const log = $("#log"); if (log.firstChild && log.firstChild.classList?.contains("s2") && log.children.length===1) log.innerHTML="";
+  const m = document.createElement("span"); m.className = "m"; m.textContent = method;
+  const st = document.createElement("span");
+  st.className = (typeof status === "number" && status < 400) ? "s2" : "err";
+  st.textContent = "→ " + status;
+  el.append(m, " " + path + " ", st);
+  const log = $("#log");
+  if (log.children.length === 1 && log.firstChild.classList?.contains("s2") && !log.firstChild.children.length) log.innerHTML = "";
   log.appendChild(el); log.scrollTop = log.scrollHeight;
 }
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
 
-// ————— optional auth (mirrors order-to-cash-live.html) —————
-async function whoami(){ try { return await api("GET","/auth/me", undefined, true); } catch { return null; } }
-function showLogin(){ if (!document.getElementById("loginBtn")) renderAccount(null); }
-function renderAccount(user){
-  const el = $("#account");
-  if (user){
-    el.innerHTML = `<span class="who">Angemeldet als <b>${(user.username||user.name||"?")}</b></span>`+
-                   `<button class="btn ghost small" id="logoutBtn">Abmelden</button>`;
-    $("#logoutBtn").onclick = async ()=>{ try{ await api("POST","/auth/logout",{}); }catch{} renderAccount(null); };
-  } else {
-    el.innerHTML = `<span class="lock">🔒 API erfordert Login</span>`+
-      `<input type="text" id="lu" placeholder="Benutzer" autocomplete="username"/>`+
-      `<input type="password" id="lp" placeholder="Passwort" autocomplete="current-password"/>`+
-      `<button class="btn primary small" id="loginBtn">Anmelden</button>`+
-      `<span class="err" id="loginErr"></span>`;
-    const submit = async ()=>{
-      $("#loginErr").textContent = "";
-      try{ await api("POST","/auth/login", {username:$("#lu").value.trim(), password:$("#lp").value});
-           renderAccount(await whoami()); }
-      catch(e){ $("#loginErr").textContent = "Login fehlgeschlagen"; }
-    };
-    $("#loginBtn").onclick = submit;
-    $("#lp").addEventListener("keydown", e=>{ if(e.key==="Enter") submit(); });
-  }
-}
-
-// ————— the wizard —————
-let instanceKey = null, currentForm = null, doneSteps = [];
-
-// find the deployed process by id (highest version)
-async function findProcess(){
-  const procs = await api("GET","/processes");
-  const mine = procs.filter(p => p.processId === PROCESS_ID).sort((a,b)=> b.version - a.version);
-  if (!mine.length) throw new Error(`Prozess "${PROCESS_ID}" ist nicht deployed. Bitte das Beispiel examples/reisebuchung zuerst deployen (siehe dessen README).`);
-  return mine[0].key;
-}
-
-// Reading instances without scanning the engine. The bare /instances listing is
-// capped — 1000 rows per half — and its active half comes back oldest-key-first, so
-// the newest instance is the first row the cap drops. On a server holding more active
-// instances than the cap, ours is simply not on that page, and a client that searches
-// the page concludes an instance that is running fine does not exist. Both reads here
-// are index-backed instead: ?process= reads one definition's own index, newest first,
-// and /instances/search?q=<key> is a point read of one instance, live or finished.
-async function instancesOfProcess(defKey){
-  const page = await api("GET",`/instances?process=${defKey}`);
-  return ((page||{}).items||[]).filter(i=>i.processDefKey===defKey);
-}
-async function readInstance(key){
-  return (((await api("GET",`/instances/search?q=${key}`))||{}).items||[]).find(i=>i.key===key) || null;
-}
-
-// START — the create response carries no instance key, so diff the scoped listing
-// before and after. Scoped, that diff is correct on any population — but it is still a
-// guess when two callers start the same definition at once. Closing that needs the
-// engine to answer with the key it minted: https://github.com/pblumer/atlas/issues/933
-async function startInstance(defKey){
-  const before = new Set((await instancesOfProcess(defKey)).map(i=>i.key));
-  await api("POST",`/processes/${defKey}/instances`, {variables:{}});
-  const after = await instancesOfProcess(defKey);
-  const fresh = after.find(i=>!before.has(i.key)) || after.sort((a,b)=>b.key-a.key)[0];
-  if (!fresh) throw new Error("Die Instanz wurde gestartet, ist aber nicht auffindbar. Bitte die Seite neu laden.");
-  return fresh.key;
-}
-
-// the tasks endpoint answers {items, total, truncated} — one shape, HTTP and MCP
-// alike. Always scope to THIS instance.
-async function openTasks(){
-  const page = await api("GET",`/tasks?processInstance=${instanceKey}`);
-  return ((page||{}).items||[]).filter(t => t.processInstanceKey === instanceKey);
-}
-
-// ADVANCE — the heart of the "no jarring switch" UX: after each completion we
-// immediately look for the next open task of the SAME instance and render its
-// form in place. Two parallel tasks (Visum + Einverständnis both open) simply
-// present as two sequential steps to the one person.
-async function advance(){
-  const tasks = await openTasks();
-  if (tasks.length){ renderStep(tasks[0]); return; }
-  // no open task: either the engine is still computing, or the instance ended.
-  const inst = await readInstance(instanceKey);
-  if (inst && inst.state !== "active") renderDone();
-  else renderWaiting();
-}
-
-async function renderStep(task){
-  const info = STEP_INFO[task.elementId] || { title: task.name || task.elementId, why:"" };
-  const { schema } = await api("GET",`/forms/${task.formId}`);
-  $("#instHint").textContent = "#"+instanceKey+" · Schritt "+(doneSteps.length+1);
-  $("#body").innerHTML =
-    stepsBar(task) +
-    `<p class="steptitle">${info.title}</p>`+
-    `<p class="stepsub">Task <code>${task.elementId}</code> · form <code>${task.formId}</code></p>`+
-    `<div class="fj-host" id="fjhost"></div>`+
-    (info.why ? `<div class="why">${info.why}</div>` : "")+
-    `<div class="actions"><button class="btn primary" id="next">Weiter →</button>`+
-    `<span class="muted" id="stepHint"></span></div>`;
-  if (currentForm){ currentForm.destroy?.(); currentForm = null; }
-  currentForm = new Form({ container: $("#fjhost") });
-  await currentForm.importSchema(schema);
-  $("#next").onclick = ()=> submitStep(task, info.title);
-}
-
-function stepsBar(task){
-  const past = doneSteps.map(s=>`<li class="done">${s}</li>`).join("");
-  const cur = `<li class="current">${(STEP_INFO[task.elementId]||{}).title || task.name}</li>`;
-  return `<ul class="steps">${past}${cur}<li>…</li></ul>`;
-}
-
-// form-js date fields (subtype "date") should serialize to yyyy-MM-dd; be
-// defensive if a datetime slips through, since the FEEL date() call wants a date.
+// form-js date fields (subtype "date") serialize to yyyy-MM-dd; be defensive if a
+// datetime slips through, since the FEEL date() call wants a date.
 function normalize(data){
   const out = {};
   for (const [k,v] of Object.entries(data)){
@@ -293,42 +181,142 @@ function normalize(data){
   return out;
 }
 
-async function submitStep(task, title){
-  const { data, errors } = currentForm.submit();
-  if (errors && Object.keys(errors).length){ $("#stepHint").textContent = "Bitte die markierten Felder prüfen."; return; }
-  const btn = $("#next"); btn.disabled = true; $("#stepHint").textContent = "Wird gespeichert …";
-  try{
-    await api("POST",`/tasks/${task.key}/complete`, { variables: normalize(data) });
-    doneSteps.push(title);
-    await advance();   // ← next form appears in place; no navigation, no task list
-  }catch(e){ $("#stepHint").innerHTML = `<span style="color:#b23a3a">Fehler: ${e.message}</span>`; btn.disabled=false; }
+async function mountForm(schema, data){
+  if (currentForm){ currentForm.destroy?.(); currentForm = null; }
+  currentForm = new Form({ container: $("#fjhost") });
+  await currentForm.importSchema(schema || { type:"default", components:[] }, data || {});
+}
+function stepHint(text, isError){
+  const el = $("#stepHint"); if (!el) return;
+  el.textContent = text; el.style.color = isError ? "#b23a3a" : "";
+}
+function instanceHint(extra){
+  const key = pass.split(".")[0];
+  $("#instHint").textContent = (key ? "#" + key : "—") + (extra ? " · " + extra : "");
+}
+function stepsBar(current){
+  const past = doneSteps.map(s => `<li class="done">${esc(s)}</li>`).join("");
+  return `<ul class="steps"><li class="done">Reisedaten</li>${past}` +
+    (current ? `<li class="current">${esc(current)}</li><li>…</li>` : "") + `</ul>`;
 }
 
-function renderWaiting(){
-  $("#body").innerHTML = `<div class="waiting">Die Engine rechnet/routet … <button class="btn ghost small" id="again">Aktualisieren</button></div>`;
-  $("#again").onclick = advance;
+// ————— the start form —————
+async function showStart(){
+  const def = await call("GET", `/public/forms/${encodeURIComponent(token)}/schema`);
+  doneSteps = []; keepDone();
+  $("#instHint").textContent = "Schritt 1";
+  $("#body").innerHTML =
+    `<ul class="steps"><li class="current">Reisedaten</li><li>…</li></ul>` +
+    `<p class="steptitle">Reisedaten</p>` +
+    `<p class="stepsub">Startformular von <code>${esc(def.processName || "proc_reisebuchung")}</code> · öffentlicher Link</p>` +
+    `<div class="fj-host" id="fjhost"></div>` +
+    `<div class="why">Die <b>Zielliste</b> passt sich der Reiseart an, und die <b>Reisepass-Nr.</b> erscheint nur bei einer Fernreise — beides rein im Browser (form-js), ohne Prozess-Roundtrip.</div>` +
+    `<div class="actions"><button class="btn primary" id="next">Reise buchen →</button><span class="muted" id="stepHint"></span></div>`;
+  await mountForm(def.schema, {});
+  $("#next").onclick = async () => {
+    const { data, errors } = currentForm.submit();
+    if (errors && Object.keys(errors).length){ stepHint("Bitte die markierten Felder prüfen."); return; }
+    $("#next").disabled = true; stepHint("Wird gestartet …");
+    try {
+      const out = await call("POST", `/public/forms/${encodeURIComponent(token)}/start`, { variables: normalize(data) });
+      if (!out.wizard || !out.wizard.pass){ renderDone(); return; }   // a model without a public wizard
+      keepPass(out.wizard.pass);
+      await showWizard(out.wizard);
+    } catch (e){ stepHint(e.message, true); $("#next").disabled = false; }
+  };
 }
+
+// ————— the wizard: follow the answer, never guess the next screen —————
+async function showWizard(w, attempt = 0){
+  if (w.state === "step" && w.step) return renderStep(w.step);
+  if (w.state === "pending") return renderWaiting(attempt);
+  renderDone();
+}
+
+async function resume(attempt = 0){
+  try { await showWizard(await call("GET", "/public/wizard/step", undefined, true), attempt); }
+  catch (e){ e.gone ? renderGone(e.message) : renderProblem(e.message); }
+}
+
+async function renderStep(step){
+  instanceHint("Schritt " + (doneSteps.length + 2));
+  $("#body").innerHTML =
+    stepsBar(step.title) +
+    `<p class="steptitle">${esc(step.title || "Nächster Schritt")}</p>` +
+    `<p class="stepsub">Maske einer öffentlichen Wizard-Sitzung · Task <code>${esc(step.taskKey)}</code></p>` +
+    `<div class="fj-host" id="fjhost"></div>` +
+    (step.documentation ? `<div class="why" id="why"></div>` : "") +
+    `<div class="actions"><button class="btn primary" id="next">Weiter →</button><span class="muted" id="stepHint"></span></div>`;
+  if (step.documentation) $("#why").textContent = step.documentation;   // the model's words, as text
+  await mountForm(step.schema, step.data);
+  $("#next").onclick = async () => {
+    const { data, errors } = currentForm.submit();
+    if (errors && Object.keys(errors).length){ stepHint("Bitte die markierten Felder prüfen."); return; }
+    $("#next").disabled = true; stepHint("Wird gespeichert …");
+    try {
+      const next = await call("POST", `/public/wizard/steps/${encodeURIComponent(step.taskKey)}/complete`, { variables: normalize(data) }, true);
+      doneSteps.push(step.title); keepDone();
+      await showWizard(next);   // ← the next screen appears in place; no navigation, no task list
+    } catch (e){
+      if (e.gone){ renderGone(e.message); return; }
+      stepHint(e.message, true); $("#next").disabled = false;
+    }
+  };
+}
+
+function renderWaiting(attempt){
+  if (currentForm){ currentForm.destroy?.(); currentForm = null; }
+  const late = attempt >= WAIT.length;
+  $("#body").innerHTML = stepsBar("") +
+    `<div class="waiting">${late ? "Die nächste Maske braucht länger als üblich. Deine Angaben sind gespeichert." : "Die Engine rechnet und routet … Deine Angaben sind gespeichert."}` +
+    ` <button class="btn ghost small" id="again">Aktualisieren</button></div>`;
+  $("#again").onclick = () => resume(0);
+  if (!late) setTimeout(() => { if ($("#again")) resume(attempt + 1); }, WAIT[attempt]);
+}
+
 function renderDone(){
   if (currentForm){ currentForm.destroy?.(); currentForm = null; }
-  $("#instHint").textContent = "#"+instanceKey+" · abgeschlossen";
-  $("#body").innerHTML =
-    `<ul class="steps">${doneSteps.map(s=>`<li class="done">${s}</li>`).join("")}<li class="done">✓ fertig</li></ul>`+
-    `<div class="banner">✅ Buchung abgeschlossen — die Prozessinstanz ist beendet.</div>`+
+  instanceHint("abgeschlossen");
+  const steps = stepsBar("").replace("</ul>", `<li class="done">✓ fertig</li></ul>`);
+  keepPass(""); doneSteps = []; keepDone();
+  $("#body").innerHTML = steps +
+    `<div class="banner">✅ Buchung abgeschlossen — die Sitzung ist beendet.</div>` +
     `<div class="actions"><button class="btn ghost" id="restart">Neue Buchung</button></div>`;
-  $("#restart").onclick = ()=>location.reload();
+  $("#restart").onclick = () => showStart().catch(e => renderProblem(e.message));
 }
 
-$("#startBtn").onclick = async ()=>{
-  const btn=$("#startBtn"); btn.disabled=true; $("#startHint").textContent="Starte Instanz …";
-  try{
-    const defKey = await findProcess();
-    instanceKey = await startInstance(defKey);
-    doneSteps = [];
-    await advance();  // renders the first user task (Reisedaten)
-  }catch(e){ $("#startHint").innerHTML = `<span style="color:#b23a3a">${e.message}</span>`; btn.disabled=false; }
-};
+function renderGone(message){
+  keepPass(""); doneSteps = []; keepDone();
+  renderProblem(message, true);
+}
 
-whoami().then(renderAccount);  // greet, or reveal the login bar if the API is gated
+function renderProblem(message, offerRestart){
+  if (currentForm){ currentForm.destroy?.(); currentForm = null; }
+  $("#body").innerHTML = `<div class="waiting" id="problem"></div>` +
+    (offerRestart ? `<div class="actions"><button class="btn ghost" id="restart">Neue Buchung</button></div>` : "");
+  $("#problem").textContent = message;
+  if (offerRestart) $("#restart").onclick = () => showStart().catch(e => renderProblem(e.message));
+}
+
+function renderNoLink(){
+  $("#body").innerHTML =
+    `<p class="muted">Diese Seite braucht den Token eines öffentlichen Links auf <code>proc_reisebuchung</code>.
+     Veröffentliche ihn in der Console (Prozess → Öffentlicher Link) oder mit
+     <code>POST /api/v1/public-links {"processId":"proc_reisebuchung"}</code>, und öffne dann
+     <code>/reisebuchung-kunde.html?link=&lt;token&gt;</code>.</p>`;
+}
+
+// A pass this tab kept resumes its sitting; one that opens nothing any more is
+// forgotten, and the start form is offered again.
+async function main(){
+  if (!token){ renderNoLink(); return; }
+  if (pass){
+    try { await showWizard(await call("GET", "/public/wizard/step", undefined, true)); return; }
+    catch (e){ if (!e.gone){ renderProblem(e.message); return; } keepPass(""); doneSteps = []; keepDone(); }
+  }
+  try { await showStart(); } catch (e){ renderProblem(e.message); }
+}
+main();
 </script>
 </body>
 </html>

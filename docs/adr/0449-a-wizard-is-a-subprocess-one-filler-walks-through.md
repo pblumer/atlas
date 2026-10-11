@@ -1,7 +1,7 @@
 # ADR-0449: A wizard is a subprocess one filler walks through
 
-- **Status:** Proposed
-- **Implementation:** Partial
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-10-10
 - **Deciders:** Atlas maintainers
 - **Open question:** How often anonymous fillers abandon a public wizard, and how many
@@ -279,10 +279,14 @@ both written as new events) is a decision of its own.
     subprocess fixture; (2) the signed-in continuation and the Tasks app; (3) the
     inbox and authority rule for `public` wizard tasks; (4) the pass, the public
     routes and the public page and widget; (5) rebuild `examples/reisebuchung` on a
-    wizard subprocess and replace the demo's `advance()`.
+    wizard subprocess and replace the demo's `advance()`. All five are built:
+    pblumer/atlas#1226, #1228, #1229 and #1230 for the first four. The fifth makes
+    the trip booking a public wizard, so its customer page needs no account and
+    follows the answers of the public routes.
   - The public start does not check submitted keys against the start form, although
     ADR-0029 says it does. The wizard routes will check, and the start route should
-    get the same check.
+    get the same check. Done in pblumer/atlas#1225; a disabled field, which form-js
+    never submits, is not writable either.
   - Issuing a pass from the model, for example a mail carrying a link to continue a
     later `public` wizard, would let a customer come back. It is the natural next
     record.

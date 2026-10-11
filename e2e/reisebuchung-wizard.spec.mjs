@@ -1,146 +1,168 @@
-// End-to-end coverage for the customer wizard (api/web/reisebuchung-kunde.html): it
-// starts a real process instance and then has to find that instance again, twice —
-// once for its key right after the start, and once per step to ask whether the
-// process has ended.
+// End-to-end coverage for the customer assistant (api/web/reisebuchung-kunde.html) on
+// the public wizard of examples/reisebuchung (ADR-0449). The page used to sign a person
+// in, list the instance's open tasks after every submit and render the first one it
+// found, which could not tell "the engine is still working" from "this step belongs to
+// somebody else". It now follows what the public routes answer: the start hands a pass
+// and the first screen, each completion the next screen, "pending" or "done".
 //
-// Both answers used to come out of GET /api/v1/instances, and that listing is a page
-// rather than the set. Unscoped it is capped, and its active half is scanned in
-// ascending instance-key order — oldest first — so the newest instance is the first
-// row the cap drops. On a server holding more active instances than the cap, the
-// wizard's own instance is therefore never on the page it was searching, and the
-// start died on `Cannot read properties of undefined (reading 'key')` while the
-// instance sat happily on its first user task.
-//
-// The mock below IS that server: the bare listing answers with a full page of other
-// definitions' instances and never contains ours, exactly as a loaded engine does.
-// A page that reads it cannot get past the start button. The scoped listing
-// (?process=) and the per-key point read (/instances/search?q=) answer truthfully,
-// because those are the reads the wizard is supposed to make.
-//
-// The static e2e harness runs no Go server, so what is verified here is the wiring
-// and the call sequence, not the server side; the endpoints' own behaviour is pinned
-// by TestANewInstanceIsOffTheCappedListingButOnItsOwnDefinitionsPage in api/.
+// The static e2e harness runs no Go server, so what is verified here is the wiring and
+// the call sequence: which calls the page makes, that the pass travels only in the
+// Authorization header, that the screen's documentation is shown as text, and that a
+// reload resumes the sitting. The server side of the same walk is pinned against the
+// real example files by TestTheTripBookingExample* in api/.
 import { test, expect } from "@playwright/test";
 
-// listing is how every capped list endpoint answers since
-// ADR-0378: the rows under
-// .items, beside the count of what is really there and whether the cap bit.
-const listing = (items, extra = {}) => ({
-  items, total: items.length, totalExact: true, truncated: false, ...extra,
-});
+const TOKEN = "b6f0c1d2e3a4";
+const PASS = "281474990452515." + "ab".repeat(32);
 
-const DEF_KEY = 213;
-const INSTANCE = 281474990452515; // a realistic key: high, and far past the cap
-const TASK_KEY = 77;
-
-const STEP_FORM = {
+const START_FORM = {
   type: "default",
-  id: "reisedaten",
-  components: [{ type: "textfield", key: "reiseziel", label: "Reiseziel" }],
+  id: "reise-start",
+  components: [{ type: "textfield", key: "ziel", label: "Ziel" }],
+};
+const VISUM = {
+  taskKey: 11,
+  title: "Visum-Angaben",
+  documentation: "Dieser Schritt erscheint, weil die Entscheidungstabelle ReisePflichten für eine Fernreise ein Visum verlangt. <b>kein HTML</b>",
+  schema: { type: "default", components: [{ type: "textfield", key: "staatsangehoerigkeit", label: "Staatsangehörigkeit" }] },
+  data: {},
+};
+const BESTAETIGEN = {
+  taskKey: 12,
+  title: "Buchung bestätigen",
+  documentation: "Der letzte Schritt, immer nötig.",
+  schema: {
+    type: "default",
+    components: [
+      { type: "number", key: "alter", label: "Alter am Stichtag (berechnet)", disabled: true },
+      { type: "checkbox", key: "buchungBestaetigt", label: "Buchung verbindlich bestätigen" },
+    ],
+  },
+  data: { alter: 16 },
 };
 
-// cappedPage is what a busy engine answers the unscoped listing with: the oldest
-// active instances it holds, none of them ours. Three rows stand in for a thousand —
-// the ordering is the point, not the count.
-const cappedPage = [
-  { key: 281474978838864, processDefKey: 92, processId: "onboarding-atlas", version: 2, state: "active", variables: [] },
-  { key: 281474978841949, processDefKey: 113, processId: "andere", version: 1, state: "active", variables: [] },
-  { key: 281474979489879, processDefKey: 386, processId: "massentest", version: 2, state: "active", variables: [] },
-];
-
-// mock answers the endpoints the wizard walks, in the shapes the page reads, and
-// records every call so a test can assert what it asked for.
+// mock answers the public routes in the shapes the server sends, and records every
+// call with the Authorization header it carried.
 function mock(page, calls) {
-  let started = false;
-  let taskOpen = true;
-
-  const ours = () => ({
-    key: INSTANCE,
-    processDefKey: DEF_KEY,
-    processId: "proc_reisebuchung",
-    version: 3,
-    state: taskOpen ? "active" : "completed",
-    variables: [],
-  });
-
-  return page.route("**/api/v1/**", async (route) => {
+  let current = VISUM; // the open screen of the sitting once it has started; null when done
+  return page.route(/\/(public|api)\//, async (route) => {
     const req = route.request();
     const url = new URL(req.url());
-    const path = url.pathname + url.search;
-    calls.push(`${req.method()} ${path}`);
+    const auth = req.headers()["authorization"] || "";
+    calls.push({ call: `${req.method()} ${url.pathname}`, auth, body: req.postData() || "" });
 
-    if (path === "/api/v1/auth/me") {
-      return route.fulfill({ json: { username: "kundin" } });
+    if (url.pathname === `/public/forms/${TOKEN}/schema`) {
+      return route.fulfill({ json: { processName: "Reisebuchung", schema: START_FORM } });
     }
-    if (path === "/api/v1/processes") {
-      return route.fulfill({
-        json: [{ key: DEF_KEY, processId: "proc_reisebuchung", version: 3 }],
-      });
+    if (url.pathname === `/public/forms/${TOKEN}/start` && req.method() === "POST") {
+      return route.fulfill({ json: { started: true, wizard: { pass: PASS, state: "step", step: VISUM } } });
     }
-    if (path === `/api/v1/processes/${DEF_KEY}/instances` && req.method() === "POST") {
-      started = true;
-      return route.fulfill({ json: { definitionKey: DEF_KEY, stats: {} } });
+    if (auth !== "Bearer " + PASS) {
+      return route.fulfill({ status: 404, json: { error: "no such sitting" } });
     }
-    // The capped, oldest-first page of a loaded engine — ours is never on it.
-    if (path === "/api/v1/instances") {
-      return route.fulfill({ json: listing(cappedPage, { totalExact: false, truncated: true }) });
+    // Between the visa screen and the confirmation the engine is still working once.
+    if (url.pathname === `/public/wizard/steps/${VISUM.taskKey}/complete`) {
+      current = BESTAETIGEN;
+      return route.fulfill({ json: { state: "pending" } });
     }
-    if (path === `/api/v1/instances?process=${DEF_KEY}`) {
-      return route.fulfill({ json: listing(started ? [ours()] : []) });
+    if (url.pathname === "/public/wizard/step") {
+      return route.fulfill({ json: current ? { state: "step", step: current } : { state: "done" } });
     }
-    if (path === `/api/v1/instances/search?q=${INSTANCE}`) {
-      return route.fulfill({ json: listing(started ? [ours()] : []) });
+    if (url.pathname === `/public/wizard/steps/${BESTAETIGEN.taskKey}/complete`) {
+      current = null;
+      return route.fulfill({ json: { state: "done" } });
     }
-    if (path === `/api/v1/tasks?processInstance=${INSTANCE}`) {
-      return route.fulfill({
-        json: listing(taskOpen
-          ? [{
-              key: TASK_KEY,
-              processInstanceKey: INSTANCE,
-              elementId: "erfassen",
-              name: "Reisedaten",
-              formId: "reise-start",
-            }]
-          : []),
-      });
-    }
-    if (path === "/api/v1/forms/reise-start") {
-      return route.fulfill({ json: { schema: STEP_FORM } });
-    }
-    if (path === `/api/v1/tasks/${TASK_KEY}/complete` && req.method() === "POST") {
-      taskOpen = false;
-      return route.fulfill({ json: {} });
-    }
-    return route.fulfill({ status: 404, body: "not mocked: " + path });
+    return route.fulfill({ status: 404, body: "not mocked: " + url.pathname });
   });
 }
 
-test("the wizard starts and finishes an instance on an engine whose instance listing is full", async ({ page }) => {
+test.beforeEach(async ({ page }) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
+  page.__errors = errors;
+});
+
+test.afterEach(async ({ page }) => {
+  expect(page.__errors).toEqual([]);
+});
+
+test("a visitor books a trip screen by screen with the pass, and nothing but the public routes is asked", async ({ page }) => {
   const calls = [];
   await mock(page, calls);
+  await page.goto(`/reisebuchung-kunde.html?link=${TOKEN}`);
 
-  await page.goto("/reisebuchung-kunde.html");
-  await expect(page.locator("#account")).toContainText("kundin");
-
-  // START. Before the fix this is where it ended: the diff of the capped listing
-  // found no row for the new instance and the page threw on `fresh.key`.
-  await page.click("#startBtn");
-  await expect(page.locator("#instHint")).toHaveText(`#${INSTANCE} · Schritt 1`);
+  // The start form, from the public schema route.
   await expect(page.locator(".steptitle")).toHaveText("Reisedaten");
-  await expect(page.locator(".fjs-input")).toHaveCount(1);
+  await page.fill(".fjs-input", "Thailand");
+  await page.click("#next");
 
-  // COMPLETE. The wizard now asks whether the instance has ended, which is the
-  // second read that used to go through the capped listing.
-  await page.fill(".fjs-input", "Sylt");
+  // The start lands on the first screen of the sitting, and says why it is there in the
+  // model's own words, as text.
+  await expect(page.locator(".steptitle")).toHaveText("Visum-Angaben");
+  await expect(page.locator("#why")).toHaveText(VISUM.documentation);
+  await expect(page.locator("#why b")).toHaveCount(0);
+  await expect(page.locator("#instHint")).toHaveText("#281474990452515 · Schritt 2");
+
+  // The engine is still working after this screen: the page waits, asks again with the
+  // pass, and shows what comes next.
+  await page.fill(".fjs-input", "CH");
+  await page.click("#next");
+  await expect(page.locator(".steptitle")).toHaveText("Buchung bestätigen");
+  await expect(page.locator(".steps li.done")).toHaveText(["Reisedaten", "Visum-Angaben"]);
+
+  // The computed age is shown and is not the visitor's to send.
+  const age = page.getByLabel("Alter am Stichtag (berechnet)");
+  await expect(age).toHaveValue("16");
+  await expect(age).toBeDisabled();
+  await page.check('input[type="checkbox"]');
   await page.click("#next");
   await expect(page.locator(".banner")).toContainText("Buchung abgeschlossen");
-  await expect(page.locator("#instHint")).toHaveText(`#${INSTANCE} · abgeschlossen`);
 
-  // It got there off the index-backed reads, and never touched the unscoped listing.
-  expect(calls).toContain(`GET /api/v1/instances?process=${DEF_KEY}`);
-  expect(calls).toContain(`GET /api/v1/instances/search?q=${INSTANCE}`);
-  expect(calls.filter((c) => c === "GET /api/v1/instances")).toEqual([]);
-  expect(errors).toEqual([]);
+  expect(calls.map((c) => c.call)).toEqual([
+    `GET /public/forms/${TOKEN}/schema`,
+    `POST /public/forms/${TOKEN}/start`,
+    `POST /public/wizard/steps/${VISUM.taskKey}/complete`,
+    "GET /public/wizard/step",
+    `POST /public/wizard/steps/${BESTAETIGEN.taskKey}/complete`,
+  ]);
+  // The pass rides in the header of every wizard call and in no URL; the start has none.
+  for (const c of calls) {
+    expect(c.auth).toBe(c.call.includes("/public/wizard/") ? "Bearer " + PASS : "");
+    expect(c.call).not.toContain(PASS.split(".")[1]);
+  }
+  expect(JSON.parse(calls[4].body)).toEqual({ variables: { buchungBestaetigt: true } });
+  // The call log on the page shows the calls, never the pass.
+  await expect(page.locator("#log")).not.toContainText(PASS.split(".")[1]);
+});
+
+test("a reload resumes the sitting from the pass the tab kept", async ({ page }) => {
+  const calls = [];
+  await mock(page, calls);
+  await page.goto(`/reisebuchung-kunde.html?link=${TOKEN}`);
+  await page.fill(".fjs-input", "Thailand");
+  await page.click("#next");
+  await expect(page.locator(".steptitle")).toHaveText("Visum-Angaben");
+
+  calls.length = 0;
+  await page.reload();
+  await expect(page.locator(".steptitle")).toHaveText("Visum-Angaben");
+  expect(calls.map((c) => c.call)).toEqual(["GET /public/wizard/step"]);
+  expect(calls[0].auth).toBe("Bearer " + PASS);
+});
+
+test("a pass that opens nothing any more is forgotten, and the start form is offered", async ({ page }) => {
+  const calls = [];
+  await mock(page, calls);
+  await page.addInitScript(([key]) => sessionStorage.setItem(key, "1.deadbeef"), [`atlas.reise.pass.${TOKEN}`]);
+  await page.goto(`/reisebuchung-kunde.html?link=${TOKEN}`);
+  await expect(page.locator(".steptitle")).toHaveText("Reisedaten");
+  expect(calls.map((c) => c.call)).toEqual(["GET /public/wizard/step", `GET /public/forms/${TOKEN}/schema`]);
+});
+
+test("without a link the page says how to get one, and calls nothing", async ({ page }) => {
+  const calls = [];
+  await mock(page, calls);
+  await page.goto("/reisebuchung-kunde.html");
+  await expect(page.locator("#body")).toContainText("public-links");
+  expect(calls).toEqual([]);
 });

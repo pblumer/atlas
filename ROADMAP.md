@@ -1281,9 +1281,12 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
     ([ADR-0129](docs/adr/0129-remote-deployment-targets.md)), and design-time
     backup for free ([ADR-0107](docs/adr/0107-backup-and-restore.md)).
   - 🔲 **Deferred, and said out loud:** authenticated hosted apps — a page that
-    needs `/api/v1/tasks`, the shape `reisebuchung-kunde.html` demonstrates —
-    require a per-app credential and a record of their own; until then such a page
-    stays a product page in `api/web/` or lives on an origin the operator runs.
+    needs `/api/v1/tasks` — require a per-app credential and a record of their own;
+    until then such a page stays a product page in `api/web/` or lives on an origin
+    the operator runs. A multi-step customer page needs no credential any more:
+    `reisebuchung-kunde.html` walks a public wizard
+    ([ADR-0449](docs/adr/0449-a-wizard-is-a-subprocess-one-filler-walks-through.md))
+    through the public routes alone.
     Per-app subdomain isolation needs wildcard DNS and a wildcard certificate.
 - 🚧 **User management & the authentication boundary**
   ([ADR-0044](docs/adr/0044-user-management-and-authentication-boundary.md)):

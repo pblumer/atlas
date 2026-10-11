@@ -3153,6 +3153,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <span class="tag ok" data-l="de">läuft sofort</span><span class="tag ok" data-l="en">runs at once</span>
           <span class="tag" data-l="de">inklusives Gateway</span><span class="tag" data-l="en">inclusive gateway</span>
           <span class="tag">DMN</span><span class="tag">form-js</span>
+          <span class="tag" data-l="de">öffentlicher Wizard</span><span class="tag" data-l="en">public wizard</span>
           <span class="tag">examples/reisebuchung/</span>
         </p>
         <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
@@ -3208,13 +3209,16 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <li data-l="en"><b>Two runs to compare:</b> "long-haul + minor" opens both extra forms at once;
               "domestic + adult" takes the default and goes straight to confirmation. The same definition, different
               behaviour – driven purely by data and the table.</li>
-            <li data-l="de"><b>Ein Kunde soll keine Aufgabenliste sehen.</b> Daneben liegt ein schlanker
-              Kunden-Assistent, der nach jedem Absenden sofort den nächsten Task derselben Instanz holt und dessen
-              Formular an derselben Stelle rendert – ein nahtloser Wizard über durable Prozessschritte, mit vier
-              Aufrufen als ganzem Vertrag.</li>
-            <li data-l="en"><b>A customer should not see a task list.</b> Beside it lies a lean customer assistant
-              that fetches the next task of the same instance right after each submit and renders its form in the
-              same place – a seamless wizard over durable process steps, with four calls as the entire contract.</li>
+            <li data-l="de"><b>Eine Kundin soll keine Aufgabenliste sehen und kein Konto brauchen.</b> Die Masken
+              nach den Reisedaten sind ein <a href="#wizards">öffentlicher Wizard</a>: Wer den öffentlichen Link
+              öffnet, bekommt einen Pass und wird von Maske zu Maske geführt; warum eine Maske erscheint, liest sie
+              aus deren Dokumentation im Modell. Daneben liegt ein schlanker Kunden-Assistent, der genau das mit vier
+              öffentlichen Aufrufen als ganzem Vertrag zeigt.</li>
+            <li data-l="en"><b>A customer should not see a task list or need an account.</b> The screens after the
+              trip details are a <a href="#wizards">public wizard</a>: whoever opens the public link gets a pass and
+              is carried from screen to screen; why a screen appears, they read from its documentation in the model.
+              Beside it lies a lean customer assistant that shows exactly that, with four public calls as the entire
+              contract.</li>
             <li data-l="de"><b>Die Gegenprobe</b> liegt in <code>examples/reisebuchung/fall-a/</code>: dieselbe
               Fachlichkeit als <i>ein</i> Formular in <i>einem</i> Schritt, im Client geblättert. Lies beide, bevor du
               dich für eine Bauform entscheidest.</li>
@@ -5452,6 +5456,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         The browser never sees the key, and <b>no case data from running instances</b> goes to a model this way: what
         is read is the process's model, not its operation.</p>
 
+      <div id="wizards" style="scroll-margin-top:66px"></div>
       <h4 data-l="de">Mehrstufige Formulare (Wizards)</h4><h4 data-l="en">Multi-step forms (wizards)</h4>
       <p data-l="de">Läuft ein Formular über mehrere Masken, und hängt die nächste Maske von der Antwort auf die
         vorige ab, dann gehört diese Abfolge in den Prozess: jede Maske ist ein <b>User-Task</b>, und die Gateways
@@ -5506,6 +5511,11 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           früheren Antworten sind dann vorbelegt.</li>
         <li data-l="en"><b>Back</b> exists only as a sequence flow you draw back to the earlier screen; the earlier
           answers are then filled in.</li>
+        <li data-l="de"><b>Ein vollständiges Beispiel</b> ist die <a href="#bsp-reisebuchung">Reisebuchung</a>: ein
+          öffentliches Startformular, danach ein öffentlicher Wizard, dessen Masken eine Entscheidungstabelle
+          auswählt.</li>
+        <li data-l="en"><b>A complete example</b> is the <a href="#bsp-reisebuchung">trip booking</a>: a public start
+          form, then a public wizard whose screens a decision table picks.</li>
       </ul>
 
       <h3 data-l="de">Worker – atlas mit der Aussenwelt verbinden</h3><h3 data-l="en">Workers – wiring atlas to the outside</h3>

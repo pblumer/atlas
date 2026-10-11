@@ -66,6 +66,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The trip booking example is a public wizard.** `examples/reisebuchung` now takes the
+  trip details as a start form behind a public link and walks the visitor through a
+  `public` wizard (ADR-0449): the screens the decision table `ReisePflichten` picks, one
+  after the other, without an account. Each screen's documentation in the model says why
+  it appears, the confirmation shows the trip type and the computed age in disabled
+  fields, the wizard maps its answers out, and a 30-minute timer ends an abandoned
+  sitting. The customer page `/reisebuchung-kunde.html?link=<token>` no longer signs
+  anyone in or lists an instance's tasks to guess the next screen: it uses only the
+  four public calls and follows their answers, `pending` included. A test runs both of
+  the README's walkthroughs against the example's own files.
+
 - **A deploy refuses an event-based gateway atlas does not run.** atlas runs an
   event-based gateway as the exclusive deferred choice inside a running instance
   (ADR-0110). A gateway marked `instantiate="true"`, which starts the instance, or
