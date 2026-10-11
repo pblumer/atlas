@@ -167,6 +167,7 @@ var apiScopeAllowed = map[string][]string{
 		"POST /api/v1/jobs/activate",
 		"POST /api/v1/jobs/{key}/complete",
 		"POST /api/v1/jobs/{key}/fail",
+		"POST /api/v1/jobs/{key}/error",
 		"POST /api/v1/mail/outbox",
 		"POST /api/v1/ad/mock-directory",
 		"POST /api/v1/sql/mock-journal",

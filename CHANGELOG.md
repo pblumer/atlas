@@ -14,6 +14,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A worker can end its job with a BPMN error a boundary catches.** An error boundary on a
+  service task or an error event subprocess could catch an error only from an error end
+  event: the engine knew how to throw one from a job (ADR-0089), but no route, worker or
+  tool reached it, so a worker could only fail the job and burn its retries. `POST
+  /api/v1/jobs/{key}/error` takes an `errorCode` and an optional `errorMessage` from the
+  worker holding the job's lease, fenced like a completion, or from an operator with a
+  required `reason`; a throw by hand is recorded in the instance's audit history with who,
+  why and the code, like a completion by hand. A matching catch takes the error path with no
+  retry spent; with none in reach the job waits on an incident naming the code and the
+  message, and resolving it retries the job. The Go worker throws when a handler returns a
+  `worker.BPMNError`, the MCP tool `atlas_throw_job_error` is the operator's door, and a
+  worker token may call the route. A thrown error does not count for or against a circuit
+  breaker. Error variables are not carried, and a command run by the worker binary has no
+  way yet to throw one.
+
 - **A wizard hands out the personal data its screens collected.** A screen inside an
   embedded subprocess writes its answer into the subprocess's scope, and a wizard's only way
   out is its output mappings (ADR-0449) — which ADR-0314 refused for any variable declared

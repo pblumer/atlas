@@ -13360,6 +13360,16 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const m = s && s.manual;
     if (!m) return "";
     const who = m.actor ? esc(m.actor) : "an operator";
+    // A BPMN error thrown by hand (ADR-0089) is the other intervention a job can take:
+    // the error path, not a finish, so it must not read as a completion.
+    if (m.action === "throwJobError") {
+      return `<div class="ops-manual">
+      <h4>&#9888; Error thrown manually</h4>
+      <p>This task's job was ended by hand with the BPMN error <code>${esc(m.errorCode || "")}</code> by
+        <b>${who}</b>${m.at ? ` on ${esc(fmtDateTime(m.at))}` : ""} — the worker did not report it.</p>
+      <p class="ops-manual-reason">${esc(m.reason || "")}</p>
+    </div>`;
+    }
     return `<div class="ops-manual">
       <h4>&#10003; Completed manually</h4>
       <p>This task was finished by hand by <b>${who}</b>${m.at ? ` on ${esc(fmtDateTime(m.at))}` : ""} —

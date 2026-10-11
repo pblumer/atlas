@@ -46,6 +46,7 @@ var continuationCarries = map[string]string{
 	"Actor":         "external",
 	"Reason":        "external",
 	"Manual":        "external",
+	"ErrorMessage":  "external", // a worker's or operator's throw (ADR-0089), never a followup
 	"RetryBackoff":  "external",
 	"LeaseFor":      "external",
 	"Created":       "external", // a caller's pointer, set only on an API start

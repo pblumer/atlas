@@ -74,7 +74,13 @@ type Command struct {
 	// work (ADR-0159). It is the explicit gate for the audit record — never inferred from
 	// Reason being set — so a manual completion is always attributable even if the reason
 	// is somehow empty, and a worker's completion never mints an operator-action record.
+	// A BPMN error thrown by hand carries it for the same reason (ADR-0089).
 	Manual bool
+	// ErrorMessage is what a worker said about the BPMN error it threw (ADR-0089), the
+	// text an operator reads on the incident when nothing catches the error. It rides
+	// only on the non-hot-path IntentJobErrorThrown command, beside the code in
+	// Value.incident.Message, so it never touches the token-movement fast path.
+	ErrorMessage string
 	// RetryBackoff is the delay (unix-nanoseconds) a worker asked to wait before its failed
 	// job may be retried (ADR-0111). It rides only on the non-hot-path IntentJobFailed command;
 	// the handler reads the clock at command time and freezes now+RetryBackoff into the job's
