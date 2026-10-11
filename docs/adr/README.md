@@ -369,7 +369,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0281](0281-session-role-revocation.md) | A role change takes effect on the next request, not the next login | Accepted | Landed |
 | [0282](0282-store-registry.md) | One inventory of what is on disk, and what a backup owes it | Accepted | Landed |
 | [0283](0283-strict-log-corruption.md) | Only the end of the active segment may be torn | Accepted | Landed |
-| [0284](0284-transactional-child-view.md) | A cancellation sees the children created in its own batch | Accepted | Landed |
+| [0284](0284-transactional-child-view.md) | A cancellation sees the children created in its own batch | Accepted (amended) | Landed |
 | [0285](0285-wal-batch-envelope.md) | A batch is one framed unit in the log | Accepted | Landed |
 | [0286](0286-a-list-carries-its-own-search.md) | A list carries its own search | Accepted | Landed |
 | [0287](0287-create-the-worker-from-the-incident.md) | Create the worker from the incident, and run the deploy preflight on every deploy path | Accepted | Landed |

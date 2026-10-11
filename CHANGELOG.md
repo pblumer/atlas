@@ -90,6 +90,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **An instance no longer completes while a token is on its way to its next element.**
+  An element that completes and takes a flow activates its successor one batch later,
+  and a parallel branch that ended in between found its scope empty and completed it.
+  The successor then ran inside an instance that had already reported itself completed
+  — and when it was a service task, its job was left with no instance to collect it.
+  First seen with a compensation throw whose handler finishes at once (#1013,
+  ADR-0284), it happened with any element handing its token on while another branch
+  ended: a task, a none, signal or escalation throw, a link. A scope now completes
+  only when no token is in it and none is still on its way into it. Instances that
+  completed early before this release keep their history as written.
 - **A task holder reads the fields of a grouped form.** What a person holding a task may
   read of its instance is the set of variables its form binds. A field inside a group or a
   dynamic list that has a path was counted under its own key rather than under the path,

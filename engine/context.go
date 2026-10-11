@@ -317,6 +317,35 @@ func (c *ProcessingContext) TokenCanStillReach(procKey, scopeKey uint64, nodeId 
 	return scan(c.p.queue[c.p.batchPos+1:]) || scan(c.p.followups)
 }
 
+// TokenEntering reports whether a token is on its way into scopeKey over a sequence
+// flow: an element that completed and took a flow has written its Completed already,
+// and its successor's activation is still a queued command, so the token is in
+// neither place the active-child counter sees (#1013). Only a flow's activation
+// counts — one with SourceFlowId >= 0. An armed boundary, an event-subprocess
+// trigger, a compensation handler or an ad-hoc activity is entered some other way,
+// and none of them is a token a scope waits for in order to drain.
+//
+// It reads the queue the way [ProcessingContext.TokenCanStillReach] does, and for the
+// same reason that is safe across a restart: the queue is the batch's continuation,
+// restored on recovery (ADR-0271), so the commands seen here are the ones a resumed
+// processor sees.
+func (c *ProcessingContext) TokenEntering(scopeKey uint64) bool {
+	return activationEntering(c.p.queue[c.p.batchPos+1:], scopeKey) ||
+		activationEntering(c.p.followups, scopeKey)
+}
+
+// activationEntering is TokenEntering over one command list.
+func activationEntering(cmds []Command, scopeKey uint64) bool {
+	for i := range cmds {
+		cmd := &cmds[i]
+		if cmd.ValueType == model.VTElementInstance && cmd.Intent == model.IntentActivating &&
+			cmd.Value.element.FlowScopeKey == scopeKey && cmd.Value.element.SourceFlowId >= 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // ActiveChildren returns the active-child count of a scope (e.g. to detect that
 // a process instance has finished).
 func (c *ProcessingContext) ActiveChildren(scope uint64) int32 {
