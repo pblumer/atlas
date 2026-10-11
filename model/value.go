@@ -1442,6 +1442,13 @@ const (
 	// The same reason refuses the other order: the data subject's first write into a scope
 	// that already holds such a copy, which a call activity seeding its child produces.
 	IncidentPersonalOfAnotherSubject IncidentReason = 6
+	// IncidentUnhandledError marks a BPMN error that no handler caught (ADR-0089): a
+	// worker's thrown error, an error end event, a mockup task's simulated one. The
+	// element did not finish what it was doing, so resolving retries the thing that
+	// threw — the job, which an uncaught worker error leaves in place with its retries
+	// spent, or the throw itself — and an error still uncaught parks again on a fresh
+	// incident rather than leaving the token parked behind none.
+	IncidentUnhandledError IncidentReason = 7
 )
 
 func (*IncidentValue) ValueType() ValueType { return VTIncident }

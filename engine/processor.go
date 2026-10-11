@@ -597,8 +597,9 @@ func (p *Processor) ActivateJob(jobKey uint64, worker string, leaseFor int64) {
 // ThrowJobError enqueues a worker's report that its job threw a BPMN error code
 // (ADR-0089) — the "throw BPMN error" verb, a sibling of FailJob. Instead of retrying or
 // raising an incident, the handler cancels the job and propagates the error from the job's
-// element to the nearest matching error boundary or error event subprocess (or, uncaught,
-// raises an incident). The code rides in the command's incident.Message field, a transient
+// element to the nearest matching error boundary or error event subprocess. An error with
+// nowhere to go keeps the job, its retries spent, under a job incident, so resolving it
+// retries the job. The code rides in the command's incident.Message field, a transient
 // command carrier that is never persisted. Throwing on a job that no longer exists is a
 // no-op. Call RunUntilIdle (or Drive) to process it.
 func (p *Processor) ThrowJobError(jobKey uint64, errorCode string) {

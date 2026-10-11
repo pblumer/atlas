@@ -174,7 +174,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0086](0086-gateway-conditions-resolve-over-scope-chain.md) | Gateway conditions resolve over the scope chain | Accepted | Landed |
 | [0087](0087-in-process-csv-ingestion.md) | In-process CSV ingestion — upload in a user task, parse in the process | Accepted | Landed |
 | [0088](0088-signal-events.md) | Signal events (broadcast throw/catch) | Accepted | Landed |
-| [0089](0089-error-events.md) | Error events (scoped propagation to the nearest handler) | Accepted | Landed |
+| [0089](0089-error-events.md) | Error events (scoped propagation to the nearest handler) | Accepted (amended) | Landed |
 | [0090](0090-bulk-terminate-instances.md) | Bulk-terminate running instances — an explicit selection and a filtered scope | Accepted | Landed |
 | [0091](0091-user-task-scheduling.md) | User-task scheduling — priority and due date | Accepted | Landed |
 | [0092](0092-clio-key-provisioning.md) | One-click clio credential provisioning | Accepted | Landed |

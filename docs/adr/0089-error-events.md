@@ -1,6 +1,6 @@
 # ADR-0089: Error events (scoped propagation to the nearest handler)
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-11 — an uncaught worker error keeps its job, and resolving an uncaught error retries it; see the note under Consequences)
 - **Implementation:** Landed
 - **Date:** 2026-07-30
 - **Deciders:** Atlas engine team
@@ -262,6 +262,7 @@ decision (I6); it runs only live (a throw is a command), never during replay.
   `FailJob`) whose handler, instead of decrementing retries, calls
   `propagateError(c, job.ElementInstanceKey, code)` — so a service task with an error boundary
   catches a worker-thrown error. The job is consumed (canceled), the boundary fires.
+  (Amended 2026-10-11: an error with nowhere to go keeps its job; see Consequences.)
 
 ### Compiler
 
@@ -343,6 +344,33 @@ decision (I6); it runs only live (a throw is a command), never during replay.
   need explicit ordering tests. Signal-vs-error is deliberately opposite (broadcast vs nearest);
   a future `bpmn:escalation` (non-interrupting, propagating) is a third variant deferred with
   compensation.
+- **Amendment 2026-10-11:** the incident terminal did not resume. An uncaught error's
+  incident carried no job and no reason, and resolving it (ADR-0061) found no case for a
+  service task or an error end event, so it cleared the incident and left the token parked
+  behind none: an instance stuck where nothing reported it. Two changes make the resolve the
+  genuine retry ADR-0061 promises.
+  - An uncaught *worker* error no longer cancels the job. When nothing in the instance
+    catches the code and the instance has no caller to leave to, the job is kept with its
+    retries spent and its lease released, under a job incident (`IncidentUnhandledError`,
+    "unhandled error '<code>'"). That is the shape of a failed job with no retries left,
+    so resolving it hands the same job back to the workers with the retries the resolve
+    gives. Canceling it and building a new job on resolve was the alternative; it needs a
+    resume case of its own per job-bearing node type, must take care not to re-arm the
+    boundary events the task still has armed, and would build the job from the definition
+    rather than with the retries the resolve names. Keeping the job reuses the resolve
+    path every failed job already takes.
+    An error that is caught, or that leaves a call activity's child for its caller, is
+    unchanged: the job is canceled and the error propagates.
+  - An uncaught error end event's incident is marked `IncidentUnhandledError`, and
+    resolving it throws the error again: a handler that has come into reach (a migration
+    to a version with one, ADR-0162) catches it, and one still missing parks it on a fresh
+    incident. An incident on an error end from before the reason existed is read the same
+    way, since an error end parks for no other reason the resolve path does not already
+    recognise.
+  A mockup task's simulated error and a call activity whose child's error went uncaught
+  were already resumed by their node type, and still are. Nothing yet lets a worker reach
+  `ThrowJobError` over HTTP, the worker client or MCP; this amendment makes the uncaught
+  case safe to expose before that door opens.
 
 ## Pros and cons of the options
 

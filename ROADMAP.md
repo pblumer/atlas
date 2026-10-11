@@ -658,7 +658,8 @@ Making processes wait, react, and time out.
   error event subprocess whose code matches (a code-less catch is a catch-all), always
   interrupting: the caught scope is torn down and the handler's recovery flow runs. Uncaught,
   it propagates to a call-activity caller (ADR-0076) or, at the top, raises an incident
-  (ADR-0061). Built on the scope chain, `interruptHost`/`terminateScope`, and the
+  (ADR-0061) whose resolve retries the throw: an uncaught worker error keeps its job for
+  that retry, and an error end throws again. Built on the scope chain, `interruptHost`/`terminateScope`, and the
   boundary/event-subprocess lifecycle — no subscription, value type, or recovery path;
   propagation is a pure function of committed scope state. Recovery-tested; authored in the
   Modeler's Implement panel (an error-code picker on error end/boundary/event-subprocess
