@@ -102,6 +102,16 @@ func TestAccountBestellungNamesWhoseDataItHolds(t *testing.T) {
 	if !strings.Contains(string(form), `"key": "`+subject+`"`) {
 		t.Errorf("the start form does not collect %q, so no instance would have a data subject", subject)
 	}
+	// The widget is the other way in, and it does not go through the form: it posts its
+	// own variables to the public start. It has to send the subject too, or every order
+	// placed through it is refused at the edge.
+	widget, err := os.ReadFile("account-bestellung/account-order-widget.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(widget), subject+": ") {
+		t.Errorf("the widget does not send %q, so every order it places would be refused", subject)
+	}
 	// And it stays findable: erasing a person starts with finding their instances.
 	if !cp.IsSearchableVariable(subject) {
 		t.Errorf("the data subject %q is not searchable, so an operator cannot find the instances to erase", subject)

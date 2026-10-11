@@ -8,17 +8,18 @@
                                                  Kontotyp, Begruendung)
      -> [DMN] "Profil bestimmen"   KontotypMapping: kontotyp A/E/T/S -> profil
                                    { kuerzel, accountEnabled, kategorie, usageLocation }
-     -> [Script] "aufbereiten"     mailNick, upn = jml-test-<kuerzel>-<mailNick>@contoso.com,
-                                   displayName, kategorie
-     -> (X) "Test-Objekt?"         nur jml-test-*@contoso.com weiter; sonst Ende ohne Entra
-     -> User-Task "Freigeben"      (account-freigabe; Admin setzt Initialpasswort)
+     -> [Script] "aufbereiten"     kategorie aus dem Profil
+     -> User-Task "Freigeben"      (account-freigabe; zeigt Vorname und Nachname,
+                                   Admin setzt Initialpasswort)
      -> (X) "Freigegeben?"         nur "anlegen" legt an; sonst Ende "Abgelehnt"
-     -> [entra create-user]        Attribute aus profil (accountEnabled, usageLocation) + Form
+     -> [entra create-user]        baut UPN jml-test-<kuerzel>-<vorname>.<nachname>@contoso.com,
+                                   mailNickname und Anzeigenamen selbst; accountEnabled und
+                                   usageLocation aus dem Profil
      -> Ende "Konto bereitgestellt"
 
-  Der Kontotyp bestimmt ueber die DMN-Tabelle das Profil; das "jml-test-"-Praefix baut
-  der Script-Task, nicht die Tabelle — so bleibt die Test-Objekt-Grenze eine
-  Prozess-Invariante. Beide Gateways sind fail-closed (Default = ablehnen/Ende).
+  Der Kontotyp bestimmt ueber die DMN-Tabelle das Profil; das "jml-test-"-Praefix steht
+  im attributes-Ausdruck des create-user-Tasks, nicht in der Tabelle — so bleibt die
+  Test-Objekt-Grenze im Modell sichtbar. Das Gateway ist fail-closed (Default = ablehnen).
 
   Personendaten (ADR-0314): vorname und nachname sind als personal deklariert und
   werden unter einem Schluessel verschluesselt, der zur Personalnummer gehoert. Die
@@ -113,8 +114,9 @@ Dauer eines Aufrufs existiert. Was hier bleibt, liest nur das Profil.</bpmn:docu
 
     <bpmn:serviceTask id="anlegen" name="Konto anlegen">
       <bpmn:documentation>create-user gegen contoso.com. Der Body wird inline als JSON verfasst; accountEnabled
-und usageLocation kommen aus dem DMN-Profil, displayName/mailNickname/userPrincipalName
-aus der Aufbereitung, das Passwort ist die Laufzeit-Variable initialpasswort. Antwort in
+und usageLocation kommen aus dem DMN-Profil; displayName, mailNickname und userPrincipalName
+baut der Worker selbst aus Vorname, Nachname und dem Profil, weil er als einziger den
+Klartext hat (ADR-0314). Das Passwort ist die Laufzeit-Variable initialpasswort. Antwort in
 "konto".</bpmn:documentation>
       <bpmn:extensionElements>
         <atlas:entraConnector connector="contoso" operation="create-user" resultVariable="konto"

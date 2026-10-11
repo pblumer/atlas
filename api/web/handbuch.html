@@ -5048,17 +5048,19 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <div>
             <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
             <p data-l="de">Ein <b>öffentliches Startformular</b> nimmt die Bestellung entgegen; ein
-              <b>Business-Rule-Task</b> (<code>KontotypMapping</code>) macht daraus das Profil; ein Script-Task baut
-              UPN und Anzeigename; das <b>fail-closed Testgatter</b> steht davor wie im Self-Service; dann Freigabe
-              und <code>create-user</code> mit <code>accountEnabled</code> und <code>usageLocation</code> aus dem
-              Profil. Dazu liegt ein <b>einbettbares HTML+JS-Widget</b> daneben, das die Bestellung von einer
+              <b>Business-Rule-Task</b> (<code>KontotypMapping</code>) macht daraus das Profil; dann Freigabe und
+              <code>create-user</code> mit <code>accountEnabled</code> und <code>usageLocation</code> aus dem Profil.
+              Vor- und Nachname sind <b>Personendaten</b> und werden unter dem Schlüssel der Personalnummer
+              verschlüsselt; UPN und Anzeigename baut deshalb <code>create-user</code> selbst, weil nur der Worker den
+              Klartext sieht, und das Präfix <code>jml-test-</code> steht fest in seinem Ausdruck. Dazu liegt ein <b>einbettbares HTML+JS-Widget</b> daneben, das die Bestellung von einer
               beliebigen Website aus startet – der Weg, wie ein Prozess in eine bestehende Oberfläche kommt, ohne dass
               jemand atlas öffnen muss.</p>
             <p data-l="en">A <b>public start form</b> takes the order; a <b>business rule task</b>
-              (<code>KontotypMapping</code>) turns it into the profile; a script task builds the UPN and display name;
-              the <b>fail-closed test guard</b> stands in front as in the self-service; then approval and
-              <code>create-user</code> with <code>accountEnabled</code> and <code>usageLocation</code> from the
-              profile. Beside it lies an <b>embeddable HTML+JS widget</b> that starts the order from any website – the
+              (<code>KontotypMapping</code>) turns it into the profile; then approval and <code>create-user</code>
+              with <code>accountEnabled</code> and <code>usageLocation</code> from the profile. First and last name are
+              <b>personal data</b>, enciphered under the key of the personnel number; so <code>create-user</code>
+              builds the UPN and display name itself, because only the worker sees the plaintext, and the
+              <code>jml-test-</code> prefix is fixed in its expression. Beside it lies an <b>embeddable HTML+JS widget</b> that starts the order from any website – the
               way a process reaches an existing interface without anyone having to open atlas.</p>
           </div>
         </div>

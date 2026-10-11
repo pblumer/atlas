@@ -93,6 +93,11 @@
       <p>Neues Konto im Tenant <b>contoso.com</b> — der Kontotyp bestimmt Aktivierung, Kategorie und Namen.</p>
     </div>
     <div class="body">
+      <div class="field">
+        <label class="lbl" for="personalnummer">Personalnummer</label>
+        <input id="personalnummer" name="personalnummer" type="text" autocomplete="off" required/>
+      </div>
+
       <div class="row">
         <div class="field">
           <label class="lbl" for="vorname">Vorname</label>
@@ -147,6 +152,10 @@
   var previewEl = document.getElementById("preview");
   var submitEl = document.getElementById("submit");
   var msgEl = document.getElementById("msg");
+  // The Personalnummer names the person the account is for. Vorname and Nachname are
+  // declared personal data and are enciphered under that person's key (ADR-0314), so a
+  // start without it is refused.
+  var personalnummer = document.getElementById("personalnummer");
   var vorname = document.getElementById("vorname");
   var nachname = document.getElementById("nachname");
   var chosen = null;
@@ -179,8 +188,9 @@
     previewEl.innerHTML = 'Vorgeschlagener UPN: <code>'+upnPreview()+'</code>'+
       '<span class="hint">Kategorie <b style="color:var(--ink)">'+t.label+'</b> · wird '+
       (t.enabled?"aktiviert":"deaktiviert")+' angelegt · Freigabe durch einen Administrator.</span>';
-    submitEl.disabled = !(vorname.value.trim() && nachname.value.trim() && chosen);
+    submitEl.disabled = !(personalnummer.value.trim() && vorname.value.trim() && nachname.value.trim() && chosen);
   }
+  personalnummer.addEventListener("input", render);
   vorname.addEventListener("input", render);
   nachname.addEventListener("input", render);
 
@@ -188,8 +198,9 @@
 
   root.addEventListener("submit", function(ev){
     ev.preventDefault();
-    if(!chosen || !vorname.value.trim() || !nachname.value.trim()) return;
+    if(!chosen || !personalnummer.value.trim() || !vorname.value.trim() || !nachname.value.trim()) return;
     var payload = { variables: {
+      personalnummer: personalnummer.value.trim(),
       vorname: vorname.value.trim(), nachname: nachname.value.trim(),
       kontotyp: chosen, begruendung: document.getElementById("begruendung").value.trim()
     }};
