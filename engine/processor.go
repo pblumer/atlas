@@ -603,11 +603,37 @@ func (p *Processor) ActivateJob(jobKey uint64, worker string, leaseFor int64) {
 // command carrier that is never persisted. Throwing on a job that no longer exists is a
 // no-op. Call RunUntilIdle (or Drive) to process it.
 func (p *Processor) ThrowJobError(jobKey uint64, errorCode string) {
+	p.ThrowJobErrorWithMessage(jobKey, errorCode, "")
+}
+
+// ThrowJobErrorWithMessage is ThrowJobError with the worker's own words about the error:
+// nothing reads them while a handler catches it, and when nothing does they follow the
+// code on the incident an operator reads.
+func (p *Processor) ThrowJobErrorWithMessage(jobKey uint64, errorCode, message string) {
 	p.queue = append(p.queue, Command{
-		Key:       jobKey,
-		ValueType: model.VTJob,
-		Intent:    model.IntentJobErrorThrown,
-		Value:     inflightValue{incident: model.IncidentValue{Message: errorCode}},
+		Key:          jobKey,
+		ValueType:    model.VTJob,
+		Intent:       model.IntentJobErrorThrown,
+		Value:        inflightValue{incident: model.IncidentValue{Message: errorCode}},
+		ErrorMessage: message,
+	})
+}
+
+// ThrowJobErrorManually throws a BPMN error from a parked job on an operator's say-so
+// rather than a worker's report (ADR-0089, ADR-0159): the throw runs exactly as
+// ThrowJobErrorWithMessage does, and the intervention is additionally frozen into an
+// append-only audit event carrying who forced it, why, and the code. actor is the
+// acting principal's username ("" when auth is off); reason is their justification.
+func (p *Processor) ThrowJobErrorManually(jobKey uint64, errorCode, message, actor, reason string) {
+	p.queue = append(p.queue, Command{
+		Key:          jobKey,
+		ValueType:    model.VTJob,
+		Intent:       model.IntentJobErrorThrown,
+		Value:        inflightValue{incident: model.IncidentValue{Message: errorCode}},
+		ErrorMessage: message,
+		Actor:        actor,
+		Reason:       reason,
+		Manual:       true,
 	})
 }
 

@@ -53,6 +53,7 @@ Bearer` header.
 | `atlas_publish_message` | `name`, `correlationKey?`, `variables?` | correlates a message to waiting instances; returns stats |
 | `atlas_complete_job` | `key`, `variables?` | completes a job by hand (operator counterpart to a worker) |
 | `atlas_fail_job` | `key`, `retries?`, `message?` | fails a job; `retries` 0 (default) raises an incident, positive re-activates |
+| `atlas_throw_job_error` | `key`, `errorCode`, `reason`, `errorMessage?` | throws a BPMN error from a job by hand; a matching error boundary or event subprocess catches it, otherwise the job is kept under an incident whose resolve retries it |
 | `atlas_list_incidents` | `limit?` | `{incidents, truncated}` — the operator "what's stuck" view |
 | `atlas_resolve_incident` | `key`, `retries?` | resolves an incident by elementInstanceKey and retries its job |
 

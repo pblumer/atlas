@@ -4423,6 +4423,9 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 .wkjob { border: 1px solid var(--border); border-left: 3px solid var(--border); border-radius: 6px; padding: 8px 10px; }
 .wkjob-completed { border-left-color: var(--ok, #2e7d32); }
 .wkjob-failed { border-left-color: var(--danger); }
+/* Ended in a BPMN error (ADR-0089): an answer the model may have a path for, so not
+   painted as a failure. */
+.wkjob-error-thrown { border-left-color: var(--accent); }
 /* Still out with the worker: neither good news nor bad, and the age is what tells a
    job still being worked from a lease whose worker has gone. */
 .wkjob-in-flight { border-left-color: #b26b00; }

@@ -914,6 +914,11 @@ const (
 	// successor's timeline open with the reason it exists rather than with a token
 	// appearing in the middle of the diagram.
 	OperatorActionForkedFrom
+	// OperatorActionThrowJobError is an operator throwing a BPMN error from a parked job
+	// by hand, the error a worker would otherwise have thrown (ADR-0089, ADR-0159). Like a
+	// completion by hand it forces a path the engine did not take on its own — here the
+	// error flow — so it is recorded with who and why, and with the code it threw.
+	OperatorActionThrowJobError
 )
 
 func (k OperatorActionKind) String() string {
@@ -926,6 +931,8 @@ func (k OperatorActionKind) String() string {
 		return "forkedTo"
 	case OperatorActionForkedFrom:
 		return "forkedFrom"
+	case OperatorActionThrowJobError:
+		return "throwJobError"
 	default:
 		return "OperatorActionKind(?)"
 	}
@@ -961,6 +968,11 @@ type OperatorActionValue struct {
 	// through the old version's compiled graph. Append-compatible: a record written
 	// before this field decodes to 0, which is what every non-migration record means.
 	FromProcessDefKey uint64
+	// ErrorCode is the BPMN error code an OperatorActionThrowJobError threw, and "" for
+	// every other kind (ADR-0089). It is written only when set, after FromProcessDefKey,
+	// so a record of any other kind keeps the layout it always had and an older reader
+	// stops where it always stopped.
+	ErrorCode string
 }
 
 func (*OperatorActionValue) ValueType() ValueType { return VTOperatorAction }
@@ -972,7 +984,11 @@ func (v *OperatorActionValue) encode(dst []byte) []byte {
 	dst = append(dst, byte(v.Kind))
 	dst = appendString(dst, v.Actor)
 	dst = appendString(dst, v.Reason)
-	return binary.LittleEndian.AppendUint64(dst, v.FromProcessDefKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.FromProcessDefKey)
+	if v.ErrorCode != "" {
+		dst = appendString(dst, v.ErrorCode)
+	}
+	return dst
 }
 
 func (v *OperatorActionValue) decode(src []byte) error {
@@ -996,8 +1012,17 @@ func (v *OperatorActionValue) decode(src []byte) error {
 	// Appended after the two strings, so a record written before it simply ends here
 	// and the field stays 0 — which is what every kind but a migration means by it.
 	v.FromProcessDefKey = 0
+	v.ErrorCode = ""
 	if len(rest) >= 8 {
 		v.FromProcessDefKey = binary.LittleEndian.Uint64(rest)
+		// The code follows only on a thrown error's record; any other ends here.
+		if rest = rest[8:]; len(rest) > 0 {
+			code, _, err := readString(rest)
+			if err != nil {
+				return err
+			}
+			v.ErrorCode = code
+		}
 	}
 	return nil
 }

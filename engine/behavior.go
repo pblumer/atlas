@@ -1199,12 +1199,30 @@ func handleJobError(c *ProcessingContext) {
 		return
 	}
 	code := c.cmd.Value.incident.Message
+	// An operator forced this throw rather than a worker reporting it (ADR-0159): who,
+	// why and which code are frozen into the audit history ahead of whatever the throw
+	// does, caught or not, so replay rebuilds the trail without re-running the command.
+	if c.cmd.Manual {
+		c.AppendOperatorActionEvent(model.OperatorActionValue{
+			ProcessInstanceKey: job.ProcessInstanceKey,
+			ElementInstanceKey: job.ElementInstanceKey,
+			JobKey:             c.cmd.Key,
+			Kind:               model.OperatorActionThrowJobError,
+			Actor:              c.cmd.Actor,
+			Reason:             c.cmd.Reason,
+			ErrorCode:          code,
+		})
+	}
 	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil && errorUncaughtAtRoot(c, job.ElementInstanceKey, ei, code) {
 		// Given back as a failing worker gives it back (handleJobFailed): the lease is
 		// released, Assignee left alone.
 		job.Retries = 0
 		job.LeaseExpiresAt = 0
-		recordJobFailure(c, c.cmd.Key, job, 0, unhandledErrorMessage(code), model.IncidentUnhandledError)
+		msg := unhandledErrorMessage(code)
+		if c.cmd.ErrorMessage != "" {
+			msg += ": " + c.cmd.ErrorMessage
+		}
+		recordJobFailure(c, c.cmd.Key, job, 0, msg, model.IncidentUnhandledError)
 		return
 	}
 	c.AppendJobEvent(c.cmd.Key, model.IntentJobCanceled, *job)

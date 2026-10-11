@@ -11,7 +11,7 @@
 *model.JobValue: Assignee, CandidateGroups, CreatedAt, Deadline, ElementInstanceKey, JobType, LeaseEpoch, LeaseExpiresAt, ProcessInstanceKey, Retries, RetryDueDate
 *model.MessageFlowValue: CorrelationKey, MessageName, ReceiverElementId, ReceiverProcessDefKey, ReceiverProcessInstanceKey, SenderProcessInstanceKey
 *model.MessageSubscriptionValue: CorrelationKey, ElementId, ElementInstanceKey, MessageName, ProcessDefKey, ProcessInstanceKey
-*model.OperatorActionValue: Actor, ElementInstanceKey, FromProcessDefKey, JobKey, Kind, ProcessInstanceKey, Reason
+*model.OperatorActionValue: Actor, ElementInstanceKey, ErrorCode, FromProcessDefKey, JobKey, Kind, ProcessInstanceKey, Reason
 *model.ProcessInstanceValue: CompletedAt, CompletedPosition, CorrelationKey, CreatedAt, ExpiryDueDate, ParentElementInstanceKey, PredecessorInstanceKey, ProcessDefKey, PurgeDueDate, State, SuccessorInstanceKey
 *model.ProcessMigrationValue: FromProcessDefKey, Mapping, ProcessInstanceKey, ToProcessDefKey
 *model.SignalSubscriptionValue: ElementId, ElementInstanceKey, ProcessDefKey, ProcessInstanceKey, SignalName

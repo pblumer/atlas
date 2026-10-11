@@ -729,6 +729,47 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_throw_job_error",
+			Description: "Throw a BPMN error from a job by hand, by its job key — the operator counterpart to a " +
+				"worker ending its job with an error code instead of a result (ADR-0089). A matching error " +
+				"boundary or error event subprocess catches the code and the instance takes the error path; " +
+				"with none in reach the job is kept under an incident naming the code (and 'errorMessage', " +
+				"when given), and resolving that incident retries the job. A 'reason' is REQUIRED: forcing " +
+				"the error flow is an operator intervention, recorded with who did it, why and which code in " +
+				"append-only audit history (ADR-0159). Refused with a not-found error if no job has that key. " +
+				"Returns {jobKey}.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":          map[string]any{"type": "integer", "description": "The job key to throw the error from."},
+					"errorCode":    stringProp("The BPMN error code — what an error boundary or error event subprocess matches on."),
+					"errorMessage": stringProp("Optional message; the incident carries it after the code when nothing catches the error."),
+					"reason":       map[string]any{"type": "string", "description": "Why this error is being thrown by hand — recorded in the instance's audit trail. Required."},
+				},
+				"required": []any{"key", "errorCode", "reason"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				code, err := argString(args, "errorCode")
+				if err != nil {
+					return "", err
+				}
+				reason, err := argString(args, "reason")
+				if err != nil {
+					return "", err
+				}
+				payload := map[string]any{"errorCode": code, "reason": reason}
+				if msg := optString(args, "errorMessage"); msg != "" {
+					payload["errorMessage"] = msg
+				}
+				body, _ := json.Marshal(payload)
+				return asText(c.post("/api/v1/jobs/"+strconv.FormatUint(key, 10)+"/error", "application/json", body))
+			},
+		},
+		{
 			Name: "atlas_workers",
 			Description: "The Workers view — who is doing the engine's out-of-process work, and what is waiting. " +
 				"Returns {types, workers, breakers}. Each 'types' row is a job type with its 'parked' queue depth, " +

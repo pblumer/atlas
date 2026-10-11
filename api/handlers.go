@@ -477,6 +477,9 @@ type manualActionView struct {
 	Actor  string `json:"actor,omitempty"`
 	Reason string `json:"reason"`
 	At     int64  `json:"at"`
+	// ErrorCode is the BPMN error a throw by hand threw (ADR-0089); absent for a
+	// completion by hand.
+	ErrorCode string `json:"errorCode,omitempty"`
 }
 
 type timelineToken struct {
@@ -2191,6 +2194,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				if v.ElementInstanceKey != 0 {
 					manualByElement[v.ElementInstanceKey] = manualActionView{
 						Action: v.Kind.String(), Actor: v.Actor, Reason: v.Reason, At: ts,
+						ErrorCode: v.ErrorCode,
 					}
 				}
 				return nil
@@ -4971,6 +4975,111 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 	case notHolder:
 		httpapi.Error(w, http.StatusConflict,
 			"worker "+strconv.Quote(strings.TrimSpace(req.Worker))+" does not hold this job's current lease; it may have elapsed and been taken by another worker")
+	default:
+		httpapi.JSON(w, http.StatusOK, map[string]any{"jobKey": key})
+	}
+}
+
+// throwJobErrorReq is the body of POST /api/v1/jobs/{key}/error (ADR-0089).
+type throwJobErrorReq struct {
+	// ErrorCode is what an error boundary or error event subprocess matches on.
+	ErrorCode string `json:"errorCode"`
+	// ErrorMessage is the worker's own account of the error. Nothing reads it while a
+	// handler catches the error; when nothing does, it follows the code on the incident.
+	ErrorMessage string `json:"errorMessage"`
+	// Worker and LeaseToken are the protocol path, fenced exactly as a completion or a
+	// failure is (ADR-0007): only the holder of the job's current lease may throw.
+	Worker     string `json:"worker"`
+	LeaseToken uint64 `json:"leaseToken"`
+	// Reason is the operator path: throwing by hand forces the error flow the engine
+	// did not take on its own, so it is required and recorded like a completion by hand
+	// (ADR-0159).
+	Reason string `json:"reason"`
+}
+
+// handleThrowJobError ends a job with a BPMN error instead of a result (ADR-0089): a
+// matching error boundary or error event subprocess catches it and the instance takes
+// the error path; with none in reach the job is kept under an incident, and resolving
+// that incident retries the job. It is the third answer a worker can give beside
+// complete and fail, and it takes the same two doors complete does — the lease-holding
+// worker, or an operator with a reason.
+//
+// A thrown error says nothing about whether the target behind the job is healthy: the
+// worker may have reached it and been told no, or decided before ever calling it. So
+// unlike a completion or a failure it neither closes nor feeds a circuit breaker
+// (ADR-0340).
+func (s *Server) handleThrowJobError(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "invalid job key")
+		return
+	}
+	var req throwJobErrorReq
+	if !s.decodeJSONBody(w, r, &req) {
+		return
+	}
+	code := strings.TrimSpace(req.ErrorCode)
+	if code == "" {
+		httpapi.Error(w, http.StatusBadRequest, "errorCode is required: it is what an error boundary or error event subprocess catches")
+		return
+	}
+	worker := strings.TrimSpace(req.Worker)
+	reason := strings.TrimSpace(req.Reason)
+	if worker == "" && reason == "" {
+		httpapi.Error(w, http.StatusBadRequest, "reason is required: throwing a job's error by hand is an operator intervention and is recorded with who did it and why")
+		return
+	}
+	if worker != "" && req.LeaseToken == 0 {
+		httpapi.Error(w, http.StatusBadRequest, "leaseToken is required when throwing as a worker; it is returned by the activation that leased the job")
+		return
+	}
+	message := strings.TrimSpace(req.ErrorMessage)
+	actor := ""
+	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
+		actor = p.Username
+	}
+	var (
+		found     bool
+		notHolder bool
+		runErr    error
+	)
+	s.do(func() {
+		jv, ok, err := s.store.GetJob(key)
+		if err != nil || !ok {
+			return
+		}
+		found = true
+		if worker == "" {
+			s.proc.ThrowJobErrorManually(key, code, message, actor, reason)
+			return
+		}
+		if !holdsLease(jv, worker, req.LeaseToken) {
+			notHolder = true
+			return
+		}
+		s.proc.ThrowJobErrorWithMessage(key, code, message)
+		// What the worker sent back, on the row its lease opened: the code first, since
+		// that is what decided where the instance went.
+		said := code
+		if message != "" {
+			said += ": " + message
+		}
+		s.workers.recordOutcome(worker, key, jobRunErrorThrown, said, jv.Retries, nil)
+	})
+	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
+	// where a worker's outbound call happens, and holding the single writer for
+	// its duration is the stall ADR-0157 step 6 removes.
+	if runErr == nil {
+		runErr = s.drive()
+	}
+	switch {
+	case runErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "throw job error: "+runErr.Error())
+	case !found:
+		httpapi.Error(w, http.StatusNotFound, "no job with that key")
+	case notHolder:
+		httpapi.Error(w, http.StatusConflict,
+			"worker "+strconv.Quote(worker)+" does not hold this job's current lease; it may have elapsed and been taken by another worker. Lease it again, or throw as an operator with a reason")
 	default:
 		httpapi.JSON(w, http.StatusOK, map[string]any{"jobKey": key})
 	}

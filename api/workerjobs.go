@@ -52,6 +52,10 @@ const (
 	jobRunInFlight  = "in flight"
 	jobRunCompleted = "completed"
 	jobRunFailed    = "failed"
+	// jobRunErrorThrown is a job its worker ended with a BPMN error (ADR-0089): not a
+	// failure — the work reached an answer the model has a path for, or an incident when
+	// it has none — and not a completion either.
+	jobRunErrorThrown = "error thrown"
 )
 
 // jobRun is one job a worker leased, as the console shows it.

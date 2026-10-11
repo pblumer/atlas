@@ -514,6 +514,12 @@ func (s *Server) apiRoutes() []apiRoute {
 				"retries": tInteger(), "message": tString(), "worker": tString(), "leaseToken": tInteger(),
 			})),
 			resp: jsonBody("Job key and stats", tObject())}},
+		{"POST", "/api/v1/jobs/{key}/error", s.handleThrowJobError, apiOp{
+			summary: "Throw a BPMN error from a job instead of completing it (ADR-0089) — as its lease-holding worker (\"worker\" + \"leaseToken\"), or by hand as an operator (\"reason\", recorded for audit). A matching error boundary or error event subprocess catches it; with none in reach the job is kept under an incident whose resolve retries it", tag: "Incidents", role: RoleOperator,
+			req: jsonBody("The code a catch matches, an optional message the incident carries when nothing catches it, and either the holding worker id with the lease token its activation returned or an operator's reason", schemaObj(map[string]any{
+				"errorCode": tString(), "errorMessage": tString(), "worker": tString(), "leaseToken": tInteger(), "reason": tString(),
+			}, "errorCode")),
+			resp: jsonBody("Job key", tObject())}},
 		{"GET", "/api/v1/incidents", s.handleListIncidents, apiOp{
 			summary: "List unresolved incidents, optionally scoped to one instance (?instance=), definition (?process=), BPMN element (?element=, or ?elementIndex= for an instance whose definition is no longer deployed), kind (?type=job|timer|budget) or message fragment (?message=) — capped per call (?limit=, max 5000). Answers {items, total, totalExact, truncated}: on a capped page total is a floor, and GET /api/v1/incidents/summary is the reading that counts them all", tag: "Incidents", role: RoleOperator, resp: jsonBody("Incidents", tPage())}},
 		{"GET", "/api/v1/incidents/summary", s.handleIncidentSummary, apiOp{

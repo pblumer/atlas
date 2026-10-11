@@ -653,8 +653,9 @@ Making processes wait, react, and time out.
   signal event, plus a central signals manager on the diagram root).
 - ✅ **Error events and error propagation**: an `errorEventDefinition` is a **named, coded
   failure** propagated **structurally** to the **nearest enclosing** matching handler — not
-  broadcast (ADR-0089). An error end event (or a worker failing a job to a code via
-  `ThrowJobError`) throws; it walks up the live scope chain to the first error boundary or
+  broadcast (ADR-0089). An error end event (or a worker ending its job with a code over
+  `POST /jobs/{key}/error`, the Go worker's `BPMNError`, or an operator by hand with a reason
+  through the same route or `atlas_throw_job_error`) throws; it walks up the live scope chain to the first error boundary or
   error event subprocess whose code matches (a code-less catch is a catch-all), always
   interrupting: the caught scope is torn down and the handler's recovery flow runs. Uncaught,
   it propagates to a call-activity caller (ADR-0076) or, at the top, raises an incident

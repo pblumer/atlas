@@ -62,9 +62,15 @@ func jobPullSrv(t *testing.T, jobType string, vars string) *Server {
 // need a lease to elapse.
 func jobPullSrvClocked(t *testing.T, jobType string, vars string) (*Server, *testClock) {
 	t.Helper()
+	return jobPullSrvClockedWith(t, jobTypeBPMN("orders", jobType), vars)
+}
+
+// jobPullSrvClockedWith is jobPullSrvClocked for a model of the test's own.
+func jobPullSrvClockedWith(t *testing.T, bpmnXML string, vars string) (*Server, *testClock) {
+	t.Helper()
 	clk := &testClock{t: time.Now().UnixNano()}
 	srv := newServerWithClock(t, clk)
-	code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", jobTypeBPMN("orders", jobType), "application/xml")
+	code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/deployments", bpmnXML, "application/xml")
 	if code != http.StatusOK {
 		t.Fatalf("deploy: status=%d body=%s", code, body)
 	}
