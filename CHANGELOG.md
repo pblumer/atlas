@@ -88,6 +88,19 @@ _Changed_ / _Removed_ for each version.
   four public calls and follows their answers, `pending` included. A test runs both of
   the README's walkthroughs against the example's own files.
 
+## [0.9.2] — 2026-10-11
+
+**A patch release of correctness and security fixes.** An instance no longer reports
+itself completed while a token is still on its way to its next element, the public start
+link and the inbox's task content stop handing out or taking in more than a form asks for,
+and a REST task keeps its OAuth2 settings through the Modeler. Two changes refuse what was
+accepted before: a public start that names a field its form does not submit, and a deploy
+of an event-based gateway marked `instantiate="true"` or `eventGatewayType="Parallel"`.
+0.9.2 carries none of the wizard work on main (ADR-0449, proposed here), and reads and
+writes the same data directory as 0.9.1.
+
+### Changed
+
 - **A deploy refuses an event-based gateway atlas does not run.** atlas runs an
   event-based gateway as the exclusive deferred choice inside a running instance
   (ADR-0110). A gateway marked `instantiate="true"`, which starts the instance, or
@@ -111,6 +124,7 @@ _Changed_ / _Removed_ for each version.
   ended: a task, a none, signal or escalation throw, a link. A scope now completes
   only when no token is in it and none is still on its way into it. Instances that
   completed early before this release keep their history as written.
+
 - **A task holder reads the fields of a grouped form.** What a person holding a task may
   read of its instance is the set of variables its form binds. A field inside a group or a
   dynamic list that has a path was counted under its own key rather than under the path,
@@ -130,6 +144,7 @@ _Changed_ / _Removed_ for each version.
   left out, as the form never submits one. The check covers names and structure; a
   field's type, whether it is required and its pattern stay the form's validation in the
   browser.
+
 - **A REST task's OAuth2 settings survive the Modeler, and the Modeler can write them.**
   The compiler reads `authTokenUrl`, `authClientId` and `authScope` for the
   client-credentials grant (ADR-0152), but the Modeler's moddle did not declare them, so
@@ -14145,7 +14160,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.9.2...HEAD
+[0.9.2]: https://github.com/pblumer/atlas/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/pblumer/atlas/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/pblumer/atlas/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/pblumer/atlas/compare/v0.7.0...v0.8.0
