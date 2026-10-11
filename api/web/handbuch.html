@@ -2217,12 +2217,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <!-- ==================== EXAMPLES ==================== -->
     <section id="beispiele">
       <h2 data-l="de">Beispiele</h2><h2 data-l="en">Examples</h2>
-      <p class="lead" data-l="de">Hier stehen <span data-count="examples">40</span> fertige Szenarien aus dem
+      <p class="lead" data-l="de">Hier stehen <span data-count="examples">41</span> fertige Szenarien aus dem
         atlas-Repository, vollständig beschrieben – <b>fachlich</b> (wofür ist das gut, wer hat etwas davon) und <b>technisch</b>
         (wie ist es gebaut, welche Variablen, welche Fallstricke). Jedes lässt sich mit einem Klick in deine eigene
         Instanz installieren, im Modeler öffnen und zu deinem Prozess umbauen. Vom Dreizeiler bis zur Applikation aus
         zwei Prozessen; vom Einzelunternehmen bis zum Konzernverzeichnis mit 50 000 Konten.</p>
-      <p class="lead" data-l="en">Here are <span data-count="examples">40</span> finished scenarios from the atlas
+      <p class="lead" data-l="en">Here are <span data-count="examples">41</span> finished scenarios from the atlas
         repository, described in full – <b>in business terms</b> (what it is good for, who benefits) and <b>technically</b> (how it is
         built, which variables, which traps). Each one installs into your own instance in one click, opens in the
         Modeler, and can be rebuilt into your process. From a three-liner to an application of two processes; from a
@@ -2255,6 +2255,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <td><a href="#bsp-pruefe-auftrag" data-l="de">Auftrag prüfen</a><a href="#bsp-pruefe-auftrag" data-l="en">Check an order</a></td></tr>
           <tr><td data-l="de">… rechnen, ohne irgendetwas anzubinden</td><td data-l="en">… calculate, with nothing connected</td>
             <td><a href="#bsp-cart-total" data-l="de">Warenkorb</a><a href="#bsp-cart-total" data-l="en">Shopping cart</a></td></tr>
+          <tr><td data-l="de">… ein Formular über mehrere Masken, dessen nächste Maske von der Antwort abhängt</td><td data-l="en">… a form over several screens, the next one depending on the answer</td>
+            <td><a href="#bsp-arbeitsplatz" data-l="de">Arbeitsplatz-Ausstattung</a><a href="#bsp-arbeitsplatz" data-l="en">Workplace equipment</a> (<span data-l="de">intern</span><span data-l="en">internal</span>), <a href="#bsp-reisebuchung">Reisebuchung</a> (<span data-l="de">öffentlich</span><span data-l="en">public</span>)</td></tr>
           <tr><td data-l="de">… einen Antrag von einem Menschen freigeben lassen</td><td data-l="en">… have a person approve a request</td>
             <td><a href="#bsp-jira-zugangsantrag">Zugangsantrag</a>, <a href="#bsp-account-bestellung">Account-Bestellung</a></td></tr>
           <tr><td data-l="de">… ein privates Vorhaben organisieren, nicht ein geschäftliches</td><td data-l="en">… organise something private, not something for work</td>
@@ -2297,10 +2299,10 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <div class="card">
           <b><span class="tag ok" data-l="de">läuft sofort</span><span class="tag ok" data-l="en">runs at once</span></b>
           <p class="lead" data-l="de">Kein Worker, kein Zugang, kein Internet. Installieren, starten, in Operations
-            zusehen. Das gilt für <span data-count="examples-runnable">15</span> der Beispiele – darunter jedes, das
+            zusehen. Das gilt für <span data-count="examples-runnable">16</span> der Beispiele – darunter jedes, das
             etwas Grundsätzliches erklärt.</p>
           <p class="lead" data-l="en">No worker, no credential, no internet. Install it, start it, watch it in
-            Operations. That holds for <span data-count="examples-runnable">15</span> of the examples – including every
+            Operations. That holds for <span data-count="examples-runnable">16</span> of the examples – including every
             one that explains something fundamental.</p>
         </div>
         <div class="card">
@@ -2384,7 +2386,11 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <tr><td><a href="#bsp-reisebuchung">Reisebuchung</a></td>
             <td data-l="de">Reise buchen; Visum und Einverständnis je nach Fall</td><td data-l="en">Book a trip; visa and consent depending on the case</td>
             <td><span class="tag ok">–</span></td>
-            <td data-l="de">Inclusive-Gateway, DMN, abhängige Formulare</td><td data-l="en">Inclusive gateway, DMN, dependent forms</td></tr>
+            <td data-l="de">Inclusive-Gateway, DMN, öffentlicher Wizard</td><td data-l="en">Inclusive gateway, DMN, public wizard</td></tr>
+          <tr><td><a href="#bsp-arbeitsplatz" data-l="de">Arbeitsplatz-Ausstattung</a><a href="#bsp-arbeitsplatz" data-l="en">Workplace equipment</a></td>
+            <td data-l="de">Die vorgesetzte Person wählt Gerät und Software für einen Eintritt</td><td data-l="en">A supervisor picks the device and software for a new hire</td>
+            <td><span class="tag ok">–</span></td>
+            <td data-l="de">Interner Wizard, Exklusiv-Gateway zwischen Masken, Output-Mappings</td><td data-l="en">Internal wizard, an exclusive gateway between screens, output mappings</td></tr>
           <tr><td><a href="#bsp-bewerbermanagement">Bewerbermanagement</a></td>
             <td data-l="de">Bewerbung, Vorprüfung, so viele Interviewrunden wie nötig</td><td data-l="en">An application, a screening, as many interview rounds as needed</td>
             <td><span class="tag ok">–</span></td>
@@ -2501,7 +2507,9 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <tr><td data-l="de">User-Task mit Formular</td><td data-l="en">User task with a form</td>
             <td><a href="#bsp-pruefung" data-l="de">Prüfung</a><a href="#bsp-pruefung" data-l="en">Exam</a>, <a href="#bsp-reisebuchung">Reisebuchung</a>, <a href="#bsp-onboarding">Onboarding</a>, <a href="#bsp-benutzerverwaltung" data-l="de">Benutzerverwaltung</a><a href="#bsp-benutzerverwaltung" data-l="en">User administration</a></td></tr>
           <tr><td data-l="de">Öffentliches Startformular</td><td data-l="en">Public start form</td>
-            <td><a href="#bsp-account-bestellung">Account-Bestellung</a></td></tr>
+            <td><a href="#bsp-account-bestellung">Account-Bestellung</a>, <a href="#bsp-reisebuchung">Reisebuchung</a></td></tr>
+          <tr><td data-l="de">Wizard (mehrstufiges Formular)</td><td data-l="en">Wizard (multi-step form)</td>
+            <td><a href="#bsp-arbeitsplatz" data-l="de">Arbeitsplatz-Ausstattung</a><a href="#bsp-arbeitsplatz" data-l="en">Workplace equipment</a> (<span data-l="de">intern</span><span data-l="en">internal</span>), <a href="#bsp-reisebuchung">Reisebuchung</a> (<span data-l="de">öffentlich</span><span data-l="en">public</span>)</td></tr>
           <tr><td data-l="de">Timer als Start (Zeitplan)</td><td data-l="en">Timer start (a schedule)</td>
             <td><a href="#bsp-hypothekarzinsen">Hypothekarzinsen</a>, <a href="#bsp-galsync">GALSync</a></td></tr>
           <tr><td data-l="de">Boundary-Timer, unterbrechend</td><td data-l="en">Boundary timer, interrupting</td>
@@ -3181,7 +3189,11 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               Business-Rule-Task (<code>ReisePflichten</code>) entscheidet aus Reiseart + Alter, was Pflicht ist, und
               ein <b>inklusives Gateway</b> öffnet genau die zutreffenden Zweige. Der Beweis, dass es wirklich
               inklusiv ist, steht in den Element-Besuchen: bei zwei offenen Zweigen wird das Join <b>zweimal</b>
-              besucht, nicht dreimal – der Default-Zweig wurde korrekt unterdrückt.</p>
+              besucht, nicht dreimal – der Default-Zweig wurde korrekt unterdrückt. Die Reisedaten sind das
+              <b>öffentliche Startformular</b>; alles danach liegt in einem Subprozess, der als
+              <a href="#wizards">öffentlicher Wizard</a> markiert ist. Wer den Link öffnet, bekommt einen Pass und wird
+              ohne Konto von Maske zu Maske geführt; die zwei parallel geöffneten Zweige erscheinen dabei als zwei
+              Masken hintereinander.</p>
             <p data-l="en">The example separates two things colloquially both called "dependent forms".
               <b>Level A – inside the form:</b> the destination list cascades through
               <code>valuesExpression</code>, the passport field appears through <code>conditional.hide</code>. That
@@ -3189,7 +3201,11 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               script task computes the age, a business rule task (<code>ReisePflichten</code>) decides from trip type
               and age what is mandatory, and an <b>inclusive gateway</b> opens exactly the branches that apply. The
               proof that it really is inclusive is in the element visits: with two branches open, the join is visited
-              <b>twice</b>, not three times – the default branch was correctly suppressed.</p>
+              <b>twice</b>, not three times – the default branch was correctly suppressed. The trip details are the
+              <b>public start form</b>; everything after them sits in a subprocess marked as a
+              <a href="#wizards">public wizard</a>. Whoever opens the link gets a pass and is carried from screen to
+              screen without an account; the two branches opened in parallel appear to them as two screens in a
+              row.</p>
           </div>
         </div>
         <div class="rz-actions"></div>
@@ -3219,12 +3235,100 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               is carried from screen to screen; why a screen appears, they read from its documentation in the model.
               Beside it lies a lean customer assistant that shows exactly that, with four public calls as the entire
               contract.</li>
+            <li data-l="de"><b>Das interne Gegenstück</b> ist die <a href="#bsp-arbeitsplatz">Arbeitsplatz-Ausstattung</a>:
+              dort führt ein interner Wizard eine angemeldete Person in der Tasks-App, hier ein öffentlicher eine
+              Besucherin ohne Konto.</li>
+            <li data-l="en"><b>The internal counterpart</b> is the <a href="#bsp-arbeitsplatz">workplace equipment</a>:
+              there an internal wizard carries a signed-in person in the Tasks app, here a public one carries a visitor
+              without an account.</li>
             <li data-l="de"><b>Die Gegenprobe</b> liegt in <code>examples/reisebuchung/fall-a/</code>: dieselbe
               Fachlichkeit als <i>ein</i> Formular in <i>einem</i> Schritt, im Client geblättert. Lies beide, bevor du
               dich für eine Bauform entscheidest.</li>
             <li data-l="en"><b>The counter-experiment</b> lives in <code>examples/reisebuchung/fall-a/</code>: the
               same business content as <i>one</i> form in <i>one</i> step, paged in the client. Read both before
               choosing a shape.</li>
+          </ul>
+        </details>
+      </div>
+
+      <div class="bsp" id="bsp-arbeitsplatz">
+        <h4><span class="rz-emoji" aria-hidden="true">💻</span>
+          <span data-l="de">Arbeitsplatz-Ausstattung: ein interner Wizard</span><span data-l="en">Workplace equipment: an internal wizard</span></h4>
+        <p class="bsp-tags">
+          <span class="tag ok" data-l="de">läuft sofort</span><span class="tag ok" data-l="en">runs at once</span>
+          <span class="tag" data-l="de">interner Wizard</span><span class="tag" data-l="en">internal wizard</span>
+          <span class="tag" data-l="de">exklusives Gateway</span><span class="tag" data-l="en">exclusive gateway</span>
+          <span class="tag">form-js</span>
+          <span class="tag">examples/arbeitsplatz/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Die Personalabteilung meldet einen Eintritt. Die vorgesetzte Person wählt danach aus, womit
+              die neue Person arbeitet: ein Gerät, je nach Gerät dessen Details, Software, zum Schluss eine
+              Zusammenfassung mit den geschätzten Kosten. Sie füllt das <b>in einem Zug</b> aus, Maske für Maske,
+              ohne nach jeder Maske im Posteingang zu suchen. Danach stellt die IT den Arbeitsplatz bereit. Dasselbe
+              Muster trägt jede interne Erfassung über mehrere Masken: eine Spesenabrechnung, eine Schadenaufnahme,
+              eine Bedarfsmeldung.</p>
+            <p data-l="en">The personnel office reports a new hire. The supervisor then picks what the new person will
+              work with: a device, its details depending on the device, software, and at the end a summary with the
+              estimated cost. They fill it in <b>in one go</b>, screen by screen, without hunting for the next one in
+              the inbox. Then IT provides the workplace. The same pattern carries any internal intake over several
+              screens: an expense claim, a damage report, a request for supplies.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Die Masken liegen in einem Subprozess, der als <a href="#wizards">interner Wizard</a>
+              markiert ist (<code>atlas:wizard="internal"</code>). Ein <b>exklusives Gateway</b> nach der ersten Maske
+              wählt die nächste: Laptop, Desktop oder gleich Software – die Abfolge steht im Diagramm, nicht im
+              Formular. Die erste Maske ist der vorgesetzten Person zugewiesen
+              (<code>assignee="=vorgesetzter"</code>); sie öffnet sie im Posteingang, und ab da öffnet die Tasks-App
+              jede nächste Maske sofort und hält sie für sie fest. Ein Script schätzt zwischen zwei Masken die Kosten,
+              die Zusammenfassung zeigt sie in einem deaktivierten Feld. Was die IT braucht, geben die
+              <b>Output-Mappings</b> des Subprozesses nach aussen; die Bereitstellung danach ist Arbeit der Gruppe
+              <code>it</code>.</p>
+            <p data-l="en">The screens sit in a subprocess marked as an <a href="#wizards">internal wizard</a>
+              (<code>atlas:wizard="internal"</code>). An <b>exclusive gateway</b> after the first screen picks the
+              next: laptop, desktop or straight to software – the sequence is in the diagram, not in the form. The
+              first screen is assigned to the supervisor (<code>assignee="=vorgesetzter"</code>); they open it from the
+              inbox, and from there the Tasks app opens each next screen at once and holds it for them. A script
+              estimates the cost between two screens, and the summary shows it in a disabled field. What IT needs, the
+              subprocess's <b>output mappings</b> pass out; the provisioning after it is the work of the group
+              <code>it</code>.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <details class="bsp-more">
+          <summary><span data-l="de">Wer geführt wird, und was daneben liegt</span><span data-l="en">Who is carried, and what lies beside it</span></summary>
+          <ul>
+            <li data-l="de"><b>Starten dürfen nur Operatoren.</b> Wer mit der Rolle <i>user</i> arbeitet, startet keine
+              Prozesse, sondern erledigt Aufgaben. Deshalb ist die erste Maske zugewiesen: Die Personalabteilung
+              startet, die Antwort auf ihren Start lautet „weitergegeben“, und die vorgesetzte Person kommt über ihren
+              Posteingang in die Sitzung. Ohne Zuweisung würde geführt, wer startet.</li>
+            <li data-l="en"><b>Only operators may start.</b> Whoever works with the role <i>user</i> does not start
+              processes but completes tasks. That is why the first screen is assigned: the personnel office starts,
+              its start is answered with "handed over", and the supervisor enters the sitting through their inbox.
+              Without the assignment, whoever starts would be carried.</li>
+            <li data-l="de"><b>Drei Durchläufe zum Vergleichen:</b> Laptop („Leistung“) über die Laptop-Maske, 2400 CHF;
+              Desktop mit zwei Bildschirmen über die Desktop-Maske, 1600 CHF; kein Gerät direkt zur Software, 0 CHF.
+              Alle drei laufen als Test gegen die Dateien des Beispiels.</li>
+            <li data-l="en"><b>Three runs to compare:</b> a laptop ("performance") through the laptop screen, CHF 2400;
+              a desktop with two screens through the desktop screen, CHF 1600; no device straight to software, CHF 0.
+              All three run as tests against the example's files.</li>
+            <li data-l="de"><b>Das öffentliche Gegenstück</b> ist die <a href="#bsp-reisebuchung">Reisebuchung</a>:
+              dort führt ein öffentlicher Wizard eine Besucherin ohne Konto, hier ein interner eine angemeldete
+              Person.</li>
+            <li data-l="en"><b>The public counterpart</b> is the <a href="#bsp-reisebuchung">trip booking</a>: there a
+              public wizard carries a visitor without an account, here an internal one carries a signed-in
+              person.</li>
+            <li data-l="de"><b>Warum kein Personalbogen?</b> Adresse, Geburtsdatum und Bankverbindung wären
+              Personendaten, und die lassen sich heute nicht über Output-Mappings aus einem Wizard herausgeben
+              (ADR-0314). Das Beispiel kommt deshalb ohne Personendaten aus.</li>
+            <li data-l="en"><b>Why not a personnel form?</b> Address, date of birth and bank details would be personal
+              data, which cannot leave a wizard through its output mappings today (ADR-0314). So the example does
+              without personal data.</li>
           </ul>
         </details>
       </div>
@@ -5478,6 +5582,16 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           with the screens before it above, already assigned to you. If a worker or a timer stands between two
           screens, the view waits for up to two minutes. If the next screen is assigned to a group you are not in,
           it goes there, and you are back in the inbox.</li>
+        <li data-l="de"><b>Wer in die Sitzung kommt.</b> Geführt wird, wer eine Maske der Sitzung abschickt, und wer
+          einen Prozess startet, der direkt in den Wizard läuft. Starten dürfen in der Tasks-App nur Operatoren. Soll
+          eine Person mit der Rolle <i>user</i> den Wizard ausfüllen, weist du ihr die erste Maske zu, zum Beispiel
+          mit <code>assignee="=vorgesetzter"</code>: Sie öffnet die Maske im Posteingang und wird von dort an
+          geführt. Wer gestartet hat, erfährt nur, dass die Maske weitergegeben wurde.</li>
+        <li data-l="en"><b>Who gets into the sitting.</b> Whoever submits a screen of the sitting is carried on, and so
+          is whoever starts a process that runs straight into the wizard. In the Tasks app only operators may start
+          processes. For a person with the role <i>user</i> to fill the wizard, assign the first screen to them, for
+          instance with <code>assignee="=vorgesetzter"</code>: they open it from their inbox and are carried on from
+          there. Whoever started is only told that the screen was handed on.</li>
         <li data-l="de"><b>Einen unterbrechenden Timer</b> an den Subprozess hängen: Er sagt, wann eine nicht beendete
           Sitzung als abgebrochen gilt. Ohne ihn warnt das Problems-Panel, und ein öffentlicher Wizard lässt sich gar
           nicht veröffentlichen.</li>
@@ -5490,6 +5604,13 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <li data-l="en"><b>The answers stay in the wizard.</b> What the screens submit lives in the subprocess's
           scope; what the process needs afterwards, you pass out through the subprocess's <i>output
           mappings</i>.</li>
+        <li data-l="de"><b>Personendaten</b> (<code>atlas:personal</code>) lassen sich heute nicht über die
+          Output-Mappings aus einem Wizard herausgeben: Ein Output-Mapping darf keine Personendaten schreiben,
+          weil die Engine sie nicht verschlüsseln kann (ADR-0314). Was in einem Wizard als Personendaten erfasst
+          wird, muss innerhalb des Wizards weiterverarbeitet werden.</li>
+        <li data-l="en"><b>Personal data</b> (<code>atlas:personal</code>) cannot leave a wizard through its output
+          mappings today: an output mapping may not write personal data, because the engine cannot encipher it
+          (ADR-0314). Personal data a wizard collects has to be dealt with inside the wizard.</li>
         <li data-l="de"><b>Ein öffentlicher Wizard</b> (<i>for the anonymous visitor of a public start link</i>)
           gehört der Person, die ihn über den öffentlichen Link begonnen hat. Die öffentliche Seite führt sie ohne
           Konto von Maske zu Maske; ein Pass, den nur dieser Browser-Tab kennt, öffnet genau ihre Masken. Nach einem
@@ -5511,11 +5632,15 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           früheren Antworten sind dann vorbelegt.</li>
         <li data-l="en"><b>Back</b> exists only as a sequence flow you draw back to the earlier screen; the earlier
           answers are then filled in.</li>
-        <li data-l="de"><b>Ein vollständiges Beispiel</b> ist die <a href="#bsp-reisebuchung">Reisebuchung</a>: ein
-          öffentliches Startformular, danach ein öffentlicher Wizard, dessen Masken eine Entscheidungstabelle
+        <li data-l="de"><b>Zwei vollständige Beispiele:</b> die <a href="#bsp-arbeitsplatz">Arbeitsplatz-Ausstattung</a>
+          als <i>interner</i> Wizard, den eine zugewiesene vorgesetzte Person in der Tasks-App durchläuft und dessen
+          nächste Maske ihre Antwort wählt, und die <a href="#bsp-reisebuchung">Reisebuchung</a> als
+          <i>öffentlicher</i> Wizard nach einem öffentlichen Startformular, dessen Masken eine Entscheidungstabelle
           auswählt.</li>
-        <li data-l="en"><b>A complete example</b> is the <a href="#bsp-reisebuchung">trip booking</a>: a public start
-          form, then a public wizard whose screens a decision table picks.</li>
+        <li data-l="en"><b>Two complete examples:</b> the <a href="#bsp-arbeitsplatz">workplace equipment</a> as an
+          <i>internal</i> wizard that an assigned supervisor walks in the Tasks app, the next screen picked by their
+          answer, and the <a href="#bsp-reisebuchung">trip booking</a> as a <i>public</i> wizard after a public start
+          form, its screens picked by a decision table.</li>
       </ul>
 
       <h3 data-l="de">Worker – atlas mit der Aussenwelt verbinden</h3><h3 data-l="en">Workers – wiring atlas to the outside</h3>
@@ -10471,7 +10596,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
              <a class="applink" href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a></p>
         </div>
         <div class="card"><b data-l="de">Beispiele</b><b data-l="en">Examples</b>
-          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">40</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">40</span> examples in the handbook</span></a> ·
+          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">41</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">41</span> examples in the handbook</span></a> ·
              <a class="applink" href="#runbooks"><span data-l="de">Worker in Betrieb nehmen</span><span data-l="en">Putting a worker into service</span></a></p>
           <p class="lead" data-l="de">Die Dateien dazu liegen unter <code>examples/</code> im Repository.</p>
           <p class="lead" data-l="en">Their files live under <code>examples/</code> in the repository.</p>

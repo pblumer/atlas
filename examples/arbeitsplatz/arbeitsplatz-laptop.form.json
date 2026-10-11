@@ -1,0 +1,25 @@
+{
+  "type": "default",
+  "id": "arbeitsplatz-laptop",
+  "components": [
+    {
+      "type": "text",
+      "text": "## Laptop\n\nDiese Maske erscheint nur, wenn ein Laptop gewählt ist."
+    },
+    {
+      "key": "modell",
+      "type": "select",
+      "label": "Modell",
+      "values": [
+        { "label": "Standard (14 Zoll)", "value": "Standard" },
+        { "label": "Leistung (16 Zoll)", "value": "Leistung" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "key": "dockingStation",
+      "type": "checkbox",
+      "label": "Mit Docking-Station"
+    }
+  ]
+}

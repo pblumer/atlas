@@ -1,0 +1,26 @@
+{
+  "type": "default",
+  "id": "arbeitsplatz-software",
+  "components": [
+    {
+      "type": "text",
+      "text": "## Software"
+    },
+    {
+      "key": "pakete",
+      "type": "checklist",
+      "label": "Software-Pakete",
+      "values": [
+        { "label": "Office", "value": "Office" },
+        { "label": "CAD", "value": "CAD" },
+        { "label": "Grafik", "value": "Grafik" },
+        { "label": "Entwicklung", "value": "Entwicklung" }
+      ]
+    },
+    {
+      "key": "bemerkung",
+      "type": "textarea",
+      "label": "Bemerkung für die IT"
+    }
+  ]
+}

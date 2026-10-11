@@ -1,0 +1,62 @@
+{
+  "type": "default",
+  "id": "arbeitsplatz-bereitstellen",
+  "components": [
+    {
+      "type": "text",
+      "text": "## Arbeitsplatz bereitstellen\n\nDie vorgesetzte Person hat die Ausstattung gewählt."
+    },
+    {
+      "key": "neuePerson",
+      "type": "textfield",
+      "label": "Für",
+      "disabled": true
+    },
+    {
+      "key": "eintrittsdatum",
+      "type": "datetime",
+      "subtype": "date",
+      "dateLabel": "Bis zum Eintritt am",
+      "disabled": true
+    },
+    {
+      "key": "geraet",
+      "type": "textfield",
+      "label": "Gerät",
+      "disabled": true
+    },
+    {
+      "key": "modell",
+      "type": "textfield",
+      "label": "Laptop-Modell",
+      "disabled": true,
+      "conditional": { "hide": "=geraet != \"Laptop\"" }
+    },
+    {
+      "key": "bildschirme",
+      "type": "number",
+      "label": "Bildschirme",
+      "disabled": true,
+      "conditional": { "hide": "=geraet != \"Desktop\"" }
+    },
+    {
+      "key": "standort",
+      "type": "textfield",
+      "label": "Standort",
+      "disabled": true,
+      "conditional": { "hide": "=geraet != \"Desktop\"" }
+    },
+    {
+      "key": "bemerkung",
+      "type": "textarea",
+      "label": "Bemerkung",
+      "disabled": true
+    },
+    {
+      "key": "bereitgestellt",
+      "type": "checkbox",
+      "label": "Arbeitsplatz ist bereitgestellt",
+      "validate": { "required": true }
+    }
+  ]
+}
