@@ -1058,21 +1058,31 @@ func handleJobFailed(c *ProcessingContext) {
 	// also what stops the reporting worker from reporting twice, since a fenced report
 	// requires a live lease.
 	job.LeaseExpiresAt = 0
+	recordJobFailure(c, c.cmd.Key, job, c.cmd.RetryBackoff, c.cmd.Value.incident.Message, model.IncidentUnclassified)
+}
+
+// recordJobFailure emits a failed job — its retries already set and its lease already
+// released — and what its retry count makes of it: another attempt, held off by backoff
+// nanoseconds when that is positive, while it has retries left; an incident with message
+// and reason once it has none. It is a worker's failure report (handleJobFailed) and also
+// a worker error nothing catches (handleJobError), which is a failure with no retries
+// left: the job stays, and resolving the incident is the retry (ADR-0061).
+func recordJobFailure(c *ProcessingContext, key uint64, job *model.JobValue, backoff int64, message string, reason model.IncidentReason) {
 	// A worker-requested retry backoff (ADR-0111): with retries left and a positive delay,
 	// hold the job off the activatable index (RetryDueDate keeps PutJob from indexing it) and
 	// arm a retry timer that re-activates it when the backoff elapses. The due date is read
 	// from the clock here and frozen into the event (I6). A zero backoff is the pre-0111 path.
-	if job.Retries > 0 && c.cmd.RetryBackoff > 0 {
-		job.RetryDueDate = c.Now() + c.cmd.RetryBackoff
-		c.AppendJobEvent(c.cmd.Key, model.IntentJobFailed, *job)
+	if job.Retries > 0 && backoff > 0 {
+		job.RetryDueDate = c.Now() + backoff
+		c.AppendJobEvent(key, model.IntentJobFailed, *job)
 		c.AppendTimerEvent(c.NewKey(), model.IntentTimerCreated, model.TimerValue{
 			ProcessInstanceKey: job.ProcessInstanceKey,
-			JobKey:             c.cmd.Key,
+			JobKey:             key,
 			DueDate:            job.RetryDueDate,
 		})
 		return
 	}
-	c.AppendJobEvent(c.cmd.Key, model.IntentJobFailed, *job)
+	c.AppendJobEvent(key, model.IntentJobFailed, *job)
 	// With retries left and nothing holding it, the job is back on the activatable index
 	// the moment this batch is durable, and a worker long-polling its type must be told —
 	// every other path that puts a job there does (creation, a backoff or a lease
@@ -1090,10 +1100,11 @@ func handleJobFailed(c *ProcessingContext) {
 		c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
 			ProcessInstanceKey: job.ProcessInstanceKey,
 			ElementInstanceKey: job.ElementInstanceKey,
-			JobKey:             c.cmd.Key,
+			JobKey:             key,
 			ElementId:          elementId,
 			RaisedAt:           c.Now(),
-			Message:            c.cmd.Value.incident.Message,
+			Message:            message,
+			Reason:             reason,
 		})
 	}
 }
@@ -1171,16 +1182,33 @@ func expireJobLease(c *ProcessingContext, jobKey uint64) {
 // handleJobError handles a worker throwing a BPMN error from its job (ADR-0089): it
 // cancels the job (the token neither retries nor completes) and propagates the error from
 // the job's element to the nearest matching error handler. A matching error boundary on the
-// service task — or an enclosing scope — catches it; uncaught, it raises an incident. The
-// thrown code rides in the command's incident.Message (a transient command carrier).
-// Throwing on a job that is gone is a no-op.
+// service task — or an enclosing scope — catches it, and an error leaving a call
+// activity's child goes on to the caller. The thrown code rides in the command's
+// incident.Message (a transient command carrier). Throwing on a job that is gone is a
+// no-op.
+//
+// An error with nowhere to go is the exception: the job is kept rather than canceled,
+// its retries spent, under a job incident naming the code. That is the shape a failed
+// job with no retries left has, so resolving it is the same genuine retry — the job
+// goes back to the workers (ADR-0061). Canceling it instead left the incident pointing
+// at nothing, and resolving that cleared the incident and left the token on the task
+// with neither a job nor an incident.
 func handleJobError(c *ProcessingContext) {
 	job := c.GetJob(c.cmd.Key)
 	if job == nil {
 		return
 	}
+	code := c.cmd.Value.incident.Message
+	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil && errorUncaughtAtRoot(c, job.ElementInstanceKey, ei, code) {
+		// Given back as a failing worker gives it back (handleJobFailed): the lease is
+		// released, Assignee left alone.
+		job.Retries = 0
+		job.LeaseExpiresAt = 0
+		recordJobFailure(c, c.cmd.Key, job, 0, unhandledErrorMessage(code), model.IncidentUnhandledError)
+		return
+	}
 	c.AppendJobEvent(c.cmd.Key, model.IntentJobCanceled, *job)
-	propagateError(c, job.ElementInstanceKey, c.cmd.Value.incident.Message)
+	propagateError(c, job.ElementInstanceKey, code)
 }
 
 // handleIncidentResolved clears an incident and resumes the work it blocked
@@ -1270,6 +1298,15 @@ func resumeParkedElement(c *ProcessingContext, elKey uint64, reason model.Incide
 		// target again, as it is now: a target that gained a none start or was
 		// redirected is called, one that still cannot say where to begin parks again.
 		c.p.behavior(ei.BpmnElementType).OnActivated(c, elKey, ei)
+	case compiler.TypeErrorEndEvent:
+		// An error end parks only when nothing caught its error (ADR-0089), so an
+		// incident recorded before IncidentUnhandledError existed is that one too.
+		// Resolving throws the error again rather than clearing the incident and
+		// leaving the token behind none: a handler that has come into reach catches
+		// it, and one still missing parks it again on a fresh incident.
+		if reason == model.IncidentUnhandledError || reason == model.IncidentUnclassified {
+			propagateError(c, elKey, cp.ErrorEnd(node.Detail).ErrorCode)
+		}
 	case compiler.TypeMockupTask:
 		// A resolved mockup-failure incident (ADR-0120): re-arm a fresh attempt. The
 		// new timer key drives an independent duration and failure draw, so a retry can
@@ -2923,10 +2960,18 @@ func propagateError(c *ProcessingContext, fromKey uint64, code string) {
 	}
 }
 
-// errorCaughtInInstance walks the scope chain of one instance from fromKey up to its root,
-// firing the nearest matching error catch (an event subprocess before a boundary at each
-// scope; the root's event subprocesses last), and reports whether one fired (ADR-0089).
+// errorCaughtInInstance fires the nearest matching error catch in one instance
+// (errorCatchInInstance) and reports whether one fired (ADR-0089).
 func errorCaughtInInstance(c *ProcessingContext, piKey, fromKey uint64, code string) bool {
+	return fireErrorCatch(c, errorCatchInInstance(c, piKey, fromKey, code))
+}
+
+// errorCatchInInstance walks the scope chain of one instance from fromKey up to its root
+// and returns the nearest matching error catch — an event subprocess before a boundary at
+// each scope, the root's event subprocesses last — or 0 when nothing in the instance
+// catches the code (ADR-0089). It only looks: firing is errorCaughtInInstance's, so a
+// caller can ask where an error would go before anything is torn down.
+func errorCatchInInstance(c *ProcessingContext, piKey, fromKey uint64, code string) uint64 {
 	for depth, scope := 0, fromKey; depth <= maxScopeDepth; depth++ {
 		ei := c.GetElementInstance(scope)
 		if ei == nil {
@@ -2934,17 +2979,38 @@ func errorCaughtInInstance(c *ProcessingContext, piKey, fromKey uint64, code str
 		}
 		// An error event subprocess declared in this scope catches errors thrown within it,
 		// nearer than a boundary on the scope's activity (which catches the error leaving it).
-		if fireErrorCatch(c, findErrorEventSub(c, piKey, scope, code)) {
-			return true
+		if k := findErrorEventSub(c, piKey, scope, code); liveCatch(c, k) {
+			return k
 		}
-		if fireErrorCatch(c, findErrorBoundary(c, piKey, scope, code)) {
-			return true
+		if k := findErrorBoundary(c, piKey, scope, code); liveCatch(c, k) {
+			return k
 		}
 		scope = ei.FlowScopeKey
 	}
 	// The process root's own error event subprocesses are keyed by the instance scope, which
 	// is not an element instance — so they are checked here, after the element-scope walk.
-	return fireErrorCatch(c, findErrorEventSub(c, piKey, piKey, code))
+	if k := findErrorEventSub(c, piKey, piKey, code); liveCatch(c, k) {
+		return k
+	}
+	return 0
+}
+
+// liveCatch reports whether a found catch key names an element instance that is still
+// there. A zero or vanished key is not a catch.
+func liveCatch(c *ProcessingContext, catchKey uint64) bool {
+	return catchKey != 0 && c.GetElementInstance(catchKey) != nil
+}
+
+// errorUncaughtAtRoot reports whether an error thrown from element elKey (ei) has nowhere
+// to go: no catch in its own instance, and no caller for it to leave to, because the
+// instance is not a call activity's child (ADR-0076). It is propagateError's terminal
+// case, asked before anything is torn down.
+func errorUncaughtAtRoot(c *ProcessingContext, elKey uint64, ei *model.ElementInstanceValue, code string) bool {
+	if errorCatchInInstance(c, ei.ProcessInstanceKey, elKey, code) != 0 {
+		return false
+	}
+	pi := c.GetProcessInstance(ei.ProcessInstanceKey)
+	return pi == nil || pi.ParentElementInstanceKey == 0
 }
 
 // fireErrorCatch drives a found error catch (a boundary or event-subprocess trigger element)
@@ -3022,17 +3088,22 @@ func raiseErrorIncident(c *ProcessingContext, elKey uint64, code string) {
 	if ei == nil {
 		return
 	}
-	msg := "unhandled error"
-	if code != "" {
-		msg = "unhandled error '" + code + "'"
-	}
 	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ElementInstanceKey: elKey,
 		ElementId:          ei.ElementId,
 		RaisedAt:           c.Now(),
-		Message:            msg,
+		Message:            unhandledErrorMessage(code),
+		Reason:             model.IncidentUnhandledError,
 	})
+}
+
+// unhandledErrorMessage is an uncaught error's incident message, naming its code.
+func unhandledErrorMessage(code string) string {
+	if code == "" {
+		return "unhandled error"
+	}
+	return "unhandled error '" + code + "'"
 }
 
 // --- Escalation (ADR-0125) ---

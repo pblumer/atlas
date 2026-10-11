@@ -124,6 +124,19 @@ _Changed_ / _Removed_ for each version.
   on a wizard's screen did not stop the subject from moving. It now scans every scope of the
   instance, and only when the subject actually changes value.
 
+- **Resolving an uncaught error's incident retries it instead of leaving the instance
+  stuck.** A BPMN error that nothing catches parks its instance on an incident (ADR-0089).
+  Resolving that incident cleared it and did nothing else when the error came from an error
+  end event or a worker's job: the token stayed on the element with neither a job nor an
+  incident, so nothing reported the stuck instance. An error end event's incident now throws
+  the error again when resolved, and parks on a fresh incident while nothing catches it. A
+  worker error with no handler (reachable today only from the playground's simulation; the
+  route for workers is still to come) keeps its job, its retries spent, under a job
+  incident, so resolving it hands the same job back to the workers with the retries the
+  resolve gives, as for a failed job; the job is no longer canceled. The incident is marked
+  as an unhandled error. An incident left on an error end event by an earlier version is
+  resolved the same way.
+
 ## [0.9.2] — 2026-10-11
 
 **A patch release of correctness and security fixes.** An instance no longer reports
