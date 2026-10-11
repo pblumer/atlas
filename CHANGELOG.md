@@ -12,7 +12,49 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.9.2] — 2026-10-11
+
+**A patch release of correctness and security fixes.** An instance no longer reports
+itself completed while a token is still on its way to its next element, the public start
+link and the inbox's task content stop handing out or taking in more than a form asks for,
+and a REST task keeps its OAuth2 settings through the Modeler. Two changes refuse what was
+accepted before: a public start that names a field its form does not submit, and a deploy
+of an event-based gateway marked `instantiate="true"` or `eventGatewayType="Parallel"`.
+0.9.2 carries none of the wizard work on main (ADR-0449, proposed here), and reads and
+writes the same data directory as 0.9.1.
+
+### Changed
+
+- **A deploy refuses an event-based gateway atlas does not run.** atlas runs an
+  event-based gateway as the exclusive deferred choice inside a running instance
+  (ADR-0110). A gateway marked `instantiate="true"`, which starts the instance, or
+  `eventGatewayType="Parallel"`, which waits for every event, deployed without a word
+  and ran as that exclusive choice — something other than its diagram says (#804). A
+  deploy now refuses it with the stage-5 rule `event-gateway.kind`, anchored to the
+  gateway, and the Modeler flags it while it is drawn. A definition already deployed
+  with one still loads on restart and keeps the behaviour it had, with the finding
+  logged beside it (ADR-0177, ADR-0393). An explicit `instantiate="false"` or
+  `eventGatewayType="Exclusive"` is the default and still deploys.
+
 ### Fixed
+
+- **An instance no longer completes while a token is on its way to its next element.**
+  An element that completes and takes a flow activates its successor one batch later,
+  and a parallel branch that ended in between found its scope empty and completed it.
+  The successor then ran inside an instance that had already reported itself completed
+  — and when it was a service task, its job was left with no instance to collect it.
+  First seen with a compensation throw whose handler finishes at once (#1013,
+  ADR-0284), it happened with any element handing its token on while another branch
+  ended: a task, a none, signal or escalation throw, a link. A scope now completes
+  only when no token is in it and none is still on its way into it. Instances that
+  completed early before this release keep their history as written.
+
+- **A task holder reads the fields of a grouped form.** What a person holding a task may
+  read of its instance is the set of variables its form binds. A field inside a group or a
+  dynamic list that has a path was counted under its own key rather than under the path,
+  so the form came up without the values it should have shown, and a variable of the
+  field's bare name, which the form does not bind, was readable instead. The variables are
+  now the roots of the paths the form submits, as the public start link already checks.
 
 - **A public start link accepts only what its form can submit.** `POST
   /public/forms/{token}/start` took any variable name and value, so an anonymous caller
@@ -22,9 +64,30 @@ _Changed_ / _Removed_ for each version.
   form has no field for, a member beside a dotted key or inside a group's or dynamic
   list's path, or a plain value where the form nests fields. A refused submission starts
   nothing. A link whose form is gone accepts only an empty submission. A widget that
-  sends values its form does not declare has to add fields for them. The check covers
-  names and structure; a field's type, whether it is required and its pattern stay the
-  form's validation in the browser.
+  sends values its form does not declare has to add fields for them. A disabled field is
+  left out, as the form never submits one. The check covers names and structure; a
+  field's type, whether it is required and its pattern stay the form's validation in the
+  browser.
+
+- **A REST task's OAuth2 settings survive the Modeler, and the Modeler can write them.**
+  The compiler reads `authTokenUrl`, `authClientId` and `authScope` for the
+  client-credentials grant (ADR-0152), but the Modeler's moddle did not declare them, so
+  opening such a task and pressing Save stripped all three; the task then failed to
+  deploy with "uses oauth2 auth but names no tokenUrl" (#468). They are declared now,
+  and the REST worker's panel offers *OAuth2 client credentials* with a field for each.
+  The guard that compares the compiler's worker attributes with the moddle covers every
+  Worker Type, read from `compiler/parse.go`, instead of a hand-kept list of two.
+
+### Security
+
+- **A task row's content carries only what the task's form asks for.** `GET
+  /api/v1/tasks?content=1` — what the inbox's search reads — filled each row with up to
+  40 short values from the task's whole scope. An open task, which every signed-in
+  account sees, so handed an unrelated account values the instance's variables endpoint
+  refuses it (ADR-0275, audit F11). A row now carries the values of the fields its form
+  asks for, under the same allowlist the variables endpoint gives a task holder, and a
+  task without a form carries none. The rule is the same for every viewer, operators
+  included; a page asked for its content is now read off the run loop.
 
 ## [0.9.1] — 2026-10-09
 
@@ -14021,7 +14084,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.9.2...HEAD
+[0.9.2]: https://github.com/pblumer/atlas/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/pblumer/atlas/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/pblumer/atlas/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/pblumer/atlas/compare/v0.7.0...v0.8.0
