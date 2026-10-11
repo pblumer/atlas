@@ -14,6 +14,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A wizard hands out the personal data its screens collected.** A screen inside an
+  embedded subprocess writes its answer into the subprocess's scope, and a wizard's only way
+  out is its output mappings (ADR-0449) — which ADR-0314 refused for any variable declared
+  `atlas:personal`, so a personnel form could seal an address and a bank account and never
+  hand them to anything after it. An output mapping whose source is nothing but its own
+  target (`source="=iban"`, `target="iban"`) is now allowed: the compiler marks it, and the
+  engine copies the stored, sealed record byte for byte instead of evaluating anything. A
+  sealed value is bound to its subject and its name, not to a scope, so the copy opens and
+  erases exactly like the original, and the engine still never holds a key. Renaming a
+  personal value, computing from it, and input mappings into one stay refused, with a message
+  that says how to hand a value out instead. A copy sealed for a different data subject than
+  the target scope names is refused with an incident (`IncidentPersonalOfAnotherSubject`),
+  because an erasure of the instance's subject would leave it readable; so is the other
+  order, a data subject first written into a scope that already holds such a copy, which a
+  call activity seeding its child produces (ADR-0314, amended).
+
 - **An example of an internal wizard.** `examples/arbeitsplatz` is the internal counterpart
   of the trip booking's public wizard (ADR-0449): the personnel office reports a new hire,
   the first screen is assigned to the supervisor, and from there the Tasks app carries the
@@ -23,7 +39,7 @@ _Changed_ / _Removed_ for each version.
   through their inbox, and whoever started is told the screen was handed over. Three runs
   are tests against the example's own files. The handbook gives it a card, lists both
   wizard examples in its overview tables, and its wizard section now says who gets into a
-  sitting and that personal data cannot leave a wizard through its output mappings.
+  sitting and how personal data leaves one.
 
 - **A visitor without an account walks a public wizard with a pass.** When a process holds
   a public wizard (ADR-0449), its public start link now answers with a pass beside
@@ -113,6 +129,15 @@ writes the same data directory as 0.9.1.
   `eventGatewayType="Exclusive"` is the default and still deploys.
 
 ### Fixed
+
+- **The data subject cannot move from under a value sealed inside a subprocess.** Once a
+  personal value is sealed, the writer refuses a change of the instance's data subject,
+  because that would split one person's data across two keys and an erasure of either would
+  leave the other half readable (ADR-0314). The check looked only at the instance's root,
+  reasoning that every personal value lands there; a form submitted or a worker completing
+  inside an embedded subprocess writes into that subprocess's scope instead, so a value sealed
+  on a wizard's screen did not stop the subject from moving. It now scans every scope of the
+  instance, and only when the subject actually changes value.
 
 - **An instance no longer completes while a token is on its way to its next element.**
   An element that completes and takes a flow activates its successor one batch later,

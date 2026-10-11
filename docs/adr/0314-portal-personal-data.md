@@ -1,6 +1,6 @@
 # ADR-0314: Personal data in the portal — a reference by default, a destroyable key for the rest
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-11: a personal value may leave a scope under its own name, unchanged; see the amendment below)
 - **Implementation:** Partial
 - **Date:** 2026-09-11
 - **Deciders:** Atlas maintainers
@@ -303,6 +303,60 @@ the result ([ADR-0047](0047-polyglot-script-tasks-via-job-workers.md)), where th
 plaintext exists for the duration of one call and is never written back in the clear.
 The open question above records that this has not yet been proven against a real
 portal process.
+
+#### Amendment (2026-10-11): moving is not computing
+
+The rule above refused every input and output mapping that touches a declared variable. That
+was too wide by exactly one case, and the case is the one a wizard
+([ADR-0449](0449-a-wizard-is-a-subprocess-one-filler-walks-through.md)) cannot do without: a
+screen inside an embedded subprocess writes its answer into the subprocess's scope, and the
+subprocess's output mappings are the only way out of it. A personnel form collecting an
+address and a bank account could seal both and then never hand them to anything after it.
+
+**An output mapping whose source is nothing but its own target — `source="=iban"`,
+`target="iban"` — is a copy, not an expression, and it is allowed.** The compiler marks it,
+and the engine copies the stored record, the envelope it cannot open, byte for byte into the
+parent scope instead of evaluating anything. That is inside every boundary this record draws:
+
+- The engine still never enciphers and never deciphers. It moves bytes it already holds.
+- An envelope is bound to its subject and its variable name — the AEAD's additional data — and
+  to nothing else; not to a scope. The identical bytes under the identical name open exactly
+  where the original opens, and die with the same erased key. "Every copy carries the same
+  ciphertext" stays true, which is the property this record rests on. It is the same copy a
+  call activity propagating its child's variables, a fork or a migration already made.
+- The copy is a byte copy on purpose. Evaluating `=iban` would decode the envelope as a FEEL
+  context and encode it again, reordering its members: it would still open, but by accident.
+
+What stays refused, with a message that says how to hand a value out instead: renaming it
+(the envelope would not open under another name, and the engine cannot re-seal it), computing
+anything from it, and any input mapping into a declared variable.
+
+Two runtime checks come with it, both answerable without a key:
+
+- **A copy sealed for somebody else is refused.** A subprocess could set its own data subject
+  before anything was sealed and then seal its screens for that subject. Copied to the root,
+  whose subject is another person, the value would still open — under the other key — and an
+  erasure of the instance's subject would leave it readable. The writer compares the subject
+  the envelope names in the clear with the one the target scope resolves, and parks an
+  incident (`IncidentPersonalOfAnotherSubject`) when they differ. The comparison is made from
+  both sides, because a copy can arrive before the subject does: a call activity seeds its
+  child with the caller's variables before its input mappings, so a child keeping its subject
+  under another name receives the sealed value first, and an output mapping can hand a value
+  to a root that names nobody yet. The subject's first write into a scope therefore compares
+  itself with the values sealed in that scope and is refused with the same incident when they
+  differ. Only that scope is read: a form filled once per family member names a different
+  person in every iteration, and one iteration's values are not the next one's business.
+- **The data subject cannot move from under a value sealed anywhere in the instance.** The
+  check that refuses moving the subject once something is sealed looked only at the root,
+  reasoning that every personal value lands there. It does not: a form submitted or a worker
+  completing inside an embedded subprocess writes into that subprocess's scope. The check now
+  scans every scope of the instance; it runs only when the subject actually changes value.
+
+What this does not decide: whether a personal value *should* outlive the wizard that collected
+it. Handing it out keeps it for the life of the instance, where retention and erasure reach it
+as they reach any other copy; keeping it inside and passing it to the system that needs it from
+a worker within the sitting keeps atlas a place it passes through. Both are the modeller's to
+choose, field by field.
 
 ### Consequences
 

@@ -124,14 +124,22 @@ In jedem Durchlauf wird der Start der Personalabteilung als `handedOver`
 beantwortet, die vorgesetzte Person ab der ersten Maske geführt, und die
 Bereitstellung erscheint nur im Posteingang der Gruppe `it`.
 
-## Grenze: Personendaten in einem Wizard
+## Und mit Personendaten?
 
 Ein naheliegendes internes Beispiel wäre ein Personalbogen, den die neue Person
 selbst ausfüllt: Adresse, Geburtsdatum, Bankverbindung. Solche Felder sind
 Personendaten und werden mit `atlas:personal` verschlüsselt gespeichert
-([ADR-0314](../../docs/adr/0314-portal-personal-data.md)). Ein Output-Mapping
-darf aber keine Personendaten schreiben, weil die Engine sie nicht verschlüsseln
-kann. Personendaten, die in einem Wizard erfasst werden, lassen sich deshalb
-heute nicht über die Output-Mappings nach aussen geben. Dieses Beispiel kommt
-ohne Personendaten aus; wer sie braucht, muss sie innerhalb des Wizards
-weiterverarbeiten oder auf eine Lösung dieser Grenze warten.
+([ADR-0314](../../docs/adr/0314-portal-personal-data.md)). Auch sie verlassen den
+Wizard über die Output-Mappings, aber nur **unter ihrem eigenen Namen und
+unverändert**:
+
+```xml
+<zeebe:output source="=iban" target="iban"/>
+```
+
+Die Engine kopiert dann den versiegelten Wert, ohne ihn zu öffnen; die Kopie lässt
+sich lesen und löschen wie das Original. Umbenennen (`target="lohnkonto"`) oder
+daraus rechnen lehnt der Compiler ab, weil die Engine keinen Schlüssel hat; das
+gehört in einen Worker. Dieses Beispiel kommt ohne Personendaten aus; den Weg mit
+Personendaten prüft
+[`api/personalwizard_internal_test.go`](../../api/personalwizard_internal_test.go).

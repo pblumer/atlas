@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"sort"
 	"strings"
 )
@@ -568,6 +569,30 @@ func (v *VariableValue) IndexText() (string, bool) {
 // that may hold a key; this const is what keeps the two from drifting, since the vault
 // builds and matches its envelopes against it.
 const EncipheredMarker = `{"atlas:personal":`
+
+// EncipheredSubject returns the data subject a sealed personal value was enciphered for,
+// read from the envelope's clear header (ADR-0314: the subject's id is a reference, and
+// travels in the clear on purpose). It needs no key. ok is false when text is not an
+// envelope with a subject.
+//
+// The engine uses it to refuse a sealed value copied into a scope whose data subject is
+// somebody else: the value would still open, under its own subject's key, but an erasure
+// of the instance's subject would leave it readable.
+func EncipheredSubject(text string) (string, bool) {
+	if !strings.HasPrefix(text, EncipheredMarker) {
+		return "", false
+	}
+	var env map[string]struct {
+		Subject string `json:"subject"`
+	}
+	if json.Unmarshal([]byte(text), &env) != nil || len(env) != 1 {
+		return "", false
+	}
+	for _, e := range env {
+		return e.Subject, e.Subject != ""
+	}
+	return "", false
+}
 
 // IsEnciphered reports whether this value holds a sealed personal value rather than a
 // readable one. It needs no key, which is the point: the single writer uses it to refuse
@@ -1408,6 +1433,15 @@ const (
 	// instance with the right subject, so this does not become a retry somebody can
 	// resolve their way out of.
 	IncidentDataSubjectMoved IncidentReason = 5
+	// IncidentPersonalOfAnotherSubject marks an element whose write was refused because it
+	// carried a sealed personal value enciphered for a different data subject than the one
+	// the target scope names (ADR-0314). A value only reaches a scope sealed for someone
+	// else by being copied there — an output mapping handing a value out of a subprocess
+	// that shadowed the subject, say. It would still open under its own subject's key, so
+	// nothing would look wrong, but erasing the instance's subject would leave it readable.
+	// The same reason refuses the other order: the data subject's first write into a scope
+	// that already holds such a copy, which a call activity seeding its child produces.
+	IncidentPersonalOfAnotherSubject IncidentReason = 6
 )
 
 func (*IncidentValue) ValueType() ValueType { return VTIncident }

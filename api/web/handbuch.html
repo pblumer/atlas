@@ -3323,12 +3323,14 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <li data-l="en"><b>The public counterpart</b> is the <a href="#bsp-reisebuchung">trip booking</a>: there a
               public wizard carries a visitor without an account, here an internal one carries a signed-in
               person.</li>
-            <li data-l="de"><b>Warum kein Personalbogen?</b> Adresse, Geburtsdatum und Bankverbindung wären
-              Personendaten, und die lassen sich heute nicht über Output-Mappings aus einem Wizard herausgeben
-              (ADR-0314). Das Beispiel kommt deshalb ohne Personendaten aus.</li>
-            <li data-l="en"><b>Why not a personnel form?</b> Address, date of birth and bank details would be personal
-              data, which cannot leave a wizard through its output mappings today (ADR-0314). So the example does
-              without personal data.</li>
+            <li data-l="de"><b>Und mit Personendaten?</b> Ein Personalbogen mit Adresse und Bankverbindung ginge
+              genauso: die Felder als <code>atlas:personal</code> deklarieren und im Output-Mapping unter ihrem
+              eigenen Namen herausgeben (<code>source="=iban"</code>, <code>target="iban"</code>). Die Engine kopiert
+              den versiegelten Wert, ohne ihn zu öffnen (ADR-0314).</li>
+            <li data-l="en"><b>And with personal data?</b> A personnel form with an address and bank details works the
+              same way: declare the fields <code>atlas:personal</code> and hand them out under their own names in the
+              output mapping (<code>source="=iban"</code>, <code>target="iban"</code>). The engine copies the sealed
+              value without opening it (ADR-0314).</li>
           </ul>
         </details>
       </div>
@@ -5604,13 +5606,15 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <li data-l="en"><b>The answers stay in the wizard.</b> What the screens submit lives in the subprocess's
           scope; what the process needs afterwards, you pass out through the subprocess's <i>output
           mappings</i>.</li>
-        <li data-l="de"><b>Personendaten</b> (<code>atlas:personal</code>) lassen sich heute nicht über die
-          Output-Mappings aus einem Wizard herausgeben: Ein Output-Mapping darf keine Personendaten schreiben,
-          weil die Engine sie nicht verschlüsseln kann (ADR-0314). Was in einem Wizard als Personendaten erfasst
-          wird, muss innerhalb des Wizards weiterverarbeitet werden.</li>
-        <li data-l="en"><b>Personal data</b> (<code>atlas:personal</code>) cannot leave a wizard through its output
-          mappings today: an output mapping may not write personal data, because the engine cannot encipher it
-          (ADR-0314). Personal data a wizard collects has to be dealt with inside the wizard.</li>
+        <li data-l="de"><b>Personendaten</b> (<code>atlas:personal</code>) gibst du <i>unter ihrem eigenen Namen
+          und unverändert</i> heraus: <code>source="=iban"</code>, <code>target="iban"</code>. Die Engine kopiert
+          dann den versiegelten Wert, ohne ihn zu öffnen; die Kopie lässt sich lesen und löschen wie das Original
+          (ADR-0314). Umbenennen oder daraus rechnen geht nicht, weil die Engine keinen Schlüssel hat; das muss ein
+          Worker tun.</li>
+        <li data-l="en"><b>Personal data</b> (<code>atlas:personal</code>) leaves <i>under its own name,
+          unchanged</i>: <code>source="=iban"</code>, <code>target="iban"</code>. The engine then copies the sealed
+          value without opening it; the copy reads and erases exactly like the original (ADR-0314). Renaming it or
+          computing from it is not possible, because the engine holds no key; that is a worker's job.</li>
         <li data-l="de"><b>Ein öffentlicher Wizard</b> (<i>for the anonymous visitor of a public start link</i>)
           gehört der Person, die ihn über den öffentlichen Link begonnen hat. Die öffentliche Seite führt sie ohne
           Konto von Maske zu Maske; ein Pass, den nur dieser Browser-Tab kennt, öffnet genau ihre Masken. Nach einem

@@ -1425,6 +1425,13 @@ type DataInputAssociation struct {
 type IOMapping struct {
 	Target int32          // interned target variable name → index
 	Source *expr.Compiled // FEEL expression evaluated to produce the value
+	// Verbatim marks an output mapping that hands a value its process declares personal
+	// out under that value's own name, source "=iban" for target "iban" (ADR-0314,
+	// amended). The engine copies the stored record — the sealed envelope it cannot open
+	// — unchanged instead of evaluating Source: evaluating would re-encode the envelope,
+	// and anything but the identical bytes under the identical name is a value the engine
+	// computed. Set by Build; Source stays for display.
+	Verbatim bool
 }
 
 // CompiledProcess is the immutable result of compiling one process definition.
