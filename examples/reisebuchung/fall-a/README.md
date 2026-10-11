@@ -6,10 +6,10 @@ Punkt.
 
 |  | **Fall B** (`../reisebuchung.bpmn`) | **Fall A** (hier) |
 |---|---|---|
-| Prozess | mehrere `userTask`s, DMN + Inclusive-Gateways verzweigen | **ein** `userTask` |
+| Prozess | Startformular + ein Wizard-Subprozess mit mehreren `userTask`s, DMN + Inclusive-Gateways verzweigen | **ein** `userTask` |
 | „welches Formular als Nächstes?" | die **Engine** entscheidet (persistiert, auditierbar) | der **Client** entscheidet (reine UI) |
-| Abgaben an atlas | eine `complete` pro Schritt (hier: 4) | **eine** `complete`, ganz am Ende |
-| Wann | verschiedene Akteure, Warten/Genehmigung dazwischen, tagelang wiederaufnehmbar | dieselbe Person, eine Sitzung, atomar |
+| Abgaben an atlas | ein Start und eine Abgabe pro Maske (hier: 1–3 Masken) | **eine** `complete`, ganz am Ende |
+| Wann | Regeln und Berechnungen zwischen den Masken, jede Maske ein durabler Zwischenstand; als öffentlicher Wizard auch ohne Konto | dieselbe Person, eine Sitzung, atomar |
 
 ## Das Modell
 
