@@ -118,7 +118,7 @@ record is about.
   (F01 in the review) will change how queued work is represented; this filter
   will have to move with it.
 - **Amendment 2026-10-11:** the compensation defect is fixed by
-  [ADR-draft-a-scope-drains-only-when-no-token-is-in-transit](draft-a-scope-drains-only-when-no-token-is-in-transit.md)
+  [ADR-0450](0450-a-scope-drains-only-when-no-token-is-in-transit.md)
   (#1013). It was not specific to compensation: any element handing its token on
   over a flow while another branch of the scope ends let the scope drain early.
   The fix is on the completion path, as this record asked, and the liveness guard
