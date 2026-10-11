@@ -3,6 +3,7 @@ package compiler
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/pblumer/atlas/expr"
 )
@@ -259,13 +260,56 @@ func (p *CompiledProcess) refuseExpressionsReadingPersonalData() error {
 		// No article before %s: the kinds start with both vowels and consonants ("output
 		// mapping", "input mapping"), and "a output mapping" in a deploy error is the kind
 		// of sloppiness that makes a reader trust the rest of the message less.
+		hint := ""
+		if site.path == "ioOutputs.Source" {
+			// The one shape that may read a personal variable: handing it out unchanged.
+			hint = ". To hand a personal value out of a subprocess, map it to its own name unchanged " +
+				"(source \"=" + hits[0] + "\", target \"" + hits[0] + "\"); renaming it is not possible, because the " +
+				"sealed value is bound to its name"
+		}
 		return fmt.Errorf(
 			"compiler: %s reads personal variable(s) %v: %q — a variable declared personal is enciphered "+
 				"before the engine sees it, so it cannot be compared, matched or routed on. Move the transform into "+
-				"the worker that needs the result, where the plaintext exists for one call (ADR-0314, ADR-0047)",
-			kind, hits, site.e.Source())
+				"the worker that needs the result, where the plaintext exists for one call (ADR-0314, ADR-0047)%s",
+			kind, hits, site.e.Source(), hint)
 	}
 	return nil
+}
+
+// markPersonalPassThroughs finds the output mappings that hand a declared personal value
+// out under its own name and marks them Verbatim, so the engine copies the sealed record
+// instead of evaluating an expression over it.
+//
+// This is the one write of a declared variable the engine may perform, and it is not an
+// exception to the rule below so much as the case the rule never meant: the engine
+// computes nothing. A sealed value is bound to its data subject and its variable name
+// (the AEAD's additional data, api/vault/personal.go), not to a scope, so the identical
+// bytes under the identical name open exactly where the original opens and die with the
+// same erased key — the same copy a call activity propagating its child's variables, a
+// fork or a migration already makes. Renaming is not a pass-through: the envelope would no
+// longer open under the new name, and the engine cannot re-seal it.
+//
+// It is what lets a wizard hand out the personal answers its screens collected
+// (ADR-0449), whose only way out of the subprocess is its output mappings.
+func (p *CompiledProcess) markPersonalPassThroughs() {
+	if len(p.personalSet) == 0 {
+		return
+	}
+	for i := range p.ioOutputs {
+		m := &p.ioOutputs[i]
+		if name := p.Intern(m.Target); p.IsPersonal(name) && passesThrough(m.Source, name) {
+			m.Verbatim = true
+		}
+	}
+}
+
+// passesThrough reports whether e is nothing but a reference to the variable name.
+func passesThrough(e *expr.Compiled, name string) bool {
+	if e == nil {
+		return false
+	}
+	in := e.Inputs()
+	return len(in) == 1 && in[0] == name && strings.TrimSpace(e.Source()) == name
 }
 
 // refuseEngineWritesToPersonalData is the other direction of the same rule, and it exists
@@ -296,8 +340,9 @@ func (p *CompiledProcess) refuseEngineWritesToPersonalData() error {
 			"compiler: %s writes personal variable %q — the engine cannot encipher a value, because it holds no key, "+
 				"so a value it computes into a declared variable would be stored in the clear and could never be erased. "+
 				"A personal value may only be written by something that seals it: a form, a worker's result, or an "+
-				"operator. Have the worker that produces it return it under that name (ADR-0314, ADR-0047)",
-			kind, name)
+				"operator. Have the worker that produces it return it under that name, or, to hand it out of a "+
+				"subprocess, map it to its own name unchanged (source \"=%s\") (ADR-0314, ADR-0047)",
+			kind, name, name)
 	}
 	for i := range p.ioInputs {
 		if err := refuse("input mapping", p.Intern(p.ioInputs[i].Target)); err != nil {
@@ -305,6 +350,9 @@ func (p *CompiledProcess) refuseEngineWritesToPersonalData() error {
 		}
 	}
 	for i := range p.ioOutputs {
+		if p.ioOutputs[i].Verbatim {
+			continue // the sealed value moves under its own name; the engine computes nothing
+		}
 		if err := refuse("output mapping", p.Intern(p.ioOutputs[i].Target)); err != nil {
 			return err
 		}
@@ -359,6 +407,9 @@ func (p *CompiledProcess) expressionSites() []expressionSite {
 		add("ioInputs.Source", p.ioInputs[i].Source)
 	}
 	for i := range p.ioOutputs {
+		if p.ioOutputs[i].Verbatim {
+			continue // copied, never evaluated: see markPersonalPassThroughs
+		}
 		add("ioOutputs.Source", p.ioOutputs[i].Source)
 	}
 	for i := range p.dataInAssocs {

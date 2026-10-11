@@ -2162,6 +2162,9 @@ func applyInputMappings(c *ProcessingContext, key uint64, ei *model.ElementInsta
 // yields null rather than halting the processor — the same rule the inline script
 // task and data associations follow.
 func evalMapping(c *ProcessingContext, cp *compiler.CompiledProcess, m compiler.IOMapping, evalScope, destScope uint64) model.VariableValue {
+	if m.Verbatim {
+		return copyMapping(c, cp, m, evalScope, destScope)
+	}
 	result, err := m.Source.Eval(bindInputsChain(c, m.Source.Inputs(), evalScope))
 	if err != nil {
 		result = expr.Null
@@ -2174,6 +2177,21 @@ func evalMapping(c *ProcessingContext, cp *compiler.CompiledProcess, m compiler.
 		Bool:     b,
 		Text:     text,
 	}
+}
+
+// copyMapping hands a personal value out under its own name (ADR-0314, amended): the
+// stored record, a sealed envelope the engine holds no key for, is copied unchanged,
+// resolved over the same scope chain an evaluated source would read. Evaluating it
+// instead would decode the envelope as a FEEL context and encode it again, which
+// reorders its members — still openable, but only by accident, and not the identical
+// bytes every copy of a sealed value is supposed to carry. A value nobody wrote copies
+// as null, as `=name` over a missing variable evaluates.
+func copyMapping(c *ProcessingContext, cp *compiler.CompiledProcess, m compiler.IOMapping, evalScope, destScope uint64) model.VariableValue {
+	out := model.VariableValue{ScopeKey: destScope, Name: cp.Intern(m.Target), Kind: model.VarNull}
+	if vv := c.ResolveVariable(evalScope, out.Name); vv != nil {
+		out.Kind, out.Bool, out.Text = vv.Kind, vv.Bool, vv.Text
+	}
+	return out
 }
 
 // applyOutputMappings evaluates a completing activity's zeebe:ioMapping outputs over
@@ -4719,6 +4737,30 @@ func parkMovedDataSubject(c *ProcessingContext, scope uint64, name string) {
 			"so erasing either subject would leave the other half readable. Start an instance with the correct " +
 			"data subject instead; resolving this will only retry the same write",
 		Reason: model.IncidentDataSubjectMoved,
+	}
+	if ei := c.GetElementInstance(scope); ei != nil {
+		inc.ProcessInstanceKey, inc.ElementId = ei.ProcessInstanceKey, ei.ElementId
+	} else if ei := c.GetElementInstance(c.producer); ei != nil {
+		inc.ElementInstanceKey = c.producer
+		inc.ProcessInstanceKey, inc.ElementId = ei.ProcessInstanceKey, ei.ElementId
+	} else {
+		inc.ProcessInstanceKey = scope
+	}
+	c.AppendIncidentEvent(model.IntentIncidentCreated, inc)
+}
+
+// parkPersonalOfAnotherSubject refuses a sealed personal value written into a scope whose
+// data subject is somebody else, and parks an incident naming it (ADR-0314).
+func parkPersonalOfAnotherSubject(c *ProcessingContext, scope uint64, name string) {
+	inc := model.IncidentValue{
+		ElementInstanceKey: scope,
+		RaisedAt:           c.Now(),
+		Message: "the value written to \"" + name + "\" is personal and enciphered for a different data subject than " +
+			"the one this scope names. It would still open under its own subject's key, so erasing this instance's " +
+			"subject would leave it readable. It most likely reached here through an output mapping out of a scope " +
+			"that set its own data subject; keep the data subject the same across the instance instead. Resolving " +
+			"this only retries the same write",
+		Reason: model.IncidentPersonalOfAnotherSubject,
 	}
 	if ei := c.GetElementInstance(scope); ei != nil {
 		inc.ProcessInstanceKey, inc.ElementId = ei.ProcessInstanceKey, ei.ElementId

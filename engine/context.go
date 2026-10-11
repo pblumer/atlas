@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"strings"
+
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/model"
 )
@@ -549,11 +551,11 @@ func clearPersonalWrite(cp *compiler.CompiledProcess, v *model.VariableValue) bo
 // The first write is how the subject arrives, and a change *before* anything has been
 // sealed costs nothing — correcting a mistyped id then is ordinary, and refusing it would
 // be pedantry. So the refusal asks the one question that matters: has anything already
-// been sealed? Only the instance root is scanned, and that is where the answer is: a
-// personal value can reach an instance from a start, a worker's result or an operator's
-// write, and all three land at the root — while an engine-evaluated mapping, the one
-// thing that writes into an activity-local scope, is refused from touching a declared
-// variable at deploy time.
+// been sealed, anywhere in the instance? Every scope is scanned, not only the root: a
+// form submitted or a worker completing inside an embedded subprocess — every screen of
+// a wizard (ADR-0449) — writes into that subprocess's scope, not the root, so a root-only
+// scan would let the subject move from under values sealed there. The scan runs only when
+// the subject variable actually changes value, which is rare, so its cost is too.
 func movedDataSubject(c *ProcessingContext, cp *compiler.CompiledProcess, v *model.VariableValue) bool {
 	if cp == nil || !cp.HasPersonalVariables() || v.Name != cp.DataSubjectVariable() {
 		return false
@@ -567,12 +569,48 @@ func movedDataSubject(c *ProcessingContext, cp *compiler.CompiledProcess, v *mod
 		piKey = ei.ProcessInstanceKey
 	}
 	sealed := false
-	c.VariablesOfScope(piKey, func(existing model.VariableValue) {
-		if !sealed && cp.IsPersonal(existing.Name) && existing.IsEnciphered() {
-			sealed = true
+	scan := func(scope uint64) {
+		if sealed {
+			return
 		}
-	})
+		c.VariablesOfScope(scope, func(existing model.VariableValue) {
+			if !sealed && cp.IsPersonal(existing.Name) && existing.IsEnciphered() {
+				sealed = true
+			}
+		})
+	}
+	scan(piKey)
+	c.ForEachElementInstance(piKey, scan)
 	return sealed
+}
+
+// foreignSubject reports whether a sealed personal value is written into a scope whose
+// data subject is somebody else.
+//
+// An edge seals under the subject the target scope's chain names, so a value written
+// from outside always matches. A value only arrives sealed for someone else by being
+// copied — an output mapping handing a value out of a subprocess that shadowed the
+// subject (ADR-0314, amended). It would still open, under its own subject's key, so
+// nothing downstream would notice; but an erasure of this instance's subject would leave
+// it readable, which is the split movedDataSubject refuses from the other side. The
+// envelope names its subject in the clear, so the question needs no key.
+func foreignSubject(c *ProcessingContext, cp *compiler.CompiledProcess, v *model.VariableValue) bool {
+	if cp == nil || !cp.HasPersonalVariables() || !cp.IsPersonal(v.Name) || !v.IsEnciphered() {
+		return false
+	}
+	sealedFor, ok := model.EncipheredSubject(v.Text)
+	if !ok {
+		return false
+	}
+	current := c.ResolveVariable(v.ScopeKey, cp.DataSubjectVariable())
+	if current == nil {
+		return false // the subject arrives with this write, or later: nothing to disagree with yet
+	}
+	subject := ""
+	if current.Kind == model.VarString || current.Kind == model.VarNumber {
+		subject = strings.TrimSpace(current.Text)
+	}
+	return subject != "" && subject != sealedFor
 }
 
 // refusePersonalWrite parks an incident and reports true when ADR-0314 forbids this
@@ -585,6 +623,9 @@ func refusePersonalWrite(c *ProcessingContext, cp *compiler.CompiledProcess, v *
 		return true
 	case movedDataSubject(c, cp, v):
 		parkMovedDataSubject(c, v.ScopeKey, v.Name)
+		return true
+	case foreignSubject(c, cp, v):
+		parkPersonalOfAnotherSubject(c, v.ScopeKey, v.Name)
 		return true
 	}
 	return false

@@ -291,12 +291,12 @@ both written as new events) is a decision of its own.
     later `public` wizard, would let a customer come back. It is the natural next
     record.
   - "Back" as a platform operation, as above.
-  - Personal data cannot leave a wizard. An output mapping may not write a variable
-    declared `atlas:personal`, because the engine holds no key to encipher it
-    ([ADR-0314](0314-portal-personal-data.md)), and a wizard's answers reach the
-    process only through its output mappings. A wizard that collects personal data,
-    a personnel form for instance, has to deal with it inside the sitting until a
-    record decides how such a value is handed out.
+  - Personal data leaves a wizard only under its own name. A wizard's answers reach the
+    process only through its output mappings, and the engine holds no key to encipher a
+    value it computes ([ADR-0314](0314-portal-personal-data.md)). ADR-0314's amendment of
+    2026-10-11 lets an output mapping hand a declared personal value out unchanged
+    (`source="=iban"`, `target="iban"`): the engine copies the sealed record, which opens
+    and erases exactly as the original. Renaming or computing on it stays refused.
   - Only operators may start a process in the Tasks app. A person with the role `user`
     enters an internal wizard through a first screen assigned to them, as
     `examples/arbeitsplatz` shows; whoever started is answered `handedOver`.
