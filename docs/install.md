@@ -577,6 +577,58 @@ real owner from the same page. Processes deployed before this carry no deployer
 either, so they keep any message name they already listen for until they are
 redeployed — deploy them again to bring them under the claim.
 
+### What a script can reach with `--script-sandbox=off`
+
+`off` is the default, for upgrade compatibility
+([ADR-0303](adr/0303-script-sandbox-isolation.md)). It is worth knowing what it means
+before a model author writes the first script task, because it comes down to one
+sentence: **a script runs under the operating-system account of the atlas process
+that starts it, so it can read every file that process can read.** In the container
+image that is uid 65532, which owns `/data`.
+
+What that reaches, with `off`:
+
+- **The data directory.** The log, the state store, the user and API-token stores, the
+  OAuth grants and the settings — readable, and writable, past every check the API
+  makes.
+- **The vault key, and so every stored credential.** A key atlas generated lives in
+  the data directory beside the ciphertext it protects; one you mount with
+  `ATLAS_VAULT_KEY_FILE` has to be readable by the same account. Either way a script
+  can read the key and the vault, and with both, decrypt every Worker's credentials.
+  The same holds for the TLS private key (`--tls-key`), a file the server must read.
+- **The environment of atlas processes under the same account.** A script does not
+  inherit its worker's environment — the interpreter starts from a short allowlist
+  with no atlas credential in it — but it can read `/proc/<pid>/environ` of the
+  server or worker process that started it. That holds `ATLAS_VAULT_KEY` and
+  `ATLAS_OIDC_CLIENT_SECRET` when they are given that way, and in a supervised worker
+  `ATLAS_TOKEN`, which is always set there: the token you configured, or else the
+  server's own credential, which is limited to the routes a worker uses (scope
+  `worker`). A secret passed as a flag instead, such as `--oidc-client-secret`, is in
+  `/proc/<pid>/cmdline`. Whether a host's `kernel.yama.ptrace_scope` closes these
+  paths has not been verified; do not count on it.
+- **The network.** Unrestricted. In Kubernetes the containers of a pod share one
+  network namespace, so the atlas API is reachable over loopback.
+
+What it does not hand over directly: passwords are stored as bcrypt hashes and API
+tokens as SHA-256 hashes, and each run is bounded — in wall-clock time (30 seconds by
+default, `--script-timeout`), in output (8 MB of stdout by default, the `Payload`
+budget), and in what it leaves behind: at the limit it ends with everything it
+started, its process group on Linux and macOS, its Job Object on Windows.
+
+So treat **whoever may deploy a script task as somebody who holds the data directory
+and the vault key**. Three ways to narrow that:
+
+| Setting | What a script reaches |
+|---|---|
+| `--script-sandbox=off` (default) | Everything above |
+| `--script-sandbox=strict` (Linux, Landlock ABI 3+) | The installed runtime and private per-run scratch; no `/data`, no other files, no new sockets |
+| An external worker under its own account | Whatever that account can reach — run it on another host or as another user, without the vault key or the data directory |
+
+`strict` is the narrowest, and refuses to start where the kernel cannot enforce it,
+or where an enabled interpreter cannot run inside it. Scripts that need a mounted
+file or a network service do not run under it; give those an external worker with
+its own account instead of loosening the server.
+
 ### Connecting a hosted AI connector
 
 > **A different "connector".** This section is about an *MCP client* — claude.ai's
