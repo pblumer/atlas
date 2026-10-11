@@ -49,7 +49,10 @@ Landlock ABI 3+, strict mode gives each execution private scratch, denies access
 to `/data` and other non-runtime files, and blocks socket creation. Atlas refuses
 to start strict mode when the host or container runtime cannot enforce it, and
 likewise when an enabled interpreter cannot start inside it — each one is run once
-at boot rather than taken on trust.
+at boot rather than taken on trust. What a script can reach in the default `off`
+mode — the data directory, the vault key and every credential it protects — is
+spelled out in
+[What a script can reach with `--script-sandbox=off`](../docs/install.md#what-a-script-can-reach-with---script-sandboxoff).
 
 ## Kubernetes (Helm)
 

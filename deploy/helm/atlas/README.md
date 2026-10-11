@@ -187,9 +187,12 @@ to. Where that last hop must be encrypted as well — an Ingress on another node
 another atlas publishing an application to this one, which requires `https` of its
 target — set `atlas.tls.enabled` with a `kubernetes.io/tls` Secret and the pod
 terminates TLS itself; the probes then switch to the HTTPS scheme automatically.
-Either way `/mcp` is gated by `--auth` like every other route and no longer depends
-on a proxy rule, while `/metrics`, `/healthz` and `/readyz` stay unauthenticated by
-design — encryption is not authorization.
+Either way `/mcp` and `/metrics` are gated by `--auth` like every other route and no
+longer depend on a proxy rule: a Prometheus scraper presents an API token scoped
+`metrics` ([ADR-0198](../../../docs/adr/0198-metrics-behind-the-boundary.md), and
+[Credentials for machines](../../../docs/install.md#credentials-for-machines) for the
+scrape config). Only `/healthz` and `/readyz` stay unauthenticated, by design,
+because a kubelet has no credential to offer — encryption is not authorization.
 
 ## Values
 
