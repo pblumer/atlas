@@ -1,4 +1,4 @@
-# ADR-DRAFT: A scope drains only when no token is in transit into it
+# ADR-0450: A scope drains only when no token is in transit into it
 
 - **Status:** Accepted
 - **Implementation:** Landed
