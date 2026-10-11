@@ -254,13 +254,14 @@ func (s *Server) holdsTaskAs(username, userID string, groupIDs []string, assigne
 }
 
 // collectFormFieldKeys adds to out the variables a form-js schema reads and writes: the
-// root of every value path the form can submit (publicstartfields.go). A keyed field
+// root of every value path the form binds (publicstartfields.go). A keyed field
 // inside a group or a dynamic list with a path lives under that path, so the variable is
 // the path's root and not the field's own key; reading only keys used to name a variable
-// the form never binds and miss the one it does. A schema that will not parse
-// contributes nothing, which fails closed.
+// the form never binds and miss the one it does. A disabled field counts: the form shows
+// its value though it never submits one. A schema that will not parse contributes
+// nothing, which fails closed.
 func collectFormFieldKeys(schema []byte, out map[string]bool) {
-	for k := range formShapeOf(schema).children {
+	for k := range formBindingsOf(schema).children {
 		out[k] = true
 	}
 }

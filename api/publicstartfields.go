@@ -37,19 +37,29 @@ type formShape struct {
 	children map[string]*formShape
 }
 
-// formShapeOf reads the submittable paths of a form-js schema. A schema that does not
-// parse has none, so a form that cannot be rendered accepts no field either.
-func formShapeOf(schema []byte) *formShape {
+// formShapeOf reads the submittable paths of a form-js schema. A disabled field is shown
+// but never submitted (_getSubmitData in the vendored viewer skips it), so it is left
+// out: a value the form only displays, a price a worker computed between two screens,
+// is not the caller's to set. A read-only field is submitted and stays writable. A
+// schema that does not parse has none, so a form that cannot be rendered accepts no
+// field either.
+func formShapeOf(schema []byte) *formShape { return shapeOf(schema, false) }
+
+// formBindingsOf reads every value path a form-js schema binds, the disabled fields it
+// only displays included: what the form reads, where formShapeOf is what it writes.
+func formBindingsOf(schema []byte) *formShape { return shapeOf(schema, true) }
+
+func shapeOf(schema []byte, withDisabled bool) *formShape {
 	root := &formShape{}
 	var doc map[string]any
 	if json.Unmarshal(schema, &doc) == nil {
-		root.add(doc["components"])
+		root.add(doc["components"], withDisabled)
 	}
 	return root
 }
 
 // add records one container level's components under s.
-func (s *formShape) add(components any) {
+func (s *formShape) add(components any, withDisabled bool) {
 	list, _ := components.([]any)
 	for _, c := range list {
 		comp, ok := c.(map[string]any)
@@ -67,12 +77,12 @@ func (s *formShape) add(components any) {
 					at.list = true
 				}
 			}
-			at.add(comp["components"])
+			at.add(comp["components"], withDisabled)
 		default:
-			if k, _ := comp["key"].(string); k != "" {
+			if k, _ := comp["key"].(string); k != "" && (withDisabled || comp["disabled"] != true) {
 				s.at(k).field = true
 			}
-			s.add(comp["components"])
+			s.add(comp["components"], withDisabled)
 		}
 	}
 }
