@@ -1649,8 +1649,17 @@ func completeAndTakeFlows(c *ProcessingContext, key uint64, ei *model.ElementIns
 // outgoing flow — which may in turn drain the parent scope. The decision is a pure
 // function of state (GetElementInstance / ActiveChildren), so recovery reconstructs
 // it identically (I4/I6). A no-op while the scope still has active children.
+//
+// Nor while a token is still on its way into the scope (TokenEntering). The
+// active-child counter drops when an element completes and rises only when its
+// successor activates, a batch later, so a branch that ended in between used to find
+// the scope empty and complete it — and the successor then ran inside an instance
+// that had reported itself done, a job for it left with no instance to collect it
+// (#1013). The token that is on its way ends in an end event or a dead end of its own,
+// and that calls here again. A liveness guard on activation must not be the fix for
+// this: it drops exactly that token (ADR-0284).
 func completeScope(c *ProcessingContext, scope uint64) {
-	if c.ActiveChildren(scope) != 0 {
+	if c.ActiveChildren(scope) != 0 || c.TokenEntering(scope) {
 		return
 	}
 	if ei := c.GetElementInstance(scope); ei != nil {

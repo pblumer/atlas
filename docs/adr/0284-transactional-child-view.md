@@ -1,6 +1,6 @@
 # ADR-0284: A cancellation sees the children created in its own batch
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-11 — the compensation follow-up is fixed; see the note under Consequences)
 - **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas maintainers
@@ -117,6 +117,12 @@ record is about.
   unaddressed and now has a written description. The durable-continuation work
   (F01 in the review) will change how queued work is represented; this filter
   will have to move with it.
+- **Amendment 2026-10-11:** the compensation defect is fixed by
+  [ADR-draft-a-scope-drains-only-when-no-token-is-in-transit](draft-a-scope-drains-only-when-no-token-is-in-transit.md)
+  (#1013). It was not specific to compensation: any element handing its token on
+  over a flow while another branch of the scope ends let the scope drain early.
+  The fix is on the completion path, as this record asked, and the liveness guard
+  of option 3 is still not the way to do it.
 
 ## Pros and cons of the options
 
