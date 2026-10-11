@@ -604,13 +604,54 @@ func foreignSubject(c *ProcessingContext, cp *compiler.CompiledProcess, v *model
 	}
 	current := c.ResolveVariable(v.ScopeKey, cp.DataSubjectVariable())
 	if current == nil {
-		return false // the subject arrives with this write, or later: nothing to disagree with yet
+		return false // the subject arrives later, and subjectArrivesForAnother asks then
 	}
-	subject := ""
-	if current.Kind == model.VarString || current.Kind == model.VarNumber {
-		subject = strings.TrimSpace(current.Text)
-	}
+	subject := subjectOf(current)
 	return subject != "" && subject != sealedFor
+}
+
+// subjectArrivesForAnother is foreignSubject asked from the other side: the data subject
+// arrives in a scope that already holds a value sealed for somebody else.
+//
+// A copy can arrive before the subject does. A call activity seeds its child with the
+// caller's variables in name order and its input mappings after them, so the child's
+// subject may be written after a value sealed for the caller's; an output mapping can hand
+// a value out to a scope that never had the subject, which a later task then sets. The
+// value's own write found no subject to disagree with, so the subject's first write is
+// where the two meet. Only the written scope is read: that is where a copy lands, and a
+// sibling scope naming a subject of its own — one iteration per person — is not this
+// subject's business. The read happens only on a subject's first write into a scope of a
+// process that declares personal data.
+func subjectArrivesForAnother(c *ProcessingContext, cp *compiler.CompiledProcess, v *model.VariableValue) bool {
+	if cp == nil || !cp.HasPersonalVariables() || v.Name != cp.DataSubjectVariable() {
+		return false
+	}
+	if c.ResolveVariable(v.ScopeKey, v.Name) != nil {
+		return false // a change, not an arrival: movedDataSubject's question
+	}
+	subject := subjectOf(v)
+	if subject == "" {
+		return false
+	}
+	foreign := false
+	c.VariablesOfScope(v.ScopeKey, func(existing model.VariableValue) {
+		if foreign || !cp.IsPersonal(existing.Name) || !existing.IsEnciphered() {
+			return
+		}
+		if sealedFor, ok := model.EncipheredSubject(existing.Text); ok && sealedFor != subject {
+			foreign = true
+		}
+	})
+	return foreign
+}
+
+// subjectOf is the person a data-subject value names: its text, trimmed, when it is a
+// string or a number, and nobody otherwise.
+func subjectOf(v *model.VariableValue) string {
+	if v.Kind == model.VarString || v.Kind == model.VarNumber {
+		return strings.TrimSpace(v.Text)
+	}
+	return ""
 }
 
 // refusePersonalWrite parks an incident and reports true when ADR-0314 forbids this
@@ -626,6 +667,9 @@ func refusePersonalWrite(c *ProcessingContext, cp *compiler.CompiledProcess, v *
 		return true
 	case foreignSubject(c, cp, v):
 		parkPersonalOfAnotherSubject(c, v.ScopeKey, v.Name)
+		return true
+	case subjectArrivesForAnother(c, cp, v):
+		parkSubjectOfAnotherPerson(c, v.ScopeKey, v.Name)
 		return true
 	}
 	return false

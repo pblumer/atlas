@@ -222,3 +222,226 @@ func TestTheDataSubjectCannotMoveFromUnderAValueSealedInASubprocess(t *testing.T
 		t.Errorf("root pnr = %+v, want P-4711 unchanged", got)
 	}
 }
+
+// scopeVariable reads one variable of scope, or nil.
+func scopeVariable(t *testing.T, s *state.Store, scope uint64, name string) *model.VariableValue {
+	t.Helper()
+	var got *model.VariableValue
+	if err := s.VariablesOfScope(scope, func(v *model.VariableValue) error {
+		if v.Name == name {
+			c := *v
+			got = &c
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("VariablesOfScope: %v", err)
+	}
+	return got
+}
+
+// TestTheDataSubjectCannotArriveNamingAnotherPersonThanTheCopy is the other order of
+// TestASealedValueOfAnotherSubjectIsNotHandedOut. The wizard names the subject on its own
+// first screen and does not hand it out, so the copy of iban reaches a root that names
+// nobody, and there is nothing yet to disagree with. The task after the wizard then names
+// the root's subject for the first time: the same person is fine, anybody else is refused,
+// because the instance would name one person and hold another's value.
+func TestTheDataSubjectCannotArriveNamingAnotherPersonThanTheCopy(t *testing.T) {
+	for _, tc := range []struct {
+		later   string
+		refused bool
+	}{{"P-0815", true}, {"P-4711", false}} {
+		t.Run(tc.later, func(t *testing.T) {
+			h := openHarness(t, t.TempDir())
+			defer h.close(t)
+			cp := passThroughProcess(t)
+			p := engine.New(1, h.log, h.store, &manualClock{})
+			p.Deploy(cp)
+			if err := p.Recover(); err != nil {
+				t.Fatalf("Recover: %v", err)
+			}
+			p.CreateInstance(cp.Key)
+			if err := p.RunUntilIdle(); err != nil {
+				t.Fatalf("RunUntilIdle: %v", err)
+			}
+
+			screen(t, p, h.store, model.VariableValue{Name: "pnr", Kind: model.VarString, Text: "P-4711"}, sealedFor("iban", "P-4711"))
+			screen(t, p, h.store)
+			iban, piKey := rootVariable(t, h.store, "iban")
+			if iban == nil {
+				t.Fatal("the sealed value did not leave the subprocess")
+			}
+			if pnr, _ := rootVariable(t, h.store, "pnr"); pnr != nil {
+				t.Fatalf("root pnr = %q before the task after the wizard, want nobody named", pnr.Text)
+			}
+
+			screen(t, p, h.store, model.VariableValue{Name: "pnr", Kind: model.VarString, Text: tc.later})
+			r := incidentReasons(t, h.store)
+			if !tc.refused {
+				if len(r) != 0 {
+					t.Errorf("incidents = %v, want none: the subject names the person the copy is sealed for", r)
+				}
+				return
+			}
+			if len(r) != 1 || r[0] != model.IncidentPersonalOfAnotherSubject {
+				t.Fatalf("incident reasons = %v, want one IncidentPersonalOfAnotherSubject", r)
+			}
+			if pnr := scopeVariable(t, h.store, piKey, "pnr"); pnr != nil {
+				t.Errorf("root pnr = %q, want nothing written: the root holds iban sealed for P-4711", pnr.Text)
+			}
+		})
+	}
+}
+
+// A call activity seeds its child with the caller's variables in name order and its input
+// mappings after them, so a child keeping its data subject under another name receives the
+// caller's sealed iban before it learns whose data it holds.
+func callIntoChild(t testing.TB, childSubject string) (parent, child *compiler.CompiledProcess) {
+	t.Helper()
+	parent, err := compiler.Parse(passThroughKey+1, 1, strings.NewReader(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:atlas="http://atlas/schema/1.0"
+                    xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="antrag" isExecutable="true" atlas:personal="iban" atlas:dataSubject="pnr">
+    <startEvent id="s"/>
+    <callActivity id="call">
+      <extensionElements>
+        <zeebe:calledElement processId="auszahlung"/>
+        <zeebe:ioMapping><zeebe:input source="`+childSubject+`" target="empfaenger"/></zeebe:ioMapping>
+      </extensionElements>
+    </callActivity>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="call"/>
+    <sequenceFlow id="f2" sourceRef="call" targetRef="e"/>
+  </process>
+</definitions>`))
+	if err != nil {
+		t.Fatalf("Parse parent: %v", err)
+	}
+	child, err = compiler.Parse(passThroughKey+2, 1, strings.NewReader(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:atlas="http://atlas/schema/1.0">
+  <process id="auszahlung" isExecutable="true" atlas:personal="iban" atlas:dataSubject="empfaenger">
+    <startEvent id="s"/>
+    <userTask id="pruefen"/>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="pruefen"/>
+    <sequenceFlow id="f2" sourceRef="pruefen" targetRef="e"/>
+  </process>
+</definitions>`))
+	if err != nil {
+		t.Fatalf("Parse child: %v", err)
+	}
+	return parent, child
+}
+
+// TestACalledProcessCannotNameAnotherPersonThanTheValueItWasHanded: the child's subject
+// arrives after the caller's sealed iban. Naming the caller's person is fine; naming
+// anybody else is refused, so the child never names one person while holding another's
+// value.
+func TestACalledProcessCannotNameAnotherPersonThanTheValueItWasHanded(t *testing.T) {
+	for _, tc := range []struct {
+		name, source, want string
+		refused            bool
+	}{
+		{"another person", `=&quot;P-0815&quot;`, "", true},
+		{"the caller's person", `=pnr`, "P-4711", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := openHarness(t, t.TempDir())
+			defer h.close(t)
+			parent, child := callIntoChild(t, tc.source)
+			p := engine.New(1, h.log, h.store, &manualClock{})
+			p.Deploy(parent)
+			p.Deploy(child)
+			if err := p.Recover(); err != nil {
+				t.Fatalf("Recover: %v", err)
+			}
+			p.CreateInstance(parent.Key, model.VariableValue{Name: "pnr", Kind: model.VarString, Text: "P-4711"}, sealedFor("iban", "P-4711"))
+			if err := p.RunUntilIdle(); err != nil {
+				t.Fatalf("RunUntilIdle: %v", err)
+			}
+
+			var childKey uint64
+			for k, v := range activeInstances(t, h.store) {
+				if v.ProcessDefKey == child.Key {
+					childKey = k
+				}
+			}
+			if childKey == 0 {
+				t.Fatal("the call activity started no child")
+			}
+			if iban := scopeVariable(t, h.store, childKey, "iban"); iban == nil {
+				t.Fatal("the child was not handed the caller's iban")
+			}
+			r := incidentReasons(t, h.store)
+			got := scopeVariable(t, h.store, childKey, "empfaenger")
+			if !tc.refused {
+				if len(r) != 0 || got == nil || got.Text != tc.want {
+					t.Errorf("incidents = %v, child empfaenger = %+v, want none and %s", r, got, tc.want)
+				}
+				return
+			}
+			if len(r) != 1 || r[0] != model.IncidentPersonalOfAnotherSubject {
+				t.Fatalf("incident reasons = %v, want one IncidentPersonalOfAnotherSubject", r)
+			}
+			if got != nil {
+				t.Errorf("child empfaenger = %q, want nothing written: the child holds iban sealed for P-4711", got.Text)
+			}
+		})
+	}
+}
+
+// TestEachIterationMayNameItsOwnPerson: the arrival check reads the scope the subject is
+// written into and nothing beside it. A form filled once per family member names a
+// different person in every iteration, and seals each member's iban for that member; the
+// first iteration's value, still alive in its own scope, is not the second one's business.
+func TestEachIterationMayNameItsOwnPerson(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	cp, err := compiler.Parse(passThroughKey+3, 1, strings.NewReader(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:atlas="http://atlas/schema/1.0"
+                    xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="familie" isExecutable="true" atlas:personal="iban" atlas:dataSubject="pnr">
+    <startEvent id="s"/>
+    <subProcess id="je">
+      <multiInstanceLoopCharacteristics isSequential="false">
+        <extensionElements><zeebe:loopCharacteristics inputCollection="=[1, 2]" inputElement="nr"/></extensionElements>
+      </multiInstanceLoopCharacteristics>
+      <startEvent id="js"/>
+      <userTask id="angaben"/>
+      <userTask id="pruefen"/>
+      <endEvent id="jn"/>
+      <sequenceFlow id="w1" sourceRef="js" targetRef="angaben"/>
+      <sequenceFlow id="w2" sourceRef="angaben" targetRef="pruefen"/>
+      <sequenceFlow id="w3" sourceRef="pruefen" targetRef="jn"/>
+    </subProcess>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="je"/>
+    <sequenceFlow id="f2" sourceRef="je" targetRef="e"/>
+  </process>
+</definitions>`))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	first := activatableJobs(t, h.store, compiler.UserTaskJobTypeIndex)
+	if len(first) != 2 {
+		t.Fatalf("open screens = %d, want one per family member", len(first))
+	}
+	for i, person := range []string{"P-1", "P-2"} {
+		p.CompleteJob(first[i], model.VariableValue{Name: "pnr", Kind: model.VarString, Text: person}, sealedFor("iban", person))
+		if err := p.RunUntilIdle(); err != nil {
+			t.Fatalf("RunUntilIdle: %v", err)
+		}
+	}
+	if r := incidentReasons(t, h.store); len(r) != 0 {
+		t.Fatalf("incidents = %v, want none: each iteration names its own person", r)
+	}
+}

@@ -4752,15 +4752,32 @@ func parkMovedDataSubject(c *ProcessingContext, scope uint64, name string) {
 // parkPersonalOfAnotherSubject refuses a sealed personal value written into a scope whose
 // data subject is somebody else, and parks an incident naming it (ADR-0314).
 func parkPersonalOfAnotherSubject(c *ProcessingContext, scope uint64, name string) {
+	parkForeignSubject(c, scope, "the value written to \""+name+"\" is personal and enciphered for a different "+
+		"data subject than the one this scope names. It would still open under its own subject's key, so erasing "+
+		"this instance's subject would leave it readable. It most likely reached here through an output mapping "+
+		"out of a scope that set its own data subject; keep the data subject the same across the instance "+
+		"instead. Resolving this only retries the same write")
+}
+
+// parkSubjectOfAnotherPerson is the same refusal from the other side: the data subject
+// written to name arrives in a scope already holding a personal value sealed for somebody
+// else, which got there as a copy before the subject did (ADR-0314, amended).
+func parkSubjectOfAnotherPerson(c *ProcessingContext, scope uint64, name string) {
+	parkForeignSubject(c, scope, "the data subject written to \""+name+"\" names a different person than a "+
+		"personal value already sealed in this scope. That value arrived as a copy before the subject did — "+
+		"seeded by a call activity, or handed out of a subprocess that set its own data subject — and would "+
+		"stay readable after erasing the subject named now. Keep the data subject the same across the "+
+		"instance instead. Resolving this only retries the same write")
+}
+
+// parkForeignSubject parks the incident both refusals share, on the scope's element when
+// there is one and on the producing element otherwise, as parkMovedDataSubject does.
+func parkForeignSubject(c *ProcessingContext, scope uint64, message string) {
 	inc := model.IncidentValue{
 		ElementInstanceKey: scope,
 		RaisedAt:           c.Now(),
-		Message: "the value written to \"" + name + "\" is personal and enciphered for a different data subject than " +
-			"the one this scope names. It would still open under its own subject's key, so erasing this instance's " +
-			"subject would leave it readable. It most likely reached here through an output mapping out of a scope " +
-			"that set its own data subject; keep the data subject the same across the instance instead. Resolving " +
-			"this only retries the same write",
-		Reason: model.IncidentPersonalOfAnotherSubject,
+		Message:            message,
+		Reason:             model.IncidentPersonalOfAnotherSubject,
 	}
 	if ei := c.GetElementInstance(scope); ei != nil {
 		inc.ProcessInstanceKey, inc.ElementId = ei.ProcessInstanceKey, ei.ElementId

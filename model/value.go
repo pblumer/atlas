@@ -1439,6 +1439,8 @@ const (
 	// else by being copied there — an output mapping handing a value out of a subprocess
 	// that shadowed the subject, say. It would still open under its own subject's key, so
 	// nothing would look wrong, but erasing the instance's subject would leave it readable.
+	// The same reason refuses the other order: the data subject's first write into a scope
+	// that already holds such a copy, which a call activity seeding its child produces.
 	IncidentPersonalOfAnotherSubject IncidentReason = 6
 )
 

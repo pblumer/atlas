@@ -26,7 +26,9 @@ _Changed_ / _Removed_ for each version.
   personal value, computing from it, and input mappings into one stay refused, with a message
   that says how to hand a value out instead. A copy sealed for a different data subject than
   the target scope names is refused with an incident (`IncidentPersonalOfAnotherSubject`),
-  because an erasure of the instance's subject would leave it readable (ADR-0314, amended).
+  because an erasure of the instance's subject would leave it readable; so is the other
+  order, a data subject first written into a scope that already holds such a copy, which a
+  call activity seeding its child produces (ADR-0314, amended).
 
 - **An example of an internal wizard.** `examples/arbeitsplatz` is the internal counterpart
   of the trip booking's public wizard (ADR-0449): the personnel office reports a new hire,

@@ -338,7 +338,14 @@ Two runtime checks come with it, both answerable without a key:
   whose subject is another person, the value would still open — under the other key — and an
   erasure of the instance's subject would leave it readable. The writer compares the subject
   the envelope names in the clear with the one the target scope resolves, and parks an
-  incident (`IncidentPersonalOfAnotherSubject`) when they differ.
+  incident (`IncidentPersonalOfAnotherSubject`) when they differ. The comparison is made from
+  both sides, because a copy can arrive before the subject does: a call activity seeds its
+  child with the caller's variables before its input mappings, so a child keeping its subject
+  under another name receives the sealed value first, and an output mapping can hand a value
+  to a root that names nobody yet. The subject's first write into a scope therefore compares
+  itself with the values sealed in that scope and is refused with the same incident when they
+  differ. Only that scope is read: a form filled once per family member names a different
+  person in every iteration, and one iteration's values are not the next one's business.
 - **The data subject cannot move from under a value sealed anywhere in the instance.** The
   check that refuses moving the subject once something is sealed looked only at the root,
   reasoning that every personal value lands there. It does not: a form submitted or a worker
