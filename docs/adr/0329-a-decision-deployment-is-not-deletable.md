@@ -5,6 +5,13 @@
 - **Date:** 2026-09-14
 - **Deciders:** Atlas maintainers
 
+> **As built (2026-10-11).** The route this record prepared for exists:
+> `DELETE /api/v1/decision-deployments/{key}` ([ADR-0336](0336-cleaning-up-the-decision-store.md)), refused with 409 while a
+> definition is pinned to the deployment, and the MCP tool `atlas_delete_decision_deployment`.
+> `api/decisiondelete_guard_test.go`, which asserted the route's absence, was replaced by
+> `api/decisiondelete_internal_test.go`. The title and the text below describe the state
+> before that.
+
 ## Context and problem statement
 
 [ADR-0319](0319-durable-versioned-decision-deployments.md) made a decision a

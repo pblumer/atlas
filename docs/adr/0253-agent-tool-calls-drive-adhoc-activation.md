@@ -248,6 +248,10 @@ incidents; and as a row in the agent-run record ADR-0117 defines (`VTAgentRun`),
 which gains the round number and the ordered calls of each round. The first tells
 an operator what ran; the second tells an auditor why it was chosen.
 
+> **As built (2026-10-11).** Only the first view exists. The agent-run record of
+> ADR-0117 was never built (see that record's implementation status), so a tool call
+> is visible as its activity in the timeline and nowhere else.
+
 ### Governance — the agent can now cause side effects, and that is the point
 
 With the toolbox in the model, an agent-driven ad-hoc can activate a mail send, a

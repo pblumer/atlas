@@ -85,7 +85,7 @@ MIM's supported-connector list, mapped to Atlas Worker Types as of this writing.
 Atlas also has a **MariaDB / MySQL** Worker Type, which MIM has no counterpart for.
 
 These are the first Worker Types with no in-process handler at all: SQL runs only on
-a worker, so a database credential never enters the engine (ADR-0164/0170).
+a worker, so a database credential never enters the engine (ADR-0164/0173).
 
 ### Cloud and web services
 

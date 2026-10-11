@@ -1,7 +1,7 @@
 # ADR-0410: A peer credential carries the reach a membership cannot give it
 
 - **Status:** Accepted
-- **Implementation:** Partial
+- **Implementation:** Landed
 - **Date:** 2026-09-22
 - **Deciders:** Atlas maintainers
 - **Open question:** what the reach is expressed in. Projects are the unit sharing scopes
@@ -10,6 +10,12 @@
   installation, not about Atlas, and nobody here has seen one. If they do not line up, the
   reach needs a unit of its own, and that is a larger change than this record.
 - **Question checked:** 2026-09
+
+> **Implementation status (2026-10-11).** Landed. A token carries its reach
+> (`api/apitokenstore.go`, `api/apitokens.go`, `api/scopes.go`, `api/apitokenscope.go`),
+> covered by `api/reach_internal_test.go` and `api/reach_test.go`. The estate altitude this
+> record named as not built belongs to [ADR-0402](0402-one-estate-several-nodes.md),
+> which has landed. Evidence: [the reconciliation of 2026-10-11](../audits/adr-status-reconciliation-2026-10-11.md).
 
 ## Context and problem statement
 

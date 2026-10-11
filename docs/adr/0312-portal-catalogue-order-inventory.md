@@ -11,6 +11,13 @@
   one place that will is the one nobody has built.
 - **Question checked:** 2026-09
 
+> **Implementation status (2026-10-11).** Still Partial. Reconciliation and adoption
+> ([ADR-0334](0334-reconciliation.md), `api/reconcile*.go`) and the commissioning
+> load ([ADR-0333](0333-inventory-commissioning-load.md),
+> `api/inventoryload*.go`) are built. Two parts of the decision are not: `order.Abandon`
+> exists and is tested, but no route lets a person give up on a failed line, and no deadline
+> on a failed line's incident escalates it. Evidence: [the reconciliation of 2026-10-11](../audits/adr-status-reconciliation-2026-10-11.md).
+
 ## Context and problem statement
 
 Atlas executes provisioning today. A model can create an account in Active Directory

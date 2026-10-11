@@ -1,9 +1,15 @@
 # ADR-0128: Process applications — the project, elevated into a deployable, versioned, portable unit
 
 - **Status:** Accepted
-- **Implementation:** Landed
+- **Implementation:** Partial
 - **Date:** 2026-08-17
 - **Deciders:** Atlas maintainers
+
+> **Implementation status (2026-10-11).** Partial. Capabilities 1 and 2 are built:
+> applications with releases, and deployment targets with promotion
+> ([ADR-0129](0129-remote-deployment-targets.md)). Capability 3, the git source binding, is
+> not: [ADR-0134](0134-git-backed-applications.md) built only the source layout and a tar.gz
+> export and import. Evidence: [the reconciliation of 2026-10-11](../audits/adr-status-reconciliation-2026-10-11.md).
 
 ## Context and problem statement
 

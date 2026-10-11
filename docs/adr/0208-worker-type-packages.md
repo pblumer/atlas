@@ -1,9 +1,18 @@
 # ADR-0208: Worker Type package contract, trust, and distribution
 
 - **Status:** Accepted
-- **Implementation:** Landed
+- **Implementation:** Partial
 - **Date:** 2026-08-28
 - **Deciders:** Atlas maintainers
+
+> **Implementation status (2026-10-11).** Partial. Built (steps 1–3 and 6): the runtime
+> modes and the `WorkerTypeDefinition` view (`api/workertypes.go`), the built-in metadata
+> (`api/builtinworkertypes.go`), `GET /api/v1/worker-types`, and `/configured-workers` with
+> the `/connectors` routes deprecated. Not built: Repository worker-type packages and the
+> `installed` origin (only `built-in` exists), a persisted digest and origin with signature
+> checks, Worker Instances reporting their type id and version, version pinning on configured
+> Workers, and the refusal to uninstall a type in use. Evidence:
+> [the reconciliation of 2026-10-11](../audits/adr-status-reconciliation-2026-10-11.md).
 
 ## Context and problem statement
 

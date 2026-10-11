@@ -5,6 +5,10 @@
 - **Date:** 2026-09-14
 - **Deciders:** Atlas maintainers
 
+> **As built (2026-10-11).** The package below is `dmn`, not `api/dmnlayout`: the layout
+> lives in `dmn/layout.go` (`EnsureDiagram`, `EnsureDiagramReport`, `RegenerateDiagram`), and its
+> HTTP side in `api/dmnlayouthttp.go`.
+
 ## Context and problem statement
 
 A DMN model, like a BPMN one, has two halves: the **semantic** model (decisions,

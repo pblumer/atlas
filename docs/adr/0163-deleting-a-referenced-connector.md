@@ -92,8 +92,9 @@ only state in which deleting is uneventful and is worth saying plainly.
 the ordinary one. If the server refuses, the second names the processes, the running
 counts, the elements, and what will actually happen to them — then forces. It does not
 pre-flight the check itself: the usage on the row can be stale by the time the button is
-pressed, and the server is the one that decides. `deleteConnectorFlow` and
-`connectorUsageHTML` live in `api/web/connectordialog.js` rather than in `app.js`,
+pressed, and the server is the one that decides. `deleteWorkerFlow` and
+`workerUsageHTML` (then `deleteConnectorFlow` and `connectorUsageHTML`) live in
+`api/web/workerdialog.js` (then `connectordialog.js`) rather than in `app.js`,
 because `app.js` boots the whole console on import and anything left in it is only ever
 exercised by hand.
 

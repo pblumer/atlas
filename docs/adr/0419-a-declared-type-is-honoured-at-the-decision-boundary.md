@@ -150,10 +150,9 @@ For **what to do about models already deployed**:
 
 ## Decision outcome
 
-*(Proposed. An earlier draft of this record chose 2A outright; the second measurement
-above withdrew it, because 2A cannot produce a FEEL date and a date is the case the
-record exists for. What follows is the revised reading, and the choice it leaves is
-the one this record now needs answered.)*
+*(An earlier draft of this record chose 2A outright; the second measurement above
+withdrew it, because 2A cannot produce a FEEL date and a date is the case the record
+exists for. What follows is the revised reading and the choice that landed.)*
 
 **2A alone does not reach the goal.** `evalDecision` can convert an ISO string to a
 `time.Time`, and that is a real improvement for an input declared `date and time` — but

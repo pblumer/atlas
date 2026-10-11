@@ -10428,8 +10428,8 @@ async function viewRepository() {
       <button class="btn neutral" id="repo-refresh" title="Reload the repository catalog">Refresh</button>
     </div>
     <p class="muted">Workers, service tasks and scripts the community already built,
-    packaged as element templates. Install one and it lands in your palette ready to
-    configure. Data-only workers install in a click; a script task carries code, so it
+    packaged as element templates. Installing one keeps its template on this server;
+    applying it to a task in the Modeler is not built yet (ADR-0212). Data-only workers install in a click; a script task carries code, so it
     is imported for review. Credentials never travel in a shared package — you connect
     those on your server.</p>
     <div class="ops-toolbar">
@@ -10471,7 +10471,7 @@ async function viewRepository() {
         ? `<button class="btn ghost danger" data-act="uninstall" data-id="${esc(p.id)}" title="Remove this template from your server">Remove</button>`
         : p.carriesCode
           ? `<button class="btn neutral" data-act="install" data-id="${esc(p.id)}" title="Review the code, then install this template">Review &amp; install</button>`
-          : `<button class="btn" data-act="install" data-id="${esc(p.id)}" title="Install this template into your palette">Install</button>`;
+          : `<button class="btn" data-act="install" data-id="${esc(p.id)}" title="Install this template on this server">Install</button>`;
       const installedTag = isInstalled ? '<span class="pill ok"><span class="dot"></span>Installed</span>' : "";
       return `<div class="repo-card card">
         <div class="repo-head">

@@ -38,9 +38,9 @@
 //
 // Two endpoints outside the document answer "what did my run actually do":
 // `GET /__mock/calls` is the journal of served calls, and `GET /__mock/report` is that
-// journal and the operation table in the envelope the Console's Mockups view takes
-// (ADR-0216), so this mock reports into the same place as every
-// other one rather than becoming a fourth place to look.
+// journal and the operation table in the envelope ADR-0216 defines for a single
+// Mockups view, so this mock does not become a fourth place to look. That view is not
+// built yet; until it is, nothing in Atlas collects the report.
 package openapimock
 
 import (

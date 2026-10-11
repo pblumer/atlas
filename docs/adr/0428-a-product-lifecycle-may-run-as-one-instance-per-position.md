@@ -277,7 +277,7 @@ Landed:
 - **Server.** `startReturn` — the orderer's return and a recertification's revoke —
   delivers a per-position line's return through `deliverOrStart`, falling back to the
   deprovision start event when the strand is gone. `POST /api/v1/messages` refuses a
-  message a per-position product delivers (`catalogOwnerOfDelivered`). The shop's open
+  message a per-position product delivers (`catalogOwnerOfName`, `api/triggerroute.go`). The shop's open
   tasks list a strand once.
 - **Surfaces.** The product form offers the form; the MCP save tool declares
   `lifecycleForm`.

@@ -1,7 +1,7 @@
 # The Atlas runtime contract
 
 **Contract version:** 0 (pre-1.0)
-**Applies to:** Atlas 0.6.x
+**Applies to:** Atlas 0.9.x
 **Decided by:** [ADR-0176](adr/0176-standards-boundary-and-runtime-contract.md)
 
 BPMN, DMN and FEEL define what a *model* means. They do not define what happens when you
@@ -31,7 +31,7 @@ standard defines. Concretely:
 | Deployment and versioning | Deploying a model, what a version is, how an instance binds to a definition, application releases and promotion |
 | Instance lifecycle | Creation, termination, cancellation, migration between versions, message correlation |
 | Variables | Scopes, the scope chain, input/output mapping, structured JSON values and their limits |
-| Jobs | Activation, leases, fencing, completion, failure, retries, at-least-once delivery, worker idempotency requirements |
+| Jobs | Activation, leases, fencing, completion, failure, a BPMN error thrown from a job ([ADR-0089](adr/0089-error-events.md)), retries, at-least-once delivery, worker idempotency requirements |
 | User tasks | Assignment, claim, scheduling, forms, completion |
 | Incidents | Creation, inspection, repair, resolution, retry |
 | Queries | Filters, ordering, pagination, continuation |

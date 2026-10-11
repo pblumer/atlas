@@ -1,7 +1,7 @@
 # ADR-0403: The estate graph is derived from the log, never the log from the graph
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Landed
 - **Date:** 2026-09-18
 - **Deciders:** Atlas maintainers
 - **Open question:** whether every runtime property tier T2 wants can be served without
@@ -11,6 +11,12 @@
   wanted property needs a walk of the instance population, the T2/T4 boundary below is
   what has to move, and it is the tier rule that gets re-argued rather than the query.
 - **Question checked:** 2026-09
+
+> **Implementation status (2026-10-11).** Landed. The record decides rules rather than
+> code, and the tree keeps them: the estate graph of
+> [ADR-0402](0402-one-estate-several-nodes.md) is a projection read from state
+> (`api/panorama/mesh.go`), and nothing writes back into the log from it. The rules are held by
+> review, not by a test. Evidence: [the reconciliation of 2026-10-11](../audits/adr-status-reconciliation-2026-10-11.md).
 
 ## Context and problem statement
 

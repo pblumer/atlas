@@ -73,6 +73,10 @@ across replays.
 - **Follow-ups / risks to watch:** Deeply nested structures could grow large;
   variable-size limits are not enforced yet (tracked under Milestone 2).
 
+> **As built (2026-10-11).** Variable-size limits are enforced now: a value past
+> `DefaultMaxVariable` (one megabyte, `engine/budget.go`) is refused with an
+> `IncidentVariableTooLarge` incident ([ADR-0294](0294-a-variable-is-a-record.md)).
+
 ## Detailed design
 
 ### Model layer

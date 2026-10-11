@@ -136,6 +136,10 @@ is not offered inside a project's own scope.
   deleting the application explicitly leaves deployed definitions alone. What this
   record changes is that the store being append-only stops being merely convenient
   and becomes load-bearing.
+
+> **As built (2026-10-11).** A decision deployment is deletable now
+> (`DELETE /api/v1/decision-deployments/{key}`, [ADR-0336](0336-cleaning-up-the-decision-store.md)), and the delete is refused
+> with 409 while a definition is pinned to it — the rule the follow-up below asks for.
 - **Negative:** The preflight now reads run-loop-owned registry state, so the set
   of deployed decision ids is read on the loop and passed in, next to the reference
   records. One more parameter on a function that already takes one.

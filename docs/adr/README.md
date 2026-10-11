@@ -103,14 +103,14 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0015](0015-reuse-feel-engine.md) | Reuse the external FEEL engine behind an `expr` boundary | Accepted | Landed |
 | [0016](0016-mcp-server-over-http-api.md) | Model Context Protocol server as a stdio adapter over the HTTP API | Accepted | Landed |
 | [0017](0017-process-instance-history.md) | Retain finished process instances in a history index | Accepted | Landed |
-| [0018](0018-test-driven-development.md) | Test-driven development as the default workflow | Accepted | Landed |
+| [0018](0018-test-driven-development.md) | Test-driven development as the default workflow | Accepted (amended) | Landed |
 | [0019](0019-durable-deployments.md) | Durable deployments via an on-disk sidecar store | Accepted | Landed |
 | [0020](0020-message-correlation.md) | Message events and correlation | Accepted | Landed |
 | [0021](0021-diagram-drafts.md) | Diagram drafts, separate from deployments | Accepted | Landed |
 | [0022](0022-element-visit-history.md) | Retain a per-element token-visit history for the Operations overlay | Accepted | Landed |
 | [0023](0023-collaborations-and-pools.md) | Collaborations and pools as multi-process deployments | Accepted | Landed |
 | [0024](0024-parallel-gateway-join.md) | Parallel gateway join synchronization | Accepted | Landed |
-| [0025](0025-full-properties-panel.md) | Extend the hand-written properties panel instead of vendoring bpmn-js-properties-panel | Proposed | Partial |
+| [0025](0025-full-properties-panel.md) | Extend the hand-written properties panel instead of vendoring bpmn-js-properties-panel | Proposed (amended) | Partial |
 | [0026](0026-problems-panel-and-versioned-validation.md) | A Problems panel with validation targeted at an engine version | Accepted | Landed |
 | [0027](0027-element-templates.md) | Element templates for pre-configured, reusable elements | Proposed | Partial |
 | [0028](0028-forms-and-the-tasks-app.md) | User tasks, forms, and the Tasks app | Accepted | Landed |
@@ -126,7 +126,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0038](0038-collaboration-message-flow-replay.md) | Collaboration message-flow replay | Accepted | Landed |
 | [0039](0039-dmn-io-variable-mappings.md) | Input/output variable mappings for business rule tasks | Accepted | Landed |
 | [0040](0040-boundary-events.md) | Boundary events — timer and message, interrupting and non-interrupting | Accepted | Landed |
-| [0041](0041-connector-management-and-secret-store.md) | Connector management and the secret store | Accepted | Landed |
+| [0041](0041-connector-management-and-secret-store.md) | Connector management and the secret store | Accepted | Partial |
 | [0042](0042-user-task-assignment-and-claim.md) | User-task runtime assignment and claim/unclaim | Accepted | Landed |
 | [0043](0043-openapi-spec-and-embedded-api-explorer.md) | An OpenAPI spec and an embedded API explorer for the HTTP API | Accepted | Landed |
 | [0044](0044-user-management-and-authentication-boundary.md) | User management and the authentication boundary | Accepted | Landed |
@@ -191,10 +191,10 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0103](0103-compensation.md) | Compensation and compensation handlers | Accepted | Landed |
 | [0104](0104-token-simulation-embedded-subprocesses.md) | Token simulation — entering embedded subprocesses | Accepted | Landed |
 | [0105](0105-per-server-call-activity-target-overrides.md) | Per-server call-activity target overrides | Accepted | Landed |
-| [0106](0106-bmc-remedy-connector.md) | A BMC Remedy connector — server-registered ITSM entry creation | Accepted | Landed |
+| [0106](0106-bmc-remedy-connector.md) | A BMC Remedy connector — server-registered ITSM entry creation | Accepted (amended) | Landed |
 | [0107](0107-backup-and-restore.md) | Backup and restore — a one-file download of the design-time data directory | Accepted | Landed |
 | [0108](0108-bpmn-transactions.md) | BPMN transactions (cancel end event, cancel boundary, transactional compensation) | Accepted | Landed |
-| [0109](0109-full-instance-snapshot.md) | Whole-instance snapshot — a full backup that includes running instances | Accepted | Landed |
+| [0109](0109-full-instance-snapshot.md) | Whole-instance snapshot — a full backup that includes running instances | Accepted (amended) | Landed |
 | [0110](0110-event-based-gateways.md) | Event-based gateways (deferred choice) | Accepted | Landed |
 | [0111](0111-incident-model-completion.md) | Completing the incident model — retry backoff and timer-FEEL failure incidents | Accepted | Landed |
 | [0112](0112-send-tasks.md) | Send tasks | Accepted | Landed |
@@ -202,7 +202,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0114](0114-opensearch-event-exporter.md) | OpenSearch event exporter — a WAL-tailing sink, off the hot path | Accepted | Landed |
 | [0115](0115-history-retention-hard-delete.md) | History retention — an export-gated, age-based hard delete of finished instances | Accepted | Landed |
 | [0116](0116-terminate-end-events.md) | Terminate end events | Accepted | Landed |
-| [0117](0117-ai-agent-task.md) | An AI agent task — an LLM agent as a managed connector on the job path | Accepted | Landed |
+| [0117](0117-ai-agent-task.md) | An AI agent task — an LLM agent as a managed connector on the job path | Accepted | Partial |
 | [0118](0118-web-scraping-connector.md) | A web-scraping connector — model-authored URL + CSS selector extraction | Accepted | Landed |
 | [0119](0119-deactivate-deployed-process.md) | Deactivating a deployed process | Accepted | Landed |
 | [0120](0120-mockup-service-task.md) | Mockup (engine-simulated) service tasks | Accepted | Landed |
@@ -213,18 +213,18 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0125](0125-escalation-events.md) | Escalation events (non-interrupting, propagating throw/catch) | Accepted | Landed |
 | [0126](0126-self-service-registration-link.md) | Self-service registration link on the login screen | Accepted | Landed |
 | [0127](0127-layered-layout-pipeline-and-invariants.md) | A layered layout pipeline and executable layout invariants | Accepted (amended) | Landed |
-| [0128](0128-process-applications.md) | Process applications — the project, elevated into a deployable, versioned, portable unit | Accepted | Landed |
+| [0128](0128-process-applications.md) | Process applications — the project, elevated into a deployable, versioned, portable unit | Accepted | Partial |
 | [0129](0129-remote-deployment-targets.md) | Remote deployment targets — publish an application to another Atlas server | Accepted | Landed |
 | [0130](0130-deprecating-a-process-version.md) | Deprecating a process version — a drain state distinct from pausing | Proposed | Not started |
 | [0131](0131-engine-recovery-checkpoints-and-wal-compaction.md) | Engine recovery checkpoints and WAL compaction | Accepted | Landed |
 | [0132](0132-link-events.md) | Link events (intra-scope goto — a compile-time synthetic flow) | Accepted | Landed |
 | [0133](0133-standard-loop-activities.md) | Standard loop activities (the ↻ marker) | Accepted (amended) | Landed |
-| [0134](0134-git-backed-applications.md) | Git-backed applications — a repository as an application's source of truth | Accepted | Landed |
+| [0134](0134-git-backed-applications.md) | Git-backed applications — a repository as an application's source of truth | Accepted | Partial |
 | [0135](0135-retries-as-a-task-property.md) | Retries as a property of every job-backed task | Accepted | Landed |
 | [0136](0136-terminated-tokens-in-the-replay.md) | Terminated tokens in the step-by-step replay | Accepted | Landed |
 | [0137](0137-conditional-events.md) | Conditional events (data-triggered catch/boundary) | Accepted | Landed |
 | [0138](0138-adhoc-subprocesses.md) | Ad-hoc subprocesses (on-demand, unordered contained activities) | Accepted | Landed |
-| [0139](0139-csv-to-json-connector.md) | A first-class "CSV to JSON" connector kind with model-authored layout | Accepted | Landed |
+| [0139](0139-csv-to-json-connector.md) | A first-class "CSV to JSON" connector kind with model-authored layout | Accepted (amended) | Landed |
 | [0140](0140-live-collaborative-modeling-sessions.md) | Live collaborative modeling sessions — real-time co-editing of drafts by people and AI agents | Accepted | Landed |
 | [0141](0141-sharepoint-connector.md) | A SharePoint connector (create list item, via Microsoft Graph) | Accepted | Landed |
 | [0142](0142-prometheus-metrics.md) | Operational metrics over a Prometheus endpoint | Accepted | Landed |
@@ -232,14 +232,14 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0144](0144-per-definition-history-ttl.md) | Per-definition history TTL — retention the model declares | Accepted | Landed |
 | [0145](0145-developer-view-for-code-fields.md) | A Developer View for code-bearing fields | Accepted | Landed |
 | [0146](0146-history-expiry-due-date-index.md) | History expiry as a due-date index — retention that scales with what is due | Accepted | Landed |
-| [0147](0147-splitting-the-api-server-object.md) | Splitting the api Server object, without weakening the single writer | Accepted | Landed |
+| [0147](0147-splitting-the-api-server-object.md) | Splitting the api Server object, without weakening the single writer | Accepted (amended) | Landed |
 | [0148](0148-org-wide-brand-logo.md) | Org-wide brand logo | Accepted | Landed |
 | [0149](0149-bounded-connector-call-budget.md) | A bounded outbound-call budget for every connector | Accepted (amended) | Landed |
 | [0150](0150-preview-mail-provider-and-visible-incidents.md) | A preview mail provider, and incidents on the live diagram | Accepted (amended) | Landed |
 | [0151](0151-incidents-beyond-the-live-diagram.md) | Incidents beyond the live diagram — the replay, the lists, and one shared action | Accepted | Landed |
 | [0152](0152-rest-connector-oauth2.md) | OAuth2 client-credentials for the REST connector | Accepted | Landed |
 | [0153](0153-scim-connector.md) | SCIM 2.0 provisioning connector | Accepted | Landed |
-| [0154](0154-ldap-connector.md) | Generic LDAP connector | Accepted | Landed |
+| [0154](0154-ldap-connector.md) | Generic LDAP connector | Accepted (amended) | Landed |
 | [0155](0155-secret-shape-hints.md) | The Secrets panel says what a value has to be | Accepted | Landed |
 | [0156](0156-in-process-vs-out-of-process-service-tasks.md) | In-process vs. out-of-process service tasks — where a step's work runs, and what we recommend | Superseded by ADR-0164 | Superseded |
 | [0157](0157-worker-processes-supervision-and-console.md) | Every side-effecting task on a worker process — `atlas worker`, optional supervision, and a Workers console | Accepted | Landed |
@@ -251,13 +251,13 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0163](0163-deleting-a-referenced-connector.md) | Deleting a connector deployed models still reference — and keeping a table inside its card | Accepted | Landed |
 | [0164](0164-no-in-process-service-tasks.md) | No in-process service tasks — the core loop must never be able to get stuck | Accepted | Landed |
 | [0165](0165-soap-connector.md) | SOAP / Web Services (WSDL) connector | Accepted | Landed |
-| [0166](0166-active-directory-connector.md) | Active Directory connector | Accepted | Landed |
+| [0166](0166-active-directory-connector.md) | Active Directory connector | Accepted (amended) | Landed |
 | [0167](0167-released-connectors-ship-in-the-marketplace.md) | A released connector ships in the marketplace | Accepted | Partial |
 | [0168](0168-connector-work-on-a-worker.md) | Moving a connector onto a worker — where the task detail travels, and where the credential lives | Accepted | Landed |
 | [0169](0169-incident-repair-forms.md) | A form on the incident — repairing an instance with named fields instead of raw JSON | Accepted | Landed |
-| [0170](0170-adr-numbers-assigned-at-merge.md) | ADR numbers are assigned at merge, not on a branch | Accepted | Landed |
+| [0170](0170-adr-numbers-assigned-at-merge.md) | ADR numbers are assigned at merge, not on a branch | Accepted (amended) | Landed |
 | [0171](0171-directory-file-connector.md) | A directory-file connector — LDIF and DSML | Accepted | Landed |
-| [0172](0172-entra-id-connector.md) | A Microsoft Entra ID connector | Accepted | Landed |
+| [0172](0172-entra-id-connector.md) | A Microsoft Entra ID connector | Accepted (amended) | Landed |
 | [0173](0173-generic-sql-connector.md) | Three SQL connectors, and the first kinds born on a worker | Accepted | Landed |
 | [0174](0174-connector-payloads-are-the-input-mapping.md) | A connector task's input mappings are its outbound payload | Accepted | Landed |
 | [0175](0175-replicated-partition-cells.md) | Replicated partition cells for horizontal scale-out | Proposed | Not started |
@@ -292,21 +292,21 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0204](0204-hosted-apps-on-an-isolated-origin.md) | Hosted apps — user HTML/JS served from an isolated origin | Proposed | Not started |
 | [0205](0205-connector-ownership-and-event-delivery.md) | Who owns a connector, and who may use the events it brings in | Accepted | Landed |
 | [0206](0206-ad-as-a-console-connector.md) | Active Directory is a connector you configure, not one you write into a model | Accepted | Landed |
-| [0207](0207-worker-type-packaging.md) | Package Worker Types as signed external runtime artifacts | Accepted | Landed |
-| [0208](0208-worker-type-packages.md) | Worker Type package contract, trust, and distribution | Accepted | Landed |
+| [0207](0207-worker-type-packaging.md) | Package Worker Types as signed external runtime artifacts | Accepted | Partial |
+| [0208](0208-worker-type-packages.md) | Worker Type package contract, trust, and distribution | Accepted | Partial |
 | [0209](0209-roles-per-endpoint-group.md) | Roles per endpoint group | Accepted | Landed |
 | [0210](0210-federated-authentication.md) | Federated authentication | Accepted | Landed |
-| [0211](0211-panorama-derived-landscape-mesh.md) | Panorama's derived landscape mesh and notation projections | Accepted | Landed |
+| [0211](0211-panorama-derived-landscape-mesh.md) | Panorama's derived landscape mesh and notation projections | Accepted (amended) | Landed |
 | [0212](0212-element-template-applier.md) | The element-template applier, and what a template binding means in Atlas | Proposed | Not started |
 | [0213](0213-ad-mock-directory-in-the-console.md) | The mock Active Directory is visible in the Console | Accepted | Landed |
 | [0214](0214-jira-inbound-issue-watch.md) | Jira as an inbound event source — a polled issue watch, deduplicated per issue | Accepted | Landed |
 | [0215](0215-modeler-playground.md) | The Modeler Playground — batch simulation and analysis of a draft | Accepted | Landed |
-| [0216](0216-mockups-are-one-view.md) | Mockups are one view, not one per kind | Accepted | Landed |
-| [0217](0217-openapi-mock-server.md) | A mock REST API served from an OpenAPI document | Accepted | Landed |
+| [0216](0216-mockups-are-one-view.md) | Mockups are one view, not one per kind | Accepted | Not started |
+| [0217](0217-openapi-mock-server.md) | A mock REST API served from an OpenAPI document | Accepted (amended) | Landed |
 | [0218](0218-jira-default-offload.md) | Jira runs on a worker by default | Accepted | Landed |
 | [0219](0219-variable-write-attribution.md) | Variable write attribution | Accepted | Landed |
 | [0220](0220-checking-a-database-connector.md) | The Console may dial a database, and the engine still links no driver | Accepted | Landed |
-| [0221](0221-sql-mock-mode.md) | A database task runs against seeded answers, not against a SQL engine | Accepted | Landed |
+| [0221](0221-sql-mock-mode.md) | A database task runs against seeded answers, not against a SQL engine | Accepted (amended) | Landed |
 | [0222](0222-artifact-id-renames.md) | An artifact's id is its identity — renaming moves it, collisions are refused | Accepted | Landed |
 | [0223](0223-jira-account-lookup.md) | Jira account lookup | Accepted | Landed |
 | [0224](0224-sql-mock-journal.md) | A mockup run is visible, and it carries what the process bound | Accepted | Landed |
@@ -336,7 +336,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0248](0248-search-terms-are-literal.md) | A search term is literal, and widening is asked for | Accepted | Landed |
 | [0249](0249-overlay-cancelled-tokens.md) | Cancelled tokens on the runtime overlay, and a deferred choice drawn once | Accepted | Landed |
 | [0250](0250-documentation-is-markdown.md) | Documentation prose is Markdown, rendered by one closed renderer | Accepted | Landed |
-| [0251](0251-adjust-a-deployed-diagram.md) | Adjusting a deployed definition's diagram without redeploying it | Accepted | Landed |
+| [0251](0251-adjust-a-deployed-diagram.md) | Adjusting a deployed definition's diagram without redeploying it | Accepted (amended) | Landed |
 | [0252](0252-runtime-badges-clear-of-labels.md) | Runtime badges hang outside the shape, clear of its caption | Accepted | Landed |
 | [0253](0253-agent-tool-calls-drive-adhoc-activation.md) | Agent tool calls drive ad-hoc activation — the toolbox is the model | Accepted | Landed |
 | [0254](0254-agent-rounds-on-a-worker.md) | An agent round on a worker — the toolbox travels out, the tool calls travel back | Accepted | Landed |
@@ -347,7 +347,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0259](0259-data-object-lifecycle.md) | The data object lifecycle — what the BPMN data state resolves against | Accepted | Landed |
 | [0260](0260-ai-form-generation.md) | A form is generated at design time, by the Worker an operator already configured | Accepted | Landed |
 | [0261](0261-instances-on-an-element.md) | The diagram is the query — filtering instances by the element they sit on | Accepted | Landed |
-| [0262](0262-discord-inbound-watch.md) | Discord as an inbound event source — a channel is a log, and a snowflake is its sequence | Accepted | Landed |
+| [0262](0262-discord-inbound-watch.md) | Discord as an inbound event source — a channel is a log, and a snowflake is its sequence | Accepted (amended) | Landed |
 | [0263](0263-form-runtime-brand-theming.md) | The brand palette reaches the form runtime | Accepted | Landed |
 | [0264](0264-row-watch-mark-per-watch.md) | A row watch's idempotency mark is its own, and the cursor is why that needs no migration | Accepted | Landed |
 | [0265](0265-login-off-the-run-loop.md) | Signing in does not wait for the run loop | Accepted | Landed |
@@ -388,7 +388,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0300](0300-openapi-element-templates.md) | An OpenAPI document as element templates | Accepted | Landed |
 | [0301](0301-derive-the-model-from-the-processes.md) | Derive the information model from the processes that use it | Accepted | Landed |
 | [0302](0302-withdrawing-commit-attribution.md) | The repository stops rewriting who authored an agent's commit | Accepted | Landed |
-| [0303](0303-script-sandbox-isolation.md) | Isolate general-purpose script tasks inside a restrictive OS sandbox | Accepted | Partial |
+| [0303](0303-script-sandbox-isolation.md) | Isolate general-purpose script tasks inside a restrictive OS sandbox | Accepted | Landed |
 | [0304](0304-a-capability-says-when-it-was-last-confirmed.md) | A capability record says when somebody last confirmed it | Accepted | Landed |
 | [0305](0305-business-capabilities-and-value-streams.md) | Business capabilities and value streams as design-time records | Accepted | Partial |
 | [0306](0306-a-lifecycle-may-take-its-states-from-an-enumeration.md) | A lifecycle may take its states from an «enumeration» | Accepted | Landed |
@@ -396,12 +396,12 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0308](0308-panorama-binds-the-capability-register.md) | Panorama binds the capability register | Accepted | Landed |
 | [0309](0309-measuring-a-capability.md) | Measuring a capability | Accepted | Landed |
 | [0310](0310-read-the-difference-between-what-is-built-and-what-is-planned.md) | Read the difference between what is built and what is planned | Accepted | Landed |
-| [0311](0311-portal-approval-page.md) | The approver decides on a page of their own, in the customer's colours | Accepted | Partial |
+| [0311](0311-portal-approval-page.md) | The approver decides on a page of their own, in the customer's colours | Accepted | Landed |
 | [0312](0312-portal-catalogue-order-inventory.md) | Catalogue, order, inventory — three models, not one | Accepted | Partial |
-| [0313](0313-portal-language-follows-the-browser.md) | The portal follows the browser's language; the console still does not | Accepted | Not started |
+| [0313](0313-portal-language-follows-the-browser.md) | The portal follows the browser's language; the console still does not | Accepted | Partial |
 | [0314](0314-portal-personal-data.md) | Personal data in the portal — a reference by default, a destroyable key for the rest | Accepted (amended) | Partial |
 | [0315](0315-portal-roles-and-responsibilities.md) | Who runs the portal — a role for the operation, a catalogue for the object | Accepted | Partial |
-| [0316](0316-portal-theme-per-catalogue.md) | A theme belongs to a catalogue, the sign-in screen belongs to the operator | Accepted | Partial |
+| [0316](0316-portal-theme-per-catalogue.md) | A theme belongs to a catalogue, the sign-in screen belongs to the operator | Accepted | Landed |
 | [0317](0317-task-commands-are-an-object-question.md) | Acting on a user task is an object question | Accepted | Landed |
 | [0318](0318-user-task-assignment-expressions.md) | A user task's assignment may be an expression | Accepted | Landed |
 | [0319](0319-durable-versioned-decision-deployments.md) | Durable, versioned decision deployments — and `latest` resolved when a process is deployed | Accepted | Landed |
@@ -418,9 +418,9 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0330](0330-a-model-with-no-reference-stays-findable.md) | A model with no reference stays findable | Accepted | Landed |
 | [0331](0331-deleting-a-dmn-reference-says-what-it-breaks.md) | Deleting a DMN reference says what it would break | Accepted | Landed |
 | [0332](0332-entra-directory-provisioning.md) | Accounts and groups are pulled from Entra by delta query, and the first run writes nothing | Accepted | Landed |
-| [0333](0333-inventory-commissioning-load.md) | The inventory is taken before it is enforced, and what it records says Atlas did not grant it | Accepted | Partial |
+| [0333](0333-inventory-commissioning-load.md) | The inventory is taken before it is enforced, and what it records says Atlas did not grant it | Accepted | Landed |
 | [0334](0334-reconciliation.md) | Reconciliation reads absence as a finding, and only inside a scope somebody promised was complete | Accepted | Landed |
-| [0335](0335-starting-an-instance-returns-its-key.md) | Starting an instance returns its key | Proposed | Not started |
+| [0335](0335-starting-an-instance-returns-its-key.md) | Starting an instance returns its key | Accepted | Partial |
 | [0336](0336-cleaning-up-the-decision-store.md) | Cleaning up the decision store | Accepted | Landed |
 | [0337](0337-incident-floods.md) | An incident flood is read by cause and resolved in bulk | Accepted | Landed |
 | [0338](0338-where-a-business-object-is-used.md) | Where a business object is used | Accepted | Landed |
@@ -445,7 +445,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0357](0357-a-portable-backup-does-not-overwrite-another-installations-identity.md) | A portable backup does not overwrite another installation's identity | Accepted | Landed |
 | [0358](0358-order-line-configuration.md) | A product names one Atlas form, and the order line carries the answers | Accepted | Landed |
 | [0359](0359-amending-an-order-line.md) | A position can be withdrawn on its own and its details corrected; what is held is never changed in place | Accepted | Landed |
-| [0360](0360-product-category.md) | A category is a heading a product writes on itself, not a thing the catalogue owns | Accepted | Landed |
+| [0360](0360-product-category.md) | A category is a heading a product writes on itself, not a thing the catalogue owns | Accepted (amended) | Landed |
 | [0361](0361-product-price.md) | A price is a sentence the catalogue writes, frozen like a rule and computed by nothing | Accepted | Landed |
 | [0362](0362-collective-approval.md) | One decision covers a request; the engine still completes one task per line | Accepted | Landed |
 | [0363](0363-the-drawing-says-which-members-are-used.md) | The drawing says which members are used | Accepted | Landed |
@@ -468,12 +468,12 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0380](0380-a-commitment-is-checked-against-what-the-process-does.md) | A commitment is checked against what the process actually does | Proposed | Not started |
 | [0381](0381-a-problem-aggregates-incidents.md) | A problem is an aggregation over incidents, not a BPMN element | Proposed | Not started |
 | [0382](0382-whole-store-reads-leave-the-writer.md) | Whole-store reads leave the writer, and the store is sized for what it holds | Accepted | Landed |
-| [0383](0383-portal-level-names.md) | A position's level is read from the graph once, and a root with no parts is not a bundle | Accepted | Landed |
+| [0383](0383-portal-level-names.md) | A position's level is read from the graph once, and a root with no parts is not a bundle | Accepted (amended) | Landed |
 | [0384](0384-order-position-key.md) | A position is a product and the shape of it, and it says so in its own key | Accepted | Landed |
 | [0385](0385-a-decision-is-addressed-by-both-of-its-names.md) | A decision is addressed by both of its names | Accepted | Landed |
 | [0386](0386-a-decision-result-keeps-its-declared-type.md) | A decision result keeps the type the model declares for it | Accepted | Landed |
 | [0387](0387-the-catalogue-against-the-standards-boundary.md) | The catalogue keeps its own model, and answers to TMF620 at the boundary | Proposed | Not started |
-| [0388](0388-a-call-that-can-only-be-null-is-refused-at-deploy.md) | A call that can only be null is refused at deploy | Accepted | Landed |
+| [0388](0388-a-call-that-can-only-be-null-is-refused-at-deploy.md) | A call that can only be null is refused at deploy | Accepted (amended) | Landed |
 | [0389](0389-forked-instance-migration.md) | Forked instance migration | Accepted | Landed |
 | [0390](0390-position-progress.md) | The orderer is told where their position stands, from a route of their own | Accepted | Landed |
 | [0391](0391-product-picture.md) | A product is shown, and its picture is not part of what was promised | Accepted | Landed |
@@ -481,24 +481,24 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0393](0393-a-rule-added-later-is-a-gate-on-deploy.md) | A rule the compiler gains later is a gate on deploy, whatever stage it lives in | Accepted | Landed |
 | [0394](0394-approval-in-the-inbox.md) | An approval is read and decided where the work already is | Accepted | Landed |
 | [0395](0395-product-construction-kit.md) | A product's structure is assembled per product, not related pairwise | Accepted | Landed |
-| [0396](0396-catalogue-on-the-starmap.md) | The service catalogue is drawn on the starmap, as derived fact | Accepted | Landed |
+| [0396](0396-catalogue-on-the-starmap.md) | The service catalogue is drawn on the starmap, as derived fact | Accepted (amended) | Landed |
 | [0397](0397-enforce-the-orderable-window.md) | The orderable window is enforced when an order is placed | Accepted | Landed |
 | [0398](0398-a-business-rule-task-can-call-a-decision-service.md) | A business rule task can call a decision service | Accepted | Landed |
 | [0399](0399-portal-carries-its-own-sign-in.md) | The service portal carries its own sign-in | Accepted | Landed |
 | [0400](0400-an-edge-that-was-taken-is-not-an-edge-that-was-declared.md) | An edge that was taken is not an edge that was declared | Accepted | Partial |
 | [0401](0401-graph-identity-across-several-logs.md) | What a node is called when there is more than one log | Accepted | Partial |
 | [0402](0402-one-estate-several-nodes.md) | One estate, several nodes — a starmap stitched from subgraphs | Accepted (amended) | Landed |
-| [0403](0403-the-estate-graph-is-derived-from-the-log.md) | The estate graph is derived from the log, never the log from the graph | Accepted | Not started |
+| [0403](0403-the-estate-graph-is-derived-from-the-log.md) | The estate graph is derived from the log, never the log from the graph | Accepted | Landed |
 | [0404](0404-the-whole-graph-can-be-walked.md) | The whole graph can be walked, in a projection with a stated scope | Accepted | Partial |
 | [0405](0405-a-decision-is-shown-rather-than-described.md) | A decision is shown, not described | Accepted | Landed |
 | [0406](0406-decision-service-is-drawn-around-its-members.md) | A decision service is drawn, and drawn around its members | Accepted | Landed |
 | [0407](0407-requirements-as-design-time-records.md) | Requirements as design-time records, attached by a declared edge | Proposed | Not started |
 | [0408](0408-portal-shows-no-process-links-per-position.md) | The portal's order rows carry one link into a process, not three | Accepted | Landed |
-| [0409](0409-the-archive-substrate-waits-its-schema-does-not.md) | The archive substrate waits, its schema does not | Proposed | Partial |
-| [0410](0410-a-peer-credential-carries-the-reach-a-membership-cannot-give-it.md) | A peer credential carries the reach a membership cannot give it | Accepted | Partial |
+| [0409](0409-the-archive-substrate-waits-its-schema-does-not.md) | The archive substrate waits, its schema does not | Accepted | Landed |
+| [0410](0410-a-peer-credential-carries-the-reach-a-membership-cannot-give-it.md) | A peer credential carries the reach a membership cannot give it | Accepted | Landed |
 | [0411](0411-system-processes-call-atlas-directly.md) | The shipped system processes call Atlas as REST connector tasks, told their own address | Accepted | Landed |
-| [0412](0412-translatable-catalogue-headings.md) | A catalogue heading is a key that groups and a wording per language that shows | Accepted | Landed |
-| [0413](0413-a-language-tag-is-checked-where-it-is-written.md) | A language tag is checked where it is written, and nowhere else | Accepted | Landed |
+| [0412](0412-translatable-catalogue-headings.md) | A catalogue heading is a key that groups and a wording per language that shows | Accepted (amended) | Landed |
+| [0413](0413-a-language-tag-is-checked-where-it-is-written.md) | A language tag is checked where it is written, and nowhere else | Accepted (amended) | Landed |
 | [0414](0414-a-missing-translation-is-reported-not-refused.md) | A missing translation is reported, not refused | Accepted | Landed |
 | [0415](0415-the-portal-offers-the-catalogues-languages.md) | The portal offers the languages its catalogue is kept in | Accepted | Landed |
 | [0416](0416-the-shop-shows-an-orders-open-tasks.md) | The shop shows an order's open tasks, and the order records the instances that work it | Accepted | Landed |
@@ -510,11 +510,11 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0422](0422-who-decided-is-recorded.md) | Who decided is recorded, on the task, the order and the right | Accepted | Landed |
 | [0423](0423-a-business-rule-task-chooses-its-decision-version.md) | A business rule task follows the newest decision when it runs, or the version it names | Accepted | Landed |
 | [0424](0424-a-playground-rule-can-demand-the-cases-it-speaks-about.md) | A Playground rule can demand the cases it speaks about | Proposed | Not started |
-| [0425](0425-a-product-lifecycle-is-one-process-with-message-triggers.md) | A product's lifecycle is one process, and each operation is a message start it is triggered at | Accepted | Partial |
+| [0425](0425-a-product-lifecycle-is-one-process-with-message-triggers.md) | A product's lifecycle is one process, and each operation is a message start it is triggered at | Accepted | Landed |
 | [0426](0426-an-untriggered-create-never-seeds-several-start-events.md) | An untriggered create never seeds several start events | Accepted | Landed |
 | [0427](0427-converting-a-product-to-a-lifecycle-process.md) | Converting a product to a lifecycle process keeps the old processes alive until nothing needs them | Accepted | Landed |
-| [0428](0428-a-product-lifecycle-may-run-as-one-instance-per-position.md) | A product lifecycle may run as one instance per position, and its later operations are delivered to that instance | Accepted | Landed |
-| [0429](0429-product-actions-are-commands-with-published-outcomes.md) | A product declares its actions, each a command whose outcome is a fact published beyond Atlas | Accepted | Partial |
+| [0428](0428-a-product-lifecycle-may-run-as-one-instance-per-position.md) | A product lifecycle may run as one instance per position, and its later operations are delivered to that instance | Accepted (amended) | Landed |
+| [0429](0429-product-actions-are-commands-with-published-outcomes.md) | A product declares its actions, each a command whose outcome is a fact published beyond Atlas | Accepted (amended) | Partial |
 | [0430](0430-the-event-feed-has-its-own-role-and-token-scope.md) | The event feed has its own role and its own token scope | Accepted | Landed |
 | [0431](0431-system-processes-announce-their-facts-as-signals.md) | A system process announces its facts as signals | Accepted | Landed |
 | [0432](0432-the-event-feed-is-narrowed-by-the-catalogue-that-maintains-the-product.md) | The event feed is narrowed by the catalogue that maintains the product | Accepted | Landed |

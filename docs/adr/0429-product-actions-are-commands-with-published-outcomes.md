@@ -694,6 +694,12 @@ other rule the compiler gains later is closed (ADR-0177, ADR-0393):
 This part of the record is built, as are the inbound-watch slice of §6 and slice A of §10
 (the actions on the product, §1); the rest is not, which is why the record is `Partial`.
 
+*As built (2026-10-11): every slice of [the plan](../planning/0429-product-actions-plan.md) has
+landed since — A to E and the feed's access and delivery (ADR-0430, ADR-0432, ADR-0433). What
+keeps the record `Partial` is the three decisions of §10 no slice has taken up yet: an operator
+action for every position (decision 3), a suspended entitlement state (decision 2), and the
+run-loop measurement (decision 9).*
+
 ### 10. Decided at acceptance (amended 2026-10-01)
 
 The maintainers accepted this record with the points it left open decided as follows.

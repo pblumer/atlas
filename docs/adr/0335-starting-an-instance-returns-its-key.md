@@ -1,7 +1,7 @@
 # ADR-0335: Starting an instance returns its key
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted (2026-10-11: the chosen option shipped with ADR-0416; see the implementation status)
+- **Implementation:** Partial
 - **Date:** 2026-09-15
 - **Deciders:** Atlas maintainers
 - **Open question:** How often two callers start the same definition inside one batch is
@@ -10,6 +10,15 @@
   is work for nothing. Nothing in the engine counts it, and the demo apps that would hit it
   first have one user at a time.
 - **Question checked:** 2026-09
+
+> **Implementation status (2026-10-11).** Partial. The core shipped with
+> [ADR-0416](0416-the-shop-shows-an-orders-open-tasks.md): `Command.Created`, read only after the
+> batch committed, so `POST /api/v1/processes/{key}/instances` answers with `instanceKey`
+> (`api/startinstance.go`, `engine/createreporting_test.go`). The key is written where it is
+> minted rather than on the post-fsync seam this record describes; the guarantee is the same,
+> because it is read only after `RunUntilIdle` returned. Not built: `instanceKey` on the CSV
+> start (`api/csvupload.go`), and the four hosted apps under `api/web` that still find their
+> instance by comparing listings. Evidence: [the reconciliation of 2026-10-11](../audits/adr-status-reconciliation-2026-10-11.md).
 
 ## Context and problem statement
 

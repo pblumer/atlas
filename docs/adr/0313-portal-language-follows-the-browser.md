@@ -1,7 +1,7 @@
 # ADR-0313: The portal follows the browser's language; the console still does not
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-09-11
 - **Deciders:** Atlas maintainers
 - **Open question:** Whether refusing to publish a catalogue with an untranslated
@@ -10,6 +10,12 @@
   change. No catalogue has been maintained under it, so whether it produces translated
   catalogues or unpublished ones is not established.
 - **Question checked:** 2026-09
+
+> **Implementation status (2026-10-11).** Partial. Built: the portal follows the browser's
+> language, narrowed to the catalogue's languages, with the completeness test
+> (`api/web/shop.js`, `api/portal_page_internal_test.go`). Not built: the language stored on
+> the account — the choice is kept in the browser's local storage — and the fallback for a
+> missing key, which still renders the key. Evidence: [the reconciliation of 2026-10-11](../audits/adr-status-reconciliation-2026-10-11.md).
 
 ## Context and problem statement
 

@@ -27,7 +27,7 @@ is guarded by `TestEveryDefaultSupervisedWorkerOnlyKindCanBeServed`: a kind Atla
 supervises must be a managed kind, marked worker-only, **and provisioned by the engine** —
 otherwise the default would run a worker with nothing to serve, forever. The agent kind
 is none of those, so it cannot be defaulted, and every installation that wants an agent
-has to know to pass `--supervise-connectors agent`.
+has to know to pass `--supervise-connector agent`.
 
 The question this record answers is not *whether* an agent model becomes a Console
 Worker — the argument above is the same one every kind before it made. It is **what an
@@ -56,7 +56,7 @@ has a part that is neither an endpoint, nor a credential, nor derivable from eit
 
 ## Considered options
 
-1. **Leave it in the environment.** No record, no Console entry; `--supervise-connectors
+1. **Leave it in the environment.** No record, no Console entry; `--supervise-connector
    agent` and `ATLAS_AGENT_*` stay the only way.
 2. **A managed kind with the model in the vault bundle**, as Entra puts three values
    behind one `credentialsRef`.

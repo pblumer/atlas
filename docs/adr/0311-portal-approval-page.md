@@ -1,7 +1,7 @@
 # ADR-0311: The approver decides on a page of their own, in the customer's colours
 
 - **Status:** Accepted (its page half is withdrawn — see the amendment below)
-- **Implementation:** Partial
+- **Implementation:** Landed
 - **Date:** 2026-09-11
 - **Deciders:** Atlas maintainers
 - **Open question:** Whether an approver should be able to ask a question back — "what
@@ -10,6 +10,13 @@
   into a rejection the orderer has to re-place. A third outcome is a change to the
   approval models and to the order's line statuses, not to this page.
 - **Question checked:** 2026-09
+
+> **Implementation status (2026-10-11).** Landed. Everything not withdrawn is built: the
+> joined approvals list and its mark route (`api/approvals.go`), deciding a request by
+> completing its task, and the notification through the `genehmigung-*.bpmn` system models.
+> The page itself was replaced by [ADR-0394](0394-approval-in-the-inbox.md). The open question
+> and naming the product in the mail remain follow-ups. Evidence:
+> [the reconciliation of 2026-10-11](../audits/adr-status-reconciliation-2026-10-11.md).
 
 ## Context and problem statement
 

@@ -136,6 +136,11 @@ extra attribute and buy the correct MIME message.
 Still open from the original follow-up list: attachments, a per-send connection
 timeout, and TLS policy options.
 
+> **As built (2026-10-11).** Native providers exist beside SMTP (`connector/mail/gmail.go`,
+> `graph.go`), a send is bounded by the connector call budget ([ADR-0149](0149-bounded-connector-call-budget.md)), and
+> implicit TLS is supported ([ADR-0150](0150-preview-mail-provider-and-visible-incidents.md)). Still open: attachments and certificate
+> pinning.
+
 ## Pros and cons of the options
 
 ### Option A — SMTP only

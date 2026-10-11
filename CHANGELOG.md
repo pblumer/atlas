@@ -121,6 +121,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The records and the docs say what is built, and no more.** Seven decision records marked
+  `Landed` were not: the agent task's run record and limits (ADR-0117), git-backed
+  applications (ADR-0128, ADR-0134), Worker Type packaging (ADR-0207, ADR-0208), the single
+  Mockups view (ADR-0216) and the secret backends beyond the vault and the environment
+  (ADR-0041). They now read `Partial`, or `Not started` for the Mockups view, each with a
+  dated note naming what is built and what is not. Ten records that were further along than
+  they said moved up. The README no longer calls process applications git-backed, and the
+  Repository view no longer says an installed template lands in the palette — it is kept on
+  the server, and applying it is not built yet. The evidence for every change is in
+  `docs/audits/adr-status-reconciliation-2026-10-11.md`.
+
 - **The account order example's widget sends the personnel number.** The account order
   example declares first and last name personal data and enciphers them under the key of
   the `personalnummer`, but its embeddable widget still posted only the names, so every

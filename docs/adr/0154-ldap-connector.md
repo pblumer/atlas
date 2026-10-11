@@ -1,8 +1,8 @@
 # ADR-0154: Generic LDAP connector
 
 - **Status:** Accepted (amended 2026-08-21 — paging, per-value modify, a
-- **Implementation:** Landed
   client-certificate bind and connection pooling; see the amendment note below)
+- **Implementation:** Landed
 
 > **Amendment (2026-08-21): hardening.** Four of the follow-ups below are done, and
 > two of them change the shape of what the connector does rather than only adding to
@@ -158,6 +158,12 @@ Concretely:
 - **Follow-ups / risks to watch:** connection pooling / reuse; paged results and a
   sync/delta cookie; per-value modify operations; client-certificate (mTLS) bind;
   a Modeler palette entry for the extension.
+
+> **As built (2026-10-11).** These consequences predate the amendment at the top of this
+> record. Pooling (`connector/ldap/pool.go`), paged search, per-value modify and the
+> client-certificate bind have landed, and the Modeler offers the extension. Of the delta
+> cookie, the Active Directory half is built (DirSync, `connector/ad/client.go`); RFC 4533
+> content sync is not.
 
 ## Pros and cons of the options
 
