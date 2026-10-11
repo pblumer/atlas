@@ -252,6 +252,16 @@ func TestRecordRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name:   "a public start's process instance carries the hash of its pass",
+			vt:     VTProcessInstance,
+			intent: IntentActivated,
+			value: &ProcessInstanceValue{
+				ProcessDefKey:  NewKey(3, 2),
+				CreatedAt:      1_700_000_000_000_000_000,
+				PublicPassHash: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+			},
+		},
+		{
 			name:   "forked-away process instance names its successor in history",
 			vt:     VTProcessInstance,
 			intent: IntentTerminated,
@@ -349,6 +359,26 @@ func TestProcessInstanceDecodeLegacy(t *testing.T) {
 	}
 	if !reflect.DeepEqual(v, want) {
 		t.Errorf("legacy decode = %+v, want %+v", v, want)
+	}
+}
+
+// TestAProcessInstanceWrittenBeforeThePassDecodesWithout: a record from before the pass
+// hash existed ends after the successor key, and decodes as an instance no public start
+// handed a pass for (ADR-0449).
+func TestAProcessInstanceWrittenBeforeThePassDecodesWithout(t *testing.T) {
+	full := &ProcessInstanceValue{ProcessDefKey: 7, CreatedAt: 1, SuccessorInstanceKey: 9, PublicPassHash: "ab"}
+	enc := full.encode(nil)
+	legacy := enc[:len(enc)-6] // the string's four-byte length and its two bytes
+	var got ProcessInstanceValue
+	if err := got.decode(legacy); err != nil {
+		t.Fatalf("decode a record written before the pass: %v", err)
+	}
+	if got.PublicPassHash != "" || got.SuccessorInstanceKey != 9 || got.ProcessDefKey != 7 {
+		t.Errorf("legacy record decoded as %+v", got)
+	}
+	var back ProcessInstanceValue
+	if err := back.decode(enc); err != nil || back.PublicPassHash != "ab" {
+		t.Errorf("round trip: %+v, %v", back, err)
 	}
 }
 

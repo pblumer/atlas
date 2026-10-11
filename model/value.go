@@ -358,6 +358,18 @@ type ProcessInstanceValue struct {
 	// forked predecessor distinguishable from an ordinary cancellation, both of which
 	// are PITerminated (ADR-0389).
 	SuccessorInstanceKey uint64
+	// PublicPassHash is the SHA-256, hex, of the pass a public start link handed the
+	// visitor who started this instance, when its process holds a public wizard
+	// (ADR-0449). The pass is what lets that visitor, who has no account, fill the
+	// steps of the instance's public wizards and nothing else. It rides in on the
+	// creation command and is frozen into the activation event, so it is durable in the
+	// same fsync as the instance it unlocks and read back on replay rather than
+	// recomputed (I6). Empty for every other instance.
+	//
+	// Kept out of every JSON rendering of the record (the event export among them): it
+	// cannot be turned back into the pass, but a verifier of a credential has no
+	// reader outside the one route that checks it.
+	PublicPassHash string `json:"-"`
 }
 
 // processInstanceLegacySize is the original fixed layout (ProcessDefKey, State,
@@ -379,7 +391,8 @@ func (v *ProcessInstanceValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.CompletedPosition)
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.PurgeDueDate))
 	dst = binary.LittleEndian.AppendUint64(dst, v.PredecessorInstanceKey)
-	return binary.LittleEndian.AppendUint64(dst, v.SuccessorInstanceKey)
+	dst = binary.LittleEndian.AppendUint64(dst, v.SuccessorInstanceKey)
+	return appendString(dst, v.PublicPassHash)
 }
 
 func (v *ProcessInstanceValue) decode(src []byte) error {
@@ -430,6 +443,16 @@ func (v *ProcessInstanceValue) decode(src []byte) error {
 	}
 	if len(tail) >= 48 {
 		v.SuccessorInstanceKey = binary.LittleEndian.Uint64(tail[40:])
+	}
+	// The public pass hash is the newest appended field: a record written before it
+	// ends after the successor key and leaves it empty — an instance no public start
+	// handed a pass for (ADR-0449).
+	if len(tail) > 48 {
+		hash, _, err := readString(tail[48:])
+		if err != nil {
+			return err
+		}
+		v.PublicPassHash = hash
 	}
 	return nil
 }

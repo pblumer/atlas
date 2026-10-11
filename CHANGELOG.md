@@ -14,14 +14,31 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A visitor without an account walks a public wizard with a pass.** When a process holds
+  a public wizard (ADR-0449), its public start link now answers with a pass beside
+  `started`, and the public page carries the visitor from screen to screen: it keeps the
+  pass for the tab, so a reload resumes the sitting, waits while a worker stands between
+  two screens, and thanks the visitor when the sitting is done. The pass is
+  `<instanceKey>.<secret>`, drawn at random; the instance keeps only its SHA-256, frozen
+  on its activation event, so it is durable with the instance and nothing is stored
+  beside it. It opens the open screens of that instance's public wizards and nothing
+  else, through two new public routes that take it in an `Authorization: Bearer` header:
+  `GET /public/wizard/step` and `POST /public/wizard/steps/{taskKey}/complete`. A screen
+  accepts only the fields its form submits, seals personal values as every in-edge does,
+  and is prefilled only with the variables its form binds; a value it shows in a disabled
+  field, such as a price a worker computed, is not the visitor's to change, while a
+  read-only field is submitted and stays writable. A wrong, forged or foreign pass
+  answers 404 alike, and the routes share the public links' rate limit and CORS
+  allow-list, which now lets an embedding page send the header. Every other public start
+  answers `{"started": true}` as before.
+
 - **A step of a public wizard belongs to the visitor who started it.** A public wizard's
   steps name nobody, and by the rule that an unaddressed task is anybody's to pick up they
   would have sat in every signed-in inbox, every customer's half-filled screens included
   (ADR-0449, refining ADR-0421). They are now listed, read by key, completed, claimed and
   released only by operators and administrators; anyone else is told the step belongs to
   the visitor who started the form. Nobody signed in is carried into a public sitting, and
-  nothing in it is claimed. Until the visitor can continue through the public link, which
-  is the next step, an operator is the only one who can move a public wizard on.
+  nothing in it is claimed.
 
 - **A wizard carries the signed-in person from screen to screen.** Completing a step of a
   wizard (ADR-0449), and starting a process that runs into one, now answers with where the
@@ -32,8 +49,7 @@ _Changed_ / _Removed_ for each version.
   queue: it opens the next screen, marks it "Step n" with the screens submitted before it,
   waits for up to two minutes while the sitting is pending, and says when the form is
   done. Starting a process from the Tasks app opens its first screen. Task rows name the
-  sitting they belong to (`wizardScopeKey`, `wizard`). The anonymous visitor of a public
-  start link is not carried yet.
+  sitting they belong to (`wizardScopeKey`, `wizard`).
 
 - **A subprocess can be marked as a wizard.** `atlas:wizard="internal"` or `"public"` on an
   embedded subprocess marks it as one sitting of one person: its user tasks are the
@@ -78,9 +94,10 @@ _Changed_ / _Removed_ for each version.
   form has no field for, a member beside a dotted key or inside a group's or dynamic
   list's path, or a plain value where the form nests fields. A refused submission starts
   nothing. A link whose form is gone accepts only an empty submission. A widget that
-  sends values its form does not declare has to add fields for them. The check covers
-  names and structure; a field's type, whether it is required and its pattern stay the
-  form's validation in the browser.
+  sends values its form does not declare has to add fields for them. A disabled field is
+  left out, as the form never submits one. The check covers names and structure; a
+  field's type, whether it is required and its pattern stay the form's validation in the
+  browser.
 - **A REST task's OAuth2 settings survive the Modeler, and the Modeler can write them.**
   The compiler reads `authTokenUrl`, `authClientId` and `authScope` for the
   client-credentials grant (ADR-0152), but the Modeler's moddle did not declare them, so
