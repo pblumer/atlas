@@ -20,7 +20,7 @@ Start (öffentliches Formular account-order: Personalnummer, Vorname, Nachname,
   → [DMN] Profil bestimmen   KontotypMapping: A/E/T/S → { kuerzel, accountEnabled,
                              kategorie, usageLocation }
   → [Script] kategorie aus dem Profil übernehmen
-  → 🔑 Freigabe (account-freigabe) – Admin setzt Initialpasswort
+  → 🔑 Freigabe (account-freigabe) – zeigt Vor- und Nachname, Admin setzt Initialpasswort
   → (X) Freigegeben?   ── ablehnen ▶ Ende "Abgelehnt"
         │ anlegen
   → [entra create-user] baut UPN, mailNickname und Anzeigenamen selbst aus Vorname,
@@ -94,7 +94,9 @@ je Kontotyp** und **Live-UPN-Vorschau**. Zwei Einbett-Wege:
 Beide Wege posten an `POST /public/forms/{token}/start` (ADR-0029) —
 token-basiert, rate-limited, ohne Login, ohne Cookie. atlas nimmt dort nur die
 Felder des Startformulars `account-order` an; ein eigenes Widget, das weitere
-Variablen sendet, erhält **400** und startet nichts.
+Variablen sendet, erhält **400** und startet nichts. Umgekehrt muss es die
+**Personalnummer** mitsenden: ohne sie gibt es keinen Schlüssel, unter dem Vor- und
+Nachname verschlüsselt werden könnten, und atlas lehnt den Start ab.
 
 ## Deployen (über die atlas-MCP-Tools)
 
@@ -122,5 +124,5 @@ Danach `token` ins Widget setzen (`data-token` / `?token=`).
 | `account-bestellung.bpmn` | Prozess (`proc_account_bestellung`) |
 | `kontotyp.dmn` | Entscheidung `KontotypMapping` (A/E/T/S → Profil) |
 | `form-account-order.json` | Öffentliches Start-Formular |
-| `form-account-freigabe.json` | Freigabe-Formular (Admin) |
+| `form-account-freigabe.json` | Freigabe-Formular (Admin; zeigt Vor- und Nachname schreibgeschützt) |
 | `account-order-widget.html` | Einbettbares HTML+JS-Bestell-Widget |

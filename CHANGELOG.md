@@ -104,6 +104,26 @@ _Changed_ / _Removed_ for each version.
   four public calls and follows their answers, `pending` included. A test runs both of
   the README's walkthroughs against the example's own files.
 
+### Fixed
+
+- **The account order example's widget sends the personnel number.** The account order
+  example declares first and last name personal data and enciphers them under the key of
+  the `personalnummer`, but its embeddable widget still posted only the names, so every
+  order placed through it was refused at the public start. It now asks for the personnel
+  number and sends it. The example's approval form shows first and last name read-only
+  instead of a UPN field nothing filled and a display name the `create-user` task never
+  used, and the model's comments, the README and the handbook card no longer describe the
+  script task and the UPN gate the personal data declaration removed.
+
+- **The data subject cannot move from under a value sealed inside a subprocess.** Once a
+  personal value is sealed, the writer refuses a change of the instance's data subject,
+  because that would split one person's data across two keys and an erasure of either would
+  leave the other half readable (ADR-0314). The check looked only at the instance's root,
+  reasoning that every personal value lands there; a form submitted or a worker completing
+  inside an embedded subprocess writes into that subprocess's scope instead, so a value sealed
+  on a wizard's screen did not stop the subject from moving. It now scans every scope of the
+  instance, and only when the subject actually changes value.
+
 ## [0.9.2] — 2026-10-11
 
 **A patch release of correctness and security fixes.** An instance no longer reports
@@ -129,15 +149,6 @@ writes the same data directory as 0.9.1.
   `eventGatewayType="Exclusive"` is the default and still deploys.
 
 ### Fixed
-
-- **The data subject cannot move from under a value sealed inside a subprocess.** Once a
-  personal value is sealed, the writer refuses a change of the instance's data subject,
-  because that would split one person's data across two keys and an erasure of either would
-  leave the other half readable (ADR-0314). The check looked only at the instance's root,
-  reasoning that every personal value lands there; a form submitted or a worker completing
-  inside an embedded subprocess writes into that subprocess's scope instead, so a value sealed
-  on a wizard's screen did not stop the subject from moving. It now scans every scope of the
-  instance, and only when the subject actually changes value.
 
 - **An instance no longer completes while a token is on its way to its next element.**
   An element that completes and takes a flow activates its successor one batch later,
