@@ -291,6 +291,15 @@ both written as new events) is a decision of its own.
     later `public` wizard, would let a customer come back. It is the natural next
     record.
   - "Back" as a platform operation, as above.
+  - Personal data cannot leave a wizard. An output mapping may not write a variable
+    declared `atlas:personal`, because the engine holds no key to encipher it
+    ([ADR-0314](0314-portal-personal-data.md)), and a wizard's answers reach the
+    process only through its output mappings. A wizard that collects personal data,
+    a personnel form for instance, has to deal with it inside the sitting until a
+    record decides how such a value is handed out.
+  - Only operators may start a process in the Tasks app. A person with the role `user`
+    enters an internal wizard through a first screen assigned to them, as
+    `examples/arbeitsplatz` shows; whoever started is answered `handedOver`.
 
 ## Pros and cons of the options
 

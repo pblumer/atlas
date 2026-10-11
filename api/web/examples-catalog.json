@@ -849,6 +849,358 @@
       ]
     },
     {
+      "id": "arbeitsplatz",
+      "path": "arbeitsplatz",
+      "app": "Beispiel: Arbeitsplatz-Ausstattung",
+      "processes": [
+        {
+          "processId": "proc_arbeitsplatz",
+          "name": "Arbeitsplatz-Ausstattung",
+          "file": "arbeitsplatz/arbeitsplatz.bpmn",
+          "xml": "\u003c?xml version=\"1.0\" encoding=\"UTF-8\"?\u003e\n\u003c!--\n  Arbeitsplatz-Ausstattung — ein INTERNER Wizard (ADR-0449, siehe README.md).\n\n  Die Personalabteilung meldet einen Eintritt. Die Ausstattung wählt danach die\n  vorgesetzte Person aus, angemeldet in der Tasks-App, über mehrere Masken. Welche\n  Maske nach der ersten kommt, hängt von ihrer Antwort ab, und das steht im\n  Diagramm, nicht im Formular:\n\n    Start \"Eintritt gemeldet\"           (Startformular arbeitsplatz-start: neuePerson,\n                                         eintrittsdatum, vorgesetzter)\n     → Subprozess \"Ausstattung wählen\"  (atlas:wizard=\"internal\": EINE Sitzung)\n          User-Task \"Gerät\"                (assignee = vorgesetzter)\n          Exklusiv-Gateway \"Welches Gerät?\"\n               Laptop     → User-Task \"Laptop\"\n               Desktop    → User-Task \"Desktop\"\n               sonst      → direkt weiter (kein Gerät)\n          User-Task \"Software\"\n          Script \"Kosten schätzen\"         (kosten aus Gerät, Modell, Bildschirmen)\n          User-Task \"Zusammenfassung\"      (zeigt Name, Eintritt und Kosten nur an)\n        Timer am Rand: 7 Tage ohne Abschluss → \"Nicht ausgewählt\"\n     → User-Task \"Arbeitsplatz bereitstellen\" (Gruppe it)\n     → Ende\n\n  Die erste Maske ist der vorgesetzten Person zugewiesen. Wer startet, wird\n  deshalb nicht in die Sitzung geführt: Die Maske gehört jemand anderem. Die\n  vorgesetzte Person öffnet sie in ihrem Posteingang; von da an führt die\n  Tasks-App sie von Maske zu Maske. Die Bereitstellung liegt AUSSERHALB des\n  Wizards: Sie ist Arbeit der IT. Was die IT braucht, geben die Output-Mappings\n  des Subprozesses nach aussen.\n--\u003e\n\u003cdefinitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n             xmlns:atlas=\"http://atlas/schema/1.0\"\n             xmlns:zeebe=\"http://camunda.org/schema/zeebe/1.0\"\n             xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\"\n             xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\"\n             xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\"\n             id=\"defs_arbeitsplatz\" targetNamespace=\"http://atlas/examples\"\u003e\n  \u003cprocess id=\"proc_arbeitsplatz\" name=\"Arbeitsplatz-Ausstattung\" isExecutable=\"true\"\u003e\n\n    \u003cstartEvent id=\"start\" name=\"Eintritt gemeldet\"\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:formDefinition formId=\"arbeitsplatz-start\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003coutgoing\u003ef_start_auswahl\u003c/outgoing\u003e\n    \u003c/startEvent\u003e\n\n    \u003csubProcess id=\"auswahl\" name=\"Ausstattung wählen\" atlas:wizard=\"internal\"\u003e\n      \u003cdocumentation\u003eDie Masken der Ausstattung. Die erste ist der vorgesetzten Person zugewiesen; wer sie öffnet, wird in der Tasks-App von Maske zu Maske geführt. Welche Maske nach der ersten kommt, entscheidet das Gateway auf das gewählte Gerät.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:ioMapping\u003e\n          \u003czeebe:output source=\"=geraet\" target=\"geraet\"/\u003e\n          \u003czeebe:output source=\"=arbeitsort\" target=\"arbeitsort\"/\u003e\n          \u003czeebe:output source=\"=modell\" target=\"modell\"/\u003e\n          \u003czeebe:output source=\"=dockingStation\" target=\"dockingStation\"/\u003e\n          \u003czeebe:output source=\"=bildschirme\" target=\"bildschirme\"/\u003e\n          \u003czeebe:output source=\"=standort\" target=\"standort\"/\u003e\n          \u003czeebe:output source=\"=pakete\" target=\"pakete\"/\u003e\n          \u003czeebe:output source=\"=bemerkung\" target=\"bemerkung\"/\u003e\n          \u003czeebe:output source=\"=kosten\" target=\"kosten\"/\u003e\n        \u003c/zeebe:ioMapping\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_start_auswahl\u003c/incoming\u003e\n      \u003coutgoing\u003ef_auswahl_bereitstellen\u003c/outgoing\u003e\n\n      \u003cstartEvent id=\"auswahl_start\"\u003e\n        \u003coutgoing\u003ef_a_geraet\u003c/outgoing\u003e\n      \u003c/startEvent\u003e\n\n      \u003cuserTask id=\"geraet_waehlen\" name=\"Gerät\"\u003e\n        \u003cdocumentation\u003eDer erste Schritt. Die Personalabteilung hat ihn dir zugewiesen; ab hier führt dich die Tasks-App von Maske zu Maske. Das gewählte Gerät entscheidet, welche Maske als Nächstes kommt.\u003c/documentation\u003e\n        \u003cextensionElements\u003e\n          \u003czeebe:assignmentDefinition assignee=\"=vorgesetzter\"/\u003e\n          \u003czeebe:formDefinition formId=\"arbeitsplatz-geraet\"/\u003e\n        \u003c/extensionElements\u003e\n        \u003cincoming\u003ef_a_geraet\u003c/incoming\u003e\n        \u003coutgoing\u003ef_geraet_welches\u003c/outgoing\u003e\n      \u003c/userTask\u003e\n\n      \u003cexclusiveGateway id=\"welches\" name=\"Welches Gerät?\" default=\"f_welches_keins\"\u003e\n        \u003cincoming\u003ef_geraet_welches\u003c/incoming\u003e\n        \u003coutgoing\u003ef_welches_laptop\u003c/outgoing\u003e\n        \u003coutgoing\u003ef_welches_desktop\u003c/outgoing\u003e\n        \u003coutgoing\u003ef_welches_keins\u003c/outgoing\u003e\n      \u003c/exclusiveGateway\u003e\n\n      \u003cuserTask id=\"laptop\" name=\"Laptop\"\u003e\n        \u003cdocumentation\u003eDieser Schritt erscheint, weil du einen Laptop gewählt hast.\u003c/documentation\u003e\n        \u003cextensionElements\u003e\n          \u003czeebe:formDefinition formId=\"arbeitsplatz-laptop\"/\u003e\n        \u003c/extensionElements\u003e\n        \u003cincoming\u003ef_welches_laptop\u003c/incoming\u003e\n        \u003coutgoing\u003ef_laptop_weiter\u003c/outgoing\u003e\n      \u003c/userTask\u003e\n\n      \u003cuserTask id=\"desktop\" name=\"Desktop\"\u003e\n        \u003cdocumentation\u003eDieser Schritt erscheint, weil du einen Desktop gewählt hast.\u003c/documentation\u003e\n        \u003cextensionElements\u003e\n          \u003czeebe:formDefinition formId=\"arbeitsplatz-desktop\"/\u003e\n        \u003c/extensionElements\u003e\n        \u003cincoming\u003ef_welches_desktop\u003c/incoming\u003e\n        \u003coutgoing\u003ef_desktop_weiter\u003c/outgoing\u003e\n      \u003c/userTask\u003e\n\n      \u003cexclusiveGateway id=\"weiter\"\u003e\n        \u003cincoming\u003ef_laptop_weiter\u003c/incoming\u003e\n        \u003cincoming\u003ef_desktop_weiter\u003c/incoming\u003e\n        \u003cincoming\u003ef_welches_keins\u003c/incoming\u003e\n        \u003coutgoing\u003ef_weiter_software\u003c/outgoing\u003e\n      \u003c/exclusiveGateway\u003e\n\n      \u003cuserTask id=\"software\" name=\"Software\"\u003e\n        \u003cdocumentation\u003eWelche Software braucht die neue Person?\u003c/documentation\u003e\n        \u003cextensionElements\u003e\n          \u003czeebe:formDefinition formId=\"arbeitsplatz-software\"/\u003e\n        \u003c/extensionElements\u003e\n        \u003cincoming\u003ef_weiter_software\u003c/incoming\u003e\n        \u003coutgoing\u003ef_software_kosten\u003c/outgoing\u003e\n      \u003c/userTask\u003e\n\n      \u003cscriptTask id=\"kosten_schaetzen\" name=\"Kosten schätzen\"\u003e\n        \u003cextensionElements\u003e\n          \u003czeebe:script resultVariable=\"kosten\"\n            expression=\"= if geraet = \u0026quot;Laptop\u0026quot; then (if modell = \u0026quot;Leistung\u0026quot; then 2400 else 1400) else if geraet = \u0026quot;Desktop\u0026quot; then 1100 + 250 * bildschirme else 0\"/\u003e\n        \u003c/extensionElements\u003e\n        \u003cincoming\u003ef_software_kosten\u003c/incoming\u003e\n        \u003coutgoing\u003ef_kosten_abschluss\u003c/outgoing\u003e\n      \u003c/scriptTask\u003e\n\n      \u003cuserTask id=\"abschluss\" name=\"Zusammenfassung\"\u003e\n        \u003cdocumentation\u003eDer letzte Schritt. Name und Eintrittsdatum stammen aus der Meldung der Personalabteilung, die Kosten hat der Prozess geschätzt; beides ist hier nur angezeigt.\u003c/documentation\u003e\n        \u003cextensionElements\u003e\n          \u003czeebe:formDefinition formId=\"arbeitsplatz-abschluss\"/\u003e\n        \u003c/extensionElements\u003e\n        \u003cincoming\u003ef_kosten_abschluss\u003c/incoming\u003e\n        \u003coutgoing\u003ef_abschluss_ende\u003c/outgoing\u003e\n      \u003c/userTask\u003e\n\n      \u003cendEvent id=\"auswahl_ende\"\u003e\n        \u003cincoming\u003ef_abschluss_ende\u003c/incoming\u003e\n      \u003c/endEvent\u003e\n\n      \u003csequenceFlow id=\"f_a_geraet\" sourceRef=\"auswahl_start\" targetRef=\"geraet_waehlen\"/\u003e\n      \u003csequenceFlow id=\"f_geraet_welches\" sourceRef=\"geraet_waehlen\" targetRef=\"welches\"/\u003e\n      \u003csequenceFlow id=\"f_welches_laptop\" name=\"Laptop\" sourceRef=\"welches\" targetRef=\"laptop\"\u003e\n        \u003cconditionExpression\u003e= geraet = \"Laptop\"\u003c/conditionExpression\u003e\n      \u003c/sequenceFlow\u003e\n      \u003csequenceFlow id=\"f_welches_desktop\" name=\"Desktop\" sourceRef=\"welches\" targetRef=\"desktop\"\u003e\n        \u003cconditionExpression\u003e= geraet = \"Desktop\"\u003c/conditionExpression\u003e\n      \u003c/sequenceFlow\u003e\n      \u003csequenceFlow id=\"f_welches_keins\" name=\"kein Gerät\" sourceRef=\"welches\" targetRef=\"weiter\"/\u003e\n      \u003csequenceFlow id=\"f_laptop_weiter\" sourceRef=\"laptop\" targetRef=\"weiter\"/\u003e\n      \u003csequenceFlow id=\"f_desktop_weiter\" sourceRef=\"desktop\" targetRef=\"weiter\"/\u003e\n      \u003csequenceFlow id=\"f_weiter_software\" sourceRef=\"weiter\" targetRef=\"software\"/\u003e\n      \u003csequenceFlow id=\"f_software_kosten\" sourceRef=\"software\" targetRef=\"kosten_schaetzen\"/\u003e\n      \u003csequenceFlow id=\"f_kosten_abschluss\" sourceRef=\"kosten_schaetzen\" targetRef=\"abschluss\"/\u003e\n      \u003csequenceFlow id=\"f_abschluss_ende\" sourceRef=\"abschluss\" targetRef=\"auswahl_ende\"/\u003e\n    \u003c/subProcess\u003e\n\n    \u003cboundaryEvent id=\"verfallen\" name=\"7 Tage ohne Abschluss\" attachedToRef=\"auswahl\"\u003e\n      \u003coutgoing\u003ef_verfallen_ende\u003c/outgoing\u003e\n      \u003ctimerEventDefinition\u003e\n        \u003ctimeDuration\u003eP7D\u003c/timeDuration\u003e\n      \u003c/timerEventDefinition\u003e\n    \u003c/boundaryEvent\u003e\n\n    \u003cuserTask id=\"bereitstellen\" name=\"Arbeitsplatz bereitstellen\"\u003e\n      \u003cdocumentation\u003eStellt die gewählte Ausstattung bis zum Eintritt bereit. Dieser Schritt liegt ausserhalb des Wizards: Er gehört der IT.\u003c/documentation\u003e\n      \u003cextensionElements\u003e\n        \u003czeebe:assignmentDefinition candidateGroups=\"it\"/\u003e\n        \u003czeebe:formDefinition formId=\"arbeitsplatz-bereitstellen\"/\u003e\n      \u003c/extensionElements\u003e\n      \u003cincoming\u003ef_auswahl_bereitstellen\u003c/incoming\u003e\n      \u003coutgoing\u003ef_bereitstellen_ende\u003c/outgoing\u003e\n    \u003c/userTask\u003e\n\n    \u003cendEvent id=\"end\" name=\"Arbeitsplatz bereit\"\u003e\n      \u003cincoming\u003ef_bereitstellen_ende\u003c/incoming\u003e\n    \u003c/endEvent\u003e\n\n    \u003cendEvent id=\"end_verfallen\" name=\"Nicht ausgewählt\"\u003e\n      \u003cincoming\u003ef_verfallen_ende\u003c/incoming\u003e\n    \u003c/endEvent\u003e\n\n    \u003csequenceFlow id=\"f_start_auswahl\" sourceRef=\"start\" targetRef=\"auswahl\"/\u003e\n    \u003csequenceFlow id=\"f_auswahl_bereitstellen\" sourceRef=\"auswahl\" targetRef=\"bereitstellen\"/\u003e\n    \u003csequenceFlow id=\"f_bereitstellen_ende\" sourceRef=\"bereitstellen\" targetRef=\"end\"/\u003e\n    \u003csequenceFlow id=\"f_verfallen_ende\" sourceRef=\"verfallen\" targetRef=\"end_verfallen\"/\u003e\n  \u003c/process\u003e\n\n  \u003cbpmndi:BPMNDiagram id=\"diagram\"\u003e\n    \u003cbpmndi:BPMNPlane id=\"plane\" bpmnElement=\"proc_arbeitsplatz\"\u003e\n      \u003cbpmndi:BPMNShape id=\"di_start\" bpmnElement=\"start\"\u003e\n        \u003cdc:Bounds x=\"152\" y=\"182\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"126\" y=\"225\" width=\"88\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_auswahl\" bpmnElement=\"auswahl\" isExpanded=\"true\"\u003e\n        \u003cdc:Bounds x=\"240\" y=\"40\" width=\"1090\" height=\"340\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_auswahl_start\" bpmnElement=\"auswahl_start\"\u003e\n        \u003cdc:Bounds x=\"272\" y=\"182\" width=\"36\" height=\"36\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_geraet_waehlen\" bpmnElement=\"geraet_waehlen\"\u003e\n        \u003cdc:Bounds x=\"350\" y=\"160\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_welches\" bpmnElement=\"welches\" isMarkerVisible=\"true\"\u003e\n        \u003cdc:Bounds x=\"500\" y=\"175\" width=\"50\" height=\"50\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"452\" y=\"232\" width=\"70\" height=\"27\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_laptop\" bpmnElement=\"laptop\"\u003e\n        \u003cdc:Bounds x=\"610\" y=\"70\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_desktop\" bpmnElement=\"desktop\"\u003e\n        \u003cdc:Bounds x=\"610\" y=\"270\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_weiter\" bpmnElement=\"weiter\" isMarkerVisible=\"true\"\u003e\n        \u003cdc:Bounds x=\"770\" y=\"175\" width=\"50\" height=\"50\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_software\" bpmnElement=\"software\"\u003e\n        \u003cdc:Bounds x=\"870\" y=\"160\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_kosten_schaetzen\" bpmnElement=\"kosten_schaetzen\"\u003e\n        \u003cdc:Bounds x=\"1010\" y=\"160\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_abschluss\" bpmnElement=\"abschluss\"\u003e\n        \u003cdc:Bounds x=\"1150\" y=\"160\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_auswahl_ende\" bpmnElement=\"auswahl_ende\"\u003e\n        \u003cdc:Bounds x=\"1282\" y=\"182\" width=\"36\" height=\"36\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_verfallen\" bpmnElement=\"verfallen\"\u003e\n        \u003cdc:Bounds x=\"1252\" y=\"362\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"1160\" y=\"400\" width=\"86\" height=\"27\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_bereitstellen\" bpmnElement=\"bereitstellen\"\u003e\n        \u003cdc:Bounds x=\"1380\" y=\"160\" width=\"100\" height=\"80\"/\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_end\" bpmnElement=\"end\"\u003e\n        \u003cdc:Bounds x=\"1532\" y=\"182\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"1500\" y=\"225\" width=\"100\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n      \u003cbpmndi:BPMNShape id=\"di_end_verfallen\" bpmnElement=\"end_verfallen\"\u003e\n        \u003cdc:Bounds x=\"1252\" y=\"432\" width=\"36\" height=\"36\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"1298\" y=\"443\" width=\"90\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNShape\u003e\n\n      \u003cbpmndi:BPMNEdge id=\"di_f_start_auswahl\" bpmnElement=\"f_start_auswahl\"\u003e\n        \u003cdi:waypoint x=\"188\" y=\"200\"/\u003e\u003cdi:waypoint x=\"240\" y=\"200\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_a_geraet\" bpmnElement=\"f_a_geraet\"\u003e\n        \u003cdi:waypoint x=\"308\" y=\"200\"/\u003e\u003cdi:waypoint x=\"350\" y=\"200\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_geraet_welches\" bpmnElement=\"f_geraet_welches\"\u003e\n        \u003cdi:waypoint x=\"450\" y=\"200\"/\u003e\u003cdi:waypoint x=\"500\" y=\"200\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_welches_laptop\" bpmnElement=\"f_welches_laptop\"\u003e\n        \u003cdi:waypoint x=\"525\" y=\"175\"/\u003e\u003cdi:waypoint x=\"525\" y=\"110\"/\u003e\u003cdi:waypoint x=\"610\" y=\"110\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"538\" y=\"88\" width=\"36\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_welches_desktop\" bpmnElement=\"f_welches_desktop\"\u003e\n        \u003cdi:waypoint x=\"525\" y=\"225\"/\u003e\u003cdi:waypoint x=\"525\" y=\"310\"/\u003e\u003cdi:waypoint x=\"610\" y=\"310\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"536\" y=\"316\" width=\"44\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_welches_keins\" bpmnElement=\"f_welches_keins\"\u003e\n        \u003cdi:waypoint x=\"550\" y=\"200\"/\u003e\u003cdi:waypoint x=\"770\" y=\"200\"/\u003e\n        \u003cbpmndi:BPMNLabel\u003e\u003cdc:Bounds x=\"634\" y=\"178\" width=\"54\" height=\"14\"/\u003e\u003c/bpmndi:BPMNLabel\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_laptop_weiter\" bpmnElement=\"f_laptop_weiter\"\u003e\n        \u003cdi:waypoint x=\"710\" y=\"110\"/\u003e\u003cdi:waypoint x=\"795\" y=\"110\"/\u003e\u003cdi:waypoint x=\"795\" y=\"175\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_desktop_weiter\" bpmnElement=\"f_desktop_weiter\"\u003e\n        \u003cdi:waypoint x=\"710\" y=\"310\"/\u003e\u003cdi:waypoint x=\"795\" y=\"310\"/\u003e\u003cdi:waypoint x=\"795\" y=\"225\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_weiter_software\" bpmnElement=\"f_weiter_software\"\u003e\n        \u003cdi:waypoint x=\"820\" y=\"200\"/\u003e\u003cdi:waypoint x=\"870\" y=\"200\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_software_kosten\" bpmnElement=\"f_software_kosten\"\u003e\n        \u003cdi:waypoint x=\"970\" y=\"200\"/\u003e\u003cdi:waypoint x=\"1010\" y=\"200\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_kosten_abschluss\" bpmnElement=\"f_kosten_abschluss\"\u003e\n        \u003cdi:waypoint x=\"1110\" y=\"200\"/\u003e\u003cdi:waypoint x=\"1150\" y=\"200\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_abschluss_ende\" bpmnElement=\"f_abschluss_ende\"\u003e\n        \u003cdi:waypoint x=\"1250\" y=\"200\"/\u003e\u003cdi:waypoint x=\"1282\" y=\"200\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_auswahl_bereitstellen\" bpmnElement=\"f_auswahl_bereitstellen\"\u003e\n        \u003cdi:waypoint x=\"1330\" y=\"200\"/\u003e\u003cdi:waypoint x=\"1380\" y=\"200\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_bereitstellen_ende\" bpmnElement=\"f_bereitstellen_ende\"\u003e\n        \u003cdi:waypoint x=\"1480\" y=\"200\"/\u003e\u003cdi:waypoint x=\"1532\" y=\"200\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n      \u003cbpmndi:BPMNEdge id=\"di_f_verfallen_ende\" bpmnElement=\"f_verfallen_ende\"\u003e\n        \u003cdi:waypoint x=\"1270\" y=\"398\"/\u003e\u003cdi:waypoint x=\"1270\" y=\"432\"/\u003e\n      \u003c/bpmndi:BPMNEdge\u003e\n    \u003c/bpmndi:BPMNPlane\u003e\n  \u003c/bpmndi:BPMNDiagram\u003e\n\u003c/definitions\u003e"
+        }
+      ],
+      "forms": [
+        {
+          "id": "arbeitsplatz-abschluss",
+          "name": "arbeitsplatz-abschluss",
+          "file": "arbeitsplatz/arbeitsplatz-abschluss.form.json",
+          "schema": {
+            "type": "default",
+            "id": "arbeitsplatz-abschluss",
+            "components": [
+              {
+                "type": "text",
+                "text": "## Zusammenfassung\n\nName und Eintrittsdatum hat die Personalabteilung erfasst, die Kosten hat der Prozess geschätzt. Prüfe die Auswahl und gib sie an die IT."
+              },
+              {
+                "key": "neuePerson",
+                "type": "textfield",
+                "label": "Neue Mitarbeiterin oder neuer Mitarbeiter",
+                "disabled": true
+              },
+              {
+                "key": "eintrittsdatum",
+                "type": "datetime",
+                "subtype": "date",
+                "dateLabel": "Eintrittsdatum",
+                "disabled": true
+              },
+              {
+                "key": "geraet",
+                "type": "textfield",
+                "label": "Gerät",
+                "disabled": true
+              },
+              {
+                "key": "kosten",
+                "type": "number",
+                "label": "Geschätzte Gerätekosten in CHF (berechnet)",
+                "disabled": true
+              },
+              {
+                "key": "bestaetigt",
+                "type": "checkbox",
+                "label": "Die Auswahl ist vollständig",
+                "validate": {
+                  "required": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "arbeitsplatz-bereitstellen",
+          "name": "arbeitsplatz-bereitstellen",
+          "file": "arbeitsplatz/arbeitsplatz-bereitstellen.form.json",
+          "schema": {
+            "type": "default",
+            "id": "arbeitsplatz-bereitstellen",
+            "components": [
+              {
+                "type": "text",
+                "text": "## Arbeitsplatz bereitstellen\n\nDie vorgesetzte Person hat die Ausstattung gewählt."
+              },
+              {
+                "key": "neuePerson",
+                "type": "textfield",
+                "label": "Für",
+                "disabled": true
+              },
+              {
+                "key": "eintrittsdatum",
+                "type": "datetime",
+                "subtype": "date",
+                "dateLabel": "Bis zum Eintritt am",
+                "disabled": true
+              },
+              {
+                "key": "geraet",
+                "type": "textfield",
+                "label": "Gerät",
+                "disabled": true
+              },
+              {
+                "key": "modell",
+                "type": "textfield",
+                "label": "Laptop-Modell",
+                "disabled": true,
+                "conditional": {
+                  "hide": "=geraet != \"Laptop\""
+                }
+              },
+              {
+                "key": "bildschirme",
+                "type": "number",
+                "label": "Bildschirme",
+                "disabled": true,
+                "conditional": {
+                  "hide": "=geraet != \"Desktop\""
+                }
+              },
+              {
+                "key": "standort",
+                "type": "textfield",
+                "label": "Standort",
+                "disabled": true,
+                "conditional": {
+                  "hide": "=geraet != \"Desktop\""
+                }
+              },
+              {
+                "key": "bemerkung",
+                "type": "textarea",
+                "label": "Bemerkung",
+                "disabled": true
+              },
+              {
+                "key": "bereitgestellt",
+                "type": "checkbox",
+                "label": "Arbeitsplatz ist bereitgestellt",
+                "validate": {
+                  "required": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "arbeitsplatz-desktop",
+          "name": "arbeitsplatz-desktop",
+          "file": "arbeitsplatz/arbeitsplatz-desktop.form.json",
+          "schema": {
+            "type": "default",
+            "id": "arbeitsplatz-desktop",
+            "components": [
+              {
+                "type": "text",
+                "text": "## Desktop\n\nDiese Maske erscheint nur, wenn ein Desktop gewählt ist."
+              },
+              {
+                "key": "bildschirme",
+                "type": "number",
+                "label": "Anzahl Bildschirme",
+                "validate": {
+                  "required": true,
+                  "min": 1,
+                  "max": 3
+                }
+              },
+              {
+                "key": "standort",
+                "type": "textfield",
+                "label": "Standort (Gebäude, Raum)",
+                "validate": {
+                  "required": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "arbeitsplatz-geraet",
+          "name": "arbeitsplatz-geraet",
+          "file": "arbeitsplatz/arbeitsplatz-geraet.form.json",
+          "schema": {
+            "type": "default",
+            "id": "arbeitsplatz-geraet",
+            "components": [
+              {
+                "type": "text",
+                "text": "# Ausstattung wählen\n\nWelches Gerät braucht die neue Person? Davon hängt ab, welche Maske als Nächstes kommt."
+              },
+              {
+                "key": "geraet",
+                "type": "radio",
+                "label": "Gerät",
+                "values": [
+                  {
+                    "label": "Laptop",
+                    "value": "Laptop"
+                  },
+                  {
+                    "label": "Desktop",
+                    "value": "Desktop"
+                  },
+                  {
+                    "label": "Kein Gerät",
+                    "value": "Kein Gerät"
+                  }
+                ],
+                "validate": {
+                  "required": true
+                }
+              },
+              {
+                "key": "arbeitsort",
+                "type": "radio",
+                "label": "Arbeitsort",
+                "values": [
+                  {
+                    "label": "Büro",
+                    "value": "Büro"
+                  },
+                  {
+                    "label": "Homeoffice",
+                    "value": "Homeoffice"
+                  },
+                  {
+                    "label": "Beides",
+                    "value": "Beides"
+                  }
+                ],
+                "validate": {
+                  "required": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "arbeitsplatz-laptop",
+          "name": "arbeitsplatz-laptop",
+          "file": "arbeitsplatz/arbeitsplatz-laptop.form.json",
+          "schema": {
+            "type": "default",
+            "id": "arbeitsplatz-laptop",
+            "components": [
+              {
+                "type": "text",
+                "text": "## Laptop\n\nDiese Maske erscheint nur, wenn ein Laptop gewählt ist."
+              },
+              {
+                "key": "modell",
+                "type": "select",
+                "label": "Modell",
+                "values": [
+                  {
+                    "label": "Standard (14 Zoll)",
+                    "value": "Standard"
+                  },
+                  {
+                    "label": "Leistung (16 Zoll)",
+                    "value": "Leistung"
+                  }
+                ],
+                "validate": {
+                  "required": true
+                }
+              },
+              {
+                "key": "dockingStation",
+                "type": "checkbox",
+                "label": "Mit Docking-Station"
+              }
+            ]
+          }
+        },
+        {
+          "id": "arbeitsplatz-software",
+          "name": "arbeitsplatz-software",
+          "file": "arbeitsplatz/arbeitsplatz-software.form.json",
+          "schema": {
+            "type": "default",
+            "id": "arbeitsplatz-software",
+            "components": [
+              {
+                "type": "text",
+                "text": "## Software"
+              },
+              {
+                "key": "pakete",
+                "type": "checklist",
+                "label": "Software-Pakete",
+                "values": [
+                  {
+                    "label": "Office",
+                    "value": "Office"
+                  },
+                  {
+                    "label": "CAD",
+                    "value": "CAD"
+                  },
+                  {
+                    "label": "Grafik",
+                    "value": "Grafik"
+                  },
+                  {
+                    "label": "Entwicklung",
+                    "value": "Entwicklung"
+                  }
+                ]
+              },
+              {
+                "key": "bemerkung",
+                "type": "textarea",
+                "label": "Bemerkung für die IT"
+              }
+            ]
+          }
+        },
+        {
+          "id": "arbeitsplatz-start",
+          "name": "arbeitsplatz-start",
+          "file": "arbeitsplatz/arbeitsplatz-start.form.json",
+          "schema": {
+            "type": "default",
+            "id": "arbeitsplatz-start",
+            "components": [
+              {
+                "type": "text",
+                "text": "# Arbeitsplatz für einen Eintritt\n\nDie Personalabteilung meldet den Eintritt. Die Ausstattung wählt danach die vorgesetzte Person aus."
+              },
+              {
+                "key": "neuePerson",
+                "type": "textfield",
+                "label": "Neue Mitarbeiterin oder neuer Mitarbeiter",
+                "validate": {
+                  "required": true
+                }
+              },
+              {
+                "key": "eintrittsdatum",
+                "type": "datetime",
+                "subtype": "date",
+                "dateLabel": "Eintrittsdatum",
+                "validate": {
+                  "required": true
+                }
+              },
+              {
+                "key": "vorgesetzter",
+                "type": "textfield",
+                "label": "Vorgesetzte Person (Benutzername in atlas)",
+                "description": "Sie wählt die Ausstattung aus.",
+                "validate": {
+                  "required": true
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "id": "bewerbermanagement",
       "path": "bewerbermanagement",
       "app": "Bewerbermanagement",

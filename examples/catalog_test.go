@@ -151,6 +151,9 @@ var catalogSources = []catalogSource{
 	},
 	{ID: "pruefung", App: "Beispiel: Prüfung", Dir: "pruefung"},
 	{ID: "reisebuchung", App: "Beispiel: Reisebuchung", Dir: "reisebuchung", Main: "reisebuchung/reisebuchung.bpmn"},
+	// The internal counterpart of the trip booking's public wizard (ADR-0449). No Start
+	// button: its first screen is a supervisor's, so a bare start would only park it.
+	{ID: "arbeitsplatz", App: "Beispiel: Arbeitsplatz-Ausstattung", Dir: "arbeitsplatz"},
 	{ID: "bewerbermanagement", App: "Bewerbermanagement", Dir: "bewerbermanagement", Main: "bewerbermanagement/bewerbung.bpmn"},
 	// The course's guiding case (docs/planning/lehrgang-prozessentwicklung.md, phase 3):
 	// one onboarding process the six reference modules all hang on. No Start button — the

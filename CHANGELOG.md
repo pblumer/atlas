@@ -14,6 +14,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An example of an internal wizard.** `examples/arbeitsplatz` is the internal counterpart
+  of the trip booking's public wizard (ADR-0449): the personnel office reports a new hire,
+  the first screen is assigned to the supervisor, and from there the Tasks app carries the
+  supervisor through the device, its details, software and a summary, the next screen
+  picked by an exclusive gateway on the answer. It shows why the first screen is assigned:
+  only operators may start a process, so a person with the role `user` enters a sitting
+  through their inbox, and whoever started is told the screen was handed over. Three runs
+  are tests against the example's own files. The handbook gives it a card, lists both
+  wizard examples in its overview tables, and its wizard section now says who gets into a
+  sitting and that personal data cannot leave a wizard through its output mappings.
+
 - **A visitor without an account walks a public wizard with a pass.** When a process holds
   a public wizard (ADR-0449), its public start link now answers with a pass beside
   `started`, and the public page carries the visitor from screen to screen: it keeps the
