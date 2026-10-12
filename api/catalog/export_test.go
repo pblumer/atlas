@@ -14,7 +14,7 @@ import (
 )
 
 // A catalogue leaves an installation as the same document it arrives as
-// (ADR-draft-catalogue-export): a whole catalogue with its products, or a choice of
+// (ADR-0451): a whole catalogue with its products, or a choice of
 // products to be imported into another catalogue — each optionally with the
 // processes the products are bound to.
 

@@ -135,7 +135,7 @@ not exist here.
 - **Follow-ups:**
   - **Export**, e.g. `GET /api/v1/catalogs/{id}/document`, so a shop built in the Console
     becomes a document. *As built:* landed with
-    [ADR-draft-catalogue-export](draft-catalogue-export.md), which also imports products into
+    [ADR-0451](0451-catalogue-export.md), which also imports products into
     another catalogue and carries the processes they are bound to.
   - **Pictures** carried by reference, if examples need them.
 

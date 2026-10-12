@@ -18,7 +18,7 @@ _Changed_ / _Removed_ for each version.
   answers a catalogue with every product it maintains or offers, and
   `GET /api/v1/catalog-products/document?ids=a,b` chosen products with the edges between
   them; `?processes=true` adds the BPMN of every process the products are bound to, and names
-  any not deployed under `missingProcesses` (ADR-draft-catalogue-export). The import takes
+  any not deployed under `missingProcesses` (ADR-0451). The import takes
   both: `?into=<catalogue>` offers a document's products in a catalogue you maintain — a
   product new to the server is homed there, one it has keeps its home — and `processes` are
   deployed first through the same door as `POST /api/v1/deployments`, which needs the

@@ -12,7 +12,7 @@ import (
 )
 
 // What a catalogue document's processes ask of the engine
-// (ADR-draft-catalogue-export).
+// (ADR-0451).
 //
 // A catalogue binds a product to a process by id, and the process lives here, in
 // the deployment registry. Exporting a catalogue with its processes reads the model

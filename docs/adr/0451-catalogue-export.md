@@ -1,4 +1,4 @@
-# ADR-DRAFT: A catalogue is exported as the document it is imported as
+# ADR-0451: A catalogue is exported as the document it is imported as
 
 - **Status:** Accepted
 - **Implementation:** Landed

@@ -2099,7 +2099,7 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
 - ✅ **A catalogue exported as that document.** A whole catalogue, or chosen products to import
   into another catalogue (`?into=`), optionally with the processes the products are bound to,
   which the import deploys first; over HTTP, MCP and the Console
-  ([ADR-draft-catalogue-export](docs/adr/draft-catalogue-export.md)).
+  ([ADR-0451](docs/adr/0451-catalogue-export.md)).
 - ✅ **A shop handbook with an example to install.** `shop-handbuch.html` (DE/EN) on building
   catalogues, several catalogues, products and services and their processes, with the
   administration-services example (`examples/verwaltung-dienstleistungen/`, both process

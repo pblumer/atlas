@@ -1255,7 +1255,7 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
 
 // ---------- Moving a catalogue between installations ----------
 //
-// A catalogue leaves as the document the import takes (ADR-draft-catalogue-export),
+// A catalogue leaves as the document the import takes (ADR-0451),
 // so the file a person downloads here is the file they review and import on the
 // other installation — not a second format to keep level with the first. Two shapes:
 // the whole catalogue, imported as it is, and a choice of products, imported into

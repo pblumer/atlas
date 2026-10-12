@@ -8,7 +8,7 @@ import (
 )
 
 // A catalogue leaves one installation and arrives on another through the whole
-// stack (ADR-draft-catalogue-export): exported with the processes its product is
+// stack (ADR-0451): exported with the processes its product is
 // bound to, imported by somebody who may deploy them, and deployed before the
 // catalogue is written — once, because a second import finds them unchanged.
 func TestACatalogueMovesBetweenServersWithItsProcesses(t *testing.T) {

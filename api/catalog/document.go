@@ -37,12 +37,12 @@ type Document struct {
 	// written, validated before anything is.
 	Publish bool `json:"publish,omitempty"`
 	// Edges are the structure and precedence between the document's products when
-	// it carries products alone (ADR-draft-catalogue-export). Edges belong to a
+	// it carries products alone (ADR-0451). Edges belong to a
 	// catalogue, so these land in the catalogue the products are imported into
 	// (?into=), and a document carrying them is refused without one.
 	Edges []Edge `json:"edges,omitempty"`
 	// Processes are the BPMN models the products are bound to, deployed by the
-	// import before the catalogues are written (ADR-draft-catalogue-export).
+	// import before the catalogues are written (ADR-0451).
 	Processes []Process `json:"processes,omitempty"`
 	// MissingProcesses names the processes an export was asked to carry and could
 	// not, because the exporting server has none deployed under that id. An import
@@ -167,7 +167,7 @@ func (d Document) check(into string) []DocumentProblem {
 // HandleImportDocument serves POST /api/v1/catalogs/import.
 //
 // ?into=<catalogue> imports a document of products alone into a catalogue that
-// exists (ADR-draft-catalogue-export): every product is offered there, a product new
+// exists (ADR-0451): every product is offered there, a product new
 // to this server is homed there, and the document's edges are added to it.
 func (s *Service) HandleImportDocument(w http.ResponseWriter, r *http.Request) {
 	var doc Document

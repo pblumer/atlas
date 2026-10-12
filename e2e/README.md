@@ -278,7 +278,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   Drives the real `viewCatalogDetail` through the editor harness, which lets a spec reshape
   a product before it mounts (`window.__patchItems`).
 
-- **`catalog-transfer.spec.mjs`** ([ADR-draft-catalogue-export](../docs/adr/draft-catalogue-export.md)):
+- **`catalog-transfer.spec.mjs`** ([ADR-0451](../docs/adr/0451-catalogue-export.md)):
   **exporting and importing a catalogue** from the Console. The catalogue exports as
   `catalogue-<id>.json`, with `?processes=true` when that is ticked; the ticked products
   export as one document, and none ticked asks for some rather than calling the server; a

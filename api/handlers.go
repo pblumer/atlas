@@ -871,7 +871,7 @@ func refusedWith(status int, msg string) *deployRefusal {
 // under, who may listen to and claim what, and the deploy itself. It is the one
 // door a BPMN model is deployed through on a person's behalf, so a catalogue
 // import that carries processes takes it too rather than a second, laxer copy
-// (ADR-draft-catalogue-export). It must not be called on the run loop.
+// (ADR-0451). It must not be called on the run loop.
 func (s *Server) deployBody(r *http.Request, body []byte) (deployResp, *deployRefusal) {
 	// Resolve the DMN model this diagram's business rule tasks need and bundle it,
 	// so a decision authored in Atlas deploys together with its process instead of

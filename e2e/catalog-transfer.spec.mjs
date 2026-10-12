@@ -1,5 +1,5 @@
 // Moving a catalogue between installations, from the catalogue screen
-// (ADR-draft-catalogue-export).
+// (ADR-0451).
 //
 // The export buttons ask the server for the document and hand it to the browser as a
 // file; the import reads a file and posts it. Neither is something a Go test can see:

@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// Exporting a catalogue (ADR-draft-catalogue-export) is the other half of importing
+// Exporting a catalogue (ADR-0451) is the other half of importing
 // one (ADR-0436): it answers the same Document the import takes, so what a product
 // manager built in the Console on one installation becomes a file they review and
 // import on another.
