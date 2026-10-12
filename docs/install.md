@@ -10,6 +10,7 @@ operator's guide — for setting up a *development* checkout see
 | Run the binary on a Linux server | [Linux, step by step](#linux-step-by-step) |
 | Run it on Windows Server | [Windows Server](#windows-server) |
 | Run it on macOS | [macOS](#macos) |
+| Upgrade to a new release | [Upgrading](#upgrading); on Windows Server, [step 4](#4-upgrade-to-a-new-release) |
 | Try it out for five minutes | [Quick try](#quick-try) |
 | Run it in Docker or Kubernetes | [`deploy/README.md`](../deploy/README.md) |
 | Look up a flag or environment variable | [Configuration reference](#configuration-reference) |
@@ -766,6 +767,86 @@ variables before the first start with `--auth`.
 not the Windows PowerShell 5.1 that ships with the OS. Install it separately if
 you need them, or start with `--powershell=false`.
 
+### 4. Upgrade to a new release
+
+The service is two programs, and an upgrade replaces only one of them.
+`atlas-service.exe` is WinSW — no atlas release contains it, and it stays as it is.
+The new `atlas.exe` goes into a directory of its own beside the old one, and the
+wrapper is pointed at it. **Do not copy the new `atlas.exe` over
+`atlas-service.exe`:** the service then starts atlas itself, which does not answer
+the Service Control Manager, and every start fails with error 1053 (see
+[Troubleshooting](#troubleshooting)).
+
+First read [`CHANGELOG.md`](../CHANGELOG.md) — the *Read this before upgrading*
+list of every release between the one you run and the one you install. While atlas
+is `0.x`, on-disk formats can change, and going back is not supported once the new
+build has written to the data directory ([Upgrading](#upgrading)).
+
+In an elevated PowerShell, with the new release downloaded and verified as in
+[step 1](#1-download-and-verify) (`atlas.zip` in the current directory):
+
+```powershell
+$Version = '0.10.0'
+$Xml     = 'C:\Atlas\atlas-service.xml'
+
+# Stop the service. The wrapper gives atlas <stoptimeout> to finish in-flight work.
+Stop-Service atlas
+
+# Copy the data directory while nothing holds it open. /B reads vault.key although
+# only the service account may; /COPY:DATS keeps that access list on the copy.
+robocopy C:\Atlas\data "C:\Atlas\data-before-$Version" /E /B /COPY:DATS /DCOPY:DAT /R:0 /NP
+if ($LASTEXITCODE -ge 8) { throw "backup failed - do not continue" }
+Copy-Item $Xml "$Xml.before-$Version"
+
+# Unpack the new build beside the old one, which stays for a rollback.
+Expand-Archive atlas.zip -DestinationPath C:\Atlas
+
+# Point the wrapper at the new build. Only <executable> changes.
+[xml]$cfg = Get-Content $Xml
+$cfg.service.executable = "C:\Atlas\atlas_${Version}_windows_amd64\atlas.exe"
+$cfg.Save($Xml)
+
+Start-Service atlas
+```
+
+The wrapper reads its XML each time the service starts, so a changed
+`<executable>` or `<arguments>` needs no reinstall. Only a change to what the
+service is registered as — its id, its name, the account it runs as — needs
+`atlas-service.exe uninstall` and `install`.
+
+Check that the service runs the new build and is ready:
+
+```powershell
+& "C:\Atlas\atlas_${Version}_windows_amd64\atlas.exe" version
+Get-Process atlas | Select-Object Id, Path      # the server and its workers, all from the new directory
+Invoke-WebRequest http://127.0.0.1:8080/readyz -UseBasicParsing   # https:// with --tls-cert
+```
+
+Repeat the last line until it answers `200 ok`: a refused connection means the server
+is not listening yet, and `503 startup recovery has not finished` that it is still
+replaying the log ([Endpoints](#endpoints)).
+
+If the service starts and stops again, the reason is in `atlas-service.err.log`
+next to the wrapper: that is atlas failing, not the service.
+
+**To go back**, restore both the data and the XML — the old build on data the new
+one has written is the combination that is not supported. Whatever happened since
+the upgrade — instances started, tasks completed, deployments — goes back with the
+data. With `$Version` and `$Xml` set as above:
+
+```powershell
+Stop-Service atlas
+Rename-Item C:\Atlas\data "data-failed-$Version"
+Rename-Item "C:\Atlas\data-before-$Version" data
+Copy-Item "$Xml.before-$Version" $Xml -Force
+Start-Service atlas
+```
+
+Once the new release has run for a while, delete `data-before-<version>` and the
+old build's directory. The copy is a rollback point on the same server, not a
+backup: it does not replace keeping `vault.key` and the data directory elsewhere
+([step 7](#7-back-up-the-vault-key), [Backups](#backups)).
+
 ## macOS
 
 `darwin_amd64` and `darwin_arm64` builds are published. Installation is the same
@@ -1224,6 +1305,9 @@ journalctl -u atlas -n 50
 Downgrading is not supported: a newer build may have written state an older one
 cannot read. Restore the backup instead.
 
+On Windows Server the service wrapper stays as it is and only its `<executable>`
+moves to the new build: see [Windows Server, step 4](#4-upgrade-to-a-new-release).
+
 ## Uninstalling
 
 ```bash
@@ -1265,8 +1349,22 @@ Tasks in that language park until it is available; nothing is lost.
 add the flag and restart.
 
 **You cannot log in** — use `atlas reset-password` against the data directory
-(see [step 6](#6-turn-on-authentication)). It works whether or not the server is
+(see [step 6](#6-the-administrator-account)). It works whether or not the server is
 running, because login re-reads the user store on every attempt.
+
+**Windows: `Error 1053: The service did not respond to the start or control request
+in a timely fashion`** — the service starts `atlas.exe` itself instead of the
+wrapper, usually because the new `atlas.exe` was copied over `atlas-service.exe`
+during an upgrade. `sc.exe qc atlas` shows the program the service starts, and
+`(Get-Item C:\Atlas\atlas-service.exe).VersionInfo.ProductName` reads `atlas`
+rather than WinSW's name when the wrapper has been overwritten (by a build from
+0.9.1 on, which carries a version resource). Put WinSW back under that name and
+follow [step 4](#4-upgrade-to-a-new-release). Started that way, atlas runs `serve`
+with its defaults — `:8080` on every interface and a fresh `atlas-data` directory
+in the service's working directory, normally `C:\Windows\System32` — and the
+process can outlive the failed start. End every `atlas.exe` that `Get-Process
+atlas` still lists and delete that `atlas-data` before you start the service
+again; your own data directory was not opened.
 
 **Recovery takes a long time after a crash** — the WAL is replayed from the
 newest usable checkpoint. If checkpointing was disabled (`--checkpoint-interval
