@@ -9,7 +9,10 @@
   depends on the questions people actually bring to the graph, and nobody has
   collected them. §6 is shaped so that a textual front-end can be added later without
   a second engine, which is what lets this record leave the question open rather than
-  guess at it.
+  guess at it. Issue #887, closed into this record on 2026-10-12, asked for the textual
+  form from the start; the draft PR #911 carried a parser and evaluator for one
+  (`api/panorama/query_*.go` on its branch), which is where a textual front-end would
+  begin.
 - **Question checked:** 2026-09
 
 ## Context and problem statement
@@ -292,6 +295,11 @@ So two modes, and the conservative one is the default:
 
 Opaque passage never crosses an installation boundary: a segment that would include a
 node of another installation ends the walk there, under the stop rule.
+
+> **Note (2026-10-12).** Issue #887, transferred into this record, required that a hidden
+> node is never traversed as a bridge to the topology behind it. That agrees with the
+> default (*Stop*) and conflicts with the opt-in above. Whether opaque passage stays is to
+> be settled before this record is accepted.
 
 Across installations, the estate rules of ADR-0402 apply unchanged. ADR-0402's open
 question — an estate reader who may not see all of it — is inherited: this record makes

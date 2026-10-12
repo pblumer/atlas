@@ -264,6 +264,8 @@ and tests together. The "thirty statements, sustained across a few merges" condi
 2026-09-09 is replaced by the size of the margin and the measured rate; if the rate turns,
 the right response is to cover the new code, and the wrong one is to lower the floor a
 third time. [Issue #979](https://github.com/pblumer/atlas/issues/979) tracks the rate.
+*(2026-10-12: #979 is closed. The margin that `scripts/check-coverage.sh` prints on every
+CI run is the reading of the rate; an issue that only repeated it tracked nothing more.)*
 
 `.github/workflows/ci.yml` and `scripts/check-coverage.sh` (its default) now say 95.
 
