@@ -20,9 +20,9 @@ and replay any instance step by step — with no database, no message broker, an
 
 <img src="docs/screenshots/modeler.png" alt="The atlas Modeler: a BPMN diagram on the canvas with the properties panel open on the right" />
 
-**Atlas** is named after the Titan who bears an immense load without ever letting it drop. That's exactly what it does: it carries process instances, batch after batch, and never drops a token.
+**atlas** is named after the Titan who bears an immense load without ever letting it drop. That's exactly what it does: it carries process instances, batch after batch, and never drops a token.
 
-> **Developer preview (`0.x`).** Atlas already runs a broad slice of BPMN 2.x durably on a single node, but it is not ready for production use — the pre-1.0 API and on-disk formats are unstable and changing fast. See the [changelog](CHANGELOG.md) for what's in each release and the [roadmap](ROADMAP.md) for what's next.
+> **Developer preview (`0.x`).** atlas already runs a broad slice of BPMN 2.x durably on a single node, but it is not ready for production use — the pre-1.0 API and on-disk formats are unstable and changing fast. See the [changelog](CHANGELOG.md) for what's in each release and the [roadmap](ROADMAP.md) for what's next.
 
 ---
 
@@ -85,7 +85,7 @@ Business rule tasks evaluate DMN decisions ([ADR-0014](docs/adr/0014-dmn-busines
 
 ## Why another workflow engine?
 
-Most BPMN engines spend their time interpreting XML at runtime and writing process state to a SQL database one transaction at a time. Both are throughput killers. Atlas takes a different path, borrowed from the design lineage of log-structured, event-sourced systems:
+Most BPMN engines spend their time interpreting XML at runtime and writing process state to a SQL database one transaction at a time. Both are throughput killers. atlas takes a different path, borrowed from the design lineage of log-structured, event-sourced systems:
 
 - **Compile, don't interpret.** BPMN models are compiled once at deploy time into a flat, integer-indexed execution graph. At runtime there are no string lookups, no XML parsing, no map access on the hot path — just pointer arithmetic over cache-friendly slices.
 - **Event sourcing over state mutation.** State is never written in place. Every state transition is an append-only event in a write-ahead log. The live state is a materialization of that log, kept in an embedded key-value store.
@@ -173,7 +173,7 @@ Backup and restore, including whole-instance snapshots ([ADR-0107](docs/adr/0107
 
 ## Non-goals (for now)
 
-- A *bespoke* graphical modeler — Atlas ships a browser viewer/editor by embedding the standard [`bpmn-js`](https://bpmn.io) toolkit ([ADR-0011](docs/adr/0011-single-binary-distribution-and-web-ui.md)), rather than reimplementing BPMN rendering from scratch
+- A *bespoke* graphical modeler — atlas ships a browser viewer/editor by embedding the standard [`bpmn-js`](https://bpmn.io) toolkit ([ADR-0011](docs/adr/0011-single-binary-distribution-and-web-ui.md)), rather than reimplementing BPMN rendering from scratch
 - A full-stack, batteries-included server beyond the single self-contained binary — the engine core stays a library first, embedded by the server
 
 ## License
