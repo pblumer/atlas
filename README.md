@@ -2,7 +2,7 @@
 
 <img src="docs/brand/atlas-mark.svg" width="96" height="96" alt="" />
 
-# Atlas
+# atlas
 
 **A durable, high-throughput BPMN 2.x workflow engine in a single Go binary.**
 
