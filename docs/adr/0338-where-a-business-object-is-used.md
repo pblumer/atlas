@@ -130,6 +130,10 @@ processes only the server can reach.
   editor holds unsaved state, so navigating out of it is a decision of its own. The open
   question above (reading Modeler drafts) is the other half of "used by nothing" and is
   worth revisiting once somebody is bitten by it.
+  *As built (2026-10-12):* the link was not built. [ADR-0363](0363-the-drawing-says-which-members-are-used.md)
+  answered the question it was for on the class canvas itself, so reading "is this used?"
+  leaves no unsaved edit behind, and #945 is closed. The per-element detail stays on
+  Data › Business objects.
 
 ## Pros and cons of the options
 
