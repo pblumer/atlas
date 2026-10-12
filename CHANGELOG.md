@@ -14,6 +14,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **An SMTP Worker without a credential sends without logging in.** The credential
+  reference was optional in the form, yet a Worker without one still logged in as its
+  sender with an empty password, which every server refuses with
+  `535 5.7.8 authentication failed` — so an internal relay that admits a server by its
+  address, typically on port 25, could not be configured. Such a Worker now connects,
+  upgrades with STARTTLS where offered and sends without a login, and its check says
+  it did not log in. A credential reference that resolves to nothing — no vault secret
+  of that name and no `ATLAS_CONNECTOR_<REF>_TOKEN` — is now reported as such by the
+  check, the parked task and the supervised Worker, instead of failing at the server
+  (ADR-0079).
+
 - **An uncaught error's incident says it is an error, not a timer.** An error end event
   whose error nothing caught parks on an incident marked as an unhandled error (ADR-0089),
   but the label every operator surface reads knew only a job, the execution budget and,

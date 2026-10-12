@@ -65,9 +65,17 @@ func NewProviderClient(cfg ProviderConfig) (Client, error) {
 		if err != nil {
 			return nil, fmt.Errorf("mail: %w", err)
 		}
+		// The sender logs in only when there is a password to log in with. A Worker
+		// given no credential is an internal relay that admits this server by its
+		// network address (ADR-0079); presenting the sender with an empty password
+		// instead is refused by every server, so such a relay could not be reached.
+		username := cfg.Sender
+		if cfg.Secret == "" {
+			username = ""
+		}
 		client := NewSMTPClient(Connector{
 			Endpoint: endpoint,
-			Username: cfg.Sender,
+			Username: username,
 			Password: cfg.Secret,
 			From:     cfg.Sender,
 		})

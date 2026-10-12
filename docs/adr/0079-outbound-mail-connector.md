@@ -141,6 +141,34 @@ timeout, and TLS policy options.
 > implicit TLS is supported ([ADR-0150](0150-preview-mail-provider-and-visible-incidents.md)). Still open: attachments and certificate
 > pinning.
 
+## Amendment (2026-10-12): a Worker without a credential does not log in
+
+The decision above makes the `sender` "both the SMTP auth username and the default
+`From`", and the form has always called the credential reference optional. Together
+they described a Worker that could not work: with no reference the sender still
+logged in, with an empty password, and every server refuses that
+(`535 5.7.8 authentication failed`). The case it shut out is common in larger
+organisations — an **internal relay**, usually on port 25, that admits a server by
+its network address and offers no login, or refuses every one.
+
+- **No credential reference → no login.** The SMTP client presents the sender only
+  when there is a password to present it with; without one it connects, upgrades
+  with STARTTLS where offered, and hands over the message. This is what
+  `SMTPClient.auth` already said a Worker without a username is, and what a Worker
+  configured from the environment without `_USERNAME` already did.
+- **A reference that resolves to nothing is an error, not a relay.** It means
+  somebody wanted a login, and a typo or a secret never stored must not quietly
+  become a Worker that sends anonymously. The check, the engine's registry and the
+  environment handed to a supervised Worker all refuse it, naming the reference and
+  the `ATLAS_CONNECTOR_<REF>_TOKEN` variable it was also looked up under.
+- **The check says what it proved.** Without a credential it reports that it
+  connected *without logging in*, because a relay that admits by address can still
+  refuse to relay; a test message is what confirms it.
+
+Rejected: a separate "authenticate" switch on the Worker. It would state the same
+fact twice — a credential is configured or it is not — and the two could disagree.
+A login name that differs from the sender stays a follow-up.
+
 ## Pros and cons of the options
 
 ### Option A — SMTP only

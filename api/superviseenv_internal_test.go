@@ -131,6 +131,9 @@ func TestTwoConnectorsThatFoldToOneVariableDoNotShareACredential(t *testing.T) {
 			t.Fatalf("Save(%s): %v", c.Name, err)
 		}
 	}
+	// Both credentials resolve, so the collision is the only reason one is left out.
+	t.Setenv("ATLAS_CONNECTOR_A_TOKEN", "pw-a")
+	t.Setenv("ATLAS_CONNECTOR_B_TOKEN", "pw-b")
 
 	env := envOf(t, srv.mailWorkerEnv())
 	names := strings.Split(env["ATLAS_MAIL_CONNECTORS"], ",")

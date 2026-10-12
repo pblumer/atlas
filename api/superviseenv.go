@@ -93,9 +93,19 @@ func (s *Server) mailWorkerEnv() []string {
 					slog.String("connector", c.Name), slog.String("collidesWith", first))
 				continue
 			}
+			// A missing SECRET tells the worker not to log in, so a Worker whose
+			// reference resolves to nothing is left out rather than handed over as a
+			// relay nobody configured — the engine records the same reason for it.
+			secret, err := s.mailCredential(c.CredentialsRef)
+			if err != nil && mailProviderOf(c) != mail.ProviderPreview {
+				logging.Warn(logging.WorkerSupervisorFailed,
+					"a mail worker's credential reference resolves to nothing; it is not handed to the supervised worker",
+					slog.String("connector", c.Name), slog.String("error", err.Error()))
+				continue
+			}
 			taken[key] = c.Name
 			names = append(names, c.Name)
-			env = append(env, mailConnectorEnv(key, c, s.resolveConnectorSecret(c.CredentialsRef))...)
+			env = append(env, mailConnectorEnv(key, c, secret)...)
 		}
 	})
 	if len(names) == 0 {
