@@ -88,6 +88,11 @@ var catalogGates = []handlerGate{
 	// it is nor what is in it.
 	{name: "HandleImportDocument", kind: gated, want: http.StatusForbidden, method: "POST",
 		body: `{"catalogs":[{"id":"CAT","rank":5,"languages":["de"]}]}`},
+	// An export is the whole record, so it is gated on maintaining the catalogue and
+	// not on seeing it; an outsider sees nothing and is answered 404.
+	{name: "HandleExportCatalog", kind: gated, want: http.StatusNotFound, method: "GET", id: true},
+	{name: "HandleExportProducts", kind: ungated, method: "GET",
+		why: "names its products in the query, which this harness does not carry; it is gated per product on maintaining its home, and the outsider case — 404, as the product listing hides it — is proved in TestChosenProductsExportWithTheEdgesBetweenThem"},
 	{name: "HandleImport", kind: gated, want: http.StatusNotFound, method: "POST",
 		body: `<?xml version="1.0" encoding="UTF-8"?><model xmlns="http://www.opengroup.org/xsd/archimate/3.0/" identifier="m"/>`,
 		id:   true},

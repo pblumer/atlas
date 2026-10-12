@@ -1862,6 +1862,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.catalogs.Processes = processLookup{s: s}
 	s.catalogs.EntryPoints = processLookup{s: s}
 	s.catalogs.Forms = processLookup{s: s}
+	s.catalogs.Models = processLookup{s: s}
+	s.catalogs.Deployer = catalogDeployer{s: s}
 	s.catalogs.Personal = processLookup{s: s}
 	s.catalogs.Remainders = remainderLookup{s: s}
 	s.orders.Limits = s.budgets()

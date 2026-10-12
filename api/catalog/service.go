@@ -76,6 +76,15 @@ type Service struct {
 	// (AnswerWarnings). Nil skips the warning.
 	Personal PersonalLookup
 
+	// Models answers the BPMN a process id was deployed from, for an export that
+	// carries the processes its products are bound to (export.go). Nil refuses
+	// such an export rather than leaving the processes out unannounced.
+	Models ProcessSource
+
+	// Deployer deploys the processes an imported document carries (export.go).
+	// Nil refuses such a document.
+	Deployer ProcessDeployer
+
 	// Remainders counts the order lines a converted product left on its old
 	// processes, for the fulfilment report (ADR-0427). Nil leaves the report's
 	// remainder empty.
