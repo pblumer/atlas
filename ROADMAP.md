@@ -16,10 +16,10 @@ The skeleton that proves the three pillars fit together end to end.
 - ✅ `state`: Pebble-backed store, transactions, column-family/index helpers
 - ✅ `engine`: single-writer processor loop, batch cycle, `ProcessingContext`
 - ✅ `applyToState` used identically live and on recovery; crash-recovery test
-- ✅ Minimal `compiler`: BPMN-XML parse → resolve → linearize to `CompiledProcess` (programmatic builder + `Parse`); deeper validation (reachability, gateway coverage) still to come
+- ✅ Minimal `compiler`: BPMN-XML parse → resolve → linearize to `CompiledProcess` (programmatic builder + `Parse`); deeper validation followed in Milestone 1 (`compiler/validation.go`, ADR-0026)
 - ✅ Behaviors: none/start event, end event, sequence flow, **service task**
-- ✅ `job`: dedicated `job` package — in-process worker subscription that pulls activatable jobs and feeds completions back (ADR-0007); gRPC streaming transport + leases/retry are Milestone 4
-- ✅ **Goal: execute `Start → ServiceTask → End` and recover it across a restart** (deployment is programmatic for now, pending the XML front end)
+- ✅ `job`: dedicated `job` package — in-process worker subscription that pulls activatable jobs and feeds completions back (ADR-0007); leases, retries and fencing followed over HTTP — only a gRPC transport is still undecided (Milestone 4)
+- ✅ **Goal: execute `Start → ServiceTask → End` and recover it across a restart** (deployment was programmatic then; XML deploy followed)
 
 ## Milestone 1 — Core BPMN 🚧
 
@@ -31,10 +31,10 @@ The control-flow basics most real models use.
   the result variable, so an instance runs to completion with no external worker.
   Recovery-tested (the result is written into the event and re-applied on replay,
   never re-evaluated).
-- 🚧 Process variables: a variable store with **input binding** — instances start
+- ✅ Process variables: a variable store with **input binding** — instances start
   with variables (`{"variables": {…}}`), script tasks read them, and Operations
-  shows them per instance. Variable scopes (local vs. propagated), copy-on-write,
-  and output mappings still to come.
+  shows them per instance. Variable scopes, propagation and input/output mappings
+  followed ([ADR-0068](docs/adr/0068-task-io-variable-mappings.md)).
 - ✅ Exclusive gateway (data-based XOR): takes the first outgoing flow whose
   compiled-FEEL condition is true, else the default flow. Recovery-tested (the
   chosen branch is captured by which element activates, never re-evaluated).
@@ -76,7 +76,7 @@ The control-flow basics most real models use.
   ([ADR-0174](docs/adr/0174-connector-payloads-are-the-input-mapping.md)), and embedded
   subprocesses reuse the same local-scope machinery
   ([ADR-0074](docs/adr/0074-embedded-subprocesses.md)). **ADR-0068 is complete.**
-- 🚧 **Data objects** ([ADR-0053](docs/adr/0053-first-class-data-objects.md)):
+- ✅ **Data objects** ([ADR-0053](docs/adr/0053-first-class-data-objects.md)):
   first-class, typed, event-sourced data — not the decoration most engines settle
   for. The foundational slice landed: a modeled `<dataObject>` (its name,
   `isCollection`, and optional `<dataState>`) compiles into the process, and at
@@ -253,7 +253,7 @@ The control-flow basics most real models use.
   stored nowhere, for ADR-0310's reason: the names are already the mechanism. Next here: a link
   from the class canvas into the reading, which waits on what a navigation out of an editor
   holding unsaved state should do.
-- 🔲 Compiler validation: reachability, gateway coverage, scope consistency
+- ✅ Compiler validation: reachability, gateway coverage, scope consistency (`compiler/validation.go`), and the same checks as a dry run over `POST /api/v1/validate` ([ADR-0026](docs/adr/0026-problems-panel-and-versioned-validation.md))
 - 🚧 **Conformance tests against a curated BPMN model set** — the
   [`conformance/`](conformance/) package scaffolds the suite: a register of BPMN
   execution features mapped onto the workflow control-flow patterns (so gaps are
@@ -304,7 +304,7 @@ The control-flow basics most real models use.
   opt-in behind a build tag (needs Node), out of the default test/coverage path.
   Next: grow the differential's reference translations, plus data-object lineage
   and error/message end events.
-- 🚧 **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)
+- ✅ **Business rule tasks** (DMN via the embedded [temis](https://github.com/pblumer/temis)
   engine, [ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)): the
   element, its behavior, and evaluation through the job path landed as a vertical
   slice. **The single-binary server now executes them end to end**: a project
@@ -465,8 +465,10 @@ The control-flow basics most real models use.
   and deployments written before this keep resolving `latest` at activation, exactly
   as they were deployed to. Served over `GET /api/v1/decision-deployments` (+
   `/{key}/xml` for the deployed source), reported in the application release
-  manifest beside its processes. `versionTag` (pin to a numbered version) is now
-  buildable on top of this and is the next step.
+  manifest beside its processes. A fixed version is chosen with `atlas:version`, resolved
+  at deploy, and a `versionTag` binding is refused rather than read as `latest` until a
+  decision version can carry a tag
+  ([ADR-0423](docs/adr/0423-a-business-rule-task-chooses-its-decision-version.md)).
   **A decision is now debuggable end to end**
   ([ADR-0066](docs/adr/0066-decision-evaluation-records.md)): the DMN worker
   requests temis's rules-fired **trace** during its off-path evaluation and rides
@@ -480,9 +482,12 @@ The control-flow basics most real models use.
   outputs it produced, and a rules-fired view of the trace — live and long after
   the instance finished (remote ADR-0050 decisions record an empty trace).
   Recovery-tested. Retention/compaction for the new family remains future work.
-  Next: explicit `<zeebe:output>` mappings, decimal precision across the temis
-  boundary, and off-loop streaming evaluation as the Milestone-4 gRPC job-worker
-  concern (the single binary drives jobs synchronously).
+  Outputs map through the task I/O mappings (`zeebe:ioMapping`, ADR-0068), and a
+  decision's numbers cross the temis boundary as exact decimals (`dmn/numbers.go`).
+  A business rule task can also call a **decision service**
+  ([ADR-0398](docs/adr/0398-a-business-rule-task-can-call-a-decision-service.md)):
+  one addressing vocabulary for decisions and services, an ambiguous name refused at
+  deploy.
 - 🚧 **Worker Types** ([ADR-0036](docs/adr/0036-clio-connector.md)): a service task
   bearing an `<atlas:clioConnector>` extension is a worker task that appends an
   event to a **server-registered** clio event store through the job path (like the
@@ -610,8 +615,8 @@ Making processes wait, react, and time out.
   execute: the token waits, a server-side scheduler fires due timers on the
   partition goroutine, and the event continues. Recovery-tested (a pending timer
   is restored from the log and fires afterward). A cycle on a plain catch is a
-  compile error (a catch fires once). An incident instead of firing immediately
-  when a FEEL timer can't resolve is still to come (ADR-0055/0056/0057).
+  compile error (a catch fires once). A FEEL timer that cannot resolve raises an
+  incident instead of firing ([ADR-0064](docs/adr/0064-timer-feel-failure-incidents.md)).
 - ✅ **Timer start events** (duration, date, cycle, cron): a `<startEvent>` with a
   `<timerEventDefinition>` starts a fresh instance on its schedule —
   `<timeDuration>` (once, after a delay), `<timeDate>` (once, at an absolute
@@ -630,8 +635,9 @@ Making processes wait, react, and time out.
   `POST /api/v1/messages` publish, correlating against open subscriptions through
   one shared path and carrying an optional variable payload into the woken
   instance. Recovery-tested (an open subscription is restored from the log and
-  correlates afterward). Message buffering, message boundary events, and
-  cross-partition correlation still to come (ADR-0020). A **message end event**
+  correlates afterward). Message boundary events are built (below); buffering is
+  open (end of this milestone) and cross-partition correlation is Milestone 5
+  (ADR-0020). A **message end event**
   publishes its message, then ends the instance — the send-and-stop counterpart of
   the throw event (ADR-0052).
 - ✅ **Message start events** (single-partition): a `<startEvent>` with a
@@ -640,7 +646,12 @@ Making processes wait, react, and time out.
   end to end. Matching is by message name; a throw event carries its instance's
   variables as the payload, and the reserved FEEL identifier `processInstanceKey`
   exposes an instance's own key so a reply can correlate back to the requester.
-  Recovery-tested. A start-event correlation key and buffering remain (ADR-0035).
+  Recovery-tested. A message start may carry a correlation key and be a **singleton
+  start**: while an instance started with a key is live, another message with that key
+  starts no duplicate ([ADR-0094](docs/adr/0094-singleton-message-start.md)). With
+  several start events, only the one that fired is seeded, and an untriggered create
+  seeds the none start ([ADR-0226](docs/adr/0226-start-events-are-triggers.md)).
+  Buffering remains open.
 - ✅ **Signal events (broadcast)**: a `signalEventDefinition` is a **named broadcast**
   — no correlation key, delivered 1:n to **every** waiting catch of the same name across
   all instances (ADR-0088). A signal throw or signal end event broadcasts the throwing
@@ -744,37 +755,6 @@ Making processes wait, react, and time out.
   dependency. Authored in the Modeler (the mode switch, the Worker and result collection, and a
   parameter editor per tool), and an undocumented tool is warned about at deploy and where it is
   written.
-- ✅ **Forms written by the AI Worker** ([ADR-0260](docs/adr/0260-ai-form-generation.md)):
-  the same Worker an operator configured for the runtime also writes forms at **design time**.
-  **"Create a new form" on a user task or a start event carries that step into the editor**, which
-  opens with the generator already on it — pressing that link was the author saying what the form is
-  for, so the dialog does not ask again (a repair form's link stays plain: a different kind of form).
-  The form editor's **✨ Generate** button asks for a brief in prose and, optionally, the process the
-  form belongs to and the step it is for — and the process's *own words* do the rest of the talking:
-  its documentation, each step's `<bpmn:documentation>`, the sequence-flow conditions, and the
-  variable names its mappings and data objects already use, read tolerantly from the **draft** the
-  author is looking at (or the deployed version) rather than from a compile. Regenerating over an
-  open form is a refinement, not a fresh start. **Nothing is stored**: what comes back opens unsaved
-  in the editor, under the id the editor was already holding, and the author reads it and saves it
-  through the ordinary path — ADR-0032's stance about generated diagrams, applied to forms. One
-  configuration and one credential for runtime and authoring alike (ADR-0255), no key in the browser,
-  and the call runs on the request's own goroutine, never on the run loop: it is authoring, not a
-  service task, so ADR-0164 is untouched. What comes back is gated before it is shown — form-js's
-  one root type, a curated component vocabulary (an `iframe` is refused **by name**, not dropped),
-  a unique key on every input, and a bound on the document — and an answer that is not a form is a
-  422 with the reason rather than a broken editor.
-- ✅ **The FEEL assistant** ([ADR-0445](docs/adr/0445-feel-assistant.md)): a
-  conversation with the same AI Worker that writes a **FEEL expression**, opened from anywhere with
-  **Ctrl/⌘+Shift+E**, the spark in the top bar, a **mini spark on every FEEL field** of the Modeler,
-  or a spark beside a focused output cell, literal expression or input expression in the DMN editor.
-  **Every answer is run before anybody reads it**: compiled, its calls refused as a deploy refuses
-  them (ADR-0388), evaluated against the example the model gave and held against the result it
-  claimed — and an answer that fails goes back to the model with the engine's own words, at most
-  twice, so a small free model behind OpenRouter is usable. The prompt's function list is the
-  engine's registry and every rule it teaches is a tested expression. Beside the chat: a FEEL editor,
-  a test pane, Copy, and **Apply to the field it was opened from** (an fx field keeps its `=`; a
-  decision table's input cell, which takes a unary test, is not written to), a **history** of the
-  last thirty expressions and **favourites**, kept in the browser. Nothing is stored on the server.
 - ✅ Boundary events: timer and message, interrupting and non-interrupting,
   attached to waiting activities. An interrupting boundary cancels the host (and
   its job) and routes out its flow; a non-interrupting one spawns a parallel
@@ -889,6 +869,21 @@ Making processes wait, react, and time out.
   `GET /api/v1/instances/{key}/variable-audit` and surfaced inline in the instance
   timeline so a corrected value carries its actor.
 
+**Still open in this milestone:**
+- 🔲 **Message buffer** ([ADR-0370](docs/adr/0370-durable-message-buffer.md), accepted): a
+  message published with a TTL that correlates nothing is kept, durably, and delivered to
+  the subscription that opens for it later — the fix for the publish-before-subscribe
+  race, built first as a local slice. It is also what a singleton start needs to hand a
+  message to its live instance instead of dropping it (ADR-0094's follow-up).
+- 🔲 **Repeatable non-interrupting conditional events**: a non-interrupting conditional
+  fires once per arm; firing again on every false→true edge is ADR-0137's follow-up.
+- 🔲 **Overviews of the messages and signals deployed models exchange**
+  ([ADR-0446](docs/adr/0446-the-messages-deployed-models-send-and-receive.md),
+  [ADR-0447](docs/adr/0447-the-signals-deployed-models-throw-and-receive.md), both proposed).
+- 🔲 **Lanes, layers B and C** ([ADR-0121](docs/adr/0121-bpmn-lanes.md)): a lane naming
+  an Atlas group as a compile-time `candidateGroups` default, and instance-level access
+  control.
+
 ## Milestone 3 — Structure ✅
 
 Composition and reuse.
@@ -948,13 +943,13 @@ Composition and reuse.
   transactions and cancel events; the cancel boundary/end panels are wired)
   ([ADR-0108](docs/adr/0108-bpmn-transactions.md)). **Closes Milestone 3.**
 
-## Milestone 4 — Operability 🔲
+## Milestone 4 — Operability 🚧
 
 What it takes to run this for real.
 
-- 🔲 Public API surface (deploy, create instance, publish message, complete job, queries)
-- 🔲 gRPC job-worker protocol (streaming pull, leases, fencing) — ADR-0007
-- 🔲 Worker SDK (Go first)
+- 🚧 Public API surface (deploy, create instance, publish message, complete job, queries): every route is in the served OpenAPI document with its role (`api/openapi.go`), with scoped API tokens ([ADR-0194](docs/adr/0194-api-tokens.md)) and a stated runtime contract ([ADR-0176](docs/adr/0176-standards-boundary-and-runtime-contract.md)). Deploy is still a sidecar store, not an event-sourced command ([ADR-0019](docs/adr/0019-durable-deployments.md))
+- 🚧 Job-worker protocol — ADR-0007: built over HTTP, with the type-keyed pull, long-poll, leases, `leaseToken` fencing, complete, fail and BPMN errors, and the activation and lease-timeout counters. A gRPC transport is not built, and whether it should be is open
+- 🚧 Worker SDK (Go first): the `worker` package is usable from Go — handlers, concurrency, `BPMNError` — but is not yet packaged and documented as an SDK
 - ✅ A worker runs the jobs of one type concurrently: `--max-jobs` places, a poll asking only
   for the free ones, and supervised built-in workers at the engine's in-process bound
   (`--worker-max-jobs`, default 16)
@@ -962,7 +957,7 @@ What it takes to run this for real.
   On Windows a kill-on-close job object ends every supervised worker, and what it started,
   with the server however the server ends
   ([ADR-0439](docs/adr/0439-supervised-workers-end-with-the-server.md)).
-- 🚧 Metrics (throughput, batch size, fsync latency, queue depth), structured logs, OTel traces
+- ✅ Metrics (throughput, batch size, fsync latency, queue depth), structured logs, OTel traces
   ([ADR-0142](docs/adr/0142-prometheus-metrics.md), v0.2.0 programme E): a Prometheus
   exposition at `/metrics` on Atlas's own registry. The **durability** metrics landed —
   applied log position, checkpoints and the position/age of the newest that still
@@ -1009,7 +1004,7 @@ What it takes to run this for real.
   compacted log. `GET`/`POST /api/v1/checkpoints` expose the status — published
   checkpoints and whether they still verify, the last pass, the WAL's footprint — and a
   checkpoint-now control for a planned restart. **ADR-0131 is complete.**
-- 🔲 Exported-log stream for downstream analytics
+- ✅ Exported-log stream for downstream analytics: the OpenSearch exporter ([ADR-0114](docs/adr/0114-opensearch-event-exporter.md)) and the CloudEvents feed, pushed to a receiver ([ADR-0433](docs/adr/0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md))
 - ✅ **Instance migration**
   ([ADR-0162](docs/adr/0162-process-instance-migration.md)): move running
   instances from one deployed version to the next. A deployment is immutable and
@@ -1045,7 +1040,7 @@ What it takes to run this for real.
   `POST /api/v1/instances/{key}/migrate/fork`, the `atlas_fork_instance` MCP tool, the
   plan endpoint answering both readings at once, the Operations dialog showing the fork
   below the rebinding, and the two-way link on the replay and the instance card.
-- 🚧 Operator tooling: list/inspect instances, incidents, jobs. **Finding one instance
+- ✅ Operator tooling: list/inspect instances, incidents, jobs. **Finding one instance
   among a few hundred thousand** landed
   ([ADR-0241](docs/adr/0241-finding-an-instance.md)): the
   variable search used to walk every instance in the engine *on the run loop*, so a
@@ -1104,6 +1099,22 @@ What it takes to run this for real.
   `?element=` / `?elementIndex=` / `?type=` / `?message=` filters are the *same* selector that action
   evaluates, so a preview and the act cannot disagree, and Operations → Incidents opens
   on the causes with the worker fix and a Resolve all beside each.
+- ✅ **Shipping it**: a container image (`Dockerfile`, built per release tag by
+  `.github/workflows/docker.yml`) and a Helm chart (`deploy/helm/atlas`, released by
+  `.github/workflows/chart-release.yml`); an optional **TLS 1.3 listener** with
+  operator-supplied certificates, off by default
+  ([ADR-0191](docs/adr/0191-built-in-tls-listener.md)).
+- ✅ **Deactivating a version** ([ADR-0119](docs/adr/0119-deactivate-deployed-process.md)):
+  an inactive definition is no longer started by its timer, message or signal start
+  events; an explicit create and the running instances are untouched.
+- ✅ **Instance TTL** ([ADR-0085](docs/adr/0085-process-instance-ttl.md)): a definition
+  may declare `instanceTtl`, with an optional server default; an instance still running
+  when it expires is terminated by a durable timer created at its activation, so a
+  replay recreates it.
+- ✅ **A circuit breaker per Worker** ([ADR-0340](docs/adr/0340-worker-circuit-breaker.md)):
+  an outage stops at the Worker, not at every token — the dispatch of a failing Worker's
+  jobs is held in runtime state, deliberately not durable, instead of each instance
+  running into its own incident.
 
 ## Milestone 5 — Scale-out 🔲
 
@@ -1116,12 +1127,12 @@ Beyond a single node.
 - 🔲 Partition rebalancing / failover
 - 🔲 Idempotency/dedupe for delivered cross-partition messages
 
-## Milestone 6 — Ecosystem 🔲
+## Milestone 6 — Ecosystem 🚧
 
 Adoption and polish.
 
 - 🔲 Worker SDKs in more languages
-- 🔲 BPMN modeler interoperability (import from common tools)
+- 🚧 BPMN modeler interoperability (import from common tools): the Zeebe dialect round-trips, and a MIM worksheet imports ([ADR-0292](docs/adr/0292-mim-import-worksheet.md)); importing from Camunda 7 or Signavio is not built
 - 🚧 **Benchmark suite and published performance numbers** (v0.2.0 programme B):
   a reproducible harness landed in [`benchmarks/`](benchmarks/) — durable-profile
   (real WAL `fsync` per batch) steady-state benchmarks for the minimal
@@ -1141,7 +1152,7 @@ Adoption and polish.
   [`benchmarks/results/`](benchmarks/results/). Still to come: a loopback-socket HTTP
   variant and a large parked-workload profile
   ([`benchmarks/README.md`](benchmarks/README.md)).
-- 🔲 Documentation site, tutorials, examples
+- 🚧 Documentation site, tutorials, examples: the handbooks in the Console, the API explorer and the models under `examples/` exist; a documentation site of its own does not
 - 🔲 1.0 API stability commitment
 
 ## Milestone S — Single-binary server & web UI 🚧
@@ -1195,7 +1206,7 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   it like every other route, and a tool call carries the caller's credential rather
   than one the adapter supplies
   ([ADR-0196](docs/adr/0196-authenticated-mcp-transport.md)).
-- 🔲 Full properties panel — the hand-written Details panel grows group by group
+- 🚧 Full properties panel — the hand-written Details panel grows group by group
   ([ADR-0025](docs/adr/0025-full-properties-panel.md)) rather than vendoring the
   ES-module-only `bpmn-js-properties-panel`. Enumerated in **Milestone A** below.
 - ✅ Durable deployments ([ADR-0019](docs/adr/0019-durable-deployments.md)): the
@@ -1579,19 +1590,37 @@ for the derived whole-instance mesh above them.
   is their sum; the queue-depth gauge is asked with `max_over_time()` and its total
   is the peak, because adding two readings of a queue depth measures nothing.
 
-## Milestone A — Modeler & authoring experience 🔲
+**After the six slices** — the estate and the run graph, outside the milestone's marker:
+- ✅ **One estate, several nodes** ([ADR-0402](docs/adr/0402-one-estate-several-nodes.md)):
+  every node keeps deriving its own subgraph and the reader's node stitches them into one
+  starmap; no node is the master and nothing new is stored.
+- ✅ **A peer credential carries its reach**
+  ([ADR-0410](docs/adr/0410-a-peer-credential-carries-the-reach-a-membership-cannot-give-it.md)):
+  an API token carries, beside its scope, the subjects it may see, applied by the same
+  per-item filter a person's membership uses.
+- 🚧 **Taken edges**
+  ([ADR-0400](docs/adr/0400-an-edge-that-was-taken-is-not-an-edge-that-was-declared.md)):
+  a derived edge carries how often it was traversed and the window that was counted; the
+  drift axis — taken but not declared — is not built.
+- 🚧 **The run graph** ([ADR-0404](docs/adr/0404-the-whole-graph-can-be-walked.md)): a
+  rebuildable in-memory projection of the whole graph (`rungraph/`), named apart from the
+  starmap and with a stated scope; the record is partly built.
+- 🔲 **One graph model, several projections**
+  ([ADR-0420](docs/adr/0420-one-graph-model-several-projections.md), proposed).
+
+## Milestone A — Modeler & authoring experience 🚧
 
 A parallel track alongside Milestone S: bring the Modeler's *authoring* surface up
 to what a real BPMN "Implement" workspace offers, captured feature-by-feature from
 a reference modeler and translated into Atlas decisions. Every item respects the
 buildless, self-contained UI rule ([ADR-0012](docs/adr/0012-web-ui-app-shell.md))
 and the compiler gate ([ADR-0013](docs/adr/0013-embed-bpmn-js-modeler.md)) — the
-panel only ever authors what the engine actually runs. The ADRs below are
-**Proposed** (feature intentions, not yet decided or built).
+panel only ever authors what the engine actually runs. Most of the records below have
+been decided and built since this track was opened; the markers say which.
 
 **Properties panel** ([ADR-0025](docs/adr/0025-full-properties-panel.md)) — extend
 the hand-written Details panel one vertical slice at a time:
-- 🔲 General: element id, name.
+- ✅ General: element id, name.
 - ✅ Documentation: `<bpmn:documentation>` — a Documentation field beside every
   element's name and id, on the process, each pool and the process it executes, and
   the collaboration itself. The compiler carries it as metadata but never acts on it
@@ -1606,31 +1635,37 @@ the hand-written Details panel one vertical slice at a time:
 - 🔲 Example data — editor-only mock data used by Play mode, never by the runtime.
 
 **Validation & problems** ([ADR-0026](docs/adr/0026-problems-panel-and-versioned-validation.md)):
-- 🔲 A `POST /api/v1/validate` dry-run compile (no register, no version, no run)
+- ✅ A `POST /api/v1/validate` dry-run compile (no register, no version, no run)
   returning structured problems (element ref, severity, rule, message).
-- 🔲 A Problems panel that calls it debounced on edit, links each problem to its
+- ✅ A Problems panel that calls it debounced on edit, links each problem to its
   element, and shows a version selector ("check problems against Atlas <version>").
 
 **Element & connector templates** ([ADR-0027](docs/adr/0027-element-templates.md)):
-- 🔲 Adopt the bpmn.io element-templates JSON schema; a server-served catalog.
+- 🚧 Adopt the bpmn.io element-templates JSON schema; a server-served catalog. The Repository serves and installs templates (`api/repository.go`, ADR-0081, ADR-0300); nothing applies one yet (below, [ADR-0212](docs/adr/0212-element-template-applier.md)).
 - 🔲 "Template → Select" applies a template's bound properties through the
   ADR-0025 write path, rendering only the template's declared fields.
 
 **Human tasks & forms** ([ADR-0028](docs/adr/0028-forms-and-the-tasks-app.md)):
-- 🔲 `<bpmn:userTask>` that parks a token and creates an activatable human task
+- ✅ `<bpmn:userTask>` that parks a token and creates an activatable human task
   via the existing job/task lifecycle (ADR-0007).
-- 🔲 Form model (adopt the bpmn.io form-js schema) + a server-side form store.
-- 🔲 The **Tasks** app (reserved in ADR-0012) as the human "worker": task inbox,
+- ✅ Form model (adopt the bpmn.io form-js schema) + a server-side form store.
+- ✅ The **Tasks** app (reserved in ADR-0012) as the human "worker": task inbox,
   form rendering, submit-completes-task.
-- 🔲 Form binding + a **Test** tab that previews a form against example data.
+- ✅ Form binding + a **Test** tab that previews a form against example data.
+- ✅ Assignee and candidate groups as **FEEL expressions**, evaluated at activation and
+  frozen ([ADR-0318](docs/adr/0318-user-task-assignment-expressions.md)).
+- ✅ **Task folders** in the Tasks app: saved filters stored as structured rules and
+  generated into FEEL, evaluated on the server off the run loop
+  ([ADR-0268](docs/adr/0268-task-folders-are-saved-filters.md)).
 
 **Publication** ([ADR-0029](docs/adr/0029-public-process-start-links.md)):
-- 🔲 Opt-in, revocable public start links: a scoped, unauthenticated
+- ✅ Opt-in, revocable public start links: a scoped, unauthenticated
   `POST /public/forms/{token}/start` bound to one process + start form, reusing the
-  single-writer start path. Needs rate limiting / abuse mitigation before shipping.
+  single-writer start path, rate-limited, checked against its form, and embeddable
+  cross-origin ([ADR-0186](docs/adr/0186-embed-public-forms-cross-origin.md)).
 
 **Play mode** ([ADR-0030](docs/adr/0030-play-mode-simulation.md)):
-- 🔲 An ephemeral engine sandbox: the real compiler + processor over an in-memory,
+- ✅ An ephemeral engine sandbox: the real compiler + processor over an in-memory,
   non-durable partition seeded from the draft, external effects mocked, driven
   from the Modeler and overlaid with the existing runtime overlay. No JS token
   simulator — identical semantics to production by construction.
@@ -1741,9 +1776,30 @@ dataset of up to 50 000 cases":
   looped through carries every step it was. An unfinished case is drawn standing
   where it stopped. It reads rather than drives: Step's controls act on the whole
   sandbox, and offering them over a finished run would invite stepping it.
-- ✅ **Nothing left open.** Saving a scenario from a CSV-driven run stays impossible
+- ✅ **Nothing left open from ADR-0215.** Saving a scenario from a CSV-driven run stays impossible
   on purpose — its rows are parsed on the server, so the browser has nothing to store
   — and the described dataset is the answer to what that was wanted for.
+- 🔲 A rule that demands the cases it speaks about: `minMatched`, the fewest cases its
+  `when` has to select, and the variables it reads that no case carried
+  ([ADR-0424](docs/adr/0424-a-playground-rule-can-demand-the-cases-it-speaks-about.md),
+  proposed).
+
+**Working on a diagram:**
+- ✅ **Token simulation** in the Design view: a client-side walkthrough of the control
+  flow, a hand-written bpmn-js module
+  ([ADR-0078](docs/adr/0078-design-view-token-simulation.md)).
+- ✅ **Live co-editing**: several authors in one session on a draft, with presence and a
+  lock per element, reachable from MCP as well
+  ([ADR-0140](docs/adr/0140-live-collaborative-modeling-sessions.md)).
+- ✅ **Adjusting a deployed diagram** without redeploying it: only the diagram blocks are
+  replaced, every other byte of the stored model is kept
+  ([ADR-0251](docs/adr/0251-adjust-a-deployed-diagram.md)).
+- ✅ **What an element was handed**, on the replayed diagram: the evaluated inputs and
+  outputs of a task, read from the log, with nothing new persisted
+  ([ADR-0161](docs/adr/0161-element-io-on-the-diagram.md)).
+- ✅ **Into a call activity**: double-clicking its "+" opens the process it calls, on
+  every surface that draws one, with a hover cue
+  ([ADR-0245](docs/adr/0245-call-activity-drilldown.md)).
 
 **Version history** ([ADR-0031](docs/adr/0031-diagram-version-history.md)):
 - 🔲 A **Versions** control: explicit named checkpoints (immutable snapshots)
@@ -1751,8 +1807,9 @@ dataset of up to 50 000 cases":
   distinct from deployment versions. Browse, label, restore.
 
 **In-Modeler AI copilot** ([ADR-0032](docs/adr/0032-modeler-ai-copilot.md)):
-- 🔲 Extend the MCP/HTTP surface (ADR-0016) with model-authoring tools (return
-  XML, validate candidate XML, accept generated XML into a draft).
+- 🚧 Extend the MCP/HTTP surface (ADR-0016) with model-authoring tools (return
+  XML, validate candidate XML, accept generated XML into a draft). The draft tools
+  exist; a validation tool does not.
 - 🔲 A copilot panel over a user-configured agent endpoint that drops generated
   models into a reviewable draft — no LLM or provider SDK in the binary, every
   result passes the compiler + Problems gate before deploy.
@@ -1762,11 +1819,42 @@ dataset of up to 50 000 cases":
   result is an unsaved draft. The copilot is the same shape with a diagram where the
   form is — and ADR-0032's "a user-configured agent endpoint" is now answered by the
   Console record rather than by a second place to put a key.
+- ✅ **Forms written by the AI Worker** ([ADR-0260](docs/adr/0260-ai-form-generation.md)):
+  the same Worker an operator configured for the runtime also writes forms at **design time**.
+  **"Create a new form" on a user task or a start event carries that step into the editor**, which
+  opens with the generator already on it — pressing that link was the author saying what the form is
+  for, so the dialog does not ask again (a repair form's link stays plain: a different kind of form).
+  The form editor's **✨ Generate** button asks for a brief in prose and, optionally, the process the
+  form belongs to and the step it is for — and the process's *own words* do the rest of the talking:
+  its documentation, each step's `<bpmn:documentation>`, the sequence-flow conditions, and the
+  variable names its mappings and data objects already use, read tolerantly from the **draft** the
+  author is looking at (or the deployed version) rather than from a compile. Regenerating over an
+  open form is a refinement, not a fresh start. **Nothing is stored**: what comes back opens unsaved
+  in the editor, under the id the editor was already holding, and the author reads it and saves it
+  through the ordinary path — ADR-0032's stance about generated diagrams, applied to forms. One
+  configuration and one credential for runtime and authoring alike (ADR-0255), no key in the browser,
+  and the call runs on the request's own goroutine, never on the run loop: it is authoring, not a
+  service task, so ADR-0164 is untouched. What comes back is gated before it is shown — form-js's
+  one root type, a curated component vocabulary (an `iframe` is refused **by name**, not dropped),
+  a unique key on every input, and a bound on the document — and an answer that is not a form is a
+  422 with the reason rather than a broken editor.
+- ✅ **The FEEL assistant** ([ADR-0445](docs/adr/0445-feel-assistant.md)): a
+  conversation with the same AI Worker that writes a **FEEL expression**, opened from anywhere with
+  **Ctrl/⌘+Shift+E**, the spark in the top bar, a **mini spark on every FEEL field** of the Modeler,
+  or a spark beside a focused output cell, literal expression or input expression in the DMN editor.
+  **Every answer is run before anybody reads it**: compiled, its calls refused as a deploy refuses
+  them (ADR-0388), evaluated against the example the model gave and held against the result it
+  claimed — and an answer that fails goes back to the model with the engine's own words, at most
+  twice, so a small free model behind OpenRouter is usable. The prompt's function list is the
+  engine's registry and every rule it teaches is a tested expression. Beside the chat: a FEEL editor,
+  a test pane, Copy, and **Apply to the field it was opened from** (an fx field keeps its `=`; a
+  decision table's input cell, which takes a unary test, is not written to), a **history** of the
+  last thirty expressions and **favourites**, kept in the browser. Nothing is stored on the server.
 
 **Canvas polish** (bpmn-js affordances; mostly no ADR needed, toolkit features):
-- 🔲 Minimap, align/distribute, element color/appearance.
+- 🚧 Minimap, align/distribute, element color/appearance: align and distribute are on the bpmn-js context menu; a minimap and element colour are not built.
 - 🔲 Element comments / annotations.
-- 🔲 Projects/folders to organize diagrams (draft/deployment listing grows a tree).
+- 🚧 Projects/folders to organize diagrams (draft/deployment listing grows a tree): projects exist ([ADR-0034](docs/adr/0034-projects-and-artifacts.md), [ADR-0128](docs/adr/0128-process-applications.md)); nested folders do not.
 
 ---
 
@@ -2100,13 +2188,14 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
 
 **Not built yet**
 - 🔲 The aggregate figures a product manager may see and the integration-manager relation
-  ([ADR-0315](docs/adr/0315-portal-roles-and-responsibilities.md)); a screen for a
-  catalogue's theme and mark, set over the API today ([ADR-0316](docs/adr/0316-portal-theme-per-catalogue.md)).
+  ([ADR-0315](docs/adr/0315-portal-roles-and-responsibilities.md)). (The screen for a
+  catalogue's theme and mark is built, in the catalogue administration —
+  [ADR-0316](docs/adr/0316-portal-theme-per-catalogue.md).)
 - 🔲 The TMF620 boundary, still Proposed
   ([ADR-0387](docs/adr/0387-the-catalogue-against-the-standards-boundary.md)). A
   per-operation product's `change`, which
   [ADR-0425](docs/adr/0425-a-product-lifecycle-is-one-process-with-message-triggers.md) bound
-  but nothing started, is started by the action act of slice B below.
+  but nothing started, is started by the action act of slice B below — built.
 
 **Product actions** ([ADR-0429](docs/adr/0429-product-actions-are-commands-with-published-outcomes.md),
 [plan](docs/planning/0429-product-actions-plan.md)) — a product declares an open list of
@@ -2224,9 +2313,14 @@ actions with closed effects, each a command whose outcome is a fact published be
 
 ## Guiding constraints
 
-Every milestone must respect the architecture's load-bearing decisions:
+Every milestone must respect the six invariants in
+[`docs/architecture/invariants.md`](docs/architecture/invariants.md):
 
-- No allocation on the hot path; immutable compiled graphs; value tokens.
-- Durable before visible (fsync → commit → side effects).
-- Single writer per partition; cross-partition only via async messaging.
-- Same `applyToState` live and on recovery.
+- **I1** No allocation on the hot path; immutable compiled graphs; value tokens.
+- **I2** Durable before visible (fsync → commit → side effects).
+- **I3** Single writer per partition; cross-partition only via async messaging.
+- **I4** One `applyToState`, live and on recovery, deterministic and side-effect-free.
+- **I5** Compile, don't interpret: what can be done once at deploy time is not done on
+  the hot path.
+- **I6** Events are facts, commands are intentions: only events are persisted, and the
+  keys and timestamps they carry are read back on replay, never generated again.
