@@ -12,6 +12,47 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-10-12
+
+**A process can walk one person through a multi-step form.** An embedded subprocess
+marked `atlas:wizard="internal"` or `"public"` is one sitting of one person: its user tasks
+are the screens of a form, and the gateways between them decide which screen follows which
+answer ([ADR-0449](docs/adr/0449-a-wizard-is-a-subprocess-one-filler-walks-through.md)).
+The Tasks app carries a signed-in person from one screen to the next, and a visitor without
+an account walks a public wizard behind a public start link, with a pass that opens the
+screens of that one instance and nothing else. Personal data a wizard's screens collected
+leaves it under its own name, sealed as it was. Two examples show both kinds: the trip
+booking is now a public wizard, and `examples/arbeitsplatz` is an internal one.
+
+**A worker can throw a BPMN error.** `POST /api/v1/jobs/{key}/error`, a handler of the Go
+worker returning a `worker.BPMNError`, and the MCP tool `atlas_throw_job_error` end a job
+with an error a boundary event or an error event subprocess catches, instead of failing it
+and spending its retries ([ADR-0089](docs/adr/0089-error-events.md)). Resolving the
+incident of an error nothing caught now retries what threw it, where it used to leave the
+instance on the element with neither a job nor an incident. Among the fixes, the data
+subject can no longer move from under a value sealed inside a subprocess, the account order
+example's widget sends the personnel number its public start requires, and seven decision
+records that claimed more than is built now say what is. 0.10.0 also carries every fix of
+0.9.2, which was cut from 0.9.1 on a branch of its own.
+
+**Read this before upgrading from 0.9.2.** These act on an existing installation:
+
+- Resolving the incident of a BPMN error nothing caught now acts. An error end event's
+  incident throws the error again: a handler that has come into reach catches it, and one
+  still missing parks the instance on a fresh incident. 0.9.2 cleared the incident and left
+  the token where it was. Incidents raised before the upgrade are resolved the same way.
+- A worker token may now call `POST /api/v1/jobs/{key}/error` for a job its worker holds,
+  fenced by the job's lease like a completion.
+- A change of an instance's data subject is refused with an incident when a personal value
+  is sealed in any scope of the instance, an embedded subprocess's included. 0.9.2 looked
+  at the instance's root alone.
+- The CORS answer of the public routes now allows the `Authorization` header, which a public
+  wizard's pass travels in. It still never allows credentials.
+- Take a backup before upgrading. 0.10.0 reads a 0.9.2 data directory as it is: the two
+  records that gain a field — an instance's public pass, an operator's thrown error code —
+  gain it at their end. Going back to 0.9.2 on a directory 0.10.0 has written is not
+  tested, and 0.10.0 writes an incident reason and an audit record kind 0.9.2 does not know.
+
 ### Added
 
 - **A worker can end its job with a BPMN error a boundary catches.** An error boundary on a
@@ -156,10 +197,10 @@ _Changed_ / _Removed_ for each version.
   end event or a worker's job: the token stayed on the element with neither a job nor an
   incident, so nothing reported the stuck instance. An error end event's incident now throws
   the error again when resolved, and parks on a fresh incident while nothing catches it. A
-  worker error with no handler (reachable today only from the playground's simulation; the
-  route for workers is still to come) keeps its job, its retries spent, under a job
-  incident, so resolving it hands the same job back to the workers with the retries the
-  resolve gives, as for a failed job; the job is no longer canceled. The incident is marked
+  worker error with no handler, thrown through the route this release adds, keeps its job,
+  its retries spent, under a job incident, so resolving it hands the same job back to the
+  workers with the retries the resolve gives, as for a failed job; the job is no longer
+  canceled. The incident is marked
   as an unhandled error. An incident left on an error end event by an earlier version is
   resolved the same way.
 
@@ -14235,7 +14276,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.9.2...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/pblumer/atlas/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/pblumer/atlas/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/pblumer/atlas/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/pblumer/atlas/compare/v0.8.0...v0.9.0
