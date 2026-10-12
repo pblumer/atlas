@@ -12,6 +12,41 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-10-12
+
+**A catalogue moves to another installation as one file.** `GET /api/v1/catalogs/{id}/document`
+answers a catalogue as the document `POST /api/v1/catalogs/import` takes, and
+`GET /api/v1/catalog-products/document` answers chosen products, which the import offers in a
+catalogue of your choice with `?into=`
+([ADR-0451](docs/adr/0451-catalogue-export.md)). With `?processes=true` the document also
+carries the BPMN of every process its products are bound to, and the import deploys them
+through the same door as `POST /api/v1/deployments`. The Console's catalogue pages export and
+import, and MCP has `atlas_export_catalog` and `atlas_export_catalog_products`. Among the
+fixes, an SMTP Worker without a credential reaches an internal relay without logging in, and
+the incident of a BPMN error nothing caught says it is an error instead of a timer.
+
+**Read this before upgrading from 0.10.0.** These act on an existing installation:
+
+- The incident of an error end event whose error nothing caught, raised under 0.10.0, now
+  reads `error` where it read `timer`: in `GET /api/v1/incidents` and its `?type=` filter, in
+  the summary's causes, in the Console, and in the `incidentType` of `atlas.incident.raised`
+  and `.resolved`. A filter, a dashboard or an event receiver that took such an incident for
+  a timer must take `error`; a receiver that keyed a cause by a `raised` event from 0.10.0
+  finds the `resolved` event from 0.11.0 under `error`. Such an incident raised before 0.10.0
+  still reads `timer`.
+- An SMTP Worker without a credential reference now connects without logging in, so a relay
+  that admits atlas by its address accepts its messages, and a mail task 0.10.0 failed sends
+  when it is retried. A mail Worker whose reference resolves to nothing is no longer built:
+  its check, the task that needs it and the supervised Worker report the reference. 0.10.0
+  logged in with an empty password, which the server refused, so nothing that sent before
+  stops sending. The preview provider is exempt.
+- A document 0.11.0 exports is meant for an import on 0.11.0. 0.10.0 ignores `?into=`, the
+  `processes` and the top-level `edges` without saying so, so upgrade the installation that
+  imports first.
+- 0.11.0 reads and writes the same data directory as 0.10.0: no record, log or store format
+  changed, and no system process changed, so the first start deploys nothing new. Take a
+  backup before upgrading all the same.
+
 ### Added
 
 - **A catalogue exports as the document it imports as.** `GET /api/v1/catalogs/{id}/document`
@@ -14319,7 +14354,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/pblumer/atlas/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/pblumer/atlas/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/pblumer/atlas/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/pblumer/atlas/compare/v0.9.0...v0.9.1
