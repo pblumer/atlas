@@ -844,7 +844,35 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "empty request body: expected BPMN XML")
 		return
 	}
+	resp, refused := s.deployBody(r, body)
+	if refused != nil {
+		httpapi.JSON(w, refused.status, refused.body)
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, resp)
+}
 
+// deployRefusal is why a deploy did not happen: the status and body the deploy
+// route answers with, and the same in one sentence for a caller that reports it
+// inside an answer of its own, as a catalogue import does.
+type deployRefusal struct {
+	status int
+	body   any
+	reason string
+}
+
+// refusedWith is the refusal whose body is the API's ordinary error envelope.
+func refusedWith(status int, msg string) *deployRefusal {
+	return &deployRefusal{status: status, body: map[string]string{"error": msg}, reason: msg}
+}
+
+// deployBody is everything POST /api/v1/deployments does with a model once it has
+// read it, as the caller of r: the DMN models it needs, the application it files
+// under, who may listen to and claim what, and the deploy itself. It is the one
+// door a BPMN model is deployed through on a person's behalf, so a catalogue
+// import that carries processes takes it too rather than a second, laxer copy
+// (ADR-draft-catalogue-export). It must not be called on the run loop.
+func (s *Server) deployBody(r *http.Request, body []byte) (deployResp, *deployRefusal) {
 	// Resolve the DMN model this diagram's business rule tasks need and bundle it,
 	// so a decision authored in Atlas deploys together with its process instead of
 	// model-less (which would create DMN jobs that can never evaluate and then fail
@@ -865,17 +893,14 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		deployedDecisionIDs = s.dmnRegistry.LatestDecisionIDs()
 	})
 	if loadErr != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "list dmn references: "+loadErr.Error())
-		return
+		return deployResp{}, refusedWith(http.StatusInternalServerError, "list dmn references: "+loadErr.Error())
 	}
 	dmnXMLs, refuse, dmnErr := s.dmnForDeployBody(r.Context(), body, refs, deployedDecisionIDs)
 	if dmnErr != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "resolve dmn model: "+dmnErr.Error())
-		return
+		return deployResp{}, refusedWith(http.StatusInternalServerError, "resolve dmn model: "+dmnErr.Error())
 	}
 	if refuse != "" {
-		httpapi.Error(w, http.StatusConflict, refuse)
-		return
+		return deployResp{}, refusedWith(http.StatusConflict, refuse)
 	}
 
 	// Resolve the project this deploy files under, so the Modeler home groups the
@@ -899,15 +924,13 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		)
 		s.do(func() { d, ok, readErr = s.drafts.Get(pid) })
 		if readErr != nil {
-			httpapi.Error(w, http.StatusInternalServerError, "read draft: "+readErr.Error())
-			return
+			return deployResp{}, refusedWith(http.StatusInternalServerError, "read draft: "+readErr.Error())
 		}
 		if ok && d.ProjectID != "" {
 			var exists bool
 			s.do(func() { _, exists, readErr = s.projects.Get(d.ProjectID) })
 			if readErr != nil {
-				httpapi.Error(w, http.StatusInternalServerError, "read project: "+readErr.Error())
-				return
+				return deployResp{}, refusedWith(http.StatusInternalServerError, "read project: "+readErr.Error())
 			}
 			if exists {
 				projectID = d.ProjectID
@@ -928,16 +951,16 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	// the loop would deadlock.
 	if projectID != "" {
 		if code, msg := s.authorizeTargetProject(r, projectID, ScopeRoleEditor); code != 0 {
-			httpapi.Error(w, code, msg)
-			return
+			return deployResp{}, refusedWith(code, msg)
 		}
 	}
 	// Who may listen to the personal data atlas emits (ADR-0435 §6), before anything
 	// is persisted. It reads only the bytes and the caller, so it runs here rather
 	// than on the loop.
 	if found := s.personalListenersBlocking(r, body); len(found) > 0 {
-		personalListenerRefusal(w, r, found)
-		return
+		auditPersonalListenerRefusal(r, found)
+		return deployResp{}, &deployRefusal{status: http.StatusForbidden, body: personalListenerBody(r, found),
+			reason: personalListenerReason(r, found)}
 	}
 	var (
 		resp       deployResp
@@ -984,24 +1007,26 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case compErr != nil:
 		// A compile failure is a client error: the submitted model is invalid.
-		httpapi.Error(w, http.StatusBadRequest, compErr.Error())
+		return deployResp{}, refusedWith(http.StatusBadRequest, compErr.Error())
 	case persistErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "persist deployment: "+persistErr.Error())
+		return deployResp{}, refusedWith(http.StatusInternalServerError, "persist deployment: "+persistErr.Error())
 	case refused != nil:
-		mailboxRefusalResponse(w, refused)
+		return deployResp{}, &deployRefusal{status: http.StatusForbidden, body: mailboxRefusalBody(refused),
+			reason: mailboxRefusalReason(refused)}
 	case claimed != "":
-		claimRefusal(w, claimed, "An inbound worker you cannot reach publishes under this "+
-			"message name. Rename the message in your model, or ask whoever owns that worker to share it.")
-	default:
-		// Off the run loop on purpose: this reads nothing but the bytes the caller
-		// sent, and work that does not need the engine's single writer does not
-		// belong on it (I3). Once for the model rather than once per deployed pool —
-		// a namespace prefix is bound at the document root, so every pool of a
-		// collaboration shares the one declaration and the one mistake.
-		resp.Warnings = append(resp.Warnings, foreignAtlasNamespaceWarnings(body)...)
-		resp.Warnings = append(resp.Warnings, searchableDeclarationWarnings(body)...)
-		httpapi.JSON(w, http.StatusOK, resp)
+		detail := "An inbound worker you cannot reach publishes under this " +
+			"message name. Rename the message in your model, or ask whoever owns that worker to share it."
+		return deployResp{}, &deployRefusal{status: http.StatusConflict, body: claimBody(claimed, detail),
+			reason: "the message name " + claimed + " is claimed elsewhere: " + detail}
 	}
+	// Off the run loop on purpose: this reads nothing but the bytes the caller
+	// sent, and work that does not need the engine's single writer does not
+	// belong on it (I3). Once for the model rather than once per deployed pool —
+	// a namespace prefix is bound at the document root, so every pool of a
+	// collaboration shares the one declaration and the one mistake.
+	resp.Warnings = append(resp.Warnings, foreignAtlasNamespaceWarnings(body)...)
+	resp.Warnings = append(resp.Warnings, searchableDeclarationWarnings(body)...)
+	return resp, nil
 }
 
 // deployModel compiles and registers every executable process in one BPMN model

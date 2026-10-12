@@ -51,6 +51,8 @@ var mcpToolRoutes = map[string]string{
 	"atlas_catalog_releases":          "GET /api/v1/catalogs/{id}/releases",
 	"atlas_catalog_unpublished":       "GET /api/v1/catalogs/{id}/unpublished",
 	"atlas_import_catalog":            "POST /api/v1/catalogs/import",
+	"atlas_export_catalog":            "GET /api/v1/catalogs/{id}/document",
+	"atlas_export_catalog_products":   "GET /api/v1/catalog-products/document",
 	"atlas_import_catalog_archimate":  "POST /api/v1/catalogs/{id}/import",
 	// What a held position offers and whether it takes it now (ADR-0429). Reading it
 	// changes nothing; asking for an action is omitted below.

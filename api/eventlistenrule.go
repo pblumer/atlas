@@ -145,12 +145,17 @@ func personalListenerReason(r *http.Request, found []personalListener) string {
 // sentence, because an MCP client keeps nothing of the body but the error.
 func personalListenerRefusal(w http.ResponseWriter, r *http.Request, found []personalListener) {
 	auditPersonalListenerRefusal(r, found)
-	httpapi.JSON(w, http.StatusForbidden, map[string]any{
+	httpapi.JSON(w, http.StatusForbidden, personalListenerBody(r, found))
+}
+
+// personalListenerBody is the body personalListenerRefusal answers with.
+func personalListenerBody(r *http.Request, found []personalListener) map[string]any {
+	return map[string]any{
 		"error":     personalListenerReason(r, found),
 		"listeners": found,
 		"needs":     RoleAdmin,
 		"roles":     callerRoles(r),
-	})
+	}
 }
 
 // auditPersonalListenerRefusal leaves the line every authorization refusal leaves.

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strings"
 )
 
 // The shop catalogue tools: what a product manager maintains
@@ -676,35 +677,113 @@ func catalogTools() []Tool {
 		},
 		{
 			Name: "atlas_import_catalog",
-			Description: "Import a whole shop as one document: {catalogs, products, publish}. Each " +
+			Description: "Import a whole shop as one document: {catalogs, products, edges, processes, publish} — " +
+				"exactly what atlas_export_catalog and atlas_export_catalog_products answer. Each " +
 				"catalogue carries its id, texts, rank, languages, items (the product ids it offers), " +
 				"groups (its audience), members and edges; each product carries the fields " +
 				"atlas_save_catalog_product takes, including its homeCatalog. IDs are the document's " +
 				"own and stable, so importing the same document again UPDATES what the first import " +
-				"created. ALL OR NOTHING: every id, every catalogue you must maintain and — with " +
-				"publish:true — every publish problem is checked before anything is written; a refusal " +
-				"writes nothing and lists every problem with its subject (catalog:<id> or product:<id>). " +
-				"Returns {created, updated, releases}. A theme, a logo and pictures are not part of a " +
-				"document.",
+				"created. Pass `into` to import a document of PRODUCTS ALONE into a catalogue you " +
+				"maintain: every product is offered there, one new to this server is homed there, one " +
+				"it already has keeps its home, and the document's edges are added to that catalogue. " +
+				"`processes` ({id, xml} each) are deployed BEFORE the catalogue is written and need the " +
+				"modeler role as well; one already deployed with the same model is left unchanged, and " +
+				"a catalogue refused after they deployed leaves them deployed. ALL OR NOTHING " +
+				"otherwise: every id, every catalogue you must maintain and — with publish:true — every " +
+				"publish problem is checked before anything is written; a refusal writes nothing and " +
+				"lists every problem with its subject (catalog:<id>, product:<id>, process:<id>). " +
+				"Returns {created, updated, releases, deployed, unchanged}. A theme, a logo and " +
+				"pictures are not part of a document.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"catalogs": map[string]any{"type": "array", "items": map[string]any{"type": "object"},
-						"description": "The catalogues, each with its id"},
+						"description": "The catalogues, each with its id. None when importing into a catalogue"},
 					"products": map[string]any{"type": "array", "items": map[string]any{"type": "object"},
-						"description": "The products, each with its id and homeCatalog"},
+						"description": "The products, each with its id and — unless imported into a catalogue — its homeCatalog"},
+					"edges": map[string]any{"type": "array", "items": map[string]any{"type": "object"},
+						"description": "Edges between the document's products, {from, to, kind}; only with into"},
+					"processes": map[string]any{"type": "array", "items": map[string]any{"type": "object"},
+						"description": "BPMN models the products are bound to, {id, xml} each, deployed first"},
 					"publish": map[string]any{"type": "boolean",
 						"description": "Publish a release of every catalogue in the document once it is written"},
+					"into": stringProp("Import the document's products into this existing catalogue you maintain"),
 				},
 			},
 			Handler: func(c *Client, args map[string]any) (string, error) {
 				body, err := json.Marshal(map[string]any{
-					"catalogs": args["catalogs"], "products": args["products"], "publish": args["publish"] == true,
+					"catalogs": args["catalogs"], "products": args["products"], "edges": args["edges"],
+					"processes": args["processes"], "publish": args["publish"] == true,
 				})
 				if err != nil {
 					return "", err
 				}
-				return asText(c.post("/api/v1/catalogs/import", "application/json", body))
+				path := "/api/v1/catalogs/import"
+				if into, _ := args["into"].(string); into != "" {
+					path += "?into=" + url.QueryEscape(into)
+				}
+				return asText(c.post(path, "application/json", body))
+			},
+		},
+		{
+			Name: "atlas_export_catalog",
+			Description: "Export a catalogue you maintain as the document atlas_import_catalog takes: " +
+				"the catalogue with every product it maintains or offers, without what belongs to " +
+				"this installation (owner, revisions, times, theme, logo, pictures). With " +
+				"processes:true it carries the BPMN of every process the products are bound to, and " +
+				"names any this server has not deployed under missingProcesses. Use it to move a " +
+				"catalogue to another server, or to keep it as a reviewable file.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":        stringProp("The catalogue to export."),
+					"processes": map[string]any{"type": "boolean", "description": "Carry the processes the products are bound to"},
+				},
+				"required": []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				suffix := "/document"
+				if args["processes"] == true {
+					suffix += "?processes=true"
+				}
+				return asText(c.get(withID(id, suffix)))
+			},
+		},
+		{
+			Name: "atlas_export_catalog_products",
+			Description: "Export chosen products whose home you maintain, with the edges between them, " +
+				"as a document to import into another catalogue with atlas_import_catalog and `into`. " +
+				"It carries no catalogue. With processes:true it carries the processes the products " +
+				"are bound to, as atlas_export_catalog does.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"ids": map[string]any{"type": "array", "items": map[string]any{"type": "string"},
+						"description": "The product ids to export"},
+					"processes": map[string]any{"type": "boolean", "description": "Carry the processes the products are bound to"},
+				},
+				"required": []any{"ids"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				raw, _ := args["ids"].([]any)
+				var ids []string
+				for _, v := range raw {
+					if id, ok := v.(string); ok && id != "" {
+						ids = append(ids, url.QueryEscape(id))
+					}
+				}
+				if len(ids) == 0 {
+					return "", fmt.Errorf("ids: name at least one product")
+				}
+				path := "/api/v1/catalog-products/document?ids=" + strings.Join(ids, ",")
+				if args["processes"] == true {
+					path += "&processes=true"
+				}
+				return asText(c.get(path))
 			},
 		},
 		{
