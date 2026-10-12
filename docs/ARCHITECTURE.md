@@ -44,9 +44,9 @@ See [ADR-0001](adr/0001-event-sourcing-and-log-structured-state.md), [ADR-0002](
 
 ## System overview
 
-![Atlas system overview: users, applications, interfaces, workflow engine, embedded persistence (WAL and Pebble state store), workers and target systems](architecture/system-overview.svg)
+![Atlas system overview: users, applications, interfaces, workflow engine, embedded persistence (WAL and Pebble state store), workers, the per-run script sandbox and target systems](architecture/system-overview.svg)
 
-A client never talks to the state store directly. Everything is a **command** submitted to a partition. The processor turns commands into **events**, makes them durable, and applies them to state. External work (service tasks) is handed out to **Worker Instances** as durable jobs over the HTTP Worker API, and their results come back as new commands.
+A client never talks to the state store directly. Everything is a **command** submitted to a partition. The processor turns commands into **events**, makes them durable, and applies them to state. External work (service tasks) is handed out to **Worker Instances** as durable jobs over the HTTP Worker API, and their results come back as new commands. PowerShell, Python and JavaScript tasks can run each execution in a fail-closed [Linux sandbox](adr/0303-script-sandbox-isolation.md): `--script-sandbox=strict` confines the filesystem with Landlock and denies sockets with seccomp, and refuses to run rather than fall back. It is opt-in; the default, `off`, keeps the process's own access ([what a script reaches then](install.md#what-a-script-can-reach-with---script-sandboxoff)).
 
 ## The three pillars
 
