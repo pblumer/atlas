@@ -260,6 +260,49 @@ func TestListIncidentsByElementTypeAndMessage(t *testing.T) {
 	}
 }
 
+// uncaughtErrorEndXML is a process whose only path ends in an error end event nothing
+// catches, so every instance parks on an unhandled-error incident (ADR-0089).
+const uncaughtErrorEndXML = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" id="d" targetNamespace="http://atlas/test">
+  <error id="Err_nope" errorCode="NOPE"/>
+  <process id="uncaught" isExecutable="true">
+    <startEvent id="start"/>
+    <endEvent id="boom"><errorEventDefinition errorRef="Err_nope"/></endEvent>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="boom"/>
+  </process>
+</definitions>`
+
+// TestUncaughtErrorIncidentReadsAsError: an error nothing caught is what parked, so the
+// listing, its ?type= filter and the summary's cause all name it error rather than the
+// timer the job-less fallback used to call it. Resolving throws it again, and the fresh
+// incident reads the same.
+func TestUncaughtErrorIncidentReadsAsError(t *testing.T) {
+	ts := newTestServer(t)
+	startInstance(t, ts, deployXML(t, ts, uncaughtErrorEndXML))
+
+	rows := listIncidents(t, ts)
+	if len(rows) != 1 || rows[0].Type != "error" || rows[0].Message != "unhandled error 'NOPE'" {
+		t.Fatalf("incidents = %+v, want one error incident naming NOPE", rows)
+	}
+	if got := listIncidentsQuery(t, ts, "?type=error"); len(got) != 1 {
+		t.Errorf("?type=error returned %d, want the uncaught error", len(got))
+	}
+	if got := listIncidentsQuery(t, ts, "?type=timer"); len(got) != 0 {
+		t.Errorf("?type=timer returned %d, want none", len(got))
+	}
+	if s := incidentSummaryQuery(t, ts, ""); len(s.Groups) != 1 || s.Groups[0].Type != "error" {
+		t.Errorf("summary = %+v, want one cause of type error", s)
+	}
+
+	if code, body := doReq(t, ts, http.MethodPost,
+		fmt.Sprintf("/api/v1/incidents/%d/resolve", rows[0].ElementInstanceKey), `{"retries":1}`, "application/json"); code != http.StatusOK {
+		t.Fatalf("resolve: status=%d body=%s", code, body)
+	}
+	if again := listIncidents(t, ts); len(again) != 1 || again[0].Type != "error" {
+		t.Errorf("after resolving, incidents = %+v, want the error thrown again as a fresh error incident", again)
+	}
+}
+
 // TestResolveIncidentsByKeys is the hand-picked set: the rows an operator ticked,
 // resolved in one call, with a key that holds no incident reported rather than
 // failing the whole call.

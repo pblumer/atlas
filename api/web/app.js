@@ -6384,7 +6384,8 @@ function overrideCell(r) {
 // Each row links to the stuck element on the live diagram and to that instance's replay
 // (ADR-0151) and resolves in place over POST /incidents/{elementInstanceKey}/resolve: a
 // job incident re-activates its job with a fresh retry budget; a timer incident re-arms
-// the element against the instance's current variables (re-raising if it still fails).
+// the element against the instance's current variables; an error incident throws its
+// uncaught error again (each re-raising if it still fails).
 
 // How many incident rows one page of the table renders. The API's own ceiling is 5000;
 // asking for it put thousands of rows (each with an actions menu) into the DOM, which is
@@ -6452,11 +6453,12 @@ async function viewIncidents() {
     <p class="muted inc-lead">Where a token is stuck waiting for an operator (ADR-0061). A <b>job</b>
     incident is a service task whose retries ran out and parked; a <b>timer</b> incident is a
     recurring boundary or event-subprocess timer whose FEEL schedule stopped resolving
-    (ADR-0111). The table below groups them by <b>cause</b> — the element that parked — because
+    (ADR-0111); an <b>error</b> incident is a BPMN error nothing caught (ADR-0089). The
+    table below groups them by <b>cause</b> — the element that parked — because
     one broken integration parks every instance that reaches it: fix what the cause names, then
     <b>Resolve all</b> clears everything behind it in one go. <b>Resolve</b> re-activates the work:
     a parked job retries with the budget you grant, a timer re-arms against the instance's current
-    variables — re-raising if it still fails.</p>
+    variables, an uncaught error is thrown again — each re-raising if it still fails.</p>
     <div id="inc-note"></div>
     <div class="card" style="padding:0">
       <table data-dt-key="incident-causes">

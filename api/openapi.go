@@ -521,7 +521,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "errorCode")),
 			resp: jsonBody("Job key", tObject())}},
 		{"GET", "/api/v1/incidents", s.handleListIncidents, apiOp{
-			summary: "List unresolved incidents, optionally scoped to one instance (?instance=), definition (?process=), BPMN element (?element=, or ?elementIndex= for an instance whose definition is no longer deployed), kind (?type=job|timer|budget) or message fragment (?message=) — capped per call (?limit=, max 5000). Answers {items, total, totalExact, truncated}: on a capped page total is a floor, and GET /api/v1/incidents/summary is the reading that counts them all", tag: "Incidents", role: RoleOperator, resp: jsonBody("Incidents", tPage())}},
+			summary: "List unresolved incidents, optionally scoped to one instance (?instance=), definition (?process=), BPMN element (?element=, or ?elementIndex= for an instance whose definition is no longer deployed), kind (?type=job|timer|budget|error) or message fragment (?message=) — capped per call (?limit=, max 5000). Answers {items, total, totalExact, truncated}: on a capped page total is a floor, and GET /api/v1/incidents/summary is the reading that counts them all", tag: "Incidents", role: RoleOperator, resp: jsonBody("Incidents", tPage())}},
 		{"GET", "/api/v1/incidents/summary", s.handleIncidentSummary, apiOp{
 			summary: "What is stuck, by cause: one group per (definition, element, kind) with its count, its raised-at window, a representative message and the worker behind it — the constant-size reading of a flood, scoped like the list (?process=, ?instance=)", tag: "Incidents", role: RoleOperator,
 			resp: jsonBody("Incident causes", tObject())}},

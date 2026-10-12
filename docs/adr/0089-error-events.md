@@ -393,6 +393,17 @@ decision (I6); it runs only live (a throw is a command), never during replay.
   - A thrown error neither closes nor feeds a circuit breaker (ADR-0340): it says nothing
     about whether the target answered. The worker's job row records it as "error
     thrown".
+- **Amendment 2026-10-12, the label:** the operator surfaces read an incident's kind from
+  one function (`incidentType`, ADR-0150), and it knew only a job, the execution budget
+  and, for everything else, a timer, so an uncaught error end read as a timer whose
+  schedule stopped resolving. A job-less incident marked `IncidentUnhandledError` now
+  reads `error`: in the listing and its `?type=` filter, the summary's causes, the bulk
+  resolve's scope, the `atlas.incident.raised` and `.resolved` feed events, and the
+  Console's pill and resolve dialog, which says the error is thrown again and that the
+  retry count does not apply. A worker's uncaught error keeps reading `job`, because it
+  keeps its job and resolving retries that job with the retries granted. An incident an
+  error end raised before the reason existed still reads `timer` until it is resolved;
+  the incident the re-throw raises reads `error`.
 
 ## Pros and cons of the options
 

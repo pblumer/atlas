@@ -15,18 +15,35 @@ import { loadFormViewer, formFieldKeys } from "./formviewer.js";
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-// incidentKind is what parked: a service-task job whose retries ran out, or a
-// job-less timer whose FEEL schedule stopped resolving (ADR-0064/0111). The server
-// says so directly; the jobKey fallback keeps an older response readable.
+// incidentKind is what parked: a service-task job whose retries ran out, a BPMN
+// error nothing caught (ADR-0089), a token that used up its execution budget
+// (ADR-0272), or a job-less timer whose FEEL schedule stopped resolving
+// (ADR-0064/0111). The server says so directly; the jobKey fallback keeps an older
+// response readable.
 const incidentKind = (inc) => inc.type || (inc.jobKey ? "job" : "timer");
 
-// incidentPill renders the job/timer cause as the colored pill the incidents table
-// established: red for a parked job, amber for a timer that stopped resolving.
+// incidentPill renders the cause as the colored pill the incidents table established:
+// red for a parked job or an uncaught error, amber for the rest, and the server's name
+// for the kind as its label.
 export function incidentPill(inc) {
-  return incidentKind(inc) === "job"
-    ? `<span class="pill err"><span class="dot"></span>job</span>`
-    : `<span class="pill warn"><span class="dot"></span>timer</span>`;
+  const kind = incidentKind(inc);
+  const tone = kind === "job" || kind === "error" ? "err" : "warn";
+  return `<span class="pill ${tone}"><span class="dot"></span>${esc(kind)}</span>`;
 }
+
+// resolveNotes says what resolving does to the kinds that spend no retries: a timer
+// re-arms, and an uncaught error is thrown again (ADR-0089). Any other kind resumes
+// work that takes the granted retries.
+const resolveNotes = {
+  timer: {
+    one: "This timer re-arms against the instance's current variables. If its schedule still doesn't resolve, the incident is raised again.",
+    many: "Each timer re-arms against its instance's current variables. One whose schedule still doesn't resolve raises its incident again.",
+  },
+  error: {
+    one: "The error is thrown again. A handler that has come into reach catches it; while none does, the incident is raised again.",
+    many: "Each error is thrown again. One a handler now catches takes its error path; the others raise their incident again.",
+  },
+};
 
 // fmtRaised renders an incident's raisedAt (unix nanoseconds, frozen into the
 // event) as a local timestamp.
@@ -160,23 +177,25 @@ export async function resolveIncidentQuick({ api, toast, key }) {
 
 // askResolveRetries opens the resolve dialog and resolves to the retry budget the
 // operator granted, or null if they cancelled. A modal rather than window.prompt:
-// the count needs the explanation that a timer incident ignores it, and prompt has
-// nowhere to put one.
+// the count needs the explanation that a timer or error incident ignores it, and
+// prompt has nowhere to put one.
 function askResolveRetries(inc) {
   return new Promise((resolve) => {
-    const timer = incidentKind(inc) === "timer";
+    const kind = incidentKind(inc);
+    const note = resolveNotes[kind];
+    const noRetries = !!note;
     const ov = document.createElement("div");
     ov.className = "modal-ov";
     ov.innerHTML = `
       <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-label="Resolve incident">
         <div class="modal-head"><h2>Resolve incident</h2></div>
         <div class="modal-body">
-          <p class="muted" style="margin:0 0 10px">${timer
-            ? "This timer re-arms against the instance's current variables. If its schedule still doesn't resolve, the incident is raised again."
+          <p class="muted" style="margin:0 0 10px">${noRetries
+            ? note.one
             : "The parked job goes back on the activatable index and a worker retries it. If the cause is unfixed it fails again and a new incident is raised."}</p>
           ${inc.message ? `<p class="inc-modal-msg">${esc(inc.message)}</p>` : ""}
-          <label class="field"><span>Retries to grant${timer ? " (ignored by a timer incident)" : ""}</span>
-            <input id="inc-retries" type="number" min="1" step="1" value="1" ${timer ? "disabled" : ""}/></label>
+          <label class="field"><span>Retries to grant${noRetries ? ` (ignored by ${kind === "error" ? "an error" : "a timer"} incident)` : ""}</span>
+            <input id="inc-retries" type="number" min="1" step="1" value="1" ${noRetries ? "disabled" : ""}/></label>
         </div>
         <div class="modal-foot">
           <button class="btn neutral" data-inc-cancel title="Close without resolving the incident">Cancel</button>
@@ -191,7 +210,7 @@ function askResolveRetries(inc) {
       if (e.key === "Enter" && document.body.contains(ov)) go();
     };
     const go = () => {
-      const n = timer ? 1 : parseInt(input.value, 10);
+      const n = noRetries ? 1 : parseInt(input.value, 10);
       if (!Number.isInteger(n) || n <= 0) { input.focus(); return; }
       close(n);
     };
@@ -199,8 +218,8 @@ function askResolveRetries(inc) {
     ov.querySelector("[data-inc-cancel]").addEventListener("click", () => close(null));
     ov.querySelector("[data-inc-go]").addEventListener("click", go);
     ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
-    (timer ? ov.querySelector("[data-inc-go]") : input).focus();
-    if (input && !timer) input.select();
+    (noRetries ? ov.querySelector("[data-inc-go]") : input).focus();
+    if (input && !noRetries) input.select();
   });
 }
 
@@ -258,7 +277,9 @@ function causeScope(group, retries) {
 // askBulkResolve asks for the retry budget once for the whole set, and says plainly
 // what a bulk retry does when the cause is still broken — which is the mistake this
 // action makes cheap to repeat. Resolves to the budget, or null when cancelled.
-function askBulkResolve({ title, count, timer, message, note }) {
+function askBulkResolve({ title, count, kind, message, note }) {
+  const what = resolveNotes[kind];
+  const noRetries = !!what;
   return new Promise((resolve) => {
     const ov = document.createElement("div");
     ov.className = "modal-ov";
@@ -266,13 +287,13 @@ function askBulkResolve({ title, count, timer, message, note }) {
       <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-label="Resolve incidents">
         <div class="modal-head"><h2>${esc(title)}</h2></div>
         <div class="modal-body">
-          <p class="muted" style="margin:0 0 10px">${timer
-            ? "Each timer re-arms against its instance's current variables. One whose schedule still doesn't resolve raises its incident again."
+          <p class="muted" style="margin:0 0 10px">${noRetries
+            ? what.many
             : "Each parked job goes back on the activatable index and a worker retries it. <b>Fix the cause first</b> — a retry against an unfixed cause fails again and parks the same tokens with a new incident."}</p>
           ${note ? `<p class="muted" style="margin:0 0 10px">${note}</p>` : ""}
           ${message ? `<p class="inc-modal-msg">${esc(message)}</p>` : ""}
-          <label class="field"><span>Retries to grant each${timer ? " (ignored by a timer incident)" : ""}</span>
-            <input id="inc-bulk-retries" type="number" min="1" step="1" value="1" ${timer ? "disabled" : ""}/></label>
+          <label class="field"><span>Retries to grant each${noRetries ? ` (ignored by ${kind === "error" ? "an error" : "a timer"} incident)` : ""}</span>
+            <input id="inc-bulk-retries" type="number" min="1" step="1" value="1" ${noRetries ? "disabled" : ""}/></label>
         </div>
         <div class="modal-foot">
           <button class="btn neutral" data-inc-cancel title="Close without resolving anything">Cancel</button>
@@ -283,7 +304,7 @@ function askBulkResolve({ title, count, timer, message, note }) {
     const input = ov.querySelector("#inc-bulk-retries");
     const close = (value) => { ov.remove(); document.removeEventListener("keydown", onKey); resolve(value); };
     const go = () => {
-      const n = timer ? 1 : parseInt(input.value, 10);
+      const n = noRetries ? 1 : parseInt(input.value, 10);
       if (!Number.isInteger(n) || n <= 0) { input.focus(); return; }
       close(n);
     };
@@ -295,8 +316,8 @@ function askBulkResolve({ title, count, timer, message, note }) {
     ov.querySelector("[data-inc-cancel]").addEventListener("click", () => close(null));
     ov.querySelector("[data-inc-go]").addEventListener("click", go);
     ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
-    (timer ? ov.querySelector("[data-inc-go]") : input).focus();
-    if (input && !timer) input.select();
+    (noRetries ? ov.querySelector("[data-inc-go]") : input).focus();
+    if (input && !noRetries) input.select();
   });
 }
 
@@ -308,7 +329,7 @@ export async function resolveCauseFlow({ api, toast, group }) {
   const retries = await askBulkResolve({
     title: `Resolve ${group.count} incident${group.count === 1 ? "" : "s"} on ${group.elementId || "this element"}?`,
     count: group.count,
-    timer: group.type === "timer",
+    kind: group.type,
     message: group.message,
     note: group.messageVaries
       ? "These incidents do not all carry the same message — the one below is a sample."
@@ -349,7 +370,8 @@ export async function resolveSelectionFlow({ api, toast, incidents }) {
   const retries = await askBulkResolve({
     title: `Resolve ${incidents.length} selected incident${incidents.length === 1 ? "" : "s"}?`,
     count: incidents.length,
-    timer: incidents.every((inc) => incidentKind(inc) === "timer"),
+    // One kind for the whole set says what resolving does to it; a mix asks for retries.
+    kind: incidents.every((inc) => incidentKind(inc) === incidentKind(incidents[0])) ? incidentKind(incidents[0]) : "job",
   });
   if (retries === null) return 0;
   try {

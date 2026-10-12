@@ -5467,10 +5467,16 @@ func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 // incidentType names what an incident parked, the distinction the operator views
 // label: a job incident holds a service-task job whose retries ran out; one the
 // execution budget raised holds a token that never got to run
-// (ADR-0272); a job-less incident is otherwise a timer whose FEEL
+// (ADR-0272); an error incident holds a BPMN error nothing caught, which resolving
+// throws again (ADR-0089); a job-less incident is otherwise a timer whose FEEL
 // schedule stopped resolving (ADR-0064/0111).
 //
-// That last fallback is approximate and was already: a mockup task's simulated
+// A job outranks the reason: a worker's uncaught error keeps its job, and resolving
+// it retries that job with the retries the operator grants, as for any parked job.
+// An error end event's incident raised before IncidentUnhandledError existed carries
+// no reason and still reads as "timer"; resolving it re-raises one that reads "error".
+//
+// The timer fallback is approximate and was already: a mockup task's simulated
 // failure, a runaway loop and a gateway that cannot route all raise job-less
 // incidents and all read as "timer" here. Classifying them is what
 // model.IncidentReason is for, and doing it is a change to each of those sources
@@ -5481,6 +5487,8 @@ func incidentType(v *model.IncidentValue) string {
 		return "job"
 	case v.Reason == model.IncidentOverBudget:
 		return "budget"
+	case v.Reason == model.IncidentUnhandledError:
+		return "error"
 	default:
 		return "timer"
 	}

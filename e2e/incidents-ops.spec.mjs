@@ -449,13 +449,13 @@ const matchesScope = (inc, body) => (!body.processDefKey || inc.processDefKey ==
   && (!body.type || inc.type === body.type)
   && (!body.message || (inc.message || "").toLowerCase().includes(String(body.message).toLowerCase()));
 
-const bootOverview = async (page, { truncated = false } = {}) => {
+const bootOverview = async (page, { truncated = false, seed = OVERVIEW.incidents } = {}) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.__errors = errors;
   // Mutable, so a resolve really removes one and both the table and the nav badge
   // (which reads the count off /stats) have to agree afterwards.
-  let incidents = OVERVIEW.incidents.slice();
+  let incidents = seed.slice();
   // What the page asked the bulk endpoint for, recorded here in the test process so a
   // route handler never has to reach back into the page to store it.
   const bulk = [];
@@ -623,6 +623,33 @@ test.describe("incidents by cause", () => {
     await expect(page.locator("#causes tr")).toHaveCount(1);
     await expect(page.locator("#rows tr")).toHaveCount(1);
     await expect(page.locator("#topnav .nav-badge[data-badge=incidents]")).toHaveText("1");
+    expect(page.__errors).toEqual([]);
+  });
+
+  // An error end whose error nothing caught (ADR-0089): resolving throws the error
+  // again, so the cause reads as an error and the dialog grants no retries.
+  test("an uncaught error reads as one, and resolving it grants no retries", async ({ page }) => {
+    await bootOverview(page, {
+      seed: [{
+        elementInstanceKey: "2001", processInstanceKey: "900001", processDefKey: 6, elementId: "End_fail",
+        elementIndex: 3, type: "error", raisedAt: 1, message: "unhandled error 'NOPE'",
+      }],
+    });
+    await openIncidents(page);
+
+    const cause = page.locator("#causes tr").first();
+    await expect(cause.locator("span.pill.err", { hasText: "error" })).toHaveCount(1);
+    await expect(page.locator("#rows tr").first().locator("span.pill.err", { hasText: "error" })).toHaveCount(1);
+
+    await cause.locator("button[data-resolve-cause]").click();
+    const modal = page.locator(".modal-ov");
+    await expect(modal).toContainText("Each error is thrown again");
+    await expect(modal).toContainText("ignored by an error incident");
+    await expect(modal.locator("#inc-bulk-retries")).toBeDisabled();
+    await modal.locator("[data-inc-go]").click();
+
+    await expect.poll(() => page.__bulk.length).toBe(1);
+    expect(page.__bulk[0]).toMatchObject({ processDefKey: 6, elementId: "End_fail", type: "error", retries: 1 });
     expect(page.__errors).toEqual([]);
   });
 
