@@ -1,6 +1,6 @@
 # Atlas Architecture
 
-This document describes the architecture of Atlas, a durable, high-throughput BPMN 2.x workflow engine written in Go. It is the canonical reference for how the system is structured and why. For the reasoning behind specific decisions, see the [Architecture Decision Records](adr/).
+This document describes the architecture of atlas, a durable, high-throughput BPMN 2.x workflow engine written in Go. It is the canonical reference for how the system is structured and why. For the reasoning behind specific decisions, see the [Architecture Decision Records](adr/).
 
 ## Table of contents
 
@@ -24,8 +24,8 @@ This document describes the architecture of Atlas, a durable, high-throughput BP
 
 > **What you may depend on** is stated separately, in
 > [the runtime contract](runtime-contract.md): which behaviour is public and versioned,
-> which structures are implementation details, and how a BPMN feature Atlas *draws* is
-> told apart from one Atlas *executes* ([ADR-0176](adr/0176-standards-boundary-and-runtime-contract.md)).
+> which structures are implementation details, and how a BPMN feature atlas *draws* is
+> told apart from one atlas *executes* ([ADR-0176](adr/0176-standards-boundary-and-runtime-contract.md)).
 > This document explains how the system works; that one says what is promised.
 
 ## Design philosophy
@@ -242,13 +242,13 @@ The target is full BPMN 2.0 execution semantics. Coverage is delivered in phases
 
 ## Failure handling and incidents
 
-When something cannot proceed — a job fails after exhausting retries, an expression cannot be evaluated, a variable is missing — Atlas does not crash the instance. It raises an **incident**: a first-class state entity that pauses the affected token and surfaces the problem for operator intervention. Resolving an incident produces a command that resumes execution. This keeps long-running processes robust against transient and operator-fixable failures.
+When something cannot proceed — a job fails after exhausting retries, an expression cannot be evaluated, a variable is missing — atlas does not crash the instance. It raises an **incident**: a first-class state entity that pauses the affected token and surfaces the problem for operator intervention. Resolving an incident produces a command that resumes execution. This keeps long-running processes robust against transient and operator-fixable failures.
 
 An incident is surfaced where the operator already is: the live diagram marks the stuck element, badges it with the failure message and resolves it in place ([ADR-0150](adr/0150-preview-mail-provider-and-visible-incidents.md)), and the step-by-step replay, the Instances list and the variable search say so too ([ADR-0151](adr/0151-incidents-beyond-the-live-diagram.md)). The diagram context that needs — the definition, and the BPMN id of the element the compiled record refers to by index — is resolved when the runtime overlay or the incident list is *read*; the durable `IncidentValue` is unchanged, so `applyToState` and replay stay untouched.
 
 ## Observability
 
-Because every state transition is an event in an ordered log, the log itself is the primary observability surface: a complete, replayable audit trail of everything that ever happened. On top of it Atlas exposes metrics (throughput, batch sizes, fsync latency, queue depth per partition), structured logs, and tracing hooks around command processing. The exported-log stream is also the integration point for downstream analytics.
+Because every state transition is an event in an ordered log, the log itself is the primary observability surface: a complete, replayable audit trail of everything that ever happened. On top of it atlas exposes metrics (throughput, batch sizes, fsync latency, queue depth per partition), structured logs, and tracing hooks around command processing. The exported-log stream is also the integration point for downstream analytics.
 
 ## Component map
 
