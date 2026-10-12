@@ -536,6 +536,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0448](0448-trusted-proxies.md) | Trusted proxies — the client's address behind a load balancer, and the health check that is not news | Accepted | Landed |
 | [0449](0449-a-wizard-is-a-subprocess-one-filler-walks-through.md) | A wizard is a subprocess one filler walks through | Accepted | Landed |
 | [0450](0450-a-scope-drains-only-when-no-token-is-in-transit.md) | A scope drains only when no token is in transit into it | Accepted | Landed |
+| [0451](0451-catalogue-export.md) | A catalogue is exported as the document it is imported as | Accepted | Landed |
 
 ## The two states of a record
 

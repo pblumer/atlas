@@ -2096,7 +2096,10 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   under the authority the single writes need; ids are the document's own, so importing again
   updates
   ([ADR-0436](docs/adr/0436-a-catalogue-is-imported-as-one-document.md)).
-  Export is a follow-up.
+- ✅ **A catalogue exported as that document.** A whole catalogue, or chosen products to import
+  into another catalogue (`?into=`), optionally with the processes the products are bound to,
+  which the import deploys first; over HTTP, MCP and the Console
+  ([ADR-0451](docs/adr/0451-catalogue-export.md)).
 - ✅ **A shop handbook with an example to install.** `shop-handbuch.html` (DE/EN) on building
   catalogues, several catalogues, products and services and their processes, with the
   administration-services example (`examples/verwaltung-dienstleistungen/`, both process

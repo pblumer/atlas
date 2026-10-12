@@ -176,11 +176,16 @@ func receivesMessage(names []string, want string) bool {
 // that says "anna's posteingang claims this" hands over exactly what the private
 // worker was hiding.
 func claimRefusal(w http.ResponseWriter, message, detail string) {
-	httpapi.JSON(w, http.StatusConflict, map[string]any{
+	httpapi.JSON(w, http.StatusConflict, claimBody(message, detail))
+}
+
+// claimBody is the body claimRefusal answers with.
+func claimBody(message, detail string) map[string]any {
+	return map[string]any{
 		"error":       "the message name is claimed elsewhere",
 		"messageName": message,
 		"details":     detail,
-	})
+	}
 }
 
 // claimBlockingModel parses a model and asks the deploy door about it: the first

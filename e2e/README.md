@@ -278,6 +278,16 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   Drives the real `viewCatalogDetail` through the editor harness, which lets a spec reshape
   a product before it mounts (`window.__patchItems`).
 
+- **`catalog-transfer.spec.mjs`** ([ADR-0451](../docs/adr/0451-catalogue-export.md)):
+  **exporting and importing a catalogue** from the Console. The catalogue exports as
+  `catalogue-<id>.json`, with `?processes=true` when that is ticked; the ticked products
+  export as one document, and none ticked asks for some rather than calling the server; a
+  products file is posted with `?into=` the catalogue shown; a refused import lists every
+  problem with its subject and names the processes deployed before the refusal; and the
+  catalogue list posts a whole file, with `publish` when asked. Drives the real
+  `viewCatalogDetail` and `viewCatalogs` through the editor harness, whose mock refuses an
+  import when a spec sets `window.__importRefusal`.
+
 - **`catalog-commanded-by.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md) §10):
   **which process applications may command a product** in the catalogue editor. The
   applications are offered by name and stored by their portable key, the stored ones

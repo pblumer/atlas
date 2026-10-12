@@ -6,7 +6,9 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"slices"
 	"sort"
+	"strings"
 
 	"github.com/pblumer/atlas/api/httpapi"
 )
@@ -34,6 +36,25 @@ type Document struct {
 	// Publish asks for a release of every catalogue in the document once it is
 	// written, validated before anything is.
 	Publish bool `json:"publish,omitempty"`
+	// Edges are the structure and precedence between the document's products when
+	// it carries products alone (ADR-0451). Edges belong to a
+	// catalogue, so these land in the catalogue the products are imported into
+	// (?into=), and a document carrying them is refused without one.
+	Edges []Edge `json:"edges,omitempty"`
+	// Processes are the BPMN models the products are bound to, deployed by the
+	// import before the catalogues are written (ADR-0451).
+	Processes []Process `json:"processes,omitempty"`
+	// MissingProcesses names the processes an export was asked to carry and could
+	// not, because the exporting server has none deployed under that id. An import
+	// reads nothing from it; it is there for the person holding the file.
+	MissingProcesses []string `json:"missingProcesses,omitempty"`
+}
+
+// Process is one BPMN model a document carries: the process id a product binds,
+// and the XML the newest version of it was deployed from.
+type Process struct {
+	ID  string `json:"id"`
+	XML string `json:"xml"`
 }
 
 // DocumentResult is what an import answers: which catalogues and products it created
@@ -44,6 +65,10 @@ type DocumentResult struct {
 	Releases []Release `json:"releases,omitempty"`
 	// Warnings are what the releases leave exposed (AnswerWarnings), by product.
 	Warnings []DocumentProblem `json:"warnings,omitempty"`
+	// Deployed names the document's processes this import deployed, and Unchanged
+	// those whose newest deployed version already was the document's model.
+	Deployed  []string `json:"deployed,omitempty"`
+	Unchanged []string `json:"unchanged,omitempty"`
 }
 
 // DocumentProblem is one reason a document is refused, naming what it is about.
@@ -60,7 +85,12 @@ var documentID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
 // Check reports what is wrong with a document on its own, without asking the store:
 // ids, languages, duplicates, products without a home, and the fields a document
 // may not set. It is what an example's test runs, and the first thing an import does.
-func (d Document) Check() []DocumentProblem {
+func (d Document) Check() []DocumentProblem { return d.check("") }
+
+// check is Check for a document imported into the catalogue into, or into none when
+// it is empty. Imported into one, a product needs no home of its own — the import
+// gives it one — and the document may carry no catalogue.
+func (d Document) check(into string) []DocumentProblem {
 	var out []DocumentProblem
 	add := func(subject, format string, a ...any) {
 		out = append(out, DocumentProblem{Subject: subject, Problem: fmt.Sprintf(format, a...)})
@@ -99,21 +129,54 @@ func (d Document) Check() []DocumentProblem {
 			continue
 		}
 		products[it.ID] = true
-		if it.HomeCatalog == "" {
+		if it.HomeCatalog == "" && into == "" {
 			add(subject, "a product needs a homeCatalog: the catalogue that maintains it")
 		}
+	}
+	for _, e := range d.Edges {
+		for _, end := range []string{e.From, e.To} {
+			if !products[end] {
+				add("edge:"+e.From+"->"+e.To, "names %s, which is not one of the document's products", end)
+			}
+		}
+	}
+	procs := map[string]bool{}
+	for _, pr := range d.Processes {
+		subject := "process:" + pr.ID
+		switch {
+		case strings.TrimSpace(pr.ID) == "":
+			add("document", "a process needs an id: the process id a product binds")
+		case procs[pr.ID]:
+			add(subject, "the document names this process twice")
+		case strings.TrimSpace(pr.XML) == "":
+			add(subject, "the process carries no model")
+		}
+		procs[pr.ID] = true
+	}
+	switch {
+	case into != "" && !documentID.MatchString(into):
+		add("document", "into must name a catalogue id of letters, digits, '.', '_' or '-'")
+	case into != "" && len(d.Catalogs) > 0:
+		add("document", "a document imported into a catalogue carries no catalogue of its own: its products land in %s", into)
+	case into == "" && len(d.Edges) > 0:
+		add("document", "edges outside a catalogue land in the catalogue the products are imported into: name it with ?into=")
 	}
 	return out
 }
 
 // HandleImportDocument serves POST /api/v1/catalogs/import.
+//
+// ?into=<catalogue> imports a document of products alone into a catalogue that
+// exists (ADR-0451): every product is offered there, a product new
+// to this server is homed there, and the document's edges are added to it.
 func (s *Service) HandleImportDocument(w http.ResponseWriter, r *http.Request) {
 	var doc Document
 	if err := json.NewDecoder(io.LimitReader(r.Body, s.budgets().Import)).Decode(&doc); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "malformed JSON body: "+err.Error())
 		return
 	}
-	if problems := doc.Check(); len(problems) > 0 {
+	into := r.URL.Query().Get("into")
+	if problems := doc.check(into); len(problems) > 0 {
 		httpapi.JSON(w, http.StatusBadRequest, map[string]any{"problems": problems})
 		return
 	}
@@ -124,23 +187,47 @@ func (s *Service) HandleImportDocument(w http.ResponseWriter, r *http.Request) {
 		problems []DocumentProblem
 		opErr    error
 	)
-	s.loop.Do(func() { plan, problems, opErr = s.planImport(doc, p) })
-	if opErr == nil && len(problems) == 0 && doc.Publish {
-		problems = s.publishProblems(plan)
+	s.loop.Do(func() { plan, problems, opErr = s.resolveImport(doc, into, p) })
+	if opErr == nil && len(doc.Processes) > 0 {
+		// Asked off the loop: the deployer answers for the server, and reaches its
+		// state through the loop itself.
+		if s.Deployer == nil {
+			problems = append(problems, DocumentProblem{Subject: "document",
+				Problem: "this server cannot deploy a document's processes; import it without them"})
+		} else {
+			problems = append(problems, s.Deployer.CheckProcesses(r, doc.Processes)...)
+		}
 	}
-	switch {
-	case opErr != nil:
+	if opErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "import: "+opErr.Error())
 		return
-	case len(problems) > 0:
-		code := http.StatusUnprocessableEntity
-		for _, pr := range problems {
-			if pr.Problem == problemNotYours {
-				code = http.StatusForbidden
-			}
-		}
-		httpapi.JSON(w, code, map[string]any{"problems": problems})
+	}
+	if len(problems) > 0 {
+		refuseImport(w, problems)
 		return
+	}
+
+	// The processes go first, because publishing asks whether what the products are
+	// bound to is deployed. This is the one step an import cannot take back: a
+	// catalogue refused after it leaves the processes deployed, which the answer says.
+	var result DocumentResult
+	if len(doc.Processes) > 0 {
+		deployed, unchanged, refused, err := s.Deployer.DeployProcesses(r, doc.Processes)
+		switch {
+		case err != nil:
+			httpapi.Error(w, http.StatusInternalServerError, "import: deploy processes: "+err.Error())
+			return
+		case len(refused) > 0:
+			httpapi.JSON(w, http.StatusUnprocessableEntity, map[string]any{"problems": refused, "deployed": deployed})
+			return
+		}
+		result.Deployed, result.Unchanged = deployed, unchanged
+	}
+	if doc.Publish {
+		if problems = s.publishProblems(plan); len(problems) > 0 {
+			refuseImport(w, problems, result.Deployed...)
+			return
+		}
 	}
 
 	// The writes go in a second visit to the loop, which plans again: what was
@@ -148,21 +235,101 @@ func (s *Service) HandleImportDocument(w http.ResponseWriter, r *http.Request) {
 	// catalogue edited in between is neither overwritten blind nor half-imported. Only
 	// whether the bound processes are deployed is not asked again — that is the
 	// server's to answer on a visit of its own, as a single publish asks it.
-	var result DocumentResult
-	s.loop.Do(func() { result, problems, opErr = s.applyImport(doc, p) })
+	var written DocumentResult
+	s.loop.Do(func() { written, problems, opErr = s.applyImport(doc, into, p) })
 	switch {
 	case opErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "import: "+opErr.Error())
 	case len(problems) > 0:
-		httpapi.JSON(w, http.StatusConflict, map[string]any{"problems": problems})
+		httpapi.JSON(w, http.StatusConflict, map[string]any{"problems": problems, "deployed": result.Deployed})
 	default:
-		for _, rel := range result.Releases {
+		written.Deployed, written.Unchanged = result.Deployed, result.Unchanged
+		for _, rel := range written.Releases {
 			for _, wn := range AnswerWarnings(rel.Items, s.Forms, s.Personal) {
-				result.Warnings = append(result.Warnings, DocumentProblem{Subject: "product:" + wn.Item, Problem: wn.Message})
+				written.Warnings = append(written.Warnings, DocumentProblem{Subject: "product:" + wn.Item, Problem: wn.Message})
 			}
 		}
-		httpapi.JSON(w, http.StatusOK, result)
+		httpapi.JSON(w, http.StatusOK, written)
 	}
+}
+
+// refuseImport answers a refused document: 403 when any problem is one of
+// authority, 422 otherwise. deployed names processes an earlier step of the same
+// import already deployed, which a refusal must not hide.
+func refuseImport(w http.ResponseWriter, problems []DocumentProblem, deployed ...string) {
+	code := http.StatusUnprocessableEntity
+	for _, pr := range problems {
+		if pr.Problem == problemNotYours || pr.Problem == ProblemMayNotDeploy {
+			code = http.StatusForbidden
+		}
+	}
+	body := map[string]any{"problems": problems}
+	if len(deployed) > 0 {
+		body["deployed"] = deployed
+	}
+	httpapi.JSON(w, code, body)
+}
+
+// ProblemMayNotDeploy is the problem a document carrying processes is refused with
+// when its importer may not deploy them, which the response answers 403.
+const ProblemMayNotDeploy = "deploying a document's processes needs the modeler role"
+
+// resolveImport is planImport for a document imported into a catalogue or into none.
+// Runs on the run loop.
+func (s *Service) resolveImport(doc Document, into string, p *httpapi.Principal) (importPlan, []DocumentProblem, error) {
+	if into != "" {
+		retargeted, problems, err := s.retarget(doc, into, p)
+		if err != nil || len(problems) > 0 {
+			return importPlan{}, problems, err
+		}
+		doc = retargeted
+	}
+	return s.planImport(doc, p)
+}
+
+// retarget turns a document of products into one that writes them into the
+// catalogue into: the catalogue as stored, offering every product and carrying the
+// document's edges, and each product homed there — unless this server already
+// has it, in which case it keeps the home it has. Importing a product into a
+// second catalogue offers it there; it does not take it from the first, which a
+// product referenced by several catalogues must not be. Runs on the run loop.
+func (s *Service) retarget(doc Document, into string, p *httpapi.Principal) (Document, []DocumentProblem, error) {
+	c, found, err := s.store.Catalog(into)
+	if err != nil {
+		return doc, nil, err
+	}
+	if !found || !s.mayRead(c, p) {
+		// A catalogue the caller cannot see reads as absent, as it does everywhere.
+		return doc, []DocumentProblem{{Subject: "catalog:" + into, Problem: "no catalogue " + into + " on this server"}}, nil
+	}
+	if !s.mayEdit(c, p) {
+		return doc, []DocumentProblem{{Subject: "catalog:" + into, Problem: problemNotYours}}, nil
+	}
+	next := c
+	next.Items = append([]string(nil), c.Items...)
+	next.Edges = append([]Edge(nil), c.Edges...)
+	products := make([]Item, len(doc.Products))
+	for i, it := range doc.Products {
+		prev, found, err := s.store.Item(it.ID)
+		if err != nil {
+			return doc, nil, err
+		}
+		it.HomeCatalog = into
+		if found {
+			it.HomeCatalog = prev.HomeCatalog
+		}
+		products[i] = it
+		if !slices.Contains(next.Items, it.ID) {
+			next.Items = append(next.Items, it.ID)
+		}
+	}
+	for _, e := range doc.Edges {
+		if !slices.Contains(next.Edges, e) {
+			next.Edges = append(next.Edges, e)
+		}
+	}
+	doc.Catalogs, doc.Products, doc.Edges = []Catalog{next}, products, nil
+	return doc, nil, nil
 }
 
 // problemNotYours is the problem an import is refused with for want of authority,
@@ -373,9 +540,9 @@ func (s *Service) plannedInputs(plan importPlan) ([]Input, error) {
 // products, then — when asked — a release of each catalogue, computed before the
 // first write from the store as the writes will leave it. Runs on the run loop, so
 // nothing changes between the check and the write.
-func (s *Service) applyImport(doc Document, p *httpapi.Principal) (DocumentResult, []DocumentProblem, error) {
+func (s *Service) applyImport(doc Document, into string, p *httpapi.Principal) (DocumentResult, []DocumentProblem, error) {
 	result := DocumentResult{Created: []string{}, Updated: []string{}}
-	plan, problems, err := s.planImport(doc, p)
+	plan, problems, err := s.resolveImport(doc, into, p)
 	if err != nil || len(problems) > 0 {
 		return result, problems, err
 	}

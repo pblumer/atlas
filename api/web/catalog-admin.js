@@ -230,8 +230,11 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
       </aside>
     </div>
 
+    ${importCard()}
     ${approverCard(report)}
     ${translationCard(translation)}`;
+
+  wireImport({ api, toast, view });
 
   view.querySelector(".cat-new").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -1195,7 +1198,7 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
       <b>draft</b> or <b>withdrawn</b> state is not.</p>
     <div class="product-list">
       ${offered.length ? `<div class="product-table"><table class="table">
-        <thead><tr><th>Product</th><th>State</th><th>Approval</th><th>Provisioned by</th><th></th></tr></thead>
+        <thead><tr><th aria-label="Export"></th><th>Product</th><th>State</th><th>Approval</th><th>Provisioned by</th><th></th></tr></thead>
         <tbody>${offered.map((iid) => productRow(byID[iid], iid, langs, offered.length > 1)).join("")}</tbody></table></div>`
     : `<div class="empty"><p>Nothing offered yet.</p></div>`}
 
@@ -1212,6 +1215,8 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
         <div class="assemble-editor"></div>
       </div>
     </div>
+
+    ${transferCard(cat)}
 
     <h3 style="margin-top:26px">How the products relate</h3>
     <p class="muted" style="max-width:62ch">Three different questions, kept apart.
@@ -1245,6 +1250,195 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
 
   wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, formList,
     mayShare(cat, me, enforced), mayTheme(me, enforced), dir, people, apps);
+  wireTransfer({ api, toast, view }, cat);
+}
+
+// ---------- Moving a catalogue between installations ----------
+//
+// A catalogue leaves as the document the import takes (ADR-0451),
+// so the file a person downloads here is the file they review and import on the
+// other installation — not a second format to keep level with the first. Two shapes:
+// the whole catalogue, imported as it is, and a choice of products, imported into
+// whichever catalogue the person is looking at there.
+//
+// The processes are a choice and not a default. A product binds a process by id,
+// and on another installation that id may already name the right process, a
+// different one, or nothing; only the person moving the catalogue knows which, and
+// carrying them deploys them there, which needs the modeler role as well.
+
+// transferCard is the export and import panel of one catalogue.
+function transferCard(cat) {
+  return `<h3 style="margin-top:26px">Export and import</h3>
+    <p class="muted" style="max-width:62ch">Export this catalogue, or the products ticked
+      above, as a file another installation imports. A theme, the logo and pictures stay
+      here. Importing products here offers every one of them in this catalogue; one this
+      server does not have yet is maintained here.</p>
+    <div class="card cat-transfer" style="max-width:62ch">
+      <label class="field inline"><input type="checkbox" name="withProcesses">
+        Include the processes the products are bound to</label>
+      <div class="row">
+        <button class="btn" type="button" data-act="export-catalog">Export catalogue</button>
+        <button class="btn neutral" type="button" data-act="export-products">Export ticked products</button>
+      </div>
+      <label class="field" style="margin-top:12px">Import products into ${esc(cat.id)}
+        <input type="file" name="productsFile" accept="application/json,.json"></label>
+      <div class="row"><button class="btn neutral" type="button" data-act="import-products">Import</button></div>
+      <div class="transfer-report"></div>
+    </div>`;
+}
+
+// importCard is the list page's panel for importing a whole catalogue document.
+function importCard() {
+  return `<section style="margin-top:26px">
+    <h3 style="margin:0 0 10px">Import a catalogue</h3>
+    <p class="muted" style="max-width:62ch">A file exported from a catalogue, here or on
+      another installation. Nothing is written unless all of it can be: every problem is
+      listed at once. Importing the same file again updates what it created.</p>
+    <div class="card cat-import" style="max-width:62ch">
+      <label class="field">Catalogue file<input type="file" name="catalogFile" accept="application/json,.json"></label>
+      <label class="field inline"><input type="checkbox" name="publish"> Publish every catalogue once it is imported</label>
+      <div class="row"><button class="btn" type="button" data-act="import-catalog">Import</button></div>
+      <div class="import-report"></div>
+    </div></section>`;
+}
+
+// downloadJSON hands the browser a document to save.
+function downloadJSON(name, doc) {
+  const blob = new Blob([JSON.stringify(doc, null, 2) + "\n"], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 0);
+}
+
+// readDocument reads a chosen file as a catalogue document, or says why it is not one.
+async function readDocument(input) {
+  const file = input && input.files && input.files[0];
+  if (!file) throw new Error("Choose a file first.");
+  try {
+    return JSON.parse(await file.text());
+  } catch (e) {
+    throw new Error(`${file.name} is not a catalogue document: ${e.message}`);
+  }
+}
+
+// importRefusal renders a refused import. It lists every problem with what it is
+// about, because that list is the work, and names the processes the import deployed
+// before it was refused, because those stay deployed.
+function importRefusal(err) {
+  const body = err.body || {};
+  const problems = body.problems || [];
+  const deployed = body.deployed || [];
+  return `<div class="card" style="margin-top:12px; border-color:var(--danger)">
+    <b>Not imported.</b>
+    ${deployed.length ? `<p style="margin:6px 0 0">These processes were deployed before the import
+      was refused, and stay deployed: ${esc(deployed.join(", "))}</p>`
+    : `<p class="muted" style="margin:6px 0 0">Nothing was written.</p>`}
+    ${problems.length ? `<ul style="margin:6px 0 0">${problems.map((p) =>
+    `<li><b>${esc(p.subject)}</b> — ${esc(p.problem)}</li>`).join("")}</ul>`
+    : `<pre style="white-space:pre-wrap; margin:8px 0 0">${esc(err.message || `HTTP ${err.status || "?"}`)}</pre>`}
+  </div>`;
+}
+
+// importSummary says in one line what an import that went through did. The page is
+// drawn again from what was written, so the line is what survives the redraw.
+function importSummary(res) {
+  const n = (list) => (list || []).length;
+  const parts = [`${n(res.created)} created`, `${n(res.updated)} updated`];
+  if (n(res.deployed)) parts.push(`${n(res.deployed)} processes deployed`);
+  if (n(res.unchanged)) parts.push(`${n(res.unchanged)} processes unchanged`);
+  if (n(res.releases)) parts.push(`${n(res.releases)} published`);
+  return `Imported: ${parts.join(", ")}`;
+}
+
+// redraw renders the current page again from the server.
+function redraw() {
+  const h = location.hash; location.hash = "#/catalog"; location.hash = h;
+}
+
+// missingNote says which bound processes an export could not carry.
+function missingNote(doc, toast) {
+  const missing = doc.missingProcesses || [];
+  if (missing.length) {
+    toast(`Not deployed here, so not in the file: ${missing.join(", ")}`, "err");
+  }
+}
+
+function wireTransfer({ api, toast, view }, cat) {
+  const card = view.querySelector(".cat-transfer");
+  if (!card) return;
+  const report = card.querySelector(".transfer-report");
+  const withProcesses = () => card.querySelector('[name="withProcesses"]').checked;
+  const enc = encodeURIComponent;
+
+  card.addEventListener("click", async (e) => {
+    const b = e.target.closest("button[data-act]");
+    if (!b) return;
+    const act = b.dataset.act;
+    report.innerHTML = "";
+    try {
+      if (act === "export-catalog") {
+        const doc = await api("GET", `/api/v1/catalogs/${enc(cat.id)}/document${withProcesses() ? "?processes=true" : ""}`);
+        downloadJSON(`catalogue-${cat.id}.json`, doc);
+        missingNote(doc, toast);
+        return;
+      }
+      if (act === "export-products") {
+        const ids = [...view.querySelectorAll(".export-pick:checked")].map((c) => c.value);
+        if (!ids.length) { toast("Tick the products to export in the table above.", "err"); return; }
+        const doc = await api("GET", `/api/v1/catalog-products/document?ids=${ids.map(enc).join(",")}${
+          withProcesses() ? "&processes=true" : ""}`);
+        downloadJSON(ids.length === 1 ? `product-${ids[0]}.json` : `products-${cat.id}.json`, doc);
+        missingNote(doc, toast);
+        return;
+      }
+      if (act === "import-products") {
+        const doc = await readDocument(card.querySelector('[name="productsFile"]'));
+        let res;
+        try {
+          res = await api("POST", `/api/v1/catalogs/import?into=${enc(cat.id)}`, doc);
+        } catch (err) {
+          report.innerHTML = importRefusal(err);
+          return;
+        }
+        toast(importSummary(res));
+        redraw();
+      }
+    } catch (err) {
+      toast(err.message, "err");
+    }
+  });
+}
+
+function wireImport({ api, toast, view }) {
+  const card = view.querySelector(".cat-import");
+  if (!card) return;
+  const report = card.querySelector(".import-report");
+  card.addEventListener("click", async (e) => {
+    const b = e.target.closest('button[data-act="import-catalog"]');
+    if (!b) return;
+    report.innerHTML = "";
+    let doc;
+    try {
+      doc = await readDocument(card.querySelector('[name="catalogFile"]'));
+    } catch (err) {
+      toast(err.message, "err");
+      return;
+    }
+    if (card.querySelector('[name="publish"]').checked) doc.publish = true;
+    let res;
+    try {
+      res = await api("POST", "/api/v1/catalogs/import", doc);
+    } catch (err) {
+      report.innerHTML = importRefusal(err);
+      return;
+    }
+    toast(importSummary(res));
+    redraw();
+  });
 }
 
 // ---------- What publishing would change ----------
@@ -1321,13 +1515,15 @@ function unpublishedCard(diff, langs) {
 
 function productRow(it, iid, langs, canAssemble) {
   if (!it) {
-    return `<tr><td>${esc(iid)}</td><td colspan="3" class="muted">offered but not defined —
+    return `<tr><td></td><td>${esc(iid)}</td><td colspan="3" class="muted">offered but not defined —
       publishing will refuse this</td>
       <td class="row-actions"><button class="btn ghost danger" data-act="drop" data-id="${esc(iid)}">remove</button></td></tr>`;
   }
   const ap = it.approval || {};
   const kind = APPROVAL_KINDS.find((k) => k.id === ap.kind) || APPROVAL_KINDS[0];
   return `<tr>
+    <td><input type="checkbox" class="export-pick" value="${esc(it.id)}"
+      aria-label="Export ${esc(textOf(it.texts, langs, it.id))}"></td>
     <td>${esc(textOf(it.texts, langs, it.id))}<div class="muted">${esc(it.id)}</div></td>
     <td>${esc((STATES.find((s) => s.id === it.state) || {}).name || it.state || "—")}</td>
     <td>${esc(kind.name)}${ap.ref ? ` <span class="muted">(${esc(ap.ref)})</span>` : ""}</td>
