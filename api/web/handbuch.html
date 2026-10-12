@@ -5757,8 +5757,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <tr><td><b>Mail</b></td>
             <td data-l="de"><code>smtp.example.com:587</code> bei SMTP; bei Gmail/Graph keiner</td>
             <td data-l="en"><code>smtp.example.com:587</code> for SMTP; none for Gmail/Graph</td>
-            <td data-l="de">SMTP: Benutzer und Passwort im Dialog. Gmail/Microsoft&nbsp;Graph: ein JSON-Auth-Bundle. <b>Vorschau</b>: gar nichts – der Weg, einen Mail-Task ohne Mailserver auszuprobieren.</td>
-            <td data-l="en">SMTP: user and password in the dialog. Gmail/Microsoft&nbsp;Graph: a JSON auth bundle. <b>Preview</b>: nothing at all – the way to try a mail task with no mail server.</td></tr>
+            <td data-l="de">SMTP: der Absender als Login, sein Passwort als Token-Referenz – oder keine Referenz für ein internes Relay, das den Server an seiner Adresse erkennt. Gmail/Microsoft&nbsp;Graph: ein JSON-Auth-Bundle. <b>Vorschau</b>: gar nichts – der Weg, einen Mail-Task ohne Mailserver auszuprobieren.</td>
+            <td data-l="en">SMTP: the sender as the login, its password as a token reference – or no reference for an internal relay that admits the server by its address. Gmail/Microsoft&nbsp;Graph: a JSON auth bundle. <b>Preview</b>: nothing at all – the way to try a mail task with no mail server.</td></tr>
           <tr><td><b>Active&nbsp;Directory</b></td>
             <td><code>ldaps://dc.example.com:636</code></td>
             <td><code>{"bindDN": "cn=svc-atlas,ou=Dienstkonten,dc=example,dc=com", "password": "…"}</code></td></tr>
@@ -6314,10 +6314,14 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           and demonstrated in full that way, with no mail server and no credentials – going live later is a change of
           worker, not of model.</p>
         <ul>
-          <li data-l="de"><b>SMTP:</b> Endpoint <code>smtp.example.com:587</code>, Benutzer und Passwort im Dialog.
-            Der klassische Weg, und der einzige, der auch mit dem Mailserver im eigenen Keller funktioniert.</li>
-          <li data-l="en"><b>SMTP:</b> endpoint <code>smtp.example.com:587</code>, user and password in the dialog. The
-            classic route, and the only one that also works with the mail server in your own basement.</li>
+          <li data-l="de"><b>SMTP:</b> Endpoint <code>smtp.example.com:587</code>; der Absender meldet sich mit dem
+            Passwort an, auf das die Token-Referenz zeigt. Ein internes Relay, das den Server an seiner Adresse erkennt
+            (oft Port 25), braucht keine Anmeldung: Token-Referenz leer lassen. Der klassische Weg, und der einzige,
+            der auch mit dem Mailserver im eigenen Keller funktioniert.</li>
+          <li data-l="en"><b>SMTP:</b> endpoint <code>smtp.example.com:587</code>; the sender logs in with the password the
+            token reference names. An internal relay that admits the server by its address (often port 25) needs no
+            login: leave the token reference empty. The classic route, and the only one that also works with the mail
+            server in your own basement.</li>
           <li data-l="de"><b>Gmail</b> und <b>Microsoft Graph:</b> kein Endpoint, dafür ein JSON-Auth-Bundle im Vault.
             Beide brauchen dieselbe Vorarbeit beim Anbieter wie oben (Dienstkonto bzw. App-Registrierung) –
             unterschätze diesen Schritt nicht, wenn deine Organisation SMTP-Basisauthentifizierung abgeschaltet hat,

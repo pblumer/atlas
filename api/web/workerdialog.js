@@ -251,7 +251,7 @@ export function workerShape(kind, provider) {
         ? "Needs nothing else: messages are framed exactly as they would be sent and land in <b>Operations &rsaquo; Outbox</b> instead of going out. The way to try a mail task before you own a mail server."
         : (native
           ? "The credential reference names a JSON auth bundle in the vault — never a secret value. A Google OAuth client still in <i>Testing</i> expires its refresh token after 7 days. To <b>read</b> the mailbox — a watch, or a task that lists, files or answers mail — the same credential also needs read access: <code>Mail.Read</code> (or <code>Mail.ReadWrite</code> to change it) for Microsoft, <code>gmail.readonly</code> (and <code>gmail.modify</code>) for Gmail."
-          : "Host and port of the submission server. Without a port, 587 is assumed (465 for <code>smtps://</code>). Name an <b>IMAP endpoint</b> too and the same mailbox can be read — by a watch, or a task that lists, files or answers mail; it logs in as the sender with the same credential, and always over TLS."))),
+          : "Host and port of the submission server. Without a port, 587 is assumed (465 for <code>smtps://</code>). The sender logs in with the password the token reference names; leave the reference empty for an internal relay that admits this server by its address (often port 25) — the worker then sends without logging in. Name an <b>IMAP endpoint</b> too and the same mailbox can be read — by a watch, or a task that lists, files or answers mail; it logs in as the sender with the same credential, and always over TLS."))),
   };
 }
 

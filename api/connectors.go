@@ -81,6 +81,25 @@ func (s *Server) resolveConnectorSecret(ref string) string {
 	return envConnectorSecret(ref)
 }
 
+// mailCredential resolves a mail Worker's credential reference. No reference is a
+// Worker that does not log in — an internal relay that admits this server by its
+// network address (ADR-0079) — and resolves to no secret without complaint. A
+// reference that resolves to nothing is a different thing: somebody meant the
+// Worker to log in, and a typo in the name or a secret never stored must not quietly
+// turn it into one that does not. So that is an error naming both places looked in.
+// Runs on the run-loop goroutine, as resolveConnectorSecret does.
+func (s *Server) mailCredential(ref string) (string, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return "", nil
+	}
+	if secret := s.resolveConnectorSecret(ref); secret != "" {
+		return secret, nil
+	}
+	return "", fmt.Errorf("mail: no credential: the reference %q resolves to nothing — no vault secret has that name and ATLAS_CONNECTOR_%s_TOKEN is not set",
+		ref, connectorEnvKey(ref))
+}
+
 // envTemisClients builds the temis worker clients configured purely from the
 // environment (the pre-managed mechanism, kept as a base): ATLAS_TEMIS_CONNECTORS
 // plus per-name ATLAS_TEMIS_<NAME>_URL/_TOKEN.
@@ -228,6 +247,14 @@ func (s *Server) buildMailClients() (map[string]mail.Client, map[string]string, 
 		if provider == "" {
 			provider = mail.ProviderSMTP
 		}
+		// The one thing screened here is a reference that resolves to nothing, which
+		// mail.NewProviderClient cannot tell from no reference at all. Preview presents
+		// no credential, so a stale reference on one is not a reason to skip it.
+		secret, err := s.mailCredential(c.CredentialsRef)
+		if err != nil && provider != mail.ProviderPreview {
+			problems[c.Name] = err.Error()
+			continue
+		}
 		// SMTP needs a submission endpoint and the native providers a credential;
 		// mail.NewProviderClient is the single judge of both, so a record it cannot
 		// build is skipped below rather than pre-screened here.
@@ -235,7 +262,7 @@ func (s *Server) buildMailClients() (map[string]mail.Client, map[string]string, 
 			Provider: provider,
 			Endpoint: strings.TrimSpace(c.Endpoint),
 			Sender:   strings.TrimSpace(c.Sender),
-			Secret:   s.resolveConnectorSecret(c.CredentialsRef),
+			Secret:   secret,
 			Name:     c.Name,
 			Outbox:   s.mailOutbox,
 			Mailbox:  strings.TrimSpace(c.MailboxEndpoint),
@@ -1206,6 +1233,7 @@ func (s *Server) handleTestConnector(w http.ResponseWriter, r *http.Request) {
 
 	var (
 		secret    string
+		credErr   error
 		mayUse    bool
 		lookupErr error
 	)
@@ -1213,7 +1241,7 @@ func (s *Server) handleTestConnector(w http.ResponseWriter, r *http.Request) {
 		if mayUse, lookupErr = s.mayUseCredentialRef(r, req.CredentialsRef); !mayUse || lookupErr != nil {
 			return
 		}
-		secret = s.resolveConnectorSecret(req.CredentialsRef)
+		secret, credErr = s.mailCredential(req.CredentialsRef)
 	})
 	if lookupErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "read workers: "+lookupErr.Error())
@@ -1225,6 +1253,10 @@ func (s *Server) handleTestConnector(w http.ResponseWriter, r *http.Request) {
 		// worker and everything about a permission (ADR-0205).
 		httpapi.Error(w, http.StatusForbidden,
 			"that credential reference belongs to a worker you may not edit")
+		return
+	}
+	if credErr != nil && req.Provider != mail.ProviderPreview {
+		httpapi.JSON(w, http.StatusOK, map[string]any{"ok": false, "detail": credErr.Error()})
 		return
 	}
 
@@ -1260,7 +1292,7 @@ func (s *Server) handleTestConnector(w http.ResponseWriter, r *http.Request) {
 		httpapi.JSON(w, http.StatusOK, map[string]any{"ok": false, "detail": err.Error()})
 		return
 	}
-	httpapi.JSON(w, http.StatusOK, map[string]any{"ok": true, "detail": connectorTestDetail(req.Provider, req.Endpoint, to)})
+	httpapi.JSON(w, http.StatusOK, map[string]any{"ok": true, "detail": connectorTestDetail(req.Provider, req.Endpoint, to, secret != "")})
 }
 
 // testSQLConnector answers the check for one of the SQL kinds: it resolves the
@@ -1316,8 +1348,10 @@ func (s *Server) testSQLConnector(w http.ResponseWriter, r *http.Request, produc
 
 // connectorTestDetail says what the check actually proved, rather than "OK" — the
 // difference between "the credential was accepted" and "a message was delivered"
-// matters to whoever has to decide the worker is finished.
-func connectorTestDetail(provider, endpoint, to string) string {
+// matters to whoever has to decide the worker is finished. loggedIn says whether an
+// SMTP check presented a credential: one that did not proved only that the door
+// opens, and a relay that admits by address can still refuse to relay.
+func connectorTestDetail(provider, endpoint, to string, loggedIn bool) string {
 	switch {
 	case to != "" && provider == mail.ProviderPreview:
 		return "Test message delivered to the outbox (Operations › Outbox) — the preview provider sends nothing outward."
@@ -1325,6 +1359,9 @@ func connectorTestDetail(provider, endpoint, to string) string {
 		return "Test message sent to " + to + ". If it does not arrive, the message left atlas and the provider still has it."
 	case provider == mail.ProviderPreview:
 		return "Ready. The preview provider dials nothing: messages land in the outbox (Operations › Outbox)."
+	case provider == mail.ProviderSMTP && !loggedIn:
+		return "Connected to " + endpoint + " without logging in: no credential reference is set, so the server has to " +
+			"admit atlas by its network address. No message was sent — send a test message to confirm it relays."
 	case provider == mail.ProviderSMTP:
 		return "Connected to " + endpoint + " and authenticated. No message was sent."
 	default:
