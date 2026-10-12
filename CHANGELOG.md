@@ -12,6 +12,23 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **An uncaught error's incident says it is an error, not a timer.** An error end event
+  whose error nothing caught parks on an incident marked as an unhandled error (ADR-0089),
+  but the label every operator surface reads knew only a job, the execution budget and,
+  for anything else, a timer — so the Console, the incident listing, the summary and the
+  event feed called it a timer whose schedule stopped resolving, and the resolve dialog
+  asked for retries it would never use. Such an incident now has the type `error`:
+  `GET /api/v1/incidents?type=error` lists them, a cause groups them, a bulk resolve can
+  scope to them, and `atlas.incident.raised` and `.resolved` carry `incidentType: "error"`.
+  The Console shows an `error` pill, and its resolve dialog says the error is thrown again
+  and leaves the retry count out. A worker's uncaught error still reads `job`, since
+  resolving retries its job with the retries granted. An incident an error end raised
+  before 0.10.0 still reads `timer` until it is resolved; the incident the re-throw raises
+  reads `error`. The Console also labels an execution-budget incident `budget`, as the
+  API already did, instead of `timer`.
+
 ## [0.10.0] — 2026-10-12
 
 **A process can walk one person through a multi-step form.** An embedded subprocess

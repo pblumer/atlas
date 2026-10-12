@@ -121,7 +121,7 @@ func (sel incidentSelector) match(v *model.IncidentValue, ctx incidentCtx, eleme
 // incidentTypes are the values [incidentType] can report, and so the only ones a
 // selector may name. Naming another is a client error rather than an empty page: a
 // typo that silently matches nothing reads as "nothing is stuck".
-var incidentTypes = map[string]bool{"job": true, "timer": true, "budget": true}
+var incidentTypes = map[string]bool{"job": true, "timer": true, "budget": true, "error": true}
 
 // incidentSelectorFromQuery reads a selector off the listing's query string,
 // reporting the first malformed parameter rather than ignoring it.
