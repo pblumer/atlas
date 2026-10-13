@@ -38,6 +38,20 @@ _Changed_ / _Removed_ for each version.
   read-only from Operations or the Modeler home is still deployed without touching the
   draft; the Deploy panel now says so and points at Save.
 
+### Fixed
+
+- **The Components palette in the form editor stays against the canvas when its column
+  is resized.** The Design tab's palette column is resizable, but form-js pins the palette
+  inside it to a fixed 270px and its tile groups to 236px — the defect the Properties
+  column had on the right. A column dragged wider left an empty band between the palette
+  and the Form Definition, remembered across sessions; a narrower one cut the tiles and
+  the search box off. And by default the column opened at 200px, not 270px, because it
+  was measured before form-js had rendered the palette into it, so the third column of
+  tiles was cut off before anyone touched the divider. The palette now fills its column
+  and its tiles flow into as many columns as the width holds, three at the default
+  270px; double-clicking a column's divider restores its default width instead of
+  leaving the column sized by its content.
+
 ## [0.11.0] — 2026-10-12
 
 **A catalogue moves to another installation as one file.** `GET /api/v1/catalogs/{id}/document`
