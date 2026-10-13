@@ -796,7 +796,7 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/applications/{id}/releases/{version}/promote": "shipping a release to another server is an operator decision with off-server consequences, not an agent action",
 	"GET /api/v1/applications/{id}/targets":                     "per-peer status of admin-configured targets; an agent reads this server's own state via atlas_application_deployments",
 
-	// An application's values on this installation (ADR-draft-application-values-per-installation):
+	// An application's values on this installation (ADR-0453):
 	// what every new instance's bound constants take here. Per-installation operator
 	// config in the category ADR-0105 kept read-only on MCP — an agent reads them with
 	// atlas_application_values to explain a refused start, and an administrator sets them.

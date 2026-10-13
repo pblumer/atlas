@@ -3260,7 +3260,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		return nil, err
 	}
 	// A constant is fixed by the model, so a model that also asks for it, declares it
-	// personal, or writes it does not deploy (ADR-draft-process-constants). Here for the
+	// personal, or writes it does not deploy (ADR-0454). Here for the
 	// same reason as the personal-data rule: it reads the assembled mappings.
 	if err := p.refuseConstantConflicts(); err != nil {
 		return nil, err

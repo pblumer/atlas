@@ -10,7 +10,7 @@
 
     <!-- Which tenant, which app registration and which certificate differ between DEV, INT and
          PROD, so the model states none of them: each is a constant bound to the application
-         (ADR-draft-application-values-per-installation), and every installation sets its own on
+         (ADR-0453), and every installation sets its own on
          the application's Values tab. A start is refused until the tenant and the client id are
          set there; the certificate subject has a fallback. None of them is a secret. -->
     <bpmn:extensionElements>

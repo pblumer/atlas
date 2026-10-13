@@ -392,7 +392,7 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Its values on this installation are configuration of this application alone
-		// (ADR-draft-application-values-per-installation): gone with it, before it, for the
+		// (ADR-0453): gone with it, before it, for the
 		// same self-healing order.
 		if delErr = s.appValues.Delete(id); delErr != nil {
 			return

@@ -879,7 +879,7 @@ func authoringTools() []Tool {
 				"them: each required name with the processes binding it and its state here — set, missing, " +
 				"covered by a fallback, or held with another type. A missing value means a start is refused " +
 				"and a timer or message start runs without it. Read-only: setting values is an administrator's " +
-				"per-installation decision (ADR-draft-application-values-per-installation).",
+				"per-installation decision (ADR-0453).",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"id": stringProp("The application id whose values to report.")},

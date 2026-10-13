@@ -2551,7 +2551,7 @@ function collectDiagramVariables(modeler) {
         push(v.name, "Start", "", "start variable", "Process", v.type || "");
       }
       // A constant is a variable every instance carries from its start
-      // (ADR-draft-process-constants), so expressions and completion offer it like one.
+      // (ADR-0454), so expressions and completion offer it like one.
       for (const c of readConstants(rootBo)) {
         push(c.name, "Process", "", c.source === "application" ? "application constant" : "constant", "Process", c.type || "");
       }
@@ -6849,12 +6849,12 @@ function readStartVariables(bo) {
 }
 
 // readConstants returns the constants a process declares via its atlas:Constants
-// extension element: [{name, type, value}] (ADR-draft-process-constants). Empty when
+// extension element: [{name, type, value}] (ADR-0454). Empty when
 // none are declared.
 //
 // source is "application" for a constant bound to its application's value on the
 // installation where an instance starts, whose value is then only a fallback
-// (ADR-draft-application-values-per-installation); "" for a model constant.
+// (ADR-0453); "" for a model constant.
 function readConstants(bo) {
   const cs = findExt(bo, "atlas:Constants");
   return ((cs && cs.constants) || []).map((c) => ({
@@ -6981,7 +6981,7 @@ function writeStartVariables(modeler, list, targetEl, targetBo) {
 }
 
 // writeConstants persists the process's constants the way writeStartVariables persists
-// its start variables, into atlas:Constants (ADR-draft-process-constants). The row
+// its start variables, into atlas:Constants (ADR-0454). The row
 // editor holds a constant's value where it holds a start variable's default; the value is
 // written even when empty, because an empty string is a value a string constant may have.
 function writeConstants(modeler, list, targetEl, targetBo) {
@@ -7022,7 +7022,7 @@ function writeConstants(modeler, list, targetEl, targetBo) {
 
 // The two declarations the process panel edits as rows: the start variables a start
 // asks for, and the constants every instance starts with and nobody is asked for
-// (ADR-draft-process-constants). One row editor serves both: a constant has a value
+// (ADR-0454). One row editor serves both: a constant has a value
 // where a start variable has a default, and no "required", because nobody supplies it.
 const START_VAR_DECL = { list: "#sv-list", add: "#sv-add", constant: false };
 const CONSTANT_DECL = { list: "#cv-list", add: "#cv-add", constant: true };
@@ -7040,7 +7040,7 @@ function startVarRowHTML(v, constant = false) {
     ? `<textarea class="sv-default sv-json-default" rows="2" placeholder='${bound ? "fallback (optional)" : '{"key": "value"}'}' aria-label="${what} (JSON)">${esc(v.default)}</textarea>`
     : `<input type="text" class="sv-default" value="${esc(v.default)}" placeholder="${bound ? "fallback (optional)" : constant ? "value" : "default"}" aria-label="${what}"/>`;
   // A constant takes its value from the model, or from its application on the
-  // installation where the instance starts (ADR-draft-application-values-per-installation).
+  // installation where the instance starts (ADR-0453).
   const source = constant
     ? `<select class="sv-source" aria-label="Source" title="Where the value comes from: the model, or the application's value on each installation">
         <option value=""${bound ? "" : " selected"}>value</option>

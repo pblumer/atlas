@@ -104,7 +104,7 @@ type processResp struct {
 	// missing from every instance started that way.
 	StartVariables []startVariableResp `json:"startVariables,omitempty"`
 	// Constants are the values every instance of this definition starts with and nobody
-	// is asked for (atlas:constants, ADR-draft-process-constants), absent when it declares
+	// is asked for (atlas:constants, ADR-0454), absent when it declares
 	// none. Listed so a client can tell them from inputs: a start variable naming one is
 	// dropped, because the constant is written first.
 	Constants []constantResp `json:"constants,omitempty"`
@@ -173,7 +173,7 @@ type constantResp struct {
 	Value string `json:"value"`
 	// Source is "application" for a constant bound to its application's value on this
 	// installation, whose Value is then only the fallback
-	// (ADR-draft-application-values-per-installation); absent for a model constant.
+	// (ADR-0453); absent for a model constant.
 	Source string `json:"source,omitempty"`
 }
 
@@ -1236,7 +1236,7 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 		// change a person makes and then immediately goes looking for, so it is the
 		// one that does not wait out the TTL (see forgetLandscape).
 		s.forgetLandscape()
-		s.proc.SetDefinitionApplication(key, projectID) // ADR-draft-application-values-per-installation
+		s.proc.SetDefinitionApplication(key, projectID) // ADR-0453
 		s.deployments[key] = &deployment{
 			Key:        key,
 			ProcessID:  pid,

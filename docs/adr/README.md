@@ -538,6 +538,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0450](0450-a-scope-drains-only-when-no-token-is-in-transit.md) | A scope drains only when no token is in transit into it | Accepted | Landed |
 | [0451](0451-catalogue-export.md) | A catalogue is exported as the document it is imported as | Accepted | Landed |
 | [0452](0452-modeler-shows-its-version.md) | The Modeler says which version it shows, and Deploy saves the draft | Accepted | Landed |
+| [0453](0453-application-values-per-installation.md) | An application holds its values per installation, and a constant binds to one by name | Accepted | Landed |
+| [0454](0454-process-constants.md) | Process constants are seeded with every instance and written by nothing else | Accepted | Landed |
 
 ## The two states of a record
 

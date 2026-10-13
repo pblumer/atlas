@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/model"
 )
 
-// Process constants (ADR-draft-process-constants): seeded into every instance however it
+// Process constants (ADR-0454): seeded into every instance however it
 // was started, before its start variables, and written by nothing in the run afterwards
 // but an operator's audited correction.
 
@@ -203,7 +203,7 @@ func TestNoConstantsLeavesStartVariablesAlone(t *testing.T) {
 
 // appBoundProcess builds Start → message catch "app.more" → End with the constants
 // TenantId (bound to the application, no fallback) and Language (bound, fallback "de-CH")
-// (ADR-draft-application-values-per-installation).
+// (ADR-0453).
 func appBoundProcess(t *testing.T) *compiler.CompiledProcess {
 	t.Helper()
 	b := compiler.NewBuilder(9, "app-bound", 1)

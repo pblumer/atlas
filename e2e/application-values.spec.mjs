@@ -1,5 +1,5 @@
 // End-to-end coverage for an application's values on this installation (api/web/app.js,
-// ADR-draft-application-values-per-installation): the Values tab on the application page
+// ADR-0453): the Values tab on the application page
 // lists what the deployed processes' constants bound to the application require, with
 // what this installation answers for each, and edits the values held here.
 //

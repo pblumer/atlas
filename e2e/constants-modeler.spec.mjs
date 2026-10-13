@@ -1,5 +1,5 @@
 // End-to-end coverage for process constants in the Modeler (api/web/editor.js,
-// ADR-draft-process-constants): the values every instance starts with and nobody is asked
+// ADR-0454): the values every instance starts with and nobody is asked
 // for. The process panel's Implement tab edits them beside the start variables, the
 // Variables panel offers them like any variable, and a model carrying them survives the
 // Modeler's round trip.
@@ -94,7 +94,7 @@ test("the Variables panel offers a constant like any variable", async ({ page })
 });
 
 // A constant can take its value from its application on each installation
-// (ADR-draft-application-values-per-installation): the source select writes
+// (ADR-0453): the source select writes
 // source="application", and the value field becomes an optional fallback — written only
 // when there is one.
 test("a constant bound to its application writes its source, and a fallback only when given", async ({ page }) => {

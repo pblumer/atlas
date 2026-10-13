@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/expr"
 )
 
-// Process constants (ADR-draft-process-constants).
+// Process constants (ADR-0454).
 //
 // A constant is a value every instance of a process starts with and nobody is asked for:
 // declared on the process as <atlas:constant name type value/> inside <atlas:constants>,
@@ -30,12 +30,12 @@ type xmlConstant struct {
 	Value string `xml:"value,attr"`
 	// Source is where the value comes from: the model ("" or "model", the value
 	// attribute) or the application the process is filed under on the installation
-	// where an instance starts ("application", ADR-draft-application-values-per-installation),
+	// where an instance starts ("application", ADR-0453),
 	// in which case Value is an optional fallback.
 	Source string `xml:"source,attr"`
 }
 
-// Constant sources (ADR-draft-application-values-per-installation).
+// Constant sources (ADR-0453).
 const (
 	ConstantSourceModel       = "model"
 	ConstantSourceApplication = "application"
@@ -107,7 +107,7 @@ func constantsOf(procID string, decl []xmlConstant) ([]Constant, error) {
 // ParseConstantValue turns a value declared with one of the four constant types into the
 // canonical (kind, bool, text) form a variable is stored in, or says why it is not a value
 // of that type. The API parses an application's values with it when they are saved
-// (ADR-draft-application-values-per-installation), so they are held in exactly the form a
+// (ADR-0453), so they are held in exactly the form a
 // model constant is and the engine never parses either.
 func ParseConstantValue(typ, raw string) (expr.ValueKind, bool, string, error) {
 	v, err := constantValue(typ, raw)
@@ -216,22 +216,22 @@ func (p *CompiledProcess) refuseConstantConflicts() error {
 	}
 	for _, sv := range p.startVars {
 		if p.IsConstant(sv.Name) {
-			return fmt.Errorf("compiler: %q is declared both as a start variable and as a constant — a start variable is asked for when an instance starts, a constant is fixed by the model; declare it as one or the other (ADR-draft-process-constants)", sv.Name)
+			return fmt.Errorf("compiler: %q is declared both as a start variable and as a constant — a start variable is asked for when an instance starts, a constant is fixed by the model; declare it as one or the other (ADR-0454)", sv.Name)
 		}
 	}
 	for _, name := range p.personalVars {
 		if p.IsConstant(name) {
-			return fmt.Errorf("compiler: %q is declared both personal and as a constant — a constant's value is written in the model, in the clear, so it cannot be personal data (ADR-0314, ADR-draft-process-constants)", name)
+			return fmt.Errorf("compiler: %q is declared both personal and as a constant — a constant's value is written in the model, in the clear, so it cannot be personal data (ADR-0314, ADR-0454)", name)
 		}
 	}
 	if p.dataSubjectVar != "" && p.IsConstant(p.dataSubjectVar) {
-		return fmt.Errorf("compiler: %q is the data subject and a constant — the data subject names the person an instance is about, and a constant is the same for every instance (ADR-0314, ADR-draft-process-constants)", p.dataSubjectVar)
+		return fmt.Errorf("compiler: %q is the data subject and a constant — the data subject names the person an instance is about, and a constant is the same for every instance (ADR-0314, ADR-0454)", p.dataSubjectVar)
 	}
 	refuse := func(kind, name string) error {
 		if name == "" || !p.IsConstant(name) {
 			return nil
 		}
-		return fmt.Errorf("compiler: %s writes %q, which the process declares as a constant — a constant is set when an instance starts and nothing in the run may replace it; write the value under another name (ADR-draft-process-constants)", kind, name)
+		return fmt.Errorf("compiler: %s writes %q, which the process declares as a constant — a constant is set when an instance starts and nothing in the run may replace it; write the value under another name (ADR-0454)", kind, name)
 	}
 	for i := range p.ioInputs {
 		m := &p.ioInputs[i]

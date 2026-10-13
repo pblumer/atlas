@@ -1,4 +1,4 @@
-# ADR-DRAFT: Process constants are seeded with every instance and written by nothing else
+# ADR-0454: Process constants are seeded with every instance and written by nothing else
 
 - **Status:** Accepted
 - **Implementation:** Landed
@@ -159,7 +159,7 @@ as one that declares nothing searchable.
 - **Follow-ups / risks to watch:**
   - **Values per installation.** A constant whose value differs between DEV, INT and
     PROD cannot be stated in the model without three models, which ADR-0371 rules out:
-    the same BPMN must deploy everywhere. ADR-draft-application-values-per-installation
+    the same BPMN must deploy everywhere. ADR-0453
     answers it: an application holds named values per installation, and a constant binds
     to one by name (`source="application"`). What this record fixed for it still holds —
     the value is resolved where the instance is created and frozen into the creation

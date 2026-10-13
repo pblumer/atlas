@@ -3638,7 +3638,7 @@ const APP_VALUE_TYPES = ["string", "number", "boolean", "json"];
 
 // renderAppValues fills the Values tab: what this application holds on *this*
 // installation, and what its deployed processes' constants bound to the application
-// require of it (ADR-draft-application-values-per-installation). DEV, INT and PROD each
+// require of it (ADR-0453). DEV, INT and PROD each
 // hold their own; the BPMN is the same on all three and only says which value it needs.
 //
 // A name a process requires and the installation does not hold is offered as an empty

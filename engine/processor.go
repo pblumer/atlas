@@ -90,7 +90,7 @@ type Processor struct {
 
 	// defApplication names the application each deployed definition is filed under on
 	// this server, and appValues the values each application holds here
-	// (ADR-draft-application-values-per-installation). A constant bound to its
+	// (ADR-0453). A constant bound to its
 	// application is resolved from them when an instance is created. Like callOverrides
 	// they are operator config: the server layer pushes them, from its deployment registry
 	// and a sidecar, at startup and on every change, and they are owned by this run-loop
@@ -327,7 +327,7 @@ func (p *Processor) Undeploy(defKey uint64) {
 }
 
 // ApplicationValue is one value an application holds on this installation, in the
-// canonical form a variable is stored in (ADR-draft-application-values-per-installation).
+// canonical form a variable is stored in (ADR-0453).
 // The server layer parses it when it is saved, so the engine seeds it without parsing (I5).
 type ApplicationValue struct {
 	Kind model.VarKind

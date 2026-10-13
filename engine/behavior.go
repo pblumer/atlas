@@ -231,7 +231,7 @@ func activateInstance(c *ProcessingContext, piKey uint64, seed instanceSeed) {
 		})
 	}
 
-	// Seed the process's constants first (ADR-draft-process-constants): every instance
+	// Seed the process's constants first (ADR-0454): every instance
 	// carries them, however it was started, and writing them before the start variables
 	// is what makes a start variable — or a message payload, or a forked instance's
 	// value — that names one fall to keepsConstant (context.go) rather than replace it. The
@@ -240,7 +240,7 @@ func activateInstance(c *ProcessingContext, piKey uint64, seed instanceSeed) {
 	//
 	// A constant bound to its application takes the value the application holds on this
 	// server, read from the operator config the processor carries and frozen into the event
-	// like any other (ADR-draft-application-values-per-installation); without one it takes
+	// like any other (ADR-0453); without one it takes
 	// its fallback, and without a fallback it is not seeded — the deploy warned, and an API
 	// start was refused before it got here.
 	consts := cp.Constants()
