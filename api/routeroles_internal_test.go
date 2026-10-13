@@ -47,7 +47,7 @@ var wantAdminRoutes = []string{
 	"DELETE /api/v1/call-activities/overrides/{processId}",
 	// And an application's values on this installation: the tenant, client id or
 	// endpoint every instance of its processes starts with here — the same per-server
-	// operator decision as an override (ADR-draft-application-values-per-installation).
+	// operator decision as an override (ADR-0453).
 	// Reading them stays open, because the Values tab and a deploy's warning read them.
 	"PUT /api/v1/applications/{id}/values",
 

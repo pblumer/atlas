@@ -1454,7 +1454,7 @@ type xmlProcess struct {
 	// start surfaces render them as typed fields, and the engine never reads them.
 	StartVariables []xmlStartVariable `xml:"extensionElements>startForm>startVariable"`
 	// Constants are the values every instance starts with and nobody is asked for
-	// (<atlas:constants><atlas:constant/></atlas:constants>, ADR-draft-process-constants).
+	// (<atlas:constants><atlas:constant/></atlas:constants>, ADR-0454).
 	// The engine seeds them on every start path.
 	Constants []xmlConstant `xml:"extensionElements>constants>constant"`
 

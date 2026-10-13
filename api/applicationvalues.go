@@ -15,7 +15,7 @@ import (
 	"github.com/pblumer/atlas/engine"
 )
 
-// Application values per installation (ADR-draft-application-values-per-installation).
+// Application values per installation (ADR-0453).
 //
 // An application holds, on each installation, named and typed values its processes'
 // constants bind to by name (<atlas:constant source="application"/>). DEV, INT and PROD
@@ -126,10 +126,10 @@ func (s *Server) applicationValueRefusalOnLoop(d *deployment) string {
 			continue
 		}
 		if d.ProjectID == "" {
-			return fmt.Sprintf("constant %q takes its value from the application, but this process is not filed under one; file it under its application, or give the constant a fallback value (ADR-draft-application-values-per-installation)", k.Name)
+			return fmt.Sprintf("constant %q takes its value from the application, but this process is not filed under one; file it under its application, or give the constant a fallback value (ADR-0453)", k.Name)
 		}
 		if !s.proc.HasApplicationValue(d.Key, k.Name) {
-			return fmt.Sprintf("the application value %q is not set on this installation; set it on the application's Values tab before starting this process (ADR-draft-application-values-per-installation)", k.Name)
+			return fmt.Sprintf("the application value %q is not set on this installation; set it on the application's Values tab before starting this process (ADR-0453)", k.Name)
 		}
 	}
 	return ""

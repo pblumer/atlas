@@ -419,7 +419,7 @@ type Server struct {
 	dmnDrafts        *dmnDraftStore         // durable sidecar for decision work in progress (ADR-0321)
 	connectors       *connectorStore        // durable sidecar for managed workers (ADR-0041)
 	callOverrides    *callOverrideStore     // durable sidecar for per-server call-activity target overrides (ADR-0105)
-	appValues        *applicationValueStore // durable sidecar for each application's values on this installation (ADR-draft-application-values-per-installation)
+	appValues        *applicationValueStore // durable sidecar for each application's values on this installation (ADR-0453)
 	repository       []repositoryPackage    // curated, bundled repository catalog, immutable after New (ADR-0081)
 	repositoryStore  *repositoryStore       // durable sidecar for installed repository templates (ADR-0081)
 	settings         *settingsStore         // durable sidecar for org-wide UI settings, e.g. the brand theme (ADR-0113)
@@ -2145,7 +2145,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		return nil, err
 	}
 	// And each application's values on this installation, which a constant bound to its
-	// application is seeded from (ADR-draft-application-values-per-installation). Same
+	// application is seeded from (ADR-0453). Same
 	// place and same reason as the overrides above.
 	if err := s.loadApplicationValues(); err != nil {
 		return nil, err
@@ -3065,7 +3065,7 @@ func (s *Server) restoreDeployment(rec persistedDeployment) error {
 		s.proc.SetProcessActive(rec.Key, false)
 	}
 	// Which application this definition is filed under, for its constants bound to one
-	// (ADR-draft-application-values-per-installation).
+	// (ADR-0453).
 	s.proc.SetDefinitionApplication(rec.Key, rec.ProjectID)
 	s.deployments[rec.Key] = &deployment{
 		Key:        rec.Key,

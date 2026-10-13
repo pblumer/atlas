@@ -1,4 +1,4 @@
-# ADR-DRAFT: An application holds its values per installation, and a constant binds to one by name
+# ADR-0453: An application holds its values per installation, and a constant binds to one by name
 
 - **Status:** Accepted
 - **Implementation:** Landed
@@ -7,7 +7,7 @@
 
 ## Context and problem statement
 
-Process constants (ADR-draft-process-constants) state a value every instance starts with
+Process constants (ADR-0454) state a value every instance starts with
 and nobody is asked for. They state it **in the model**. That is right for a value that
 is the same wherever the process runs — a language code, a routing mode — and wrong for
 the values that prompted them: the tenant an app registration lives in, the registration's
@@ -89,7 +89,7 @@ for a constant — so a malformed one is refused at the door and the engine neve
 
 `source="application"` binds the constant to the application's value **of the same
 name** on the installation where the instance starts. A `value` on a bound constant is its
-**fallback**, used when the application holds none. Everything ADR-draft-process-constants
+**fallback**, used when the application holds none. Everything ADR-0454
 decided about a constant still holds: it is seeded before the start variables, nothing in
 the run replaces it, the model may not write it.
 
@@ -180,7 +180,7 @@ not seeded.
 
 ## Links
 
-- extends ADR-draft-process-constants, whose open question this answers
+- extends ADR-0454, whose open question this answers
 - follows [ADR-0105](0105-per-server-call-activity-target-overrides.md) for operator
   configuration the engine reads while processing a command
 - the portability rule is [ADR-0371](0371-participant-binds-a-published-interface.md)'s;

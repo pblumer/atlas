@@ -12,7 +12,7 @@ import (
 
 // boundBPMN binds TenantId to its application with no fallback, and Language with the
 // fallback de-CH, then waits at a user task so the started instance can be read
-// (ADR-draft-application-values-per-installation).
+// (ADR-0453).
 const boundBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
                     xmlns:atlas="http://atlas/schema/1.0">
   <process id="ucc-bound" isExecutable="true" name="Sammelanschluss">

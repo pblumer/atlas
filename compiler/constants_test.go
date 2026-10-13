@@ -173,7 +173,7 @@ func TestPassingAConstantThroughUnchangedDeploys(t *testing.T) {
 	}
 }
 
-// A constant bound to its application (ADR-draft-application-values-per-installation)
+// A constant bound to its application (ADR-0453)
 // takes the application's value on the installation where an instance starts; its own
 // value, when it declares one, is the fallback and is parsed like any constant's.
 func TestApplicationBoundConstants(t *testing.T) {

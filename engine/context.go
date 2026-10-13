@@ -38,7 +38,7 @@ func (c *ProcessingContext) latestDefKey(processId string) (uint64, bool) {
 }
 
 // applicationValue is the value the application a definition is filed under holds on this
-// server for name (ADR-draft-application-values-per-installation). A pure read of
+// server for name (ADR-0453). A pure read of
 // run-loop-owned operator config — no allocation (I1).
 func (c *ProcessingContext) applicationValue(defKey uint64, name string) (ApplicationValue, bool) {
 	app, ok := c.p.defApplication[defKey]
@@ -436,7 +436,7 @@ func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.Var
 	// write indexed (I6).
 	v.Indexed = c.indexesVariable(cp, atRoot, v.Name)
 	// A write of a constant's name into an instance that already holds the constant is
-	// dropped, whatever wrote it (ADR-draft-process-constants). The writer is told it
+	// dropped, whatever wrote it (ADR-0454). The writer is told it
 	// happened: nothing about it is wrong enough to park, and the constant is what the
 	// instance was started with. A delete is exempt for the reason it is exempt below.
 	if intent != model.IntentVariableDeleted && c.keepsConstant(cp, atRoot, &v) {
@@ -543,7 +543,7 @@ func (c *ProcessingContext) indexesVariable(cp *compiler.CompiledProcess, atRoot
 
 // keepsConstant reports whether a write must be dropped because it names one of the
 // process's constants in an instance root that already holds it
-// (ADR-draft-process-constants).
+// (ADR-0454).
 //
 // Dropping rather than refusing is the decision, and it is decided by the writes that
 // actually arrive here: a call activity handing its child's variables back to a caller

@@ -157,7 +157,7 @@ func TestDeleteApplicationToolIsIdempotent(t *testing.T) {
 
 // atlas_application_values reports what an application's processes require of this
 // installation, so an agent can explain a start refused for a missing value
-// (ADR-draft-application-values-per-installation).
+// (ADR-0453).
 func TestApplicationValuesTool(t *testing.T) {
 	atlas := newAtlas(t)
 	created := callOne(t, atlas, "atlas_create_application", map[string]any{"name": "MCP Values"})

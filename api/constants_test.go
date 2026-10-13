@@ -10,7 +10,7 @@ import (
 )
 
 // constantsBPMN declares two process constants and waits at a user task, so the started
-// instance stays alive to be read (ADR-draft-process-constants).
+// instance stays alive to be read (ADR-0454).
 const constantsBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
                     xmlns:atlas="http://atlas/schema/1.0">
   <process id="ucc" isExecutable="true" name="Sammelanschluss">

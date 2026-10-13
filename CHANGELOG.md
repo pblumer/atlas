@@ -57,7 +57,7 @@ received.
 
 - **An application holds its values per installation, and a constant binds to one.**
   DEV, INT and PROD run the same BPMN with different tenants, app ids and suffixes
-  ([ADR-draft-application-values-per-installation](docs/adr/draft-application-values-per-installation.md)).
+  ([ADR-0453](docs/adr/0453-application-values-per-installation.md)).
   `<atlas:constant name="TenantId" source="application"/>` takes the value the process's
   application holds on the installation where the instance starts; a `value` on it is the
   fallback. The values are set on the application page's new **Values** tab, or with `PUT
@@ -77,7 +77,7 @@ received.
 - **A process declares constants every instance starts with.** `<atlas:constant name type
   value/>` inside `<atlas:constants>` on the process states a value nobody is asked for —
   a domain suffix, a language, an app id
-  ([ADR-draft-process-constants](docs/adr/draft-process-constants.md)). The engine writes the
+  ([ADR-0454](docs/adr/0454-process-constants.md)). The engine writes the
   constants as ordinary process variables when it creates an instance, before the start
   variables, on every start path: the Modeler, the Tasks app, the API, a public link, a
   timer, a message, a signal, a call activity and a fork. FEEL, mappings, scripts and Worker

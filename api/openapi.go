@@ -1387,10 +1387,10 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/applications/{id}/audit", s.handleListProjectAudit, apiOp{
 			summary: "An application's access-control history — shares, revokes, visibility flips, and ownership transfers, newest first; owner-only (ADR-0071)", tag: "Applications", role: RoleModeler, resp: jsonBody("Grant audit events", tArray())}},
 		{"GET", "/api/v1/applications/{id}/values", s.handleGetApplicationValues, apiOp{
-			summary: "The values an application holds on this installation, and what its deployed processes' constants bound to the application require of them, each with its state: set, missing, covered by a fallback, or held with another type (ADR-draft-application-values-per-installation)", tag: "Applications", role: roleAny,
+			summary: "The values an application holds on this installation, and what its deployed processes' constants bound to the application require of them, each with its state: set, missing, covered by a fallback, or held with another type (ADR-0453)", tag: "Applications", role: roleAny,
 			resp: jsonBody("Values and requirements", tObject())}},
 		{"PUT", "/api/v1/applications/{id}/values", s.handlePutApplicationValues, apiOp{
-			summary: "Replace the values an application holds on this installation; each is {name, type, value} with type string, number, boolean or json. Instances started afterwards take them; running ones keep theirs (ADR-draft-application-values-per-installation)", tag: "Applications", role: RoleAdmin,
+			summary: "Replace the values an application holds on this installation; each is {name, type, value} with type string, number, boolean or json. Instances started afterwards take them; running ones keep theirs (ADR-0453)", tag: "Applications", role: RoleAdmin,
 			req:  jsonBody("Values", schemaObj(map[string]any{"values": tArray()}, "values")),
 			resp: jsonBody("Values and requirements", tObject())}},
 		{"GET", "/api/v1/applications/{id}/deployments", s.handleApplicationDeployments, apiOp{
