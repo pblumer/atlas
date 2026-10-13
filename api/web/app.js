@@ -42,6 +42,9 @@ import { runImport } from "./infomodel-import.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
 // import and one-time stylesheet injection live in one module rather than here.
 import { loadFormViewer } from "./formviewer.js";
+// A start form does not replace the start variables declared on the process: the ones
+// it does not ask for are asked beneath it, with the Modeler's typed fields.
+import { uncoveredStartVariables, extraStartFieldsHTML, wireStartJSONEditors, readTypedDeployBody } from "./startvars.js";
 import { secretShapeFor, checkSecretValue, secretHintHTML, secretValueFieldHTML } from "./secret-shapes.js";
 // Giving an AI assistant access, as a screen (ADR-0200). Its own module because it
 // is a self-contained page and this file is long enough; it takes its dependencies
@@ -9467,6 +9470,13 @@ async function viewStartProcess() {
       const form = new Form({ container: host });
       await form.importSchema(def.schema, {});
       state.form = form;
+      // The declared start variables this form does not ask for, beneath it. Which ones
+      // those are is only known once the schema is here.
+      const extra = detailEl.querySelector("#start-extra");
+      if (extra) {
+        extra.innerHTML = extraStartFieldsHTML(uncoveredStartVariables(p.startVariables, def.schema));
+        wireStartJSONEditors(extra);
+      }
     } catch (e) {
       host.innerHTML = `<p class="muted err">Failed to load the start form: ${esc(e.message)}</p>`;
     }
@@ -9492,6 +9502,7 @@ async function viewStartProcess() {
         <div class="tasks-field"><span class="tasks-field-label muted">Version</span><span>${p.version}</span></div>
       </div>
       <div class="tasks-form" id="start-form"><p class="muted">Loading form&hellip;</p></div>
+      <div class="tasks-form-extra" id="start-extra"></div>
       <div class="tasks-publish" id="start-publish"></div>`;
     renderPublish(p);
     detailEl.querySelector("#start-back").addEventListener("click", () => {
@@ -9505,7 +9516,13 @@ async function viewStartProcess() {
       if (state.form) {
         const { data, errors } = state.form.submit();
         if (errors && Object.keys(errors).length > 0) { toast("Please fix the highlighted fields", "err"); return; }
-        variables = data;
+        // The declared half: a missing required value or malformed JSON stops the start
+        // and says which. The form's data wins on a shared name, though by construction
+        // the two bind different ones.
+        let declared = {};
+        try { declared = readTypedDeployBody(detailEl.querySelector("#start-extra")).variables || {}; }
+        catch (err) { toast(err.message, "err"); return; }
+        variables = { ...declared, ...(data || {}) };
       }
       btn.disabled = true;
       try {

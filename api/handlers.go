@@ -97,6 +97,12 @@ type processResp struct {
 	// when the process has no start form (ADR-0028). It lets the Tasks app offer a
 	// "start via form" flow whose submitted data becomes the start variables.
 	StartFormID string `json:"startFormId,omitempty"`
+	// StartVariables are the start variables the process declares (atlas:startForm),
+	// absent when it declares none. A start surface that shows the start form renders
+	// the ones the form does not bind beside it, so the form does not silently replace
+	// the declaration: without them a declared value the form never asks for is simply
+	// missing from every instance started that way.
+	StartVariables []startVariableResp `json:"startVariables,omitempty"`
 	// Executable is the process's bpmn:isExecutable flag. A non-executable process
 	// still lists (so it can be inspected) but is omitted from the start surfaces and
 	// cannot be started. Always emitted so the UI can filter on it.
@@ -122,6 +128,29 @@ type processResp struct {
 	// one deployed since ADR-0423 — so the listing says which definitions do not
 	// behave as their binding reads, and only those.
 	FrozenDecisions []frozenDecisionResp `json:"frozenDecisions,omitempty"`
+}
+
+// startVariableResp is one declared start variable as the start surfaces read it: the
+// same {name, type, default, required} the Modeler reads off the model.
+type startVariableResp struct {
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	Default  string `json:"default,omitempty"`
+	Required bool   `json:"required,omitempty"`
+}
+
+// startVariablesOf is a definition's declared start variables in their response shape,
+// nil when it declares none, so the field is left out of the listing.
+func startVariablesOf(cp *compiler.CompiledProcess) []startVariableResp {
+	decl := cp.StartVariables()
+	if len(decl) == 0 {
+		return nil
+	}
+	out := make([]startVariableResp, len(decl))
+	for i, v := range decl {
+		out[i] = startVariableResp{Name: v.Name, Type: v.Type, Default: v.Default, Required: v.Required}
+	}
+	return out
 }
 
 // collaborationParticipants reports how many <participant> pools a model's
@@ -1221,6 +1250,7 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
 				ProjectID:        d.ProjectID,
 				CollaborationKey: s.collaborationKeyOf(d),
 				StartFormID:      d.cp.StartFormId(),
+				StartVariables:   startVariablesOf(d.cp),
 				Executable:       d.cp.IsExecutable(),
 				VersionTag:       d.cp.VersionTag(),
 				Active:           !d.inactive,

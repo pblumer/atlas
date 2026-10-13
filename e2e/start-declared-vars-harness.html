@@ -1,0 +1,127 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas start form + declared start variables e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js — the Modeler's Deploy & run and the Live
+         view's Start instance — against a mock `api`, with a process that links a start
+         form on its start event AND declares start variables on the process
+         (atlas:startForm). The form asks for some of the declared names and not for
+         others; the ones it does not ask for must be asked beneath it, rather than
+         silently missing from the instance.
+
+         The mock records every write, so a test can prove what an instance was started
+         with — and that a refused Send started nothing. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountEditor, mountLive } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+
+      // ?declared=0 drops the declaration: the common case, which must look exactly as
+      // it did before.
+      const declared = new URL(location.href).searchParams.get("declared") !== "0";
+      const DECL = declared ? `
+    <bpmn:extensionElements>
+      <atlas:startForm>
+        <atlas:startVariable name="ApplicationId" type="string" required="true"/>
+        <atlas:startVariable name="TenantId" type="string" default="tenant-42"/>
+        <atlas:startVariable name="Retries" type="number" default="3"/>
+        <atlas:startVariable name="Options" type="json" default="{&quot;dry&quot;:true}"/>
+        <atlas:startVariable name="Name" type="string" required="true"/>
+        <atlas:startVariable name="address" type="json"/>
+        <atlas:startVariable name="Hidden" type="string" default="from-declaration"/>
+      </atlas:startForm>
+    </bpmn:extensionElements>` : "";
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:atlas="http://atlas/schema/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_dv" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="proc-ucc" name="Sammelanschluss" isExecutable="true">${DECL}
+    <bpmn:startEvent id="Start_1" name="Start">
+      <bpmn:extensionElements><zeebe:formDefinition formId="collective" /></bpmn:extensionElements>
+      <bpmn:outgoing>f0</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:endEvent id="End_1" name="Ende"><bpmn:incoming>f0</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="End_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="proc-ucc">
+    <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="320" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="320" y="138"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // The linked start form. It binds Name (a declared name, so the form asks for it
+      // and the declaration does not ask again), address via a dotted key (which binds
+      // the whole top-level `address`), and shows Hidden only disabled — a field form-js
+      // never submits, so the declared Hidden is still the declaration's to ask.
+      const FORM = {
+        id: "collective",
+        name: "Sammelanschluss (Collective Line)",
+        schema: {
+          type: "default",
+          components: [
+            { type: "textfield", key: "Name", label: "Name", validate: { required: true } },
+            { type: "textfield", key: "address.street", label: "Strasse" },
+            { type: "textfield", key: "Hidden", label: "Hidden", disabled: true },
+          ],
+        },
+      };
+
+      window.__writes = [];
+
+      const page = (items) => ({ items, total: items.length, totalExact: true, truncated: false });
+
+      const api = async (method, url, body) => {
+        if (method === "GET" && url === "/api/v1/processes") {
+          // The listing carries the declaration beside startFormId, as the server
+          // compiles it; the Live view reads both from here.
+          return [{
+            key: 11, processId: "proc-ucc", name: "Sammelanschluss", version: 1, startFormId: "collective",
+            ...(declared ? { startVariables: [
+              { name: "ApplicationId", type: "string", required: true },
+              { name: "TenantId", type: "string", default: "tenant-42" },
+              { name: "Retries", type: "number", default: "3" },
+              { name: "Options", type: "json", default: '{"dry":true}' },
+              { name: "Name", type: "string", required: true },
+              { name: "address", type: "json" },
+              { name: "Hidden", type: "string", default: "from-declaration" },
+            ] } : {}),
+          }];
+        }
+        if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (method === "GET" && /\/forms\/collective$/.test(url)) return FORM;
+        if (method === "GET" && /\/forms$/.test(url)) return [{ id: FORM.id, name: FORM.name }];
+        if (method === "GET" && url.startsWith("/api/v1/instances?")) return page([]);
+        if (method === "GET" && url.startsWith("/api/v1/tasks")) return page([]);
+        if (method === "GET" && url.includes("/runtime")) {
+          return { instances: 0, finished: 0, tokens: 0, incidents: [], incidentsTruncated: false, elements: [] };
+        }
+        if (method === "GET" && /\/instances$/.test(url)) return [];
+        if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
+        if (method === "POST" && /\/deployments/.test(url)) {
+          window.__writes.push({ method, url });
+          return { key: 11, processId: "proc-ucc", version: 1, warnings: [] };
+        }
+        if (method === "POST" && /\/instances$/.test(url)) {
+          window.__writes.push({ method, url, body });
+          return { key: 99 };
+        }
+        return {};
+      };
+      const apiRaw = async (method, url, body) => ({ data: await api(method, url, body), headers: new Headers() });
+
+      window.__mountEditor = () => mountEditor(view, { api, toast: noop, key: 42 });
+      window.__mountLive = () => mountLive(view, { api, apiRaw, toast: noop, key: 11 });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

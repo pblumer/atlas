@@ -3543,6 +3543,14 @@ tr[hidden] { display: none; }
    it reads as part of the form. The canvas already carries one for the page. */
 .startform-host .fjs-powered-by { display: none; }
 
+/* The start variables declared on the process that its start form does not ask for,
+   beneath the form in the Deploy & run / Start instance modal and in the Tasks app.
+   A rule above them, so they read as the second half of the same start rather than as
+   more of the form somebody laid out. */
+.sf-extra { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.sf-extra-note { font-size: 12px; margin: 0 0 4px; }
+.tasks-form-extra { max-width: 640px; }
+
 /* "Generate this form" (ADR-0260). A brief, the process it belongs
    to, and one button. Wider than a confirm dialog because the brief is prose: a
    three-line box invites three words, and three words is not a brief. */

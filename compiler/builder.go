@@ -576,6 +576,7 @@ type Builder struct {
 	lanes              []LaneDetail                // organizational lanes (ADR-0121)
 	documentation      int32                       // interned <bpmn:documentation> of the process itself, -1 if none
 	startFormId        int32                       // interned start-form id (ADR-0028), -1 if the process has none
+	startVars          []StartVariable             // declared start variables (atlas:startForm), nil = none
 	conditionalStarts  []int32                     // process-level start nodes that carried a conditional event definition (RuleConditionalStart)
 	eventGatewayKinds  []eventGatewayKind          // event-based gateways of a kind atlas does not run (RuleEventGatewayKind)
 	invalidWizards     []int32                     // subprocess nodes whose atlas:wizard named no kind (RuleWizardValue, ADR-0449)
@@ -899,6 +900,10 @@ func (b *Builder) AddStartEvent() int32 { return b.addNode(TypeStartEvent, -1) }
 // before creating an instance, whose data becomes the start variables (ADR-0028).
 // It is design-time metadata the engine ignores.
 func (b *Builder) SetStartFormId(id string) { b.startFormId = b.intern(id) }
+
+// SetStartVariables records the process's declared start variables (atlas:startForm).
+// Like the start form, it is design-time metadata the engine ignores.
+func (b *Builder) SetStartVariables(vs []StartVariable) { b.startVars = vs }
 
 // markConditionalStart records that the process-level start node id carried a
 // conditional event definition. The node stays the plain start it has always
@@ -3225,6 +3230,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		lanes:              b.lanes,
 		documentation:      b.documentation,
 		startFormId:        b.startFormId,
+		startVars:          b.startVars,
 		conditionalStarts:  b.conditionalStarts,
 		eventGatewayKinds:  b.eventGatewayKinds,
 		invalidWizards:     b.invalidWizards,

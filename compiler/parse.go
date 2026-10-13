@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -649,6 +650,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		}
 		b.SetHistoryTtl(nanos)
 	}
+	b.SetStartVariables(startVariablesOf(proc.StartVariables))
 	// The searchable variable names (ADR-0244): resolved here, at
 	// deploy time, so the runtime never parses the attribute and the engine asks the
 	// compiled process one question per variable write (I5). A declaration that cannot
@@ -1442,11 +1444,54 @@ type xmlProcess struct {
 	// and indexed like any other variable.
 	DataSubject string `xml:"dataSubject,attr"`
 
+	// StartVariables are the values the process says it starts with
+	// (<atlas:startForm><atlas:startVariable/></atlas:startForm>). Authoring metadata: the
+	// start surfaces render them as typed fields, and the engine never reads them.
+	StartVariables []xmlStartVariable `xml:"extensionElements>startForm>startVariable"`
+
 	xmlFlowContent // the process root's flow nodes and sequence flows
 
 	DataObjects          []xmlDataObject          `xml:"dataObject"`
 	DataStoreReferences  []xmlDataStoreReference  `xml:"dataStoreReference"`
 	DataObjectReferences []xmlDataObjectReference `xml:"dataObjectReference"`
+}
+
+// xmlStartVariable is one <atlas:startVariable name type default required/>.
+type xmlStartVariable struct {
+	Name     string `xml:"name,attr"`
+	Type     string `xml:"type,attr"`
+	Default  string `xml:"default,attr"`
+	Required string `xml:"required,attr"`
+}
+
+// startVariablesOf reads the declared start variables the way the Modeler does
+// (readStartVariables in api/web/editor.js): a row without a name is dropped, a type
+// outside the four the start forms render falls back to string, and a name declared
+// twice keeps its first row. It never refuses anything. The declaration has always been
+// authoring metadata the deploy accepted as written, and a stored definition is compiled
+// again on every restart, so a refusal here would turn an accepted model into one that
+// no longer loads.
+func startVariablesOf(decl []xmlStartVariable) []StartVariable {
+	var out []StartVariable
+	seen := map[string]bool{}
+	for _, d := range decl {
+		name := strings.TrimSpace(d.Name)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		typ := strings.TrimSpace(d.Type)
+		if !slices.Contains(startVariableTypes, typ) {
+			typ = "string"
+		}
+		out = append(out, StartVariable{
+			Name:     name,
+			Type:     typ,
+			Default:  d.Default,
+			Required: strings.TrimSpace(d.Required) == "true",
+		})
+	}
+	return out
 }
 
 // xmlFlowContent is the set of flow nodes and sequence flows of one scope — the

@@ -12,6 +12,31 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **The process listing carries the declared start variables.** `GET /api/v1/processes`
+  answers each definition's `<atlas:startVariable>` declarations as `startVariables`
+  (`name`, `type`, `default`, `required`) beside `startFormId`, absent when it declares
+  none. The compiler reads the declaration once at deploy, leniently — a nameless row is
+  dropped, an unknown type reads as `string` — because a stored definition compiles again
+  on every restart. It stays authoring metadata: the engine never reads it, and an instance
+  created through the API without a declared value still gets no default.
+
+### Fixed
+
+- **A start form no longer drops the declared start variables.** A process that links a
+  start form ([ADR-0028](docs/adr/0028-forms-and-the-tasks-app.md)) and also declares start
+  variables was started with the form's fields alone: Deploy & run and the Tasks app's Start
+  opened the form and never asked for the declaration, so a declared value the form did not
+  ask for was missing from the instance, and a script task reading it got null. Beneath the
+  form they now ask for the declared variables the form does not bind — with the
+  declaration's types, defaults and required marks — and start the instance with both
+  halves. A declared name the form submits, directly or under a dotted key, is the form's
+  to ask; a field the form only shows disabled submits nothing, so the declaration asks for
+  it. The Live view's Start instance had the opposite gap: it asked for the declaration and
+  never showed the form. On a definition with a start form it now opens the same dialog. A
+  public link still accepts only what its form submits.
+
 ## [0.11.0] — 2026-10-12
 
 **A catalogue moves to another installation as one file.** `GET /api/v1/catalogs/{id}/document`
