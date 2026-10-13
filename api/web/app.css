@@ -3025,6 +3025,20 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
    grows a white strip beside the panel instead of the panel, and dragging it narrower
    clips the panel instead of shrinking it — so let the panel follow its column. */
 #pane-design .fjs-pgl-properties-container .fjs-properties-container { width: 100%; min-width: 0; }
+/* The Components palette had the same defect on the left: form-js pins it to a fixed
+   --palette-width (270px) and centres its tile groups at a fixed 236px. A wider column
+   left an empty band between the palette and the canvas, so the palette no longer sat
+   against its resizer; a narrower one cut the tiles and the search box off. So the
+   palette fills its column, and its tiles flow into as many columns as the width
+   holds — three at the default width, as in the reference modeler, even beside a
+   classic 17px scrollbar (hence 70px tiles at the least, not form-js's fixed 72px). */
+#pane-design .fjs-pgl-palette-container .fjs-palette-container { width: 100%; min-width: 0; box-sizing: border-box; }
+#pane-design .fjs-pgl-palette-container .fjs-palette-group { width: auto; margin: 0 8px; }
+#pane-design .fjs-pgl-palette-container .fjs-palette-fields {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+}
+#pane-design .fjs-pgl-palette-container .fjs-palette-field { width: auto; }
+#pane-design .fjs-pgl-palette-container .fjs-palette-search { flex: 1 1 auto; min-width: 0; }
 #pane-design .fv-rail { width: 0 !important; min-width: 0 !important; overflow: hidden; }
 #pane-design .fv-railbtn {
   position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 8;
