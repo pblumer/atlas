@@ -67,6 +67,7 @@ Bearer` header.
 | `atlas_save_draft` | `xml`, `projectId?` | saved BPMN draft |
 | `atlas_list_drafts` | `projectId?` | saved diagram drafts |
 | `atlas_get_draft_xml` | `id` | a draft's BPMN XML (by process id) |
+| `atlas_compare_draft` | `id`, `key?` | whether the draft is the same model as the newest (or the named) deployed version, where they differ, who saved and who deployed — saving does not deploy and deploying does not save |
 | `atlas_delete_draft` | `id` | `{deleted:true,id}` — design-time only, idempotent |
 | `atlas_save_form` | `id`, `schema`, `name?`, `projectId?` | saved form-js form |
 | `atlas_list_forms` | `projectId?` | saved form definitions |

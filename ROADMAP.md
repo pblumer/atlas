@@ -1855,6 +1855,14 @@ dataset of up to 50 000 cases":
 - 🚧 Minimap, align/distribute, element color/appearance: align and distribute are on the bpmn-js context menu; a minimap and element colour are not built.
 - 🔲 Element comments / annotations.
 - 🚧 Projects/folders to organize diagrams (draft/deployment listing grows a tree): projects exist ([ADR-0034](docs/adr/0034-projects-and-artifacts.md), [ADR-0128](docs/adr/0128-process-applications.md)); nested folders do not.
+- ✅ **The editor says which version it shows** ([ADR-0452](docs/adr/0452-modeler-shows-its-version.md)):
+  a chip beside the breadcrumbs names the open record — the draft, or version N of M — and how it
+  stands against the other (`Draft = v7`, `Draft · v7 + changes`, `Draft ≠ v7` when a newer
+  deployed version differs from the draft), with who created and who last changed each. A draft
+  records who saved it, and `GET /api/v1/drafts/{id}/comparison` (MCP `atlas_compare_draft`)
+  compares it with a deployed version, ignoring the diagram. Deploy from a draft or a new diagram
+  saves it first, so the draft stays what runs; a version opened read-only is deployed without
+  touching the draft, and the Deploy panel says so.
 
 ---
 

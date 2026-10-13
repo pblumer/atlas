@@ -33,6 +33,29 @@ func principalID(r *http.Request) string {
 	return ""
 }
 
+// principalNamer returns a resolver from a principal id to the name a person reads
+// (principalName), asking the user store once per distinct id however many rows
+// carry it: a listing of a thousand versions deployed by three people costs three
+// reads. The empty id — nobody known — stays empty, so a caller can leave the name
+// out rather than print a blank.
+//
+// Call the resolver off the run loop. It reads the user store, which a reader may
+// do without the writer (api/sidecar), and nothing it answers needs the writer held.
+func (s *Server) principalNamer() func(id string) string {
+	names := map[string]string{}
+	return func(id string) string {
+		if id == "" {
+			return ""
+		}
+		n, ok := names[id]
+		if !ok {
+			n = s.principalName(id)
+			names[id] = n
+		}
+		return n
+	}
+}
+
 // projectsByID loads every project into an id→project map so a list handler can
 // resolve many artifacts' scopes without a store read per artifact. It must be
 // called on the run-loop goroutine (inside s.do), like the store it reads.

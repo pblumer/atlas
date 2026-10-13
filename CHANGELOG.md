@@ -55,6 +55,29 @@ _Changed_ / _Removed_ for each version.
   dropped, an unknown type reads as `string` — because a stored definition compiles again
   on every restart. It stays authoring metadata: the engine never reads it, and an instance
   created through the API without a declared value still gets no default.
+- **The Modeler says which version it shows.** The editor bar carries a chip naming what is
+  open — the draft, or version N of M — and how it stands against the other record: a draft
+  reads `Draft = v7` when it is the model v7 runs, `Draft · v7 + changes` when it holds
+  undeployed work, and `Draft ≠ v7` as a warning when v7 was deployed after the draft's last
+  save and differs from it, which is a change the draft is missing and the next publish of
+  the application would deploy over. A version reads `v7 · newest` or `v7 of 9`. Its
+  panel names who created the draft and who last saved it, who deployed the version and who
+  adjusted its layout, the first difference, and links to the other record. A draft now
+  records who saved it (`savedBy`); `GET /api/v1/drafts` answers `ownerId`/`ownerName` and
+  `savedBy`/`savedByName`, `GET /api/v1/processes` answers `deployedBy`/`deployedByName` and
+  `diagramUpdatedByName`, and `GET /api/v1/drafts/{id}/comparison` compares a draft with the
+  newest deployed version of its process, or with the one `?key=` names, ignoring the
+  diagram. MCP `atlas_compare_draft` (ADR-0452).
+
+### Changed
+
+- **Deploy from a draft saves the draft first.** Deploying from the Modeler sent the diagram
+  on the canvas and left the draft as it was last saved, so a change deployed without Save
+  was missing from the draft an application opens — and publishing the application deployed
+  that draft over it. A draft, and a new diagram, are now saved before they are deployed,
+  through the same path as Save, and a save that fails deploys nothing. A version opened
+  read-only from Operations or the Modeler home is still deployed without touching the
+  draft; the Deploy panel now says so and points at Save.
 
 ### Fixed
 

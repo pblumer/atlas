@@ -211,34 +211,71 @@ func canonicalSteps(src []byte) ([]step, error) {
 	return out, nil
 }
 
+// Difference names the first place two BPMN documents part as models, or returns ""
+// when they describe the same process. It is SameModel's question with the answer
+// spelled out: the diagram is ignored, and so are formatting, attribute order and
+// attributes written at their schema default.
+//
+// aName and bName are how the sentence calls each side — "the deployed version",
+// "the draft" — because the same walk answers two people: an operator whose layout
+// save was refused, and a modeller asking whether the draft in front of them is the
+// version that runs. Naming the documents is what lets the second one act on it.
+//
+// An error means one of the documents is not well-formed XML.
+func Difference(a, b []byte, aName, bName string) (string, error) {
+	da, err := semanticDigest(a)
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", aName, err)
+	}
+	db, err := semanticDigest(b)
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", bName, err)
+	}
+	if da == db {
+		return "", nil
+	}
+	return firstDifference(a, b, aName, bName), nil
+}
+
 // describeDifference names the first place two documents' semantic halves diverge,
-// for a refusal message. Best-effort by construction: it runs only once the digests
-// have already disagreed, so "somewhere" is still a true answer when the streams
-// cannot be lined up.
+// for a refusal message.
 func describeDifference(stored, incoming []byte) string {
-	a, err := canonicalSteps(stored)
+	return firstDifference(stored, incoming, "the deployed model", "the submitted model")
+}
+
+// firstDifference lines up two documents' canonical walks and names where they part.
+// Best-effort by construction: it runs only once the digests have already
+// disagreed, so "somewhere" is still a true answer when the streams cannot be lined
+// up.
+func firstDifference(a, b []byte, aName, bName string) string {
+	as, err := canonicalSteps(a)
 	if err != nil {
-		return "the stored model could not be walked"
+		return aName + " could not be walked"
 	}
-	b, err := canonicalSteps(incoming)
+	bs, err := canonicalSteps(b)
 	if err != nil {
-		return "the submitted model could not be walked"
+		return bName + " could not be walked"
 	}
-	for i := 0; i < len(a) && i < len(b); i++ {
-		if a[i].key == b[i].key {
+	for i := 0; i < len(as) && i < len(bs); i++ {
+		if as[i].key == bs[i].key {
 			continue
 		}
-		if a[i].label == b[i].label {
+		if as[i].label == bs[i].label {
 			// Same element, different content: an attribute changed.
-			return a[i].label + " differs"
+			return as[i].label + " differs"
 		}
-		return "at " + a[i].label + ", where the submitted model has " + b[i].label
+		return "at " + as[i].label + ", where " + bName + " has " + bs[i].label
 	}
+	// One walk is a prefix of the other. An empty one has no last step to name.
 	switch {
-	case len(a) > len(b):
-		return "the submitted model stops at " + b[len(b)-1].label + " and the deployed one continues"
-	case len(b) > len(a):
-		return "the submitted model continues past " + a[len(a)-1].label
+	case len(bs) == 0 && len(as) > 0:
+		return bName + " is empty"
+	case len(as) == 0 && len(bs) > 0:
+		return aName + " is empty"
+	case len(as) > len(bs):
+		return bName + " stops at " + bs[len(bs)-1].label + " and " + aName + " continues"
+	case len(bs) > len(as):
+		return bName + " continues past " + as[len(as)-1].label
 	}
 	return "somewhere the two documents disagree"
 }

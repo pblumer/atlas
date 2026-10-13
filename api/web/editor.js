@@ -29,6 +29,9 @@ import {
 import { attachCollab } from "./collab.js";
 import { collectDocumentation, exportDocumentation } from "./process-doc.js";
 import { frozenMark } from "./frozen-decisions.js";
+// Which record the Modeler has open — the draft or version N — and who created and last
+// changed it (ADR-0452).
+import { attachShownVersion } from "./shown-version.js";
 import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
 import { openDecisionGraph } from "./decision-graph.js";
 // Documentation prose is Markdown (ADR-0250). The replay
@@ -261,6 +264,7 @@ export function cleanup() {
   if (onBarMenuDismiss) { document.removeEventListener("click", onBarMenuDismiss); onBarMenuDismiss = null; }
   if (onVarsKey) { document.removeEventListener("keydown", onVarsKey, true); onVarsKey = null; }
   if (onCalleeClick) { onCalleeClick.root.removeEventListener("click", onCalleeClick.fn); onCalleeClick = null; }
+  if (shownVersion) { shownVersion.destroy(); shownVersion = null; }
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
   if (collab) { try { collab.close(); } catch { /* ignore */ } collab = null; }
   destroyObjectCanvas();
@@ -273,6 +277,10 @@ window.__atlasCleanup = cleanup;
 // (null when no editor is open). Module-level, like `current`, because cleanup()
 // has to reach it from outside a mount.
 let playground = null;
+
+// shownVersion is the bar's "what is open" chip for the editor currently mounted, so
+// cleanup() can take its document listener down and Save and Deploy can refresh it.
+let shownVersion = null;
 
 // objectCanvas is the replay Data tab's object diagram, for the same reason and in
 // the same way: it is a live diagram-js instance, so leaving the view has to take it
@@ -721,6 +729,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
     <div class="editor">
       <div class="editor-bar">
         ${editorCrumbs(project, crumb)}
+        <div class="shown-version" id="shown-version" hidden></div>
         <div class="etabs">
           <button data-tab="design" class="active" title="Draw the diagram and its flow">Design</button>
           <button data-tab="implement" title="Configure the technical details of each element">Implement</button>
@@ -730,7 +739,7 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
         <button class="btn neutral toggle" id="vars-toggle" type="button" aria-pressed="false" title="Show the variables this diagram writes, and who writes them (F4)">Variables</button>
         <span class="bar-div" aria-hidden="true"></span>
         <button class="btn neutral" id="save" title="Save this diagram as a draft">Save</button>
-        <button class="btn" id="deploy" title="Deploy this single diagram. To ship a whole process application, use Publish on the application (ADR-0128).">Deploy</button>
+        <button class="btn" id="deploy" title="Deploy this single diagram. A draft is saved first, so it stays what runs; a deployed version opened here is deployed as a new version and leaves the draft alone. To ship a whole process application, use Publish on the application (ADR-0128).">Deploy</button>
         <div class="dropdown">
           <button class="icon-btn bar-more" id="bar-more" type="button" aria-haspopup="true" aria-expanded="false" aria-label="More actions" title="Everything else this diagram can do">&#8943;</button>
           <div class="dropdown-menu" id="bar-menu" hidden>
@@ -886,6 +895,19 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   // confirmed rather than refused. Everything else is a foreign artifact.
   const openedProcessId = ((draftKeyProcess(modeler) || {}).id || "");
   identity.ownId = () => identity.draftId || (identity.fromDeployment ? openedProcessId : "") || "";
+  // savedXML is the document this session last saved as its draft, null until it has
+  // saved one. Deploy reads it to know whether the draft already holds what is about to
+  // be deployed.
+  identity.savedXML = null;
+
+  // Which record is open, read afresh on every refresh: a first Save moves the session
+  // from a version (or from nothing) onto a draft.
+  if (gen === generation) {
+    shownVersion = attachShownVersion(root.querySelector("#shown-version"), {
+      api, which: () => ({ draftId: identity.draftId, key }),
+    });
+    shownVersion.refresh();
+  }
 
   const rerender = wireProperties(root, modeler, api, projectId, toast, identity);
   const refreshBadges = makeImplementBadges(root, modeler, api);
@@ -10394,6 +10416,7 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
       const path = "/api/v1/drafts?from=" + encodeURIComponent(identity.draftId || "") +
         (projectId ? "&projectId=" + encodeURIComponent(projectId) : "");
       const d = await api("POST", path, xml, true);
+      identity.savedXML = xml;
       root.querySelector(".crumb-current").textContent = d.name || d.processId || "Draft";
       docTitle(`${d.name || d.processId || "Draft"} · Modeler`);
       // Draft is now persisted: clear the collab unsaved-work guard so a co-editor's
@@ -10418,6 +10441,7 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
         identity.fromDeployment = false;
         history.replaceState(null, "", "#/modeler/draft/" + encodeURIComponent(d.processId));
       }
+      if (shownVersion) shownVersion.refresh();
       return true;
     } catch (e) {
       // A 409 says another draft already holds this process id, and the save refused
@@ -10691,13 +10715,21 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
     // does not ask for, which the form must not silently drop.
     const fid = startFormId(modeler);
     const declared = bo ? readStartVariables(bo) : [];
-    dbody.innerHTML = fid
+    // A version opened read-only is not the draft, and deploying it does not make it
+    // one: the draft — what the application publishes — stays as it was. Said here,
+    // before the deploy, because afterwards is when it would be missed.
+    const fromVersion = identity.fromDeployment
+      ? `<p class="deploy-from-version" id="deploy-from-version">This diagram was opened from a deployed
+          version, not from the draft. Deploying makes a new version and leaves the draft as it is — publishing
+          the application would deploy the draft again. <b>Save</b> first if the draft should hold this diagram.</p>`
+      : "";
+    dbody.innerHTML = fromVersion + (fid
       ? `<p class="muted" style="margin:0">This process starts with the form
           <b>${esc((formFieldCache.get(fid) || {}).name || fid)}</b>. <b>Deploy &amp; run</b> opens it,
           and what you submit becomes the instance's start variables.${declared.length
             ? " The start variables declared on the process that the form does not ask for are asked beneath it."
             : ""}</p>`
-      : startVarsFormHTML(declared);
+      : startVarsFormHTML(declared));
     wireStartJSONEditors(dbody);
     dactions.hidden = false;
     dpanel.hidden = false;
@@ -10781,6 +10813,26 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
     derr.textContent = "";
     try {
       const { xml } = await modeler.saveXML({ format: true });
+      // Deploying from a draft saves it first, so the draft stays what runs
+      // (ADR-0452). Without it a change could be deployed
+      // and missing from the draft the application opens — and the next Publish,
+      // which deploys the drafts, would deploy over it. A new diagram is saved too:
+      // its first deploy is plainly meant to be kept. A version opened read-only is
+      // not saved, because that would overwrite a draft nobody asked to replace; the
+      // panel says so instead (openDeploy).
+      if (!identity.fromDeployment && xml !== identity.savedXML) {
+        // A changed process id makes the save a rename, which reopens the editor under
+        // the new id — a deploy cannot ride along with that navigation.
+        const pid = (draftKeyProcess(modeler) || {}).id || "";
+        if (identity.draftId != null && pid && pid !== identity.draftId) {
+          derr.textContent = "The process id changed since the last save. Save first (it renames the draft), then deploy.";
+          return;
+        }
+        if (!(await saveDraft(false))) {
+          derr.textContent = "Not deployed: the draft could not be saved first.";
+          return;
+        }
+      }
       // Carry the editor's project so the deployment files under the same folder as
       // its draft on the Modeler home (ADR-0034); omitted when editing outside a
       // project, which deploys to Ungrouped.
@@ -10806,6 +10858,7 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
           (dep.warnings || []).length ? "warn" : "ok");
         showDeploySuccess(msg, `#/operations/p/${dep.key}`, dep.warnings);
       }
+      if (shownVersion) shownVersion.refresh();
     } catch (e) {
       // The Atlas compiler rejects elements it can't execute yet — surface that
       // inline in the panel so the entered variables aren't lost.
@@ -11041,7 +11094,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       if (here.diagramUpdatedAt) {
         const when = new Date(here.diagramUpdatedAt * 1000).toLocaleString();
         layoutNote = `<span class="muted live-layout-note" title="Only the drawing was changed — the process, its version and its instances are the deployed ones${
-          here.diagramUpdatedBy ? `, adjusted by ${esc(here.diagramUpdatedBy)}` : ""}">layout adjusted ${esc(when)}</span>`;
+          here.diagramUpdatedBy ? `, adjusted by ${esc(here.diagramUpdatedByName || here.diagramUpdatedBy)}` : ""}">layout adjusted ${esc(when)}</span>`;
       }
       docTitle(`${procName} · Operations`);
       versions = procs

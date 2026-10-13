@@ -24,6 +24,13 @@ type draft struct {
 	// migration.
 	OwnerID string `json:"ownerId,omitempty"`
 	SavedAt int64  `json:"savedAt"`
+	// SavedBy is the id of the account whose save wrote this content — OwnerID says
+	// who started the draft, this says who last changed it, which is the person to
+	// ask when the draft and what is deployed disagree. A move is not a change and
+	// keeps it. Empty on a draft last saved before it was recorded, by the server
+	// itself (a system process), or with authentication off; all three read as
+	// "not known", never as somebody.
+	SavedBy string `json:"savedBy,omitempty"`
 	XML     string `json:"xml"`
 }
 
