@@ -1,6 +1,6 @@
-# n8n and Atlas
+# n8n and atlas
 
-This document compares [n8n](https://n8n.io/) with Atlas. Both automate
+This document compares [n8n](https://n8n.io/) with atlas. Both automate
 work, but they solve different primary problems:
 
 - **n8n** is an integration and technical workflow automation platform.
@@ -13,7 +13,7 @@ rather than interchangeable.
 > [!IMPORTANT]
 > Atlas is in early development. Its APIs are unstable and it is not ready for
 > production use. In this document, **implemented** means present in the current
-> Atlas codebase and tests. **Target** means documented in the architecture or
+> atlas codebase and tests. **Target** means documented in the architecture or
 > roadmap but not necessarily complete. n8n is an established product, and some
 > of its governance and scaling capabilities depend on the selected edition.
 
@@ -22,7 +22,7 @@ rather than interchangeable.
 Choose **n8n** when the main problem is connecting applications, APIs, data,
 files, or AI services quickly with ready-made integrations.
 
-Choose **Atlas** when the main problem is executing a formal, long-lived BPMN
+Choose **atlas** when the main problem is executing a formal, long-lived BPMN
 business process with durable state, explicit process semantics, deterministic
 recovery, and auditable decisions.
 
@@ -31,7 +31,7 @@ A useful rule of thumb is:
 > n8n puts the integration step at the centre. Atlas puts the business process
 > state at the centre.
 
-| Question | n8n | Atlas |
+| Question | n8n | atlas |
 |---|---|---|
 | Primary category | Integration and workflow automation | Durable BPMN workflow engine |
 | Primary model | Proprietary node graph | BPMN 2.x process model |
@@ -41,7 +41,7 @@ A useful rule of thumb is:
 | Standard process notation | No | BPMN 2.x |
 | Long-running business processes | Possible, using execution and wait mechanisms | Core architectural use case |
 | Human workflow | Forms and integration-oriented interaction | BPMN user tasks and task state |
-| Decision modelling | Conditions, expressions, code, or external services | FEEL and DMN through the Atlas ecosystem |
+| Decision modelling | Conditions, expressions, code, or external services | FEEL and DMN through the atlas ecosystem |
 | Ready-made integrations | Large catalogue | Limited; the Worker Type catalogue is the intended boundary |
 | Runtime state model | Workflow executions backed by a database | Event log plus materialized state |
 | Recovery principle | Product-level execution recovery and retry | Deterministic event replay through the same state-apply path |
@@ -66,7 +66,7 @@ Typical n8n workflows include:
 - orchestrating AI models, agents, and vector stores;
 - invoking custom JavaScript or Python for a local transformation.
 
-### Atlas
+### atlas
 
 Atlas is designed to execute business processes whose state must remain correct
 across waits, failures, retries, and restarts. BPMN XML is compiled at deployment
@@ -74,7 +74,7 @@ time into an immutable, integer-indexed graph. At runtime, a single writer per
 partition processes commands, emits facts as events, persists them, and
 materializes state.
 
-Typical Atlas processes include:
+Typical atlas processes include:
 
 - an application with review, clarification, approval, and rejection paths;
 - a multi-day or multi-week case with timers and messages;
@@ -90,7 +90,7 @@ triggers, actions, transformations, conditions, loops, merges, code, and
 sub-workflows. The graph is highly effective for technical automation, but it
 does not claim BPMN execution semantics.
 
-An Atlas model is an executable **BPMN process model**. BPMN gives events,
+An atlas model is an executable **BPMN process model**. BPMN gives events,
 activities, gateways, scopes, boundary events, subprocesses, call activities,
 and multi-instance behaviour defined meanings. The notation can also provide a
 shared artefact for business analysts, process owners, developers, and
@@ -99,17 +99,17 @@ operators.
 | Requirement | Better fit | Why |
 |---|---|---|
 | Connect several APIs rapidly | n8n | Ready-made nodes, credentials, and data preview |
-| Let a business audience read the process | Atlas | Standard BPMN notation and process concepts |
-| Exchange models with BPMN tooling | Atlas | BPMN XML is the source artefact |
+| Let a business audience read the process | atlas | Standard BPMN notation and process concepts |
+| Exchange models with BPMN tooling | atlas | BPMN XML is the source artefact |
 | Manipulate arbitrary JSON between calls | n8n | Expressions and code nodes are first-class |
-| Model timers, messages, and boundary behaviour formally | Atlas | These are BPMN execution concepts |
+| Model timers, messages, and boundary behaviour formally | atlas | These are BPMN execution concepts |
 | Debug one integration step interactively | n8n | Node-level test execution and data inspection |
-| Separate decision logic from process flow | Atlas | FEEL and DMN are part of the intended model |
+| Separate decision logic from process flow | atlas | FEEL and DMN are part of the intended model |
 
 Atlas targets broad BPMN 2.0 coverage, but coverage is delivered incrementally.
 The current implementation must always be checked against
 [the roadmap](../../ROADMAP.md); the existence of a BPMN symbol in a modeller
-does not imply that Atlas executes it yet.
+does not imply that atlas executes it yet.
 
 ## Execution and persistence
 
@@ -130,7 +130,7 @@ See the official n8n documentation for
 [database configuration](https://docs.n8n.io/hosting/configuration/supported-databases-settings/)
 and [queue mode](https://docs.n8n.io/hosting/scaling/queue-mode/).
 
-### Atlas execution model
+### atlas execution model
 
 Atlas uses the following safety-critical order:
 
@@ -159,7 +159,7 @@ These are project invariants, not optional implementation details. See
 [Architecture](../ARCHITECTURE.md) and
 [Invariants](../architecture/invariants.md).
 
-| Property | n8n | Atlas |
+| Property | n8n | atlas |
 |---|---|---|
 | Primary persistence view | Stored workflow executions | Event log and materialized process state |
 | Distributed execution | Main process, Redis queue, workers | Independent single-writer partitions |
@@ -182,14 +182,14 @@ output data, retries, and failed executions. The
 [Wait node](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.wait/)
 can suspend execution and resume it after time or an external event.
 
-In Atlas, operators reason about process instances, element instances, jobs,
+In atlas, operators reason about process instances, element instances, jobs,
 tasks, timers, messages, incidents, variables, and deployment versions. This is
 a closer fit for a durable business case whose state remains meaningful for
 weeks or months.
 
 Atlas is therefore the stronger conceptual fit for long-running,
 audit-sensitive BPMN processes. Today, however, n8n is the production-ready
-choice while Atlas remains under development.
+choice while atlas remains under development.
 
 ## Integrations and external work
 
@@ -208,10 +208,10 @@ boundaries, but it does not currently offer a catalogue comparable to n8n.
 | Microsoft 365, CRM, messaging, and databases | n8n |
 | Arbitrary REST API with minimal code | n8n |
 | Broad catalogue of supported applications | n8n |
-| Domain-specific worker controlled by BPMN state | Atlas |
-| Durable service task with engine-managed lifecycle | Atlas |
+| Domain-specific worker controlled by BPMN state | atlas |
+| Durable service task with engine-managed lifecycle | atlas |
 | Central integration hub | n8n |
-| Central BPMN orchestrator | Atlas |
+| Central BPMN orchestrator | atlas |
 
 Atlas should not make a broad n8n-style Worker Type catalogue a near-term goal.
 That would expand the product surface substantially and compete with the more
@@ -231,7 +231,7 @@ and roadmap.
 
 For a notification followed by a callback, n8n is often sufficient. For a
 shared worklist whose tasks have formal process context and an audit trail,
-Atlas has the more appropriate domain model.
+atlas has the more appropriate domain model.
 
 ## Decisions, FEEL, and DMN
 
@@ -248,7 +248,7 @@ Atlas is designed to separate process flow and decision logic:
 - decision results must be persisted as facts so recovery does not re-evaluate
   a potentially non-deterministic external decision.
 
-| Decision concern | n8n | Atlas |
+| Decision concern | n8n | atlas |
 |---|---|---|
 | Simple technical branch | Strong | Strong |
 | Ad hoc decision in code | Strong | Not the primary model |
@@ -274,9 +274,9 @@ The practical distinction is:
 
 - n8n is currently better at interactively diagnosing and retrying a failed
   integration step;
-- Atlas has the stronger formal model for reconstructing durable process state
+- atlas has the stronger formal model for reconstructing durable process state
   after a crash;
-- Atlas still has to prove this architecture through production maturity and
+- atlas still has to prove this architecture through production maturity and
   operating experience.
 
 ## Scaling and performance
@@ -293,15 +293,15 @@ Atlas is optimized for engine throughput through:
 - command batching and one shared `fsync`;
 - horizontal scaling through independent partitions.
 
-These design choices give Atlas high performance potential, but they are not a
-claim that Atlas already outperforms n8n in production. The systems execute
+These design choices give atlas high performance potential, but they are not a
+claim that atlas already outperforms n8n in production. The systems execute
 different workloads, and a meaningful benchmark must define model complexity,
 durability settings, payload size, external I/O, hardware, and recovery
 guarantees.
 
 ## Operations, security, and governance
 
-| Capability | n8n | Atlas |
+| Capability | n8n | atlas |
 |---|---|---|
 | Managed cloud | Available | Not available |
 | Established self-hosting guidance | Yes | Developing |
@@ -317,7 +317,7 @@ For n8n, consult the current
 because features such as environments, external secrets, log streaming,
 advanced collaboration, or SSO may require a paid edition.
 
-A publicly exposed Atlas HTTP or MCP endpoint requires authentication,
+A publicly exposed atlas HTTP or MCP endpoint requires authentication,
 authorization, TLS or a trusted reverse proxy, rate limiting, audit logging,
 secret management, and tenant isolation. Availability of an endpoint alone
 must never be interpreted as production hardening.
@@ -345,7 +345,7 @@ suggest execution support that the engine does not provide.
 
 ## Extensibility
 
-| Area | n8n | Atlas |
+| Area | n8n | atlas |
 |---|---|---|
 | Main implementation language | TypeScript / Node.js | Go |
 | Extension mechanism | Built-in, community, and custom nodes | Worker Types, workers, APIs, engine behaviours |
@@ -363,11 +363,11 @@ should not be treated as equivalent to a permissive open-source licence.
 
 Atlas currently uses Apache License 2.0. It permits commercial use,
 modification, distribution, and embedding subject to its licence and notice
-requirements. The Atlas README still identifies the licence as a proposed
+requirements. The atlas README still identifies the licence as a proposed
 pre-release default, so it must be settled before the first release.
 
 For an embedded engine or a product requiring broad redistribution rights,
-Atlas offers greater licence freedom. That freedom also means the adopter
+atlas offers greater licence freedom. That freedom also means the adopter
 carries the development, maintenance, security, and operational risk of an
 early-stage project.
 
@@ -382,7 +382,7 @@ early-stage project.
 - a managed cloud or established enterprise support model is required;
 - BPMN model interchange is not a requirement.
 
-### Choose Atlas when
+### Choose atlas when
 
 - BPMN is the authoritative executable model;
 - process state must remain explicit over long waits;
@@ -397,7 +397,7 @@ early-stage project.
 - a visual canvas alone: both products draw connected steps, but the semantics
   differ;
 - headline throughput without a workload and durability contract;
-- planned Atlas features being mistaken for implemented capabilities;
+- planned atlas features being mistaken for implemented capabilities;
 - the word "workflow", which covers both integration flows and durable business
   processes.
 
@@ -407,10 +407,10 @@ A strong combined architecture lets each product retain its responsibility:
 
 ```mermaid
 flowchart LR
-    A["Atlas BPMN process"] --> B["Durable service task"]
+    A["atlas BPMN process"] --> B["Durable service task"]
     B --> C["n8n integration workflow"]
     C --> D["SaaS, API, or database"]
-    C --> E["Complete or fail Atlas job"]
+    C --> E["Complete or fail atlas job"]
 ```
 
 Atlas owns the durable business process, its state, BPMN semantics, timers,
@@ -418,16 +418,16 @@ tasks, and decisions. n8n owns the technical integration with external systems.
 
 The integration contract should include:
 
-- the Atlas job key as an idempotency key;
-- correlation between Atlas process instances and n8n executions;
+- the atlas job key as an idempotency key;
+- correlation between atlas process instances and n8n executions;
 - callback authentication and authorization;
 - retry-safe completion and failure endpoints;
-- no Atlas job completion before the external result is final;
+- no atlas job completion before the external result is final;
 - a clear distinction between technical failure and BPMN business error;
 - secrets outside BPMN and workflow source artefacts;
 - metrics and logs carrying both systems' correlation identifiers.
 
-## Strategic recommendation for Atlas
+## Strategic recommendation for atlas
 
 Atlas should position itself as:
 
