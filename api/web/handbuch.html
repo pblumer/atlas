@@ -4383,9 +4383,20 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <p data-l="de">Daneben liegt <code>entra-create-account.bpmn</code> – dieselbe Aufgabe, aber als
             PowerShell-<code>jobScript</code>. Der Vergleich lohnt: Der Skript-Weg kann alles, was PowerShell kann,
             und ist genau deshalb der, bei dem du dir jede Zeile selbst absichern musst.</p>
+          <p data-l="de">Ein Skript erhält weder die Umgebung seines Workers noch den Tresor. Das Beispiel meldet
+            sich deshalb app-only mit einem <b>Zertifikat aus dem Zertifikatsspeicher des Worker-Kontos</b> an und
+            wählt es über seinen Antragsteller aus – eine Erneuerung braucht in Atlas keine Änderung. Tenant,
+            Client-ID und Zertifikats-Antragsteller sind <b>Konstanten mit der Quelle <i>application</i></b>: Jede
+            Installation setzt sie im Tab <i>Values</i> der Applikation, und bis Tenant und Client-ID gesetzt
+            sind, wird ein Start abgelehnt.</p>
           <p data-l="en">Beside it lies <code>entra-create-account.bpmn</code> – the same job as a PowerShell
             <code>jobScript</code>. The comparison is worth making: the script route can do everything PowerShell can,
             and for exactly that reason it is the one where every line is yours to secure.</p>
+          <p data-l="en">A script receives neither its worker's environment nor the vault. So the example signs in
+            app-only with a <b>certificate from the worker account's certificate store</b>, picked by its subject – a
+            renewal needs no change in atlas. The tenant, the client id and the certificate subject are
+            <b>constants with the source <i>application</i></b>: each installation sets them on the application's
+            <i>Values</i> tab, and a start is refused until the tenant and the client id are set.</p>
         </details>
       </div>
 
@@ -5528,6 +5539,51 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
       <p data-l="en">People interact with the process through <b>forms</b>: as a <b>start form</b> (collects data when
         the instance is created) or at a <b>user task</b> (in the Tasks inbox). The Modeler has a form editor;
         submitted fields become process variables.</p>
+      <p data-l="de"><b>Start-Formular und Startvariablen gemeinsam.</b> Deklariert der Prozess zusätzlich
+        Startvariablen (Prozess-Panel, Tab <i>Implement</i>, <i>Start variables</i>), fragen <i>Deploy &amp; run</i>,
+        <i>Start instance</i> und der Start in der Tasks-App unter dem Formular nach denjenigen, die das Formular
+        nicht selbst abfragt – mit Typ, Default und Pflichtmarkierung. Die Instanz startet mit beiden Teilen. Ein
+        öffentlicher Link und ein Start über die API setzen dagegen keine Defaults: Die Deklaration ist
+        Modellierungs-Metadatum, die Engine liest sie nicht.</p>
+      <p data-l="en"><b>Start form and start variables together.</b> When the process also declares start variables
+        (process panel, <i>Implement</i> tab, <i>Start variables</i>), <i>Deploy &amp; run</i>, <i>Start instance</i>
+        and the Tasks app's Start ask, beneath the form, for the ones the form does not ask for itself – with their
+        type, default and required mark. The instance starts with both halves. A public link and a start through the
+        API apply no defaults, though: the declaration is authoring metadata, and the engine does not read it.</p>
+      <p data-l="de"><b>Konstanten statt Startvariablen, die niemand eingibt.</b> Ein Wert, den jede Instanz braucht
+        und nach dem niemand gefragt werden soll – ein Domain-Suffix, eine Sprache, eine App-ID –, gehört unter
+        <i>Constants</i> im selben Panel. Atlas schreibt Konstanten beim Erzeugen jeder Instanz als gewöhnliche
+        Variablen, auf jedem Startweg: Modeler, Tasks-App, API, öffentlicher Link, Timer, Message, Signal und Call
+        Activity. Ausdrücke, Skripte und Worker lesen sie wie jede Variable; abgefragt werden sie nie. Nichts im Ablauf
+        kann eine Konstante ersetzen – ein gleichnamiger Startwert, ein Worker-Ergebnis oder eine Message wird
+        verworfen, und ein Modell, das sie selbst beschreibt, wird beim Deploy abgelehnt. Nur eine Korrektur durch
+        einen Operator geht durch und steht im Audit. Eine Konstante steht im Modell und in jeder Instanz; für
+        Geheimnisse ist sie nicht gedacht.</p>
+      <p data-l="en"><b>Constants instead of start variables nobody enters.</b> A value every instance needs and
+        nobody should be asked for – a domain suffix, a language, an app id – belongs under <i>Constants</i> in the
+        same panel. Atlas writes constants as ordinary variables when it creates an instance, on every start path: the
+        Modeler, the Tasks app, the API, a public link, a timer, a message, a signal and a call activity. Expressions,
+        scripts and workers read them like any variable; nobody is ever asked for one. Nothing in the run can replace
+        a constant – a start value, a worker's result or a message of the same name is dropped, and a model that
+        writes one itself is refused at deploy. Only an operator's correction goes through, and it is audited. A
+        constant is in the model and in every instance; it is no place for a secret.</p>
+      <p data-l="de"><b>Werte pro Umgebung.</b> Unterscheidet sich ein Wert zwischen DEV, INT und PROD – ein
+        Tenant, eine App-ID –, steht er nicht im Modell. Die Konstante erhält im Panel die Quelle
+        <i>application</i> und übernimmt dann den Wert, den ihre Applikation auf der jeweiligen Installation hält;
+        ein Wert im Modell ist nur noch der Fallback. Gesetzt werden die Werte auf der Applikationsseite im Tab
+        <i>Values</i>, pro Installation; dort steht auch, welche Werte die deployten Prozesse brauchen und welche
+        hier fehlen. Ein Deploy warnt, wenn ein Wert fehlt, und ein Start aus Modeler, Tasks-App, öffentlichem Link
+        oder API wird abgelehnt, bis er gesetzt ist. Eine Instanz behält den Wert, mit dem sie gestartet ist; eine
+        Änderung gilt für die danach gestarteten. Bei einer Promotion reisen die Werte nicht mit – jede Installation
+        hält ihre eigenen.</p>
+      <p data-l="en"><b>Values per environment.</b> A value that differs between DEV, INT and PROD – a tenant, an
+        app id – does not belong in the model. Give the constant the source <i>application</i> in the panel and it
+        takes the value its application holds on each installation; a value in the model is then only the fallback.
+        The values are set on the application page's <i>Values</i> tab, per installation, which also lists what the
+        deployed processes need and what is missing here. A deploy warns when a value is missing, and a start from the
+        Modeler, the Tasks app, a public link or the API is refused until it is set. An instance keeps the value it
+        started with; a change reaches the instances started afterwards. A promotion does not carry the values – each
+        installation holds its own.</p>
 
       <h4 data-l="de">Ein Formular schreiben lassen</h4><h4 data-l="en">Letting the AI Worker write one</h4>
       <p data-l="de">Ist ein <b>KI-Worker</b> eingerichtet (Console &rsaquo; Workers, Typ <code>agent</code>), geht das

@@ -123,6 +123,14 @@ func (s *searchableScan) read(t xml.StartElement) {
 		if name != "" {
 			s.startVars[name] = typ
 		}
+	case "constant": // <atlas:constant name="…"/>: every instance carries it from its start
+		for _, a := range t.Attr {
+			if a.Name.Local == "name" {
+				if name := strings.TrimSpace(a.Value); name != "" {
+					s.writers[name] = true
+				}
+			}
+		}
 	case "output": // <zeebe:output source="…" target="…"/>
 		for _, a := range t.Attr {
 			if a.Name.Local == "target" {

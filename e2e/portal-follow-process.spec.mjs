@@ -57,11 +57,16 @@ function installFixture() {
     status: 200, headers: { "content-type": "application/json" },
   }));
   // A request that never answers still ends when it is aborted, as the browser's own
-  // fetch does: that is the one way out a page has, and the fixture keeps it.
+  // fetch does: that is the one way out a page has, and the fixture keeps it. Including
+  // a signal aborted before the request is made, which fetch refuses at once: the page's
+  // deadline can pass while it is still reading the process list, and a listener added
+  // after the abort is never called — the fixture then hung where a browser would not.
   const never = (init) => new Promise((_, reject) => {
     const signal = init && init.signal;
-    if (signal) signal.addEventListener("abort",
-      () => reject(new DOMException("aborted", "AbortError")));
+    if (!signal) return;
+    const abort = () => reject(new DOMException("aborted", "AbortError"));
+    if (signal.aborted) abort();
+    else signal.addEventListener("abort", abort);
   });
   window.fetch = (input, init) => {
     const url = new URL(String(input), window.location.origin);

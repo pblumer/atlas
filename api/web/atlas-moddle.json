@@ -30,6 +30,28 @@
       ]
     },
     {
+      "name": "Constants",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:Process"] },
+      "properties": [
+        {
+          "name": "constants",
+          "isMany": true,
+          "type": "Constant"
+        }
+      ]
+    },
+    {
+      "name": "Constant",
+      "superClass": ["Element"],
+      "properties": [
+        { "name": "name", "type": "String", "isAttr": true },
+        { "name": "type", "type": "String", "isAttr": true },
+        { "name": "value", "type": "String", "isAttr": true },
+        { "name": "source", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "JobScript",
       "superClass": ["Element"],
       "meta": { "allowedIn": ["bpmn:ScriptTask"] },

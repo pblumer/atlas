@@ -14,6 +14,47 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An application holds its values per installation, and a constant binds to one.**
+  DEV, INT and PROD run the same BPMN with different tenants, app ids and suffixes
+  ([ADR-draft-application-values-per-installation](docs/adr/draft-application-values-per-installation.md)).
+  `<atlas:constant name="TenantId" source="application"/>` takes the value the process's
+  application holds on the installation where the instance starts; a `value` on it is the
+  fallback. The values are set on the application page's new **Values** tab, or with `PUT
+  /api/v1/applications/{id}/values` (admin), and read with `GET` there, which also lists
+  what the deployed processes require and whether this installation holds it. They are
+  kept per installation, in an `application-values` store a whole-installation snapshot
+  carries and a design-time export or a promoted release never does. The engine resolves
+  them when it creates an instance, on every start path, and freezes the value into the
+  instance, so a later change reaches only the instances started afterwards. A deploy warns
+  about a bound value this installation does not hold, and a start from the Modeler, the
+  Tasks app, a public link, a CSV upload or the API is refused with `409` until it is set;
+  a timer, message or signal start is not refused, because nobody is there to answer. The
+  Modeler's constants editor has a source select, and the process listing names a bound
+  constant's `source`.
+
+- **A process declares constants every instance starts with.** `<atlas:constant name type
+  value/>` inside `<atlas:constants>` on the process states a value nobody is asked for —
+  a domain suffix, a language, an app id
+  ([ADR-draft-process-constants](docs/adr/draft-process-constants.md)). The engine writes the
+  constants as ordinary process variables when it creates an instance, before the start
+  variables, on every start path: the Modeler, the Tasks app, the API, a public link, a
+  timer, a message, a signal, a call activity and a fork. FEEL, mappings, scripts and Worker
+  Types read them like any variable. Nothing in the run replaces one: a start variable, a
+  worker's result, a message payload or a call activity's returned variable of the same name
+  is dropped, and a model that writes one — a result variable, a mapping, a multi-instance
+  collection — is refused at deploy, as is a name that is also a start variable or personal.
+  An operator's correction goes through and is audited. The Modeler edits them in the
+  process panel's Implement tab, the Variables panel and FEEL completion offer them, and
+  `GET /api/v1/processes` lists them as `constants`. A value that differs per installation
+  (DEV, INT, PROD) is the open follow-up the record names.
+
+- **The process listing carries the declared start variables.** `GET /api/v1/processes`
+  answers each definition's `<atlas:startVariable>` declarations as `startVariables`
+  (`name`, `type`, `default`, `required`) beside `startFormId`, absent when it declares
+  none. The compiler reads the declaration once at deploy, leniently — a nameless row is
+  dropped, an unknown type reads as `string` — because a stored definition compiles again
+  on every restart. It stays authoring metadata: the engine never reads it, and an instance
+  created through the API without a declared value still gets no default.
 - **An operator sees what waits in the message buffer.** A message kept for an instance
   that has not reached its catch yet ([ADR-0370](docs/adr/0370-durable-message-buffer.md))
   was invisible until it arrived or expired. `GET /api/v1/messages/buffered` (operator)
@@ -69,6 +110,30 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The Entra PowerShell example signs in without a secret it never received.**
+  `examples/entra-create-account.bpmn` read `$env:ENTRA_CLIENT_SECRET`, `$env:ENTRA_CLIENT_ID`
+  and `$env:ENTRA_TENANT_ID`, under a comment saying the credentials came from the worker
+  environment. A script is handed a fixed list of runtime variables and never the worker's
+  credentials ([ADR-0047](docs/adr/0047-polyglot-script-tasks-via-job-workers.md)), so all three arrived empty
+  and the sign-in could not work. The example now signs in app-only with a certificate from the
+  worker account's store, picked by subject so a renewal needs no change in atlas, and takes
+  the tenant, the client id and the certificate subject from constants bound to its
+  application, which each installation sets on the application's Values tab. It also turns on
+  `Set-StrictMode`, so a variable the instance does not carry fails the job instead of reaching
+  the script as `$null`.
+
+- **A start form no longer drops the declared start variables.** A process that links a
+  start form ([ADR-0028](docs/adr/0028-forms-and-the-tasks-app.md)) and also declares start
+  variables was started with the form's fields alone: Deploy & run and the Tasks app's Start
+  opened the form and never asked for the declaration, so a declared value the form did not
+  ask for was missing from the instance, and a script task reading it got null. Beneath the
+  form they now ask for the declared variables the form does not bind — with the
+  declaration's types, defaults and required marks — and start the instance with both
+  halves. A declared name the form submits, directly or under a dotted key, is the form's
+  to ask; a field the form only shows disabled submits nothing, so the declaration asks for
+  it. The Live view's Start instance had the opposite gap: it asked for the declaration and
+  never showed the form. On a definition with a start form it now opens the same dialog. A
+  public link still accepts only what its form submits.
 - **The Components palette in the form editor stays against the canvas when its column
   is resized.** The Design tab's palette column is resizable, but form-js pins the palette
   inside it to a fixed 270px and its tile groups to 236px — the defect the Properties
