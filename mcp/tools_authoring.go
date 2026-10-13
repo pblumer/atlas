@@ -863,7 +863,9 @@ func authoringTools() []Tool {
 		{
 			Name: "atlas_list_drafts",
 			Description: "List saved BPMN diagram drafts (design-time), optionally filtered to one project. " +
-				"Each entry has the process id, name, project, and save time. Read a draft's XML with atlas_get_draft_xml.",
+				"Each entry has the process id, name, project, save time, who created it (ownerId, ownerName) and who " +
+				"last saved it (savedBy, savedByName). Read a draft's XML with atlas_get_draft_xml; compare it with " +
+				"what is deployed with atlas_compare_draft.",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"projectId": stringProp("Optional project id to filter by (from atlas_create_project).")},
@@ -887,6 +889,36 @@ func authoringTools() []Tool {
 					return "", err
 				}
 				return asText(c.get("/api/v1/drafts/" + url.PathEscape(id) + "/xml"))
+			},
+		},
+		{
+			Name: "atlas_compare_draft",
+			Description: "Compare a saved draft with a deployed version of its process — the newest unless " +
+				"`key` names another. A draft and a deployment are separate records: saving does not deploy, " +
+				"and deploying does not save, so the draft an application opens may lack a change that is " +
+				"deployed (and the next publish would deploy the draft over it). Answers whether the two " +
+				"are the same model (the diagram is not compared), where they first differ, the compared " +
+				"version and the newest version number, and who last saved the draft and who deployed the " +
+				"version. Check this before editing a draft you did not just save, and after a deploy that " +
+				"did not go through atlas_save_draft.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":  stringProp("The draft's process id (from atlas_list_drafts)."),
+					"key": stringProp("Optional definition key of the version to compare against (from atlas_list_processes); defaults to the newest version of the draft's process."),
+				},
+				"required": []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				path := "/api/v1/drafts/" + url.PathEscape(id) + "/comparison"
+				if key, _ := args["key"].(string); key != "" {
+					path += "?key=" + url.QueryEscape(key)
+				}
+				return asText(c.get(path))
 			},
 		},
 		{

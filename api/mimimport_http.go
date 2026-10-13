@@ -232,7 +232,7 @@ func (s *Server) handleImportMIM(w http.ResponseWriter, r *http.Request) {
 				// Ungrouped, the same rule handleSaveDraft follows on a rename.
 				proj = existing[i].ProjectID
 			}
-			rec := draft{ProcessID: c.pid, Name: c.name, ProjectID: proj, OwnerID: owner, SavedAt: at, XML: string(c.res.BPMN)}
+			rec := draft{ProcessID: c.pid, Name: c.name, ProjectID: proj, OwnerID: owner, SavedAt: at, SavedBy: by, XML: string(c.res.BPMN)}
 			if saveErr = s.drafts.Save(rec); saveErr != nil {
 				return
 			}

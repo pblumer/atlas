@@ -397,6 +397,15 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
   publish that warns says the release stands and lists which order-form answers reach a process in
   the clear; the warnings survive the reload every publish does, and a publish without warnings
   shows none.
+- **`shown-version.spec.mjs`** ([ADR-draft-modeler-shows-its-version](../docs/adr/draft-modeler-shows-its-version.md)):
+  the editor bar's chip names what is open and how it stands against the other record — a draft
+  missing a newer deployed change is a warning (`Draft ≠ v2`) whose panel names who created the
+  draft, who last saved it and who deployed v2, the first difference and a link to v2; a draft that
+  is the deployed model reads `Draft = v1`; one with undeployed work is not a warning; a version says
+  which of how many, who deployed it and who adjusted its layout, and compares the draft with *that*
+  version. The bar stays one row with the chip on it. Deploy from a draft saves it first and only
+  once; a new diagram's first deploy saves it; a version opened read-only is deployed without a
+  save, and the Deploy panel says the draft is left alone.
 
 ## Rendering a conformance gallery diagram
 
