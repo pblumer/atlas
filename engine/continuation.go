@@ -53,6 +53,8 @@ var continuationCarries = map[string]string{
 	"Triggered":     "external", // a caller's pointer, set only on a directed trigger
 	"Delivered":     "external", // a caller's pointer, set only on a directed delivery
 	"Reported":      "external", // a caller's pointer, set only on an outcome report
+	"MessageTTL":    "external", // a client's publish (ADR-0370), never a followup
+	"MessageID":     "external", // a client's publish (ADR-0370), never a followup
 }
 
 // schedulingIsDurable reports whether a queued command must survive a restart.

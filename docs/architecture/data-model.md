@@ -174,6 +174,9 @@ job:<jobKey>                     → JobValue
 jobActivatable:<jobType>:<key>   → nil                        (open jobs per type, worker polling)
 timer:<dueDate>:<timerKey>       → TimerValue                 (sorted by due date → range scan)
 msgSub:<msgName>:<corrKey>       → SubscriptionValue
+msgBuf:<msgName>:<corrKey>:<msgKey> → MessageValue            (messages kept for a later subscriber, ADR-0370)
+msgExp:<expiresAt>:<msgKey>      → MessageValue (no payload)  (kept messages by expiry → range scan)
+msgId:<msgName>:<corrKey>:<id>   → msgKey                     (a sender's message id, while its message lives)
 var:<scopeKey>:<name>            → bytes
 incident:<incidentKey>           → IncidentValue
 pi:<procInstKey>                 → ProcessInstanceValue       (live instances)

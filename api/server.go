@@ -646,8 +646,13 @@ type Server struct {
 	lastReceiptPrune  int64
 	// eventFeedTTL is how long a row of the event feed is kept (ADR-0429 §5); zero
 	// keeps the default of 30 days. lastFeedPrune paces its prune like the receipts'.
-	eventFeedTTL    time.Duration
-	lastFeedPrune   int64
+	eventFeedTTL  time.Duration
+	lastFeedPrune int64
+	// messageTTLMax is the longest time to live a published message may ask for
+	// (ADR-0370); zero keeps the default of seven days. A buffered message is data a
+	// caller makes this server hold, so how long it may be held is bounded like how
+	// much of it may be.
+	messageTTLMax   time.Duration
 	retentionBatch  int
 	retentionCursor uint64
 
@@ -1093,6 +1098,28 @@ func WithTriggerReceiptRetention(d time.Duration) Option {
 			s.triggerReceiptTTL = d
 		}
 	}
+}
+
+// WithMessageTTLMax sets the longest time to live a published message may ask for
+// (ADR-0370); the default is seven days. A publish asking for more is refused with 400
+// rather than shortened, because a sender that asked for a lifetime is relying on it.
+func WithMessageTTLMax(d time.Duration) Option {
+	return func(s *Server) {
+		if d > 0 {
+			s.messageTTLMax = d
+		}
+	}
+}
+
+// DefaultMessageTTLMax is the longest time to live a published message may ask for
+// when the operator set nothing (ADR-0370).
+const DefaultMessageTTLMax = 7 * 24 * time.Hour
+
+func (s *Server) messageTTLLimit() time.Duration {
+	if s.messageTTLMax > 0 {
+		return s.messageTTLMax
+	}
+	return DefaultMessageTTLMax
 }
 
 // WithEventFeedRetention sets how long a row of the event feed is kept (ADR-0429 §5);
