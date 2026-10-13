@@ -2528,6 +2528,11 @@ function collectDiagramVariables(modeler) {
       for (const v of readStartVariables(rootBo)) {
         push(v.name, "Start", "", "start variable", "Process", v.type || "");
       }
+      // A constant is a variable every instance carries from its start
+      // (ADR-draft-process-constants), so expressions and completion offer it like one.
+      for (const c of readConstants(rootBo)) {
+        push(c.name, "Process", "", "constant", "Process", c.type || "");
+      }
     }
   } catch { /* best-effort */ }
   try {
@@ -6821,6 +6826,18 @@ function readStartVariables(bo) {
   }));
 }
 
+// readConstants returns the constants a process declares via its atlas:Constants
+// extension element: [{name, type, value}] (ADR-draft-process-constants). Empty when
+// none are declared.
+function readConstants(bo) {
+  const cs = findExt(bo, "atlas:Constants");
+  return ((cs && cs.constants) || []).map((c) => ({
+    name: c.name || "",
+    type: START_VAR_TYPES.includes(c.type) ? c.type : "string",
+    value: c.value || "",
+  }));
+}
+
 // writeStartVariables persists the declared start variables onto the process
 // through the modeling API (undo/redo; serializes on deploy). Rows without a
 // name are dropped; an empty result removes the atlas:StartForm entirely so a
@@ -6936,22 +6953,66 @@ function writeStartVariables(modeler, list, targetEl, targetBo) {
   else modeling.updateModdleProperties(targetEl, bo, { extensionElements: ext });
 }
 
+// writeConstants persists the process's constants the way writeStartVariables persists
+// its start variables, into atlas:Constants (ADR-draft-process-constants). The row
+// editor holds a constant's value where it holds a start variable's default; the value is
+// written even when empty, because an empty string is a value a string constant may have.
+function writeConstants(modeler, list, targetEl, targetBo) {
+  const moddle = modeler.get("moddle");
+  const modeling = modeler.get("modeling");
+  const onRoot = !targetEl;
+  const rootEl = modeler.get("canvas").getRootElement();
+  if (onRoot) { targetEl = rootEl; targetBo = rootEl.businessObject; }
+  const bo = targetBo;
+  let ext = bo.extensionElements;
+  if (!ext) { ext = moddle.create("bpmn:ExtensionElements", { values: [] }); ext.$parent = bo; }
+  let cs = (ext.values || []).find((v) => v.$type === "atlas:Constants");
+  const clean = list.filter((v) => (v.name || "").trim() !== "");
+  if (clean.length === 0) {
+    if (cs) ext.values = (ext.values || []).filter((v) => v !== cs);
+  } else {
+    if (!cs) { cs = moddle.create("atlas:Constants"); cs.$parent = ext; ext.values = [...(ext.values || []), cs]; }
+    cs.constants = clean.map((v) => {
+      const c = moddle.create("atlas:Constant", {
+        name: v.name.trim(),
+        type: START_VAR_TYPES.includes(v.type) ? v.type : "string",
+        value: v.default || "",
+      });
+      c.$parent = cs;
+      return c;
+    });
+  }
+  if (onRoot) modeling.updateProperties(targetEl, { extensionElements: ext });
+  else modeling.updateModdleProperties(targetEl, bo, { extensionElements: ext });
+}
+
+// The two declarations the process panel edits as rows: the start variables a start
+// asks for, and the constants every instance starts with and nobody is asked for
+// (ADR-draft-process-constants). One row editor serves both: a constant has a value
+// where a start variable has a default, and no "required", because nobody supplies it.
+const START_VAR_DECL = { list: "#sv-list", add: "#sv-add", constant: false };
+const CONSTANT_DECL = { list: "#cv-list", add: "#cv-add", constant: true };
+
 // startVarRowHTML renders one editable declaration row. Values are escaped for
 // the attributes; the type <select> marks the current option. For json-typed
 // variables, the default field is a textarea (upgraded to a JSON editor after
 // the row is inserted into the DOM by wireStartVars).
-function startVarRowHTML(v) {
+function startVarRowHTML(v, constant = false) {
   const opts = START_VAR_TYPES
     .map((t) => `<option value="${t}"${t === v.type ? " selected" : ""}>${t}</option>`).join("");
+  const what = constant ? "Value" : "Default value";
   const defaultField = v.type === "json"
-    ? `<textarea class="sv-default sv-json-default" rows="2" placeholder='{"key": "value"}' aria-label="Default value (JSON)">${esc(v.default)}</textarea>`
-    : `<input type="text" class="sv-default" value="${esc(v.default)}" placeholder="default" aria-label="Default value"/>`;
+    ? `<textarea class="sv-default sv-json-default" rows="2" placeholder='{"key": "value"}' aria-label="${what} (JSON)">${esc(v.default)}</textarea>`
+    : `<input type="text" class="sv-default" value="${esc(v.default)}" placeholder="${constant ? "value" : "default"}" aria-label="${what}"/>`;
+  // A constant is never asked for, so "required" has nothing to mean on it.
+  const required = constant ? ""
+    : `<label class="sv-req" title="Required"><input type="checkbox" class="sv-required"${v.required ? " checked" : ""}/> req</label>`;
   return `<div class="sv-row${v.type === "json" ? " sv-row-json" : ""}">
-    <input type="text" class="sv-name" value="${esc(v.name)}" placeholder="customer" aria-label="Variable name"/>
+    <input type="text" class="sv-name" value="${esc(v.name)}" placeholder="${constant ? "TenantId" : "customer"}" aria-label="${constant ? "Constant name" : "Variable name"}"/>
     <select class="sv-type" aria-label="Type">${opts}</select>
     ${defaultField}
-    <label class="sv-req" title="Required"><input type="checkbox" class="sv-required"${v.required ? " checked" : ""}/> req</label>
-    <button type="button" class="sv-del icon-btn" title="Remove" aria-label="Remove variable">✕</button>
+    ${required}
+    <button type="button" class="sv-del icon-btn" title="Remove" aria-label="${constant ? "Remove constant" : "Remove variable"}">✕</button>
   </div>`;
 }
 
@@ -6970,10 +7031,15 @@ function startVarRowHTML(v) {
 // shown for the *selected* participant, so its save would rebuild the panel and
 // tear down an in-progress JSON editor — the pool passes savePreservingPanel to
 // keep the panel intact, mirroring how FEEL fields self-save.
-function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn()) {
-  const listEl = body.querySelector("#sv-list");
-  const addBtn = body.querySelector("#sv-add");
+//
+// decl says which declaration the rows edit: START_VAR_DECL (the default) or
+// CONSTANT_DECL, which reads and writes the process's constants instead.
+function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn(), decl = START_VAR_DECL) {
+  const listEl = body.querySelector(decl.list);
+  const addBtn = body.querySelector(decl.add);
   if (!listEl || !addBtn) return;
+  const required = (row) => !decl.constant && row.querySelector(".sv-required").checked;
+  const write = decl.constant ? writeConstants : writeStartVariables;
 
   const editors = new Map(); // row DOM node → attachJSONEditor handle
 
@@ -6992,9 +7058,9 @@ function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn()) {
     name: row.querySelector(".sv-name").value,
     type: row.querySelector(".sv-type").value,
     default: row.querySelector(".sv-default").value,
-    required: row.querySelector(".sv-required").checked,
+    required: required(row),
   }));
-  const persist = () => wrap(() => { try { writeStartVariables(modeler, collect(), targetEl, targetBo); } catch { /* stale */ } });
+  const persist = () => wrap(() => { try { write(modeler, collect(), targetEl, targetBo); } catch { /* stale */ } });
 
   listEl.addEventListener("change", (e) => {
     // When the type dropdown changes to or from "json", rebuild the row so the
@@ -7006,11 +7072,11 @@ function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn()) {
         name: row.querySelector(".sv-name").value,
         type: sel.value,
         default: sel.value === "json" ? "" : row.querySelector(".sv-default").value,
-        required: row.querySelector(".sv-required").checked,
+        required: required(row),
       };
       // Destroy any existing JSON editor for this row.
       if (editors.has(row)) { editors.get(row).destroy(); editors.delete(row); }
-      row.outerHTML = startVarRowHTML(data);
+      row.outerHTML = startVarRowHTML(data, decl.constant);
       attachEditors();
     }
     persist();
@@ -7025,7 +7091,7 @@ function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn()) {
     }
   });
   addBtn.addEventListener("click", () => {
-    listEl.insertAdjacentHTML("beforeend", startVarRowHTML({ name: "", type: "string", default: "", required: false }));
+    listEl.insertAdjacentHTML("beforeend", startVarRowHTML({ name: "", type: "string", default: "", required: false }, decl.constant));
     listEl.querySelector(".sv-row:last-child .sv-name").focus();
   });
 
@@ -7429,7 +7495,11 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         <h3>Start variables</h3>
         <div id="sv-list">${declared.map(startVarRowHTML).join("")}</div>
         <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="Add a variable">+ Add variable</button>
-        <p class="muted" style="font-size:12px">Declared on this pool's process, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks. With a start form, the ones the form does not ask for are asked beneath it. The engine ignores the declaration; it's authoring metadata, so an instance started through the API gets no default.</p>`;
+        <p class="muted" style="font-size:12px">Declared on this pool's process, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks. With a start form, the ones the form does not ask for are asked beneath it. The engine ignores the declaration; it's authoring metadata, so an instance started through the API gets no default. A value nobody enters is a constant, below.</p>
+        <h3>Constants</h3>
+        <div id="cv-list">${readConstants(proc).map((c) => startVarRowHTML({ name: c.name, type: c.type, default: c.value }, true)).join("")}</div>
+        <button type="button" class="btn neutral" id="cv-add" style="margin-top:6px" title="Add a constant">+ Add constant</button>
+        <p class="muted" style="font-size:12px">Values every instance starts with and nobody is asked for: set on every start path, before the start variables, and read by expressions, scripts and Worker Types like any variable. Nothing in the run can replace one; only an operator's correction can. A constant is in the model and in every instance, so it is no place for a secret.</p>`;
     }
     body.innerHTML = `${poolFields}
       <p class="muted" style="font-size:12px">The pool is a <b>participant</b> that executes the process below. The elements live in that process — the pool only labels who runs it.</p>
@@ -7460,7 +7530,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     }
     wireDocumentation(body, modeler, element, bo);
     wireDocumentation(body, modeler, element, proc, "f-procdoc");
-    if (activeTab(root) === "implement") wireStartVars(body, modeler, element, proc, savePreservingPanel);
+    if (activeTab(root) === "implement") {
+      wireStartVars(body, modeler, element, proc, savePreservingPanel);
+      wireStartVars(body, modeler, element, proc, savePreservingPanel, CONSTANT_DECL);
+    }
   }
 
   // wirePoolId makes a pool's ID editable, the same way the element ID and Process ID
@@ -7495,7 +7568,11 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             <h3>Start variables</h3>
             <div id="sv-list">${declared.map(startVarRowHTML).join("")}</div>
             <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="Add a variable">+ Add variable</button>
-            <p class="muted" style="font-size:12px">Declared here, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks — instead of raw JSON. With a start form on the start event, the ones the form does not ask for are asked beneath it, on Deploy &amp; run, Start instance and the Tasks app's Start. The engine ignores the declaration; it's authoring metadata, so an instance started through the API or a public link gets no default.</p>`;
+            <p class="muted" style="font-size:12px">Declared here, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks — instead of raw JSON. With a start form on the start event, the ones the form does not ask for are asked beneath it, on Deploy &amp; run, Start instance and the Tasks app's Start. The engine ignores the declaration; it's authoring metadata, so an instance started through the API or a public link gets no default. A value nobody enters is a constant, below.</p>
+            <h3>Constants</h3>
+            <div id="cv-list">${readConstants(rootBo).map((c) => startVarRowHTML({ name: c.name, type: c.type, default: c.value }, true)).join("")}</div>
+            <button type="button" class="btn neutral" id="cv-add" style="margin-top:6px" title="Add a constant">+ Add constant</button>
+            <p class="muted" style="font-size:12px">Values every instance starts with and nobody is asked for: set on every start path, before the start variables, and read by expressions, scripts and Worker Types like any variable. Nothing in the run can replace one; only an operator's correction can. A constant is in the model and in every instance, so it is no place for a secret.</p>`;
         }
         body.innerHTML = `
           <h3>Process</h3>
@@ -7599,6 +7676,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         });
         wireDocumentation(body, modeler, rootEl, rootBo);
         wireStartVars(body, modeler);
+        wireStartVars(body, modeler, undefined, undefined, undefined, CONSTANT_DECL);
         wireMessagesManager(body, modeler, () => show(null));
         wireSignalsManager(body, modeler, () => show(null));
         wireErrorsManager(body, modeler, () => show(null));

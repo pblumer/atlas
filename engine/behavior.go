@@ -230,6 +230,24 @@ func activateInstance(c *ProcessingContext, piKey uint64, seed instanceSeed) {
 		})
 	}
 
+	// Seed the process's constants first (ADR-draft-process-constants): every instance
+	// carries them, however it was started, and writing them before the start variables
+	// is what makes a start variable — or a message payload, or a forked instance's
+	// value — that names one fall to keepsConstant (context.go) rather than replace it. The
+	// values were canonicalised at deploy, so this parses nothing (I5) and replays the
+	// events it writes (I6).
+	consts := cp.Constants()
+	for i := range consts {
+		k := &consts[i]
+		c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+			ScopeKey: piKey,
+			Name:     k.Name,
+			Kind:     toVarKind(k.Kind),
+			Bool:     k.Bool,
+			Text:     k.Text,
+		})
+	}
+
 	// Seed the instance's start variables under its scope before any element runs.
 	for i := range seed.Vars {
 		v := seed.Vars[i]

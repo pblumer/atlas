@@ -651,6 +651,11 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		b.SetHistoryTtl(nanos)
 	}
 	b.SetStartVariables(startVariablesOf(proc.StartVariables))
+	consts, err := constantsOf(proc.Id, proc.Constants)
+	if err != nil {
+		return nil, err
+	}
+	b.SetConstants(consts)
 	// The searchable variable names (ADR-0244): resolved here, at
 	// deploy time, so the runtime never parses the attribute and the engine asks the
 	// compiled process one question per variable write (I5). A declaration that cannot
@@ -1448,6 +1453,10 @@ type xmlProcess struct {
 	// (<atlas:startForm><atlas:startVariable/></atlas:startForm>). Authoring metadata: the
 	// start surfaces render them as typed fields, and the engine never reads them.
 	StartVariables []xmlStartVariable `xml:"extensionElements>startForm>startVariable"`
+	// Constants are the values every instance starts with and nobody is asked for
+	// (<atlas:constants><atlas:constant/></atlas:constants>, ADR-draft-process-constants).
+	// The engine seeds them on every start path.
+	Constants []xmlConstant `xml:"extensionElements>constants>constant"`
 
 	xmlFlowContent // the process root's flow nodes and sequence flows
 

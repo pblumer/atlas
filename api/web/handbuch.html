@@ -5539,6 +5539,23 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         and the Tasks app's Start ask, beneath the form, for the ones the form does not ask for itself – with their
         type, default and required mark. The instance starts with both halves. A public link and a start through the
         API apply no defaults, though: the declaration is authoring metadata, and the engine does not read it.</p>
+      <p data-l="de"><b>Konstanten statt Startvariablen, die niemand eingibt.</b> Ein Wert, den jede Instanz braucht
+        und nach dem niemand gefragt werden soll – ein Domain-Suffix, eine Sprache, eine App-ID –, gehört unter
+        <i>Constants</i> im selben Panel. Atlas schreibt Konstanten beim Erzeugen jeder Instanz als gewöhnliche
+        Variablen, auf jedem Startweg: Modeler, Tasks-App, API, öffentlicher Link, Timer, Message, Signal und Call
+        Activity. Ausdrücke, Skripte und Worker lesen sie wie jede Variable; abgefragt werden sie nie. Nichts im Ablauf
+        kann eine Konstante ersetzen – ein gleichnamiger Startwert, ein Worker-Ergebnis oder eine Message wird
+        verworfen, und ein Modell, das sie selbst beschreibt, wird beim Deploy abgelehnt. Nur eine Korrektur durch
+        einen Operator geht durch und steht im Audit. Eine Konstante steht im Modell und in jeder Instanz; für
+        Geheimnisse ist sie nicht gedacht.</p>
+      <p data-l="en"><b>Constants instead of start variables nobody enters.</b> A value every instance needs and
+        nobody should be asked for – a domain suffix, a language, an app id – belongs under <i>Constants</i> in the
+        same panel. Atlas writes constants as ordinary variables when it creates an instance, on every start path: the
+        Modeler, the Tasks app, the API, a public link, a timer, a message, a signal and a call activity. Expressions,
+        scripts and workers read them like any variable; nobody is ever asked for one. Nothing in the run can replace
+        a constant – a start value, a worker's result or a message of the same name is dropped, and a model that
+        writes one itself is refused at deploy. Only an operator's correction goes through, and it is audited. A
+        constant is in the model and in every instance; it is no place for a secret.</p>
 
       <h4 data-l="de">Ein Formular schreiben lassen</h4><h4 data-l="en">Letting the AI Worker write one</h4>
       <p data-l="de">Ist ein <b>KI-Worker</b> eingerichtet (Console &rsaquo; Workers, Typ <code>agent</code>), geht das

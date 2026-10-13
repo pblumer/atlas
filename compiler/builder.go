@@ -577,6 +577,7 @@ type Builder struct {
 	documentation      int32                       // interned <bpmn:documentation> of the process itself, -1 if none
 	startFormId        int32                       // interned start-form id (ADR-0028), -1 if the process has none
 	startVars          []StartVariable             // declared start variables (atlas:startForm), nil = none
+	constants          []Constant                  // process constants (atlas:constants), nil = none
 	conditionalStarts  []int32                     // process-level start nodes that carried a conditional event definition (RuleConditionalStart)
 	eventGatewayKinds  []eventGatewayKind          // event-based gateways of a kind atlas does not run (RuleEventGatewayKind)
 	invalidWizards     []int32                     // subprocess nodes whose atlas:wizard named no kind (RuleWizardValue, ADR-0449)
@@ -3231,6 +3232,8 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		documentation:      b.documentation,
 		startFormId:        b.startFormId,
 		startVars:          b.startVars,
+		constants:          b.constants,
+		constantSet:        constantSetOf(b.constants),
 		conditionalStarts:  b.conditionalStarts,
 		eventGatewayKinds:  b.eventGatewayKinds,
 		invalidWizards:     b.invalidWizards,
@@ -3254,6 +3257,12 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		return nil, err
 	}
 	if err := p.refuseExpressionsReadingPersonalData(); err != nil {
+		return nil, err
+	}
+	// A constant is fixed by the model, so a model that also asks for it, declares it
+	// personal, or writes it does not deploy (ADR-draft-process-constants). Here for the
+	// same reason as the personal-data rule: it reads the assembled mappings.
+	if err := p.refuseConstantConflicts(); err != nil {
 		return nil, err
 	}
 	return p, nil

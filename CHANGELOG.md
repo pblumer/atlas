@@ -14,6 +14,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A process declares constants every instance starts with.** `<atlas:constant name type
+  value/>` inside `<atlas:constants>` on the process states a value nobody is asked for —
+  a domain suffix, a language, an app id
+  ([ADR-draft-process-constants](docs/adr/draft-process-constants.md)). The engine writes the
+  constants as ordinary process variables when it creates an instance, before the start
+  variables, on every start path: the Modeler, the Tasks app, the API, a public link, a
+  timer, a message, a signal, a call activity and a fork. FEEL, mappings, scripts and Worker
+  Types read them like any variable. Nothing in the run replaces one: a start variable, a
+  worker's result, a message payload or a call activity's returned variable of the same name
+  is dropped, and a model that writes one — a result variable, a mapping, a multi-instance
+  collection — is refused at deploy, as is a name that is also a start variable or personal.
+  An operator's correction goes through and is audited. The Modeler edits them in the
+  process panel's Implement tab, the Variables panel and FEEL completion offer them, and
+  `GET /api/v1/processes` lists them as `constants`. A value that differs per installation
+  (DEV, INT, PROD) is the open follow-up the record names.
+
 - **The process listing carries the declared start variables.** `GET /api/v1/processes`
   answers each definition's `<atlas:startVariable>` declarations as `startVariables`
   (`name`, `type`, `default`, `required`) beside `startFormId`, absent when it declares

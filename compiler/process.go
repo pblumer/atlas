@@ -1492,6 +1492,8 @@ type CompiledProcess struct {
 	startEvents        []int32
 	startFormId        int32               // interned start-form id (ADR-0028), -1 if none
 	startVars          []StartVariable     // declared start variables (atlas:startForm), nil if none
+	constants          []Constant          // process constants (atlas:constants), nil if none
+	constantSet        map[string]struct{} // the same names as a set, for the per-write question
 	conditionalStarts  []int32             // process-level start nodes that carried a conditional event definition; read by stage 5 only
 	eventGatewayKinds  []eventGatewayKind  // event-based gateways of a kind atlas does not run; read by stage 5 only
 	invalidWizards     []int32             // subprocess nodes whose atlas:wizard named no kind; read by stage 5 only (ADR-0449)

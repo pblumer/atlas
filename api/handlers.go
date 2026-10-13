@@ -103,6 +103,11 @@ type processResp struct {
 	// the declaration: without them a declared value the form never asks for is simply
 	// missing from every instance started that way.
 	StartVariables []startVariableResp `json:"startVariables,omitempty"`
+	// Constants are the values every instance of this definition starts with and nobody
+	// is asked for (atlas:constants, ADR-draft-process-constants), absent when it declares
+	// none. Listed so a client can tell them from inputs: a start variable naming one is
+	// dropped, because the constant is written first.
+	Constants []constantResp `json:"constants,omitempty"`
 	// Executable is the process's bpmn:isExecutable flag. A non-executable process
 	// still lists (so it can be inspected) but is omitted from the start surfaces and
 	// cannot be started. Always emitted so the UI can filter on it.
@@ -149,6 +154,27 @@ func startVariablesOf(cp *compiler.CompiledProcess) []startVariableResp {
 	out := make([]startVariableResp, len(decl))
 	for i, v := range decl {
 		out[i] = startVariableResp{Name: v.Name, Type: v.Type, Default: v.Default, Required: v.Required}
+	}
+	return out
+}
+
+// constantResp is one process constant as declared: its name, type and value.
+type constantResp struct {
+	Name  string `json:"name"`
+	Type  string `json:"type"`
+	Value string `json:"value"`
+}
+
+// constantsOf is a definition's constants in their response shape, nil when it declares
+// none, so the field is left out of the listing.
+func constantsOf(cp *compiler.CompiledProcess) []constantResp {
+	decl := cp.Constants()
+	if len(decl) == 0 {
+		return nil
+	}
+	out := make([]constantResp, len(decl))
+	for i, c := range decl {
+		out[i] = constantResp{Name: c.Name, Type: c.Type, Value: c.Value}
 	}
 	return out
 }
@@ -1251,6 +1277,7 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
 				CollaborationKey: s.collaborationKeyOf(d),
 				StartFormID:      d.cp.StartFormId(),
 				StartVariables:   startVariablesOf(d.cp),
+				Constants:        constantsOf(d.cp),
 				Executable:       d.cp.IsExecutable(),
 				VersionTag:       d.cp.VersionTag(),
 				Active:           !d.inactive,
