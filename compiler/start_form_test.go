@@ -3,6 +3,8 @@ package compiler
 import (
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/expr"
 )
 
 const startFormBPMN = `<?xml version="1.0" encoding="UTF-8"?>
@@ -78,11 +80,13 @@ func TestStartVariablesBesideStartForm(t *testing.T) {
 	if got := cp.StartFormId(); got != "collective-line" {
 		t.Errorf("StartFormId = %q, want \"collective-line\"", got)
 	}
+	// Each default is also read into the form the engine seeds it in
+	// (ADR-draft-start-variable-defaults).
 	want := []StartVariable{
 		{Name: "TenantId", Type: "string", Required: true},
-		{Name: "Retries", Type: "number", Default: "3"},
-		{Name: "Options", Type: "json", Default: `{"a":1}`},
-		{Name: "Dry", Type: "boolean", Default: "false"},
+		{Name: "Retries", Type: "number", Default: "3", HasDefault: true, Kind: expr.KindNumber, Text: "3"},
+		{Name: "Options", Type: "json", Default: `{"a":1}`, HasDefault: true, Kind: expr.KindJSON, Text: `{"a":1}`},
+		{Name: "Dry", Type: "boolean", Default: "false", HasDefault: true, Kind: expr.KindBool},
 	}
 	got := cp.StartVariables()
 	if len(got) != len(want) {
@@ -121,7 +125,8 @@ func TestStartVariablesLenient(t *testing.T) {
 		t.Fatalf("Parse: %v", err)
 	}
 	got := cp.StartVariables()
-	want := StartVariable{Name: "when", Type: "string", Default: "2026-01-01"}
+	want := StartVariable{Name: "when", Type: "string", Default: "2026-01-01",
+		HasDefault: true, Kind: expr.KindString, Text: "2026-01-01"}
 	if len(got) != 1 || got[0] != want {
 		t.Fatalf("StartVariables = %+v, want [%+v]", got, want)
 	}

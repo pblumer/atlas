@@ -53,8 +53,8 @@ _Changed_ / _Removed_ for each version.
   (`name`, `type`, `default`, `required`) beside `startFormId`, absent when it declares
   none. The compiler reads the declaration once at deploy, leniently — a nameless row is
   dropped, an unknown type reads as `string` — because a stored definition compiles again
-  on every restart. It stays authoring metadata: the engine never reads it, and an instance
-  created through the API without a declared value still gets no default.
+  on every restart. An instance started without a declared value takes its default (see
+  _Changed_).
 - **An operator sees what waits in the message buffer.** A message kept for an instance
   that has not reached its catch yet ([ADR-0370](docs/adr/0370-durable-message-buffer.md))
   was invisible until it arrived or expired. `GET /api/v1/messages/buffered` (operator)
@@ -99,6 +99,19 @@ _Changed_ / _Removed_ for each version.
   diagram. MCP `atlas_compare_draft` (ADR-0452).
 
 ### Changed
+
+- **A start variable's default is what an instance starts with when its start did not
+  supply it.** It used to be what the start forms prefilled and nothing more, so an
+  instance started through the API, MCP, a public link, a CSV upload, a timer, a message,
+  a signal or a call activity without the variable did not have it, and a script read
+  null. The engine now seeds the declared default of every start variable a start did not
+  name, on every one of those paths; a variable the start names keeps its value, null
+  included, and a fork adds none. The compiler parses the default once at deploy; one
+  that is not a literal of its type, or that holds personal data or names the data
+  subject, is not seeded, and the deploy warns instead of refusing the model. An optional
+  start-form field left empty now means "not supplied" and takes the default. A model
+  that tested for the variable's absence takes the other branch
+  ([ADR-draft-start-variable-defaults](docs/adr/draft-start-variable-defaults.md)).
 
 - **Deploy from a draft saves the draft first.** Deploying from the Modeler sent the diagram
   on the canvas and left the draft as it was last saved, so a change deployed without Save

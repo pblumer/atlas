@@ -3265,6 +3265,11 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 	if err := p.refuseConstantConflicts(); err != nil {
 		return nil, err
 	}
+	// And a start variable whose default would be refused as it is written — personal
+	// data in the clear — keeps the default for its start form only
+	// (ADR-draft-start-variable-defaults). It needs the personal declarations, which are
+	// only complete here.
+	p.withholdPersonalDefaults()
 	return p, nil
 }
 

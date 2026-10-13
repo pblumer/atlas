@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -158,6 +159,22 @@ func (s *Server) dataFlowProblems(r io.Reader, applicationID string) []compiler.
 	return append(out, infomodel.CheckApplication(app, vocab)...)
 }
 
+// startVariableDefaultWarnings names each declared start variable whose default the
+// engine does not seed (ADR-draft-start-variable-defaults): one that is not a literal of
+// its type, or one that holds personal data. A warning and never a refusal, because the
+// declaration has always been accepted as written — the start form still prefills it, and
+// an instance started without the variable does not have it.
+func startVariableDefaultWarnings(processID string, cp *compiler.CompiledProcess) []string {
+	var out []string
+	for _, sv := range cp.StartVariables() {
+		if sv.DefaultProblem != "" {
+			out = append(out, fmt.Sprintf("%s: the default of start variable %q is not seeded into an instance started without it: %s",
+				processID, sv.Name, sv.DefaultProblem))
+		}
+	}
+	return out
+}
+
 // deployWarningsOnLoop is the deploy-time preflight, in one place so every deploy
 // path runs the same one (ADR-0287).
 //
@@ -190,6 +207,7 @@ func (s *Server) deployWarningsOnLoop(deployed []deployedProcess, applicationID 
 		out = append(out, renderProblems(s.ambiguousCallTargetsOnLoop(dep.cp, nil))...)
 		out = append(out, s.heldOnOlderVersionsOnLoop(d.Key, d.ProcessID)...)
 		out = append(out, s.applicationValueWarningsOnLoop(dep)...)
+		out = append(out, startVariableDefaultWarnings(d.ProcessID, dep.cp)...)
 		if vocabErr == nil {
 			out = append(out, dataFlowWarnings(dep.cp, vocab)...)
 		}
