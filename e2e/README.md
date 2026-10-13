@@ -397,7 +397,7 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
   publish that warns says the release stands and lists which order-form answers reach a process in
   the clear; the warnings survive the reload every publish does, and a publish without warnings
   shows none.
-- **`shown-version.spec.mjs`** ([ADR-draft-modeler-shows-its-version](../docs/adr/draft-modeler-shows-its-version.md)):
+- **`shown-version.spec.mjs`** ([ADR-0452](../docs/adr/0452-modeler-shows-its-version.md)):
   the editor bar's chip names what is open and how it stands against the other record — a draft
   missing a newer deployed change is a warning (`Draft ≠ v2`) whose panel names who created the
   draft, who last saved it and who deployed v2, the first difference and a link to v2; a draft that

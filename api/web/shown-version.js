@@ -1,4 +1,4 @@
-// What the Modeler has open, said in its bar (ADR-draft-modeler-shows-its-version).
+// What the Modeler has open, said in its bar (ADR-0452).
 //
 // A draft and a deployed version are two records that share a process id and nothing
 // else: Save writes the draft, Deploy mints a version, and neither touches the other.

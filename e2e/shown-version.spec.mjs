@@ -1,6 +1,6 @@
 // End-to-end coverage for the Modeler's "what is open" chip and for Deploy saving the
 // draft first (api/web/shown-version.js, api/web/editor.js;
-// ADR-draft-modeler-shows-its-version).
+// ADR-0452).
 //
 // The report this answers: a change was deployed, and the diagram an application then
 // opened did not have it — with nothing on screen to say whether the Modeler showed an

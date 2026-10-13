@@ -26,7 +26,7 @@ _Changed_ / _Removed_ for each version.
   `savedBy`/`savedByName`, `GET /api/v1/processes` answers `deployedBy`/`deployedByName` and
   `diagramUpdatedByName`, and `GET /api/v1/drafts/{id}/comparison` compares a draft with the
   newest deployed version of its process, or with the one `?key=` names, ignoring the
-  diagram. MCP `atlas_compare_draft` (ADR-draft-modeler-shows-its-version).
+  diagram. MCP `atlas_compare_draft` (ADR-0452).
 
 ### Changed
 

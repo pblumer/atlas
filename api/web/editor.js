@@ -24,7 +24,7 @@ import { attachCollab } from "./collab.js";
 import { collectDocumentation, exportDocumentation } from "./process-doc.js";
 import { frozenMark } from "./frozen-decisions.js";
 // Which record the Modeler has open — the draft or version N — and who created and last
-// changed it (ADR-draft-modeler-shows-its-version).
+// changed it (ADR-0452).
 import { attachShownVersion } from "./shown-version.js";
 import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
 import { openDecisionGraph } from "./decision-graph.js";
@@ -10749,7 +10749,7 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
     try {
       const { xml } = await modeler.saveXML({ format: true });
       // Deploying from a draft saves it first, so the draft stays what runs
-      // (ADR-draft-modeler-shows-its-version). Without it a change could be deployed
+      // (ADR-0452). Without it a change could be deployed
       // and missing from the draft the application opens — and the next Publish,
       // which deploys the drafts, would deploy over it. A new diagram is saved too:
       // its first deploy is plainly meant to be kept. A version opened read-only is

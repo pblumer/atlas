@@ -592,7 +592,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/drafts/{id}/xml", s.handleDraftXML, apiOp{
 			summary: "Fetch a draft's BPMN XML", tag: "Drafts", role: RoleModeler, resp: xmlBody("BPMN 2.0 XML")}},
 		{"GET", "/api/v1/drafts/{id}/comparison", s.handleDraftComparison, apiOp{
-			summary: "Compare a draft with a deployed version of its process — the newest, or the one ?key= names: whether the two are the same model (the diagram is not compared), where they first differ, who last saved the draft and who deployed the version. A draft and a deployment are separate records, so this is how the Modeler says whether the draft it opened is what runs (ADR-draft-modeler-shows-its-version)", tag: "Drafts", role: RoleModeler,
+			summary: "Compare a draft with a deployed version of its process — the newest, or the one ?key= names: whether the two are the same model (the diagram is not compared), where they first differ, who last saved the draft and who deployed the version. A draft and a deployment are separate records, so this is how the Modeler says whether the draft it opened is what runs (ADR-0452)", tag: "Drafts", role: RoleModeler,
 			resp: jsonBody("The comparison", schemaObj(map[string]any{
 				"processId": tString(), "ownerId": tString(), "ownerName": tString(),
 				"savedAt": tInteger(), "savedBy": tString(), "savedByName": tString(),

@@ -17,7 +17,7 @@ import (
 // application deploys the draft over it.
 //
 // The comparison is how the Modeler says which of the two a person is looking at,
-// and an agent can ask the same question (ADR-draft-modeler-shows-its-version).
+// and an agent can ask the same question (ADR-0452).
 
 // draftComparisonResp says how a draft relates to one deployed version of its
 // process: by default the newest, or the one ?key= names.
