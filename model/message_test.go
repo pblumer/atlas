@@ -14,6 +14,7 @@ func TestABufferedMessageRoundTrips(t *testing.T) {
 		CorrelationKey: "42",
 		MessageId:      "m-1",
 		ExpiresAt:      1 << 50,
+		BufferedAt:     1 << 49,
 		Variables: []VariableValue{
 			{Name: "amount", Kind: VarNumber, Text: "12.50", Index: -1},
 			{Name: "note", Kind: VarString, Text: "early", ProducerKey: 9, Index: -1},
@@ -27,10 +28,20 @@ func TestABufferedMessageRoundTrips(t *testing.T) {
 	if got := v.(*MessageValue); !reflect.DeepEqual(got, in) {
 		t.Fatalf("round trip = %+v, want %+v", got, in)
 	}
-	for _, n := range []int{0, 3, len(raw) - 1} {
+	// The payload's last variable cut short is refused; a record that ends after the
+	// payload is one written before BufferedAt and reads it as zero.
+	for _, n := range []int{0, 3, len(raw) - 9} {
 		if _, err := DecodeValue(VTMessage, raw[:n]); err == nil {
 			t.Fatalf("a message cut to %d of %d bytes decoded", n, len(raw))
 		}
+	}
+
+	older, err := DecodeValue(VTMessage, raw[:len(raw)-8])
+	if err != nil {
+		t.Fatalf("DecodeValue (without BufferedAt): %v", err)
+	}
+	if got := older.(*MessageValue); got.BufferedAt != 0 || len(got.Variables) != 2 {
+		t.Fatalf("a record without BufferedAt = %+v, want it read as zero with its payload", got)
 	}
 
 	// Without a payload — what a consumed, expired or id-only record carries.

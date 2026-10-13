@@ -98,8 +98,22 @@
 > value type reserved for an incoming message, rather than a new `VTBufferedMessage`; the
 > state lives in three families — the buffer, its expiry index and the id index
 > (`state/message.go`). Tests: `engine/message_buffer_test.go` (including the recovery
-> test this record asked for up front), `state/message_test.go`,
+> test this record asked for up front), `state/messagebuffer_test.go`,
 > `api/messagebuffer_internal_test.go`.
+>
+> **What an operator sees.** `GET /api/v1/messages/buffered` (operator role, read off the
+> loop per ADR-0239) lists what waits a page at a time, narrowed to a message name and,
+> with it, a correlation key, and marks a message whose time is up but which the sweep
+> has not reached. The MCP tool `atlas_buffered_messages` and the Console's Operations →
+> Messages view read the same list. A message records when it was buffered
+> (`MessageValue.BufferedAt`, appended to the record, zero on one written before it). The
+> gauge `atlas_buffered_messages` reads a runtime total maintained in `applyToState` in
+> ADR-0142's shape: up on `IntentMessageBuffered`, down when a delivery or an expiry
+> removes a message that is still there, so an expiry after a delivery does not count it
+> out twice; a store that buffered messages before the total existed is seeded once on
+> open. Tests: `state/messagebuffer_test.go`, `state/messagebuffer_internal_test.go`,
+> the count's replay in `engine/message_buffer_test.go`,
+> `api/messagebuffer_internal_test.go`, `mcp/tools_operations_test.go`.
 >
 > **What is not built**, and keeps the record `Partial`: the breach of a commitment
 > (amendment of 2026-09-17) has nothing to raise until ADR-0373 lets an entry point state

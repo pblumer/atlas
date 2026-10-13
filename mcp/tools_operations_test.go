@@ -95,6 +95,26 @@ func TestAPublishedMessageWaitsViaTool(t *testing.T) {
 	}
 }
 
+// TestBufferedMessagesViaTool lists what waits in the buffer through the tool, narrowed
+// by name, and refuses a key without a name as the server does (ADR-0370).
+func TestBufferedMessagesViaTool(t *testing.T) {
+	ts := newAtlas(t)
+	for i, name := range []string{"go", "stop"} {
+		if _, isErr := toolText(t, result(t, run(t, ts, callTool(i+1, "atlas_publish_message", map[string]any{
+			"name": name, "correlationKey": "k", "timeToLiveMs": 60000}))[0])); isErr {
+			t.Fatalf("publish %s failed", name)
+		}
+	}
+	text, isErr := toolText(t, result(t, run(t, ts, callTool(3, "atlas_buffered_messages", map[string]any{"name": "go", "limit": 10}))[0]))
+	if isErr || !strings.Contains(text, `"name":"go"`) || strings.Contains(text, `"name":"stop"`) || !strings.Contains(text, `"total":2`) {
+		t.Fatalf("buffered messages for go = (%q, isErr=%v), want only go's message and the total of 2", text, isErr)
+	}
+	text, isErr = toolText(t, result(t, run(t, ts, callTool(4, "atlas_buffered_messages", map[string]any{"correlationKey": "k"}))[0]))
+	if !isErr || !strings.Contains(text, "give name as well") {
+		t.Fatalf("a key without a name = (%q, isErr=%v), want the server's refusal", text, isErr)
+	}
+}
+
 // TestPublishMessageRequiresName rejects a publish with no message name as a tool
 // error, before any request reaches the server.
 func TestPublishMessageRequiresName(t *testing.T) {

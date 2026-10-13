@@ -874,8 +874,10 @@ Making processes wait, react, and time out.
   to the first subscription that opens on its name and key — a catch, a receive task, a
   boundary or an event subprocess. A `messageId` makes a retry a no-op while the message
   lives; the timer sweep drops it when its time is up; `--message-ttl-max` bounds the
-  lifetime, and a message that may be kept carries no personal data. Built as the local
-  slice; delivery from a peer (ADR-0372) and a time to live on a throw event are not.
+  lifetime, and a message that may be kept carries no personal data. An operator reads
+  what waits through `GET /api/v1/messages/buffered`, the MCP tool and the Console, and
+  `atlas_buffered_messages` counts it on `/metrics`. Built as the local slice; delivery
+  from a peer (ADR-0372) and a time to live on a throw event are not.
 
 **Still open in this milestone:**
 - 🔲 **Repeatable non-interrupting conditional events**: a non-interrupting conditional

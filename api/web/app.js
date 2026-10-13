@@ -694,6 +694,9 @@ const TOPNAV = {
     { name: "Instances", route: "#/operations", role: "operator" },
     { name: "Incidents", route: "#/operations/incidents", badge: "incidents", role: "operator" },
     { name: "Workers", route: "#/operations/workers", role: "operator" },
+    // What waits in the message buffer for a subscription that has not opened yet
+    // (ADR-0370): the one place a message "from the past" can be seen before it arrives.
+    { name: "Messages", route: "#/operations/messages", role: "operator" },
     { name: "Outbox", route: "#/operations/outbox", role: "operator" },
     { name: "Mock directory", route: "#/operations/ad-mock", role: "admin" },
     { name: "Mock database", route: "#/operations/sql-mock", role: "admin" },
@@ -7254,6 +7257,90 @@ async function viewWorkers() {
   await load();
 }
 
+// viewBufferedMessages lists the messages kept for a subscription that has not opened yet
+// (ADR-0370): published with a time to live while nothing waited for them. It is read a
+// page at a time, narrowed to a message name and key, so the view costs what it shows.
+async function viewBufferedMessages() {
+  view.innerHTML = `
+    <div class="between">
+      <h1>Messages</h1>
+      <span><button class="btn neutral" id="refresh" title="Reload the buffer">Refresh</button></span>
+    </div>
+    <p class="muted">Messages published with a time to live while nothing waited for them
+    (ADR-0370). Each is kept until an instance starts waiting on its name and correlation
+    key &mdash; that instance then receives it at once &mdash; or until its time is up and
+    the timer sweep drops it. A message past its time is never delivered, even before the
+    sweep reaches it. A publish without a time to live is not kept, and never shows here.</p>
+    <div class="card">
+      <div class="between" style="gap:8px;margin-bottom:8px">
+        <span style="display:flex;gap:8px;flex-wrap:wrap">
+          <input id="bm-name" class="filter-input" type="search" placeholder="Message name" aria-label="Message name">
+          <input id="bm-key" class="filter-input" type="search" placeholder="Correlation key (needs a name)" aria-label="Correlation key">
+          <button class="btn neutral" id="bm-apply">Filter</button>
+        </span>
+        <span class="muted" id="bm-total"></span>
+      </div>
+      <div id="bm-list"><p class="empty">Loading&hellip;</p></div>
+      <div id="bm-more" style="margin-top:8px"></div>
+    </div>`;
+  const list = document.getElementById("bm-list");
+  const more = document.getElementById("bm-more");
+  const total = document.getElementById("bm-total");
+  const nameIn = document.getElementById("bm-name");
+  const keyIn = document.getElementById("bm-key");
+  const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—";
+  const payload = (vars) => (vars || []).map((v) => `${esc(v.name)} = ${esc(String(v.value).slice(0, 80))}`).join("<br>") || '<span class="muted">none</span>';
+  const row = (m) => `<tr>
+      <td><b>${esc(m.name)}</b>${m.expired ? ' <span class="pill warn" title="Past its time: nothing receives it now, and the next sweep drops it">expired</span>' : ""}</td>
+      <td>${m.correlationKey ? `<span class="chip">${esc(m.correlationKey)}</span>` : '<span class="muted">none</span>'}</td>
+      <td>${m.messageId ? esc(m.messageId) : '<span class="muted">—</span>'}</td>
+      <td>${esc(fmtNano(m.bufferedAt))}</td>
+      <td>${esc(fmtNano(m.expiresAt))}</td>
+      <td>${payload(m.variables)}</td>
+    </tr>`;
+  let rows = [];
+
+  const load = async (after) => {
+    const q = new URLSearchParams({ limit: "100" });
+    const name = nameIn.value.trim();
+    const key = keyIn.value.trim();
+    if (name) q.set("name", name);
+    if (name && key) q.set("correlationKey", key);
+    if (after) q.set("after", after);
+    let data;
+    try {
+      data = await api("GET", `/api/v1/messages/buffered?${q}`);
+    } catch (e) {
+      list.innerHTML = `<p class="empty">${esc(e.message)}</p>`;
+      more.innerHTML = "";
+      return;
+    }
+    rows = after ? rows.concat(data.messages || []) : (data.messages || []);
+    total.textContent = `${data.total} waiting in all`;
+    if (!rows.length) {
+      list.innerHTML = `<p class="empty">Nothing waits${name ? ` for <b>${esc(name)}</b>` : ""}. A message is
+        kept here only when it was published with <code>timeToLiveMs</code> and nothing was waiting for it.</p>`;
+      more.innerHTML = "";
+      return;
+    }
+    list.innerHTML = `<table class="table"><thead><tr>
+        <th>Message</th><th>Correlation key</th><th>Message id</th><th>Published</th><th>Expires</th><th>Payload</th>
+      </tr></thead><tbody>${rows.map(row).join("")}</tbody></table>`;
+    more.innerHTML = data.nextCursor
+      ? `<button class="btn ghost" id="bm-next">Load more</button>`
+      : "";
+    const next = document.getElementById("bm-next");
+    if (next) next.addEventListener("click", () => load(data.nextCursor));
+  };
+
+  document.getElementById("refresh").addEventListener("click", () => load());
+  document.getElementById("bm-apply").addEventListener("click", () => load());
+  for (const input of [nameIn, keyIn]) {
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") load(); });
+  }
+  await load();
+}
+
 async function viewMailOutbox() {
   view.innerHTML = `
     <div class="between">
@@ -10749,6 +10836,7 @@ async function route() {
     if (path === "#/operations/incidents") return await viewIncidents();
     if (path === "#/operations/workers") return await viewWorkers();
     if (path === "#/operations/outbox") return await viewMailOutbox();
+    if (path === "#/operations/messages") return await viewBufferedMessages();
     if (path === "#/operations/ad-mock") return await viewADMockDirectory();
     if (path === "#/operations/sql-mock") return await viewSQLMockJournal();
     if (path === "#/operations/decisions") return await viewDecisions();
