@@ -411,21 +411,22 @@ type Server struct {
 	// model library above because declared intent and derived fact must not share
 	// a surface.
 	panoramaMesh     *panorama.Mesh
-	systemPIDs       map[string]bool     // process ids of the bootstrap-deployed platform processes, protected from deletion (ADR-0122)
-	deploySysProcs   bool                // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
-	userProvisioning bool                // opt-in: enable the user-provisioning worker for system processes (ADR-0123)
-	dmnrefs          *dmnRefStore        // durable sidecar for DMN reference artifacts (ADR-0034)
-	favourites       *favouriteStore     // one list of marked products per account (ADR-0348)
-	dmnDrafts        *dmnDraftStore      // durable sidecar for decision work in progress (ADR-0321)
-	connectors       *connectorStore     // durable sidecar for managed workers (ADR-0041)
-	callOverrides    *callOverrideStore  // durable sidecar for per-server call-activity target overrides (ADR-0105)
-	repository       []repositoryPackage // curated, bundled repository catalog, immutable after New (ADR-0081)
-	repositoryStore  *repositoryStore    // durable sidecar for installed repository templates (ADR-0081)
-	settings         *settingsStore      // durable sidecar for org-wide UI settings, e.g. the brand theme (ADR-0113)
-	vault            *vault.Vault        // engine-internal encrypted secret store, nil when disabled (ADR-0069/0070)
-	vaultEnabled     bool                // whether to build the vault; on by default, off via WithoutVault (ADR-0070)
-	users            *userStore          // durable sidecar for user accounts (ADR-0044)
-	groups           *groupStore         // durable sidecar for user groups (ADR-0180)
+	systemPIDs       map[string]bool        // process ids of the bootstrap-deployed platform processes, protected from deletion (ADR-0122)
+	deploySysProcs   bool                   // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
+	userProvisioning bool                   // opt-in: enable the user-provisioning worker for system processes (ADR-0123)
+	dmnrefs          *dmnRefStore           // durable sidecar for DMN reference artifacts (ADR-0034)
+	favourites       *favouriteStore        // one list of marked products per account (ADR-0348)
+	dmnDrafts        *dmnDraftStore         // durable sidecar for decision work in progress (ADR-0321)
+	connectors       *connectorStore        // durable sidecar for managed workers (ADR-0041)
+	callOverrides    *callOverrideStore     // durable sidecar for per-server call-activity target overrides (ADR-0105)
+	appValues        *applicationValueStore // durable sidecar for each application's values on this installation (ADR-draft-application-values-per-installation)
+	repository       []repositoryPackage    // curated, bundled repository catalog, immutable after New (ADR-0081)
+	repositoryStore  *repositoryStore       // durable sidecar for installed repository templates (ADR-0081)
+	settings         *settingsStore         // durable sidecar for org-wide UI settings, e.g. the brand theme (ADR-0113)
+	vault            *vault.Vault           // engine-internal encrypted secret store, nil when disabled (ADR-0069/0070)
+	vaultEnabled     bool                   // whether to build the vault; on by default, off via WithoutVault (ADR-0070)
+	users            *userStore             // durable sidecar for user accounts (ADR-0044)
+	groups           *groupStore            // durable sidecar for user groups (ADR-0180)
 
 	// sessions holds live login sessions in memory. Unlike the sidecar stores it
 	// is touched from concurrent handler goroutines, so it guards itself with a
@@ -1475,6 +1476,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	appValues, err := newApplicationValueStore(filepath.Join(dataDir, "application-values"))
+	if err != nil {
+		return nil, err
+	}
 	// Carry a pre-rename install across before opening the store, so templates
 	// installed when the area was still called "Marketplace" are still there.
 	if err := migrateRepositoryDir(dataDir); err != nil {
@@ -1581,6 +1586,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		dmnDrafts:         dmnDrafts,
 		connectors:        connectors,
 		callOverrides:     callOverrides,
+		appValues:         appValues,
 		repository:        repositoryCatalog,
 		repositoryStore:   repositoryStore,
 		inboundSubs:       inboundSubs,
@@ -2136,6 +2142,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// loop serves traffic so touching the processor directly is single-writer-safe
 	// (ADR-0105).
 	if err := s.loadCallOverrides(); err != nil {
+		return nil, err
+	}
+	// And each application's values on this installation, which a constant bound to its
+	// application is seeded from (ADR-draft-application-values-per-installation). Same
+	// place and same reason as the overrides above.
+	if err := s.loadApplicationValues(); err != nil {
 		return nil, err
 	}
 	// Bootstrap-deploy Atlas's own platform processes into the protected system
@@ -3052,6 +3064,9 @@ func (s *Server) restoreDeployment(rec persistedDeployment) error {
 	if rec.Inactive {
 		s.proc.SetProcessActive(rec.Key, false)
 	}
+	// Which application this definition is filed under, for its constants bound to one
+	// (ADR-draft-application-values-per-installation).
+	s.proc.SetDefinitionApplication(rec.Key, rec.ProjectID)
 	s.deployments[rec.Key] = &deployment{
 		Key:        rec.Key,
 		ProcessID:  rec.ProcessID,

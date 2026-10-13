@@ -123,6 +123,9 @@ func (s *Server) handleCreateInstanceFromCSV(w http.ResponseWriter, r *http.Requ
 		if ambiguous = untriggeredStartRefusal(d.cp); ambiguous != "" {
 			return
 		}
+		if ambiguous = s.applicationValueRefusalOnLoop(d); ambiguous != "" {
+			return
+		}
 		s.proc.CreateInstance(key, startVars...)
 		driveNeeded = true
 	})

@@ -37,6 +37,18 @@ func (c *ProcessingContext) latestDefKey(processId string) (uint64, bool) {
 	return k, ok
 }
 
+// applicationValue is the value the application a definition is filed under holds on this
+// server for name (ADR-draft-application-values-per-installation). A pure read of
+// run-loop-owned operator config — no allocation (I1).
+func (c *ProcessingContext) applicationValue(defKey uint64, name string) (ApplicationValue, bool) {
+	app, ok := c.p.defApplication[defKey]
+	if !ok {
+		return ApplicationValue{}, false
+	}
+	v, ok := c.p.appValues[app][name]
+	return v, ok
+}
+
 // resolveCallTarget resolves the definition a call activity starts as a child,
 // consulting the per-server override first and falling back to the default `latest`
 // resolution (ADR-0105). Precedence for an override: disabled parks; a pinned key
@@ -423,6 +435,13 @@ func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.Var
 	// here freezes the answer into the event, and replay indexes exactly what the live
 	// write indexed (I6).
 	v.Indexed = c.indexesVariable(cp, atRoot, v.Name)
+	// A write of a constant's name into an instance that already holds the constant is
+	// dropped, whatever wrote it (ADR-draft-process-constants). The writer is told it
+	// happened: nothing about it is wrong enough to park, and the constant is what the
+	// instance was started with. A delete is exempt for the reason it is exempt below.
+	if intent != model.IntentVariableDeleted && c.keepsConstant(cp, atRoot, &v) {
+		return true
+	}
 	// A declared personal value that arrived readable is refused, whatever wrote it, and
 	// so is a write that moves the instance's data subject out from under values already
 	// sealed (ADR-0314). A delete is exempt for the reason it is exempt from the budget
@@ -447,6 +466,9 @@ func (c *ProcessingContext) appendCollection(intent model.Intent, v model.Variab
 	v.ProducerKey = c.producer
 	cp, atRoot := c.processOfScope(v.ScopeKey)
 	v.Indexed = c.indexesVariable(cp, atRoot, v.Name)
+	if intent != model.IntentVariableDeleted && c.keepsConstant(cp, atRoot, &v) {
+		return true
+	}
 	if intent != model.IntentVariableDeleted && refusePersonalWrite(c, cp, &v) {
 		return false
 	}
@@ -517,6 +539,35 @@ func (c *ProcessingContext) processOfScope(scopeKey uint64) (cp *compiler.Compil
 // conditional-event question below it.
 func (c *ProcessingContext) indexesVariable(cp *compiler.CompiledProcess, atRoot bool, name string) bool {
 	return atRoot && cp != nil && cp.HasSearchableVariables() && cp.IsSearchableVariable(name)
+}
+
+// keepsConstant reports whether a write must be dropped because it names one of the
+// process's constants in an instance root that already holds it
+// (ADR-draft-process-constants).
+//
+// Dropping rather than refusing is the decision, and it is decided by the writes that
+// actually arrive here: a call activity handing its child's variables back to a caller
+// that has a constant of the same name, a worker echoing its input, a message payload
+// carrying a field the process fixes. In each the constant is what the instance must keep,
+// and parking the token would stop a process for a value nobody meant to change. The
+// model's own writes never reach this: the deploy refused them.
+//
+// Two writes go through. The constant's own seeding, which is the first write of the
+// name and so finds nothing there yet — the reason activateInstance writes constants
+// before start variables. And an operator's correction (ADR-0095), the escape hatch for
+// a constant that is wrong in an instance already running, which the variable audit
+// records.
+//
+// A process that declares no constants pays the length check in HasConstants and nothing
+// else, the same shape as indexesVariable.
+func (c *ProcessingContext) keepsConstant(cp *compiler.CompiledProcess, atRoot bool, v *model.VariableValue) bool {
+	if !atRoot || cp == nil || !cp.HasConstants() || !cp.IsConstant(v.Name) {
+		return false
+	}
+	if c.cmd.ValueType == model.VTVariable && c.cmd.Intent == model.IntentVariableModify {
+		return false
+	}
+	return c.GetVariable(v.ScopeKey, v.Name) != nil
 }
 
 // clearPersonalWrite reports whether this write must be refused because it carries a

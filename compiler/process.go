@@ -1491,6 +1491,9 @@ type CompiledProcess struct {
 	ioOutputs          []IOMapping             // shared: zeebe:ioMapping outputs grouped by activity node
 	startEvents        []int32
 	startFormId        int32               // interned start-form id (ADR-0028), -1 if none
+	startVars          []StartVariable     // declared start variables (atlas:startForm), nil if none
+	constants          []Constant          // process constants (atlas:constants), nil if none
+	constantSet        map[string]struct{} // the same names as a set, for the per-write question
 	conditionalStarts  []int32             // process-level start nodes that carried a conditional event definition; read by stage 5 only
 	eventGatewayKinds  []eventGatewayKind  // event-based gateways of a kind atlas does not run; read by stage 5 only
 	invalidWizards     []int32             // subprocess nodes whose atlas:wizard named no kind; read by stage 5 only (ADR-0449)
@@ -2564,6 +2567,28 @@ func (p *CompiledProcess) IOOutputs(id int32) []IOMapping {
 // instance, or "" if the process has no start form (ADR-0028). It is design-time
 // metadata; the engine never reads it.
 func (p *CompiledProcess) StartFormId() string { return p.Intern(p.startFormId) }
+
+// StartVariable is one start variable a process declares (<atlas:startVariable> inside
+// <atlas:startForm>): a name, one of the types the start surfaces render (string,
+// number, boolean, json), the default they prefill, and whether they refuse to start
+// without it.
+type StartVariable struct {
+	Name     string
+	Type     string
+	Default  string
+	Required bool
+}
+
+// startVariableTypes are the types a declared start variable can take, the same four the
+// Modeler's typed start form renders (START_VAR_TYPES in api/web/editor.js).
+var startVariableTypes = []string{"string", "number", "boolean", "json"}
+
+// StartVariables returns the process's declared start variables in the order they were
+// authored, nil when it declares none. The start surfaces render them beside the start
+// form, so a value the form does not ask for is still asked. Like the start form it is
+// design-time metadata: the engine never reads it, and no default is applied to an
+// instance created without the value. The slice is shared and must not be modified.
+func (p *CompiledProcess) StartVariables() []StartVariable { return p.startVars }
 
 // IsExecutable reports the process's bpmn:isExecutable flag. A non-executable
 // process is descriptive-only: the API refuses to start it and omits it from the

@@ -375,6 +375,11 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 		if ambiguous = untriggeredStartRefusal(d.cp); ambiguous != "" {
 			return
 		}
+		// A value this installation does not hold yet: the visitor reads only that the
+		// process cannot start, the operator reads why on the application's Values tab.
+		if ambiguous = s.applicationValueRefusalOnLoop(d); ambiguous != "" {
+			return
+		}
 		// A redeploy may have added a public wizard with no timeout since the link was
 		// minted; the link refuses it as publishing would have (ADR-0449).
 		if d.cp != nil && d.cp.UntimedPublicWizard() != "" {

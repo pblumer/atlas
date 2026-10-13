@@ -8,16 +8,40 @@
                   xmlns:di="http://www.omg.org/spec/DD/20100524/DI">
   <bpmn:process id="entra-create-account" name="Create EntraID Account" isExecutable="true">
 
+    <!-- Which tenant, which app registration and which certificate differ between DEV, INT and
+         PROD, so the model states none of them: each is a constant bound to the application
+         (ADR-draft-application-values-per-installation), and every installation sets its own on
+         the application's Values tab. A start is refused until the tenant and the client id are
+         set there; the certificate subject has a fallback. None of them is a secret. -->
+    <bpmn:extensionElements>
+      <atlas:constants>
+        <atlas:constant name="EntraTenantId" type="string" source="application"/>
+        <atlas:constant name="EntraClientId" type="string" source="application"/>
+        <atlas:constant name="EntraCertificateSubject" type="string" source="application" value="CN=atlas-entra-provisioning"/>
+      </atlas:constants>
+    </bpmn:extensionElements>
+
     <bpmn:startEvent id="start" name="Onboarding requested"/>
 
     <bpmn:scriptTask id="createAccount" name="Create EntraID account">
       <bpmn:extensionElements>
         <atlas:jobScript language="powershell" resultVariable="Account">$ErrorActionPreference = 'Stop'
+# A variable the instance does not carry is an error here, not a silent $null.
+Set-StrictMode -Version Latest
 
-# --- Auth: credentials come from the worker environment, never from the model (ADR-0041) ---
-$secret = ConvertTo-SecureString $env:ENTRA_CLIENT_SECRET -AsPlainText -Force
-$cred   = [System.Management.Automation.PSCredential]::new($env:ENTRA_CLIENT_ID, $secret)
-Connect-MgGraph -TenantId $env:ENTRA_TENANT_ID -ClientSecretCredential $cred -NoWelcome
+# --- Auth: app-only, with a certificate in the store of the account the worker runs as ---
+# No secret passes through atlas: a script never receives the worker's environment or the
+# vault (ADR-0047), and it needs neither. The private key stays in the worker host's
+# certificate store; the script picks the newest valid certificate by its subject, so a
+# renewed certificate is used without changing anything in atlas. The tenant, the client
+# id and the subject are the application's values on this installation (constants above).
+$cert = Get-ChildItem Cert:\CurrentUser\My |
+    Where-Object { $_.Subject -eq $EntraCertificateSubject -and $_.NotAfter -gt (Get-Date) } |
+    Sort-Object NotAfter -Descending | Select-Object -First 1
+if (-not $cert) {
+    throw "no valid certificate with subject '$EntraCertificateSubject' in Cert:\CurrentUser\My of the worker account"
+}
+Connect-MgGraph -TenantId $EntraTenantId -ClientId $EntraClientId -CertificateThumbprint $cert.Thumbprint -NoWelcome
 
 # --- Idempotent create: the task is at-least-once, so a retry must not double-create ---
 $filter   = "userPrincipalName eq '$userPrincipalName'"

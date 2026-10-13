@@ -1547,7 +1547,7 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 #sv-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
 .sv-row { display: flex; align-items: center; gap: 6px; }
 .sv-row .sv-name, .sv-row .sv-default { flex: 2 1 0; min-width: 0; padding: 6px 8px; font-size: 12px; }
-.sv-row .sv-type { flex: 0 0 auto; width: auto; padding: 6px 6px; font-size: 12px; }
+.sv-row .sv-type, .sv-row .sv-source { flex: 0 0 auto; width: auto; padding: 6px 6px; font-size: 12px; }
 .sv-req { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--muted); white-space: nowrap; flex: 0 0 auto; margin: 0; }
 .sv-req input { width: auto; }
 .sv-del { flex: 0 0 auto; width: 26px; height: 26px; font-size: 12px; }
@@ -3582,6 +3582,14 @@ tr[hidden] { display: none; }
 /* Its attribution mark lands mid-dialog, between the last field and the buttons, where
    it reads as part of the form. The canvas already carries one for the page. */
 .startform-host .fjs-powered-by { display: none; }
+
+/* The start variables declared on the process that its start form does not ask for,
+   beneath the form in the Deploy & run / Start instance modal and in the Tasks app.
+   A rule above them, so they read as the second half of the same start rather than as
+   more of the form somebody laid out. */
+.sf-extra { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.sf-extra-note { font-size: 12px; margin: 0 0 4px; }
+.tasks-form-extra { max-width: 640px; }
 
 /* "Generate this form" (ADR-0260). A brief, the process it belongs
    to, and one button. Wider than a confirm dialog because the brief is prose: a

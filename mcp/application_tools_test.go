@@ -154,3 +154,45 @@ func TestDeleteApplicationToolIsIdempotent(t *testing.T) {
 		t.Fatalf("list applications = %s, deleted application still visible", listed)
 	}
 }
+
+// atlas_application_values reports what an application's processes require of this
+// installation, so an agent can explain a start refused for a missing value
+// (ADR-draft-application-values-per-installation).
+func TestApplicationValuesTool(t *testing.T) {
+	atlas := newAtlas(t)
+	created := callOne(t, atlas, "atlas_create_application", map[string]any{"name": "MCP Values"})
+	var app struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(created), &app); err != nil || app.ID == "" {
+		t.Fatalf("create application = %q (err=%v), want an id", created, err)
+	}
+	const bound = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0">
+  <process id="mcp-bound" isExecutable="true">
+    <extensionElements><atlas:constants>
+      <atlas:constant name="TenantId" type="string" source="application"/>
+    </atlas:constants></extensionElements>
+    <startEvent id="s"/>
+    <endEvent id="e"/>
+    <sequenceFlow id="f" sourceRef="s" targetRef="e"/>
+  </process>
+</definitions>`
+	callOne(t, atlas, "atlas_save_draft", map[string]any{"xml": bound, "projectId": app.ID})
+	callOne(t, atlas, "atlas_publish_application", map[string]any{"id": app.ID})
+
+	got := callOne(t, atlas, "atlas_application_values", map[string]any{"id": app.ID})
+	var view struct {
+		Required []struct {
+			Name      string   `json:"name"`
+			Processes []string `json:"processes"`
+			State     string   `json:"state"`
+		} `json:"required"`
+	}
+	if err := json.Unmarshal([]byte(got), &view); err != nil {
+		t.Fatalf("decode values = %q: %v", got, err)
+	}
+	if len(view.Required) != 1 || view.Required[0].Name != "TenantId" || view.Required[0].State != "missing" ||
+		len(view.Required[0].Processes) != 1 || view.Required[0].Processes[0] != "mcp-bound" {
+		t.Fatalf("values = %s, want TenantId missing, required by mcp-bound", got)
+	}
+}

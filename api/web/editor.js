@@ -20,6 +20,12 @@ import { migrateInstanceFlow, migrateProcessFlow, runningByDefinition } from "./
 // form's fields as variables, the incident's repair form reads it to know which keys a
 // submit may write (ADR-0169). One description of it, in one place.
 import { formFieldKeys, formFieldTypes, loadFormViewer, withLoadDeadline } from "./formviewer.js";
+// The typed start-variable fields, shared with the Tasks app: a process with a start
+// form still asks for the declared start variables the form does not bind.
+import {
+  START_VAR_TYPES, typedDeployFieldHTML, readTypedDeployBody, wireStartJSONEditors,
+  uncoveredStartVariables, extraStartFieldsHTML,
+} from "./startvars.js";
 import { attachCollab } from "./collab.js";
 import { collectDocumentation, exportDocumentation } from "./process-doc.js";
 import { frozenMark } from "./frozen-decisions.js";
@@ -2543,6 +2549,11 @@ function collectDiagramVariables(modeler) {
       // string"); it is a badge of its own now, like every other type the panel knows.
       for (const v of readStartVariables(rootBo)) {
         push(v.name, "Start", "", "start variable", "Process", v.type || "");
+      }
+      // A constant is a variable every instance carries from its start
+      // (ADR-draft-process-constants), so expressions and completion offer it like one.
+      for (const c of readConstants(rootBo)) {
+        push(c.name, "Process", "", c.source === "application" ? "application constant" : "constant", "Process", c.type || "");
       }
     }
   } catch { /* best-effort */ }
@@ -6824,10 +6835,6 @@ function tokenBearing(el) {
   return !NOT_A_TOKEN_HOLDER.test(bo.$type || "");
 }
 
-// The scalar types a declared start variable can take, matching what the server
-// accepts (parseStartVariables) and what the typed Deploy form coerces to.
-const START_VAR_TYPES = ["string", "number", "boolean", "json"];
-
 // readStartVariables returns the start variables a process declares via its
 // atlas:StartForm extension element: [{name, type, default, required}]. Empty
 // when none are declared.
@@ -6838,6 +6845,23 @@ function readStartVariables(bo) {
     type: START_VAR_TYPES.includes(v.type) ? v.type : "string",
     default: v.default || "",
     required: !!v.required,
+  }));
+}
+
+// readConstants returns the constants a process declares via its atlas:Constants
+// extension element: [{name, type, value}] (ADR-draft-process-constants). Empty when
+// none are declared.
+//
+// source is "application" for a constant bound to its application's value on the
+// installation where an instance starts, whose value is then only a fallback
+// (ADR-draft-application-values-per-installation); "" for a model constant.
+function readConstants(bo) {
+  const cs = findExt(bo, "atlas:Constants");
+  return ((cs && cs.constants) || []).map((c) => ({
+    name: c.name || "",
+    type: START_VAR_TYPES.includes(c.type) ? c.type : "string",
+    value: c.value || "",
+    source: c.source === "application" ? "application" : "",
   }));
 }
 
@@ -6956,22 +6980,83 @@ function writeStartVariables(modeler, list, targetEl, targetBo) {
   else modeling.updateModdleProperties(targetEl, bo, { extensionElements: ext });
 }
 
+// writeConstants persists the process's constants the way writeStartVariables persists
+// its start variables, into atlas:Constants (ADR-draft-process-constants). The row
+// editor holds a constant's value where it holds a start variable's default; the value is
+// written even when empty, because an empty string is a value a string constant may have.
+function writeConstants(modeler, list, targetEl, targetBo) {
+  const moddle = modeler.get("moddle");
+  const modeling = modeler.get("modeling");
+  const onRoot = !targetEl;
+  const rootEl = modeler.get("canvas").getRootElement();
+  if (onRoot) { targetEl = rootEl; targetBo = rootEl.businessObject; }
+  const bo = targetBo;
+  let ext = bo.extensionElements;
+  if (!ext) { ext = moddle.create("bpmn:ExtensionElements", { values: [] }); ext.$parent = bo; }
+  let cs = (ext.values || []).find((v) => v.$type === "atlas:Constants");
+  const clean = list.filter((v) => (v.name || "").trim() !== "");
+  if (clean.length === 0) {
+    if (cs) ext.values = (ext.values || []).filter((v) => v !== cs);
+  } else {
+    if (!cs) { cs = moddle.create("atlas:Constants"); cs.$parent = ext; ext.values = [...(ext.values || []), cs]; }
+    cs.constants = clean.map((v) => {
+      const props = {
+        name: v.name.trim(),
+        type: START_VAR_TYPES.includes(v.type) ? v.type : "string",
+        value: v.default || "",
+      };
+      // Bound to the application: the value is only its fallback, and an empty one is
+      // no fallback at all, so it is not written.
+      if (v.source === "application") {
+        props.source = "application";
+        if (!v.default) delete props.value;
+      }
+      const c = moddle.create("atlas:Constant", props);
+      c.$parent = cs;
+      return c;
+    });
+  }
+  if (onRoot) modeling.updateProperties(targetEl, { extensionElements: ext });
+  else modeling.updateModdleProperties(targetEl, bo, { extensionElements: ext });
+}
+
+// The two declarations the process panel edits as rows: the start variables a start
+// asks for, and the constants every instance starts with and nobody is asked for
+// (ADR-draft-process-constants). One row editor serves both: a constant has a value
+// where a start variable has a default, and no "required", because nobody supplies it.
+const START_VAR_DECL = { list: "#sv-list", add: "#sv-add", constant: false };
+const CONSTANT_DECL = { list: "#cv-list", add: "#cv-add", constant: true };
+
 // startVarRowHTML renders one editable declaration row. Values are escaped for
 // the attributes; the type <select> marks the current option. For json-typed
 // variables, the default field is a textarea (upgraded to a JSON editor after
 // the row is inserted into the DOM by wireStartVars).
-function startVarRowHTML(v) {
+function startVarRowHTML(v, constant = false) {
   const opts = START_VAR_TYPES
     .map((t) => `<option value="${t}"${t === v.type ? " selected" : ""}>${t}</option>`).join("");
+  const bound = constant && v.source === "application";
+  const what = bound ? "Fallback value" : constant ? "Value" : "Default value";
   const defaultField = v.type === "json"
-    ? `<textarea class="sv-default sv-json-default" rows="2" placeholder='{"key": "value"}' aria-label="Default value (JSON)">${esc(v.default)}</textarea>`
-    : `<input type="text" class="sv-default" value="${esc(v.default)}" placeholder="default" aria-label="Default value"/>`;
+    ? `<textarea class="sv-default sv-json-default" rows="2" placeholder='${bound ? "fallback (optional)" : '{"key": "value"}'}' aria-label="${what} (JSON)">${esc(v.default)}</textarea>`
+    : `<input type="text" class="sv-default" value="${esc(v.default)}" placeholder="${bound ? "fallback (optional)" : constant ? "value" : "default"}" aria-label="${what}"/>`;
+  // A constant takes its value from the model, or from its application on the
+  // installation where the instance starts (ADR-draft-application-values-per-installation).
+  const source = constant
+    ? `<select class="sv-source" aria-label="Source" title="Where the value comes from: the model, or the application's value on each installation">
+        <option value=""${bound ? "" : " selected"}>value</option>
+        <option value="application"${bound ? " selected" : ""}>application</option>
+      </select>`
+    : "";
+  // A constant is never asked for, so "required" has nothing to mean on it.
+  const required = constant ? ""
+    : `<label class="sv-req" title="Required"><input type="checkbox" class="sv-required"${v.required ? " checked" : ""}/> req</label>`;
   return `<div class="sv-row${v.type === "json" ? " sv-row-json" : ""}">
-    <input type="text" class="sv-name" value="${esc(v.name)}" placeholder="customer" aria-label="Variable name"/>
+    <input type="text" class="sv-name" value="${esc(v.name)}" placeholder="${constant ? "TenantId" : "customer"}" aria-label="${constant ? "Constant name" : "Variable name"}"/>
     <select class="sv-type" aria-label="Type">${opts}</select>
+    ${source}
     ${defaultField}
-    <label class="sv-req" title="Required"><input type="checkbox" class="sv-required"${v.required ? " checked" : ""}/> req</label>
-    <button type="button" class="sv-del icon-btn" title="Remove" aria-label="Remove variable">✕</button>
+    ${required}
+    <button type="button" class="sv-del icon-btn" title="Remove" aria-label="${constant ? "Remove constant" : "Remove variable"}">✕</button>
   </div>`;
 }
 
@@ -6990,10 +7075,16 @@ function startVarRowHTML(v) {
 // shown for the *selected* participant, so its save would rebuild the panel and
 // tear down an in-progress JSON editor — the pool passes savePreservingPanel to
 // keep the panel intact, mirroring how FEEL fields self-save.
-function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn()) {
-  const listEl = body.querySelector("#sv-list");
-  const addBtn = body.querySelector("#sv-add");
+//
+// decl says which declaration the rows edit: START_VAR_DECL (the default) or
+// CONSTANT_DECL, which reads and writes the process's constants instead.
+function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn(), decl = START_VAR_DECL) {
+  const listEl = body.querySelector(decl.list);
+  const addBtn = body.querySelector(decl.add);
   if (!listEl || !addBtn) return;
+  const required = (row) => !decl.constant && row.querySelector(".sv-required").checked;
+  const source = (row) => (decl.constant && row.querySelector(".sv-source").value) || "";
+  const write = decl.constant ? writeConstants : writeStartVariables;
 
   const editors = new Map(); // row DOM node → attachJSONEditor handle
 
@@ -7012,25 +7103,29 @@ function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn()) {
     name: row.querySelector(".sv-name").value,
     type: row.querySelector(".sv-type").value,
     default: row.querySelector(".sv-default").value,
-    required: row.querySelector(".sv-required").checked,
+    required: required(row),
+    source: source(row),
   }));
-  const persist = () => wrap(() => { try { writeStartVariables(modeler, collect(), targetEl, targetBo); } catch { /* stale */ } });
+  const persist = () => wrap(() => { try { write(modeler, collect(), targetEl, targetBo); } catch { /* stale */ } });
 
   listEl.addEventListener("change", (e) => {
-    // When the type dropdown changes to or from "json", rebuild the row so the
-    // default field switches between <input> and the JSON editor.
-    const sel = e.target.closest(".sv-type");
+    // When the type dropdown changes to or from "json", or a constant's source
+    // changes, rebuild the row so the value field switches between <input> and the
+    // JSON editor, and says whether it is a value or a fallback.
+    const sel = e.target.closest(".sv-type, .sv-source");
     if (sel) {
       const row = sel.closest(".sv-row");
+      const type = row.querySelector(".sv-type").value;
       const data = {
         name: row.querySelector(".sv-name").value,
-        type: sel.value,
-        default: sel.value === "json" ? "" : row.querySelector(".sv-default").value,
-        required: row.querySelector(".sv-required").checked,
+        type,
+        default: sel.classList.contains("sv-type") && type === "json" ? "" : row.querySelector(".sv-default").value,
+        required: required(row),
+        source: source(row),
       };
       // Destroy any existing JSON editor for this row.
       if (editors.has(row)) { editors.get(row).destroy(); editors.delete(row); }
-      row.outerHTML = startVarRowHTML(data);
+      row.outerHTML = startVarRowHTML(data, decl.constant);
       attachEditors();
     }
     persist();
@@ -7045,7 +7140,7 @@ function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn()) {
     }
   });
   addBtn.addEventListener("click", () => {
-    listEl.insertAdjacentHTML("beforeend", startVarRowHTML({ name: "", type: "string", default: "", required: false }));
+    listEl.insertAdjacentHTML("beforeend", startVarRowHTML({ name: "", type: "string", default: "", required: false }, decl.constant));
     listEl.querySelector(".sv-row:last-child .sv-name").focus();
   });
 
@@ -7449,7 +7544,11 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         <h3>Start variables</h3>
         <div id="sv-list">${declared.map(startVarRowHTML).join("")}</div>
         <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="Add a variable">+ Add variable</button>
-        <p class="muted" style="font-size:12px">Declared on this pool's process, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks. The engine ignores the declaration; it's authoring metadata.</p>`;
+        <p class="muted" style="font-size:12px">Declared on this pool's process, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks. With a start form, the ones the form does not ask for are asked beneath it. The engine ignores the declaration; it's authoring metadata, so an instance started through the API gets no default. A value nobody enters is a constant, below.</p>
+        <h3>Constants</h3>
+        <div id="cv-list">${readConstants(proc).map((c) => startVarRowHTML({ name: c.name, type: c.type, default: c.value, source: c.source }, true)).join("")}</div>
+        <button type="button" class="btn neutral" id="cv-add" style="margin-top:6px" title="Add a constant">+ Add constant</button>
+        <p class="muted" style="font-size:12px">Values every instance starts with and nobody is asked for: set on every start path, before the start variables, and read by expressions, scripts and Worker Types like any variable. Nothing in the run can replace one; only an operator's correction can. Set its source to <b>application</b> and it takes the application's value on each installation — DEV, INT and PROD hold their own, on the application's Values tab — with the value here as an optional fallback. A constant is in the model and in every instance, so it is no place for a secret.</p>`;
     }
     body.innerHTML = `${poolFields}
       <p class="muted" style="font-size:12px">The pool is a <b>participant</b> that executes the process below. The elements live in that process — the pool only labels who runs it.</p>
@@ -7480,7 +7579,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     }
     wireDocumentation(body, modeler, element, bo);
     wireDocumentation(body, modeler, element, proc, "f-procdoc");
-    if (activeTab(root) === "implement") wireStartVars(body, modeler, element, proc, savePreservingPanel);
+    if (activeTab(root) === "implement") {
+      wireStartVars(body, modeler, element, proc, savePreservingPanel);
+      wireStartVars(body, modeler, element, proc, savePreservingPanel, CONSTANT_DECL);
+    }
   }
 
   // wirePoolId makes a pool's ID editable, the same way the element ID and Process ID
@@ -7515,7 +7617,11 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             <h3>Start variables</h3>
             <div id="sv-list">${declared.map(startVarRowHTML).join("")}</div>
             <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="Add a variable">+ Add variable</button>
-            <p class="muted" style="font-size:12px">Declared here, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks — instead of raw JSON. The engine ignores the declaration; it's authoring metadata.</p>`;
+            <p class="muted" style="font-size:12px">Declared here, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks — instead of raw JSON. With a start form on the start event, the ones the form does not ask for are asked beneath it, on Deploy &amp; run, Start instance and the Tasks app's Start. The engine ignores the declaration; it's authoring metadata, so an instance started through the API or a public link gets no default. A value nobody enters is a constant, below.</p>
+            <h3>Constants</h3>
+            <div id="cv-list">${readConstants(rootBo).map((c) => startVarRowHTML({ name: c.name, type: c.type, default: c.value, source: c.source }, true)).join("")}</div>
+            <button type="button" class="btn neutral" id="cv-add" style="margin-top:6px" title="Add a constant">+ Add constant</button>
+            <p class="muted" style="font-size:12px">Values every instance starts with and nobody is asked for: set on every start path, before the start variables, and read by expressions, scripts and Worker Types like any variable. Nothing in the run can replace one; only an operator's correction can. Set its source to <b>application</b> and it takes the application's value on each installation — DEV, INT and PROD hold their own, on the application's Values tab — with the value here as an optional fallback. A constant is in the model and in every instance, so it is no place for a secret.</p>`;
         }
         body.innerHTML = `
           <h3>Process</h3>
@@ -7619,6 +7725,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         });
         wireDocumentation(body, modeler, rootEl, rootBo);
         wireStartVars(body, modeler);
+        wireStartVars(body, modeler, undefined, undefined, undefined, CONSTANT_DECL);
         wireMessagesManager(body, modeler, () => show(null));
         wireSignalsManager(body, modeler, () => show(null));
         wireErrorsManager(body, modeler, () => show(null));
@@ -10124,35 +10231,6 @@ export function parseStartVariables(raw) {
   return { variables: obj };
 }
 
-// typedDeployFieldHTML renders one typed input for a declared start variable,
-// prefilled with its default. A boolean is a true/false/— select; a number an
-// input[type=number]; a string a text input; a json a textarea upgraded to a
-// JSON editor after insertion. Required fields carry data-required so
-// readTypedDeployBody can enforce them.
-function typedDeployFieldHTML(v) {
-  const req = v.required ? ' <span class="req-star" title="required">*</span>' : "";
-  const dr = v.required ? ' data-required="1"' : "";
-  const cap = `<span>${esc(v.name)} <span class="muted">(${v.type})</span>${req}</span>`;
-  let input;
-  if (v.type === "boolean") {
-    const d = v.default;
-    input = `<select class="dv-field" data-name="${esc(v.name)}" data-type="boolean"${dr}>
-      <option value=""${d === "" ? " selected" : ""}>—</option>
-      <option value="true"${d === "true" ? " selected" : ""}>true</option>
-      <option value="false"${d === "false" ? " selected" : ""}>false</option>
-    </select>`;
-  } else if (v.type === "number") {
-    input = `<input type="number" step="any" class="dv-field" data-name="${esc(v.name)}" data-type="number"${dr} value="${esc(v.default)}" placeholder="0"/>`;
-  } else if (v.type === "json") {
-    // A textarea, upgraded to a JSON editor by wireDeployJSONEditors() after
-    // the panel is inserted into the DOM.
-    input = `<textarea class="dv-field dv-json" data-name="${esc(v.name)}" data-type="json"${dr} rows="3" spellcheck="false" placeholder='{ "key": "value" }'>${esc(v.default)}</textarea>`;
-  } else {
-    input = `<input type="text" class="dv-field" data-name="${esc(v.name)}" data-type="string"${dr} value="${esc(v.default)}"/>`;
-  }
-  return `<label class="field">${cap}${input}</label>`;
-}
-
 // startVarsFormHTML is the body of a start-variables panel — the editor's
 // Deploy & run and the Live view's Start instance both use it: a typed form when
 // the process declares start variables, otherwise a free-form JSON textarea.
@@ -10176,45 +10254,119 @@ function readStartFormBody(bodyEl) {
   return json ? parseStartVariables(json.value) : readTypedDeployBody(bodyEl);
 }
 
-// readTypedDeployBody turns the typed Deploy form into an instance request body,
-// coercing each field to its declared type and enforcing required fields. Empty
-// optional fields are omitted. Throws Error(message) on a bad number, invalid
-// JSON, or a missing required value.
-function readTypedDeployBody(bodyEl) {
-  const vars = {};
-  const missing = [];
-  bodyEl.querySelectorAll(".dv-field").forEach((el) => {
-    const { name, type } = el.dataset;
-    const raw = el.value.trim();
-    if (raw === "") { if (el.dataset.required === "1") missing.push(name); return; }
-    if (type === "number") {
-      const n = Number(raw);
-      if (!Number.isFinite(n)) throw new Error(`"${name}" must be a number`);
-      vars[name] = n;
-    } else if (type === "boolean") {
-      vars[name] = raw === "true";
-    } else if (type === "json") {
-      try {
-        vars[name] = JSON.parse(raw);
-      } catch (e) {
-        throw new Error(`"${name}": invalid JSON — ${e.message}`);
-      }
-    } else {
-      vars[name] = raw;
-    }
-  });
-  if (missing.length) throw new Error(`required: ${missing.join(", ")}`);
-  return Object.keys(vars).length ? { variables: vars } : {};
-}
+// askStartForm renders a process's start form in a modal and resolves with the
+// variables to start with, or null when the person backs out. Beneath the form it asks
+// for the declared start variables the form does not bind (startvars.js), so what Send
+// resolves with is both halves of what the process says it starts with: the form's
+// data, and the declared values. Without that second half a declared value the form
+// never asks for is simply missing from the instance — a script that reads it gets null.
+//
+// Deploy & run asks before deploying, so Cancel leaves the server exactly as it was;
+// the Live view's Start instance asks before starting. `texts` names what Send and
+// Cancel do on the surface that opened it, and the way out when the form cannot load.
+function askStartForm(api, formId, declared, texts = {}) {
+  const sendTitle = texts.send || "Deploy this diagram and start an instance with these values";
+  const cancelTitle = texts.cancel || "Close without deploying or starting anything";
+  const fallback = texts.fallback || "Deploy only still works, and the process can be started from the Tasks app once its form loads.";
+  return new Promise((resolve) => {
+    const ov = document.createElement("div");
+    ov.className = "modal-ov";
+    ov.innerHTML = `
+      <div class="modal startform-modal" role="dialog" aria-modal="true" aria-label="Start form">
+        <div class="modal-head"><h2>Start values</h2></div>
+        <div class="modal-body">
+          <div class="startform-host" id="sf-host"></div>
+          <div class="startform-extra" id="sf-extra"></div>
+          <p class="err" id="sf-err"></p>
+        </div>
+        <div class="modal-foot">
+          <button class="btn neutral" data-sf-cancel title="${esc(cancelTitle)}">Cancel</button>
+          <button class="btn" data-sf-send disabled title="${esc(sendTitle)}">Send</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    const host = ov.querySelector("#sf-host");
+    const extraHost = ov.querySelector("#sf-extra");
+    const errEl = ov.querySelector("#sf-err");
+    const sendBtn = ov.querySelector("[data-sf-send]");
+    let form = null;
+    let closed = false;
+    const close = (result) => {
+      closed = true;
+      if (form) { try { form.destroy(); } catch { /* noop */ } }
+      ov.remove();
+      document.removeEventListener("keydown", onKey);
+      resolve(result);
+    };
+    const onKey = (e) => { if (e.key === "Escape") close(null); };
+    document.addEventListener("keydown", onKey);
+    ov.querySelector("[data-sf-cancel]").addEventListener("click", () => close(null));
+    ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
 
-// wireDeployJSONEditors upgrades every json-typed textarea (.dv-json) and the
-// free-form start-variables textarea (.sv-json) in the given container to a
-// professional JSON editor. Called after startVarsFormHTML inserts the panel
-// HTML, so the DOM elements exist.
-function wireDeployJSONEditors(container) {
-  for (const ta of container.querySelectorAll(".dv-json, .sv-json")) {
-    attachJSONEditor(ta, { rows: 3 });
-  }
+    // loadIntoHost renders the form, and is what Try again calls to render it after a
+    // failure. Both halves carry a deadline (formviewer.js): a viewer bundle or a
+    // definition that never arrives used to leave "Loading form…" standing for the
+    // rest of the session — no error, no retry, and a Send that stayed disabled
+    // beside it. Nothing here can hang without saying so any more.
+    const loadIntoHost = () => {
+      // A retry after a half-built form (the viewer came, the schema did not) would
+      // otherwise wipe its container out from under it and leave it running.
+      if (form) { try { form.destroy(); } catch { /* noop */ } form = null; }
+      host.innerHTML = `<p class="muted">Loading form…</p>`;
+      extraHost.innerHTML = "";
+      errEl.textContent = "";
+      Promise.all([
+        loadFormViewer(),
+        withLoadDeadline(api("GET", "/api/v1/forms/" + encodeURIComponent(formId)), "The form definition"),
+      ])
+        .then(async ([{ Form }, def]) => {
+          // Cancelled while it loaded: instantiating form-js now would put a live
+          // form, with its timers and listeners, into a container already detached.
+          if (closed) return;
+          const schema = (def && def.schema) || {};
+          host.innerHTML = "";
+          form = new Form({ container: host });
+          await form.importSchema(schema, {});
+          if (closed) { try { form.destroy(); } catch { /* noop */ } form = null; return; }
+          // Which declared variables the form leaves out is only known once its schema
+          // is here, so the extra fields arrive with the form rather than before it.
+          extraHost.innerHTML = extraStartFieldsHTML(uncoveredStartVariables(declared, schema));
+          wireStartJSONEditors(extraHost);
+          sendBtn.disabled = false;
+          sendBtn.focus();
+        })
+        .catch((e) => {
+          if (closed) return;
+          // The form is the way in and it did not load. Say so, offer the retry that
+          // costs nothing (whatever did arrive is cached), and name the way out that
+          // still works rather than a Send that would start with nothing.
+          host.innerHTML = `<p class="err">Could not load the start form: ${esc(e.message)}</p>
+            <p class="muted">${esc(fallback)}</p>
+            <button type="button" class="btn ghost small" data-sf-retry
+              title="Load the start form again">Try again</button>`;
+          host.querySelector("[data-sf-retry]").addEventListener("click", loadIntoHost);
+        });
+    };
+    loadIntoHost();
+
+    sendBtn.addEventListener("click", () => {
+      if (!form) return;
+      const { data, errors } = form.submit();
+      if (errors && Object.keys(errors).length > 0) {
+        errEl.textContent = "Please fix the highlighted fields.";
+        return;
+      }
+      // The declared half is checked the way Deploy & run has always checked it: a
+      // missing required value or malformed JSON keeps the dialog open and says which.
+      let declaredVars;
+      try { declaredVars = readTypedDeployBody(extraHost).variables || {}; }
+      catch (e) { errEl.textContent = e.message; return; }
+      errEl.textContent = "";
+      // The two halves bind different names by construction; the form wins all the
+      // same, because it is the half somebody laid out for the purpose.
+      close({ ...declaredVars, ...(data || {}) });
+    });
+  });
 }
 
 // makeKeepEdits builds the "may we leave this diagram now" question every action that
@@ -10559,8 +10711,10 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
     // A process whose start event links a form already says what it starts with, in a
     // form somebody designed. Asking for the same values again as hand-typed JSON is
     // both duplicate work and a worse way to enter them, so the panel names the form
-    // and Deploy & run opens it.
+    // and Deploy & run opens it — together with the declared start variables the form
+    // does not ask for, which the form must not silently drop.
     const fid = startFormId(modeler);
+    const declared = bo ? readStartVariables(bo) : [];
     // A version opened read-only is not the draft, and deploying it does not make it
     // one: the draft — what the application publishes — stays as it was. Said here,
     // before the deploy, because afterwards is when it would be missed.
@@ -10572,107 +10726,17 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
     dbody.innerHTML = fromVersion + (fid
       ? `<p class="muted" style="margin:0">This process starts with the form
           <b>${esc((formFieldCache.get(fid) || {}).name || fid)}</b>. <b>Deploy &amp; run</b> opens it,
-          and what you submit becomes the instance's start variables.</p>`
-      : startVarsFormHTML(bo ? readStartVariables(bo) : []));
-    wireDeployJSONEditors(dbody);
+          and what you submit becomes the instance's start variables.${declared.length
+            ? " The start variables declared on the process that the form does not ask for are asked beneath it."
+            : ""}</p>`
+      : startVarsFormHTML(declared));
+    wireStartJSONEditors(dbody);
     dactions.hidden = false;
     dpanel.hidden = false;
     derr.textContent = "";
     const first = dbody.querySelector(".sv-json, .dv-field");
     if (first) first.focus();
   };
-
-  // askStartForm renders the process's own start form in a modal and resolves with the
-  // variables to start with, or null when the author backs out — in which case nothing
-  // is deployed either: "Deploy & run" is one action, and cancelling it should leave
-  // the server exactly as it was. Asking before deploying is what makes that possible.
-  function askStartForm(formId) {
-    return new Promise((resolve) => {
-      const ov = document.createElement("div");
-      ov.className = "modal-ov";
-      ov.innerHTML = `
-        <div class="modal startform-modal" role="dialog" aria-modal="true" aria-label="Start form">
-          <div class="modal-head"><h2>Start values</h2></div>
-          <div class="modal-body">
-            <div class="startform-host" id="sf-host"></div>
-            <p class="err" id="sf-err"></p>
-          </div>
-          <div class="modal-foot">
-            <button class="btn neutral" data-sf-cancel title="Close without deploying or starting anything">Cancel</button>
-            <button class="btn" data-sf-send disabled title="Deploy this diagram and start an instance with these values">Send</button>
-          </div>
-        </div>`;
-      document.body.appendChild(ov);
-      const host = ov.querySelector("#sf-host");
-      const errEl = ov.querySelector("#sf-err");
-      const sendBtn = ov.querySelector("[data-sf-send]");
-      let form = null;
-      let closed = false;
-      const close = (result) => {
-        closed = true;
-        if (form) { try { form.destroy(); } catch { /* noop */ } }
-        ov.remove();
-        document.removeEventListener("keydown", onKey);
-        resolve(result);
-      };
-      const onKey = (e) => { if (e.key === "Escape") close(null); };
-      document.addEventListener("keydown", onKey);
-      ov.querySelector("[data-sf-cancel]").addEventListener("click", () => close(null));
-      ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
-
-      // loadIntoHost renders the form, and is what Try again calls to render it after a
-      // failure. Both halves carry a deadline (formviewer.js): a viewer bundle or a
-      // definition that never arrives used to leave "Loading form…" standing for the
-      // rest of the session — no error, no retry, and a Send that stayed disabled
-      // beside it. Nothing here can hang without saying so any more.
-      const loadIntoHost = () => {
-        // A retry after a half-built form (the viewer came, the schema did not) would
-        // otherwise wipe its container out from under it and leave it running.
-        if (form) { try { form.destroy(); } catch { /* noop */ } form = null; }
-        host.innerHTML = `<p class="muted">Loading form…</p>`;
-        errEl.textContent = "";
-        Promise.all([
-          loadFormViewer(),
-          withLoadDeadline(api("GET", "/api/v1/forms/" + encodeURIComponent(formId)), "The form definition"),
-        ])
-          .then(async ([{ Form }, def]) => {
-            // Cancelled while it loaded: instantiating form-js now would put a live
-            // form, with its timers and listeners, into a container already detached.
-            if (closed) return;
-            host.innerHTML = "";
-            form = new Form({ container: host });
-            await form.importSchema((def && def.schema) || {}, {});
-            if (closed) { try { form.destroy(); } catch { /* noop */ } form = null; return; }
-            sendBtn.disabled = false;
-            sendBtn.focus();
-          })
-          .catch((e) => {
-            if (closed) return;
-            // The form is the way in and it did not load. Say so, offer the retry that
-            // costs nothing (whatever did arrive is cached), and name the way out that
-            // still works rather than a Send that would start with nothing.
-            host.innerHTML = `<p class="err">Could not load the start form: ${esc(e.message)}</p>
-              <p class="muted">Deploy only still works, and the process can be started from
-              the Tasks app once its form loads.</p>
-              <button type="button" class="btn ghost small" data-sf-retry
-                title="Load the start form again">Try again</button>`;
-            host.querySelector("[data-sf-retry]").addEventListener("click", loadIntoHost);
-          });
-      };
-      loadIntoHost();
-
-      sendBtn.addEventListener("click", () => {
-        if (!form) return;
-        const { data, errors } = form.submit();
-        if (errors && Object.keys(errors).length > 0) {
-          errEl.textContent = "Please fix the highlighted fields.";
-          return;
-        }
-        errEl.textContent = "";
-        close(data || {});
-      });
-    });
-  }
 
   deployBtn.addEventListener("click", () => { dpanel.hidden ? openDeploy() : closeDeploy(); });
   root.querySelector("#deploy-cancel").addEventListener("click", closeDeploy);
@@ -10734,7 +10798,8 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
       const fid = startFormId(modeler);
       if (fid) {
         // Ask before deploying: a Cancel here leaves nothing behind on the server.
-        const vars = await askStartForm(fid);
+        const bo = rootProcess(modeler);
+        const vars = await askStartForm(api, fid, bo ? readStartVariables(bo) : []);
         if (vars === null) return;
         body = { variables: vars };
       } else {
@@ -11008,12 +11073,20 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   // deployed (ADR-0423): what its instances evaluate is not what the binding reads,
   // and this is the view somebody opens to find out why an instance decided as it did.
   let frozenNote = "";
+  // What this definition starts with, as the server compiled it: its start form and
+  // its declared start variables. Read off the listing rather than the diagram,
+  // because a collaboration's diagram holds every pool's start event and only the
+  // listing says which one is this definition's.
+  let startForm = "";
+  let startVars = [];
   try {
     const procs = await api("GET", "/api/v1/processes");
     const here = procs.find((x) => x.key === key);
     if (here) {
       procName = here.name || here.processId;
       processId = here.processId;
+      startForm = here.startFormId || "";
+      startVars = Array.isArray(here.startVariables) ? here.startVariables : [];
       const frozen = frozenMark(here);
       if (frozen) {
         frozenNote = ` <span class="pill${frozen.behind ? " warn" : ""} frozen-mark" title="${esc(frozen.title)}">${esc(frozen.label)}</span>`;
@@ -12396,14 +12469,39 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   const openPanel = () => {
     const bo = rootProcess(viewer);
     startBody.innerHTML = startVarsFormHTML(bo ? readStartVariables(bo) : []);
-    wireDeployJSONEditors(startBody);
+    wireStartJSONEditors(startBody);
     panel.hidden = false;
     errEl.textContent = "";
     const first = startBody.querySelector(".sv-json, .dv-field");
     if (first) first.focus();
   };
 
-  startBtn.addEventListener("click", () => { panel.hidden ? openPanel() : closePanel(); });
+  const startWith = async (body) => {
+    await api("POST", `/api/v1/processes/${key}/instances`, body);
+    const n = body.variables ? Object.keys(body.variables).length : 0;
+    toast(n ? `Started a new instance with ${n} variable${n === 1 ? "" : "s"}` : "Started a new instance", "ok");
+  };
+
+  // A definition whose start event links a form starts the way Deploy & run starts it:
+  // the form in a modal, with the declared start variables it does not ask for beneath
+  // it. The typed panel alone asked for the declaration and dropped the form's fields —
+  // the same gap the other way round.
+  const startViaForm = async () => {
+    const vars = await askStartForm(api, startForm, startVars, {
+      send: "Start an instance with these values",
+      cancel: "Close without starting anything",
+      fallback: "The process can also be started from the Tasks app once its form loads.",
+    });
+    if (vars === null) return;
+    try { await startWith({ variables: vars }); }
+    catch (e) { toast("Start failed: " + e.message, "err"); return; }
+    await poll();
+  };
+
+  startBtn.addEventListener("click", () => {
+    if (startForm) { closePanel(); startViaForm(); return; }
+    panel.hidden ? openPanel() : closePanel();
+  });
   root.querySelector("#start-cancel").addEventListener("click", closePanel);
 
   goBtn.addEventListener("click", async () => {
@@ -12412,9 +12510,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     catch (e) { errEl.textContent = e.message; return; }
     goBtn.disabled = true;
     try {
-      await api("POST", `/api/v1/processes/${key}/instances`, body);
-      const n = body.variables ? Object.keys(body.variables).length : 0;
-      toast(n ? `Started a new instance with ${n} variable${n === 1 ? "" : "s"}` : "Started a new instance", "ok");
+      await startWith(body);
       closePanel();
       await poll();
     } catch (e) {
