@@ -85,7 +85,7 @@ export function draftStanding(cmp) {
     };
   }
   return {
-    label: `Draft · changed since ${v}`, tone: "",
+    label: `Draft · ${v} + changes`, tone: "",
     title: `The draft of this process, changed since ${v} was deployed.`,
     rows, links,
     note: `This draft has changes that are not deployed yet.${diff} Deploy it, or publish its application, to run them.`,
@@ -128,7 +128,7 @@ export function versionStanding(here, versions, cmp, draftUnread) {
     rows.push(["Draft", "None — Save turns this version into one"]);
   }
   return {
-    label: latest ? `${v} · newest` : `${v} · v${newest.version} is newer`,
+    label: latest ? `${v} · newest` : `${v} of ${newest.version}`,
     tone: latest ? "ok" : "warn",
     title: `Deployed version ${here.version} of ${newest.version}, deployed ${stamp(here.deployedAt, here.deployedByName)}.`,
     rows, note, links,

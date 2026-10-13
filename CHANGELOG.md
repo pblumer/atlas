@@ -16,10 +16,10 @@ _Changed_ / _Removed_ for each version.
 
 - **The Modeler says which version it shows.** The editor bar carries a chip naming what is
   open — the draft, or version N of M — and how it stands against the other record: a draft
-  reads `Draft = v7` when it is the model v7 runs, `Draft · changed since v7` when it holds
+  reads `Draft = v7` when it is the model v7 runs, `Draft · v7 + changes` when it holds
   undeployed work, and `Draft ≠ v7` as a warning when v7 was deployed after the draft's last
   save and differs from it, which is a change the draft is missing and the next publish of
-  the application would deploy over. A version reads `v7 · newest` or `v7 · v9 is newer`. Its
+  the application would deploy over. A version reads `v7 · newest` or `v7 of 9`. Its
   panel names who created the draft and who last saved it, who deployed the version and who
   adjusted its layout, the first difference, and links to the other record. A draft now
   records who saved it (`savedBy`); `GET /api/v1/drafts` answers `ownerId`/`ownerName` and

@@ -1857,7 +1857,7 @@ dataset of up to 50 000 cases":
 - 🚧 Projects/folders to organize diagrams (draft/deployment listing grows a tree): projects exist ([ADR-0034](docs/adr/0034-projects-and-artifacts.md), [ADR-0128](docs/adr/0128-process-applications.md)); nested folders do not.
 - ✅ **The editor says which version it shows** ([ADR-draft-modeler-shows-its-version](docs/adr/draft-modeler-shows-its-version.md)):
   a chip beside the breadcrumbs names the open record — the draft, or version N of M — and how it
-  stands against the other (`Draft = v7`, `Draft · changed since v7`, `Draft ≠ v7` when a newer
+  stands against the other (`Draft = v7`, `Draft · v7 + changes`, `Draft ≠ v7` when a newer
   deployed version differs from the draft), with who created and who last changed each. A draft
   records who saved it, and `GET /api/v1/drafts/{id}/comparison` (MCP `atlas_compare_draft`)
   compares it with a deployed version, ignoring the diagram. Deploy from a draft or a new diagram

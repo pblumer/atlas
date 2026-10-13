@@ -62,9 +62,9 @@ way the two records part, without changing what a draft is.
 |---|---|---|
 | draft | `Draft · not deployed` | no version exists |
 | draft | `Draft = v7` | the draft is the model v7 runs |
-| draft | `Draft · changed since v7` | the draft holds work saved after v7 |
+| draft | `Draft · v7 + changes` | the draft holds work saved after v7 |
 | draft | `Draft ≠ v7` (warning) | v7 was deployed *after* the draft's last save and differs — the draft lacks a deployed change |
-| version | `v7 · newest` / `v7 · v9 is newer` (warning) | which of how many |
+| version | `v7 · newest` / `v7 of 9` (warning) | which of how many |
 | new | `Not saved` | nothing stored yet |
 
 Its panel names who created the draft and who last saved it, who deployed the version and who

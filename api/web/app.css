@@ -999,12 +999,16 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .editor-bar .etabs button.active { color: var(--text); border-bottom-color: var(--accent); }
 .editor-bar .crumbs { color: var(--muted); font-size: 13px; margin-right: 6px; }
 /* What the Modeler has open — the draft or version N — and how it stands against the
-   other (shown-version.js). Capped and ellipsised so a long label cannot push the bar
-   into a second row; the whole sentence is in its title and its panel. */
-.editor-bar .shown-version { position: relative; flex: none; display: flex; margin-right: 6px; }
+   other (shown-version.js). The bar wraps, and at 900px it has only a few dozen pixels
+   to spare, fewer with a wider system font — so the chip claims no room of its own:
+   a zero basis keeps it from ever starting a second row, and a large grow factor lets
+   it take the free space up to its own text width before the spacer gets the rest.
+   Short of that it is ellipsised; the whole sentence is in its title and its panel. */
+.editor-bar .shown-version { position: relative; flex: 100 1 0; min-width: 2.5em; max-width: max-content;
+  display: flex; margin-right: 6px; }
 .editor-bar .shown-version[hidden] { display: none; }
-.editor-bar .sv-chip { border: 0; cursor: pointer; font: inherit; font-size: 12px; max-width: 190px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; line-height: 18px; }
+.editor-bar .sv-chip { border: 0; cursor: pointer; font: inherit; font-size: 12px; min-width: 0; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; line-height: 18px; }
 .editor-bar .sv-chip.off { border: 1px solid var(--border); }
 .editor-bar .sv-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .editor-bar .sv-pop { position: absolute; left: 0; top: calc(100% + 6px); z-index: 60; width: 340px;

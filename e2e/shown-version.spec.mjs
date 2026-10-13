@@ -71,6 +71,35 @@ test("a draft missing a newer deployed change says so, and names who to ask", as
   await expect(chip).toBeFocused();
 });
 
+test("the chip never starts a second row: short of room it is cut, not wrapped", async ({ page }) => {
+  // The bar has only a few dozen pixels to spare at 900px, and fewer with a wider system
+  // font — CI's runner wrapped a label the local fonts fitted. So the room is made
+  // scarce on purpose, whatever the font: the bar is padded until only 60px are free
+  // without the chip, and the chip's label is wider than that.
+  await setState(page, {
+    comparison: { processId: "order", savedAt: T0, deployed: false, sameModel: false },
+  });
+  await page.evaluate(() => window.__mountDraft());
+  const chip = page.locator("#sv-chip");
+  await expect(chip).toHaveText("Draft · not deployed");
+  await page.evaluate(() => {
+    const bar = document.querySelector(".editor-bar");
+    const host = document.querySelector("#shown-version");
+    const spacer = [...bar.children].find((c) => c.getAttribute("style") === "flex:1");
+    host.style.display = "none";
+    const free = spacer.getBoundingClientRect().width;
+    bar.style.paddingRight = `${10 + free - 60}px`;
+    host.style.display = "";
+  });
+  expect(await oneRow(page), "a chip short of room must not push the bar into a second row").toBe(1);
+  const fit = await chip.evaluate((c) => ({ shown: c.clientWidth, needs: c.scrollWidth }));
+  expect(fit.shown, "the chip must still be there to click").toBeGreaterThan(20);
+  expect(fit.shown, "the label is cut to the room there is").toBeLessThan(fit.needs);
+  // Cut is not lost: the whole label is the chip's title's start, and the panel opens.
+  await chip.click();
+  await expect(page.locator("#sv-pop")).toBeVisible();
+});
+
 test("a draft that is the deployed model reads as that version", async ({ page }) => {
   await setState(page, {
     comparison: {
@@ -94,8 +123,9 @@ test("a draft with undeployed changes is not a warning", async ({ page }) => {
     },
   });
   await page.evaluate(() => window.__mountDraft());
-  await expect(page.locator("#sv-chip")).toHaveText("Draft · changed since v1");
+  await expect(page.locator("#sv-chip")).toHaveText("Draft · v1 + changes");
   await expect(page.locator("#sv-chip")).not.toHaveClass(/warn/);
+  expect(await oneRow(page)).toBe(1);
 });
 
 test("a deployed version says which of how many, who deployed it, and how the draft stands", async ({ page }) => {
@@ -115,7 +145,7 @@ test("a deployed version says which of how many, who deployed it, and how the dr
   await page.evaluate(() => window.__mountVersion(42));
 
   const chip = page.locator("#sv-chip");
-  await expect(chip).toHaveText("v2 · v3 is newer");
+  await expect(chip).toHaveText("v2 of 3");
   await expect(chip).toHaveClass(/warn/);
   expect(await oneRow(page)).toBe(1);
   // The draft is compared with the version that is open, not with the newest.
