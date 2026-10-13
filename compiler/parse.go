@@ -1450,8 +1450,9 @@ type xmlProcess struct {
 	DataSubject string `xml:"dataSubject,attr"`
 
 	// StartVariables are the values the process says it starts with
-	// (<atlas:startForm><atlas:startVariable/></atlas:startForm>). Authoring metadata: the
-	// start surfaces render them as typed fields, and the engine never reads them.
+	// (<atlas:startForm><atlas:startVariable/></atlas:startForm>). The start surfaces
+	// render them as typed fields, and the engine seeds the default of one a start did
+	// not supply (ADR-draft-start-variable-defaults).
 	StartVariables []xmlStartVariable `xml:"extensionElements>startForm>startVariable"`
 	// Constants are the values every instance starts with and nobody is asked for
 	// (<atlas:constants><atlas:constant/></atlas:constants>, ADR-0454).
@@ -1479,7 +1480,9 @@ type xmlStartVariable struct {
 // twice keeps its first row. It never refuses anything. The declaration has always been
 // authoring metadata the deploy accepted as written, and a stored definition is compiled
 // again on every restart, so a refusal here would turn an accepted model into one that
-// no longer loads.
+// no longer loads. A default that is not a literal of its type is therefore not refused
+// either: it is not seeded, and the reason travels with the declaration for the deploy
+// to warn with (see startVariableDefault).
 func startVariablesOf(decl []xmlStartVariable) []StartVariable {
 	var out []StartVariable
 	seen := map[string]bool{}
@@ -1493,12 +1496,14 @@ func startVariablesOf(decl []xmlStartVariable) []StartVariable {
 		if !slices.Contains(startVariableTypes, typ) {
 			typ = "string"
 		}
-		out = append(out, StartVariable{
+		sv := StartVariable{
 			Name:     name,
 			Type:     typ,
 			Default:  d.Default,
 			Required: strings.TrimSpace(d.Required) == "true",
-		})
+		}
+		startVariableDefault(&sv)
+		out = append(out, sv)
 	}
 	return out
 }

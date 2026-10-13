@@ -270,6 +270,30 @@ func activateInstance(c *ProcessingContext, piKey uint64, seed instanceSeed) {
 		c.AppendVariableEvent(model.IntentVariableCreated, v)
 	}
 
+	// And a declared start variable the start did not supply takes the default the process
+	// declares (ADR-draft-start-variable-defaults), on every path that starts an instance:
+	// the API, MCP, a timer, a message, a signal, a call activity, a CSV row. Supplied
+	// means named, so a start that sends null for it keeps its null. A fork is not a start:
+	// it continues an instance with the values that instance had reached, and adding one it
+	// never had would be a change nobody made. Like the constants, the default was parsed
+	// at deploy, so this parses nothing (I5) and replays the events it writes (I6).
+	if seed.Instance.PredecessorInstanceKey == 0 {
+		decl := cp.StartVariables()
+		for i := range decl {
+			sv := &decl[i]
+			if !sv.HasDefault || suppliesVariable(seed.Vars, sv.Name) {
+				continue
+			}
+			c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+				ScopeKey: piKey,
+				Name:     sv.Name,
+				Kind:     toVarKind(sv.Kind),
+				Bool:     sv.Bool,
+				Text:     sv.Text,
+			})
+		}
+	}
+
 	// Seed the process's declared data objects under the instance scope, each with
 	// its declared initial data state (value unset for now; data associations write
 	// values in a later slice). Like the start variables, this is deterministic
@@ -311,6 +335,18 @@ func activateInstance(c *ProcessingContext, piKey uint64, seed instanceSeed) {
 	// Arm the root-scope event subprocesses: each opens its trigger (message/timer) and
 	// waits, ready to run its handler while the instance runs (ADR-0082).
 	armEventSubprocesses(c, piKey, defKey, piKey, cp.RootEventSubprocesses())
+}
+
+// suppliesVariable reports whether a start's variables name this one. A scan rather than
+// a set: a start carries a handful of variables, and a set would allocate on every start
+// of a process that declares a default.
+func suppliesVariable(vars []model.VariableValue, name string) bool {
+	for i := range vars {
+		if vars[i].Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // startElementsFor decides which root start events a new instance is seeded at.
