@@ -124,3 +124,21 @@ func TestTaskToolsRefuseUnusableArguments(t *testing.T) {
 	text, isErr, c = rec.call(t, "atlas_complete_task", map[string]any{"key": 8, "variables": "approved"})
 	wantRefusal(t, "atlas_complete_task", text, isErr, c, "variables")
 }
+
+// TestCompareDraftNamesAVersionOnlyWhenGiven: without a key the server compares with
+// the newest version, so an omitted key must stay omitted rather than travel as "".
+func TestCompareDraftNamesAVersionOnlyWhenGiven(t *testing.T) {
+	rec := newAPIRecorder(t, http.StatusOK, `{"processId":"order","sameModel":true}`)
+
+	text, isErr, c := rec.call(t, "atlas_compare_draft", map[string]any{})
+	wantRefusal(t, "atlas_compare_draft", text, isErr, c, "argument: id")
+
+	text, isErr, c = rec.call(t, "atlas_compare_draft", map[string]any{"id": "order"})
+	if isErr || !strings.Contains(text, `"sameModel":true`) {
+		t.Fatalf("atlas_compare_draft = (%q, isErr=%v), want the API body", text, isErr)
+	}
+	wantCall(t, "atlas_compare_draft", c, http.MethodGet, "/api/v1/drafts/order/comparison", "")
+
+	_, _, c = rec.call(t, "atlas_compare_draft", map[string]any{"id": "order", "key": "2251799813685249"})
+	wantCall(t, "atlas_compare_draft", c, http.MethodGet, "/api/v1/drafts/order/comparison", "key=2251799813685249")
+}

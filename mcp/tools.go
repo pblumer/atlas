@@ -98,7 +98,7 @@ func runtimeTools() []Tool {
 		},
 		{
 			Name:        "atlas_list_processes",
-			Description: "List all deployed process definitions with their key, process id, version, and deploy time.",
+			Description: "List all deployed process definitions with their key, process id, version, deploy time, and who deployed each version (deployedBy, deployedByName).",
 			InputSchema: noArgs(),
 			Handler: func(c *Client, _ map[string]any) (string, error) {
 				return asText(c.get("/api/v1/processes"))
