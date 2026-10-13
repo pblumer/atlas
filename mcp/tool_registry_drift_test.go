@@ -110,6 +110,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_publish_application":          "POST /api/v1/applications/{id}/publish",
 	"atlas_application_releases":         "GET /api/v1/applications/{id}/releases",
 	"atlas_application_deployments":      "GET /api/v1/applications/{id}/deployments",
+	"atlas_application_values":           "GET /api/v1/applications/{id}/values",
 	"atlas_list_tasks":                   "GET /api/v1/tasks",
 	"atlas_get_task":                     "GET /api/v1/tasks/{key}",
 	"atlas_complete_task":                "POST /api/v1/tasks/{key}/complete",
@@ -792,6 +793,12 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/targets/{id}":                               "peer target configuration is admin config, not an agent action",
 	"POST /api/v1/applications/{id}/releases/{version}/promote": "shipping a release to another server is an operator decision with off-server consequences, not an agent action",
 	"GET /api/v1/applications/{id}/targets":                     "per-peer status of admin-configured targets; an agent reads this server's own state via atlas_application_deployments",
+
+	// An application's values on this installation (ADR-draft-application-values-per-installation):
+	// what every new instance's bound constants take here. Per-installation operator
+	// config in the category ADR-0105 kept read-only on MCP — an agent reads them with
+	// atlas_application_values to explain a refused start, and an administrator sets them.
+	"PUT /api/v1/applications/{id}/values": "setting an application's per-installation values is an administrator's decision, not an agent action; an agent reads them via atlas_application_values",
 
 	// Source-tree export/import (ADR-0134): a gzip-tar file transfer of an
 	// application's whole working set, in the same category as backup/restore. An

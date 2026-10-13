@@ -861,6 +861,27 @@ func authoringTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_application_values",
+			Description: "Report the values a process application holds on this installation, and what its " +
+				"deployed processes' constants bound to the application (source=\"application\") require of " +
+				"them: each required name with the processes binding it and its state here — set, missing, " +
+				"covered by a fallback, or held with another type. A missing value means a start is refused " +
+				"and a timer or message start runs without it. Read-only: setting values is an administrator's " +
+				"per-installation decision (ADR-draft-application-values-per-installation).",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"id": stringProp("The application id whose values to report.")},
+				"required":   []any{"id"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/applications/" + url.PathEscape(id) + "/values"))
+			},
+		},
+		{
 			Name: "atlas_list_drafts",
 			Description: "List saved BPMN diagram drafts (design-time), optionally filtered to one project. " +
 				"Each entry has the process id, name, project, and save time. Read a draft's XML with atlas_get_draft_xml.",
