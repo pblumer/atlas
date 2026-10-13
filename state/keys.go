@@ -57,6 +57,9 @@ const (
 	cfTriggerReceipt         columnFamily = 0x2C // trigRcpt:<source>:0x00:<triggerId> → instanceKey(8) at(8) (ADR-0425)
 	cfActionOutcome          columnFamily = 0x2D // actOut:<order>:0x00:<position>:0x00:<commandId> → ActionOutcomeValue (ADR-0429)
 	cfFeed                   columnFamily = 0x2E // feed:0x00:<partition>:<position> → kind(1) at(8) value; feed:0x01:<partition> → pruned through (ADR-0429 §5)
+	cfBufferedMessage        columnFamily = 0x2F // msgBuf:<name>:<corrKey>:<msgKey> → MessageValue (ADR-0370)
+	cfMessageExpiry          columnFamily = 0x30 // msgExp:<expiresAt>:<msgKey> → MessageValue without payload (ADR-0370)
+	cfMessageId              columnFamily = 0x31 // msgId:<name>:<corrKey>:<messageId> → msgKey(8) (ADR-0370)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key

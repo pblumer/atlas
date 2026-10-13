@@ -635,9 +635,9 @@ Making processes wait, react, and time out.
   `POST /api/v1/messages` publish, correlating against open subscriptions through
   one shared path and carrying an optional variable payload into the woken
   instance. Recovery-tested (an open subscription is restored from the log and
-  correlates afterward). Message boundary events are built (below); buffering is
-  open (end of this milestone) and cross-partition correlation is Milestone 5
-  (ADR-0020). A **message end event**
+  correlates afterward). Message boundary events are built (below), and a message
+  published with a time to live waits for its subscriber (below); cross-partition
+  correlation is Milestone 5 (ADR-0020). A **message end event**
   publishes its message, then ends the instance — the send-and-stop counterpart of
   the throw event (ADR-0052).
 - ✅ **Message start events** (single-partition): a `<startEvent>` with a
@@ -651,7 +651,7 @@ Making processes wait, react, and time out.
   starts no duplicate ([ADR-0094](docs/adr/0094-singleton-message-start.md)). With
   several start events, only the one that fired is seeded, and an untriggered create
   seeds the none start ([ADR-0226](docs/adr/0226-start-events-are-triggers.md)).
-  Buffering remains open.
+  A buffered message feeds subscriptions, not start events (ADR-0370).
 - ✅ **Signal events (broadcast)**: a `signalEventDefinition` is a **named broadcast**
   — no correlation key, delivered 1:n to **every** waiting catch of the same name across
   all instances (ADR-0088). A signal throw or signal end event broadcasts the throwing
@@ -869,12 +869,15 @@ Making processes wait, react, and time out.
   `GET /api/v1/instances/{key}/variable-audit` and surfaced inline in the instance
   timeline so a corrected value carries its actor.
 
+- ✅ **Message buffer** ([ADR-0370](docs/adr/0370-durable-message-buffer.md)): a message
+  published with `timeToLiveMs` that correlates nothing is kept, durably, and delivered
+  to the first subscription that opens on its name and key — a catch, a receive task, a
+  boundary or an event subprocess. A `messageId` makes a retry a no-op while the message
+  lives; the timer sweep drops it when its time is up; `--message-ttl-max` bounds the
+  lifetime, and a message that may be kept carries no personal data. Built as the local
+  slice; delivery from a peer (ADR-0372) and a time to live on a throw event are not.
+
 **Still open in this milestone:**
-- 🔲 **Message buffer** ([ADR-0370](docs/adr/0370-durable-message-buffer.md), accepted): a
-  message published with a TTL that correlates nothing is kept, durably, and delivered to
-  the subscription that opens for it later — the fix for the publish-before-subscribe
-  race, built first as a local slice. It is also what a singleton start needs to hand a
-  message to its live instance instead of dropping it (ADR-0094's follow-up).
 - 🔲 **Repeatable non-interrupting conditional events**: a non-interrupting conditional
   fires once per arm; firing again on every false→true edge is ADR-0137's follow-up.
 - 🔲 **Overviews of the messages and signals deployed models exchange**

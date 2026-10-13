@@ -870,6 +870,12 @@ func (c *ProcessingContext) NotifyJobAvailable(jobType int32) {
 // appendEvent writes an event into the batch AND mutates state from that same
 // record via applyToState. Doing both from one record is what keeps the log and
 // state in lockstep — recovery replays the exact same applyToState.
+// AppendMessageEvent appends a message-buffer event (ADR-0370), keyed by the message's
+// own key.
+func (c *ProcessingContext) AppendMessageEvent(key uint64, intent model.Intent, v model.MessageValue) {
+	c.appendEvent(key, model.VTMessage, intent, inflightValue{message: v})
+}
+
 func (c *ProcessingContext) appendEvent(key uint64, vt model.ValueType, intent model.Intent, v inflightValue) {
 	c.p.position++
 	c.p.batchRecords = append(c.p.batchRecords, eventRecord{

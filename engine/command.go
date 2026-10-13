@@ -118,6 +118,14 @@ type Command struct {
 	// recorded now, answered from the record, or refused as a second ending of the
 	// same command. Same contract as Triggered.
 	Reported *OutcomeResult
+	// MessageTTL is how long a published message stays useful when nothing waits for
+	// it yet (ADR-0370): zero, the default, keeps ADR-0020's no-op for an unmatched
+	// publish, and a positive value buffers it for a subscription that opens later.
+	// It rides only on a client's publish command, never on token movement.
+	MessageTTL time.Duration
+	// MessageID is the sender's id for a published message, "" for none. With a
+	// MessageTTL it makes a repeat of the same message a no-op while the first lives.
+	MessageID string
 }
 
 // sideEffect is work to run after the batch's fsync (invariant I2). It is a

@@ -346,6 +346,18 @@ func messageBody(name string, args map[string]any) ([]byte, error) {
 	if ck := optString(args, "correlationKey"); ck != "" {
 		payload["correlationKey"] = ck
 	}
+	// A time to live keeps a message nothing waits for yet; an id makes a retry of it a
+	// no-op while it lives (ADR-0370). The server checks both.
+	ttl, ok, err := optPositiveUint(args, "timeToLiveMs")
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		payload["timeToLiveMs"] = ttl
+	}
+	if id := optString(args, "messageId"); id != "" {
+		payload["messageId"] = id
+	}
 	body, _ := json.Marshal(payload)
 	return body, nil
 }

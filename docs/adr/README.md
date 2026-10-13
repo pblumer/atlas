@@ -455,7 +455,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0367](0367-directory-photo.md) | A directory photo arrives the way every other directory fact does | Accepted | Landed |
 | [0368](0368-user-avatar.md) | A picture of a person belongs to the account, in two provenances and one place | Accepted | Landed |
 | [0369](0369-cross-instance-message-addressing.md) | Addressing and the envelope for a message that leaves the node | Accepted | Not started |
-| [0370](0370-durable-message-buffer.md) | A published message waits for its subscriber | Accepted (amended) | Not started |
+| [0370](0370-durable-message-buffer.md) | A published message waits for its subscriber | Accepted (amended) | Partial |
 | [0371](0371-participant-binds-a-published-interface.md) | A participant names an interface; the server says which node | Proposed | Not started |
 | [0372](0372-peer-message-delivery-worker.md) | Delivering a message to another node is a worker's job | Accepted | Not started |
 | [0373](0373-published-process-interface.md) | A process publishes an interface, not its model | Accepted | Not started |

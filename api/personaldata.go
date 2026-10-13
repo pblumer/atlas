@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/pblumer/atlas/api/httpapi"
@@ -368,4 +369,34 @@ func (s *Server) handleEraseDataSubject(w http.ResponseWriter, r *http.Request) 
 			slog.String("subject", subject), slog.Bool("hadKey", had))
 		httpapi.JSON(w, http.StatusOK, map[string]any{"subject": subject, "erased": had})
 	}
+}
+
+// personalDeclarationOf names the first variable among vars that any deployed process
+// declares personal, and that process's id, or "" when none does. It guards the one
+// door into the engine that cannot seal: a buffered message (ADR-0370), whose receiving
+// instance — and so its data subject — is unknown until it correlates. Any process, not
+// only those that wait for the message, because which process a message reaches is
+// decided when it arrives, and a model deployed tomorrow may wait for it. Deployments
+// are walked in key order so the answer names the same process every time. It reads
+// the deployments, so it runs on the run loop.
+func (s *Server) personalDeclarationOf(vars []model.VariableValue) (variable, processID string) {
+	if len(vars) == 0 {
+		return "", ""
+	}
+	keys := make([]uint64, 0, len(s.deployments))
+	for k, d := range s.deployments {
+		if d.cp != nil && d.cp.HasPersonalVariables() {
+			keys = append(keys, k)
+		}
+	}
+	slices.Sort(keys)
+	for _, k := range keys {
+		d := s.deployments[k]
+		for i := range vars {
+			if vars[i].Kind != model.VarNull && d.cp.IsPersonal(vars[i].Name) {
+				return vars[i].Name, d.ProcessID
+			}
+		}
+	}
+	return "", ""
 }

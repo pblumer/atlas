@@ -594,8 +594,12 @@ func runtimeTools() []Tool {
 			Description: "Publish a message for correlation: any instance waiting at a message catch event " +
 				"whose correlation key matches is delivered the message and advances. Provide the message " +
 				"'name' and, when the catch event correlates on a key, the 'correlationKey' value to match. " +
-				"A message that matches no waiting instance is a legal no-op. Optional 'variables' are merged " +
-				"into a correlated instance's scope. Returns {name, correlationKey, stats}. A message a catalogue " +
+				"A message that matches no waiting instance is a legal no-op — unless it carries 'timeToLiveMs': " +
+				"then it is kept that long, and the first instance that starts waiting for its name and key in that " +
+				"time receives it (ADR-0370). A 'messageId' with a time to live makes a retry of the same message a " +
+				"no-op while it lives. A message with a time to live may not carry a variable any deployed process " +
+				"declares personal (422). Optional 'variables' are merged into a correlated instance's scope. " +
+				"Returns {name, correlationKey, timeToLiveMs, messageId, stats}. A message a catalogue " +
 				"product's action starts or waits at is refused (409): the order sends it, never a publish by name.",
 			InputSchema: map[string]any{
 				"type": "object",
@@ -603,6 +607,8 @@ func runtimeTools() []Tool {
 					"name":           stringProp("The message name (matches the BPMN message's name)."),
 					"correlationKey": stringProp("The correlation key value to match against waiting instances. Omit for an unkeyed message."),
 					"variables":      objectProp("Optional variables merged into a correlated instance's scope, e.g. {\"approved\": true}. Omit for none."),
+					"timeToLiveMs":   integerProp("How long, in milliseconds, to keep the message for an instance that starts waiting later. Omit to lose it when nothing waits now. The server caps it (default 7 days)."),
+					"messageId":      stringProp("Your id for this message; with timeToLiveMs, a retry with the same id is a no-op while the message lives."),
 				},
 				"required": []any{"name"},
 			},

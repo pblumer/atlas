@@ -50,6 +50,7 @@ func (p *Processor) registerHandlers() {
 		handlerKey(model.VTTimer, model.IntentTimerTriggered):                  handleTimerTriggered,
 		handlerKey(model.VTTimer, model.IntentTimerStartArm):                   handleTimerStartArm,
 		handlerKey(model.VTMessage, model.IntentMessagePublished):              handleMessagePublished,
+		handlerKey(model.VTMessage, model.IntentMessageExpiring):               handleMessageExpiring,
 		handlerKey(model.VTVariable, model.IntentVariableModify):               handleVariablesModify,
 		handlerKey(model.VTTriggerReceipt, model.IntentTriggering):             handleTriggering,
 		handlerKey(model.VTTriggerReceipt, model.IntentTriggerReceiptsPruning): handleTriggerReceiptsPruning,
@@ -1656,8 +1657,99 @@ func handleMessagePublished(c *ProcessingContext) {
 		}
 		c.AppendInboundDeliveryEvent(src)
 	}
+	ttl := c.cmd.MessageTTL
+	id := c.cmd.MessageID
+	if ttl <= 0 {
+		// No time to live: ADR-0020's publish, a no-op when nothing matches, and an id
+		// means nothing without a lifetime to remember it for.
+		correlateMessage(c, pub.MessageName, pub.CorrelationKey, c.cmd.StartVars, 0)
+		return
+	}
+	// A message with an id that is still remembered is the same message again: a
+	// sender's retry. It is dropped whether the first copy waits in the buffer or was
+	// delivered at once (ADR-0370 idempotency).
+	if id != "" {
+		taken, err := c.tx.MessageIdTaken(pub.MessageName, pub.CorrelationKey, id)
+		if err != nil {
+			c.p.fail(err)
+			return
+		}
+		if taken {
+			return
+		}
+	}
 	// An API publish has no sending instance, so the recorded flow's sender is 0.
-	correlateMessage(c, pub.MessageName, pub.CorrelationKey, c.cmd.StartVars, 0)
+	delivered := correlateMessage(c, pub.MessageName, pub.CorrelationKey, c.cmd.StartVars, 0)
+	msg := model.MessageValue{
+		MessageName:    pub.MessageName,
+		CorrelationKey: pub.CorrelationKey,
+		MessageId:      id,
+		// The expiry is read from the clock here and frozen into the event, so replay
+		// keeps the message exactly as long as the live run did (I6).
+		ExpiresAt: c.Now() + int64(ttl),
+	}
+	switch {
+	case !delivered:
+		msg.Variables = c.cmd.StartVars
+		c.AppendMessageEvent(c.NewKey(), model.IntentMessageBuffered, msg)
+	case id != "":
+		c.AppendMessageEvent(c.NewKey(), model.IntentMessageIdRecorded, msg)
+	}
+}
+
+// handleMessageExpiring drops a message whose time to live has passed (ADR-0370). The
+// sweep read the due entry outside the batch, so the handler checks it is still there:
+// two sweeps may offer the same message, and a message without an id that was consumed
+// meanwhile has no entry left to expire. Expiry is not an incident — a message nobody
+// was waiting for is an ordinary outcome (ADR-0370, ADR-0337).
+func handleMessageExpiring(c *ProcessingContext) {
+	msg := c.cmd.Value.message
+	pending, err := c.tx.MessageExpiryPending(c.cmd.Key, msg.ExpiresAt)
+	if err != nil {
+		c.p.fail(err)
+		return
+	}
+	if !pending {
+		return
+	}
+	c.AppendMessageEvent(c.cmd.Key, model.IntentMessageExpired, msg.WithoutPayload())
+}
+
+// openMessageSubscription opens the subscription an element waits on and, when a
+// message for its name and key already waits in the buffer, delivers the oldest one at
+// once (ADR-0370): the subscription that opens after its message was published is the
+// one the buffer exists for. The four places a message subscription opens — a catch
+// event, a receive task, a boundary event and an event subprocess's trigger — share it,
+// so a buffered message reaches each of them the same way.
+func openMessageSubscription(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue, sub model.MessageSubscriptionValue) {
+	c.AppendMessageSubscriptionEvent(key, model.IntentSubscriptionCreated, sub)
+	// One catch per event-based gateway takes a buffered message. The others arm after
+	// it in the same run and are cancelled when it completes (ADR-0110); a message one
+	// of them took would be spent on a branch that never runs, so they leave theirs
+	// waiting.
+	gateway := ei.EventGatewayKey
+	if gateway != 0 {
+		if _, taken := c.p.gatewayRaceTaken[gateway]; taken {
+			return
+		}
+	}
+	msgKey, msg, ok, err := c.tx.OldestBufferedMessage(sub.MessageName, sub.CorrelationKey, c.Now())
+	if err != nil {
+		c.p.fail(err)
+		return
+	}
+	if !ok {
+		return
+	}
+	c.AppendMessageEvent(msgKey, model.IntentMessageConsumed, msg.WithoutPayload())
+	// A buffered message has no sending instance to name, as an API publish has none.
+	deliverToSubscriptions(c, []subscriptionMatch{{elKey: key, sub: sub}}, sub.MessageName, sub.CorrelationKey, msg.Variables, 0)
+	if gateway != 0 {
+		if c.p.gatewayRaceTaken == nil {
+			c.p.gatewayRaceTaken = map[uint64]struct{}{}
+		}
+		c.p.gatewayRaceTaken[gateway] = struct{}{}
+	}
 }
 
 // behavior resolves the behavior for a BPMN element type.
@@ -2557,7 +2649,7 @@ type messageCatchEventBehavior struct{}
 func (messageCatchEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.MessageCatch(cp.Node(ei.ElementId).Detail)
-	c.AppendMessageSubscriptionEvent(key, model.IntentSubscriptionCreated, model.MessageSubscriptionValue{
+	openMessageSubscription(c, key, ei, model.MessageSubscriptionValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ElementInstanceKey: key,
 		MessageName:        detail.MessageName,
@@ -2585,7 +2677,7 @@ type receiveTaskBehavior struct{}
 func (receiveTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.ReceiveTask(cp.Node(ei.ElementId).Detail)
-	c.AppendMessageSubscriptionEvent(key, model.IntentSubscriptionCreated, model.MessageSubscriptionValue{
+	openMessageSubscription(c, key, ei, model.MessageSubscriptionValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ElementInstanceKey: key,
 		MessageName:        detail.MessageName,
@@ -2744,15 +2836,18 @@ func deliverToSubscriptions(c *ProcessingContext, matches []subscriptionMatch, n
 // SubscriptionCorrelated (which retires the subscription), writes the message's
 // payload variables into that instance's scope, and commands the waiting element
 // instance to complete. Matches are collected before any mutation so retiring a
-// subscription can't disturb the scan. A message that matches nothing is a no-op
-// — there is no buffering yet (ADR-0020).
-func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []model.VariableValue, senderPIKey uint64) {
+// subscription can't disturb the scan. A message that matches nothing is a no-op here;
+// it reports so, and a publish with a time to live then buffers it (ADR-0370).
+// delivered is whether a subscription received the message or an instance was started
+// from it.
+func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []model.VariableValue, senderPIKey uint64) (delivered bool) {
 	var matches []subscriptionMatch
 	c.p.fail(c.tx.CorrelatableSubscriptions(name, correlationKey, func(elKey uint64, v *model.MessageSubscriptionValue) error {
 		matches = append(matches, subscriptionMatch{elKey: elKey, sub: *v})
 		return nil
 	}))
 	deliverToSubscriptions(c, matches, name, correlationKey, vars, senderPIKey)
+	delivered = len(matches) > 0
 	// A message also instantiates every deployed process with a matching message
 	// start event, seeded with the payload (ADR-0035). Matching is by name; the
 	// created instance additionally records the correlation key its start event
@@ -2774,13 +2869,14 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 			taken, err := c.singletonStartTaken(ref.defKey, startKey)
 			if err != nil {
 				c.p.fail(err)
-				return
+				return delivered
 			}
 			if taken {
 				continue // a live instance for this key already exists (or is being started this batch)
 			}
 		}
 		c.AppendCreateInstanceCommand(ref.defKey, vars, startKey, ref.elementId)
+		delivered = true
 		// Retain the delivery into the message-start event too, so the replay shows
 		// the message that opened the receiving pool. The receiver instance does not
 		// exist yet (the create is a followup), so its key is left 0 (ADR-0038).
@@ -2792,6 +2888,7 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 			CorrelationKey:           correlationKey,
 		})
 	}
+	return delivered
 }
 
 // signalCatchEventBehavior: an intermediate signal catch event. On activation it
@@ -4161,7 +4258,7 @@ func openBoundarySubscription(c *ProcessingContext, key uint64, ei *model.Elemen
 		})
 		return
 	}
-	c.AppendMessageSubscriptionEvent(key, model.IntentSubscriptionCreated, model.MessageSubscriptionValue{
+	openMessageSubscription(c, key, ei, model.MessageSubscriptionValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ElementInstanceKey: key,
 		MessageName:        d.MessageName,
@@ -4316,7 +4413,7 @@ func (eventSubProcessStartBehavior) OnActivated(c *ProcessingContext, key uint64
 	case compiler.BoundaryTimer:
 		armOneShotTimer(c, key, ei, d.Schedule)
 	case compiler.BoundaryMessage:
-		c.AppendMessageSubscriptionEvent(key, model.IntentSubscriptionCreated, model.MessageSubscriptionValue{
+		openMessageSubscription(c, key, ei, model.MessageSubscriptionValue{
 			ProcessInstanceKey: ei.ProcessInstanceKey,
 			ElementInstanceKey: key,
 			MessageName:        d.MessageName,

@@ -12,6 +12,26 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **A message can wait for the instance it is meant for.** A message published before
+  anything waits for it was lost: an instance that reached its catch event a moment later
+  waited for good, so a model had to be shaped around the race (ADR-0020). `POST
+  /api/v1/messages` and the MCP tool `atlas_publish_message` now take `timeToLiveMs`: a
+  message that correlates nothing and starts nothing is kept that long, and the first
+  subscription that opens on its name and correlation key receives it at once — a catch
+  event, a receive task, a boundary event or an event subprocess
+  ([ADR-0370](docs/adr/0370-durable-message-buffer.md)). A `messageId` beside it makes a
+  sender's retry a no-op while the message lives, whether the first copy waited or was
+  delivered at once. Without `timeToLiveMs` a publish is lost when nothing matches, as
+  before. A kept message feeds subscriptions, not message start events; of an event-based
+  gateway's catches the first in flow order takes a waiting message and the others leave
+  theirs; and a message whose time is up is dropped by the timer sweep, never delivered.
+  `--message-ttl-max` (default `168h`) bounds what a publish may ask for, and a message
+  that may be kept may not carry a variable any deployed process declares personal (422),
+  because nothing on the message path can seal it. The buffer is engine state rebuilt from
+  the log, so 0.11.0 cannot replay a data directory that has buffered a message.
+
 ## [0.11.0] — 2026-10-12
 
 **A catalogue moves to another installation as one file.** `GET /api/v1/catalogs/{id}/document`

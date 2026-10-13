@@ -1604,6 +1604,8 @@ func newValue(vt ValueType) Value {
 		return &FeedRetentionValue{}
 	case VTTriggerReceipt:
 		return &TriggerReceiptValue{}
+	case VTMessage:
+		return &MessageValue{}
 	default:
 		return nil
 	}

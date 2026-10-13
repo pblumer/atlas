@@ -509,6 +509,24 @@ const (
 	// IntentFeedPruned is the fact that it did, with the position it was pruned
 	// through, which a feed reader is answered 410 below.
 	IntentFeedPruned
+	// IntentMessageBuffered is the fact that a message published with a time to live
+	// correlated nothing and is kept, payload and all, for the subscription that opens
+	// for it later (ADR-0370). Appended at the end so every prior intent keeps its
+	// numeric value on the log.
+	IntentMessageBuffered
+	// IntentMessageIdRecorded is the fact that a message carrying an id was delivered
+	// at once: the id is remembered until the message would have expired, so a repeat
+	// of it is recognised as the same message (ADR-0370 idempotency).
+	IntentMessageIdRecorded
+	// IntentMessageConsumed is the fact that a buffered message was delivered to a
+	// subscription that opened after it was published.
+	IntentMessageConsumed
+	// IntentMessageExpiring is a command-only intent: the timer sweep asks that a
+	// message whose time to live has passed be dropped.
+	IntentMessageExpiring
+	// IntentMessageExpired is the fact that it was: the buffered message, if it still
+	// waited, and its id are gone.
+	IntentMessageExpired
 )
 
 func (i Intent) String() string {
@@ -625,6 +643,16 @@ func (i Intent) String() string {
 		return "FeedPruning"
 	case IntentFeedPruned:
 		return "FeedPruned"
+	case IntentMessageBuffered:
+		return "MessageBuffered"
+	case IntentMessageIdRecorded:
+		return "MessageIdRecorded"
+	case IntentMessageConsumed:
+		return "MessageConsumed"
+	case IntentMessageExpiring:
+		return "MessageExpiring"
+	case IntentMessageExpired:
+		return "MessageExpired"
 	default:
 		return "Intent(?)"
 	}
