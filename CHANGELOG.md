@@ -16,13 +16,12 @@ _Changed_ / _Removed_ for each version.
 
 **A value that differs between DEV, INT and PROD lives on the installation, not in the
 model.** A process declares constants every instance starts with and nobody is asked for
-([ADR-draft-process-constants](docs/adr/draft-process-constants.md)), and a constant bound
-to its application takes the value that application holds on the installation where the
-instance starts, set on the application's new **Values** tab or with
-`PUT /api/v1/applications/{id}/values`
-([ADR-draft-application-values-per-installation](docs/adr/draft-application-values-per-installation.md)).
-A message published with `timeToLiveMs` now waits for the instance it is meant for instead
-of being lost, and an operator sees what waits under Operations → Messages
+([ADR-0454](docs/adr/0454-process-constants.md)), and a constant bound to its application
+takes the value that application holds on the installation where the instance starts, set
+on the application's new **Values** tab or with `PUT /api/v1/applications/{id}/values`
+([ADR-0453](docs/adr/0453-application-values-per-installation.md)). A message published
+with `timeToLiveMs` now waits for the instance it is meant for instead of being lost, and
+an operator sees what waits under Operations → Messages
 ([ADR-0370](docs/adr/0370-durable-message-buffer.md)). The Modeler names the version it
 shows and how it stands against the draft
 ([ADR-0452](docs/adr/0452-modeler-shows-its-version.md)), and deploying from a draft saves
