@@ -1680,13 +1680,15 @@ func handleMessagePublished(c *ProcessingContext) {
 	}
 	// An API publish has no sending instance, so the recorded flow's sender is 0.
 	delivered := correlateMessage(c, pub.MessageName, pub.CorrelationKey, c.cmd.StartVars, 0)
+	// The expiry is read from the clock here and frozen into the event, so replay
+	// keeps the message exactly as long as the live run did (I6).
+	now := c.Now()
 	msg := model.MessageValue{
 		MessageName:    pub.MessageName,
 		CorrelationKey: pub.CorrelationKey,
 		MessageId:      id,
-		// The expiry is read from the clock here and frozen into the event, so replay
-		// keeps the message exactly as long as the live run did (I6).
-		ExpiresAt: c.Now() + int64(ttl),
+		ExpiresAt:      now + int64(ttl),
+		BufferedAt:     now,
 	}
 	switch {
 	case !delivered:

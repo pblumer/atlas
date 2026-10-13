@@ -25,6 +25,10 @@ type MessageValue struct {
 	MessageId      string
 	ExpiresAt      int64 // Unix nanoseconds
 	Variables      []VariableValue
+	// BufferedAt is when the message was published, read from the same clock reading
+	// its expiry was computed from, so an operator sees how long it has waited. It is
+	// the last field of the encoding, and a record written without it reads zero.
+	BufferedAt int64
 }
 
 func (*MessageValue) ValueType() ValueType { return VTMessage }
@@ -43,7 +47,7 @@ func (v *MessageValue) encode(dst []byte) []byte {
 		dst = v.Variables[i].encode(dst)
 		binary.LittleEndian.PutUint32(dst[at:], uint32(len(dst)-at-4))
 	}
-	return dst
+	return binary.LittleEndian.AppendUint64(dst, uint64(v.BufferedAt))
 }
 
 func (v *MessageValue) decode(src []byte) error {
@@ -91,6 +95,10 @@ func (v *MessageValue) decode(src []byte) error {
 			return err
 		}
 		rest = rest[size:]
+	}
+	v.BufferedAt = 0
+	if len(rest) >= 8 {
+		v.BufferedAt = int64(binary.LittleEndian.Uint64(rest))
 	}
 	return nil
 }

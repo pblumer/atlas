@@ -47,6 +47,7 @@ type durabilityCollector struct {
 	openIncidents    *prometheus.Desc
 	pendingTimers    *prometheus.Desc
 	subscriptions    *prometheus.Desc
+	buffered         *prometheus.Desc
 	exporterPosition *prometheus.Desc
 	exporterLag      *prometheus.Desc
 	breakersOpen     *prometheus.Desc
@@ -84,6 +85,8 @@ func newDurabilityCollector(s *Server) *durabilityCollector {
 		openIncidents: d("open_incidents", "Tokens parked on an unresolved incident, waiting for an operator (ADR-0061)."),
 		pendingTimers: d("pending_timers", "Timers currently waiting to fire."),
 		subscriptions: d("message_subscriptions", "Message subscriptions currently waiting to correlate."),
+		buffered: d("buffered_messages",
+			"Messages kept for a subscription that has not opened yet (ADR-0370), past their time until the sweep drops them."),
 		exporterPosition: d("exporter_position",
 			"Highest log position the OpenSearch exporter has provably indexed (ADR-0114)."),
 		exporterLag: d("exporter_lag_positions",
@@ -123,6 +126,7 @@ func (c *durabilityCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.openIncidents
 	ch <- c.pendingTimers
 	ch <- c.subscriptions
+	ch <- c.buffered
 	ch <- c.breakersOpen
 	ch <- c.breakerTrips
 	ch <- c.breakerProbes
@@ -227,6 +231,9 @@ func (c *durabilityCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 	if n, err := s.store.MessageSubscriptions(); err == nil {
 		gauge(c.subscriptions, float64(n))
+	}
+	if n, err := s.store.BufferedMessageCount(); err == nil {
+		gauge(c.buffered, float64(n))
 	}
 
 	// The breaker's aggregates. Read on the loop, because that is where its state lives

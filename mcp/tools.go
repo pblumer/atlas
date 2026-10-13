@@ -625,6 +625,43 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_buffered_messages",
+			Description: "List the messages waiting in the buffer: published with a time to live while nothing " +
+				"waited for them, kept for the instance that starts waiting later (ADR-0370). Each carries its " +
+				"key, name, correlationKey, messageId, bufferedAt and expiresAt (Unix nanoseconds), expired " +
+				"(past its time, waiting only for the sweep — nothing receives it now) and its variables. " +
+				"Optional 'name' narrows to one message name and, with it, 'correlationKey' to one key; 'limit' " +
+				"bounds the page (default 100, at most 1000) and 'after' continues from the nextCursor a previous " +
+				"call returned. Returns {messages, total, nextCursor}; total counts the whole buffer.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"name":           stringProp("Only messages with this name."),
+					"correlationKey": stringProp("Only messages with this correlation key; needs 'name'."),
+					"limit":          map[string]any{"type": "integer", "minimum": 1, "description": "Maximum messages to return (default 100, at most 1000)."},
+					"after":          stringProp("The nextCursor a previous call returned, to continue the listing."),
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				query, err := batchQuery(args)
+				if err != nil {
+					return "", err
+				}
+				q, _ := url.ParseQuery(strings.TrimPrefix(query, "?"))
+				if name := optString(args, "name"); name != "" {
+					q.Set("name", name)
+				}
+				if key := optString(args, "correlationKey"); key != "" {
+					q.Set("correlationKey", key)
+				}
+				path := "/api/v1/messages/buffered"
+				if len(q) > 0 {
+					path += "?" + q.Encode()
+				}
+				return asText(c.get(path))
+			},
+		},
+		{
 			Name: "atlas_trigger_start",
 			Description: "Start the newest deployed version of a process at ONE of its message start " +
 				"events — a directed trigger (ADR-0425). Unlike atlas_publish_message, which broadcasts by " +

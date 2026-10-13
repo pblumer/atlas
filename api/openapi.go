@@ -473,6 +473,10 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "name")),
 			resp: jsonBody("Publish result", tObject())}},
 
+		{"GET", "/api/v1/messages/buffered", s.handleBufferedMessages, apiOp{
+			summary: "The messages waiting in the buffer for a subscription that has not opened yet (ADR-0370): name, correlation key, id, when each was published and when it expires, and its payload. ?name= narrows to one message name and, with it, ?correlationKey= to one key; ?limit= bounds the page (default 100, at most 1000) and ?after= continues from nextCursor. total counts the whole buffer", tag: "Messages", role: RoleOperator,
+			resp: jsonBody("Waiting messages", tObject())}},
+
 		{"POST", "/api/v1/workers/{id}/restart", s.handleRestartWorker, apiOp{
 			summary: "Restart a worker process this server supervises (ADR-0157); 409 when it supervises none", tag: "Incidents", role: RoleOperator,
 			resp: jsonBody("The worker that is restarting", tObject())}},

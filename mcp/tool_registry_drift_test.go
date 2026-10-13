@@ -116,6 +116,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_claim_task":                   "POST /api/v1/tasks/{key}/claim",
 	"atlas_unclaim_task":                 "POST /api/v1/tasks/{key}/unclaim",
 	"atlas_publish_message":              "POST /api/v1/messages",
+	"atlas_buffered_messages":            "GET /api/v1/messages/buffered",
 	"atlas_trigger_start":                "POST /api/v1/processes/{processId}/triggers/{message}",
 	"atlas_complete_job":                 "POST /api/v1/jobs/{key}/complete",
 	"atlas_fail_job":                     "POST /api/v1/jobs/{key}/fail",

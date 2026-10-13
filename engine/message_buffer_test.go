@@ -342,3 +342,63 @@ func TestTwoSweepsExpireAMessageOnce(t *testing.T) {
 		t.Fatalf("records written by two sweeps = %d, want 1 (one expiry)", written)
 	}
 }
+
+// bufferedCount is the maintained buffered-message total, failing unless it agrees with
+// what the buffer holds.
+func bufferedCount(t *testing.T, s *state.Store, what string) int64 {
+	t.Helper()
+	n, err := s.BufferedMessageCount()
+	if err != nil {
+		t.Fatalf("BufferedMessageCount (%s): %v", what, err)
+	}
+	if held := int64(len(bufferedMessages(t, s))); n != held {
+		t.Fatalf("buffered count (%s) = %d, but the buffer holds %d", what, n, held)
+	}
+	return n
+}
+
+// The buffered-message count follows the buffer through a delivery and an expiry, and
+// a rebuild from the log alone lands on the number the live run kept (ADR-0142's
+// pairing, ADR-0370). A message delivered with an id leaves its expiry entry behind;
+// the expiry that later sweeps it finds nothing in the buffer and must not count it out
+// a second time.
+func TestTheBufferedMessageCountSurvivesReplay(t *testing.T) {
+	dir := t.TempDir()
+	catcher := catcherProcess(t, 7)
+	clk := &fixedClock{t: 0}
+
+	h1 := openHarness(t, dir)
+	p1 := bufferProcessor(t, h1, clk, catcher)
+	p1.PublishMessageWithTTL("order", "1", "with-id", time.Second)
+	p1.PublishMessageWithTTL("order", "2", "", time.Second)
+	p1.PublishMessageWithTTL("order", "3", "", time.Second)
+	runIdle(t, p1, "publish three")
+	if n := bufferedCount(t, h1.store, "after three"); n != 3 {
+		t.Fatalf("buffered count after three publishes = %d, want 3", n)
+	}
+
+	p1.CreateInstance(catcher.Key, numVar("orderId", "1"))
+	runIdle(t, p1, "catcher takes one")
+	if n := bufferedCount(t, h1.store, "after a delivery"); n != 2 {
+		t.Fatalf("buffered count after a delivery = %d, want 2", n)
+	}
+
+	clk.t = int64(2 * time.Second)
+	if err := p1.TriggerDueMessageExpiries(); err != nil {
+		t.Fatalf("TriggerDueMessageExpiries: %v", err)
+	}
+	runIdle(t, p1, "sweep")
+	if n := bufferedCount(t, h1.store, "after the sweep"); n != 0 {
+		t.Fatalf("buffered count after the sweep = %d, want 0 (the delivered one is not counted out twice)", n)
+	}
+
+	p1.PublishMessageWithTTL("order", "4", "", time.Hour)
+	runIdle(t, p1, "publish one more")
+	live := bufferedCount(t, h1.store, "live")
+	h1.close(t)
+
+	_, store2 := replayed(t, dir, catcher)
+	if got := bufferedCount(t, store2, "replayed"); got != live || got != 1 {
+		t.Fatalf("buffered count after replay = %d, want the live %d (1)", got, live)
+	}
+}

@@ -454,7 +454,7 @@ func TestMetricsReportOpenWork(t *testing.T) {
 	h.deploy()
 
 	exposition := scrape(t, h)
-	for _, name := range []string{"atlas_open_jobs", "atlas_pending_timers", "atlas_message_subscriptions"} {
+	for _, name := range []string{"atlas_open_jobs", "atlas_pending_timers", "atlas_message_subscriptions", "atlas_buffered_messages"} {
 		if got := sampleValue(t, exposition, name); got != 0 {
 			t.Errorf("%s = %v before anything started, want 0", name, got)
 		}
