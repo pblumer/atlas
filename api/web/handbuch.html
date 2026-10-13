@@ -5542,14 +5542,26 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
       <p data-l="de"><b>Start-Formular und Startvariablen gemeinsam.</b> Deklariert der Prozess zusätzlich
         Startvariablen (Prozess-Panel, Tab <i>Implement</i>, <i>Start variables</i>), fragen <i>Deploy &amp; run</i>,
         <i>Start instance</i> und der Start in der Tasks-App unter dem Formular nach denjenigen, die das Formular
-        nicht selbst abfragt – mit Typ, Default und Pflichtmarkierung. Die Instanz startet mit beiden Teilen. Ein
-        öffentlicher Link und ein Start über die API setzen dagegen keine Defaults: Die Deklaration ist
-        Modellierungs-Metadatum, die Engine liest sie nicht.</p>
+        nicht selbst abfragt – mit Typ, Default und Pflichtmarkierung. Die Instanz startet mit beiden Teilen.</p>
       <p data-l="en"><b>Start form and start variables together.</b> When the process also declares start variables
         (process panel, <i>Implement</i> tab, <i>Start variables</i>), <i>Deploy &amp; run</i>, <i>Start instance</i>
         and the Tasks app's Start ask, beneath the form, for the ones the form does not ask for itself – with their
-        type, default and required mark. The instance starts with both halves. A public link and a start through the
-        API apply no defaults, though: the declaration is authoring metadata, and the engine does not read it.</p>
+        type, default and required mark. The instance starts with both halves.</p>
+      <p data-l="de"><b>Der Default gilt auf jedem Startweg.</b> Liefert ein Start eine deklarierte Startvariable
+        nicht, setzt die Engine ihren Default – beim Start über die API, MCP, einen öffentlichen Link, einen
+        CSV-Upload, einen Timer, eine Message, ein Signal und eine Call Activity. Was der Start nennt, behält seinen
+        Wert, auch <code>null</code>; ein Fork übernimmt nur die Werte der Instanz, die er fortsetzt. Ein leer
+        gelassenes optionales Feld in einem Startdialog gilt als nicht geliefert und erhält ebenfalls den Default.
+        Ein Default, der nicht zum Typ passt (z.&nbsp;B. <code>number</code> mit <code>viele</code>), sowie ein
+        Default auf Personendaten oder auf der Data-Subject-Variable wird nicht gesetzt; der Deploy meldet ihn als
+        Warnung.</p>
+      <p data-l="en"><b>The default holds on every start path.</b> When a start does not supply a declared start
+        variable, the engine sets its default – on a start through the API, MCP, a public link, a CSV upload, a
+        timer, a message, a signal and a call activity. What the start names keeps its value, <code>null</code>
+        included; a fork carries only the values of the instance it continues. An optional field left empty in a
+        start dialog counts as not supplied and gets the default too. A default that does not fit its type (say
+        <code>number</code> with <code>many</code>), and a default on personal data or on the data-subject
+        variable, is not set; the deploy reports it as a warning.</p>
       <p data-l="de"><b>Konstanten statt Startvariablen, die niemand eingibt.</b> Ein Wert, den jede Instanz braucht
         und nach dem niemand gefragt werden soll – ein Domain-Suffix, eine Sprache, eine App-ID –, gehört unter
         <i>Constants</i> im selben Panel. Atlas schreibt Konstanten beim Erzeugen jeder Instanz als gewöhnliche

@@ -2572,11 +2572,24 @@ func (p *CompiledProcess) StartFormId() string { return p.Intern(p.startFormId) 
 // <atlas:startForm>): a name, one of the types the start surfaces render (string,
 // number, boolean, json), the default they prefill, and whether they refuse to start
 // without it.
+//
+// The default is also what an instance starts with when whoever started it did not supply
+// the variable (ADR-0455): Kind, Bool and Text are it in the
+// canonical form a variable is stored as, computed once at deploy so the engine seeds it
+// without parsing (I5), and meaningful only when HasDefault is set. A declaration whose
+// default cannot be seeded has none, and DefaultProblem says why — the deploy warns with
+// it rather than refusing, because a stored model is compiled again on every restart.
 type StartVariable struct {
 	Name     string
 	Type     string
-	Default  string
+	Default  string // as authored, for the start surfaces to prefill
 	Required bool
+
+	HasDefault     bool
+	Kind           expr.ValueKind
+	Bool           bool
+	Text           string
+	DefaultProblem string
 }
 
 // startVariableTypes are the types a declared start variable can take, the same four the
@@ -2585,9 +2598,9 @@ var startVariableTypes = []string{"string", "number", "boolean", "json"}
 
 // StartVariables returns the process's declared start variables in the order they were
 // authored, nil when it declares none. The start surfaces render them beside the start
-// form, so a value the form does not ask for is still asked. Like the start form it is
-// design-time metadata: the engine never reads it, and no default is applied to an
-// instance created without the value. The slice is shared and must not be modified.
+// form, so a value the form does not ask for is still asked, and the engine seeds the
+// default of each one a start did not supply (ADR-0455). The
+// slice is shared and must not be modified.
 func (p *CompiledProcess) StartVariables() []StartVariable { return p.startVars }
 
 // IsExecutable reports the process's bpmn:isExecutable flag. A non-executable

@@ -224,7 +224,8 @@ func runtimeTools() []Tool {
 			Name: "atlas_create_instance",
 			Description: "Start a new instance of a deployed process definition by its key and run it " +
 				"until the engine goes idle. Optionally seed the instance scope with start variables " +
-				"(the same {name: value} shape a human's start form submits). Returns the resulting " +
+				"(the same {name: value} shape a human's start form submits); a declared start variable " +
+				"left out takes the default the process declares. Returns the resulting " +
 				"live instance counts.",
 			InputSchema: map[string]any{
 				"type": "object",

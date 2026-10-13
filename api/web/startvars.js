@@ -51,7 +51,8 @@ export function typedDeployFieldHTML(v) {
 
 // readTypedDeployBody turns typed start-variable fields into an instance request
 // body, coercing each field to its declared type and enforcing required fields. Empty
-// optional fields are omitted. Throws Error(message) on a bad number, invalid JSON,
+// optional fields are omitted, and the engine then seeds the declared default
+// (ADR-0455): an emptied field means "not supplied". Throws Error(message) on a bad number, invalid JSON,
 // or a missing required value.
 export function readTypedDeployBody(bodyEl) {
   const vars = {};

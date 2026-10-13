@@ -7036,9 +7036,14 @@ function startVarRowHTML(v, constant = false) {
     .map((t) => `<option value="${t}"${t === v.type ? " selected" : ""}>${t}</option>`).join("");
   const bound = constant && v.source === "application";
   const what = bound ? "Fallback value" : constant ? "Value" : "Default value";
+  // A start variable's default is what an instance starts with when its start does not
+  // supply the variable, on every start path (ADR-0455) — not
+  // only what the start forms prefill. Said where it is typed.
+  const tip = constant ? ""
+    : ' title="What an instance starts with when its start does not supply this variable (API, timer, message, signal, call activity); the start forms prefill it"';
   const defaultField = v.type === "json"
-    ? `<textarea class="sv-default sv-json-default" rows="2" placeholder='${bound ? "fallback (optional)" : '{"key": "value"}'}' aria-label="${what} (JSON)">${esc(v.default)}</textarea>`
-    : `<input type="text" class="sv-default" value="${esc(v.default)}" placeholder="${bound ? "fallback (optional)" : constant ? "value" : "default"}" aria-label="${what}"/>`;
+    ? `<textarea class="sv-default sv-json-default" rows="2" placeholder='${bound ? "fallback (optional)" : '{"key": "value"}'}' aria-label="${what} (JSON)"${tip}>${esc(v.default)}</textarea>`
+    : `<input type="text" class="sv-default" value="${esc(v.default)}" placeholder="${bound ? "fallback (optional)" : constant ? "value" : "default"}" aria-label="${what}"${tip}/>`;
   // A constant takes its value from the model, or from its application on the
   // installation where the instance starts (ADR-0453).
   const source = constant

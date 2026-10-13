@@ -25,18 +25,28 @@ an operator sees what waits under Operations → Messages
 ([ADR-0370](docs/adr/0370-durable-message-buffer.md)). The Modeler names the version it
 shows and how it stands against the draft
 ([ADR-0452](docs/adr/0452-modeler-shows-its-version.md)), and deploying from a draft saves
-it first. Among the fixes, a start form no longer drops the declared start variables, and
-the Entra PowerShell example signs in with a certificate instead of a secret it never
-received.
+it first. A declared start variable's default is now what every instance starts with when
+its start does not supply it, on every start path
+([ADR-0455](docs/adr/0455-start-variable-defaults.md)). Among the fixes, a start form no
+longer drops the declared start variables, and the Entra PowerShell example signs in with a
+certificate instead of a secret it never received.
 
 **Read this before upgrading from 0.11.0.** These act on an existing installation:
 
+- A declared start variable's default is seeded into every new instance whose start does
+  not name the variable — through the API, MCP, a public link, a CSV upload, a timer, a
+  message, a signal or a call activity — where 0.11.0 left it out. Every deployed
+  definition is compiled again at the first start, so this holds for models deployed under
+  0.11.0 from then on, and a model that tested for the variable's absence takes the other
+  branch. A start that names the variable keeps its value, null included, a fork adds
+  none, and instances already running keep what they started with. A default that is not
+  a literal of its type, or that sits on personal data or the data subject, is withheld
+  and the deploy warns; no definition stops loading over it.
 - A process that links a start form and declares start variables now asks, beneath the
   form, for the declared variables the form does not bind, in Deploy & run and in the
   Tasks app's Start, and a required one must be filled before the instance starts, where
   0.11.0 started it without the value. The Live view's Start instance opens the same
-  dialog on such a definition. A public link and an instance created through the API are
-  unchanged.
+  dialog on such a definition. An optional field left empty takes the default.
 - Deploying from the Modeler saves the draft first, through the same path as Save, and a
   save that fails deploys nothing; 0.11.0 deployed the canvas and left the draft as it was
   last saved. A version opened read-only is still deployed without touching the draft.
@@ -94,8 +104,8 @@ received.
   (`name`, `type`, `default`, `required`) beside `startFormId`, absent when it declares
   none. The compiler reads the declaration once at deploy, leniently — a nameless row is
   dropped, an unknown type reads as `string` — because a stored definition compiles again
-  on every restart. It stays authoring metadata: the engine never reads it, and an instance
-  created through the API without a declared value still gets no default.
+  on every restart. An instance started without a declared value takes its default (see
+  _Changed_).
 
 - **An operator sees what waits in the message buffer.** A message kept for an instance
   that has not reached its catch yet ([ADR-0370](docs/adr/0370-durable-message-buffer.md))
@@ -142,6 +152,19 @@ received.
   diagram. MCP `atlas_compare_draft` (ADR-0452).
 
 ### Changed
+
+- **A start variable's default is what an instance starts with when its start did not
+  supply it.** It used to be what the start forms prefilled and nothing more, so an
+  instance started through the API, MCP, a public link, a CSV upload, a timer, a message,
+  a signal or a call activity without the variable did not have it, and a script read
+  null. The engine now seeds the declared default of every start variable a start did not
+  name, on every one of those paths; a variable the start names keeps its value, null
+  included, and a fork adds none. The compiler parses the default once at deploy; one
+  that is not a literal of its type, or that holds personal data or names the data
+  subject, is not seeded, and the deploy warns instead of refusing the model. An optional
+  start-form field left empty now means "not supplied" and takes the default. A model
+  that tested for the variable's absence takes the other branch
+  ([ADR-0455](docs/adr/0455-start-variable-defaults.md)).
 
 - **Deploy from a draft saves the draft first.** Deploying from the Modeler sent the diagram
   on the canvas and left the draft as it was last saved, so a change deployed without Save
