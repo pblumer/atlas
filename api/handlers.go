@@ -114,8 +114,16 @@ type processResp struct {
 	// diagram is shown: the drawing is no longer the deployed artefact, and a reader
 	// comparing it against a printed copy deserves to know that before they conclude
 	// somebody redeployed.
-	DiagramUpdatedAt int64  `json:"diagramUpdatedAt,omitempty"`
-	DiagramUpdatedBy string `json:"diagramUpdatedBy,omitempty"`
+	DiagramUpdatedAt     int64  `json:"diagramUpdatedAt,omitempty"`
+	DiagramUpdatedBy     string `json:"diagramUpdatedBy,omitempty"`
+	DiagramUpdatedByName string `json:"diagramUpdatedByName,omitempty"`
+	// DeployedBy is the account that deployed this version (ADR-0205), and
+	// DeployedByName the name a colleague knows it by: a version is created by its
+	// deploy, so this is who created what the Modeler shows when it opens one. Both
+	// absent where nobody is known — a system deploy, authentication off, or a
+	// version deployed before it was recorded.
+	DeployedBy     string `json:"deployedBy,omitempty"`
+	DeployedByName string `json:"deployedByName,omitempty"`
 	// FrozenDecisions are the decisions this definition's latest-bound business rule
 	// tasks were frozen on when it was deployed under ADR-0319, and what latest
 	// resolves to now. Absent on every definition that follows latest, which is every
@@ -1226,10 +1234,18 @@ func (s *Server) handleListProcesses(w http.ResponseWriter, _ *http.Request) {
 				Active:           !d.inactive,
 				DiagramUpdatedAt: d.diagramUpdatedAt,
 				DiagramUpdatedBy: d.diagramUpdatedBy,
+				DeployedBy:       d.DeployedBy,
 				FrozenDecisions:  s.frozenDecisionsOf(d),
 			})
 		}
 	})
+	// The people are named after the writer's turn, for the reason handleListDrafts
+	// gives.
+	name := s.principalNamer()
+	for i := range list {
+		list[i].DeployedByName = name(list[i].DeployedBy)
+		list[i].DiagramUpdatedByName = name(list[i].DiagramUpdatedBy)
+	}
 	httpapi.JSON(w, http.StatusOK, list)
 }
 
@@ -5859,6 +5875,13 @@ type draftResp struct {
 	Name      string `json:"name"`
 	ProjectID string `json:"projectId,omitempty"`
 	SavedAt   int64  `json:"savedAt"`
+	// OwnerID / SavedBy are who created the draft and whose save wrote its current
+	// content, each beside the name a colleague knows them by, so the Modeler can say
+	// who to ask about what it shows. Absent where the server does not know.
+	OwnerID     string `json:"ownerId,omitempty"`
+	OwnerName   string `json:"ownerName,omitempty"`
+	SavedBy     string `json:"savedBy,omitempty"`
+	SavedByName string `json:"savedByName,omitempty"`
 	// LayoutGenerated marks a draft that arrived without any diagram interchange and
 	// was laid out on the way in (ADR-0124). Only a save that generated one sets it,
 	// so the importer can say where the diagram came from — the file the author picked
@@ -6015,7 +6038,7 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 		movedFrom = origin
 	}
 	stored, laidOut := layout.EnsureReport(body)
-	rec := draft{ProcessID: pid, Name: name, ProjectID: destProjectID, OwnerID: ownerID, SavedAt: time.Now().Unix(), XML: string(stored)}
+	rec := draft{ProcessID: pid, Name: name, ProjectID: destProjectID, OwnerID: ownerID, SavedAt: time.Now().Unix(), SavedBy: principalID(r), XML: string(stored)}
 	var (
 		saveErr, projErr error
 		protectedProject bool
@@ -6072,10 +6095,19 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, fmt.Sprintf(
 			"saved as %q, but the draft it was renamed from (%q) could not be removed — delete it by hand", pid, origin))
 	default:
-		httpapi.JSON(w, http.StatusOK, draftResp{
-			ProcessID: pid, Name: name, ProjectID: rec.ProjectID, SavedAt: rec.SavedAt,
-			RenamedFrom: movedFrom, LayoutGenerated: laidOut,
-		})
+		resp := draftRespOf(rec, s.principalNamer())
+		resp.RenamedFrom, resp.LayoutGenerated = movedFrom, laidOut
+		httpapi.JSON(w, http.StatusOK, resp)
+	}
+}
+
+// draftRespOf is a stored draft as the Modeler lists it, its two people named by
+// name (see principalNamer).
+func draftRespOf(d draft, name func(string) string) draftResp {
+	return draftResp{
+		ProcessID: d.ProcessID, Name: d.Name, ProjectID: d.ProjectID, SavedAt: d.SavedAt,
+		OwnerID: d.OwnerID, OwnerName: name(d.OwnerID),
+		SavedBy: d.SavedBy, SavedByName: name(d.SavedBy),
 	}
 }
 
@@ -6083,8 +6115,10 @@ func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
 // ?projectId= query narrows the list to one project's artifacts (ADR-0034).
 func (s *Server) handleListDrafts(w http.ResponseWriter, r *http.Request) {
 	filter := r.URL.Query().Get("projectId")
-	list := []draftResp{}
-	var loadErr error
+	var (
+		visible []draft
+		loadErr error
+	)
 	s.do(func() {
 		var recs []draft
 		if recs, loadErr = s.drafts.LoadAll(); loadErr != nil {
@@ -6103,12 +6137,19 @@ func (s *Server) handleListDrafts(w http.ResponseWriter, r *http.Request) {
 			if !s.canViewArtifact(r, d.ProjectID, d.OwnerID, projs) {
 				continue
 			}
-			list = append(list, draftResp{ProcessID: d.ProcessID, Name: d.Name, ProjectID: d.ProjectID, SavedAt: d.SavedAt})
+			visible = append(visible, d)
 		}
 	})
 	if loadErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "list drafts: "+loadErr.Error())
 		return
+	}
+	// Named after the writer's turn: resolving a person reads the user store, and a
+	// listing has no business holding the engine's single writer while it does.
+	name := s.principalNamer()
+	list := make([]draftResp, 0, len(visible))
+	for _, d := range visible {
+		list = append(list, draftRespOf(d, name))
 	}
 	httpapi.JSON(w, http.StatusOK, list)
 }
@@ -6185,7 +6226,7 @@ func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "move draft: "+saveErr.Error())
 		return
 	}
-	httpapi.JSON(w, http.StatusOK, draftResp{ProcessID: rec.ProcessID, Name: rec.Name, ProjectID: rec.ProjectID, SavedAt: rec.SavedAt})
+	httpapi.JSON(w, http.StatusOK, draftRespOf(rec, s.principalNamer()))
 }
 
 // handleDraftXML returns a draft's BPMN XML so the editor can reopen it, laying the

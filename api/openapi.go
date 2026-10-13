@@ -596,6 +596,15 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Report whether a process id is free to save a draft under — the live check behind the Modeler's Process ID field, so a collision shows while the id is typed rather than at Save", tag: "Drafts", role: RoleModeler, resp: jsonBody("Availability", tObject())}},
 		{"GET", "/api/v1/drafts/{id}/xml", s.handleDraftXML, apiOp{
 			summary: "Fetch a draft's BPMN XML", tag: "Drafts", role: RoleModeler, resp: xmlBody("BPMN 2.0 XML")}},
+		{"GET", "/api/v1/drafts/{id}/comparison", s.handleDraftComparison, apiOp{
+			summary: "Compare a draft with a deployed version of its process — the newest, or the one ?key= names: whether the two are the same model (the diagram is not compared), where they first differ, who last saved the draft and who deployed the version. A draft and a deployment are separate records, so this is how the Modeler says whether the draft it opened is what runs (ADR-0452)", tag: "Drafts", role: RoleModeler,
+			resp: jsonBody("The comparison", schemaObj(map[string]any{
+				"processId": tString(), "ownerId": tString(), "ownerName": tString(),
+				"savedAt": tInteger(), "savedBy": tString(), "savedByName": tString(),
+				"deployed": tBool(), "key": tInteger(), "version": tInteger(), "latestVersion": tInteger(),
+				"deployedAt": tInteger(), "deployedBy": tString(), "deployedByName": tString(),
+				"sameModel": tBool(), "difference": tString(),
+			}))}},
 		{"PATCH", "/api/v1/drafts/{id}", s.handleMoveDraft, apiOp{
 			summary: "Move a draft to a project", tag: "Drafts", role: RoleModeler, req: jsonBody("Move", tObject()), resp: jsonBody("Updated draft", tObject())}},
 		{"DELETE", "/api/v1/drafts/{id}", s.handleDeleteDraft, apiOp{
