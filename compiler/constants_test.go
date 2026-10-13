@@ -172,3 +172,69 @@ func TestPassingAConstantThroughUnchangedDeploys(t *testing.T) {
 		t.Fatalf("Parse: %v", err)
 	}
 }
+
+// A constant bound to its application (ADR-draft-application-values-per-installation)
+// takes the application's value on the installation where an instance starts; its own
+// value, when it declares one, is the fallback and is parsed like any constant's.
+func TestApplicationBoundConstants(t *testing.T) {
+	cp, err := Parse(1, 1, strings.NewReader(constantsModel("", `
+      <atlas:constant name="TenantId" type="string" source="application"/>
+      <atlas:constant name="Retries" type="number" source="application" value="3"/>
+      <atlas:constant name="Mode" source="model" value="rr"/>`, "")))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	want := []Constant{
+		{Name: "TenantId", Type: "string", FromApplication: true},
+		{Name: "Retries", Type: "number", Value: "3", Kind: expr.KindNumber, Text: "3", FromApplication: true, HasFallback: true},
+		{Name: "Mode", Type: "string", Value: "rr", Kind: expr.KindString, Text: "rr"},
+	}
+	got := cp.Constants()
+	if len(got) != len(want) {
+		t.Fatalf("Constants = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("Constants[%d] = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestMalformedApplicationBoundConstantsAreRefused(t *testing.T) {
+	cases := map[string]struct{ decl, want string }{
+		"unknown source": {`<atlas:constant name="a" source="vault"/>`, `source "vault" is not one of model, application`},
+		"bad fallback":   {`<atlas:constant name="a" type="number" source="application" value="many"/>`, "is not a number"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := Parse(1, 1, strings.NewReader(constantsModel("", tc.decl, "")))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Parse error = %v, want it to mention %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// ParseConstantValue is what the API parses an application's values with, so it must
+// agree with the compiler on every type.
+func TestParseConstantValue(t *testing.T) {
+	for _, tc := range []struct {
+		typ, raw string
+		kind     expr.ValueKind
+		b        bool
+		text     string
+	}{
+		{"string", "contoso.ch", expr.KindString, false, "contoso.ch"},
+		{"number", "7.50", expr.KindNumber, false, "7.5"},
+		{"boolean", "false", expr.KindBool, false, ""},
+		{"json", `{"b":1,"a":[true]}`, expr.KindJSON, false, `{"a":[true],"b":1}`},
+	} {
+		kind, b, text, err := ParseConstantValue(tc.typ, tc.raw)
+		if err != nil || kind != tc.kind || b != tc.b || text != tc.text {
+			t.Errorf("ParseConstantValue(%q, %q) = %v %v %q %v, want %v %v %q", tc.typ, tc.raw, kind, b, text, err, tc.kind, tc.b, tc.text)
+		}
+	}
+	if _, _, _, err := ParseConstantValue("date", "2026-01-01"); err == nil {
+		t.Error("ParseConstantValue accepted an unknown type")
+	}
+}

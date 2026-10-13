@@ -200,3 +200,95 @@ func TestNoConstantsLeavesStartVariablesAlone(t *testing.T) {
 	run(t, p)
 	wantVar(t, h, onlyInstance(t, h.store), "TenantId", model.VarString, "from-the-caller")
 }
+
+// appBoundProcess builds Start → message catch "app.more" → End with the constants
+// TenantId (bound to the application, no fallback) and Language (bound, fallback "de-CH")
+// (ADR-draft-application-values-per-installation).
+func appBoundProcess(t *testing.T) *compiler.CompiledProcess {
+	t.Helper()
+	b := compiler.NewBuilder(9, "app-bound", 1)
+	b.SetConstants([]compiler.Constant{
+		{Name: "TenantId", Type: "string", FromApplication: true},
+		{Name: "Language", Type: "string", Value: "de-CH", Kind: expr.KindString, Text: "de-CH", FromApplication: true, HasFallback: true},
+	})
+	start := b.AddStartEvent()
+	wait := b.AddMessageCatchEvent("app.more", mustCompile(t, `"k"`))
+	b.Connect(start, wait)
+	b.Connect(wait, b.AddEndEvent())
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return cp
+}
+
+// A bound constant takes the value its application holds on this server, frozen into the
+// instance when it is created: a later change reaches the next instance and not this one,
+// and recovery rebuilds the value from the log without the operator config being there.
+func TestApplicationValuesAreFrozenIntoTheInstance(t *testing.T) {
+	dir := t.TempDir()
+	clock := &manualClock{}
+	cp := appBoundProcess(t)
+
+	h1 := openHarness(t, dir)
+	p1 := engine.New(1, h1.log, h1.store, clock)
+	p1.Deploy(cp)
+	if err := p1.Recover(); err != nil {
+		t.Fatalf("Recover 1: %v", err)
+	}
+	p1.SetDefinitionApplication(cp.Key, "ucc")
+	p1.SetApplicationValues("ucc", map[string]engine.ApplicationValue{
+		"TenantId": {Kind: model.VarString, Text: "tenant-int"},
+		"Language": {Kind: model.VarString, Text: "fr-CH"},
+	})
+	p1.CreateInstance(cp.Key, strVar("TenantId", "from-the-caller"))
+	run(t, p1)
+	first := onlyInstance(t, h1.store)
+	wantVar(t, h1, first, "TenantId", model.VarString, "tenant-int")
+	wantVar(t, h1, first, "Language", model.VarString, "fr-CH")
+
+	// The operator changes the value: the running instance keeps what it started with.
+	p1.SetApplicationValues("ucc", map[string]engine.ApplicationValue{"TenantId": {Kind: model.VarString, Text: "tenant-new"}})
+	p1.PublishMessage("app.more", "k") // the first instance completes
+	run(t, p1)
+	p1.CreateInstance(cp.Key)
+	run(t, p1)
+	second := onlyInstance(t, h1.store)
+	wantVar(t, h1, second, "TenantId", model.VarString, "tenant-new")
+	// Language is no longer held by the application, so the second instance has the fallback.
+	wantVar(t, h1, second, "Language", model.VarString, "de-CH")
+
+	// Crash and recover with no operator config pushed at all: the instance's values are
+	// facts in its log.
+	h1.close(t)
+	h2 := openHarness(t, dir)
+	defer h2.close(t)
+	p2 := engine.New(1, h2.log, h2.store, clock)
+	p2.Deploy(cp)
+	if err := p2.Recover(); err != nil {
+		t.Fatalf("Recover 2: %v", err)
+	}
+	wantVar(t, h2, second, "TenantId", model.VarString, "tenant-new")
+	wantVar(t, h2, second, "Language", model.VarString, "de-CH")
+}
+
+// Without a value from its application — the definition filed under none, or the
+// application holding none — a bound constant takes its fallback, and one without a
+// fallback is not seeded at all.
+func TestApplicationBoundConstantsWithoutAValue(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	cp := appBoundProcess(t)
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	run(t, p)
+	pi := onlyInstance(t, h.store)
+	wantVar(t, h, pi, "Language", model.VarString, "de-CH")
+	if got := readVar(t, h.store, pi, "TenantId"); got != nil {
+		t.Errorf("TenantId = %+v, want it absent: no value and no fallback", got)
+	}
+}

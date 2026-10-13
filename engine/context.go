@@ -37,6 +37,18 @@ func (c *ProcessingContext) latestDefKey(processId string) (uint64, bool) {
 	return k, ok
 }
 
+// applicationValue is the value the application a definition is filed under holds on this
+// server for name (ADR-draft-application-values-per-installation). A pure read of
+// run-loop-owned operator config — no allocation (I1).
+func (c *ProcessingContext) applicationValue(defKey uint64, name string) (ApplicationValue, bool) {
+	app, ok := c.p.defApplication[defKey]
+	if !ok {
+		return ApplicationValue{}, false
+	}
+	v, ok := c.p.appValues[app][name]
+	return v, ok
+}
+
 // resolveCallTarget resolves the definition a call activity starts as a child,
 // consulting the per-server override first and falling back to the default `latest`
 // resolution (ADR-0105). Precedence for an override: disabled parks; a pinned key

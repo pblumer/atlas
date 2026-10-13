@@ -48,6 +48,9 @@ func (s *Server) startBinding(b catalog.Binding, triggerID string, vars []model.
 			key, found = d.Key, true
 			if !b.Triggered() {
 				ambiguous = untriggeredStartRefusal(d.cp)
+				if ambiguous == "" {
+					ambiguous = s.applicationValueRefusalOnLoop(d)
+				}
 			}
 		}
 	})

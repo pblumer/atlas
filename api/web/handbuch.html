@@ -5556,6 +5556,23 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         a constant – a start value, a worker's result or a message of the same name is dropped, and a model that
         writes one itself is refused at deploy. Only an operator's correction goes through, and it is audited. A
         constant is in the model and in every instance; it is no place for a secret.</p>
+      <p data-l="de"><b>Werte pro Umgebung.</b> Unterscheidet sich ein Wert zwischen DEV, INT und PROD – ein
+        Tenant, eine App-ID –, steht er nicht im Modell. Die Konstante erhält im Panel die Quelle
+        <i>application</i> und übernimmt dann den Wert, den ihre Applikation auf der jeweiligen Installation hält;
+        ein Wert im Modell ist nur noch der Fallback. Gesetzt werden die Werte auf der Applikationsseite im Tab
+        <i>Values</i>, pro Installation; dort steht auch, welche Werte die deployten Prozesse brauchen und welche
+        hier fehlen. Ein Deploy warnt, wenn ein Wert fehlt, und ein Start aus Modeler, Tasks-App, öffentlichem Link
+        oder API wird abgelehnt, bis er gesetzt ist. Eine Instanz behält den Wert, mit dem sie gestartet ist; eine
+        Änderung gilt für die danach gestarteten. Bei einer Promotion reisen die Werte nicht mit – jede Installation
+        hält ihre eigenen.</p>
+      <p data-l="en"><b>Values per environment.</b> A value that differs between DEV, INT and PROD – a tenant, an
+        app id – does not belong in the model. Give the constant the source <i>application</i> in the panel and it
+        takes the value its application holds on each installation; a value in the model is then only the fallback.
+        The values are set on the application page's <i>Values</i> tab, per installation, which also lists what the
+        deployed processes need and what is missing here. A deploy warns when a value is missing, and a start from the
+        Modeler, the Tasks app, a public link or the API is refused until it is set. An instance keeps the value it
+        started with; a change reaches the instances started afterwards. A promotion does not carry the values – each
+        installation holds its own.</p>
 
       <h4 data-l="de">Ein Formular schreiben lassen</h4><h4 data-l="en">Letting the AI Worker write one</h4>
       <p data-l="de">Ist ein <b>KI-Worker</b> eingerichtet (Console &rsaquo; Workers, Typ <code>agent</code>), geht das

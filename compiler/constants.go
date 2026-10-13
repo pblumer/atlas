@@ -23,23 +23,41 @@ import (
 // carries one, so refusing a malformed constant can never turn an accepted model into one
 // that no longer loads.
 
-// xmlConstant is one <atlas:constant name type value/>.
+// xmlConstant is one <atlas:constant name type value source/>.
 type xmlConstant struct {
 	Name  string `xml:"name,attr"`
 	Type  string `xml:"type,attr"`
 	Value string `xml:"value,attr"`
+	// Source is where the value comes from: the model ("" or "model", the value
+	// attribute) or the application the process is filed under on the installation
+	// where an instance starts ("application", ADR-draft-application-values-per-installation),
+	// in which case Value is an optional fallback.
+	Source string `xml:"source,attr"`
 }
+
+// Constant sources (ADR-draft-application-values-per-installation).
+const (
+	ConstantSourceModel       = "model"
+	ConstantSourceApplication = "application"
+)
 
 // Constant is one process constant as the engine seeds it: its name, the type and value
 // the model declares, and that value in the canonical (kind, bool, text) form a variable
 // is stored as — computed once at deploy so the engine writes it without parsing (I5).
+//
+// A constant bound to its application (FromApplication) takes the application's value
+// of the same name on the installation where the instance starts; Kind, Bool and Text
+// are then its fallback, meaningful only when HasFallback is set.
 type Constant struct {
 	Name  string
 	Type  string // declared type: string, number, boolean or json
-	Value string // the declared value, as authored
+	Value string // the declared value (a bound constant's fallback), as authored
 	Kind  expr.ValueKind
 	Bool  bool
 	Text  string
+
+	FromApplication bool // the value is the application's, per installation
+	HasFallback     bool // a bound constant declares a value to use when the application holds none
 }
 
 // constantsOf reads a process's constant declarations, refusing any the engine could not
@@ -61,14 +79,43 @@ func constantsOf(procID string, decl []xmlConstant) ([]Constant, error) {
 		if typ == "" {
 			typ = "string"
 		}
-		v, err := constantValue(typ, d.Value)
+		k := Constant{Name: name, Type: typ, Value: d.Value}
+		switch src := strings.TrimSpace(d.Source); src {
+		case "", ConstantSourceModel:
+		case ConstantSourceApplication:
+			k.FromApplication = true
+		default:
+			return nil, fmt.Errorf("compiler: process %q: constant %q: source %q is not one of model, application", procID, name, src)
+		}
+		// A bound constant's value is optional — it is the fallback — so an empty one
+		// means "none". A model constant's empty value is the empty string it says.
+		if k.FromApplication && strings.TrimSpace(d.Value) == "" {
+			out = append(out, k)
+			continue
+		}
+		var err error
+		k.Kind, k.Bool, k.Text, err = ParseConstantValue(typ, d.Value)
 		if err != nil {
 			return nil, fmt.Errorf("compiler: process %q: constant %q: %w", procID, name, err)
 		}
-		kind, b, text := expr.Classify(v)
-		out = append(out, Constant{Name: name, Type: typ, Value: d.Value, Kind: kind, Bool: b, Text: text})
+		k.HasFallback = k.FromApplication
+		out = append(out, k)
 	}
 	return out, nil
+}
+
+// ParseConstantValue turns a value declared with one of the four constant types into the
+// canonical (kind, bool, text) form a variable is stored in, or says why it is not a value
+// of that type. The API parses an application's values with it when they are saved
+// (ADR-draft-application-values-per-installation), so they are held in exactly the form a
+// model constant is and the engine never parses either.
+func ParseConstantValue(typ, raw string) (expr.ValueKind, bool, string, error) {
+	v, err := constantValue(typ, raw)
+	if err != nil {
+		return 0, false, "", err
+	}
+	kind, b, text := expr.Classify(v)
+	return kind, b, text, nil
 }
 
 // constantValue turns a declared value into the FEEL value its type says it is. A string

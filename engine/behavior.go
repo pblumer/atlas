@@ -236,16 +236,30 @@ func activateInstance(c *ProcessingContext, piKey uint64, seed instanceSeed) {
 	// value — that names one fall to keepsConstant (context.go) rather than replace it. The
 	// values were canonicalised at deploy, so this parses nothing (I5) and replays the
 	// events it writes (I6).
+	//
+	// A constant bound to its application takes the value the application holds on this
+	// server, read from the operator config the processor carries and frozen into the event
+	// like any other (ADR-draft-application-values-per-installation); without one it takes
+	// its fallback, and without a fallback it is not seeded — the deploy warned, and an API
+	// start was refused before it got here.
 	consts := cp.Constants()
 	for i := range consts {
 		k := &consts[i]
-		c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+		v := model.VariableValue{
 			ScopeKey: piKey,
 			Name:     k.Name,
 			Kind:     toVarKind(k.Kind),
 			Bool:     k.Bool,
 			Text:     k.Text,
-		})
+		}
+		if k.FromApplication {
+			if av, ok := c.applicationValue(defKey, k.Name); ok {
+				v.Kind, v.Bool, v.Text = av.Kind, av.Bool, av.Text
+			} else if !k.HasFallback {
+				continue
+			}
+		}
+		c.AppendVariableEvent(model.IntentVariableCreated, v)
 	}
 
 	// Seed the instance's start variables under its scope before any element runs.

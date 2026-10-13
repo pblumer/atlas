@@ -4,11 +4,6 @@
 - **Implementation:** Landed
 - **Date:** 2026-10-13
 - **Deciders:** Atlas maintainers
-- **Open question:** How a constant whose value differs per installation (DEV, INT, PROD)
-  takes that value. This record settles constants whose value the model states; an
-  application-scoped, per-installation value is named below as the follow-up and not
-  designed here.
-- **Question checked:** 2026-10
 
 ## Context and problem statement
 
@@ -164,13 +159,13 @@ as one that declares nothing searchable.
 - **Follow-ups / risks to watch:**
   - **Values per installation.** A constant whose value differs between DEV, INT and
     PROD cannot be stated in the model without three models, which ADR-0371 rules out:
-    the same BPMN must deploy everywhere. The follow-up is an application-scoped set of
-    named values held by each installation, which a constant binds to by name instead of
-    stating a value. The constraint that design has to meet is already fixed here: the
-    value is resolved when the instance is created and frozen into the creation event,
-    so it has to be state the engine can read during command processing — durable,
-    written through a command like any other — and not a setting the API layer holds,
-    which a timer or message start never passes through.
+    the same BPMN must deploy everywhere. ADR-draft-application-values-per-installation
+    answers it: an application holds named values per installation, and a constant binds
+    to one by name (`source="application"`). What this record fixed for it still holds —
+    the value is resolved where the instance is created and frozen into the creation
+    event, so it has to be something the engine reads while it processes the command, not
+    something the API layer adds to an API start, which a timer or message start never
+    passes through.
   - **Visibility.** A constant is visible wherever a variable is. Atlas has no
     per-variable visibility, and introducing one for constants alone would make two
     kinds of variable that read differently. If an installation needs to keep a value

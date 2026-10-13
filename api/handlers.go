@@ -163,6 +163,10 @@ type constantResp struct {
 	Name  string `json:"name"`
 	Type  string `json:"type"`
 	Value string `json:"value"`
+	// Source is "application" for a constant bound to its application's value on this
+	// installation, whose Value is then only the fallback
+	// (ADR-draft-application-values-per-installation); absent for a model constant.
+	Source string `json:"source,omitempty"`
 }
 
 // constantsOf is a definition's constants in their response shape, nil when it declares
@@ -175,6 +179,9 @@ func constantsOf(cp *compiler.CompiledProcess) []constantResp {
 	out := make([]constantResp, len(decl))
 	for i, c := range decl {
 		out[i] = constantResp{Name: c.Name, Type: c.Type, Value: c.Value}
+		if c.FromApplication {
+			out[i].Source = compiler.ConstantSourceApplication
+		}
 	}
 	return out
 }
@@ -1221,6 +1228,7 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 		// change a person makes and then immediately goes looking for, so it is the
 		// one that does not wait out the TTL (see forgetLandscape).
 		s.forgetLandscape()
+		s.proc.SetDefinitionApplication(key, projectID) // ADR-draft-application-values-per-installation
 		s.deployments[key] = &deployment{
 			Key:        key,
 			ProcessID:  pid,

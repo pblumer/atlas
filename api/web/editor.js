@@ -2531,7 +2531,7 @@ function collectDiagramVariables(modeler) {
       // A constant is a variable every instance carries from its start
       // (ADR-draft-process-constants), so expressions and completion offer it like one.
       for (const c of readConstants(rootBo)) {
-        push(c.name, "Process", "", "constant", "Process", c.type || "");
+        push(c.name, "Process", "", c.source === "application" ? "application constant" : "constant", "Process", c.type || "");
       }
     }
   } catch { /* best-effort */ }
@@ -6829,12 +6829,17 @@ function readStartVariables(bo) {
 // readConstants returns the constants a process declares via its atlas:Constants
 // extension element: [{name, type, value}] (ADR-draft-process-constants). Empty when
 // none are declared.
+//
+// source is "application" for a constant bound to its application's value on the
+// installation where an instance starts, whose value is then only a fallback
+// (ADR-draft-application-values-per-installation); "" for a model constant.
 function readConstants(bo) {
   const cs = findExt(bo, "atlas:Constants");
   return ((cs && cs.constants) || []).map((c) => ({
     name: c.name || "",
     type: START_VAR_TYPES.includes(c.type) ? c.type : "string",
     value: c.value || "",
+    source: c.source === "application" ? "application" : "",
   }));
 }
 
@@ -6973,11 +6978,18 @@ function writeConstants(modeler, list, targetEl, targetBo) {
   } else {
     if (!cs) { cs = moddle.create("atlas:Constants"); cs.$parent = ext; ext.values = [...(ext.values || []), cs]; }
     cs.constants = clean.map((v) => {
-      const c = moddle.create("atlas:Constant", {
+      const props = {
         name: v.name.trim(),
         type: START_VAR_TYPES.includes(v.type) ? v.type : "string",
         value: v.default || "",
-      });
+      };
+      // Bound to the application: the value is only its fallback, and an empty one is
+      // no fallback at all, so it is not written.
+      if (v.source === "application") {
+        props.source = "application";
+        if (!v.default) delete props.value;
+      }
+      const c = moddle.create("atlas:Constant", props);
       c.$parent = cs;
       return c;
     });
@@ -7000,16 +7012,26 @@ const CONSTANT_DECL = { list: "#cv-list", add: "#cv-add", constant: true };
 function startVarRowHTML(v, constant = false) {
   const opts = START_VAR_TYPES
     .map((t) => `<option value="${t}"${t === v.type ? " selected" : ""}>${t}</option>`).join("");
-  const what = constant ? "Value" : "Default value";
+  const bound = constant && v.source === "application";
+  const what = bound ? "Fallback value" : constant ? "Value" : "Default value";
   const defaultField = v.type === "json"
-    ? `<textarea class="sv-default sv-json-default" rows="2" placeholder='{"key": "value"}' aria-label="${what} (JSON)">${esc(v.default)}</textarea>`
-    : `<input type="text" class="sv-default" value="${esc(v.default)}" placeholder="${constant ? "value" : "default"}" aria-label="${what}"/>`;
+    ? `<textarea class="sv-default sv-json-default" rows="2" placeholder='${bound ? "fallback (optional)" : '{"key": "value"}'}' aria-label="${what} (JSON)">${esc(v.default)}</textarea>`
+    : `<input type="text" class="sv-default" value="${esc(v.default)}" placeholder="${bound ? "fallback (optional)" : constant ? "value" : "default"}" aria-label="${what}"/>`;
+  // A constant takes its value from the model, or from its application on the
+  // installation where the instance starts (ADR-draft-application-values-per-installation).
+  const source = constant
+    ? `<select class="sv-source" aria-label="Source" title="Where the value comes from: the model, or the application's value on each installation">
+        <option value=""${bound ? "" : " selected"}>value</option>
+        <option value="application"${bound ? " selected" : ""}>application</option>
+      </select>`
+    : "";
   // A constant is never asked for, so "required" has nothing to mean on it.
   const required = constant ? ""
     : `<label class="sv-req" title="Required"><input type="checkbox" class="sv-required"${v.required ? " checked" : ""}/> req</label>`;
   return `<div class="sv-row${v.type === "json" ? " sv-row-json" : ""}">
     <input type="text" class="sv-name" value="${esc(v.name)}" placeholder="${constant ? "TenantId" : "customer"}" aria-label="${constant ? "Constant name" : "Variable name"}"/>
     <select class="sv-type" aria-label="Type">${opts}</select>
+    ${source}
     ${defaultField}
     ${required}
     <button type="button" class="sv-del icon-btn" title="Remove" aria-label="${constant ? "Remove constant" : "Remove variable"}">✕</button>
@@ -7039,6 +7061,7 @@ function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn(), d
   const addBtn = body.querySelector(decl.add);
   if (!listEl || !addBtn) return;
   const required = (row) => !decl.constant && row.querySelector(".sv-required").checked;
+  const source = (row) => (decl.constant && row.querySelector(".sv-source").value) || "";
   const write = decl.constant ? writeConstants : writeStartVariables;
 
   const editors = new Map(); // row DOM node → attachJSONEditor handle
@@ -7059,20 +7082,24 @@ function wireStartVars(body, modeler, targetEl, targetBo, wrap = (fn) => fn(), d
     type: row.querySelector(".sv-type").value,
     default: row.querySelector(".sv-default").value,
     required: required(row),
+    source: source(row),
   }));
   const persist = () => wrap(() => { try { write(modeler, collect(), targetEl, targetBo); } catch { /* stale */ } });
 
   listEl.addEventListener("change", (e) => {
-    // When the type dropdown changes to or from "json", rebuild the row so the
-    // default field switches between <input> and the JSON editor.
-    const sel = e.target.closest(".sv-type");
+    // When the type dropdown changes to or from "json", or a constant's source
+    // changes, rebuild the row so the value field switches between <input> and the
+    // JSON editor, and says whether it is a value or a fallback.
+    const sel = e.target.closest(".sv-type, .sv-source");
     if (sel) {
       const row = sel.closest(".sv-row");
+      const type = row.querySelector(".sv-type").value;
       const data = {
         name: row.querySelector(".sv-name").value,
-        type: sel.value,
-        default: sel.value === "json" ? "" : row.querySelector(".sv-default").value,
+        type,
+        default: sel.classList.contains("sv-type") && type === "json" ? "" : row.querySelector(".sv-default").value,
         required: required(row),
+        source: source(row),
       };
       // Destroy any existing JSON editor for this row.
       if (editors.has(row)) { editors.get(row).destroy(); editors.delete(row); }
@@ -7497,9 +7524,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="Add a variable">+ Add variable</button>
         <p class="muted" style="font-size:12px">Declared on this pool's process, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks. With a start form, the ones the form does not ask for are asked beneath it. The engine ignores the declaration; it's authoring metadata, so an instance started through the API gets no default. A value nobody enters is a constant, below.</p>
         <h3>Constants</h3>
-        <div id="cv-list">${readConstants(proc).map((c) => startVarRowHTML({ name: c.name, type: c.type, default: c.value }, true)).join("")}</div>
+        <div id="cv-list">${readConstants(proc).map((c) => startVarRowHTML({ name: c.name, type: c.type, default: c.value, source: c.source }, true)).join("")}</div>
         <button type="button" class="btn neutral" id="cv-add" style="margin-top:6px" title="Add a constant">+ Add constant</button>
-        <p class="muted" style="font-size:12px">Values every instance starts with and nobody is asked for: set on every start path, before the start variables, and read by expressions, scripts and Worker Types like any variable. Nothing in the run can replace one; only an operator's correction can. A constant is in the model and in every instance, so it is no place for a secret.</p>`;
+        <p class="muted" style="font-size:12px">Values every instance starts with and nobody is asked for: set on every start path, before the start variables, and read by expressions, scripts and Worker Types like any variable. Nothing in the run can replace one; only an operator's correction can. Set its source to <b>application</b> and it takes the application's value on each installation — DEV, INT and PROD hold their own, on the application's Values tab — with the value here as an optional fallback. A constant is in the model and in every instance, so it is no place for a secret.</p>`;
     }
     body.innerHTML = `${poolFields}
       <p class="muted" style="font-size:12px">The pool is a <b>participant</b> that executes the process below. The elements live in that process — the pool only labels who runs it.</p>
@@ -7570,9 +7597,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="Add a variable">+ Add variable</button>
             <p class="muted" style="font-size:12px">Declared here, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks — instead of raw JSON. With a start form on the start event, the ones the form does not ask for are asked beneath it, on Deploy &amp; run, Start instance and the Tasks app's Start. The engine ignores the declaration; it's authoring metadata, so an instance started through the API or a public link gets no default. A value nobody enters is a constant, below.</p>
             <h3>Constants</h3>
-            <div id="cv-list">${readConstants(rootBo).map((c) => startVarRowHTML({ name: c.name, type: c.type, default: c.value }, true)).join("")}</div>
+            <div id="cv-list">${readConstants(rootBo).map((c) => startVarRowHTML({ name: c.name, type: c.type, default: c.value, source: c.source }, true)).join("")}</div>
             <button type="button" class="btn neutral" id="cv-add" style="margin-top:6px" title="Add a constant">+ Add constant</button>
-            <p class="muted" style="font-size:12px">Values every instance starts with and nobody is asked for: set on every start path, before the start variables, and read by expressions, scripts and Worker Types like any variable. Nothing in the run can replace one; only an operator's correction can. A constant is in the model and in every instance, so it is no place for a secret.</p>`;
+            <p class="muted" style="font-size:12px">Values every instance starts with and nobody is asked for: set on every start path, before the start variables, and read by expressions, scripts and Worker Types like any variable. Nothing in the run can replace one; only an operator's correction can. Set its source to <b>application</b> and it takes the application's value on each installation — DEV, INT and PROD hold their own, on the application's Values tab — with the value here as an optional fallback. A constant is in the model and in every instance, so it is no place for a secret.</p>`;
         }
         body.innerHTML = `
           <h3>Process</h3>

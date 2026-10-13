@@ -88,6 +88,17 @@ type Processor struct {
 	// replay — the flag need not live in the log (I6).
 	inactive map[uint64]bool
 
+	// defApplication names the application each deployed definition is filed under on
+	// this server, and appValues the values each application holds here
+	// (ADR-draft-application-values-per-installation). A constant bound to its
+	// application is resolved from them when an instance is created. Like callOverrides
+	// they are operator config: the server layer pushes them, from its deployment registry
+	// and a sidecar, at startup and on every change, and they are owned by this run-loop
+	// goroutine (I3). The value read is frozen into the instance's VariableCreated event,
+	// so replay never consults them and they need not live in the log (I6).
+	defApplication map[uint64]string
+	appValues      map[string]map[string]ApplicationValue
+
 	jobNotifier func(jobType int32)
 
 	queue        []Command
@@ -184,6 +195,9 @@ func New(partition uint16, log *wal.Log, store *state.Store, clock Clock) *Proce
 		inactive:      map[uint64]bool{},
 		latestProcess: map[string]uint64{},
 		callOverrides: map[string]CallTargetOverride{},
+
+		defApplication: map[uint64]string{},
+		appValues:      map[string]map[string]ApplicationValue{},
 	}
 	p.registerHandlers()
 	p.registerBehaviors()
@@ -302,6 +316,52 @@ func (p *Processor) Undeploy(defKey uint64) {
 	// anyway: it costs nothing and it is the right thing to do to a key that is
 	// going away.
 	delete(p.inactive, defKey)
+	delete(p.defApplication, defKey)
+}
+
+// ApplicationValue is one value an application holds on this installation, in the
+// canonical form a variable is stored in (ADR-draft-application-values-per-installation).
+// The server layer parses it when it is saved, so the engine seeds it without parsing (I5).
+type ApplicationValue struct {
+	Kind model.VarKind
+	Bool bool
+	Text string
+}
+
+// SetDefinitionApplication records which application a deployed definition is filed
+// under on this server; "" means none. Run-loop goroutine only: the server layer calls it
+// at startup, on deploy, and when a definition moves between applications.
+func (p *Processor) SetDefinitionApplication(defKey uint64, applicationID string) {
+	if applicationID == "" {
+		delete(p.defApplication, defKey)
+		return
+	}
+	p.defApplication[defKey] = applicationID
+}
+
+// HasApplicationValue reports whether the application a definition is filed under holds
+// name on this server — what an instance created now would be seeded with. Run-loop
+// goroutine only; the server layer asks it before it lets a person start a definition
+// whose bound constant has no fallback.
+func (p *Processor) HasApplicationValue(defKey uint64, name string) bool {
+	app, ok := p.defApplication[defKey]
+	if !ok {
+		return false
+	}
+	_, ok = p.appValues[app][name]
+	return ok
+}
+
+// SetApplicationValues replaces the values an application holds on this server; nil or
+// empty removes them. The map is the processor's from here on — the caller must not
+// modify it. Run-loop goroutine only: the server layer calls it at startup, when the
+// values are saved, and when the application is deleted.
+func (p *Processor) SetApplicationValues(applicationID string, values map[string]ApplicationValue) {
+	if len(values) == 0 {
+		delete(p.appValues, applicationID)
+		return
+	}
+	p.appValues[applicationID] = values
 }
 
 // messageStartRef points a starting message at the definition it instantiates

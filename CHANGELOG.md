@@ -14,6 +14,24 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An application holds its values per installation, and a constant binds to one.**
+  DEV, INT and PROD run the same BPMN with different tenants, app ids and suffixes
+  ([ADR-draft-application-values-per-installation](docs/adr/draft-application-values-per-installation.md)).
+  `<atlas:constant name="TenantId" source="application"/>` takes the value the process's
+  application holds on the installation where the instance starts; a `value` on it is the
+  fallback. The values are set on the application page's new **Values** tab, or with `PUT
+  /api/v1/applications/{id}/values` (admin), and read with `GET` there, which also lists
+  what the deployed processes require and whether this installation holds it. They are
+  kept per installation, in an `application-values` store a whole-installation snapshot
+  carries and a design-time export or a promoted release never does. The engine resolves
+  them when it creates an instance, on every start path, and freezes the value into the
+  instance, so a later change reaches only the instances started afterwards. A deploy warns
+  about a bound value this installation does not hold, and a start from the Modeler, the
+  Tasks app, a public link, a CSV upload or the API is refused with `409` until it is set;
+  a timer, message or signal start is not refused, because nobody is there to answer. The
+  Modeler's constants editor has a source select, and the process listing names a bound
+  constant's `source`.
+
 - **A process declares constants every instance starts with.** `<atlas:constant name type
   value/>` inside `<atlas:constants>` on the process states a value nobody is asked for —
   a domain suffix, a language, an app id

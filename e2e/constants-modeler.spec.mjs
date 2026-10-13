@@ -92,3 +92,29 @@ test("the Variables panel offers a constant like any variable", async ({ page })
   await expect(page.locator('#vars-list .var-row[data-var="MaxAgents"] .vtag')).toHaveText("number");
   expect(page.__errors).toEqual([]);
 });
+
+// A constant can take its value from its application on each installation
+// (ADR-draft-application-values-per-installation): the source select writes
+// source="application", and the value field becomes an optional fallback — written only
+// when there is one.
+test("a constant bound to its application writes its source, and a fallback only when given", async ({ page }) => {
+  await openConstants(page, "plain");
+  await page.locator("#cv-add").click();
+  let row = page.locator("#cv-list .sv-row").last();
+  await row.locator(".sv-name").fill("TenantId");
+  await row.locator(".sv-name").blur();
+  await row.locator(".sv-source").selectOption("application");
+
+  row = page.locator("#cv-list .sv-row").last();
+  await expect(row.locator(".sv-default")).toHaveAttribute("placeholder", "fallback (optional)");
+  await expect.poll(() => constantsXML(page)).toContain('<atlas:constant name="TenantId" type="string" source="application" />');
+
+  await row.locator(".sv-default").fill("tenant-dev");
+  await row.locator(".sv-default").blur();
+  await expect.poll(() => constantsXML(page)).toContain('<atlas:constant name="TenantId" type="string" value="tenant-dev" source="application" />');
+
+  // The Variables panel says where the value comes from.
+  await page.locator("#vars-toggle").click();
+  await expect(page.locator('#vars-list .var-row[data-var="TenantId"] .var-meta')).toContainText("application constant");
+  expect(page.__errors).toEqual([]);
+});
