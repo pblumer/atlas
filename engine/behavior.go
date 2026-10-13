@@ -271,7 +271,7 @@ func activateInstance(c *ProcessingContext, piKey uint64, seed instanceSeed) {
 	}
 
 	// And a declared start variable the start did not supply takes the default the process
-	// declares (ADR-draft-start-variable-defaults), on every path that starts an instance:
+	// declares (ADR-0455), on every path that starts an instance:
 	// the API, MCP, a timer, a message, a signal, a call activity, a CSV row. Supplied
 	// means named, so a start that sends null for it keeps its null. A fork is not a start:
 	// it continues an instance with the values that instance had reached, and adding one it

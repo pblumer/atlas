@@ -33,7 +33,7 @@ func startVarsOf(t *testing.T, model string) map[string]StartVariable {
 }
 
 // A default is read once, at deploy, into the form a variable is stored in
-// (ADR-draft-start-variable-defaults), so the engine seeds it without parsing. The
+// (ADR-0455), so the engine seeds it without parsing. The
 // authored text stays beside it for the start forms to prefill.
 func TestStartVariableDefaultsAreParsedAtDeploy(t *testing.T) {
 	got := startVarsOf(t, startVarsModel("", `

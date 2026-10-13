@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/model"
 )
 
-// Start-variable defaults (ADR-draft-start-variable-defaults): a declared start variable
+// Start-variable defaults (ADR-0455): a declared start variable
 // a start did not supply takes the default the process declares, on every path that
 // starts an instance — and only those. A fork continues an instance; it does not start one.
 

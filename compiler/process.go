@@ -2574,7 +2574,7 @@ func (p *CompiledProcess) StartFormId() string { return p.Intern(p.startFormId) 
 // without it.
 //
 // The default is also what an instance starts with when whoever started it did not supply
-// the variable (ADR-draft-start-variable-defaults): Kind, Bool and Text are it in the
+// the variable (ADR-0455): Kind, Bool and Text are it in the
 // canonical form a variable is stored as, computed once at deploy so the engine seeds it
 // without parsing (I5), and meaningful only when HasDefault is set. A declaration whose
 // default cannot be seeded has none, and DefaultProblem says why — the deploy warns with
@@ -2599,7 +2599,7 @@ var startVariableTypes = []string{"string", "number", "boolean", "json"}
 // StartVariables returns the process's declared start variables in the order they were
 // authored, nil when it declares none. The start surfaces render them beside the start
 // form, so a value the form does not ask for is still asked, and the engine seeds the
-// default of each one a start did not supply (ADR-draft-start-variable-defaults). The
+// default of each one a start did not supply (ADR-0455). The
 // slice is shared and must not be modified.
 func (p *CompiledProcess) StartVariables() []StartVariable { return p.startVars }
 

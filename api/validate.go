@@ -160,7 +160,7 @@ func (s *Server) dataFlowProblems(r io.Reader, applicationID string) []compiler.
 }
 
 // startVariableDefaultWarnings names each declared start variable whose default the
-// engine does not seed (ADR-draft-start-variable-defaults): one that is not a literal of
+// engine does not seed (ADR-0455): one that is not a literal of
 // its type, or one that holds personal data. A warning and never a refusal, because the
 // declaration has always been accepted as written — the start form still prefills it, and
 // an instance started without the variable does not have it.

@@ -81,7 +81,7 @@ func TestStartVariablesBesideStartForm(t *testing.T) {
 		t.Errorf("StartFormId = %q, want \"collective-line\"", got)
 	}
 	// Each default is also read into the form the engine seeds it in
-	// (ADR-draft-start-variable-defaults).
+	// (ADR-0455).
 	want := []StartVariable{
 		{Name: "TenantId", Type: "string", Required: true},
 		{Name: "Retries", Type: "number", Default: "3", HasDefault: true, Kind: expr.KindNumber, Text: "3"},

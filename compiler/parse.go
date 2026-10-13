@@ -1452,7 +1452,7 @@ type xmlProcess struct {
 	// StartVariables are the values the process says it starts with
 	// (<atlas:startForm><atlas:startVariable/></atlas:startForm>). The start surfaces
 	// render them as typed fields, and the engine seeds the default of one a start did
-	// not supply (ADR-draft-start-variable-defaults).
+	// not supply (ADR-0455).
 	StartVariables []xmlStartVariable `xml:"extensionElements>startForm>startVariable"`
 	// Constants are the values every instance starts with and nobody is asked for
 	// (<atlas:constants><atlas:constant/></atlas:constants>, ADR-0454).

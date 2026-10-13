@@ -27,7 +27,7 @@ const defaultsBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/
 </definitions>`
 
 // An instance started over the API without a declared start variable has its default
-// (ADR-draft-start-variable-defaults) — the start that used to leave it out, because only
+// (ADR-0455) — the start that used to leave it out, because only
 // the start forms ever read the declaration. A default that is not a literal of its type
 // is not seeded, and the deploy says so instead of refusing the model.
 func TestAnAPIStartTakesTheDeclaredDefaults(t *testing.T) {

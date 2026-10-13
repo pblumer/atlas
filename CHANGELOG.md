@@ -111,7 +111,7 @@ _Changed_ / _Removed_ for each version.
   subject, is not seeded, and the deploy warns instead of refusing the model. An optional
   start-form field left empty now means "not supplied" and takes the default. A model
   that tested for the variable's absence takes the other branch
-  ([ADR-draft-start-variable-defaults](docs/adr/draft-start-variable-defaults.md)).
+  ([ADR-0455](docs/adr/0455-start-variable-defaults.md)).
 
 - **Deploy from a draft saves the draft first.** Deploying from the Modeler sent the diagram
   on the canvas and left the draft as it was last saved, so a change deployed without Save

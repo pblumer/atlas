@@ -7037,7 +7037,7 @@ function startVarRowHTML(v, constant = false) {
   const bound = constant && v.source === "application";
   const what = bound ? "Fallback value" : constant ? "Value" : "Default value";
   // A start variable's default is what an instance starts with when its start does not
-  // supply the variable, on every start path (ADR-draft-start-variable-defaults) — not
+  // supply the variable, on every start path (ADR-0455) — not
   // only what the start forms prefill. Said where it is typed.
   const tip = constant ? ""
     : ' title="What an instance starts with when its start does not supply this variable (API, timer, message, signal, call activity); the start forms prefill it"';

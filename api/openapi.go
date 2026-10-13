@@ -330,7 +330,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "processId")),
 			resp: jsonBody("Created instance", tObject())}},
 		{"POST", "/api/v1/processes/{key}/instances", s.handleCreateInstance, apiOp{
-			summary: "Start a process instance; a declared start variable the body leaves out takes its default (ADR-draft-start-variable-defaults)", tag: "Instances", role: RoleOperator,
+			summary: "Start a process instance; a declared start variable the body leaves out takes its default (ADR-0455)", tag: "Instances", role: RoleOperator,
 			req:  jsonBody("Initial variables", schemaObj(map[string]any{"variables": tObject()})),
 			resp: jsonBody("Created instance", tObject())}},
 		{"POST", "/api/v1/processes/{processId}/triggers/{message}", s.handleTrigger, apiOp{

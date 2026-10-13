@@ -1,6 +1,6 @@
 package compiler
 
-// Start-variable defaults (ADR-draft-start-variable-defaults).
+// Start-variable defaults (ADR-0455).
 //
 // A declared start variable's default used to be what the start surfaces prefilled and
 // nothing more: an instance started by the API, MCP, a timer, a message, a signal, a call
