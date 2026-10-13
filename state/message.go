@@ -2,6 +2,7 @@ package state
 
 import (
 	"encoding/binary"
+	"errors"
 
 	"github.com/cockroachdb/pebble"
 	"github.com/pblumer/atlas/model"
@@ -49,6 +50,9 @@ func (t *Tx) PutBufferedMessage(msgKey uint64, v *model.MessageValue) error {
 	if err := t.b.Set(keyBufferedMessage(v.MessageName, v.CorrelationKey, msgKey), t.encodeValue(v), nil); err != nil {
 		return err
 	}
+	if err := t.mergeCounter(keyRuntimeTotal(rtBufferedMessages), 1); err != nil {
+		return err
+	}
 	return t.RecordMessageId(msgKey, v)
 }
 
@@ -70,7 +74,7 @@ func (t *Tx) RecordMessageId(msgKey uint64, v *model.MessageValue) error {
 // ConsumeBufferedMessage removes a delivered message from the buffer. Its expiry entry
 // stays while its id has to be remembered, and goes with it when there is none.
 func (t *Tx) ConsumeBufferedMessage(msgKey uint64, v *model.MessageValue) error {
-	if err := t.b.Delete(keyBufferedMessage(v.MessageName, v.CorrelationKey, msgKey), nil); err != nil {
+	if err := t.dropBufferedMessage(msgKey, v); err != nil {
 		return err
 	}
 	if v.MessageId != "" {
@@ -82,7 +86,7 @@ func (t *Tx) ConsumeBufferedMessage(msgKey uint64, v *model.MessageValue) error 
 // ExpireMessage drops everything kept for a message whose time to live has passed:
 // the message, if it still waited, its expiry entry and its id.
 func (t *Tx) ExpireMessage(msgKey uint64, v *model.MessageValue) error {
-	if err := t.b.Delete(keyBufferedMessage(v.MessageName, v.CorrelationKey, msgKey), nil); err != nil {
+	if err := t.dropBufferedMessage(msgKey, v); err != nil {
 		return err
 	}
 	if err := t.b.Delete(keyMessageExpiry(v.ExpiresAt, msgKey), nil); err != nil {
@@ -92,6 +96,73 @@ func (t *Tx) ExpireMessage(msgKey uint64, v *model.MessageValue) error {
 		return nil
 	}
 	return t.b.Delete(keyMessageId(v.MessageName, v.CorrelationKey, v.MessageId), nil)
+}
+
+// dropBufferedMessage removes a message from the buffer and counts it out, when it is
+// still there: an expiry that follows a delivery finds nothing left to drop, and the
+// count must not go down twice for one message.
+func (t *Tx) dropBufferedMessage(msgKey uint64, v *model.MessageValue) error {
+	key := keyBufferedMessage(v.MessageName, v.CorrelationKey, msgKey)
+	_, present, err := getCopy(t.b, key)
+	if err != nil || !present {
+		return err
+	}
+	if err := t.b.Delete(key, nil); err != nil {
+		return err
+	}
+	return t.mergeCounter(keyRuntimeTotal(rtBufferedMessages), -1)
+}
+
+// BufferedMessageCount is how many messages wait in the buffer, read from the
+// maintained counter (ADR-0142's shape) rather than by walking the buffer, so a metrics
+// scrape costs one point read however much waits.
+func (q queries) BufferedMessageCount() (int64, error) { return q.runtimeTotal(rtBufferedMessages) }
+
+// BufferedMessagesPage calls fn for up to limit waiting messages, in (name, key, age)
+// order, narrowed to one message name and, with it, one correlation key when those are
+// given. after is the cursor a previous page returned, nil for the first page; next is
+// the cursor of this one, nil when nothing follows. Each page is bounded by limit, so an
+// operator's listing costs what it shows, not what waits (ADR-0239).
+func (q queries) BufferedMessagesPage(name, correlationKey string, after []byte, limit int,
+	fn func(msgKey uint64, v *model.MessageValue) error) (next []byte, err error) {
+	prefix := []byte{byte(cfBufferedMessage)}
+	if name != "" {
+		prefix = appendLenString(prefix, name)
+		if correlationKey != "" {
+			prefix = appendLenString(prefix, correlationKey)
+		}
+	}
+	lo := prefix
+	if len(after) > 0 {
+		// A cursor names the last key a page showed; the next page starts just past it,
+		// and a cursor from outside this prefix cannot widen the scan.
+		lo = append(append([]byte(nil), after...), 0x00)
+		if string(lo) < string(prefix) {
+			lo = prefix
+		}
+	}
+	n := 0
+	var last []byte
+	scanErr := q.scanRange(lo, prefixEnd(prefix), func(k, raw []byte) error {
+		if n == limit {
+			next = last
+			return errScanWindowFull
+		}
+		var v model.MessageValue
+		if err := model.DecodeValueInto(&v, raw); err != nil {
+			return err
+		}
+		if err := fn(trailingKey(k), &v); err != nil {
+			return err
+		}
+		last = append(last[:0], k...)
+		n++
+		return nil
+	})
+	if errors.Is(scanErr, errScanWindowFull) {
+		scanErr = nil
+	}
+	return next, scanErr
 }
 
 // MessageIdTaken reports whether a message with this name, key and id is still

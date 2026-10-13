@@ -173,3 +173,73 @@ func TestAKeptMessageMayNotCarryPersonalData(t *testing.T) {
 		t.Fatalf("a publish without a time to live: status=%d body=%s, want 200 as before", code, body)
 	}
 }
+
+// An operator reads what waits in the buffer: a bounded page with a cursor, narrowed to
+// a name and key, with the whole buffer's count and each message's payload and expiry
+// (ADR-0370). The listing reads off the run loop (ADR-0239).
+func TestAnOperatorReadsTheBuffer(t *testing.T) {
+	srv := newServerForErrors(t)
+	for _, body := range []string{
+		`{"name":"order","correlationKey":"1","timeToLiveMs":60000,"messageId":"a","variables":{"note":"first"}}`,
+		`{"name":"order","correlationKey":"1","timeToLiveMs":60000}`,
+		`{"name":"invoice","correlationKey":"9","timeToLiveMs":60000}`,
+	} {
+		if code, out := serveInternal(t, srv, http.MethodPost, "/api/v1/messages", body, "application/json"); code != http.StatusOK {
+			t.Fatalf("publish %s: status=%d body=%s", body, code, out)
+		}
+	}
+	read := func(query string) bufferedMessagesResp {
+		t.Helper()
+		code, body := serveInternal(t, srv, http.MethodGet, "/api/v1/messages/buffered"+query, "", "")
+		if code != http.StatusOK {
+			t.Fatalf("GET %s: status=%d body=%s", query, code, body)
+		}
+		var r bufferedMessagesResp
+		if err := json.Unmarshal(body, &r); err != nil {
+			t.Fatalf("decode %s: %v (%s)", query, err, body)
+		}
+		return r
+	}
+
+	first := read("?limit=2")
+	if len(first.Messages) != 2 || first.Total != 3 || first.NextCursor == "" {
+		t.Fatalf("first page = %+v, want two of three and a cursor", first)
+	}
+	rest := read("?limit=2&after=" + first.NextCursor)
+	if len(rest.Messages) != 1 || rest.NextCursor != "" {
+		t.Fatalf("second page = %+v, want the last one and no cursor", rest)
+	}
+	orders := read("?name=order&correlationKey=1")
+	if len(orders.Messages) != 2 || orders.Total != 3 {
+		t.Fatalf("order/1 = %+v, want its two messages and the whole count", orders)
+	}
+	m := orders.Messages[0]
+	if m.MessageId != "a" || m.Expired || m.BufferedAt == 0 || m.ExpiresAt-m.BufferedAt != int64(time.Minute) ||
+		len(m.Variables) != 1 || m.Variables[0].Name != "note" || m.Variables[0].Value != "first" {
+		t.Fatalf("oldest order/1 message = %+v, want id a, its payload, and a minute between publish and expiry", m)
+	}
+
+	// A server whose clock has passed the expiry marks the message as past its time,
+	// before the sweep reaches it.
+	late := newServerWith(t, withClock(func() int64 { return time.Now().Add(time.Hour).UnixNano() }))
+	if code, out := serveInternal(t, late, http.MethodPost, "/api/v1/messages",
+		`{"name":"order","timeToLiveMs":60000}`, "application/json"); code != http.StatusOK {
+		t.Fatalf("publish on the late server: status=%d body=%s", code, out)
+	}
+	code, body := serveInternal(t, late, http.MethodGet, "/api/v1/messages/buffered", "", "")
+	var past bufferedMessagesResp
+	if code != http.StatusOK || json.Unmarshal(body, &past) != nil || len(past.Messages) != 1 || !past.Messages[0].Expired {
+		t.Fatalf("buffer read an hour on: status=%d body=%s, want the one message marked expired", code, body)
+	}
+
+	for _, c := range []struct{ query, says string }{
+		{"?correlationKey=1", "give name as well"},
+		{"?limit=0", "invalid limit"},
+		{"?after=zz", "invalid after cursor"},
+	} {
+		code, body := serveInternal(t, srv, http.MethodGet, "/api/v1/messages/buffered"+c.query, "", "")
+		if code != http.StatusBadRequest || !strings.Contains(string(body), c.says) {
+			t.Errorf("GET %s: status=%d body=%s, want 400 naming %q", c.query, code, body, c.says)
+		}
+	}
+}

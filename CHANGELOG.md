@@ -55,6 +55,17 @@ _Changed_ / _Removed_ for each version.
   dropped, an unknown type reads as `string` — because a stored definition compiles again
   on every restart. It stays authoring metadata: the engine never reads it, and an instance
   created through the API without a declared value still gets no default.
+- **An operator sees what waits in the message buffer.** A message kept for an instance
+  that has not reached its catch yet ([ADR-0370](docs/adr/0370-durable-message-buffer.md))
+  was invisible until it arrived or expired. `GET /api/v1/messages/buffered` (operator)
+  lists what waits — name, correlation key, message id, when it was published, when it
+  expires, whether its time is already up, and its payload — a page at a time, narrowed
+  to a message name and, with it, a correlation key; the MCP tool
+  `atlas_buffered_messages` reads the same list, and the Console shows it under
+  Operations → Messages. `atlas_buffered_messages` on `/metrics` is the number waiting,
+  read from a counter maintained beside the buffer rather than by walking it, so a scrape
+  costs the same however much waits.
+
 - **A message can wait for the instance it is meant for.** A message published before
   anything waits for it was lost: an instance that reached its catch event a moment later
   waited for good, so a model had to be shaped around the race (ADR-0020). `POST

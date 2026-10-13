@@ -50,7 +50,8 @@ Bearer` header.
 | `atlas_terminate_instances` | `keys?` \| `processDefKey?`, `q?`, `limit?` | terminate an explicit key set, or a definition's matching instances |
 | `atlas_delete_process` | `key` | deletes one deployed definition |
 | `atlas_stats` | none | engine-wide active counts |
-| `atlas_publish_message` | `name`, `correlationKey?`, `variables?` | correlates a message to waiting instances; returns stats |
+| `atlas_publish_message` | `name`, `correlationKey?`, `variables?`, `timeToLiveMs?`, `messageId?` | correlates a message to waiting instances; with `timeToLiveMs` keeps an unmatched one for an instance that waits later (ADR-0370); returns stats |
+| `atlas_buffered_messages` | `name?`, `correlationKey?`, `limit?`, `after?` | lists the messages waiting in the buffer, with payload and expiry; returns `{messages, total, nextCursor}` |
 | `atlas_complete_job` | `key`, `variables?` | completes a job by hand (operator counterpart to a worker) |
 | `atlas_fail_job` | `key`, `retries?`, `message?` | fails a job; `retries` 0 (default) raises an incident, positive re-activates |
 | `atlas_throw_job_error` | `key`, `errorCode`, `reason`, `errorMessage?` | throws a BPMN error from a job by hand; a matching error boundary or event subprocess catches it, otherwise the job is kept under an incident whose resolve retries it |

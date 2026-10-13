@@ -94,6 +94,12 @@ func Open(dir string, opts ...Option) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("state: backfill runtime totals: %w", err)
 	}
+	// The buffered-message counter (ADR-0370) arrived after the buffer it counts, so a
+	// store that already holds waiting messages is counted once.
+	if err := s.backfillBufferedMessagesIfNeeded(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("state: backfill buffered messages: %w", err)
+	}
 	// The per-element termination counters (ADR-0249) are the latest addition, and an
 	// uncounted cancellation does not read as unknown on the overlay — it reads as a
 	// completion. The lifecycle trail has recorded them all along, so they are
@@ -717,6 +723,34 @@ func (s *Store) backfillRuntimeTotalsIfNeeded() error {
 		}
 	}
 	if err := b.Set(keyMeta(metaRuntimeTotalsV1), []byte{1}, nil); err != nil {
+		return err
+	}
+	return b.Commit(pebble.Sync)
+}
+
+// metaBufferedMessagesV1 marks that the buffered-message counter has been seeded from
+// the buffer it counts.
+const metaBufferedMessagesV1 = "buffered_messages_v1"
+
+// backfillBufferedMessagesIfNeeded seeds the buffered-message counter from the buffer
+// the first time a store gains it, in one synced batch with its marker — the shape of
+// backfillRuntimeTotalsIfNeeded, for the counter that arrived after it.
+func (s *Store) backfillBufferedMessagesIfNeeded() error {
+	if _, ok, err := getCopy(s.db, keyMeta(metaBufferedMessagesV1)); err != nil || ok {
+		return err
+	}
+	n, err := s.countPrefix([]byte{byte(cfBufferedMessage)})
+	if err != nil {
+		return err
+	}
+	b := s.db.NewBatch()
+	defer b.Close()
+	if n > 0 {
+		if err := b.Merge(keyRuntimeTotal(rtBufferedMessages), encodeCounter(int64(n)), nil); err != nil {
+			return err
+		}
+	}
+	if err := b.Set(keyMeta(metaBufferedMessagesV1), []byte{1}, nil); err != nil {
 		return err
 	}
 	return b.Commit(pebble.Sync)

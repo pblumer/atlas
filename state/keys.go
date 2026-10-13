@@ -100,6 +100,7 @@ const (
 	rtOpenJobs             runtimeTotalKind = 1
 	rtPendingTimers        runtimeTotalKind = 2
 	rtMessageSubscriptions runtimeTotalKind = 3
+	rtBufferedMessages     runtimeTotalKind = 4 // messages waiting in the buffer (ADR-0370)
 )
 
 // keyRuntimeTotal keys an engine-wide live-entity counter. One key per kind, so the
