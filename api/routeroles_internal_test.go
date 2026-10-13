@@ -45,6 +45,11 @@ var wantAdminRoutes = []string{
 	"POST /api/v1/scripts/run",
 	"PUT /api/v1/call-activities/overrides/{processId}",
 	"DELETE /api/v1/call-activities/overrides/{processId}",
+	// And an application's values on this installation: the tenant, client id or
+	// endpoint every instance of its processes starts with here — the same per-server
+	// operator decision as an override (ADR-draft-application-values-per-installation).
+	// Reading them stays open, because the Values tab and a deploy's warning read them.
+	"PUT /api/v1/applications/{id}/values",
 
 	// Reaching into a running instance's data, or moving instances between
 	// definitions. An operator may cancel and repair; rewriting a variable or
