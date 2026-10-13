@@ -1,0 +1,83 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas Modeler shown-version e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountEditor against a mock `api`, to verify
+         that the editor bar says which record is open — the draft, or version N of M —
+         who created and last changed it, and how it stands against the other record;
+         and that Deploy from a draft saves the draft first, so the draft stays what
+         runs (ADR-draft-modeler-shows-its-version).
+
+         window.__state is what the server "holds": a test sets the comparison and the
+         process listing before mounting. Every write the editor makes is recorded in
+         order in window.__writes, which is the evidence for save-before-deploy. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountEditor } from "/editor.js";
+
+      // The live collaboration session (ADR-0140) is not what this harness is about;
+      // without EventSource attachCollab is a no-op by its own first line.
+      delete window.EventSource;
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_sv" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="order" name="Bestellung" isExecutable="true">
+    <bpmn:startEvent id="Start_1"><bpmn:outgoing>f0</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:endEvent id="End_1"><bpmn:incoming>f0</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="End_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="order">
+    <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="320" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="320" y="138"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      window.__state = { comparison: null, processes: [] };
+      window.__writes = [];
+
+      const notFound = () => { const e = new Error("no draft with that process id"); e.status = 404; return e; };
+
+      const api = async (method, url, body) => {
+        if (method === "GET" && /\/drafts\/[\w-]+\/xml$/.test(url)) return XML;
+        if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (method === "GET" && /\/drafts\/[\w-]+\/comparison/.test(url)) {
+          window.__writes.push({ method, url });
+          if (window.__state.comparisonStatus) {
+            const e = new Error("read draft: broken"); e.status = window.__state.comparisonStatus; throw e;
+          }
+          if (!window.__state.comparison) throw notFound();
+          return window.__state.comparison;
+        }
+        if (method === "GET" && /\/processes$/.test(url)) return window.__state.processes;
+        if (method === "GET" && /\/forms$/.test(url)) return [];
+        if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
+        if (method === "POST" && /\/drafts/.test(url)) {
+          window.__writes.push({ method, url });
+          return { processId: "order", name: "Bestellung", savedAt: 1700000500 };
+        }
+        if (method === "POST" && /\/deployments/.test(url)) {
+          window.__writes.push({ method, url });
+          return { key: 3, processId: "order", version: 3, warnings: [] };
+        }
+        return {};
+      };
+
+      window.__mountDraft = () => mountEditor(view, { api, toast: noop, draftId: "order" });
+      window.__mountVersion = (key) => mountEditor(view, { api, toast: noop, key });
+      window.__mountNew = () => mountEditor(view, { api, toast: noop, key: null });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

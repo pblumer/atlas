@@ -152,6 +152,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_collaboration_runtime":        "GET /api/v1/collaborations/{key}/runtime",
 	"atlas_list_drafts":                  "GET /api/v1/drafts",
 	"atlas_get_draft_xml":                "GET /api/v1/drafts/{id}/xml",
+	"atlas_compare_draft":                "GET /api/v1/drafts/{id}/comparison",
 	"atlas_delete_draft":                 "DELETE /api/v1/drafts/{id}",
 	"atlas_join_session":                 "POST /api/v1/drafts/{id}/session/join",
 	"atlas_session_poll":                 "POST /api/v1/drafts/{id}/session/poll",

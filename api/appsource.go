@@ -535,7 +535,7 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, o
 	for _, p := range man.Processes {
 		rec := draft{
 			ProcessID: p.ID, Name: p.Name, ProjectID: app.ID,
-			SavedAt: now, XML: string(byPath[p.Path]),
+			SavedAt: now, SavedBy: ownerID, XML: string(byPath[p.Path]),
 		}
 		if err := s.drafts.Save(rec); err != nil {
 			return sourceImportResult{}, err

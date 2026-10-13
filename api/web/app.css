@@ -998,6 +998,28 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .editor-bar .etabs button { background: none; border: none; padding: 8px 12px; font: inherit; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
 .editor-bar .etabs button.active { color: var(--text); border-bottom-color: var(--accent); }
 .editor-bar .crumbs { color: var(--muted); font-size: 13px; margin-right: 6px; }
+/* What the Modeler has open — the draft or version N — and how it stands against the
+   other (shown-version.js). Capped and ellipsised so a long label cannot push the bar
+   into a second row; the whole sentence is in its title and its panel. */
+.editor-bar .shown-version { position: relative; flex: none; display: flex; margin-right: 6px; }
+.editor-bar .shown-version[hidden] { display: none; }
+.editor-bar .sv-chip { border: 0; cursor: pointer; font: inherit; font-size: 12px; max-width: 190px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; line-height: 18px; }
+.editor-bar .sv-chip.off { border: 1px solid var(--border); }
+.editor-bar .sv-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.editor-bar .sv-pop { position: absolute; left: 0; top: calc(100% + 6px); z-index: 60; width: 340px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(20, 22, 26, .14); padding: 10px 12px; font-size: 13px; color: var(--text); }
+.editor-bar .sv-pop[hidden] { display: none; }
+.sv-rows { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; }
+.sv-rows dt { color: var(--muted); white-space: nowrap; }
+.sv-rows dd { margin: 0; overflow-wrap: anywhere; }
+.sv-note { margin: 10px 0 0; line-height: 1.45; }
+.sv-note.warn { background: var(--warn-soft); color: var(--text); border-left: 3px solid var(--warn); padding: 6px 8px; border-radius: 4px; }
+.sv-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+/* Deploy on a version opened read-only leaves the draft alone; the panel says so first. */
+.deploy-from-version { margin: 0 0 10px; padding: 6px 8px; border-left: 3px solid var(--warn);
+  background: var(--warn-soft); border-radius: 4px; font-size: 13px; line-height: 1.45; }
 .editor-bar nav.crumbs { display: flex; align-items: center; gap: 6px; }
 .editor-bar nav.crumbs a { color: var(--muted); text-decoration: none; }
 .editor-bar nav.crumbs a:hover { color: var(--text); text-decoration: underline; }
