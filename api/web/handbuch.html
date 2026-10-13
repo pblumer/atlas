@@ -4383,9 +4383,20 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <p data-l="de">Daneben liegt <code>entra-create-account.bpmn</code> – dieselbe Aufgabe, aber als
             PowerShell-<code>jobScript</code>. Der Vergleich lohnt: Der Skript-Weg kann alles, was PowerShell kann,
             und ist genau deshalb der, bei dem du dir jede Zeile selbst absichern musst.</p>
+          <p data-l="de">Ein Skript erhält weder die Umgebung seines Workers noch den Tresor. Das Beispiel meldet
+            sich deshalb app-only mit einem <b>Zertifikat aus dem Zertifikatsspeicher des Worker-Kontos</b> an und
+            wählt es über seinen Antragsteller aus – eine Erneuerung braucht in Atlas keine Änderung. Tenant,
+            Client-ID und Zertifikats-Antragsteller sind <b>Konstanten mit der Quelle <i>application</i></b>: Jede
+            Installation setzt sie im Tab <i>Values</i> der Applikation, und bis Tenant und Client-ID gesetzt
+            sind, wird ein Start abgelehnt.</p>
           <p data-l="en">Beside it lies <code>entra-create-account.bpmn</code> – the same job as a PowerShell
             <code>jobScript</code>. The comparison is worth making: the script route can do everything PowerShell can,
             and for exactly that reason it is the one where every line is yours to secure.</p>
+          <p data-l="en">A script receives neither its worker's environment nor the vault. So the example signs in
+            app-only with a <b>certificate from the worker account's certificate store</b>, picked by its subject – a
+            renewal needs no change in atlas. The tenant, the client id and the certificate subject are
+            <b>constants with the source <i>application</i></b>: each installation sets them on the application's
+            <i>Values</i> tab, and a start is refused until the tenant and the client id are set.</p>
         </details>
       </div>
 

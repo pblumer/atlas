@@ -58,6 +58,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The Entra PowerShell example signs in without a secret it never received.**
+  `examples/entra-create-account.bpmn` read `$env:ENTRA_CLIENT_SECRET`, `$env:ENTRA_CLIENT_ID`
+  and `$env:ENTRA_TENANT_ID`, under a comment saying the credentials came from the worker
+  environment. A script is handed a fixed list of runtime variables and never the worker's
+  credentials ([ADR-0047](docs/adr/0047-polyglot-script-tasks-via-job-workers.md)), so all three arrived empty
+  and the sign-in could not work. The example now signs in app-only with a certificate from the
+  worker account's store, picked by subject so a renewal needs no change in atlas, and takes
+  the tenant, the client id and the certificate subject from constants bound to its
+  application, which each installation sets on the application's Values tab. It also turns on
+  `Set-StrictMode`, so a variable the instance does not carry fails the job instead of reaching
+  the script as `$null`.
+
 - **A start form no longer drops the declared start variables.** A process that links a
   start form ([ADR-0028](docs/adr/0028-forms-and-the-tasks-app.md)) and also declares start
   variables was started with the form's fields alone: Deploy & run and the Tasks app's Start
