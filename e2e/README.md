@@ -257,7 +257,12 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   narrower clipped it. The panel must be exactly as wide as its column — at the default
   width, after a real pointer drag, for a width a previous session left in
   `localStorage`, and collapsed to its rail, where the editor must take the freed width
-  rather than leave a gap at the right edge.
+  rather than leave a gap at the right edge. The Components palette had the same defect
+  on the left (form-js pins it to 270px): it must fill its column too, so no empty band
+  opens between it and the canvas, and its tiles must reflow rather than be clipped —
+  three to a row at the default 270px, even beside a classic 17px scrollbar (simulated
+  with padding, since headless Chromium hides scrollbars). A double-click on either
+  divider restores the column's default width.
 
 - **`user-presence.spec.mjs`** ([ADR-0228](../docs/adr/0228-user-presence.md)):
   **who is signed in**, in the Users card under Organization. The column must render the
