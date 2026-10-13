@@ -71,6 +71,30 @@ func TestPublishMessageViaTool(t *testing.T) {
 	}
 }
 
+// TestAPublishedMessageWaitsViaTool: with timeToLiveMs a message published before
+// anything waits is kept, and the instance that parks at the catch afterwards receives
+// it at once (ADR-0370). A zero time to live is refused by the tool before it reaches
+// the server.
+func TestAPublishedMessageWaitsViaTool(t *testing.T) {
+	ts := newAtlas(t)
+	if _, isErr := toolText(t, result(t, run(t, ts, callTool(1, "atlas_deploy", map[string]any{"xml": messageWaiterBPMN}))[0])); isErr {
+		t.Fatal("deploy failed")
+	}
+	pubText, isErr := toolText(t, result(t, run(t, ts, callTool(2, "atlas_publish_message", map[string]any{
+		"name": "go", "correlationKey": "order-1", "timeToLiveMs": 60000, "messageId": "m-1"}))[0]))
+	if isErr || !strings.Contains(pubText, `"timeToLiveMs":60000`) || !strings.Contains(pubText, `"messageId":"m-1"`) {
+		t.Fatalf("publish with a time to live = (%q, isErr=%v), want it accepted and echoed", pubText, isErr)
+	}
+	startText, isErr := toolText(t, result(t, run(t, ts, callTool(3, "atlas_create_instance", map[string]any{"key": 1, "variables": map[string]any{"orderId": "order-1"}}))[0]))
+	if isErr || activeProcessInstances(t, startText) != 0 {
+		t.Fatalf("create_instance after the publish = (%q, isErr=%v), want 0 active (the kept message arrived)", startText, isErr)
+	}
+	text, isErr := toolText(t, result(t, run(t, ts, callTool(4, "atlas_publish_message", map[string]any{"name": "go", "timeToLiveMs": 0}))[0]))
+	if !isErr || !strings.Contains(text, "timeToLiveMs") {
+		t.Fatalf("publish with timeToLiveMs 0 = (%q, isErr=%v), want a tool error", text, isErr)
+	}
+}
+
 // TestPublishMessageRequiresName rejects a publish with no message name as a tool
 // error, before any request reaches the server.
 func TestPublishMessageRequiresName(t *testing.T) {

@@ -393,6 +393,21 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			return tx.DecMessageSubscriptions()
 		}
 
+	case model.VTMessage:
+		// The message buffer (ADR-0370). Every field the store keys or keeps — the
+		// message's key, its expiry and its id — was frozen into the event at command
+		// time, so replay keeps and drops exactly what the live run did (I4, I6).
+		switch h.Intent {
+		case model.IntentMessageBuffered:
+			return tx.PutBufferedMessage(h.Key, &v.message)
+		case model.IntentMessageIdRecorded:
+			return tx.RecordMessageId(h.Key, &v.message)
+		case model.IntentMessageConsumed:
+			return tx.ConsumeBufferedMessage(h.Key, &v.message)
+		case model.IntentMessageExpired:
+			return tx.ExpireMessage(h.Key, &v.message)
+		}
+
 	case model.VTSignal:
 		// A signal subscription's lifecycle mirrors a message subscription's: opened
 		// when a signal catch activates, retired when a broadcast fires it. Same two

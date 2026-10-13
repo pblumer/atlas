@@ -4133,9 +4133,13 @@ func (s *Server) handleInstancesSummary(w http.ResponseWriter, _ *http.Request) 
 }
 
 type publishMessageResp struct {
-	Name           string    `json:"name"`
-	CorrelationKey string    `json:"correlationKey"`
-	Stats          statsResp `json:"stats"`
+	Name           string `json:"name"`
+	CorrelationKey string `json:"correlationKey"`
+	// TimeToLiveMs and MessageId echo what the publish asked for (ADR-0370), so a
+	// sender's log shows the lifetime the server accepted.
+	TimeToLiveMs int64     `json:"timeToLiveMs,omitempty"`
+	MessageId    string    `json:"messageId,omitempty"`
+	Stats        statsResp `json:"stats"`
 }
 
 // handlePublishMessage publishes a message by name and correlation key, with
@@ -4152,6 +4156,11 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
 		Name           string `json:"name"`
 		CorrelationKey string `json:"correlationKey"`
+		// TimeToLiveMs keeps a message nothing waits for yet, for a subscription that
+		// opens later (ADR-0370); 0 or absent is ADR-0020's publish, lost when unmatched.
+		TimeToLiveMs int64 `json:"timeToLiveMs"`
+		// MessageId makes a repeat of the same message a no-op while the first lives.
+		MessageId string `json:"messageId"`
 	}
 	if len(bytes.TrimSpace(body)) > 0 {
 		if err := json.Unmarshal(body, &payload); err != nil {
@@ -4161,6 +4170,19 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	if payload.Name == "" {
 		httpapi.Error(w, http.StatusBadRequest, "message name is required")
+		return
+	}
+	ttl := time.Duration(payload.TimeToLiveMs) * time.Millisecond
+	switch limit := s.messageTTLLimit(); {
+	case payload.TimeToLiveMs < 0:
+		httpapi.Error(w, http.StatusBadRequest, "timeToLiveMs must not be negative")
+		return
+	case payload.TimeToLiveMs > limit.Milliseconds():
+		httpapi.Error(w, http.StatusBadRequest, "timeToLiveMs is longer than the "+limit.String()+
+			" this server keeps a message (--message-ttl-max); a message kept that long is a record, not a message")
+		return
+	case payload.MessageId != "" && ttl == 0:
+		httpapi.Error(w, http.StatusBadRequest, "messageId needs a timeToLiveMs: the id is remembered for as long as its message lives")
 		return
 	}
 	vars, err := parseStartVariables(body)
@@ -4178,6 +4200,8 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 		owner       string
 		action      string
 		ownerErr    error
+		personalVar string
+		personalIn  string
 	)
 	s.do(func() {
 		// A message a catalogue product's action starts or waits at is the order's to
@@ -4191,10 +4215,27 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 		if owner, action, ownerErr = s.catalogOwnerOfName(payload.Name); ownerErr != nil || owner != "" {
 			return
 		}
-		s.proc.PublishMessage(payload.Name, payload.CorrelationKey, vars...)
+		if ttl == 0 {
+			s.proc.PublishMessage(payload.Name, payload.CorrelationKey, vars...)
+			driveNeeded = true
+			return
+		}
+		// A buffered message keeps its payload readable until it is delivered or expires:
+		// nothing on the message path can seal a value, because the instance whose data
+		// subject would key it is known only once the message correlates (ADR-0314). So a
+		// message that may be buffered must not carry a value any deployed process
+		// declares personal (ADR-0370, amended 2026-10-13).
+		if personalVar, personalIn = s.personalDeclarationOf(vars); personalVar != "" {
+			return
+		}
+		s.proc.PublishMessageWithTTL(payload.Name, payload.CorrelationKey, payload.MessageId, ttl, vars...)
 		driveNeeded = true
 	})
 	switch {
+	case personalVar != "":
+		httpapi.Error(w, http.StatusUnprocessableEntity, "variable "+personalVar+" is declared personal by process "+personalIn+
+			"; a message with a timeToLiveMs is kept readable until it is delivered or expires, so it may not carry personal data")
+		return
 	case ownerErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read catalogue: "+ownerErr.Error())
 		return
@@ -4219,7 +4260,8 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 	case statErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
 	default:
-		httpapi.JSON(w, http.StatusOK, publishMessageResp{Name: payload.Name, CorrelationKey: payload.CorrelationKey, Stats: stats})
+		httpapi.JSON(w, http.StatusOK, publishMessageResp{Name: payload.Name, CorrelationKey: payload.CorrelationKey,
+			TimeToLiveMs: payload.TimeToLiveMs, MessageId: payload.MessageId, Stats: stats})
 	}
 }
 

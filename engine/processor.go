@@ -167,6 +167,13 @@ type Processor struct {
 	// otherwise run in a later batch and rebuild what the teardown just removed. The
 	// map is reused across batches like startsThisBatch.
 	terminatedThisBatch map[uint64]struct{}
+	// gatewayRaceTaken holds the event-based gateways (by element-instance key) one of
+	// whose catches took a buffered message in this run (ADR-0370, ADR-0110). Its
+	// siblings arm in later commands of the same run, before the winner completes and
+	// cancels them, and must not take a message of their own: a message taken by a
+	// catch the winner then cancels would be spent for nothing. Command-path only, so
+	// never consulted on replay (I6); cleared when a run starts.
+	gatewayRaceTaken map[uint64]struct{}
 }
 
 // startKeyIdent identifies a (definition, correlation key) pair for the per-batch
@@ -835,6 +842,23 @@ func (p *Processor) PublishMessage(name, correlationKey string, vars ...model.Va
 	})
 }
 
+// PublishMessageWithTTL enqueues publication of a message that is kept when nothing
+// waits for it yet (ADR-0370): if it correlates no subscription and starts no instance,
+// it is buffered for ttl, and the first subscription that opens on its name and key in
+// that time receives it. messageID, when not empty, makes a repeat of the message — the
+// same name, key and id — a no-op for as long as the first one lives, delivered or not.
+// A ttl of zero is PublishMessage. Call RunUntilIdle to process it.
+func (p *Processor) PublishMessageWithTTL(name, correlationKey, messageID string, ttl time.Duration, vars ...model.VariableValue) {
+	p.queue = append(p.queue, Command{
+		ValueType:  model.VTMessage,
+		Intent:     model.IntentMessagePublished,
+		Value:      inflightValue{subscription: model.MessageSubscriptionValue{MessageName: name, CorrelationKey: correlationKey}},
+		StartVars:  vars,
+		MessageTTL: ttl,
+		MessageID:  messageID,
+	})
+}
+
 // PublishInbound enqueues publication of a message that originated from an external
 // event source (ADR-0075), carrying the source's identity (sourceID) and monotonic
 // sequence (seq) so the publish is deduplicated against the source's durable
@@ -882,10 +906,42 @@ func (p *Processor) TriggerDueTimers() error {
 	return nil
 }
 
-// TickTimers fires all due timers and processes the resulting work to idle. A
-// server scheduler calls it on the partition's goroutine (invariant I3).
+// TriggerDueMessageExpiries enqueues an expiry command for every buffered message
+// whose time to live has passed by the current clock (ADR-0370). Like the timers it is
+// time-driven and off the command path; the command it enqueues is what drops the
+// message, as an event, so applyToState never reads the clock (I4).
+func (p *Processor) TriggerDueMessageExpiries() error {
+	now := p.clock.Now()
+	type due struct {
+		key uint64
+		v   model.MessageValue
+	}
+	var expire []due
+	if err := p.store.DueMessageExpiries(now, func(k uint64, v *model.MessageValue) error {
+		expire = append(expire, due{key: k, v: *v})
+		return nil
+	}); err != nil {
+		return err
+	}
+	for _, d := range expire {
+		p.queue = append(p.queue, Command{
+			Key:       d.key,
+			ValueType: model.VTMessage,
+			Intent:    model.IntentMessageExpiring,
+			Value:     inflightValue{message: d.v},
+		})
+	}
+	return nil
+}
+
+// TickTimers fires all due timers, drops the buffered messages whose time to live has
+// passed, and processes the resulting work to idle. A server scheduler calls it on the
+// partition's goroutine (invariant I3).
 func (p *Processor) TickTimers() error {
 	if err := p.TriggerDueTimers(); err != nil {
+		return err
+	}
+	if err := p.TriggerDueMessageExpiries(); err != nil {
 		return err
 	}
 	return p.RunUntilIdle()
@@ -898,6 +954,9 @@ func (p *Processor) RunUntilIdle() error {
 	// A run is the unit the execution budget is measured in: this is where a token's
 	// step count starts over, because this is where the writer was last free.
 	clear(p.tokenSteps)
+	// An event-based gateway's catches arm within the run that activated it, so which
+	// race a buffered message already decided is a question for one run (ADR-0370).
+	clear(p.gatewayRaceTaken)
 	for len(p.queue) > 0 {
 		if err := p.processBatch(); err != nil {
 			return err

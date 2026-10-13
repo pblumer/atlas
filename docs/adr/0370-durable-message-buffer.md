@@ -1,7 +1,7 @@
 # ADR-0370: A published message waits for its subscriber
 
-- **Status:** Accepted (amended 2026-09-16 — the buffer ships as a standalone local slice, ahead of and independent of any cross-node traffic; amended 2026-09-17 — expiry at an entry point that states a commitment is a breach rather than a silent outcome; see the amendment notes below)
-- **Implementation:** Not started
+- **Status:** Accepted (amended 2026-09-16 — the buffer ships as a standalone local slice, ahead of and independent of any cross-node traffic; amended 2026-09-17 — expiry at an entry point that states a commitment is a breach rather than a silent outcome; amended 2026-10-13 — what the first slice decided where this record was silent: the buffer feeds subscriptions and not message starts, an id is remembered across delivery, one catch per event-based gateway takes a message, and a message that may be kept carries no personal data; see the amendment notes below)
+- **Implementation:** Partial
 - **Date:** 2026-09-16
 - **Deciders:** Atlas maintainers
 
@@ -53,6 +53,58 @@
 >
 > Nothing changes for an entry point without a commitment. TTL still defaults to 0 for a
 > locally published message, so ADR-0020's no-op stands for every deployed model.
+
+> **Amendment (2026-10-13): what the first slice decided where this record was silent.**
+> Building the local slice met five questions the decision below does not answer.
+>
+> - **The buffer feeds subscriptions, not message start events.** A message is consumed
+>   when a catch event, a receive task, a boundary event or an event subprocess's trigger
+>   opens a subscription on its name and key. A definition deployed or reactivated
+>   (ADR-0119) after a message was buffered does not start from it: draining the buffer
+>   into starts would start a burst of instances at once, past the singleton rule of
+>   ADR-0094, and that is a decision of its own. The record's question about a
+>   deactivated definition is answered this way: a message buffered while a message
+>   start was down waits only for a catch. One consequence is welcome rather than
+>   designed: a message a singleton start declines because an instance for its key is
+>   live is buffered when it has a time to live, and reaches that instance if it later
+>   waits for it — part of the follow-up ADR-0094 named.
+> - **An id is remembered across delivery.** Idempotency covers a message delivered at
+>   once as well as a buffered one: its id is recorded until the message would have
+>   expired, so a sender's retry after an answer it never saw is dropped either way. The
+>   id is scoped by message name and correlation key, the triple the mechanism names. An
+>   id without a time to live is refused at the API, because nothing would remember it.
+> - **One catch per event-based gateway takes a buffered message.** The catches of a race
+>   (ADR-0110) arm one after another before the winner cancels the rest. The first in
+>   flow order that finds a message takes it; the others leave theirs in the buffer
+>   instead of spending them on a branch that is about to be cancelled.
+> - **A message that may be kept carries no personal data.** Nothing on the message path
+>   can seal a value: the data subject that would key it is known only once the message
+>   correlates (ADR-0314). A buffered payload would therefore wait readable, out of reach
+>   of an erasure. So a publish with a time to live is refused with 422 when one of its
+>   variables is declared personal by any deployed process — any, because which process a
+>   message reaches is decided when it arrives.
+> - **A lifetime is bounded.** `--message-ttl-max` (default seven days) bounds what a
+>   publish may ask for; more is refused with 400 rather than shortened, because a sender
+>   that asked for a lifetime relies on it.
+
+> **As built (2026-10-13).** The local slice is built. `POST /api/v1/messages` and
+> `atlas_publish_message` take `timeToLiveMs` and `messageId`; the engine's
+> `PublishMessageWithTTL` buffers an unmatched message (`IntentMessageBuffered`), records
+> the id of one delivered at once (`IntentMessageIdRecorded`), and `openMessageSubscription`
+> (`engine/behavior.go`) hands the oldest live message to each subscription that opens
+> (`IntentMessageConsumed`). The timer tick enqueues an expiry for every message past its
+> time (`TriggerDueMessageExpiries`, `IntentMessageExpired`), and a message past its time
+> is never delivered even before the sweep reaches it. The record rides `VTMessage`, the
+> value type reserved for an incoming message, rather than a new `VTBufferedMessage`; the
+> state lives in three families — the buffer, its expiry index and the id index
+> (`state/message.go`). Tests: `engine/message_buffer_test.go` (including the recovery
+> test this record asked for up front), `state/message_test.go`,
+> `api/messagebuffer_internal_test.go`.
+>
+> **What is not built**, and keeps the record `Partial`: the breach of a commitment
+> (amendment of 2026-09-17) has nothing to raise until ADR-0373 lets an entry point state
+> one, and a message arriving from a peer is ADR-0372's. A model cannot yet give a throw
+> or end event a time to live: only the API and MCP publish can.
 
 ## Context and problem statement
 

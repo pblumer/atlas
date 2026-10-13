@@ -466,9 +466,10 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Termination result", tObject())}},
 
 		{"POST", "/api/v1/messages", s.handlePublishMessage, apiOp{
-			summary: "Publish a message for correlation. A message a catalogue product's action starts or waits at is refused with 409 naming the product and the action: the order sends it, through its start act, a return or the action (ADR-0429)", tag: "Messages", role: RoleOperator,
+			summary: "Publish a message for correlation. With timeToLiveMs a message nothing waits for yet is kept that long, and the first subscription that opens on its name and key receives it; messageId makes a retry a no-op while it lives (ADR-0370). 400 for a timeToLiveMs past --message-ttl-max or a messageId without one; 422 for a variable any deployed process declares personal on a message that may be kept. A message a catalogue product's action starts or waits at is refused with 409 naming the product and the action: the order sends it, through its start act, a return or the action (ADR-0429)", tag: "Messages", role: RoleOperator,
 			req: jsonBody("Message", schemaObj(map[string]any{
 				"name": tString(), "correlationKey": tString(), "variables": tObject(),
+				"timeToLiveMs": tInteger(), "messageId": tString(),
 			}, "name")),
 			resp: jsonBody("Publish result", tObject())}},
 

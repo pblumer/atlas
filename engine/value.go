@@ -52,6 +52,10 @@ type inflightValue struct {
 	// feedRetention rides only on the feed's prune command and the event it emits
 	// (ADR-0429 §5). Never on token movement.
 	feedRetention model.FeedRetentionValue
+	// message rides on the message buffer's events and the sweep's expiry command
+	// (ADR-0370). Its payload is a slice, so like migration it is a non-hot-path
+	// field: no token movement populates it.
+	message model.MessageValue
 }
 
 // asValue returns a model.Value pointing at the active field, for encoding. The
@@ -103,6 +107,8 @@ func (v *inflightValue) asValue(vt model.ValueType) model.Value {
 		return &v.actionOutcome
 	case model.VTFeedRetention:
 		return &v.feedRetention
+	case model.VTMessage:
+		return &v.message
 	}
 	return nil
 }
@@ -207,6 +213,10 @@ func inflightFromRecord(rec model.Record) inflightValue {
 	case model.VTFeedRetention:
 		if v, ok := rec.Value.(*model.FeedRetentionValue); ok {
 			iv.feedRetention = *v
+		}
+	case model.VTMessage:
+		if v, ok := rec.Value.(*model.MessageValue); ok {
+			iv.message = *v
 		}
 	}
 	return iv
