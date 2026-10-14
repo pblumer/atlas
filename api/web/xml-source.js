@@ -1,6 +1,6 @@
 // The Modeler's source view: the document behind a process diagram or a decision,
 // shown as text and, once corrected there, applied back onto the canvas
-// (ADR-draft-modeler-xml-source).
+// (ADR-0457).
 //
 // A BPMN diagram and a DMN decision are XML underneath, and some corrections are
 // easier to make there than on the canvas: an id that has to change in every place

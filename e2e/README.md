@@ -430,7 +430,7 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
   version. The bar stays one row with the chip on it. Deploy from a draft saves it first and only
   once; a new diagram's first deploy saves it; a version opened read-only is deployed without a
   save, and the Deploy panel says the draft is left alone.
-- **`xml-source.spec.mjs`** ([ADR-draft-modeler-xml-source](../docs/adr/draft-modeler-xml-source.md)):
+- **`xml-source.spec.mjs`** ([ADR-0457](../docs/adr/0457-modeler-xml-source.md)):
   the **XML source** view in the process and decision editors (`xml-source-harness.html` mounts the
   real `editor.js`; the decision editor runs in the Console against a stubbed server). The menu
   offers it right after Export XML, and the text is the canvas as it is now, unsaved edits included,

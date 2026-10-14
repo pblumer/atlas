@@ -16,7 +16,7 @@ _Changed_ / _Removed_ for each version.
 
 - **The Modeler shows a model's source, and takes a correction back.** The process and
   decision editors carry **XML source** in their `⋯` menu, beside Export XML
-  ([ADR-draft-modeler-xml-source](docs/adr/draft-modeler-xml-source.md)). It opens the
+  ([ADR-0457](docs/adr/0457-modeler-xml-source.md)). It opens the
   BPMN or DMN document as the canvas holds it now, saved or not, in the Modeler's code
   editor; **Apply** (Ctrl+Enter) rebuilds the diagram or decision from the text. A
   document that is not well-formed XML is refused with the line the parser stopped on,
@@ -122,7 +122,7 @@ _Changed_ / _Removed_ for each version.
   left an empty canvas. It now goes through the same import as the XML source view's Apply: the
   layout counts as unsaved work, the session defers a peer's draft until it is saved,
   and a failed import puts the diagram back
-  ([ADR-draft-modeler-xml-source](docs/adr/draft-modeler-xml-source.md)).
+  ([ADR-0457](docs/adr/0457-modeler-xml-source.md)).
 - **The Playground notices a diagram that was replaced, not only edited.** Its hint that
   the canvas no longer matches the running sandbox listened for element edits only, so an
   applied XML source, an auto-layout or a collaborator's draft arriving in a live session
